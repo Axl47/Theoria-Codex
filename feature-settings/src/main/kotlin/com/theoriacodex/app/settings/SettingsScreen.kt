@@ -55,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.allProfileCodices
@@ -79,10 +78,6 @@ import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private val STORAGE_TOGGLES = listOf(SettingToggles.KeepMediaOffline, SettingToggles.FindAnimationDurations)
 
-/**
- * Settings hub: each row shows its current value; short choices use sheets, larger tasks use pages.
- * Back on [closesFrom], the page Settings was opened at, calls [onClose]; on any other page it goes home.
- */
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
@@ -95,11 +90,10 @@ fun SettingsScreen(
     statsActions: StatsActions = StatsActions(),
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
-    /** The Series area, in a build with extensions: how often followed series are checked, and Delete after reading. */
-    series: SeriesDependencies? = null,
+    showSeries: Boolean = false,
+    appLock: (@Composable () -> Unit)? = null,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
-    /** Opens the Extensions page, which lives outside Settings; null in a build without extensions. */
     onOpenExtensions: (() -> Unit)? = null,
 ) {
     val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
@@ -108,14 +102,13 @@ fun SettingsScreen(
     StatsFilePicker(choosingStatsFile, statsActions, onAction, openHome)
     BackHandler(enabled = state.page != SettingsPage.HOME, onBack = openHome)
     AnimatedContent(
-        // Home stays behind the file picker, which covers it until a file is chosen.
         targetState = if (choosingStatsFile) SettingsPage.HOME else state.page,
         transitionSpec = { depthTransform(forward = targetState != SettingsPage.HOME) },
         label = "Settings page",
     ) { page ->
         when (page) {
             SettingsPage.HOME -> SettingsHome(
-                state, statistics, onAction, storageSummary, sites, backup, pictures, diagnostics != null, series, onClose, onOpenExtensions,
+                state, statistics, onAction, storageSummary, sites, backup, pictures, diagnostics != null, showSeries, appLock, onClose, onOpenExtensions,
             )
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
@@ -158,7 +151,8 @@ private fun SettingsHome(
     backup: SettingsBackupEntry?,
     pictures: SettingsPicturesEntry?,
     showDiagnostics: Boolean,
-    series: SeriesDependencies?,
+    showSeries: Boolean,
+    appLock: (@Composable () -> Unit)?,
     onClose: () -> Unit,
     onOpenExtensions: (() -> Unit)?,
 ) {
@@ -182,7 +176,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, series, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, showSeries, appLock, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
         if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
@@ -213,7 +207,6 @@ private fun SettingsHome(
             when (sheet) {
                 SettingsSheet.DOWNLOADS -> DownloadPreferencesSection(state, onAction)
                 SettingsSheet.CONTROLS -> PreferencesSection(state, onAction)
-                // One choice is all this sheet holds, so choosing closes it.
                 SettingsSheet.SERIES_UPDATES -> SeriesUpdatesSection(state, notificationSettingsOpener()) { action ->
                     onAction(action)
                     onAction(SettingsAction.OpenPage(SettingsPage.HOME))
@@ -223,12 +216,11 @@ private fun SettingsHome(
     }
 }
 
-/** Where content comes from: sites, extensions, links, and for series the check for new chapters and Delete after reading. */
 @Composable
 private fun SettingsSourcesGroup(
     state: SettingsUiState,
     sites: SettingsSitesEntry?,
-    series: SeriesDependencies?,
+    showSeries: Boolean,
     onAction: (SettingsAction) -> Unit,
     onOpenExtensions: (() -> Unit)?,
     onOpenSites: () -> Unit,
@@ -247,7 +239,7 @@ private fun SettingsSourcesGroup(
             SettingsRowDivider()
         }
         OpenLinksRow()
-        if (series != null) {
+        if (showSeries) {
             SettingsRowDivider()
             SeriesUpdatesRow(state.settings.seriesUpdateInterval) { onSheet(SettingsSheet.SERIES_UPDATES) }
             SettingsRowDivider()
@@ -257,7 +249,6 @@ private fun SettingsSourcesGroup(
     }
 }
 
-/** How often followed series are checked. A check that cannot announce what it finds says so instead of its interval. */
 @Composable
 private fun SeriesUpdatesRow(interval: SeriesUpdateInterval, onChooseInterval: () -> Unit) {
     val silenced = notificationSettingsOpener() != null && interval.hours != null
@@ -267,10 +258,6 @@ private fun SeriesUpdatesRow(interval: SeriesUpdateInterval, onChooseInterval: (
     )
 }
 
-/**
- * Opens the app's notification settings, while the app may not notify; null while it may. The system stops showing
- * its permission prompt once it was refused, so its settings are the only way back. Read again on every return.
- */
 @Composable
 private fun notificationSettingsOpener(): (() -> Unit)? {
     val context = LocalContext.current
@@ -292,12 +279,13 @@ private fun SettingsHomeGroups(
     backup: SettingsBackupEntry?,
     pictures: SettingsPicturesEntry?,
     showDiagnostics: Boolean,
-    series: SeriesDependencies?,
+    showSeries: Boolean,
+    appLock: (@Composable () -> Unit)?,
     onOpenExtensions: (() -> Unit)?,
     onSheet: (SettingsSheet) -> Unit,
 ) {
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
-    SettingsSourcesGroup(state, sites, series, onAction, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
+    SettingsSourcesGroup(state, sites, showSeries, onAction, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
     SettingsGroup("Viewing") {
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)
@@ -328,8 +316,10 @@ private fun SettingsHomeGroups(
                 onClick = { open(SettingsPage.BACKUP) },
             )
         }
-        SettingsRowDivider()
-        AppLockRow()
+        appLock?.let {
+            SettingsRowDivider()
+            it()
+        }
         SettingsRowDivider()
         SettingsRow(
             SettingDestinations.WhatsNew.title,
@@ -368,10 +358,6 @@ private fun ProfileMenuSheet(
     }
 }
 
-/**
- * Opens the system file picker once each time [choosing] turns on (the Compare page without a file);
- * a readable stats file opens the comparison, anything else goes back through [onBack].
- */
 @Composable
 private fun StatsFilePicker(choosing: Boolean, statsActions: StatsActions, onAction: (SettingsAction) -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -486,7 +472,6 @@ private fun BackupPage(backup: SettingsBackupEntry, onBack: () -> Unit) {
     }
 }
 
-/** Only reached when the library transfer tools, which include cache controls, are absent. */
 @Composable
 private fun FallbackCacheControls(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")

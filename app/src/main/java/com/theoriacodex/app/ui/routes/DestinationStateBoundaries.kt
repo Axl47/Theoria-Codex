@@ -45,6 +45,7 @@ import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.related.ViewerFeedOwner
 import com.theoriacodex.app.related.ViewerFeedSnapshot
+import com.theoriacodex.app.settings.AppLockRow
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsDiagnosticsEntry
@@ -438,7 +439,7 @@ internal fun SettingsDestinationStateBoundary(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             storageSummary = storageSummary, sites = sites, backup = backup, pictures = pictures, statsActions = statsActions,
             diagnostics = diagnostics,
-            storageTools = storageTools, series = series, onClose = onClose, closesFrom = closesFrom,
+            storageTools = storageTools, showSeries = series != null, appLock = { AppLockRow() }, onClose = onClose, closesFrom = closesFrom,
             onOpenExtensions = onOpenExtensions,
         )
     }
