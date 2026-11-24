@@ -1,0 +1,6 @@
+name: "Anime fixture"
+signing_key: "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+extension_list {
+  extensions { name: "Onsen" package_name: "eu.kanade.tachiyomi.animeextension.all.onsen" resources { apk_url: "https://cdn.example.org/onsen-v16.12.apk" } extension_lib: "16" version_code: 12 version_name: "16.12" content_warning: 1 sources { id: 3 name: "Onsen" language: "all" } }
+  extensions { name: "Torrents" package_name: "eu.kanade.tachiyomi.animeextension.all.torrents" resources { apk_url: "https://cdn.example.org/t-v14.6.apk" } extension_lib: "14" version_code: 6 version_name: "14.6" torrent: 1 sources { id: 4 name: "Torrents" language: "all" } }
+}

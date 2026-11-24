@@ -4,6 +4,7 @@ import android.content.Context
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.extensionhost.ExtensionHost
 import java.io.File
 import java.nio.file.Files
@@ -31,7 +32,7 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
 
     override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = change { record ->
         val changed = transform(record.choices())
-        Record(changed.trusted, changed.languages.mapValues { (_, languages) -> languages.sorted() }, changed.owners)
+        Record(changed.trusted, changed.languages.mapValues { (_, languages) -> languages.sorted() }, changed.owners, changed.repos.map(::RepoRecord))
     }
 
     private suspend fun change(transform: (Record) -> Record) = lock.withLock {
@@ -54,8 +55,16 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
         val trusted: Map<String, String> = emptyMap(),
         val languages: Map<String, List<String>> = emptyMap(),
         val owners: Map<String, String> = emptyMap(),
+        val repos: List<RepoRecord> = emptyList(),
     ) {
-        fun choices() = ExtensionChoices(trusted, languages.mapValues { (_, languages) -> languages.toSet() }, owners)
+        fun choices() = ExtensionChoices(trusted, languages.mapValues { (_, languages) -> languages.toSet() }, owners, repos.map(RepoRecord::repo))
+    }
+
+    @Serializable
+    private data class RepoRecord(val url: String, val name: String, val signingKey: String) {
+        constructor(repo: ExtensionRepo) : this(repo.url, repo.name, repo.signingKey)
+
+        fun repo() = ExtensionRepo(url, name, signingKey)
     }
 
     companion object {

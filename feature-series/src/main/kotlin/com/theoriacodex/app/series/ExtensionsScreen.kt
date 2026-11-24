@@ -31,44 +31,51 @@ import com.theoriacodex.domain.series.InstalledExtension
 internal const val EXTENSIONS_TITLE = "Extensions"
 
 /**
- * Every extension on the device with its switch, and the page of one that is on: its languages and its own settings.
- * An extension runs only once it is switched on here.
+ * Every extension on the device with its switch, the updates the repos offer, and the page of one extension: its
+ * languages and its own settings. An extension runs only once it is switched on here, or installed from a repo here.
+ * The user's repos and what they offer are pages of their own.
  */
 @Composable
 fun ExtensionsScreen(viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val open = state.extensions?.firstOrNull { it.id == state.openId && it.on }
+    val open = state.extensions?.firstOrNull { it.id == state.openId && it.hasPage }
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose {}
     }
-    BackHandler(enabled = open != null) { viewModel.open(null) }
-    if (open != null) {
-        ExtensionPage(open, state.settings.orEmpty(), viewModel, onBack = { viewModel.open(null) })
-    } else {
-        ExtensionsList(state.extensions, onOpen = viewModel::open, onAsk = viewModel::ask, onTurnOff = { viewModel.setOn(it, false) }, onBack = onBack)
+    BackHandler(enabled = open != null || state.subpage != null) { if (open != null) viewModel.open(null) else viewModel.openSubpage(null) }
+    when {
+        open != null -> ExtensionPage(open, state.settings.orEmpty(), viewModel, onBack = { viewModel.open(null) })
+        state.subpage == ExtensionsSubpage.REPOS -> ReposPage(state, viewModel, onBack = { viewModel.openSubpage(null) })
+        state.subpage == ExtensionsSubpage.BROWSE -> BrowsePage(state, viewModel, onBack = { viewModel.openSubpage(null) })
+        else -> ExtensionsList(state, viewModel, onBack = onBack)
     }
     state.asking?.let { extension -> TurnOnDialog(extension, onDismiss = { viewModel.ask(null) }) { viewModel.setOn(extension, true) } }
 }
 
 @Composable
-private fun ExtensionsList(
-    extensions: List<InstalledExtension>?,
-    onOpen: (String) -> Unit,
-    onAsk: (InstalledExtension) -> Unit,
-    onTurnOff: (InstalledExtension) -> Unit,
-    onBack: () -> Unit,
-) {
+private fun ExtensionsList(state: ExtensionsState, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
+    val extensions = state.extensions
     SettingsPageColumn {
         SettingsHeader(EXTENSIONS_TITLE, onBack)
+        UpdatesGroup(state, viewModel)
         when {
             extensions == null -> LoadingState()
             extensions.isEmpty() -> EmptyState("No extensions installed")
             else -> {
                 // With extensions of both kinds installed, each kind is a group headed by its name.
                 val kinds = extensions.groupBy(InstalledExtension::kind).toSortedMap()
-                kinds.forEach { (kind, group) -> ExtensionGroup(kind.label.takeIf { kinds.size > 1 }, group, onOpen, onAsk, onTurnOff) }
+                kinds.forEach { (kind, group) ->
+                    ExtensionGroup(kind.label.takeIf { kinds.size > 1 }, group, viewModel::open, viewModel::ask) { viewModel.setOn(it, false) }
+                }
             }
+        }
+        SettingsGroup(null) {
+            if (!state.repos.isNullOrEmpty()) {
+                SettingsRow(BROWSE_TITLE, onClick = { viewModel.openSubpage(ExtensionsSubpage.BROWSE) })
+                SettingsRowDivider()
+            }
+            SettingsRow(REPOS_TITLE, summary = state.repos?.map { it.name }?.distinct()?.joinToString(), onClick = { viewModel.openSubpage(ExtensionsSubpage.REPOS) })
         }
     }
 }
@@ -128,7 +135,13 @@ private fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, o
 private fun ExtensionPage(extension: InstalledExtension, settings: List<ExtensionSourceSettings>, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     SettingsPageColumn {
         SettingsHeader(extension.name, onBack, parents = listOf(EXTENSIONS_TITLE))
-        SettingsGroup(null) { SettingsRow("Version ${extension.versionName}", extension.signer) }
+        SettingsGroup(null) {
+            SettingsRow(
+                "Version ${extension.versionName}",
+                extension.signer,
+                trailing = if (extension.removable) ({ TextButton(onClick = { viewModel.uninstall(extension) }) { Text("Remove") } }) else null,
+            )
+        }
         settings.forEach { source ->
             // Settings come before the languages, which can run to dozens of rows. Each language is a source with
             // settings of its own, so with several on, each group says whose it is.
@@ -147,8 +160,11 @@ private fun ExtensionPage(extension: InstalledExtension, settings: List<Extensio
     }
 }
 
-/** Whether tapping the row leads anywhere: only an extension that is on and loaded has languages or settings to show. */
-private val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty()
+/**
+ * Whether tapping the row leads anywhere: an extension that is on and loaded has languages and settings to show, and
+ * one this app installed can be removed there.
+ */
+private val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty() || removable
 
 /** Its version, then why it offers nothing or, once on, the languages it offers. Who signed it is in the question asked before it is turned on. */
 internal fun extensionSummary(extension: InstalledExtension): String = when {

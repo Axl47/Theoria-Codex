@@ -40,6 +40,9 @@ interface ExtensionKind {
      */
     fun unsupported(info: PackageInfo): String?
 
+    /** Whether this host runs extensions built against [libVersion], the interface version a repo's index states. */
+    fun runs(libVersion: String): Boolean
+
     /**
      * The sources of [instance], a newly created object of one of the extension's source classes: a source, or a
      * factory of several. Null when it is neither, which rejects the extension. Runs extension code (a factory, a

@@ -13,10 +13,12 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.extensionhost.AniyomiKind
+import com.theoriacodex.extensionhost.ExtensionCatalog
 import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.extensionhost.ExtensionImages
 import com.theoriacodex.extensionhost.ExtensionLoader
@@ -35,7 +37,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.io.File
+import okhttp3.CookieJar
 import okhttp3.Interceptor
+import okhttp3.OkHttpClient
 
 /** What the app's browser check needs from extension sources. */
 interface ExtensionSites {
@@ -51,7 +56,8 @@ interface ExtensionSites {
 
 /**
  * Turns Mihon (manga) and Aniyomi (anime) extensions into series sources: third-party code, loaded into the app. It
- * finds the extensions those apps installed as packages and, in debug builds only, APK files pushed for tests with
+ * finds the extensions this app installed from the user's repos ([repos]), those Mihon or Aniyomi installed as
+ * packages and, in debug builds only, APK files pushed for tests with
  * `adb push <apk> /sdcard/Android/data/com.theoriacodex.debug/files/mihon-extensions/`.
  *
  * Nothing loads at startup, and nothing ever loads but the extensions the user turned on in the Extensions page;
@@ -73,6 +79,16 @@ internal class ExtensionSourceHost : ExtensionSites {
     /** The user's choices, which open with the app's data, after the HTTP clients that already hold [mediaInterceptor]. */
     private val choices = CompletableDeferred<ExtensionChoiceStore>()
 
+    /** [choices] as a store that waits for them to open. */
+    private val choiceStore = object : ExtensionChoiceStore {
+        override suspend fun choices(): ExtensionChoices = choices.await().choices()
+
+        override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = choices.await().update(transform)
+    }
+
+    /** Where extensions installed from repos are kept: never backed up, and written only by [repos]. */
+    private lateinit var installedFolder: Lazy<File>
+
     // Loads a source's extension on an HTTP client's thread for its first image; after that, its images only read the table.
     private lateinit var images: ExtensionImages
 
@@ -93,7 +109,9 @@ internal class ExtensionSourceHost : ExtensionSites {
         // Release builds run installed packages only; the folder is how tests hand a debug build an APK.
         imageKey = lazy { ExtensionHost.imageKey(application) }
         images = ExtensionImages(imageKey) { key -> runBlocking { source(key) } }
-        packages = ExtensionPackages(application, listOf(MihonKind, AniyomiKind)) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
+        // Not read here: the application has no files yet when it attaches the host.
+        installedFolder = lazy { File(application.noBackupFilesDir, INSTALLED_DIRECTORY) }
+        packages = ExtensionPackages(application, KINDS, installedFolder::value) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = ExtensionLoader(application, packages)
         // What extensions ask their host for is set up when the first one loads, not at startup.
         val hostInstalled = lazy {
@@ -105,11 +123,7 @@ internal class ExtensionSourceHost : ExtensionSites {
                 hostInstalled.value
                 loader.load(extension, services)
             },
-            choices = object : ExtensionChoiceStore {
-                override suspend fun choices(): ExtensionChoices = choices.await().choices()
-
-                override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) = choices.await().update(transform)
-            },
+            choices = choiceStore,
             images = images,
             settings = { hook -> SourceSettings(application, hook) },
             deviceLanguages = { application.resources.configuration.locales.toLanguageTags().split(',') },
@@ -160,6 +174,21 @@ internal class ExtensionSourceHost : ExtensionSites {
         scope.launch(Dispatchers.IO) { imageKey.value }
     }
 
+    /**
+     * The user's extension repos and installing from them, fetching over [client]. An install or removal lists the
+     * extensions again at once, since Android announces no change to the app's own folder.
+     */
+    fun repos(client: OkHttpClient): ExtensionRepos = ExtensionCatalog(
+        choices = choiceStore,
+        // Repos are no site the user signed in to: their requests carry no cookies.
+        client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build(),
+        kinds = KINDS,
+        packages = packages::list,
+        read = packages::read,
+        folder = installedFolder.value,
+        onChanged = { registry.recheck() },
+    )
+
     override fun sites(): Map<SourceKey, ExtensionSite> = registry.sites()
 
     override val siteChanges: Flow<*> get() = registry.siteChanges
@@ -185,5 +214,7 @@ internal class ExtensionSourceHost : ExtensionSites {
         const val TAG = "ExtensionHost"
         // Named when Mihon's were the only extensions; kept so files pushed there for tests keep loading.
         const val DIRECTORY = "mihon-extensions"
+        const val INSTALLED_DIRECTORY = "extensions"
+        val KINDS = listOf(MihonKind, AniyomiKind)
     }
 }

@@ -274,12 +274,13 @@ class ExtensionRegistry(
             val listing = InstalledExtension(
                 id = extension.id,
                 // A file is told apart from the installed package of the same extension.
-                name = if (extension.installed) extension.name else "${extension.name} (file)",
+                name = if (extension.origin == ExtensionOrigin.FILE) "${extension.name} (file)" else extension.name,
                 versionName = extension.versionName,
                 signer = extension.signer,
                 on = trusted,
                 problem = extension.unsupported ?: NOT_SIGNED.takeIf { extension.signer == null },
                 kind = extension.kind.seriesKind,
+                removable = extension.origin == ExtensionOrigin.PRIVATE,
             )
             if (!trusted || extension.unsupported != null) return@map listing
             val code = loaded[extension] ?: if (everything || extension.identity in wanted) {

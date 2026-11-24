@@ -13,6 +13,10 @@ import com.theoriacodex.data.repository.withProgress
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepo
+import com.theoriacodex.domain.series.ExtensionRepos
+import com.theoriacodex.domain.series.NewExtensionRepo
+import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSourceSettings
@@ -93,6 +97,20 @@ internal object NoExtensions : SeriesExtensions {
     override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = settings(id)
 }
 
+internal object NoRepos : ExtensionRepos {
+    override suspend fun repos() = emptyList<ExtensionRepo>()
+
+    override suspend fun add(repos: List<NewExtensionRepo>) = repos.associate { it.url to "Offline" }
+
+    override suspend fun remove(url: String) = Unit
+
+    override suspend fun available(refresh: Boolean) = RepoListing(emptyList())
+
+    override suspend fun install(repo: String, packageName: String) = "Offline"
+
+    override suspend fun uninstall(id: String) = Unit
+}
+
 /**
  * A series reader's dependencies over [repository], with downloads in [folder] that never fetch. A stored cover is
  * tagged `#loadable`, as an extension's own client would be asked for it.
@@ -122,5 +140,5 @@ internal fun TestScope.seriesDependencies(
         deleteAfterReading = { deleteAfterReading },
         files = AtomicJsonFileStore(StandardTestDispatcher(testScheduler)),
     )
-    return SeriesDependencies(repository, sources, source, NoExtensions, downloads, scope = this, covers = covers, pictures = pictures, log = {})
+    return SeriesDependencies(repository, sources, source, NoExtensions, NoRepos, downloads, scope = this, covers = covers, pictures = pictures, log = {})
 }

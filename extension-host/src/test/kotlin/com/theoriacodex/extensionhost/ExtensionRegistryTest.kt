@@ -219,7 +219,7 @@ class ExtensionRegistryTest {
     @Test
     fun `turning one extension on leaves another with the same key off`() = runBlocking {
         // Another package, and a file of the same extension in the debug folder: each is turned on by itself.
-        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"), extension("a", signer = "key-1", apk = "/files/a.apk", installed = false))
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"), extension("a", signer = "key-1", apk = "/files/a.apk", origin = ExtensionOrigin.FILE))
 
         val listed = registry.setOn("/a.apk", "key-1", true)
 
@@ -319,8 +319,8 @@ class ExtensionRegistryTest {
 
     @Test
     fun `another extension put under a folder file's name with the same key is not the one asked about or turned on`() = runBlocking {
-        val first = listOf(extension("a", signer = "key-1", apk = "/x.apk", installed = false))
-        val other = listOf(extension("b", signer = "key-1", apk = "/x.apk", installed = false))
+        val first = listOf(extension("a", signer = "key-1", apk = "/x.apk", origin = ExtensionOrigin.FILE))
+        val other = listOf(extension("b", signer = "key-1", apk = "/x.apk", origin = ExtensionOrigin.FILE))
         onDevice = first
         val asked = registry.installed().single().id
 
@@ -492,8 +492,8 @@ class ExtensionRegistryTest {
     private fun hosted(extension: ExtensionPackage, host: HostServices): List<HostedSource> =
         sourcesOf(extension).flatMap { checkNotNull(extension.kind.adapt(it, host)) }
 
-    private fun extension(name: String, signer: String?, apk: String = "/$name.apk", installed: Boolean = true) = ExtensionPackage(
-        packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), installed = installed,
+    private fun extension(name: String, signer: String?, apk: String = "/$name.apk", origin: ExtensionOrigin = ExtensionOrigin.PACKAGE) = ExtensionPackage(
+        packageName = name, name = name, versionName = "1.0", versionCode = 1, signer = signer, apk = File(apk), origin = origin,
         kind = MihonKind, sourceClasses = listOf(".Source"),
     )
 }

@@ -54,6 +54,10 @@
 - Downloaded chapters are listed under Offline in the Library's sheet, one row per series, and count toward offline storage. Removing a series' row deletes its chapters and cancels the ones waiting to download; Remove all offline copies does both for every series.
 - The app now reads the list of installed apps to find extensions, and asks to send notifications when you follow a series.
 - Series: anime from Aniyomi extensions, beside manga. Turn an anime extension on under Extensions, then browse, search and follow anime in the same Series tab; anime covers carry a play mark, and All, Manga and Anime chips narrow the tab once you have both.
+- Extensions install from the same repos Mihon and Aniyomi use. Add a repo under Extensions, then Get extensions lists what it offers in your device's languages, or anything by name. Installing one turns it on. Theoria keeps its own copy, so it stays when you uninstall Mihon, Aniyomi or their forks.
+- The Extensions page lists updates your repos offer, with Update all. Updating an extension another app installed gives Theoria its own copy and keeps it on or off as it was.
+- An extension installed from a repo has Remove on its page.
+- A repo that starts signing with a different key than the one it had when you added it offers nothing until you add it again.
 - Episodes play in the Viewer. An episode resumes where you stopped, counts as watched once you're 85% through, and goes on to the next one when it ends.
 - While an episode plays, the stream button lists every server and quality the source found, with subtitles and audio beside it and next episode on the right. Double-tap a side of the picture to skip 10 seconds.
 - Subtitles come on by themselves, in your phone's language when the episode has it. Off stays off for the episodes that follow.

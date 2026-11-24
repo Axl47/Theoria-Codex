@@ -84,7 +84,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
 @Composable
 internal fun ExtensionsDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
-    val viewModel = viewModel { ExtensionsViewModel(series.extensions) }
+    val viewModel = viewModel { ExtensionsViewModel(series.extensions, series.repos) }
     ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() })
 }
 
