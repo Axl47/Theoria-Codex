@@ -414,6 +414,29 @@ internal class DefaultTheoriaAppContainer(
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
+    // Before the backup service, which adds an imported backup's extension repos.
+    override val series: SeriesDependencies? = extensionHost?.let { host ->
+        val choices = DeviceExtensionChoices.on(appContext)
+        host.bind(choices)
+        val repository = RoomSeriesRepository(contentDatabase)
+        // Neither Android's backup nor device transfer carries the queue (noBackupFilesDir) or the offline copies.
+        val downloads = SeriesDownloads(
+            store = offlineStore,
+            queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
+            repository = repository,
+            source = host::source,
+            covers = host.covers,
+            // The client that carries the extension interceptor, as the Viewer's image loader does.
+            fetch = { url, file -> downloadChapterPage(url, file, httpClients.downloads) },
+            scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
+            deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
+        )
+        SeriesDependencies(
+            repository, host::sources, host::source, host.extensions, host.repos(httpClients.shared), downloads, scope = durableStoreScope, covers = host.covers,
+            pictures = ChapterPictures(repository) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
+        ) { Log.i("SeriesReader", it) }
+    }
+
     private val profileBackup = ProfileBackupService(
         settings = settingsRepository,
         store = RoomProfileBackupStore(contentDatabase),
@@ -423,7 +446,7 @@ internal class DefaultTheoriaAppContainer(
         statistics = statisticsStore,
         writeGuard = profileWriteGuard,
         siteProfiles = siteProfiles,
-        extensionRepos = { series?.repos },
+        extensionRepos = series?.repos,
         extensionSources = { series?.sources?.invoke().orEmpty().mapTo(HashSet()) { it.key } },
     )
     private val autoBackup = AutoBackupWorkflow(
@@ -576,28 +599,6 @@ internal class DefaultTheoriaAppContainer(
     )
 
     override val extensionSites: ExtensionSites? get() = extensionHost
-
-    override val series: SeriesDependencies? = extensionHost?.let { host ->
-        val choices = DeviceExtensionChoices.on(appContext)
-        host.bind(choices)
-        val repository = RoomSeriesRepository(contentDatabase)
-        // Neither Android's backup nor device transfer carries the queue (noBackupFilesDir) or the offline copies.
-        val downloads = SeriesDownloads(
-            store = offlineStore,
-            queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
-            repository = repository,
-            source = host::source,
-            covers = host.covers,
-            // The client that carries the extension interceptor, as the Viewer's image loader does.
-            fetch = { url, file -> downloadChapterPage(url, file, httpClients.downloads) },
-            scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
-            deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
-        )
-        SeriesDependencies(
-            repository, host::sources, host::source, host.extensions, host.repos(httpClients.shared), downloads, scope = durableStoreScope, covers = host.covers,
-            pictures = ChapterPictures(repository) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
-        ) { Log.i("SeriesReader", it) }
-    }
 
     /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
     private var seriesScheduling: Job? = null

@@ -60,20 +60,19 @@ data class ProfileBackup(
 /** What restoring a chosen file would add: a Theoria backup's profiles, or the series of a Mihon-family app's backup. */
 sealed interface BackupPreview {
     data class Profiles(val preview: ProfileBackupPreview) : BackupPreview
-    data class Series(val preview: SeriesImportPreview) : BackupPreview
+    data class Series(
+        val preview: SeriesImportPreview,
+        /** How many of the extension repos the backup lists are not added here yet; importing adds them. */
+        val newRepos: Int = 0,
+        /** The backup's names for the sources its series are on that are not on here, the one with the most series first. */
+        val missingSources: List<String> = emptyList(),
+        /** How many more sources are missing that the backup gives no name. */
+        val unnamedMissingSources: Int = 0,
+    ) : BackupPreview
 }
 
-/** What importing a Mihon-family backup adds: the series it follows by kind, the entries it finished, and its extension repos. */
-data class SeriesImportPreview(
-    val manga: Int,
-    val anime: Int,
-    val chaptersRead: Int,
-    val episodesWatched: Int,
-    /** How many extension repos the backup lists; importing adds them. */
-    val repos: Int = 0,
-    /** The backup's names for the sources its series are on that are not on here, the one with the most series first. */
-    val missingSources: List<String> = emptyList(),
-)
+/** What importing a Mihon-family backup adds: the series it follows by kind, and the entries it finished. */
+data class SeriesImportPreview(val manga: Int, val anime: Int, val chaptersRead: Int, val episodesWatched: Int)
 
 /** What a Mihon-family import did: what it [imported], how many of its repos are new here, and why each refused repo was, by address. */
 data class SeriesImportResult(

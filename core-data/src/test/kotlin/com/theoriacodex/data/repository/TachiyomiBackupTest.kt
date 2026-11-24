@@ -130,7 +130,8 @@ class TachiyomiBackupTest {
             FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"))
         val expected = SeriesImportPreview(manga = 1, anime = 1, chaptersRead = 1, episodesWatched = 0)
 
-        assertEquals(BackupPreview.Series(expected), service.preview(bytes))
+        // No extension is on, and the backup names neither source.
+        assertEquals(BackupPreview.Series(expected, unnamedMissingSources = 2), service.preview(bytes))
         assertEquals(SeriesImportResult(expected), service.importSeries(bytes))
         val merged = store.merged.single()
         assertEquals(2, merged.series.size)
@@ -142,7 +143,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `importing adds Mihon's and Anikku's repos and the preview names the sources still missing`() = runTest {
+    fun `importing adds the repos Mihon and Anikku list and the preview names the sources still missing`() = runTest {
         val bytes = backup {
             message(1) { long(1, 1); string(2, "/m"); string(3, "M") }
             message(1) { long(1, 2); string(2, "/n"); string(3, "N") }
@@ -154,21 +155,28 @@ class TachiyomiBackupTest {
             message(501) { long(1, 3); string(2, "/b"); string(3, "B") }
             message(503) { string(1, "Gogoanime"); long(2, 1) }
             message(505) { string(1, "https://anime.example/repo"); string(2, "Anime"); string(5, "bb22") }
-            message(505) { string(1, "https://manga.example/repo"); string(5, "aa11") }
+            message(505) { string(1, "https://manga.example/repo/"); string(5, "aa11") }
+            message(505) { string(1, "https://more.example/repo"); string(5, "cc33") }
         }
-        val repos = RecordingRepos(refuse = "https://anime.example/repo")
+        val repos = RecordingRepos(refuse = "https://anime.example/repo", added = "https://manga.example/repo")
         val directory = temporary.newFolder()
         // MangaDex is on here; the anime source numbered 3 is missing but the backup gives it no name.
         val service = ProfileBackupService(InMemorySettingsRepository(), RecordingStore(), InMemorySavedSearchRepository(),
             FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
-            extensionRepos = { repos }, extensionSources = { setOf(SourceKey.parseOrThrow("custom_mihon_1")) })
+            extensionRepos = repos, extensionSources = { setOf(SourceKey.parseOrThrow("custom_mihon_1")) })
 
-        val preview = (service.preview(bytes) as BackupPreview.Series).preview
-        assertEquals(2, preview.repos)
+        val preview = service.preview(bytes) as BackupPreview.Series
+        assertEquals("The manga repo is added already", 2, preview.newRepos)
         assertEquals(listOf("Comick", "Gogoanime"), preview.missingSources)
+        assertEquals(1, preview.unnamedMissingSources)
 
         val result = service.importSeries(bytes)
-        assertEquals(listOf(NewExtensionRepo("https://manga.example/repo", "aa11"), NewExtensionRepo("https://anime.example/repo", "bb22")), repos.given)
+        val given = listOf(
+            NewExtensionRepo("https://manga.example/repo", "aa11"),
+            NewExtensionRepo("https://anime.example/repo", "bb22"),
+            NewExtensionRepo("https://more.example/repo", "cc33"),
+        )
+        assertEquals(given, repos.given)
         assertEquals(1, result.reposAdded)
         assertEquals(mapOf("https://anime.example/repo" to "Now signed with another key"), result.repoProblems)
     }
@@ -193,15 +201,16 @@ private class RecordingStore : ProfileBackupStore {
     override suspend fun merge(library: BackupLibrary): Int = 0.also { merged += library }
 }
 
-/** Adds every repo but [refuse], which it refuses as [ExtensionRepos.add] does a repo whose key changed. */
-private class RecordingRepos(private val refuse: String) : ExtensionRepos {
+/** Holds [added] already and adds each other repo but [refuse], which it refuses as [ExtensionRepos.add] does a repo whose key changed. */
+private class RecordingRepos(private val refuse: String, added: String) : ExtensionRepos {
     val given = mutableListOf<NewExtensionRepo>()
-    private val added = mutableListOf<ExtensionRepo>()
-    override suspend fun repos() = added.toList()
+    private val stored = mutableListOf(ExtensionRepo(added, added, ""))
+    override suspend fun repos() = stored.toList()
     override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> {
         given += repos
-        added += repos.filter { it.url != refuse }.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
-        return repos.filter { it.url == refuse }.associate { it.url to "Now signed with another key" }
+        val new = repos.filter { repo -> stored.none { it.url == repo.url } }
+        stored += new.filter { it.url != refuse }.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
+        return new.filter { it.url == refuse }.associate { it.url to "Now signed with another key" }
     }
     override suspend fun remove(url: String) = error("unused")
     override suspend fun available(refresh: Boolean): RepoListing = error("unused")

@@ -11,6 +11,7 @@ import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.extensionSeriesStatus
 import com.theoriacodex.domain.series.extensionSourceKey
 import com.theoriacodex.domain.series.seriesKind
+import com.theoriacodex.domain.series.storedRepoAddress
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -53,27 +54,34 @@ internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): TachiyomiImport
     // A folder address is how these apps store a repo; ExtensionRepos.add takes it as it is.
     val repos = (backup.repos + backup.animeRepos).filter { it.url.isNotBlank() }
         .map { NewExtensionRepo(it.url.trim(), it.signingKey.trim().ifBlank { null }) }
-        .distinctBy { it.url }
+        .distinctBy { storedRepoAddress(it.url) }
     val names = backup.sources.named(SeriesKind.MANGA) + backup.animeSources.named(SeriesKind.ANIME)
     return TachiyomiImport(series, repos, names)
 }
 
-/**
- * What importing [this] adds, for the preview and the message after it. [sourcesOn] are the extension sources on here;
- * a missing source the backup does not name is left out of [SeriesImportPreview.missingSources].
- */
-internal fun TachiyomiImport.importPreview(sourcesOn: Set<SourceKey>): SeriesImportPreview {
+/** What importing [this] adds, for the preview and the message after it. */
+internal fun TachiyomiImport.importPreview(): SeriesImportPreview {
     val (anime, manga) = series.partition { it.series.series.id.source.seriesKind == SeriesKind.ANIME }
-    val missing = series.map { it.series.series.id.source }.filterNot { it in sourcesOn }
-        .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
-        .mapNotNull { sourceNames[it.key] }.distinct()
     return SeriesImportPreview(
         manga = manga.count { it.series.followed },
         anime = anime.count { it.series.followed },
         chaptersRead = manga.sumOf { series -> series.entries.count { it.read } },
         episodesWatched = anime.sumOf { series -> series.entries.count { it.read } },
-        repos = repos.size,
-        missingSources = missing,
+    )
+}
+
+/**
+ * The preview of importing [this] on a device where [sourcesOn] are the extension sources that are on and [storedRepos]
+ * the addresses of the repos already added, or null where no repos can be added.
+ */
+internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, storedRepos: Set<String>?): BackupPreview.Series {
+    val missing = series.map { it.series.series.id.source }.filterNot { it in sourcesOn }
+        .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+    return BackupPreview.Series(
+        importPreview(),
+        newRepos = storedRepos?.let { stored -> repos.count { storedRepoAddress(it.url) !in stored } } ?: 0,
+        missingSources = missing.mapNotNull(sourceNames::get).distinct(),
+        unnamedMissingSources = missing.count { it !in sourceNames },
     )
 }
 

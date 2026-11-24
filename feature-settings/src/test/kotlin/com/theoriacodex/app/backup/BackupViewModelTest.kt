@@ -86,8 +86,8 @@ class BackupViewModelTest {
 
     @Test
     fun `a Mihon-family import says which of its repos were added and why others were not`() = runTest {
-        val imported = SeriesImportPreview(manga = 3, anime = 0, chaptersRead = 0, episodesWatched = 0, repos = 3)
-        actions.nextPreview = BackupPreview.Series(imported)
+        val imported = SeriesImportPreview(manga = 3, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        actions.nextPreview = BackupPreview.Series(imported, newRepos = 3)
         actions.nextImport = SeriesImportResult(imported, reposAdded = 2, repoProblems = mapOf("https://old.example" to "Now signed with another key"))
         val owner = owner()
         owner.import("document")
@@ -96,6 +96,18 @@ class BackupViewModelTest {
         advanceUntilIdle()
 
         assertEquals("Imported 3 manga. Added 2 extension repos. Could not add 1 extension repo: Now signed with another key.", owner.effects.first())
+    }
+
+    @Test
+    fun `the import preview names the missing extensions the backup names, and only warns when it names none`() {
+        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        assertNull(BackupPreview.Series(counts).missingNotice())
+        assertEquals("Unavailable until this extension is on: Comick", BackupPreview.Series(counts, missingSources = listOf("Comick")).missingNotice())
+        assertEquals(
+            "Unavailable until these extensions are on: Comick, Gogoanime and 1 other",
+            BackupPreview.Series(counts, missingSources = listOf("Comick", "Gogoanime"), unnamedMissingSources = 1).missingNotice(),
+        )
+        assertEquals("A series stays unavailable until its extension is on here.", BackupPreview.Series(counts, unnamedMissingSources = 2).missingNotice())
     }
 
     @Test

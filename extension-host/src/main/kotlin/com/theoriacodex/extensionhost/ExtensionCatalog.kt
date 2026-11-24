@@ -8,6 +8,7 @@ import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
+import com.theoriacodex.domain.series.storedRepoAddress
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.awaitSuccess
 import java.io.File
@@ -66,7 +67,7 @@ class ExtensionCatalog(
     override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = withContext(Dispatchers.IO) {
         val problems = LinkedHashMap<String, String>()
         for (new in repos) {
-            val url = RepoReader.storedAddress(new.url)
+            val url = storedRepoAddress(new.url)
             if (repos().any { it.url == url }) continue
             runCatchingPreservingCancellation { addOne(url, new.signingKey) }.onFailure { problems[new.url] = describe(it) }
         }

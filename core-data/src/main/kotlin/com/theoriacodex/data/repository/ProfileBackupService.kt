@@ -9,6 +9,7 @@ import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepos
+import com.theoriacodex.domain.series.storedRepoAddress
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -43,8 +44,8 @@ class ProfileBackupService(
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
-    /** Where a Mihon-family import adds its repos; null where no extensions run. Read at import, so it can be built later. */
-    private val extensionRepos: () -> ExtensionRepos? = { null },
+    /** Where a Mihon-family import adds its repos; null where no extensions run. */
+    private val extensionRepos: ExtensionRepos? = null,
     /** The extension sources that are on, so a Mihon-family import can name the ones its series still need. */
     private val extensionSources: suspend () -> Set<SourceKey> = { emptySet() },
 ) {
@@ -79,8 +80,9 @@ class ProfileBackupService(
 
     /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
     suspend fun preview(bytes: ByteArray): BackupPreview =
-        if (isTachiyomiBackup(bytes)) BackupPreview.Series(decodeTachiyomiBackup(bytes, clock()).importPreview(extensionSources()))
-        else BackupPreview.Profiles(codec.decode(bytes).preview())
+        if (isTachiyomiBackup(bytes)) {
+            decodeTachiyomiBackup(bytes, clock()).preview(extensionSources(), extensionRepos?.repos()?.mapTo(HashSet()) { it.url })
+        } else BackupPreview.Profiles(codec.decode(bytes).preview())
 
     /**
      * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
@@ -96,11 +98,11 @@ class ProfileBackupService(
             }
         }
         // Outside the lock: each repo is read over the network, and none touches the library.
-        val repos = extensionRepos()?.takeIf { backup.repos.isNotEmpty() }
-        val before = repos?.repos()?.size ?: 0
-        val problems = repos?.add(backup.repos).orEmpty()
-        val added = (repos?.repos()?.size ?: 0) - before
-        SeriesImportResult(backup.importPreview(extensionSources()), reposAdded = added, repoProblems = problems)
+        val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(backup.importPreview())
+        val before = repos.repos().mapTo(HashSet()) { it.url }
+        val problems = repos.add(backup.repos)
+        val added = backup.repos.count { storedRepoAddress(it.url) !in before && it.url !in problems }
+        SeriesImportResult(backup.importPreview(), reposAdded = added, repoProblems = problems)
     }
 
     suspend fun restore(

@@ -23,7 +23,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
-import com.theoriacodex.data.repository.SeriesImportPreview
 import com.theoriacodex.data.repository.BackupPreview
 
 @Composable
@@ -118,7 +117,7 @@ fun BackupDialogs(
 ) {
     when (val preview = state.preview) {
         is BackupPreview.Profiles -> RestoreBackupDialog(preview.preview, state, onDismiss, onApplyPreferences, onRestore)
-        is BackupPreview.Series -> ImportSeriesDialog(preview.preview, state.busy, onDismiss, onRestore)
+        is BackupPreview.Series -> ImportSeriesDialog(preview, state.busy, onDismiss, onRestore)
         null -> Unit
     }
 }
@@ -162,7 +161,8 @@ private fun RestoreBackupDialog(
 
 /** A Mihon-family backup brings only series and its extension repos, so its preview says what of them comes along and which extensions are still missing. */
 @Composable
-private fun ImportSeriesDialog(preview: SeriesImportPreview, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
+private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
+    val preview = import.preview
     val counts = listOfNotNull(
         preview.summary(),
         countLabel(preview.chaptersRead, "chapter read", "chapters read").takeIf { preview.chaptersRead > 0 },
@@ -178,14 +178,26 @@ private fun ImportSeriesDialog(preview: SeriesImportPreview, busy: Boolean, onDi
             ) {
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
-                if (preview.repos > 0) Text("Also adds ${countLabel(preview.repos, "extension repo")}.")
-                if (preview.missingSources.isNotEmpty()) Text("Unavailable until these extensions are on: ${preview.missingSources.joinToString()}")
+                if (import.newRepos > 0) Text("Also adds ${countLabel(import.newRepos, "extension repo")}.")
+                import.missingNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
             }
         },
         confirmButton = { TextButton(onClick = onImport, enabled = !busy) { Text("Import") } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
     )
+}
+
+/**
+ * "Unavailable until these extensions are on: Comick, Gogoanime and 1 other", naming what the backup names; null when
+ * nothing is missing.
+ */
+internal fun BackupPreview.Series.missingNotice(): String? {
+    val named = missingSources
+    if (named.isEmpty()) return "A series stays unavailable until its extension is on here.".takeIf { unnamedMissingSources > 0 }
+    val others = if (unnamedMissingSources > 0) " and ${countLabel(unnamedMissingSources, "other")}" else ""
+    val subject = if (named.size + unnamedMissingSources == 1) "this extension is" else "these extensions are"
+    return "Unavailable until $subject on: ${named.joinToString()}$others"
 }
 
 @Composable

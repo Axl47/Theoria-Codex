@@ -50,12 +50,6 @@ internal object RepoReader {
         return if ('.' in path.substringAfterLast('/')) url else url.trimEnd('/') + "/repo.json"
     }
 
-    /** How a repo address is stored: the folder for a legacy repo's files, any other address as given. */
-    fun storedAddress(url: String): String {
-        val trimmed = url.trim().trimEnd('/')
-        return LEGACY_FILES.firstNotNullOfOrNull { file -> trimmed.removeSuffix("/$file").takeIf { it != trimmed } } ?: trimmed
-    }
-
     private suspend fun read(address: String, get: suspend (String) -> ByteArray, followed: Boolean): RepoIndex {
         val body = gunzipped(get(address))
         return when (body.firstOrNull { !it.toInt().toChar().isWhitespace() }?.toInt()?.toChar()) {
@@ -95,7 +89,6 @@ internal object RepoReader {
     private fun gunzipped(body: ByteArray): ByteArray =
         if (body.size >= 2 && body[0] == GZIP_FIRST && body[1] == GZIP_SECOND) GZIPInputStream(ByteArrayInputStream(body)).use { it.readBytes() } else body
 
-    private val LEGACY_FILES = listOf("index.min.json", "repo.json")
     private const val GZIP_FIRST = 0x1f.toByte()
     private const val GZIP_SECOND = 0x8b.toByte()
     private val json = Json { ignoreUnknownKeys = true }
