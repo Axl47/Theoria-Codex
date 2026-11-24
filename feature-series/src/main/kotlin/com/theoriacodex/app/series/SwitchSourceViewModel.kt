@@ -37,11 +37,13 @@ sealed interface SwitchListing {
 data class SwitchSourceResult(val key: SourceKey, val name: String, val listing: SwitchListing)
 
 /**
- * The open Switch source sheet: one result per other source, in the order the sources are offered. [confirming] is the
- * match awaiting confirmation; [failure] says why the last switch did not happen.
+ * The open Switch source sheet: one result per other source, in the order the sources are offered, for [query], which
+ * starts as the series' title and the user can edit and search again. [confirming] is the match awaiting confirmation;
+ * [failure] says why the last switch did not happen.
  */
 data class SwitchSourceSheet(
     val results: List<SwitchSourceResult>,
+    val query: String = "",
     val confirming: SwitchMatch? = null,
     val switching: Boolean = false,
     val failure: String? = null,
@@ -74,7 +76,9 @@ class SwitchSourceViewModel(
 
     /** Every source that is on, the series' own too, which the labels tell apart. */
     private var sources = emptyList<SeriesSource>()
-    private var title = ""
+
+    /** What the sources were last searched for. */
+    private var searched = ""
     private val switching get() = state.value.sheet?.switching == true
 
     /** Parent of every source call the open sheet makes; closing the sheet cancels them all. */
@@ -96,10 +100,24 @@ class SwitchSourceViewModel(
     fun open(title: String) {
         if (switching) return
         closeSheet()
-        this.title = title
+        mutableState.update { it.copy(sheet = SwitchSourceSheet(results = emptyList(), query = title)) }
+        searchAll(title)
+    }
+
+    fun editQuery(query: String) = updateSheet { it.copy(query = query) }
+
+    /** Searches every other source again for the edited query, dropping what the last search found. */
+    fun searchAgain() {
+        val query = state.value.sheet?.query?.trim().orEmpty()
+        if (!switching && query.isNotEmpty()) searchAll(query)
+    }
+
+    private fun searchAll(query: String) {
+        searching?.cancel()
+        searched = query
         val job = SupervisorJob(viewModelScope.coroutineContext[Job]).also { searching = it }
-        mutableState.update { state ->
-            state.copy(sheet = SwitchSourceSheet(others.map { SwitchSourceResult(it.key, it.label(sources), SwitchListing.Loading) }))
+        updateSheet { sheet ->
+            sheet.copy(results = others.map { SwitchSourceResult(it.key, it.label(sources), SwitchListing.Loading) }, confirming = null, failure = null)
         }
         others.forEach { search(it, job) }
     }
@@ -158,9 +176,9 @@ class SwitchSourceViewModel(
         }
     }
 
-    /** Searches [source] for the title, then counts the entries of each match shown, each as its own call. */
+    /** Searches [source] for the query, then counts the entries of each match shown, each as its own call. */
     private fun search(source: SeriesSource, job: Job) {
-        val query = title
+        val query = searched
         viewModelScope.launch(job) {
             val listing = calls.withPermit { firstPage { source.search(query, 1) } }
             val matches = (listing as? SeriesListing.Loaded)?.let { bestMatches(query, it.series) }
