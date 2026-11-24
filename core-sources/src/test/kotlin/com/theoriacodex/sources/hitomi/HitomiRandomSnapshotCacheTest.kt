@@ -115,7 +115,7 @@ class HitomiRandomSnapshotCacheTest {
     }
 
     @Test
-    fun `byte budget evicts LRU snapshots and skips oversize snapshots`() = runTest {
+    fun `byte budget evicts LRU snapshots and skips oversize snapshots (ADR 0043)`() = runTest {
         val sample = snapshot(1, 2)
         val oneEntryWeight = "a".hitomiUtf8ByteWeight() + sample.fingerprint.hitomiUtf8ByteWeight() +
             sample.ids.hitomiByteWeight() + Long.SIZE_BYTES

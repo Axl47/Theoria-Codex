@@ -167,41 +167,41 @@ class DefaultSourceHttpClientTest {
 
     @Test
     fun `cancellation disconnects an active post response read (ADR 0051)`() = runBlocking {
-        val releaseServer = CountDownLatch(1)
+        val disconnected = CountDownLatch(1)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/stalled-post") { exchange ->
                 exchange.requestBody.close()
-                exchange.sendResponseHeaders(200, 10L)
-                exchange.responseBody.write(byteArrayOf(1))
-                exchange.responseBody.flush()
-                releaseServer.await(2L, TimeUnit.SECONDS)
-                exchange.close()
+                exchange.sendResponseHeaders(200, 0L)
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+                try {
+                    while (System.nanoTime() < deadline) {
+                        exchange.responseBody.write(byteArrayOf(1))
+                        exchange.responseBody.flush()
+                        Thread.sleep(20L)
+                    }
+                } catch (_: IOException) {
+                    disconnected.countDown()
+                } finally {
+                    runCatching { exchange.close() }
+                }
             }
             start()
         }
 
-        val (failure, cancellationElapsedMs) = try {
-            val startedAt = System.nanoTime()
-            val result = runCatching {
+        val (failure, disconnectedBeforeRelease) = try {
+            val failure = runCatching {
                 withTimeout(100L) {
-                    DefaultSourceHttpClient(
-                        readTimeoutMs = 10_000,
-                        maxRetries = 0,
-                    ).postJson(
-                        url = "http://127.0.0.1:${server.address.port}/stalled-post",
-                        body = "{}",
-                    )
+                    DefaultSourceHttpClient(readTimeoutMs = 10_000, maxRetries = 0)
+                        .postJson(url = "http://127.0.0.1:${server.address.port}/stalled-post", body = "{}")
                 }
-            }
-            result.exceptionOrNull() to
-                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+            }.exceptionOrNull()
+            failure to disconnected.await(2L, TimeUnit.SECONDS)
         } finally {
-            releaseServer.countDown()
             server.stop(0)
         }
 
         assertTrue(failure is TimeoutCancellationException)
-        assertTrue("Cancellation took ${cancellationElapsedMs}ms", cancellationElapsedMs < 1_000L)
+        assertTrue("the call kept reading after its caller was cancelled", disconnectedBeforeRelease)
     }
 
     @Test
@@ -445,6 +445,10 @@ class DefaultSourceHttpClientTest {
         }
 
         assertEquals(List(burst) { "together" }, bodies)
+        for (dispatcher in listOf(unqueuedSourceDispatcher(), defaultSourceOkHttpClient.dispatcher)) {
+            assertEquals(128, dispatcher.maxRequests)
+            assertEquals(128, dispatcher.maxRequestsPerHost)
+        }
     }
 
     @Test

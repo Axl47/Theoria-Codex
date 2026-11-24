@@ -119,7 +119,7 @@ class HitomiGalleryManifestStoreTest {
     }
 
     @Test
-    fun `byte budget rejects a manifest larger than the entire cache`() = runTest {
+    fun `byte budget rejects a manifest larger than the entire cache (ADR 0043)`() = runTest {
         var calls = 0
         val store = HitomiGalleryManifestStore(
             maxBytes = 256L,

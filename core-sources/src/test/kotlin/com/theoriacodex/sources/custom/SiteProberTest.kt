@@ -184,7 +184,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a probe never sends more than its request budget`() = runTest {
+    fun `a probe never sends more than its request budget (ADR 0040)`() = runTest {
         var sent = 0
         val counting = object : SourceHttpClient by NoWrites {
             override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
@@ -205,7 +205,8 @@ class SiteProberTest {
         val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example", GOOD_KEYS)
 
         assertTrue(result is SiteProbeResult.Supported)
-        assertEquals(SiteProber.MAX_REQUESTS, site.requests.size)
+        assertEquals(8, SiteProber.MAX_REQUESTS)
+        assertEquals(8, site.requests.size)
         assertEquals("https://booru.example/apple-touch-icon.png", site.requests.last().first)
     }
 

@@ -48,6 +48,17 @@ class Rule34PahealSourceAdapterTest {
     }
 
     @Test
+    fun `data-mime wins over data-ext and an older card's data-ext still types the file (ADR 0053)`() = runTest {
+        suspend fun fullMime(rss: String): String? {
+            val httpClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = rss) }
+            return Rule34PahealSourceAdapter(httpClient = httpClient).search(sampleQuery(), pageToken = null).items.single().full?.mime
+        }
+
+        assertEquals("image/png", fullMime(SAMPLE_PAHEAL_RSS))
+        assertEquals("image/gif", fullMime(SAMPLE_PAHEAL_RSS.replace("data-ext='png'", "data-mime='image/gif; animated=true' data-ext='png'")))
+    }
+
+    @Test
     fun `no tags reads the listing page with the same file types`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_PAHEAL_LISTING_HTML)

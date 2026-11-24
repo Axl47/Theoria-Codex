@@ -1,21 +1,29 @@
 package com.theoriacodex.sources
 
+import com.theoriacodex.domain.adapter.AccountProfileSourceAdapter
 import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.adapter.SearchMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.custom.SiteFamilyRegistry
 import com.theoriacodex.sources.custom.SiteRequestContext
 import com.theoriacodex.sources.hitomi.HitomiSourceAdapter
+import com.theoriacodex.sources.http.SourceByteRange
+import com.theoriacodex.sources.http.SourceByteResponse
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import com.theoriacodex.sources.testing.commentTestPost
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -83,29 +91,87 @@ class RealAdapterRegistryTest {
 
     @Test
     fun `every source fails a lookup on a failed request instead of answering null (ADR 0008)`() = runTest {
-        val http = FakeHttpClient().apply {
-            nextGetResponse = SourceHttpResponse(503, "")
-            nextPostResponse = SourceHttpResponse(503, "")
-        }
-        val credentials = FakeCredentialsProvider().apply { pixivTokens = PixivAuthTokens("access", "refresh", Long.MAX_VALUE) }
-        val registry = RealAdapterRegistry(credentials, http, exposedSources = SourceKey.builtIns.toSet())
-        val adapters = SourceKey.builtIns.map { key -> key to requireNotNull(registry.adapterFor(key)) } +
-            customFamilyAdapters(http).values.map { adapter -> adapter.sourceKey to adapter }
+        val refused = FailingTransport { SourceByteResponse(503, ByteArray(0)) }
+        val unreachable = IOException("transport down")
+        val down = FailingTransport { throw unreachable }
 
-        val answered = adapters.flatMap { (key, adapter) ->
-            val post = commentTestPost(key, "123")
-            listOfNotNull(
+        val refusedReport = failedRequestReport(refused) { failure -> failure is SourceAdapterException }
+        val downReport = failedRequestReport(down) { failure ->
+            failure is SourceAdapterException && generateSequence(failure.cause) { it.cause }.any { it === unreachable }
+        }
+
+        assertEquals(emptyList<String>(), refusedReport.wrong)
+        assertEquals(emptyList<String>(), downReport.wrong)
+        assertEquals("checked lookups", 27, refusedReport.checked)
+        assertEquals(refusedReport.checked, downReport.checked)
+        assertEquals(setOf("AIBOORU", "DANBOORU", "GELBOORU", "IWARA", "PIXIV", "custom_booru_example"), refusedReport.accountsAsking)
+    }
+
+    private class FailedRequestReport(val checked: Int, val wrong: List<String>, val accountsAsking: Set<String>)
+
+    private suspend fun failedRequestReport(http: FailingTransport, isProviderFailure: (Throwable?) -> Boolean): FailedRequestReport {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens("access", "refresh", Long.MAX_VALUE)
+            gelbooruCredentials = UserApiKey("1", "key")
+            rule34XxxCredentials = UserApiKey("1", "key")
+        }
+        val registry = RealAdapterRegistry(credentials, http, exposedSources = SourceKey.builtIns.toSet())
+        val adapters = SourceKey.builtIns.map { key -> requireNotNull(registry.adapterFor(key)) } + customFamilyAdapters(http).values
+        var checked = 0
+        val wrong = mutableListOf<String>()
+        val accountsAsking = mutableSetOf<String>()
+        for (adapter in adapters) {
+            val post = commentTestPost(adapter.sourceKey, "123")
+            val creator = CreatorProfile(adapter.sourceKey, "alice", "1", "https://www.iwara.tv/profile/alice", "user:alice")
+            val lookups = listOfNotNull(
                 "resolvePost" to suspend { adapter.resolvePost(post.id) },
                 (adapter as? SearchMetadataSourceAdapter)?.let { "resolveSearchMetadata" to suspend { it.resolveSearchMetadata(post) } },
                 (adapter as? FileHashLookupSourceAdapter)?.let { "findByFileHash" to suspend { it.findByFileHash("0123456789abcdef0123456789abcdef") } },
-            ).filter { (_, lookup) -> runCatching { lookup() }.isSuccess }.map { (name, _) -> "${key.id}.$name" }
+                (adapter as? AccountProfileSourceAdapter)?.let { "accountDetails" to suspend { it.accountDetails(creator) } },
+            )
+            for ((name, lookup) in lookups) {
+                val before = http.requests
+                val failure = runCatching { lookup() }.exceptionOrNull()
+                val asked = http.requests > before
+                val where = "${adapter.sourceKey.id}.$name"
+                if (name == "accountDetails" && asked) accountsAsking += adapter.sourceKey.id
+                if (name == "accountDetails" && !asked && failure == null) continue
+                checked += 1
+                if (!asked) wrong += "$where never asked the site"
+                if (!isProviderFailure(failure)) wrong += "$where ended with $failure"
+            }
         }
-
-        assertEquals(SourceKey.builtIns.size + SiteFamilyRegistry.default().families.size, adapters.size)
-        assertEquals(emptyList<String>(), answered)
+        return FailedRequestReport(checked, wrong, accountsAsking)
     }
 
-    private fun customFamilyAdapters(http: FakeHttpClient): Map<ProtocolFamily, SourceAdapter> {
+    private class FailingTransport(private val answer: () -> SourceByteResponse) : SourceHttpClient {
+        var requests = 0
+            private set
+
+        override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
+            val response = getBytes(url, query, headers, range = null, maxBodyBytes = 0)
+            return SourceHttpResponse(response.statusCode, response.body.decodeToString(), response.headers)
+        }
+
+        override suspend fun getBytes(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+            range: SourceByteRange?,
+            maxBodyBytes: Int,
+        ): SourceByteResponse {
+            requests += 1
+            return answer()
+        }
+
+        override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
+            get(url, form, headers)
+
+        override suspend fun postJson(url: String, body: String, headers: Map<String, String>): SourceHttpResponse =
+            get(url, emptyMap(), headers)
+    }
+
+    private fun customFamilyAdapters(http: SourceHttpClient): Map<ProtocolFamily, SourceAdapter> {
         val address = (SiteAddress.parse("booru.example") as SiteAddressParse.Valid).address
         return SiteFamilyRegistry.default().families.associate { siteFamily ->
             val profile = SiteProfile(address.derivedSourceId, address, "Booru", siteFamily.family.name, addedAtEpochMs = 0)

@@ -18,7 +18,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class HitomiGlobalIndexCacheTest {
     @Test
-    fun `byte weighted LRU evicts the least recently used indexes`() = runTest {
+    fun `byte weighted LRU evicts the least recently used indexes (ADR 0043)`() = runTest {
         val cache = HitomiGlobalIndexCache(maxBytes = 26L)
 
         cache.getOrLoad("v1", "large") { intArrayOf(1, 2) }
@@ -35,7 +35,7 @@ class HitomiGlobalIndexCacheTest {
     }
 
     @Test
-    fun `an index larger than the total budget is returned without being cached`() = runTest {
+    fun `an index larger than the total budget is returned without being cached (ADR 0043)`() = runTest {
         val cache = HitomiGlobalIndexCache(maxBytes = 11L)
 
         val loaded = cache.getOrLoad("v1", "oversize") { intArrayOf(1, 2) }

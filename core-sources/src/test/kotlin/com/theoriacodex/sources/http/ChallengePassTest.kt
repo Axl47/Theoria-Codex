@@ -19,6 +19,7 @@ import org.junit.Test
 class ChallengePassTest {
     private val cookies = FakeCookies()
     private val passes = mutableListOf<Request>()
+    private val clearanceOnEntry = mutableListOf<String?>()
     private val sent: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
     private val challengedHosts = mutableSetOf<String>()
     private val passableHosts = mutableSetOf("site.test", "cdn.other.test")
@@ -30,6 +31,7 @@ class ChallengePassTest {
 
         override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
             passes += request
+            clearanceOnEntry += cookies.values["cf_clearance"]
             earned?.let { cookies.values["cf_clearance"] = it }
             return passed()
         }
@@ -70,6 +72,7 @@ class ChallengePassTest {
 
         assertEquals("listing", call("https://site.test/list").body.string())
         assertEquals(listOf("agent/1"), passes.map { it.header("User-Agent") })
+        assertEquals(listOf<String?>(null), clearanceOnEntry)
         assertEquals("new", cookies.values["cf_clearance"])
         assertEquals(1, cookies.flushes)
     }
