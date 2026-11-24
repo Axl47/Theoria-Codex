@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Outlined "any one of these" tag group; [active] marks the group receiving new tags. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagGroupCard(
@@ -47,7 +46,6 @@ fun TagGroupCard(
     }
 }
 
-/** The word between alternatives in a [TagGroupCard]. */
 @Composable
 fun TagGroupOrLabel() {
     Text(

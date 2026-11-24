@@ -27,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
-/** The circle that fades in at the edge a card is being pulled toward, for the directions without targets. */
 @Composable
 internal fun BoxScope.TriageEdgeCue(icon: ImageVector, alignment: Alignment, progress: Float) {
     if (progress <= 0f) return
@@ -46,10 +45,6 @@ internal fun BoxScope.TriageEdgeCue(icon: ImageVector, alignment: Alignment, pro
     }
 }
 
-/**
- * Says for a couple of seconds, at the edge the card went to, that the deck's latest decision is done or that it
- * failed and its card is back. A skip says nothing: the card leaving is the confirmation.
- */
 @Composable
 internal fun BoxScope.TriageConfirmation(notice: TriageNotice?) {
     var visible by remember { mutableStateOf(false) }
@@ -88,7 +83,6 @@ internal fun noticeLabel(notice: TriageNotice): String? = when (val decision = n
     is TriageDecision.Skipped -> null
 }
 
-/** A tag as the Viewer's tag chips show it. */
 internal fun tagLabel(tag: String): String = tag.replace('_', ' ')
 
 private fun noticeAlignment(decision: TriageDecision): Alignment = when (decision) {

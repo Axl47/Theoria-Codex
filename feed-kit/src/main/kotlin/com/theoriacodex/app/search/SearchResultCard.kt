@@ -111,7 +111,6 @@ fun SearchResultCard(
     val mediaGeometry = remember(post.id) { SearchCardMediaGeometry() }
     var isInViewport by remember(post.id) { mutableStateOf(false) }
     val lifecycleState = LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    // Derived, so a pause or resume that leaves the host started does not recompose the card.
     val lifecycleStarted by remember(lifecycleState) { derivedStateOf { lifecycleState.value.isAtLeast(Lifecycle.State.STARTED) } }
     val playbackActive = isInViewport && lifecycleStarted
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
@@ -145,8 +144,6 @@ fun SearchResultCard(
             post, resolution, pixivUgoiraClient, playbackActive, acquiredDurationMs, showSourceBadge, metadataLabel,
             viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, onToggleLike, resolvePostById,
             recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
-            // A visible caption must not retain autoplay demand for media outside the window.
-            // Runs every scrolled frame: keep it to the visibility check unless a Viewer return is landing here.
             onMediaPositioned = { coordinates, titleBelowMedia ->
                 mediaGeometry.coordinates = coordinates
                 mediaGeometry.titleBelowMedia = titleBelowMedia
@@ -166,7 +163,6 @@ fun SearchResultCard(
     }
 }
 
-/** The media slot's latest placement; its corners are rebuilt only when its size or caption changes. */
 private class SearchCardMediaGeometry {
     var coordinates: LayoutCoordinates? = null
     var titleBelowMedia = false
@@ -188,7 +184,6 @@ private class SearchCardMediaGeometry {
     }
 }
 
-/** One post's replacement data from its provider: resolving a preview, and recovering dead media. */
 @Stable
 private class SearchCardResolution(private val postId: PostId) {
     var resolvedPost by mutableStateOf<Post?>(null)
@@ -208,7 +203,6 @@ private class SearchCardResolution(private val postId: PostId) {
     fun canRecover(canRecoverAtAll: Boolean, error: Throwable, location: String?): Boolean =
         canRecoverAtAll && isHttpNotFound(error) && recoveryAttemptedUrls.add(location.orEmpty())
 
-    /** Returns whether the provider supplied replacement media for this card. */
     suspend fun recover(
         current: Post,
         failedRef: ImageRef,
@@ -221,7 +215,6 @@ private class SearchCardResolution(private val postId: PostId) {
     }
 }
 
-/** How far one delivery plan has progressed: what is shown, what is ready, and the poster to hold. */
 @Stable
 private class SearchCardImageProgress {
     var displayedIndex by mutableIntStateOf(0)
@@ -236,7 +229,6 @@ private class SearchCardImageProgress {
     }
 }
 
-/** What the card's watch history changes: its preview, progress badge, and watched mark. */
 private class SearchCardWatch(
     val watchedPost: Post?,
     val viewedMediaNumber: Int?,
@@ -255,7 +247,6 @@ private fun rememberSearchCardWatch(
     val (lastPosition, watchedHistoryEntry) = rememberPostWatchEntry(post.id).value
     val lastMediaNumber = lastPosition?.mediaNumber
     val watchedEntry = watchedHistoryEntry.takeIf { showWatchHistory }
-    // A bare "2h ago" over a result reads as its upload date, so watch history gets its own mark.
     val watchedDescription = watchedEntry?.takeIf { metadataLabel == null }?.let {
         val watchedAt = relativeTimeLabel(System.currentTimeMillis(), lastPosition?.lastViewedAt ?: it.viewedAtEpochMs)
         "Watched ${watchedAt.lowercase(Locale.US)}"
@@ -324,9 +315,7 @@ private fun SearchCardContent(
         imageDeliveryPlan, progress, decodeSize, effectivePost, playbackActive, resolution, recoverPostMedia,
     )
     val scope = rememberCoroutineScope()
-    // A new resolver instance must not restart the request; only gaining one at all should.
     val currentResolvePostById by rememberUpdatedState(resolvePostById)
-    // Only a card on screen asks its provider for details, so scrolling past cards never spends rate limit.
     LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById != null, playbackActive) {
         if (playbackActive && videoRef == null && resolution.resolvedPost == null) {
             resolution.requestPreview(scope, currentResolvePostById)
@@ -369,7 +358,6 @@ private fun rememberSearchCardImageModel(
                 url = it,
                 sourceKey = source,
                 decodeSize = decodeSize,
-                // Animated drawables skip the memory cache, so keep the poster up while one decodes.
                 placeholderMemoryCacheKey = progress.posterMemoryCacheKey.takeIf {
                     candidate.activation == MediaDeliveryActivation.ANIMATION_UPGRADE
                 },
@@ -393,7 +381,6 @@ private fun SearchCardTitle(title: String) {
     }
 }
 
-/** Fetches the next image candidates in the background, then swaps to the first that loads. */
 @Composable
 private fun SearchCardImageUpgradeEffect(
     plan: com.theoriacodex.app.media.MediaDeliveryPlan,
@@ -408,7 +395,6 @@ private fun SearchCardImageUpgradeEffect(
     val pendingUpgrades = remember(plan, progress.displayedIndex) { plan.upgradeIndicesAfter(progress.displayedIndex) }
     val upgradesToAnimation = pendingUpgrades.firstOrNull()
         ?.let { index -> plan.candidates[index].activation == MediaDeliveryActivation.ANIMATION_UPGRADE } == true
-    // Whole-file animation downloads are costly, so like video players they follow settled visibility.
     val upgradeWanted = !upgradesToAnimation || playbackActive
     LaunchedEffect(plan, progress.displayedIndex, progress.preparedIndex, progress.hasVisibleImage, decodeSize, upgradeWanted) {
         if (!progress.hasVisibleImage || !upgradeWanted || progress.displayedIndex != progress.preparedIndex) {
@@ -422,7 +408,6 @@ private fun SearchCardImageUpgradeEffect(
     }
 }
 
-/** Returns whether this candidate settled the attempt, by loading or by replacing the post's media. */
 private suspend fun tryImageUpgrade(
     context: android.content.Context,
     plan: com.theoriacodex.app.media.MediaDeliveryPlan,
@@ -458,7 +443,6 @@ private suspend fun recoverFailedUpgrade(
     resolution.canRecover(recoverPostMedia != null, result.throwable, candidate.location) &&
     resolution.recover(post, candidate.ref.copy(url = candidate.location), recoverPostMedia)
 
-/** The card's single media slot: animation, inline video, image, or a placeholder, in that order. */
 @Composable
 private fun SearchCardMedia(
     post: Post,
@@ -553,7 +537,6 @@ private fun searchCardVideoIndex(post: Post, watchedPost: Post?, videoRef: Image
         ?: watchedPost?.let { postMediaItems(it).indexOf(videoRef).takeIf { index -> index >= 0 } }
         ?: 0
 
-/** Recovers dead media first, then tries the next candidate, then asks the provider once more. */
 private fun handleSearchCardImageError(
     error: Throwable,
     post: Post,
@@ -611,11 +594,6 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
     return postPlaybackMediaCandidate(post)?.ref
 }
 
-/**
- * Whether this provider's list results carry only a poster, so a card learns its video URL only from
- * the post's detail request. The one place that names them; every other source's cards play what their
- * list results already hold.
- */
 internal fun SourceKey.videoUrlComesFromPostDetails(): Boolean =
     this == SourceKey.RULE34VIDEO || this == SourceKey.RULE34GEN || this == SourceKey.IWARA
 

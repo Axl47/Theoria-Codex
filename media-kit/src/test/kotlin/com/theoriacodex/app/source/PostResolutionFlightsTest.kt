@@ -99,7 +99,6 @@ class PostResolutionFlightsTest {
         release.complete(Unit)
 
         callers.forEach {
-            // Search treats a rate limit specially, so the reason must survive the hop through the shared request.
             assertEquals(SourceFailureReason.RATE_LIMITED, (it.await() as SourceAdapterException).reason)
         }
     }

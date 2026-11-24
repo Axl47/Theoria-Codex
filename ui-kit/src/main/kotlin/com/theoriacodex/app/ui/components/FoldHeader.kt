@@ -22,10 +22,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 
-/**
- * A section title with an optional count that folds its content away; [what] names it for TalkBack ("Show tags").
- * [trailing] sits before the chevron and keeps its own touch target.
- */
 @Composable
 fun FoldHeader(
     title: String,

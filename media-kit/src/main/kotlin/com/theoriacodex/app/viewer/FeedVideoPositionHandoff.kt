@@ -3,7 +3,6 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import java.io.Closeable
 
-/** Main-thread, one-time handoffs survive either order of viewer disposal and feed binding. */
 class FeedVideoPositionHandoff {
     private val pending = linkedMapOf<ViewerMediaKey, Long>()
     private val receivers = mutableMapOf<ViewerMediaKey, MutableList<(Long) -> Unit>>()

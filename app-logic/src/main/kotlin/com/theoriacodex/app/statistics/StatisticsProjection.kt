@@ -49,7 +49,6 @@ data class CodexStatisticsSummary(
     val topOpened: List<CodexPostStatistic>,
     val topVideos: List<CodexPostStatistic>,
     val topImages: List<CodexPostStatistic>,
-    /** Every recorded post, which is what lets a shared copy leave one out and rerank the rest. */
     val posts: Map<String, CodexPostStatistics> = emptyMap(),
     val thumbnails: Map<String, String> = emptyMap(),
 )
@@ -62,7 +61,6 @@ data class CodexPostStatistic(
     val thumbnail: String? = null,
 )
 
-/** Local calendar activity, oldest first in the summary; inactive days may be omitted. */
 data class DailyStatistic(
     val date: LocalDate,
     val appOpenCount: Long = 0L,
@@ -76,7 +74,6 @@ data class DailyStatistic(
     val searchCount: Long = 0L,
 )
 
-/** One recommendation profile's Codices, for the surfaces that span every profile. */
 data class ProfileStatistics(
     val profileId: String,
     val name: String,
@@ -92,9 +89,7 @@ data class StatisticsSummary(
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
-    /** Time in series sessions that read chapters. */
     val readingMs: Long = 0L,
-    /** Time in series sessions that play episodes. */
     val animeMs: Long = 0L,
     val watchedPostCount: Long = 0L,
     val watchedSources: List<SourceStatistic> = emptyList(),
@@ -113,7 +108,6 @@ data class StatisticsSummary(
     val topCodexSources: List<SourceStatistic> = emptyList(),
 )
 
-/** Process-only saved-library projection; timer updates never read Posts. */
 data class SavedContentStatistics(
     val codices: List<Codex> = emptyList(),
     val postCount: Long = 0L,
@@ -210,7 +204,6 @@ object StatisticsProjection {
     }
 }
 
-/** Overlay live monotonic time without rebuilding content, source or tag statistics. */
 fun StatisticsSummary.withLiveUsage(usage: UsageDurationDelta): StatisticsSummary = copy(
     history = dailyRows(history.associate { it.date to DailyActivity(it.appOpenCount, it.totalForegroundMs,
         it.browsingMs, it.watchingMs, it.codexMs, it.readingMs, it.animeMs, it.watchedPostCount, it.searchCount) }
@@ -255,7 +248,6 @@ private fun Long.saturatingAdd(delta: Long): Long {
 
 private const val TOP_TAG_LIMIT = 5
 
-/** Profile-visible collections sorted by cumulative watching time, with deterministic ties. */
 fun codexStatistics(lifetime: LifetimeStatistics, codices: List<Codex>): List<CodexStatisticsSummary> =
     codices.map { codex ->
         val stats = lifetime.codexStatistics[codex.codexId] ?: CodexStatistics()
@@ -282,7 +274,6 @@ private fun codexPostRows(
     }
 }
 
-/** Only direct Codex launches carry collection attribution; Recents keeps its own launch identity. */
 fun statisticsCodexId(context: ViewerLaunchContext?): String? =
     context?.takeIf { it.streamSource == ViewerStreamSource.CODEX }
         ?.queryHash?.takeIf { it.startsWith("codex:") }?.removePrefix("codex:")?.takeIf(String::isNotBlank)

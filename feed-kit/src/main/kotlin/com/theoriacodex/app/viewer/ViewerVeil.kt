@@ -19,16 +19,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 
-/** The current artwork's accent, shown on progress and on the selected thumbnail. White when the art has none. */
 val LocalViewerAccent = compositionLocalOf { Color.White }
 
-/** The Viewer's shared look: white controls over soft black scrims, so the artwork stays continuous behind them. */
 object ViewerVeil {
     val Capsule = Color.Black.copy(alpha = 0.62f)
     val InactiveTrack = Color.White.copy(alpha = 0.32f)
     const val SECONDARY_TEXT_ALPHA = 0.68f
 
-    /** Tabular figures keep time readouts from shifting on device fonts whose digits vary in width. */
     val Time = TextStyle(fontSize = 13.sp, fontFeatureSettings = "tnum", shadow = TextOverMediaShadow)
     val LargeReadout = TextStyle(fontSize = 22.sp, fontFeatureSettings = "tnum", shadow = TextOverMediaShadow)
 
@@ -43,16 +40,11 @@ object ViewerVeil {
     val StripOnlyScrim = Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.3f))
 }
 
-/** The tall bottom scrim: takes under half the screen, so landscape video keeps most of its frame clear. */
 @Composable
 private fun ViewerBottomScrim() {
     Box(Modifier.fillMaxWidth().fillMaxHeight(0.42f).heightIn(max = 290.dp).background(ViewerVeil.BottomScrim))
 }
 
-/**
- * Backs a player's timeline. It lives inside the player because the timeline is drawn there: a scrim
- * in the screen's overlay would sit on top of the timeline and dim it.
- */
 @Composable
 fun ViewerTimelineVeil(timeline: @Composable () -> Unit) {
     Box(contentAlignment = Alignment.BottomCenter) {
@@ -61,12 +53,6 @@ fun ViewerTimelineVeil(timeline: @Composable () -> Unit) {
     }
 }
 
-/**
- * Everything under the media that belongs to the screen rather than the player: the post strip, with [pageBar] in the
- * timeline's slot below it on pages without one. [lift] raises both clear of what sits underneath (the dock, and the
- * player's timeline when [timelinePresent]). Pages with a timeline bring their own scrim, so only a faint one is added
- * behind the strip to carry it through loading. [pageBar] stays lit while [fadesWhileScrubbing] dims the strip.
- */
 @Composable
 fun ViewerBottomChrome(
     timelinePresent: Boolean,

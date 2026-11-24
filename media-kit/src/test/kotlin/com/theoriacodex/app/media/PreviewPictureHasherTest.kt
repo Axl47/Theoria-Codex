@@ -30,7 +30,6 @@ class PreviewPictureHasherTest {
         slow.complete(PictureHashResult.Hashed(7))
         runCurrent()
 
-        // Answers are remembered by address, so the next listing of these posts loads nothing.
         assertEquals(listOf(posts[0].preview.url!!.length.toLong(), 7L, null, null), hasher.annotate(posts).map { it.pictureHash })
         assertEquals(3, loads.size)
     }

@@ -23,13 +23,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.launch
 
-/**
- * A name being edited in place of the text that shows it (a Codex title, a saved search's row). It opens focused
- * with [current] selected and keeps the typed text across recreation. Keyboard Done or losing focus finishes it;
- * [onDone] runs once, with the trimmed new name, or null when it is empty or unchanged (and on Back). A focus loss
- * commits on the next frame from the field's own scope: tearing the field down (a rotation, leaving the screen)
- * also takes focus from it, but cancels that scope first, so it renames nothing.
- */
 @Composable
 fun InlineNameField(current: String, textStyle: TextStyle, modifier: Modifier = Modifier, onDone: (String?) -> Unit) {
     var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -59,7 +52,6 @@ fun InlineNameField(current: String, textStyle: TextStyle, modifier: Modifier = 
     )
 }
 
-/** Whether the field has held focus, and whether it already finished, so Done followed by the focus loss it causes commits once. */
 private class InlineNameFieldState {
     var focused = false
     private var finished = false
@@ -71,5 +63,4 @@ private class InlineNameFieldState {
     }
 }
 
-/** The name an inline rename commits: trimmed, or null when it is empty or unchanged. */
 internal fun committedName(current: String, typed: String): String? = typed.trim().takeIf { it.isNotEmpty() && it != current }

@@ -13,7 +13,7 @@ class PictureEmbeddingTest {
     fun `round trip stays within one step of the largest magnitude and size is dimensions plus the scale`() {
         val random = Random(7)
         val values = FloatArray(768) { random.nextFloat() * 2f - 1f }
-        values[10] = -1.5f // the largest magnitude, negative
+        values[10] = -1.5f
 
         val bytes = PictureEmbedding.encode(values)
         val decoded = PictureEmbedding.decode(bytes)

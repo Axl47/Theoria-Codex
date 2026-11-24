@@ -36,11 +36,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Shared geometry for the pill search bar on Search and Series screens. */
 val SearchBarShape = RoundedCornerShape(28.dp)
 val SearchBarMinHeight = 52.dp
 
-/** Collapsed controls share an edge-attached strip without reserving feed space. */
 @Composable
 fun CollapsingSearchChrome(
     expanded: Boolean,
@@ -53,11 +51,8 @@ fun CollapsingSearchChrome(
     contentHorizontalPadding: Dp = horizontalPadding,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // Saved so the first frame back from a pushed screen reserves the measured height instead of sliding the
-    // results down by it while media lands on its card.
     var toolbarHeight by rememberSaveable { mutableIntStateOf(0) }
     val height = with(LocalDensity.current) { toolbarHeight.toDp() }
-    // Include the toolbar gap so removing the spacer cannot snap the grid upward.
     val reservedHeight by animateDpAsState(if (legacy || expanded) height + 6.dp else 0.dp, label = "Search toolbar space")
     val collapsed = !legacy && !expanded
     Box(modifier) {

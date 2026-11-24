@@ -46,7 +46,6 @@ class LibraryVisionBackfillTest {
     @After
     fun tearDown() = scope.cancel()
 
-    /** The Library newest first, as Room answers; [stored] is what indexing wrote, one row per post. */
     private class Library(val posts: List<Post>) : VisualSignatureRepository {
         val stored = mutableListOf<PictureVision>()
         private val attempts = HashMap<PostId, Int>()
@@ -112,7 +111,6 @@ class LibraryVisionBackfillTest {
         val library = Library(dead + older)
         val store = readyStore()
         assertEquals(ModelState.Ready, store.states.value)
-        // Posts without a still are settled without the model; the dead previews never load.
         val tagger = PictureTagger(store, library, Pictures(hasStill = { it.id.sourcePostId.startsWith("dead") }), scope)
 
         assertTrue(backfill(tagger, library).drain())
@@ -123,7 +121,6 @@ class LibraryVisionBackfillTest {
     @Test
     fun `while the app runs, analyses awaiting frames whose post does not play stop waiting`() = runBlocking {
         val library = Library(listOf(post("video"), post("picture")))
-        // As the migration that added frames left every earlier analysis.
         library.putVision(listOf("video", "picture").map { PictureVision(post(it).id, spec.id, null, emptyList(), VisionFrames.WANTED) })
         val tagger = PictureTagger(readyStore(), library, Pictures(plays = { it.id.sourcePostId == "video" }), scope)
 
@@ -136,7 +133,6 @@ class LibraryVisionBackfillTest {
     @Test
     fun `a model that will not load asks for another run while it is installed, and none once it is gone`() = runBlocking {
         val library = Library(listOf(post("a")))
-        // The stored file is no model, so loading it fails as it might under memory pressure.
         val installed = readyStore()
         val picture = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
         val tagger = PictureTagger(installed, library, Pictures(still = { picture }), scope)
@@ -167,7 +163,6 @@ class LibraryVisionBackfillTest {
 
         assertFalse(backfill.drainFrames())
 
-        // Four pictures, so each tag scores the mean of its top two: the still's 0.9 and the quarters' 0.6.
         val upgraded = library.vision("video")
         assertEquals(VisionFrames.READ, upgraded.frames)
         assertEquals(listOf(PredictedTag("solo", 0.75f, PredictedTag.Kind.GENERAL)), upgraded.tags)
@@ -192,7 +187,6 @@ class LibraryVisionBackfillTest {
         backfill.drain()
         val stills = library.stored.toList()
 
-        // A failure asks for no early rerun: the next scheduled run tries again.
         assertFalse(backfill.drainFrames())
         assertEquals(2, framesRead)
         assertEquals(stills, library.stored)
@@ -219,13 +213,11 @@ class LibraryVisionBackfillTest {
         backfill.drain()
         gifPlays = false
 
-        // The network is down rather than these posts: stop early and ask for another run.
         assertTrue(backfill.drainFrames())
         assertEquals(3, read)
         assertEquals(VisionFrames.NONE, library.vision("gif").frames)
         assertEquals(listOf("a", "b", "c", "d").map { post(it).id }, library.signaturesAwaitingFrames())
 
-        // Each run charges only the streak's first post, so the others keep their tries.
         repeat(MAX_FRAME_ATTEMPTS - 1) { backfill.drainFrames() }
         assertEquals(listOf("b", "c", "d").map { post(it).id }, library.signaturesAwaitingFrames())
     }
@@ -254,7 +246,6 @@ class LibraryVisionBackfillTest {
         )
         val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
         val video = post("video")
-        // For You looks at the still: the 0.1 score stores no tag.
         tagger.analyze(video)
         assertEquals(emptyList<PredictedTag>(), tagger.known(video.id))
 
@@ -266,7 +257,6 @@ class LibraryVisionBackfillTest {
 
     private fun backfill(tagger: PictureTagger, library: Library) = LibraryVisionBackfill(tagger, library, hot = { false })
 
-    /** Stills and frames as a test sets them; by default every post has a still that fails to load and none plays. */
     private class Pictures(
         private val hasStill: (Post) -> Boolean = { true },
         private val still: (Post) -> Bitmap? = { null },
@@ -279,7 +269,6 @@ class LibraryVisionBackfillTest {
         override suspend fun frames(post: Post): PostFrames = frames.invoke(post)
     }
 
-    /** Scores the one-tag vocabulary by [Pattern]: 0.9 for the top half dark, 0.1 for the left, 0.6 for quarters. */
     private class PatternModel(private val analysed: MutableList<Pattern>) : PictureModel {
         override fun analyze(picture: Bitmap): PictureAnalysis {
             val pattern = Pattern.of(picture).also(analysed::add)

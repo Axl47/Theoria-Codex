@@ -14,10 +14,6 @@ import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * A small decorative image from [source] (avatar, stamp), requested at its drawn size with the source's media
- * headers; Pixiv's image host refuses requests without its Referer.
- */
 @Composable
 fun SourceImage(
     source: SourceKey,

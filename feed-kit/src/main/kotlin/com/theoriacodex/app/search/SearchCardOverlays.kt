@@ -50,11 +50,6 @@ import com.theoriacodex.app.ui.motion.rememberLikeFeedback
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import com.theoriacodex.domain.model.Post
 
-/**
- * Everything drawn over a card's media. Soft gradients along the top and bottom edges carry plain
- * white marks, so no overlay needs its own pill: like and media count on top; duration, then
- * time, watched mark and source along the bottom; and gallery progress as a line on the bottom edge.
- */
 @Composable
 fun BoxScope.SearchCardBadges(
     post: Post,
@@ -95,7 +90,6 @@ fun BoxScope.SearchCardBadges(
     }
 }
 
-/** Comment count, then media count, along the top end; each appears only when the post has something to count. */
 @Composable
 private fun SearchCardCountMarks(comments: CommentCount?, mediaCount: Int, viewedMediaNumber: Int?, modifier: Modifier) {
     if (comments == null && mediaCount <= 1) return
@@ -117,10 +111,6 @@ private fun SearchCardCountMarks(comments: CommentCount?, mediaCount: Int, viewe
     }
 }
 
-/**
- * A 48dp checkbox target whose visible heart sits in the card's corner, centered on the same line as
- * the top marks. The ripple is a circle around the heart rather than the square target.
- */
 @Composable
 private fun SearchCardLikeButton(liked: Boolean, onToggleLike: () -> Unit, modifier: Modifier) {
     val feedback = rememberLikeFeedback()
@@ -159,7 +149,6 @@ private fun Modifier.likeSemantics(liked: Boolean): Modifier = semantics {
     stateDescription = if (liked) "Liked" else "Not liked"
 }
 
-/** When it was seen or watched, then where it came from. */
 @Composable
 private fun SearchCardPreviewContext(
     metadataLabel: String?,
@@ -181,7 +170,6 @@ private fun SearchCardPreviewContext(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        // Marks a previously watched post; when it was watched is left to screen readers and Recents.
         if (watchedDescription != null) {
             Icon(Icons.Default.Visibility, watchedDescription, Modifier.size(13.dp), tint = Color.White)
         }
@@ -189,7 +177,6 @@ private fun SearchCardPreviewContext(
     }
 }
 
-/** A white icon and label that rely on the edge scrim, not a container, for contrast. */
 @Composable
 private fun OverlayMark(text: String?, icon: @Composable (Modifier) -> Unit, modifier: Modifier) {
     Row(modifier.height(OVERLAY_ROW_HEIGHT), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -198,7 +185,6 @@ private fun OverlayMark(text: String?, icon: @Composable (Modifier) -> Unit, mod
     }
 }
 
-/** How far through a gallery the viewer got, along the media's bottom edge. */
 @Composable
 private fun GalleryProgressLine(fraction: Float, modifier: Modifier) {
     Box(modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(alpha = 0.18f))) {
@@ -218,7 +204,6 @@ private val TOP_SCRIM_HEIGHT = 56.dp
 private val BOTTOM_SCRIM_HEIGHT = 72.dp
 private val OVERLAY_ROW_HEIGHT = 18.dp
 
-/** Every corner mark shares this inset and the row height above, so marks on one edge share a center line. */
 private val OverlayMarkPlacement = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
 private val TopScrim = Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent))
 private val BottomScrim = Brush.verticalGradient(

@@ -82,7 +82,6 @@ class PostTagActionTypedCountsTest {
         assertCountsDisplayed("7", "12", "34")
     }
 
-    /** Counts load on real dispatchers, which waiting for Compose to go idle does not cover. */
     private fun assertCountsDisplayed(vararg counts: String) {
         counts.forEach { count ->
             compose.waitUntilSettled(conditionDescription = "count $count loads", timeoutMillis = 10_000) {

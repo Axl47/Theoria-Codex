@@ -168,7 +168,6 @@ class PostMediaTest {
             plan.candidates.map { it.activation },
         )
 
-        // Without a lighter rendition the original is the step up only when the post says it is small.
         val withoutSample = post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg"))
         assertEquals(
             listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),

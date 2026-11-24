@@ -42,7 +42,6 @@ class LiftedCopyTest {
             MaterialTheme { Box { LiftedCopy(session, lift, settling = null, land = Animatable(0f)) } }
         }
 
-        // The merged tree is what TalkBack reads and what card lookups in tests search.
         compose.onAllNodesWithTag(searchCardTestTag(post.id)).assertCountEquals(0)
     }
 }

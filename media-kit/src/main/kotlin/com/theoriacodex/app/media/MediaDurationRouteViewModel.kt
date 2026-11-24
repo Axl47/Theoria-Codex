@@ -22,7 +22,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.ContinuationInterceptor
 
-/** Navigation-scoped demand adapter. It never copies duration values into route post lists. */
 class MediaDurationRouteViewModel(
     private val coordinator: MediaDurationCoordinator,
     routeName: String,
@@ -70,7 +69,6 @@ class MediaDurationRouteViewModel(
 
     private val mutableStates = MutableStateFlow(MediaDurationStates.EMPTY)
 
-    /** Decisions for the synchronized posts while a duration filter is active; empty otherwise. */
     val states: StateFlow<MediaDurationStates> = mutableStates.asStateFlow()
 
     init {
@@ -177,7 +175,6 @@ class MediaDurationRouteViewModel(
         }
     }
 
-    /** A duration the feed supplied answers directly; only the others are looked up and kept by the coordinator. */
     fun observeState(post: Post): Flow<MediaDurationState?> {
         if (!isAnimatedPost(post)) return flowOf(null)
         animatedDurationMs(post)?.let { durationMs ->
@@ -201,10 +198,6 @@ class MediaDurationRouteViewModel(
         }
     }
 
-    /**
-     * The posts a swipe can reach right now (the Viewer's current post and its neighbours). Their durations
-     * resolve regardless of background resolution, so a timeline can show its length before the player has it.
-     */
     fun onNearbyPostsChanged(postIds: Set<PostId>) {
         if (requestedNearbyPostIds == postIds) return
         requestedNearbyPostIds = postIds
@@ -293,7 +286,6 @@ class MediaDurationRouteViewModel(
             val post = candidatesByKey[key] ?: return@forEach
             submit(post, key, demandIdentity(lane, key), priority)
         }
-        // The coordinator retains deferred demand and refills its bounded queue independently.
         return desired
     }
 

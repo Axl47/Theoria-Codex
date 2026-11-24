@@ -23,24 +23,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/** One file of a picture model, pinned by size and SHA-256 so only the exact published bytes are ever loaded. */
 data class ModelFile(val name: String, val bytes: Long, val sha256: String)
 
-/**
- * A downloadable picture model: [id] names it in stored analyses, so a new model (a new id) re-analyses everything.
- * Files are fetched from [baseUrl] + their name.
- */
 data class VisualModelSpec(val id: String, val baseUrl: String, val model: ModelFile, val vocabulary: ModelFile) {
     val files: List<ModelFile> get() = listOf(model, vocabulary)
     val totalBytes: Long get() = files.sumOf(ModelFile::bytes)
 
     companion object {
-        /**
-         * WD ViT tagger v3 (SmilingWolf, Apache-2.0), exported with both outputs (normalised 768-d embedding, sigmoid tag
-         * scores) and dynamic-range int8 weights by `tools/phone-bench/export_models.py` on the `spike/phone-bench`
-         * branch (litert-torch 0.10 `full_dynamic_recipe`, jax < 0.9); the vocabulary is the model's `selected_tags.csv`.
-         * A new export gets a new [id], since its bytes and SHA-256 differ.
-         */
         fun wdVitTaggerV3(baseUrl: String) = VisualModelSpec(
             id = "wd-vit-tagger-v3-int8@1",
             baseUrl = baseUrl,
@@ -50,21 +39,14 @@ data class VisualModelSpec(val id: String, val baseUrl: String, val model: Model
     }
 }
 
-/** Where the model's download stands. */
 sealed interface ModelState {
     data object Absent : ModelState
     data class Downloading(val bytes: Long, val total: Long) : ModelState
     data object Ready : ModelState
 
-    /** The last download stopped; [mismatch] when its bytes were not the pinned ones (rather than a network failure). */
     data class Failed(val mismatch: Boolean) : ModelState
 }
 
-/**
- * The opt-in model's files under [directory] (the app's no-backup storage). A file is renamed into place only after its
- * size and SHA-256 match [spec], so a file present is a verified file. [delete] stops a download, removes the files and
- * runs [onDeleted] (which forgets what the model predicted); nothing else in the app changes while the model is absent.
- */
 class VisualModelStore(
     private val spec: VisualModelSpec,
     root: File,
@@ -73,7 +55,6 @@ class VisualModelStore(
     private val onDeleted: suspend () -> Unit,
 ) {
     private val directory = File(root, spec.id.replace(Regex("[^A-Za-z0-9._-]"), "_"))
-    // What an interrupted download left behind is removed, so an absent model never holds space.
     private val state = MutableStateFlow(if (installed()) ModelState.Ready else ModelState.Absent.also { directory.deleteRecursively() })
     private val lock = Mutex()
     private var download: Job? = null
@@ -87,7 +68,6 @@ class VisualModelStore(
     val modelFile: File get() = file(spec.model)
     val vocabularyFile: File get() = file(spec.vocabulary)
 
-    /** Starts the download unless it runs or the model is ready. */
     fun download() {
         scope.launch {
             lock.withLock {
@@ -98,7 +78,6 @@ class VisualModelStore(
         }
     }
 
-    /** Stops a download, removes the model and forgets what it predicted. */
     suspend fun delete() {
         lock.withLock {
             download?.cancel()
@@ -122,7 +101,6 @@ class VisualModelStore(
             onSuccess = { ModelState.Ready },
             onFailure = { error ->
                 Diagnostics.report("vision", "The picture tagger download failed", error)
-                // Nothing of a failed download is kept, so a failure never holds the model's space.
                 directory.deleteRecursively()
                 ModelState.Failed(mismatch = error is MismatchException)
             },
@@ -135,7 +113,6 @@ class VisualModelStore(
             val request = Request.Builder().url(spec.baseUrl + file.name).header("Accept-Encoding", "identity").build()
             val call = client.newCall(request)
             coroutineScope {
-                // A blocking read cannot see cancellation; this child sees it at once and cancels the call, which throws.
                 val watcher = launch(start = CoroutineStart.UNDISPATCHED) { try { awaitCancellation() } finally { call.cancel() } }
                 try {
                     call.execute().use { response -> receive(response, file, part, progress) }
@@ -149,7 +126,6 @@ class VisualModelStore(
         }
     }
 
-    /** Streams [response] into [part], hashing as it goes; throws unless the bytes are exactly [file]'s. */
     private suspend fun receive(response: okhttp3.Response, file: ModelFile, part: File, progress: (Long) -> Unit) {
         if (!response.isSuccessful) throw IOException("HTTP ${response.code} for ${file.name}")
         val digest = MessageDigest.getInstance("SHA-256")

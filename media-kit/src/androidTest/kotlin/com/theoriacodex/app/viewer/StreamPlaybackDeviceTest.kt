@@ -14,12 +14,6 @@ import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Plays the stream fixture on real decoders: an HLS episode that needs a header, whose video carries no audio, with
- * separate audio and a WebVTT file, served from a loopback server in this process. It runs in `:media-kit`'s own test
- * APK (`scripts/verify_debug_device.sh media`), whose process has no application infrastructure, so the one it makes
- * here is the only one; the stream skips the shared cache, whose directory only one instance per process may open.
- */
 @RunWith(AndroidJUnit4::class)
 class StreamPlaybackDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -73,11 +67,6 @@ class StreamPlaybackDeviceTest {
         }
     }
 
-    /**
-     * Skips the test when the decoder that failed is the emulator's own (`c2.goldfish.*`, which no phone has). The
-     * Android 17 emulator image denies that decoder the app's input buffers (SELinux, `memfd_file`), so it decodes no
-     * video at all; the Android 16 emulator still runs this test in full.
-     */
     private fun skipIfTheEmulatorDecoderFailed(player: Player) = onMain {
         val decoder = (player.playerError?.cause as? MediaCodecDecoderException)?.codecInfo?.name
         assumeFalse("This emulator's $decoder cannot decode", decoder?.startsWith("c2.goldfish") == true)

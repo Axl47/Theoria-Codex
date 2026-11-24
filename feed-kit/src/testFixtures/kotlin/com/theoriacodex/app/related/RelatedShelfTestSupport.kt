@@ -4,7 +4,6 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
-/** A controller over the caller's own shelf state; [UnsupportedRelatedPostsLoader] means it never loads. */
 fun testRelatedController(
     state: () -> RelatedPostsUiState = { RelatedPostsUiState.Idle },
     updateState: (RelatedPostsUiState) -> Unit = {},
@@ -17,7 +16,6 @@ fun testRelatedController(
     updateState = updateState,
 )
 
-/** The binding a feed screen takes; the default is an empty shelf nothing drives. */
 fun testRelatedShelf(
     state: RelatedPostsUiState = RelatedPostsUiState.Idle,
     controller: RelatedPostsRouteController = testRelatedController({ state }),

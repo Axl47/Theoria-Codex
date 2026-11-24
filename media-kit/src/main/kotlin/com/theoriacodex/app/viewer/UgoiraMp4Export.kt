@@ -11,7 +11,6 @@ import java.io.IOException
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** Encodes [playback] as H.264 MP4 at a fixed frame rate, repeating frames to keep each one's delay. */
 internal fun encodeUgoiraMp4(
     playback: UgoiraPlayback,
     outputFileDescriptor: FileDescriptor,
@@ -83,7 +82,6 @@ private fun encodeFrames(
     drain: () -> Unit,
 ): Long {
     var presentationTimeUs = 0L
-    // One pixel buffer for the whole export; each frame is read once, however often it repeats.
     val argb = IntArray(width * height)
     playback.frames.forEach { frame ->
         val sizedBitmap = if (frame.bitmap.width != width || frame.bitmap.height != height) {
@@ -234,7 +232,6 @@ private fun delayToFrameRepeat(delayMs: Int): Int {
         .coerceAtLeast(1)
 }
 
-/** The export's file name: the post's sanitized title, or `pixiv_<id>`, then the id. */
 internal fun ugoiraMp4FileName(postId: String, title: String?): String {
     val normalizedTitle = title
         ?.sanitizeFileComponent()

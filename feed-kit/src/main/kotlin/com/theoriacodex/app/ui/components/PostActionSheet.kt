@@ -44,13 +44,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * The product's post long-press menu: labeled actions, with search-term selection in its own sheet.
- *
- * Callers supply the actions available on their route and the route-specific [tagContent], which
- * stays open while terms are toggled. Every other action closes the menu before it runs. [onRemoveFromCodex]
- * adds a destructive row at the end, named [removeLabel] for routes that remove the post from something else.
- */
 @Composable
 fun PostActionSheet(
     post: Post,
@@ -93,7 +86,6 @@ fun PostActionSheet(
         emptyList()
     }
 
-    // The first creator is the header's link, as in the Viewer's information sheet; others get rows.
     fun openCreator(action: CreatorProfileAction) = dismissThen {
         action.profile?.let { onOpenCreatorProfile?.invoke(it) } ?: onOpenLegacyCreatorProfile?.invoke()
     }
@@ -147,7 +139,6 @@ private fun PostLikeRow(liked: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** The app-wide [PostMenuActions] for [post], Share first. Each closes the menu. */
 @Composable
 private fun PostMenuRows(post: Post, onDismiss: () -> Unit) {
     val actions = LocalPostMenuActions.current
@@ -160,7 +151,6 @@ private fun PostMenuRows(post: Post, onDismiss: () -> Unit) {
     }
 }
 
-/** Save to Codex, marked green with a checked bookmark when [post] is already in a Codex. */
 @Composable
 private fun SaveToCodexRow(post: Post, label: String, onClick: () -> Unit) {
     if (post.id in LocalCodexPostIds.current.value) {
@@ -170,15 +160,9 @@ private fun SaveToCodexRow(post: Post, label: String, onClick: () -> Unit) {
     }
 }
 
-/**
- * Identifies the post a menu acts on, since most posts have no provider title to show.
- * [showPostId] adds the source's post ID for surfaces that present post details.
- */
 @Composable
 fun PostActionHeader(post: Post, showPostId: Boolean = false, creator: HeaderLink? = null) {
     val pageCount = maxOf(post.mediaCount ?: 1, post.media.size)
-    // Without its own title the header names the creator, so that title becomes the link; a titled
-    // post keeps its title and links the creator on the details line. Either way it appears once.
     val hasOwnTitle = post.displayTitleOrNull() != null
     ActionMenuHeader(
         titleLink = creator?.takeUnless { hasOwnTitle },
@@ -202,7 +186,6 @@ fun PostActionHeader(post: Post, showPostId: Boolean = false, creator: HeaderLin
     )
 }
 
-/** A post's static preview image, for menus and lists rather than feed cards. */
 @Composable
 fun PostThumbnail(post: Post, modifier: Modifier) {
     val context = LocalContext.current

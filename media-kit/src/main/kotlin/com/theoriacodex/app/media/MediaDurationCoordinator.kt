@@ -25,11 +25,9 @@ import kotlinx.coroutines.withContext
 fun interface MediaDurationAcquirer {
     suspend fun acquire(post: Post): MediaDurationState
 
-    /** An answer that costs no work, so the post can skip the queue entirely. */
     fun settleWithoutWork(post: Post): MediaDurationState? = null
 }
 
-/** Duration-pipeline milestones, recorded as trace sections the macrobenchmark counts. */
 sealed interface DurationTraceEvent {
     data object Demand : DurationTraceEvent
     data object ProviderResolve : DurationTraceEvent
@@ -67,10 +65,6 @@ object NoOpMediaDurationTraceRecorder : MediaDurationTraceRecorder {
     override fun record(event: DurationTraceEvent) = Unit
 }
 
-/**
- * Application-scoped owner for duration demand, cancellation, single-flight work, and publication.
- * Routes never drain acquisition loops and metadata publication never becomes a new demand input.
- */
 class MediaDurationCoordinator(
     private val acquirer: MediaDurationAcquirer,
     private val durationRepository: MediaDurationRepository? = null,
@@ -114,7 +108,6 @@ class MediaDurationCoordinator(
         require(demand.key.postId == post.id) { "Duration demand key must match its post" }
         traceRecorder.record(DurationTraceEvent.Demand)
 
-        // Readers take a feed-supplied duration from the post itself, so there is nothing to look up or keep.
         if (animatedDurationMs(post) != null) return
 
         val shouldLoadStoredState = lock.withLock {
@@ -370,7 +363,6 @@ class MediaDurationCoordinator(
     private suspend fun loadStoredState(key: MediaDurationKey): MediaDurationState? {
         val repository = durationRepository ?: return null
         return runCatchingExceptionsPreservingCancellation {
-            // "No media" costs nothing to re-derive, and a source may have gained a resolver since.
             repository.get(key.toStoredKey())?.toMediaDurationState()?.takeUnless { state ->
                 state == MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
             }
@@ -383,7 +375,6 @@ class MediaDurationCoordinator(
         runCatchingExceptionsPreservingCancellation {
             repository.put(key.toStoredKey(), storedState)
         }.onFailure {
-            // Duration persistence is a cache optimization and never changes a successful outcome.
         }
     }
 
@@ -478,7 +469,6 @@ class MediaDurationCoordinator(
     }
 }
 
-/** How long a failed lookup waits before a new demand may try it again. */
 internal const val DEFAULT_DURATION_RETRY_DELAY_MS = 5L * 60L * 1_000L
 
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"

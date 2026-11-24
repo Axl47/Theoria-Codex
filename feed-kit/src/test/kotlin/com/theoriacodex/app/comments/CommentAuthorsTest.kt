@@ -14,7 +14,6 @@ class CommentAuthorsTest {
         val onPage = CreatorProfile(SourceKey.PIXIV, "painter", profileId = "1", profileUrl = "https://site/u/1", uploadsQuery = "user:1")
         assertEquals(AuthorDestination.CreatorPage(onPage), commentAuthorDestination(onPage, browsable))
 
-        // Not browseable here: the source is not enabled for creator pages, or the profile has no uploads query.
         assertEquals(AuthorDestination.Browser("https://site/u/1"), commentAuthorDestination(onPage, emptySet()))
         assertEquals(AuthorDestination.Browser("https://site/u/1"), commentAuthorDestination(onPage.copy(uploadsQuery = null), browsable))
     }

@@ -15,7 +15,6 @@ data class ScheduledDurationWork(
     val key: MediaDurationKey,
     val priority: DurationDemandPriority,
     val demands: List<DurationDemand>,
-    /** Pass back to [DurationDemandScheduler.submit] so requeued work keeps its place in line. */
     val sequence: Long,
 )
 
@@ -27,7 +26,6 @@ sealed interface DurationDemandSubmission {
     data object Rejected : DurationDemandSubmission
 }
 
-/** Platform-free bounded queue. Active work and cancellation are owned by the app coordinator. */
 class DurationDemandScheduler(
     private val maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
 ) {
@@ -65,7 +63,6 @@ class DurationDemandScheduler(
         return DurationDemandSubmission.Accepted(evictedKey, evictedDemands)
     }
 
-    /** A duration filter hides posts until decided, so only its demand runs during a scroll. */
     fun takeNext(
         gate: DurationExecutionGate,
         isSourceSaturated: (SourceKey) -> Boolean = { false },
@@ -87,7 +84,6 @@ class DurationDemandScheduler(
         )
     }
 
-    /** Drops [identities]' tickets in one pass; returns the keys that lost one, including keys left with none. */
     fun removeIdentities(identities: Set<String>): Set<MediaDurationKey> {
         val affected = linkedSetOf<MediaDurationKey>()
         val iterator = entries.iterator()

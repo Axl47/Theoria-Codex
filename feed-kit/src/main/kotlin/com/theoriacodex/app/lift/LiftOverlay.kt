@@ -49,15 +49,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * Draws [session]'s lift above the navigation host and acts on its drops. Mount it once, above everything the
- * cards live in. Saves go through [LocalQuickSave], Like through the card's own toggle, and Similar opens a trail
- * through [LocalTrailOpener], with its target showing progress until the opener returns. New hands the post to
- * [onNewCodex] and More, with the lift's search, to [onOpenPicker]; each hands back the Codex chosen there, which is
- * saved (and created, when new) and confirmed like a drop on a Codex, so Undo also removes a Codex it created. [onFailure] gets a message when a drop could not act. [onSaved] confirms
- * a save that can be undone, suspending until the confirmation goes away, and returns true when the user chose Undo.
- * Nothing is composed while no lift is in progress.
- */
 @Composable
 fun LiftOverlay(
     session: LiftSession,
@@ -75,7 +66,6 @@ fun LiftOverlay(
     key(lift) { LiftStage(session, lift, settling) }
 }
 
-/** Where the save edge's New and More send the lifted post. */
 private class LiftSaveRoutes(
     val newCodex: (suspend (ChosenCodex.New) -> Unit) -> Unit,
     val openPicker: (Post, Query?, CodexChosen) -> Unit,
@@ -93,7 +83,6 @@ private fun LiftDropEffect(
     val saveRoutes by rememberUpdatedState(routes)
     val failure by rememberUpdatedState(onFailure)
     val saved by rememberUpdatedState(onSaved)
-    // Drops outlive the overlay's phases: a save or trail keeps running after the copy has landed.
     val scope = rememberCoroutineScope()
     LaunchedEffect(session, quickSave, trails) {
         session.drops.collect { drop ->
@@ -107,7 +96,6 @@ private fun LiftDropEffect(
     }
 }
 
-/** Acts on [drop] and returns why it failed, or null. New and More hand off to their routes instead. */
 private suspend fun failureOf(
     drop: LiftDrop,
     session: LiftSession,
@@ -125,7 +113,6 @@ private suspend fun failureOf(
     return null
 }
 
-/** Saves [drop]'s post to [codex] and offers Undo; returns why it failed, or null. */
 private suspend fun saveFailure(
     drop: LiftDrop,
     codex: ChosenCodex,
@@ -133,16 +120,13 @@ private suspend fun saveFailure(
     onSaved: suspend (QuickSaveRecord) -> Boolean,
 ): String? {
     val record = quickSave.save(drop.lift.post, codex, drop.lift.query) ?: return "Could not save to ${codex.name}"
-    // Undo reverses exactly this save, even when a later save has replaced it as the last one.
     if (record.undoable && onSaved(record)) quickSave.undoQuickSave(record)
     return null
 }
 
-/** The scrim, both target edges and the lifted copy, for one lift from pick-up until it has landed. */
 @Composable
 private fun LiftStage(session: LiftSession, lift: LiftedPost, settling: LiftPhase.Settling?) {
     val quickSave = LocalQuickSave.current
-    // Null until the first ranking arrives: the end edge's targets shift then, so it takes no hover before.
     val suggestions by remember(lift.post.id, lift.query, quickSave) {
         quickSave.suggestions(lift.post, lift.query, SAVE_MENU_CODICES)
     }.collectAsStateWithLifecycle<SaveSuggestions?>(null)
@@ -152,7 +136,6 @@ private fun LiftStage(session: LiftSession, lift: LiftedPost, settling: LiftPhas
     }
     val quickState = rememberCollectTargetsState<LiftAction>()
     val saveState = rememberCollectTargetsState<LiftAction>()
-    // What the user sees highlighted is what a release acts on.
     SideEffect { session.targetAt = { saveState.hovered?.payload ?: quickState.hovered?.payload } }
     val appear = remember { Animatable(0f) }
     val land = remember { Animatable(0f) }
@@ -172,7 +155,6 @@ private fun LiftStage(session: LiftSession, lift: LiftedPost, settling: LiftPhas
     }
 }
 
-/** Both edges of targets; the only part besides the copy that follows the finger. */
 @Composable
 private fun LiftTargetEdges(
     session: LiftSession,
@@ -183,7 +165,6 @@ private fun LiftTargetEdges(
     saveState: CollectTargetsState<LiftAction>,
     appear: Animatable<Float, *>,
 ) {
-    // Once released, only a target that was dropped on stays highlighted, showing a check if it saved.
     val pointer = if (settling == null) session.hoverPointer else settling.at.takeIf { settling.action != null }
     val confirmed = settling?.action as? LiftAction.Save
     val save = remember(targets.save, confirmed) {

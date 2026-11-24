@@ -17,11 +17,6 @@ interface PostDownloadJobStore {
     suspend fun save(batches: List<PostDownloadBatch>)
 }
 
-/**
- * Operational identities only: no media URLs, credentials, paths or complete Post graphs. Versions 1 to 3 share one
- * record: version 2 added untrackedPreparation and version 3 added origin. An unreadable queue fails instead of
- * dropping jobs.
- */
 class FileBackedPostDownloadJobStore(private val file: File,
     private val store: AtomicJsonFileStore = AtomicJsonFileStore()) : PostDownloadJobStore {
     override suspend fun load(): List<PostDownloadBatch> = withContext(Dispatchers.IO) {
@@ -66,7 +61,6 @@ internal data class DownloadBatchRecord(
     val items: List<DownloadItemRecord>,
 )
 
-/** Optional keys are omitted rather than written as null or false, as every earlier version wrote them. */
 @Serializable
 internal data class DownloadItemRecord(
     @SerialName("id")
@@ -111,7 +105,6 @@ internal data class DownloadItemRecord(
             PostDownloadRequest(post, selected, marker, restored = true,
                 untrackedPreparation = untrackedPreparation == true ||
                     version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED),
-                // Downloads queued from For You were stored under its old short name.
                 originLabel = origin?.take(200)?.let { if (it == "FYP") "For You" else it } ?: "Downloads"),
             restoredStatus, downloadId, enqueuePending = enqueuePending ?: false)
     }

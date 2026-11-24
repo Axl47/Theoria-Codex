@@ -21,7 +21,6 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** A request from its start to each way it can end, as [SearchStateReducer] records it. */
 class SearchRequestReducerTest {
     @Test
     fun `begin loading clears old error while retaining visible content`() {
@@ -228,8 +227,6 @@ class SearchRequestReducerTest {
         val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
             .reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(first, second)))
         val newest = post("newest")
-        // The refresh finds the first post is a copy of the second, and brings another copy of it; the second's own hash
-        // came too late this time.
         val updated = first.copy(title = "Updated", pictureHash = PICTURE xor 0b111)
         val repost = post("repost").copy(pictureHash = PICTURE xor 0b1100_0000)
         val fresh = success(request, listOf(newest, updated, second.copy(pictureHash = null), repost))
@@ -241,7 +238,6 @@ class SearchRequestReducerTest {
         assertEquals(fresh.posts, atTop.content.results)
         assertEquals(listOf(updated, second, newest), scrolled.content.results)
         assertSame(atTop, atTop.reduce(SearchStateChange.CachedFirstPageScrolled))
-        // The next page keeps them too.
         val more = page(81L, scrolled)
         val paged = scrolled.reduce(SearchStateChange.BeginRequest(more))
             .reduce(SearchStateChange.PageResult(81L, nextPage(more, emptyList())))
@@ -291,7 +287,6 @@ class SearchRequestReducerTest {
 
     @Test
     fun `a page's copy of a shown card is dropped even when that card copies another shown one`() {
-        // Within 4 bits of its neighbour each, but 5 bits apart end to end.
         val first = post("first").copy(pictureHash = PICTURE)
         val second = post("second").copy(pictureHash = PICTURE xor 0b111)
         val repost = post("repost").copy(pictureHash = PICTURE xor 0b11_0111)
@@ -432,12 +427,10 @@ class SearchRequestReducerTest {
     private fun root(id: Long, query: Query, kind: SearchRequestKind = SearchRequestKind.REPLACE) =
         SearchRequest(id, kind, query)
 
-    /** A page request for the results [state] shows. */
     private fun page(id: Long, state: SearchUiState) = SearchRequest(
         id, SearchRequestKind.PAGE, state.query.applied, state.query.appliedSourceScope, state.query.appliedQueryHash,
     )
 
-    /** [query]'s completed search with [posts] on screen. */
     private fun showing(query: Query, posts: List<Post>, statuses: List<SourceRunStatus> = emptyList()) = SearchUiState(
         query = SearchQueryUiState(draft = query, applied = query, appliedQueryHash = QueryHash.from(query)),
         content = SearchContentUiState(results = posts, statuses = statuses, hasExecutedSearch = true, canLoadMore = true),

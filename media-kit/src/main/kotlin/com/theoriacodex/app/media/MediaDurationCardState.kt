@@ -14,7 +14,6 @@ val noMediaDurationStateForPost: (Post) -> Flow<MediaDurationState?> = {
     emptyMediaDurationState
 }
 
-/** Collects one post key so a badge update does not invalidate the route-wide feed. */
 @Composable
 fun observedMediaDurationMs(
     post: Post,

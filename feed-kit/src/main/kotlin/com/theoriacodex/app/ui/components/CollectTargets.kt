@@ -52,39 +52,30 @@ import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
 import kotlin.math.roundToInt
 
-/** What a collect target shows: an icon, a Codex cover that falls back to an icon, or progress while it works. */
 sealed interface CollectTargetVisual {
     data object Busy : CollectTargetVisual
     data class Icon(val icon: ImageVector) : CollectTargetVisual
     data class Cover(val candidates: List<CodexCoverCandidate>, val fallback: ImageVector) : CollectTargetVisual
 }
 
-/** One place a dragged finger can land. [key] is unique among the shown targets; callers act on [payload]. */
 @Immutable
 data class CollectTarget<out T>(val key: String, val label: String, val visual: CollectTargetVisual, val payload: T)
 
-/** Where [CollectTargets] lays its targets out. */
 sealed interface CollectTargetsLayout {
-    /** A column centred on the start or end screen edge. */
     data class EdgeColumn(val atEnd: Boolean = true) : CollectTargetsLayout
 
-    /** A row centred on the top or bottom screen edge, the first target leading. */
     data class EdgeRow(val atTop: Boolean) : CollectTargetsLayout
 
-    /** A stack rising from [anchor] (window coordinates, such as a button's top centre), the first target nearest. */
     data class Rising(val anchor: Offset) : CollectTargetsLayout
 }
 
-/** Where each shown target sits in the window, and which one the pointer is over. */
 @Stable
 class CollectTargetsState<T> {
     private val bounds = mutableStateMapOf<String, Rect>()
 
-    /** The target under the pointer as of the last frame, or null. Read it when the gesture ends. */
     var hovered: CollectTarget<T>? by mutableStateOf(null)
         internal set
 
-    /** The target among [targets] whose circle (grown by [slop] px) contains [pointer], in window coordinates. */
     fun targetAt(targets: List<CollectTarget<T>>, pointer: Offset, slop: Float = 0f): CollectTarget<T>? =
         targets.firstOrNull { target -> bounds[target.key]?.inflate(slop)?.contains(pointer) == true }
 
@@ -96,12 +87,6 @@ class CollectTargetsState<T> {
 @Composable
 fun <T> rememberCollectTargetsState(): CollectTargetsState<T> = remember { CollectTargetsState() }
 
-/**
- * Labelled circular targets for drag-to-collect gestures (Codices, New, Like, Similar, tags). Callers own the
- * gesture and pass its [pointer] in window coordinates, or null when no finger is down. The target under the
- * pointer grows and gains a ring, and each change of hovered target ticks once. Fills its parent, which should
- * cover the screen area the layout needs.
- */
 @Composable
 fun <T> CollectTargets(
     targets: List<CollectTarget<T>>,
@@ -128,7 +113,6 @@ fun <T> CollectTargets(
                 targets,
             )
             is CollectTargetsLayout.EdgeRow -> {
-                // Labels narrow before a full row would overflow, so every target stays reachable on a narrow screen.
                 val labelWidth = minOf(LABEL_WIDTH, (maxWidth - ROW_GAP * (targets.size - 1)) / targets.size.coerceAtLeast(1))
                 Row(
                     Modifier.align(if (layout.atTop) Alignment.TopCenter else Alignment.BottomCenter).padding(vertical = 12.dp),
@@ -143,7 +127,6 @@ fun <T> CollectTargets(
     }
 }
 
-/** Places the content with its bottom centre just above [anchor], in the parent's coordinates. */
 private fun Modifier.risingFrom(anchor: Offset): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
     layout(constraints.maxWidth, constraints.maxHeight) {
@@ -183,7 +166,6 @@ private fun <T> CollectTargetBubble(
                 }
             }
         }
-        // Labels sit over scrims and media rather than a surface, so they never take the inherited content color.
         Text(
             target.label,
             color = Color.White,

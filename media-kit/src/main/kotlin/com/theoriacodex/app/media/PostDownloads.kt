@@ -19,12 +19,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * The app's one download queue and the one writer of its [jobFile], created once in the app container so every
- * Activity instance uses this object: commands, workers and removals share one thread and one set of locks. Work
- * runs in [parentScope] (application-lived), so downloads and a started removal continue after the Activity finishes.
- * The list restores at once; downloads start only after [sourcesReady] returns (see [PostDownloadQueue]).
- */
 class PostDownloads(
     context: Context,
     jobFile: File,
@@ -34,7 +28,6 @@ class PostDownloads(
     exportAnimation: suspend (Post, String) -> Result<Unit>,
     sourcesReady: suspend () -> Unit,
 ) {
-    // One thread off Main serializes every queue command and worker continuation.
     private val queueDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val queueScope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]) + queueDispatcher)
     val feedback = MutationFeedback()
@@ -63,11 +56,6 @@ class PostDownloads(
 
     suspend fun localFile(item: PostDownloadItem): DownloadedPostFile? = backend.localFile(item)
 
-    /**
-     * Removes the downloads (and their files, for [deleteFiles]) on the queue's thread and returns whether every one
-     * went, a removed gallery's pages included; the caller offers Retry otherwise. A deferred removal commits through
-     * this after its Undo; once started it finishes deleting and saving the queue even if its caller is cancelled.
-     */
     suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = withContext(queueDispatcher + NonCancellable) {
         queue.removeItems(itemIds, deleteFiles)
     }
@@ -112,7 +100,6 @@ internal class AndroidPostDownloadBackend(
     }
 
     private fun enqueueResolved(request: PostDownloadRequest, post: Post, settings: CacheSettings): Long? {
-        // A restored page takes its media from the freshly resolved post, since saved URLs may have expired.
         val selected = request.selectedMedia?.let { page ->
             if (!request.restored) return@let page
             page.copy(media = post.downloadablePages.getOrNull(page.pageIndex)

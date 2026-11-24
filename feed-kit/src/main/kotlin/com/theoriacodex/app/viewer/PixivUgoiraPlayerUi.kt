@@ -21,10 +21,6 @@ import androidx.compose.ui.layout.ContentScale
 import com.theoriacodex.app.search.FEED_PLAYER_ACTIVATION_DELAY_MS
 import kotlinx.coroutines.delay
 
-/**
- * Plays a Pixiv ugoira on [controls]: the Viewer's commands, or [ViewerRendererControls.feedCard] on a card. Frames
- * play as soon as the first ones decode; [loadingPreview] shows until then.
- */
 @Composable
 fun PixivUgoiraPlayer(
     postId: String,
@@ -62,13 +58,11 @@ fun PixivUgoiraPlayer(
     UgoiraLoadedPlayer(playback, load, controls, events, contentDescription, contentScale, modifier, mediaModifier)
 }
 
-/** One load of a post's frames; a new post, client, size or retry generation starts another. */
 private class UgoiraLoad(initial: UgoiraPlayback?) {
     var playback by mutableStateOf(initial)
     var errorMessage by mutableStateOf<String?>(null)
 }
 
-/** Plays frames that are already available; loading and its failures stay with [PixivUgoiraPlayer]. */
 @Composable
 private fun UgoiraLoadedPlayer(
     playback: UgoiraPlayback,
@@ -89,7 +83,6 @@ private fun UgoiraLoadedPlayer(
         derivedStateOf { animationFrameIndexAt(frames.positionMs, frameEndsMs) }
     }
     val frame = playback.frames[frameIndex.coerceAtMost(playback.frames.lastIndex)]
-    // Cards and off-screen pages draw the bare frame: no box, timeline or progress to lay out per frame.
     if (!controls.showControls && !controls.showPassiveProgress) {
         Image(frame.bitmap.asImageBitmap(), contentDescription, modifier.then(mediaModifier), contentScale = contentScale)
         return

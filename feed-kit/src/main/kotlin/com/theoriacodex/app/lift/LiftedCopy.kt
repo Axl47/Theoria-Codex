@@ -21,13 +21,8 @@ import androidx.compose.ui.util.lerp
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 
-/** The shell's Pixiv animation client, so a lifted ugoira card plays as its grid card does. */
 val LocalLiftUgoiraClient = staticCompositionLocalOf<PixivUgoiraClient?> { null }
 
-/**
- * The card's copy under the finger. While lifted it follows [LiftSession.pointer] in layout only; once
- * released it shrinks into the target it was dropped on, or returns to its card, as [land] runs from 0 to 1.
- */
 @Composable
 internal fun LiftedCopy(session: LiftSession, lift: LiftedPost, settling: LiftPhase.Settling?, land: Animatable<Float, *>) {
     val bounds = lift.cardBounds
@@ -48,12 +43,10 @@ internal fun LiftedCopy(session: LiftSession, lift: LiftedPost, settling: LiftPh
                 this.shape = shape
                 clip = true
             }
-            // A picture of the card, not a second one: TalkBack and tests keep finding the original only.
             .clearAndSetSemantics {},
     ) { LiftedCard(lift, bounds.width / bounds.height) }
 }
 
-/** The grid's own card, so an animated or video post keeps playing under the finger. */
 @Composable
 internal fun LiftedCard(lift: LiftedPost, aspectRatio: Float) {
     SearchResultCard(
@@ -66,7 +59,6 @@ internal fun LiftedCard(lift: LiftedPost, aspectRatio: Float) {
     )
 }
 
-/** Where the copy's top-left sits: under the finger while lifted, then easing to where it lands. */
 private fun copyTopLeft(lift: LiftedPost, pointer: Offset, settling: LiftPhase.Settling?, progress: Float): Offset {
     val bounds = lift.cardBounds
     val held = bounds.topLeft + (pointer - lift.origin)

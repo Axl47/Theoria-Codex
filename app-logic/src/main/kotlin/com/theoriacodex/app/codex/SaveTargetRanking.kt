@@ -6,25 +6,8 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Query
 import kotlin.math.exp
 
-/**
- * A post's save targets, ranked once so every save surface agrees.
- *
- * [ordered] is the Save-to-Codex picker's list: Codices already holding the post first, then by score.
- * [suggestions] are the best Codices the post is not in yet, for one-tap save surfaces.
- * [inAnyCodex] is true when one of the profile's Codices (Likes aside) already holds the post.
- */
 data class SaveTargets(val ordered: List<Codex>, val suggestions: List<Codex>, val inAnyCodex: Boolean)
 
-/**
- * Ranks [codices], one profile's Codices in library order, as save targets in profile [profileId].
- *
- * Scores are [relevance] lifted by this session's saves from [query] in [searchSaves], plus a boost for a Codex saved
- * into in the last half hour or so ([lastSavedAt], epoch ms by Codex id, as of [nowEpochMs]): saves tend to come in
- * runs into one Codex. The boost closes part of the gap to [SEARCH_SAVE_TIER], so it never lifts a Codex over one this
- * search already saved into, whether [searchSaves] or the caller applied that lift. Ties keep library order. The profile's Likes and [excludedCodexIds] are never targets.
- * Suggestions break score ties by the most recent save, so with no scores the most recently used Codex comes first.
- * Empty [relevance], no [searchSaves] and no [lastSavedAt] give library order.
- */
 fun rankSaveTargets(
     codices: List<Codex>,
     profileId: String,
@@ -57,13 +40,8 @@ fun rankSaveTargets(
     )
 }
 
-/** When each Codex last received a post, epoch ms by Codex id, for [rankSaveTargets]. */
 fun latestSaveTimes(itemsByCodex: Map<String, List<CodexItem>>): Map<String, Long> =
     itemsByCodex.mapValues { (_, items) -> items.maxOfOrNull(CodexItem::savedAtEpochMs) ?: 0L }
 
-/**
- * The share of the gap to [SEARCH_SAVE_TIER] closed for a Codex saved into just now, fading by about two thirds every
- * [RECENT_SAVE_DECAY_MS].
- */
 private const val RECENT_SAVE_WEIGHT = 0.3
 private const val RECENT_SAVE_DECAY_MS = 30 * 60_000.0

@@ -24,15 +24,9 @@ import com.theoriacodex.app.ui.navigation.LocalLiftController
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 
-/**
- * The applied search whose results a grid shows. Cards under it lift with that query, so the lift ranks and
- * remembers Codex targets as the Viewer's Save does for the same search; null elsewhere.
- */
 val LocalLiftQuery = staticCompositionLocalOf<Query?> { null }
 
-/** One card's lift in progress through [controller]: where the card is, and the finger's last window position. */
 private class CardLift(private val controller: LiftController) {
-    /** The search the card belongs to, kept current by the composable; see [LocalLiftQuery]. */
     var query: Query? = null
     var coordinates: LayoutCoordinates? = null
     var lifting = false
@@ -41,10 +35,6 @@ private class CardLift(private val controller: LiftController) {
 
     private fun toWindow(local: Offset): Offset? = coordinates?.takeIf { it.isAttached }?.localToWindow(local)
 
-    /**
-     * Lifts [post] from [bounds] at the long-press timeout; true when the card should open its menu instead. A
-     * long press while another lift is active (a second finger) does nothing.
-     */
     fun start(local: Offset, post: Post, bounds: Rect?, like: LiftLike?): Boolean {
         if (controller.lifting) return false
         val window = toWindow(local)
@@ -61,7 +51,6 @@ private class CardLift(private val controller: LiftController) {
         }
     }
 
-    /** Releases the lift; true when the release asks for the post menu. */
     fun end(): Boolean {
         if (!lifting) return false
         lifting = false
@@ -75,14 +64,6 @@ private class CardLift(private val controller: LiftController) {
     }
 }
 
-/**
- * A feed card's long-press, as a modifier placed after its clickable (so a lift's release never also clicks it).
- * At the long-press timeout the card's post is lifted through [LocalLiftController] from [mediaBounds] and follows
- * the finger until release; the drag is consumed, so the grid, shelf and pager do not scroll under it. A release
- * the controller reads as [LiftRelease.OpenMenu], or a controller that does not lift, calls [onLongPress] as a
- * long-click did. Accessibility services keep a long-click action that opens the menu directly. A null
- * [onLongPress] leaves the card without long-press.
- */
 @Composable
 internal fun rememberCardLiftModifier(
     post: Post,
@@ -99,7 +80,6 @@ internal fun rememberCardLiftModifier(
     val currentLike by rememberUpdatedState(onToggleLike?.let { LiftLike(liked, it) })
     val currentLongPress by rememberUpdatedState(onLongPress)
     val lift = remember(post.id, controller) { CardLift(controller) }.also { it.query = LocalLiftQuery.current }
-    // A feed update can dispose the card mid-lift; the overlay must not keep showing it.
     DisposableEffect(lift) { onDispose(lift::cancel) }
     return Modifier
         .onPlaced { lift.coordinates = it }

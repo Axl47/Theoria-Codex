@@ -41,7 +41,6 @@ class DiagnosticLogStoreTest {
         val store = store()
         repeat(4_000) { index ->
             store.record("area", "message $index " + "x y ".repeat(50), null)
-            // Waiting keeps this below the flood limit, which would otherwise drop the newest lines.
             if (index % 100 == 0) store.readEvents()
         }
 

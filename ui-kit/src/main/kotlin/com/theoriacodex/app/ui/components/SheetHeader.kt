@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/** Balanced sheet title with a close action and an optional trailing action. */
 @Composable
 fun SheetHeader(
     title: String,

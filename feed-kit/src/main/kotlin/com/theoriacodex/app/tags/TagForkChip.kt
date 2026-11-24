@@ -11,10 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 
-/**
- * A tag chip where a tap forks a trail from the tag ([onFork]) and a long-press opens [moves]: the Search draft edits and
- * saving that a tap and hold do on other screens. TalkBack reaches each move directly as a custom action.
- */
 @Composable
 internal fun TagForkChip(
     name: String,

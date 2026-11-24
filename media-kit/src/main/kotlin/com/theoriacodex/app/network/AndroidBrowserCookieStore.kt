@@ -5,10 +5,6 @@ import com.theoriacodex.sources.http.BrowserCookieStore
 import com.theoriacodex.sources.http.HostOutageTracker
 import java.net.URI
 
-/**
- * The system WebView's [CookieManager], which the in-app browser writes to and the app's HTTP clients read through
- * their cookie jars. It can throw when the WebView is missing or updating; callers guard every call.
- */
 object AndroidBrowserCookieStore : BrowserCookieStore {
     override fun cookieHeader(url: String): String? =
         CookieManager.getInstance().getCookie(url)?.takeIf(String::isNotBlank)
@@ -21,12 +17,6 @@ object AndroidBrowserCookieStore : BrowserCookieStore {
         CookieManager.getInstance().flush()
     }
 
-    /**
-     * Overwrites each cookie with an expired one, in every form it can have been stored in: host-only or on the
-     * domain it was created with (a `www.` site's can sit on the parent), and, over HTTPS, `Secure` and partitioned.
-     * The WebView keeps a `Secure` cookie from being replaced by one without the flag, and a partitioned one (as
-     * Cloudflare's clearance is) is only replaced within its partition.
-     */
     override fun expire(url: String, name: String?) {
         val address = runCatching { URI(url) }.getOrNull() ?: return
         val host = address.host ?: return

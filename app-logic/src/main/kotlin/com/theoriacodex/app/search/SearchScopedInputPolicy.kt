@@ -37,11 +37,6 @@ fun resolveSupportedScope(
         ?: scopes.firstOrNull { it.facet == prefix.facet }
 }
 
-/**
- * The tag type typed input is aimed at: a prefix such as `artist:` resolves against [supported] and
- * overrides the picked [selected] scope. A prefix this mode cannot search gives null, except `tag:`,
- * which always means general tags.
- */
 fun typedInputScope(
     input: ParsedScopedInput,
     selected: FacetedSearchScope,

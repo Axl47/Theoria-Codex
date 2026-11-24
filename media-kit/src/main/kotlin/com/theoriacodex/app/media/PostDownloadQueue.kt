@@ -27,10 +27,6 @@ data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val to
 
 enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
 
-/**
- * One download in a batch. [expandedFrom] is the gallery row this page replaced when the gallery expanded during
- * this run (not saved), so a removal of that row also covers its pages and the sheet keeps one Undo for them.
- */
 data class PostDownloadItem(
     val id: Long,
     val request: PostDownloadRequest,
@@ -44,7 +40,6 @@ data class PostDownloadItem(
 ) {
     val active: Boolean get() = status in ACTIVE_DOWNLOAD_STATUSES
 
-    /** Whether a removal of [ids] covers this download: named directly, or a page of a gallery row it names. */
     fun removedBy(ids: Set<Long>): Boolean = id in ids || expandedFrom in ids
 }
 
@@ -56,7 +51,6 @@ data class PostDownloadBatch(val id: Long, val title: String, val items: List<Po
     val settledCount: Int get() = items.count { !it.active }
 }
 
-/** Completed bytes in retained job history; not a measurement of files on disk. */
 fun List<PostDownloadBatch>.savedBytes(): Long =
     sumOf { batch -> batch.items.filter { it.status == PostDownloadStatus.SAVED }.sumOf(PostDownloadItem::downloadedBytes) }
 
@@ -77,16 +71,10 @@ interface PostDownloadBackend {
     suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload
     suspend fun findTransfer(marker: String): Long? = null
     suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot
-    /** Remove incomplete transfers only; completed public files must remain on the device. */
     suspend fun cancel(downloadId: Long)
     suspend fun deleteFile(item: PostDownloadItem) { error("File deletion is unavailable") }
 }
 
-/**
- * All calls and state updates use the owner's dispatcher. Two workers bound preparation and transfers. Each worker
- * waits on [startGate] before running its item, so restored work cannot run, or fail, before the sources it
- * resolves through are ready; the list itself restores and shows at once.
- */
 class PostDownloadQueue(
     private val scope: CoroutineScope,
     private val backend: PostDownloadBackend,
@@ -143,7 +131,6 @@ class PostDownloadQueue(
             workers[item.id]?.cancel()
         }
         checkpoint()
-        // A restored native transfer may still be waiting for a worker slot.
         withContext(NonCancellable) { activeItems.forEach { item -> cancelNativeTransfer(item) } }
         schedule()
     }
@@ -157,13 +144,8 @@ class PostDownloadQueue(
         schedule()
     }
 
-    /**
-     * Stop workers before record removal; history-only clearing never deletes completed files. Returns whether every
-     * download the removal covers ([PostDownloadItem.removedBy]) went.
-     */
     suspend fun removeItems(itemIds: Set<Long>, deleteFiles: Boolean): Boolean {
         restore()
-        // A confirmation can outlive the parent row while a gallery becomes page downloads.
         val selected = mutableBatches.value.flatMap { it.items }.filter { it.removedBy(itemIds) }
         selected.filter { it.active }.forEach { item ->
             update(item.id) { it.copy(status = PostDownloadStatus.CANCELLED, message = null) }
@@ -195,7 +177,6 @@ class PostDownloadQueue(
 
     private suspend fun retryItem(item: PostDownloadItem) {
         val nativeId = nativeTransferId(item)
-        // Losing a marker to a native redirect cannot authorize a duplicate of an unknown transfer.
         if (item.enqueuePending && nativeId == null) return
         val nativeStatus = nativeId?.let { backend.snapshot(it).status }
         if (nativeStatus == PostDownloadStatus.SAVED || nativeStatus == PostDownloadStatus.ALREADY_EXISTS) {
@@ -231,7 +212,6 @@ class PostDownloadQueue(
         }
     }
 
-    // Unexpected failures surface only as a generic user message; the queue has no logging seam, so the cause is dropped.
     @Suppress("SwallowedException")
     private suspend fun execute(item: PostDownloadItem) {
         var downloadId: Long? = item.downloadId
@@ -294,11 +274,9 @@ class PostDownloadQueue(
         nativeTransferId(item)?.let { backend.cancel(it) }
     }
 
-    /** The item's Android transfer, looked up by its marker when the process died before the id was saved. */
     private suspend fun nativeTransferId(item: PostDownloadItem): Long? =
         item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
 
-    /** Publishes [next] and saves it; if the save fails, publishes [rollback]'s list instead and rethrows. */
     private suspend fun commit(next: List<PostDownloadBatch>, rollback: () -> List<PostDownloadBatch>) {
         mutableBatches.value = next
         var committed = false
@@ -351,7 +329,6 @@ class PostDownloadQueue(
 
 }
 
-/** Expansion happens after one authoritative resolution; selected Viewer pages never expand again. */
 fun galleryDownloadPages(post: Post): List<PostDownloadRequest> {
     val media = post.downloadablePages
     if ((post.mediaCount ?: media.size) > media.size) {

@@ -13,21 +13,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** What the Viewer's comment UI can ask for; a post's state is read from [PostCommentsController.state]. */
 interface PostCommentsActions {
-    /** Loads the next page of the post's comments; also retries a page that failed. */
     fun loadMore(post: Post)
 
-    /** Opens or closes the replies under [comment], loading their first page on first opening. */
     fun toggleReplies(post: Post, comment: PostComment)
 
-    /** Loads the next page of replies under [comment]; also retries a page that failed. */
     fun loadMoreReplies(post: Post, comment: PostComment)
 
-    /** The link that opens [target] on [post], or null when the post has no page URL to build it on. */
     fun linkTo(post: Post, target: CommentTarget): String?
 
-    /** The list scrolled to the post's focused comment; clears [PostCommentsState.focusKey] so it acts once. */
     fun focusShown(post: Post)
 
     companion object {
@@ -41,15 +35,6 @@ interface PostCommentsActions {
     }
 }
 
-/**
- * Owns the comments of the posts one Viewer session has shown, so swiping back to a post is instant. The
- * first page of each post the Viewer [show]s (the current one and its neighbours) loads in the background;
- * everything else waits for a tap. Pages come
- * through [loader], which caches them, so this holds only what the screen draws.
- *
- * [beforeFirstFetch] runs before each background first-page request, letting the Viewer keep the shown
- * media's own loading ahead of this speculative request.
- */
 class PostCommentsController(
     private val loader: CommentsLoading,
     private val scope: CoroutineScope,
@@ -60,7 +45,6 @@ class PostCommentsController(
     private val mutableState = MutableStateFlow<Map<PostId, PostCommentsState>>(emptyMap())
     val state: StateFlow<Map<PostId, PostCommentsState>> = mutableState.asStateFlow()
 
-    /** Starts the post's first page unless it already started or [shouldFetchFirstPage] says not to. */
     fun show(post: Post) {
         if (post.id in mutableState.value || !loader.shouldFetchFirstPage(post)) return
         synchronized(lock) {
@@ -111,12 +95,6 @@ class PostCommentsController(
         synchronized(lock) { update(post.id) { it.copy(focusKey = null) } }
     }
 
-    /**
-     * Looks for the comment [target] names, so the sheet can scroll to it: pages the post's comments until it
-     * (or, for a reply, its parent) shows up, then opens the parent's replies and pages those. Both searches stop
-     * after [MAX_FOCUS_PAGES] requests. On success [PostCommentsState.focusKey] names the item; otherwise nothing
-     * changes, and the post's comments simply open as usual. Like the first page, it waits for [beforeFirstFetch].
-     */
     fun focus(post: Post, target: CommentTarget) {
         if (!loader.shouldFetchFirstPage(post)) return
         synchronized(lock) {
@@ -139,7 +117,6 @@ class PostCommentsController(
         }
     }
 
-    /** Pages the replies under [parent] (the post's own comments when null) until one has [id]; null if none does, or a page fails. */
     private suspend fun pageUntilFound(post: Post, parent: PostComment?, id: String): PostComment? {
         var requests = 0
         while (true) {
@@ -160,7 +137,6 @@ class PostCommentsController(
     private fun listFor(id: PostId, parent: PostComment?): CommentList? =
         mutableState.value[id]?.let { state -> if (parent == null) state.top else state.replies[parent.id] ?: CommentList() }
 
-    /** Forgets every post and stops the requests in flight, for a Viewer session that was replaced. */
     fun reset() {
         synchronized(lock) {
             jobs.toList().forEach(Job::cancel)
@@ -177,7 +153,6 @@ class PostCommentsController(
 
     private suspend fun fetchTop(post: Post, token: String? = null) = fetch(post, token, parent = null)
 
-    /** Applies one page, or its failure, to the list it belongs to. */
     private suspend fun fetch(post: Post, token: String?, parent: PostComment?) {
         val result = runCatchingPreservingCancellation { loader.load(post, token, parent) }
         synchronized(lock) {
@@ -197,7 +172,6 @@ class PostCommentsController(
     }
 
     private companion object {
-        /** How many pages [focus] requests per list before giving up on a comment. */
         const val MAX_FOCUS_PAGES = 10
     }
 }

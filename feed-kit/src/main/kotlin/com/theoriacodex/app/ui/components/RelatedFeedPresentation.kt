@@ -24,11 +24,6 @@ data class RelatedFeedPresentation(
     val projection: RelatedFeedProjection,
 )
 
-/**
- * A feed's related shelf: its loaded posts after the feed's filters, and where it sits among the feed's posts.
- * [retainKey], the feed's own key, keeps the shelf's resolved lengths while the Viewer covers the feed, so the first
- * frame back filters with them instead of hiding every post whose length had to be probed.
- */
 @Composable
 fun rememberRelatedFeedPresentation(
     retainKey: String,
@@ -49,7 +44,6 @@ fun rememberRelatedFeedPresentation(
     val relatedPosts = relatedState.loadedPosts
     val durationMetadata = rememberDurationFilterMetadata(relatedPosts, durationStates, durationFilterActive, "$retainKey:related")
     val marks = visibilityFilters.markInputs(likedPostIds, savedPostIds, watchedPostIds, retainedLikedPostIds)
-    // At most MAX_RELATED_POSTS posts, so filtering in the frame costs microseconds and shows a length's effect at once.
     val visiblePosts = remember(
         relatedPosts,
         visibilityFilters,
@@ -76,10 +70,6 @@ fun rememberRelatedFeedPresentation(
     )
 }
 
-/**
- * Page demand for a feed shown through [projection]: grid positions map back to the feed's own posts, and the grid
- * ends where the projection does, so a related shelf inserted among the posts does not end the feed one item early.
- */
 @Composable
 fun rememberFeedPageDemand(
     input: FeedPageDemandInput,

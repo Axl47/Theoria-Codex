@@ -14,16 +14,11 @@ private const val MAIN_THREAD_AREA = "main-thread"
 private const val STRICT_MODE_AREA = "strictmode"
 private const val APP_PACKAGE_PREFIX = "com.theoriacodex."
 
-/** The checker [installOffMainChecker] installs; device tests read its counts. */
 val mainThreadWorkChecker = MainThreadWorkChecker(
     isMainThread = { Looper.getMainLooper().isCurrentThread },
     report = ::reportMainThreadWork,
 )
 
-/**
- * Reports [OffMainWork] that runs on the main thread to logcat and the diagnostics log. Installed once, in the main
- * process only, next to the diagnostics log: no other process calls a source adapter.
- */
 fun installOffMainChecker() {
     OffMainWork.install(mainThreadWorkChecker)
 }
@@ -38,17 +33,8 @@ private fun reportMainThreadWork(report: MainThreadWorkReport) = when (report) {
     is MainThreadWorkReport.LimitReached -> reportLimit(MAIN_THREAD_AREA, report.siteLimit)
 }
 
-/**
- * StrictMode violations in debug builds, counted per class of the topmost app frame (its outer class, so lambdas
- * count with the code that wrote them) and reported once per distinct frame. Device tests read the counts.
- */
 val strictModeViolations = ViolationLedger()
 
-/**
- * Debug builds only: extends the calling thread's existing policy, so Android's network-on-main protection stays,
- * to report disk reads and writes. Call on the main thread. StrictMode sees disk access performed on the main thread,
- * not the main thread waiting for another thread's disk access.
- */
 fun installDebugStrictMode() {
     if (!BuildConfig.DEBUG) return
     val listenerThread = Executors.newSingleThreadExecutor { task ->
@@ -84,5 +70,4 @@ private fun reportLimit(area: String, siteLimit: Int) {
     Diagnostics.report(area, message)
 }
 
-/** Carries a call site's frames into logcat and the diagnostics log. Never thrown. */
 private class CallSiteStack : Throwable("call site")

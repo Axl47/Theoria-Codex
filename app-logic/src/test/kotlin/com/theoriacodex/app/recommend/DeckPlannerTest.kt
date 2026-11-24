@@ -62,7 +62,6 @@ class DeckPlannerTest {
     }
 
     @Test fun `one picture is dealt once, and not at all when a copy was seen`() {
-        // a1 and b1 are one picture on two sites; b2 is a copy of the kept k.
         val copies = mapOf("a1" to setOf("a1", "b1"), "b1" to setOf("a1", "b1"), "b2" to setOf("b2", "k"))
         val batch = nextBatch(
             listOf(lane(a, "a1", "a2"), lane(b, "b1", "b2", "b3")), DeckSteering(), setOf(id("k"))::contains, size = 4,

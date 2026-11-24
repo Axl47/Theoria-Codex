@@ -171,7 +171,6 @@ class SearchDraftReducerTest {
         assertEquals(listOf(artist, hidden), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.GELBOORU, typed))
         assertEquals(emptyList<SearchTerm>(), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.PIXIV, typed))
         assertEquals(emptyList<SearchTerm>(), SearchDraftReducer.termsLostToPostTerm(draft, SourceKey.GELBOORU, SearchTerm("sky")))
-        // The report matches what adding the tag really removes.
         val added = SearchDraftReducer.addPostTerm(
             state(draft, available = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)), post(SourceKey.GELBOORU), typed, excluded = false,
         ).state.query.draft

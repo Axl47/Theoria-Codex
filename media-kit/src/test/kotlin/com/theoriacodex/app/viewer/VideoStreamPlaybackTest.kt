@@ -27,7 +27,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Real Media3 players against [StreamFixtureServer]: what [VideoPlaybackInfrastructure.bind] makes of each request field. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class VideoStreamPlaybackTest {
@@ -36,7 +35,6 @@ class VideoStreamPlaybackTest {
         streamFixtureRoutes(application.assets) + mapOf(
             "/main.wav" to FixtureRoute.Body(wav(channels = 1)),
             "/ja.wav" to FixtureRoute.Body(wav(channels = 1)),
-            // Media3 alone would prefer this one, for its extra channel.
             "/en.wav" to FixtureRoute.Body(wav(channels = 2)),
             "/bad.mpd" to FixtureRoute.Body("4f2a9c0e17".toByteArray()),
             "/subtitles/page" to FixtureRoute.Body("<html><body>Not found</body></html>".toByteArray()),
@@ -56,21 +54,17 @@ class VideoStreamPlaybackTest {
         assertTrue(source(request("https://cdn.test/manifest.mpd")) is DashMediaSource)
         assertTrue(source(request("https://cdn.test/clip.m3u8", mime = "video/mp4")) is ProgressiveMediaSource)
         assertTrue(source(request("https://cdn.test/stream")) is ProgressiveMediaSource)
-        // Formats the app plays as nothing else (SmoothStreaming, RTSP) are progressive files, not a crash here.
         assertTrue(source(request("https://cdn.test/live.isml/manifest")) is ProgressiveMediaSource)
         assertTrue(source(request("https://cdn.test/live", mime = "application/vnd.ms-sstr+xml")) is ProgressiveMediaSource)
         assertTrue(source(request("rtsp://cam.test/stream", mime = "application/x-rtsp")) is ProgressiveMediaSource)
-        // An extension's own proxy on the device is an ordinary web address.
         val loopback = request("http://127.0.0.1:8341/clip.mp4", mime = "video/mp4")
         assertEquals("http://127.0.0.1:8341/clip.mp4", infrastructure.bind(loopback).mediaItem.localConfiguration?.uri.toString())
         assertEquals(videoCacheKey(loopback.location, loopback.headers), cacheKey(loopback))
         val post = request("https://cdn.test/clip", mime = "video/webm")
         assertTrue(source(post) is ProgressiveMediaSource)
-        // The key names the bytes alone, whatever else the request adds.
         assertEquals(videoCacheKey(post.location, post.headers), cacheKey(post.copy(subtitles = listOf(MediaTrack("https://cdn.test/a.vtt", "A")))))
         assertNull(cacheKey(request("https://cdn.test/master.m3u8")))
         assertNull(cacheKey(request("https://cdn.test/clip.mp4", cache = false)))
-        // What the cache keeps, or a file on the device, may be read ahead; any other web stream may not.
         assertEquals(
             listOf(true, true, false, false),
             listOf(post, request("/data/clip.mp4"), request("https://cdn.test/master.m3u8"), request("https://cdn.test/clip.mp4", cache = false))
@@ -85,14 +79,12 @@ class VideoStreamPlaybackTest {
                 headers = STREAM_FIXTURE_HEADERS,
                 mime = "application/vnd.apple.mpegurl",
                 subtitles = listOf(MediaTrack("${server.base}/subtitles/en.vtt", "English")),
-                // Without an extension, the audio is read as the same kind of stream as the episode.
                 audioTracks = listOf(MediaTrack("${server.base}/hls/audio", "Japanese")),
                 cache = false,
             ),
         )
         val player = lease.player
         until { player.playbackTracks().subtitles.isNotEmpty() && "/hls/audio0.ts" in server.paths() && "/hls/video0.ts" in server.paths() }
-        // Only the side-loaded file: HLS no longer lists a closed-caption track its playlist never declared.
         player.selectSubtitle(player.playbackTracks().subtitles.single().id)
         until { "/subtitles/en.vtt" in server.paths() }
 
@@ -130,7 +122,6 @@ class VideoStreamPlaybackTest {
         until { player.playbackTracks().audio.any { it.label == "Japanese" && it.selected } }
         val tracks = player.playbackTracks().audio
 
-        // The video's own audio is unnamed, so it is named by its place.
         assertEquals(listOf("Track 1", "Japanese", "English"), tracks.map { it.label })
         player.selectAudio(tracks.single { it.label == "English" }.id)
         until { player.playbackTracks().audio.single { it.selected }.label == "English" }
@@ -164,13 +155,11 @@ class VideoStreamPlaybackTest {
         assertTrue(server.paths().none { it.startsWith("/subtitles/") })
         player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "Signs" }.id)
         until { player.playbackTracks().subtitles.single { it.label == "Signs" }.selected }
-        // Served at a .vtt address, but its first bytes say it is ASS.
         player.addListener(object : Player.Listener {
             override fun onCues(cueGroup: CueGroup) { cueGroup.cues.mapNotNullTo(cues) { it.text?.toString() } }
         })
         player.play()
         until { "Sniffed cue" in cues }
-        // A drag turns the chosen subtitles off, rather than decoding the file again after each of its seeks.
         player.scrubTo(1_000L)
         until { player.playbackTracks().subtitles.none { it.selected } }
         player.endScrub()
@@ -241,7 +230,6 @@ class VideoStreamPlaybackTest {
         subtitles: List<MediaTrack> = emptyList(),
     ) = VideoPlaybackRequest(location, emptyMap(), mime = mime, subtitles = subtitles, cache = cache)
 
-    /** Runs the main looper, and with it the player's clock, until [condition] holds. */
     private fun until(condition: () -> Boolean) {
         val deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos()
         while (!condition()) {
@@ -252,7 +240,6 @@ class VideoStreamPlaybackTest {
     }
 }
 
-/** Two seconds of 16-bit silence as a WAV file: audio that plays without a codec. */
 private fun wav(channels: Int, sampleRate: Int = 8_000): ByteArray {
     val dataBytes = 2 * sampleRate * channels * 2
     return ByteBuffer.allocate(44 + dataBytes).order(ByteOrder.LITTLE_ENDIAN).apply {

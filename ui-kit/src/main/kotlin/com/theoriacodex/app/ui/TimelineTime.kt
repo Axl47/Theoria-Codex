@@ -2,7 +2,6 @@ package com.theoriacodex.app.ui
 
 import java.util.Locale
 
-/** A playback time as the Viewer's timeline writes it: "8:05", or "1:02:05" past an hour. Negative reads as 0:00. */
 fun formatTimelineTime(valueMs: Long): String {
     val totalSeconds = (valueMs.coerceAtLeast(0L) / 1000L)
     val hours = totalSeconds / 3600L

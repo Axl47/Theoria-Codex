@@ -10,10 +10,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
-/**
- * The "Filter tags" field over a tag list. Its button clears the text; with [onClose] it also closes the
- * field, so the button stays while the field is empty.
- */
 @Composable
 fun TagFilterField(
     value: String,
@@ -44,7 +40,6 @@ fun TagFilterField(
     )
 }
 
-/** Folds case, underscores and runs of spaces, so "Long  Hair" finds "long_hair". */
 fun String.normalizedTagFilterText(): String = trim()
     .lowercase()
     .replace('_', ' ')

@@ -7,7 +7,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
 
-/** How a listed tag relates to the query being built. */
 enum class TagChipState(val description: String, val mark: String?) {
     NONE("Not in search", null),
     REQUIRED("Required", "+"),
@@ -20,7 +19,6 @@ fun PostTagSelection.chipState(term: SearchTerm): TagChipState = when {
     else -> TagChipState.NONE
 }
 
-/** What one tap on a listed tag does. Stored terms keep the draft's own form of a matching tag. */
 sealed interface TagTapEffect {
     data object AddRequired : TagTapEffect
     data class AddAlternative(val groupIndex: Int) : TagTapEffect
@@ -28,21 +26,18 @@ sealed interface TagTapEffect {
     data class Clear(val stored: SearchTerm) : TagTapEffect
 }
 
-/** Taps cycle: not in search, then required (or into [targetGroup]), then excluded, then cleared. */
 fun tagTapEffect(term: SearchTerm, selection: PostTagSelection, targetGroup: Int?): TagTapEffect {
     selection.included(term)?.let { return TagTapEffect.SwitchToExcluded(it) }
     selection.excluded(term)?.let { return TagTapEffect.Clear(it) }
     return targetGroup?.let(TagTapEffect::AddAlternative) ?: TagTapEffect.AddRequired
 }
 
-/** What TalkBack announces a tap will do next. */
 fun tagTapLabel(name: String, state: TagChipState): String = when (state) {
     TagChipState.NONE -> "Include $name in Search"
     TagChipState.REQUIRED -> "Exclude $name from Search"
     TagChipState.EXCLUDED -> "Remove $name from Search"
 }
 
-/** Applies one tap to a query held locally, as the Codex search does before it runs. */
 fun Query.withTagTap(source: SourceKey, term: SearchTerm, targetGroup: Int?): Query {
     val selection = PostTagSelection(source, includeTerms, excludeTerms)
     return when (val effect = tagTapEffect(term, selection, targetGroup)) {
@@ -66,7 +61,6 @@ private fun Query.withoutIncludeTerm(term: SearchTerm): Query = withIncludeTermG
     },
 )
 
-/** At most four characters ("842", "1.2k", "84k", "1.2m"), which the chip's fixed slot relies on. */
 fun compactTagCount(count: Int): String {
     val (unit, suffix) = when {
         count >= 1_000_000_000 -> 1_000_000_000 to "b"

@@ -71,7 +71,6 @@ class SourceMetadataTest {
         assertEquals("Iwara", SourceKey.IWARA.displayName())
         assertEquals("https://hitomi.la/", SourceKey.HITOMI.requestHeaders()["Referer"])
         assertEquals("Hitomi", SourceKey.HITOMI.displayName())
-        // Danbooru's Cloudflare challenges the generic browser agent on its media CDN.
         assertEquals(THEORIA_SOURCE_USER_AGENT, SourceKey.DANBOORU.requestHeaders()["User-Agent"])
     }
 
