@@ -152,6 +152,7 @@
 
 ### Fixed
 
+- A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - The notification saying chapters wait for their extension no longer stays up after chapter downloads fail. It comes back once downloads get through if those chapters are still waiting.

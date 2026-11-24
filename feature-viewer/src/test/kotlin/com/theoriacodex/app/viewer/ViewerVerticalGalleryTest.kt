@@ -141,7 +141,7 @@ class ViewerVerticalGalleryTest {
                     uiState = state.value,
                     host = ViewerScreenHost(
                         onAction = { state.value = reduceViewerState(state.value, it).state },
-                        onVisibleMediaChanged = { post, number -> if (post.id == gallery.id) recorded += number },
+                        onVisibleMediaChanged = { post, number, _ -> if (post.id == gallery.id) recorded += number },
                     ),
                     config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
                 )
@@ -166,7 +166,7 @@ class ViewerVerticalGalleryTest {
                     uiState = state.value,
                     host = ViewerScreenHost(
                         onAction = { state.value = reduceViewerState(state.value, it).state },
-                        onVisibleMediaChanged = { post, _ -> if (post.id == gallery.id) reported += post.media.size },
+                        onVisibleMediaChanged = { post, _, _ -> if (post.id == gallery.id) reported += post.media.size },
                     ),
                     config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
                 )
@@ -175,6 +175,53 @@ class ViewerVerticalGalleryTest {
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals("reported page counts $reported", gallery.media.size, reported.lastOrNull()) }
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a chapter reopens where the reader left it inside its page (ADR 0192)`() {
+        val land = installGatedLoader(width = 100, height = 400)
+        state.value = createViewerUiState(
+            ViewerSessionIdentity("offset"), listOf(gallery, next), initialMediaIndices = mapOf(gallery.id to 2),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.5f)),
+        )
+        show()
+        compose.runOnIdle { land() }
+        compose.waitForIdle()
+
+        val page = compose.onNodeWithContentDescription("Page 3").fetchSemanticsNode()
+        val line = compose.onRoot().fetchSemanticsNode().size.height / 3f
+        assertEquals(0.5f, (line - page.positionInRoot.y) / page.size.height, 0.02f)
+        assertEquals(2, state.value.currentPage?.selectedMediaIndex)
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `scrolling inside a chapter's page reports how far into the page the reader is (ADR 0192)`() {
+        val land = installGatedLoader(width = 100, height = 400)
+        val reported = mutableListOf<Pair<Int, Float?>>()
+        state.value = createViewerUiState(
+            ViewerSessionIdentity("report"), listOf(gallery, next), series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL),
+        )
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value,
+                    host = ViewerScreenHost(
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onVisibleMediaChanged = { post, number, offset -> if (post.id == gallery.id) reported += number to offset },
+                    ),
+                    config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
+                )
+            }
+        }
+        compose.runOnIdle { land() }
+        compose.waitForIdle()
+        val before = reported.last().second
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 8f, endY = centerY - height / 8f) }
+        compose.waitForIdle()
+
+        val (number, offset) = reported.last()
+        assertEquals(1, number)
+        assertTrue("reported $reported", before != null && offset != null && offset > before && offset < 1f)
     }
 
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {

@@ -9,6 +9,7 @@ A series is read or watched through the same Viewer as posts, but it has its own
 ## Decision
 
 - `SeriesReader.session` builds a session over the series' stored entries in reading order, opening at the requested entry. A chapter opens on `pageIndex` or where the user left it; an episode starts where the user left it (a playback position), so `pageIndex` means nothing for an anime. It returns null when the series or entry is not stored. Posts arrive with their media when the Viewer reaches them, so the Viewer's own start position, next-post swipe and end card give resume and next entry.
+- A chapter also reopens where the reader was inside its page. The vertical gallery reports, once scrolling settles, how far down the selected page its selection line is, as a fraction of the page's height (`pageOffset`, in thousandths), and `recordPageProgress` stores it with the page (`StoredSeriesEntry.pageOffset`, column `page_offset`). A page reported without an offset (paged reading, a new chapter) keeps the stored offset only while the page is unchanged. `session` hands the offsets of unread chapters to the Viewer (`ViewerSeries.Reading.pageOffsets`), except the opening chapter's when `pageIndex` picks its page. The gallery restores an offset once that page has painted, because a page's height is only known then (`scrollToPageOffset`, waiting up to `PAGE_OFFSET_RESTORE_WAIT_MS`); if the reader scrolls first, or the page never paints, it stays at the page's top. Nothing is reported while a restore is pending, so a quick close keeps the stored offset. Rows saved before schema 24 have no offset and open at the top of their page, as before.
 - No extension loads for a session. The cover shows while an entry's media loads; one only an extension's own client can fetch is tagged for it (`SeriesCovers`), and that extension loads when the cover is requested. A downloaded chapter's cover is tagged the same way, so offline the cover fails and the pages still read.
 - A series session's launch context is never saved: the saved launch context never names a series session (`SeriesPageDestination` opens chapters as series sessions).
 - `resolve` asks the source again on every call, because media addresses expire; that is also how the Viewer recovers an episode whose stream stopped working. Media of the wrong shape for the series' kind, or an episode with no stream that can play, is a failure the Viewer shows. A downloaded chapter's pages are its files, so it reads with no connection and without its extension. The source lookup is logged without naming the entry, so a lookup can be timed against playback: the next episode's starts before the current one ends.
@@ -30,10 +31,22 @@ Progress writes cannot be cancelled by closing the Viewer, but they queue behind
 
 ## Applies to
 
-- `app/src/main/java/com/theoriacodex/app/series/SeriesReader.kt`: `SeriesReader`, `session`, `resolve`, `record`, `failureKinds`, `seriesQueryHash`, `seriesIdOf`, `opened`, `closed`
+- `app/src/main/java/com/theoriacodex/app/series/SeriesReader.kt`: `SeriesReader`, `session`, `resolve`, `record`, `recordPageProgress`, `failureKinds`, `seriesQueryHash`, `seriesIdOf`, `opened`, `closed`
+- `core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesRepository.kt`: `StoredSeriesEntry`, `withProgress`, `resumePageOffset`, `recordProgress`
+- `core-data-android/src/main/java/com/theoriacodex/data/android/room/TheoriaRoomDatabase.java`: `MIGRATION_23_24`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGallery.kt`: `VerticalGalleryPageReport`, `VerticalGalleryOffsetRestore`, `rememberVerticalGalleryState`, `pageOffset`, `scrollToPageOffset`, `PAGE_OFFSET_STEPS`, `PAGE_OFFSET_RESTORE_WAIT_MS`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerSessionCoordinator.kt`: `ViewerSeries`
 - `app/src/main/java/com/theoriacodex/app/series/ChapterPictures.kt`: `ChapterPictures`, `compare`, `chapterLeadPage`
 - `app/src/main/java/com/theoriacodex/app/series/SeriesDestinations.kt`: `SeriesPageDestination`
 - `app/src/main/java/com/theoriacodex/app/di/ExtensionSources.kt`: `SeriesDependencies`, `switchSource`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaNavDestinations.kt`: `rememberSeriesViewerConfig`
 - `app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt`: `handleViewerEffect`, `collectsPost`, `ViewerRoute`, `rememberViewerScreenHost`
 - `app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt`: `recoverMedia`, `recordPlaybackProgress`, `recordSeriesPage`, `recordSeriesProgress`
+
+## Guarded by
+
+- `app/src/test/java/com/theoriacodex/app/series/SeriesReaderTest.kt`: `a session reopens each unread chapter where the reader was inside its page (ADR 0192)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomSeriesRepositoryTest.kt`: `a chapter keeps how far into its page the reader was until another page is reached (ADR 0192)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomUpgradeJourneyTest.kt`: `chapters read before in-page offsets resume at the top of their page (ADR 0192)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a chapter reopens where the reader left it inside its page (ADR 0192)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `scrolling inside a chapter's page reports how far into the page the reader is (ADR 0192)`

@@ -14,6 +14,7 @@ import com.theoriacodex.data.repository.chapterPost
 import com.theoriacodex.data.repository.episodePost
 import com.theoriacodex.data.repository.inReadingOrder
 import com.theoriacodex.data.repository.resumePageIndex
+import com.theoriacodex.data.repository.resumePageOffset
 import com.theoriacodex.data.repository.resumePositionMs
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -61,8 +62,10 @@ internal class SeriesReader(private val series: SeriesDependencies) {
                     entry.entry.number?.takeIf { it >= 0f && it.isFinite() }?.let { postId(entry) to seriesChapterMark(stored.series.title, entry.entry.name, it) }
                 }.toMap()
                 val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), stored.chapterLeadPage())
+                val offsets = entries.mapNotNull { entry -> entry.resumePageOffset()?.let { postId(entry) to it } }.toMap() -
+                    listOfNotNull(pageIndex?.let { posts[start].id }).toSet()
                 ViewerSession(
-                    posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess()),
+                    posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess(), offsets),
                     stripMarks = marks,
                 )
             }
@@ -103,12 +106,12 @@ internal class SeriesReader(private val series: SeriesDependencies) {
         }
     }
 
-    fun recordPageProgress(session: ViewerSession, post: Post, page: Int) {
+    fun recordPageProgress(session: ViewerSession, post: Post, page: Int, pageOffset: Float? = null) {
         val id = seriesIdOf(session.context.queryHash) ?: return
         when (session.series) {
             is ViewerSeries.Reading -> if (post.media.isNotEmpty()) {
                 series.scope.launch { series.pictures.compare(id, mapOf(post.id.sourcePostId to post.media.first())) }
-                record { recordProgress(id, post.id.sourcePostId, page.toLong(), post.media.size.toLong()) }
+                record { recordProgress(id, post.id.sourcePostId, page.toLong(), post.media.size.toLong(), pageOffset) }
             }
             is ViewerSeries.Watching -> record { recordProgress(id, post.id.sourcePostId, 0, null) }
             null -> Unit

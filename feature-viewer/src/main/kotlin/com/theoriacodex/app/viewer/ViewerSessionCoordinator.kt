@@ -29,7 +29,7 @@ data class ViewerSession(
 )
 
 sealed interface ViewerSeries {
-    data class Reading(val mode: GalleryReadingMode) : ViewerSeries
+    data class Reading(val mode: GalleryReadingMode, val pageOffsets: Map<PostId, Float> = emptyMap()) : ViewerSeries
 
     data class Watching(
         val startPositionsMs: Map<PostId, Long> = emptyMap(),

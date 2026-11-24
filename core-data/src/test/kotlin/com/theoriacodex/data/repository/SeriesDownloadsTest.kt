@@ -444,6 +444,6 @@ class SeriesDownloadsTest {
         override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
         override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
         override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
-        override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
+        override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?, pageOffset: Float?) = Unit
     }
 }

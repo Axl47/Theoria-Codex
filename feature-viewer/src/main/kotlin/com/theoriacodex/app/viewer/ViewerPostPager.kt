@@ -326,7 +326,7 @@ private fun ViewerPostPageEffects(
     controls: ViewerControls,
     swipe: ViewerSwipeController,
     onAction: (ViewerAction) -> Unit,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
+    onVisibleMediaChanged: ((Post, Int, Float?) -> Unit)?,
 ) {
     val currentPostIndex = frame.navigation.currentIndex
     val selectedMediaIndex = frame.selection.mediaIndex
@@ -370,11 +370,11 @@ private fun reportSettledMedia(
     selectedMediaIndex: Int,
     post: Post,
     onAction: (ViewerAction) -> Unit,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
+    onVisibleMediaChanged: ((Post, Int, Float?) -> Unit)?,
 ) {
     if (!isCurrentPost) return
     if (settledPage != selectedMediaIndex) onAction(ViewerAction.SelectMedia(settledPage))
-    onVisibleMediaChanged?.invoke(post, settledPage + 1)
+    onVisibleMediaChanged?.invoke(post, settledPage + 1, null)
 }
 
 private val restingReturnProgress = { 0f }
