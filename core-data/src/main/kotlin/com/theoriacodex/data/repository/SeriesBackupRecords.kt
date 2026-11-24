@@ -37,7 +37,6 @@ internal data class BackupSeriesRecord(
     @SerialName("followed") val followed: Boolean = false,
     @SerialName("readingMode") val readingMode: String? = null,
     @SerialName("lastOpenedEntry") val lastOpenedEntry: String? = null,
-    @SerialName("lastCheckedAt") val lastCheckedAt: Long? = null,
     /** Absent from backups written before the setting existed, which restore with it off. */
     @SerialName("downloadNewChapters") val downloadNewChapters: Boolean = false,
     /** Absent from backups written before the Following sorts, which restore without it. */
@@ -64,7 +63,6 @@ internal data class BackupSeriesRecord(
                 followed = followed,
                 readingMode = GalleryReadingMode.entries.firstOrNull { it.name == readingMode },
                 lastOpenedEntry = lastOpenedEntry,
-                lastCheckedAtEpochMs = lastCheckedAt,
                 downloadNewChapters = downloadNewChapters,
                 followedAtEpochMs = followedAt,
             ),
@@ -87,7 +85,6 @@ internal data class BackupSeriesRecord(
                 followed = followed,
                 readingMode = readingMode?.name,
                 lastOpenedEntry = lastOpenedEntry,
-                lastCheckedAt = lastCheckedAtEpochMs,
                 downloadNewChapters = downloadNewChapters,
                 followedAt = followedAtEpochMs,
                 memo = series.memo,

@@ -91,4 +91,20 @@ class RoomUpgradeJourneyTest {
             }
         }
     }
+
+    @Test fun `a series stored with a check time keeps everything else when the column goes`() {
+        val name = "series-check-time.db"
+        helper.createDatabase(name, 20).use {
+            it.execSQL(
+                "INSERT INTO series (source, address, title, genres, language, followed, last_opened_entry, last_checked_at_epoch_ms, memo) " +
+                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, '/a/1', 50, '{}')",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 21, true, TheoriaRoomDatabase.MIGRATION_20_21).use { database ->
+            database.query("SELECT title, followed, last_opened_entry, memo FROM series").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(listOf("A", "1", "/a/1", "{}"), (0..3).map(it::getString))
+            }
+        }
+    }
 }
