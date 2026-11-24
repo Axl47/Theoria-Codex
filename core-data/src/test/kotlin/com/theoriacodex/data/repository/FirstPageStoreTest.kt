@@ -9,6 +9,12 @@ import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -95,5 +101,17 @@ class FirstPageStoreTest {
         file().writeText("{not json")
 
         assertTrue(FirstPageStore(file(), StandardTestDispatcher(testScheduler)).load("key-a").isEmpty())
+    }
+
+    @Test
+    fun `one unreadable post leaves the rest of the cached page intact (ADR 0021)`() = runTest {
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        store.save("key", listOf(post("1"), post("2"), post("3")))
+        val root = Json.parseToJsonElement(file().readText()).jsonObject
+        val posts = root.getValue("posts").jsonArray
+        val unreadable = JsonObject(posts[1].jsonObject + ("source" to JsonPrimitive("no_such_source")))
+        file().writeText(JsonObject(root + ("posts" to JsonArray(listOf(posts[0], unreadable, posts[2])))).toString())
+
+        assertEquals(listOf("1", "3"), store.load("key").map { it.id.sourcePostId })
     }
 }
