@@ -52,7 +52,9 @@ internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
         .setContentTitle(update.series.title)
         .setContentText(newEntriesText(update))
         .setContentIntent(opening(entry = null))
-    update.newEntries.singleOrNull()?.let { entry ->
+    // Read only when this notification stands for this entry alone: one it replaces may have announced an unread one.
+    val replacing = manager.activeNotifications.any { it.id == SERIES_NOTIFICATION_ID && it.tag == tag }
+    update.newEntries.singleOrNull()?.takeUnless { replacing }?.let { entry ->
         val action = update.series.id.source.seriesKind.words.open
         builder.addAction(Notification.Action.Builder(null, action, opening(entry.address)).build())
     }
@@ -180,7 +182,10 @@ private fun downloadNotification(context: Context): Notification.Builder {
 class SeriesNotificationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        opened.value = intent.data?.let(::seriesLinkOfUri)
+        val link = intent.data?.let(::seriesLinkOfUri)
+        // Read leaves the notification up (only a body tap cancels itself); once its entry is open it has done its job.
+        if (link?.entry != null) getSystemService(NotificationManager::class.java).cancel(link.series.toString(), SERIES_NOTIFICATION_ID)
+        opened.value = link
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }

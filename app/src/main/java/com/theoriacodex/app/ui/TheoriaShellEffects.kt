@@ -179,8 +179,7 @@ internal fun ShellIncomingUriEffects(
 
 /**
  * Opens what a tapped series notification names: always a new series page, since reusing the one on top would keep
- * the series that page was opened for. An announced entry opens in the Viewer over it, so Back lands on the series;
- * only while that page is still on top once the entry loads.
+ * the series that page was opened for. The page opens an announced entry in the Viewer over itself.
  */
 @Composable
 private fun ShellSeriesNotificationEffect(shell: TheoriaShell) {
@@ -188,10 +187,7 @@ private fun ShellSeriesNotificationEffect(shell: TheoriaShell) {
         if (!shell.navReady) return@LaunchedEffect
         SeriesNotificationActivity.opened.filterNotNull().collect { link ->
             SeriesNotificationActivity.opened.value = null
-            shell.navController.navigate(AppRoute.series(link.series))
-            val page = shell.navController.currentBackStackEntry
-            val session = link.entry?.let { shell.seriesReader?.session(link.series, it) } ?: return@collect
-            if (shell.navController.currentBackStackEntry == page) shell.launchViewer(session, saveContext = false, singleTop = true)
+            shell.navController.navigate(AppRoute.series(link.series, link.entry))
         }
     }
 }

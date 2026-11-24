@@ -75,7 +75,7 @@ class SeriesUpdateScheduleTest {
     }
 
     @Test
-    fun `one announced entry gets an action that opens it, by its kind's verb, and several get none`() {
+    fun `one announced entry gets an action that opens it, by its kind's verb, unless several are new or one is replaced`() {
         val manager = context.getSystemService(NotificationManager::class.java)
         val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/anime/a"), "Anime")
         fun posted(series: Series) = manager.activeNotifications.single { it.tag == series.id.toString() }.notification
@@ -90,6 +90,10 @@ class SeriesUpdateScheduleTest {
         assertEquals("Watch", posted(anime).actions.single().title.toString())
 
         notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/7", "7"), SeriesEntry("/c/6", "6"))))
+        assertNull(posted(series).actions)
+
+        // Replacing a notification still showing, which may have announced an unread entry, offers no Read.
+        notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/8", "8"))))
         assertNull(posted(series).actions)
     }
 

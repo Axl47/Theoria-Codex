@@ -28,7 +28,15 @@ import kotlinx.coroutines.launch
 internal val seriesArguments = listOf(
     navArgument("source") { type = NavType.StringType },
     navArgument("address") { type = NavType.StringType },
+    navArgument("entry") {
+        type = NavType.StringType
+        nullable = true
+        defaultValue = null
+    },
 )
+
+/** Set once the page has opened the entry its route names, so returning to the page does not open it again. */
+private const val ROUTE_ENTRY_OPENED = "routeEntryOpened"
 
 /** Carries a genre chip tap from a series page to the Series tab's source-filtered search. */
 internal class SeriesGenreRequests {
@@ -115,6 +123,16 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
             viewModel.whileMoving { series.switchSource(id, source, to) }
         }
     }
+    val openEntry: suspend (String) -> Unit = { address ->
+        shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }
+    }
+    // Tied to this page: Back while the entry loads cancels it, so the Viewer never opens over another screen.
+    LaunchedEffect(entry) {
+        val routed = entry.arguments?.getString("entry") ?: return@LaunchedEffect
+        if (entry.savedStateHandle.get<Boolean>(ROUTE_ENTRY_OPENED) == true) return@LaunchedEffect
+        entry.savedStateHandle[ROUTE_ENTRY_OPENED] = true
+        openEntry(routed)
+    }
     SeriesPageScreen(
         viewModel = viewModel,
         onBack = { shell.navController.popBackStack() },
@@ -127,11 +145,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
                 shell.navController.navigate(AppRoute.series(moved)) { popUpTo(entry.destination.id) { inclusive = true } }
             }
         },
-        onOpenEntry = { address ->
-            shell.scope.launch {
-                shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }
-            }
-        },
+        onOpenEntry = { address -> shell.scope.launch { openEntry(address) } },
         onSearchGenre = { genre ->
             genreRequests.request(id.source, genre)
             shell.navigation.goToTab(TopLevelDestination.Series)
