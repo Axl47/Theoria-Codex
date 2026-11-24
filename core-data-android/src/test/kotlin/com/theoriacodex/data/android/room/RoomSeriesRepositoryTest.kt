@@ -246,19 +246,21 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a series listed empty before gets its first chapters as new, and one never listed takes them as a baseline`() = runTest {
-        val first = listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1"))
+    fun `a followed series' first listing reports only chapters dated after it was followed, less a day`() = runTest {
+        val day = 24 * 60 * 60 * 1_000L
+        val fresh = SeriesEntry("/c/3", "Chapter 3", uploadedAtEpochMs = 10 * day)
+        val sameDay = SeriesEntry("/c/2", "Chapter 2", uploadedAtEpochMs = 9 * day + 1)
+        val old = listOf(SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = day), SeriesEntry("/c/0", "Chapter 0"))
         repository.store(series)
-        assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(id, first))
+        now = 10 * day
+        repository.setFollowed(id, true)
+        repository.storeEntries(id, emptyList())
 
-        val announced = Series(SeriesId(id.source, "/series/b"), "Announced", language = "en")
-        repository.store(announced, emptyList())
-        assertEquals(first, repository.storeEntries(announced.id, first))
+        assertEquals(listOf(fresh, sameDay), repository.storeEntries(id, listOf(fresh, sameDay) + old))
 
-        val checked = Series(SeriesId(id.source, "/series/c"), "Checked", language = "en")
-        repository.store(checked)
-        repository.storeEntries(checked.id, emptyList())
-        assertEquals(first, repository.storeEntries(checked.id, first))
+        val unfollowed = Series(SeriesId(id.source, "/series/b"), "Unfollowed", language = "en")
+        repository.store(unfollowed)
+        assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(unfollowed.id, listOf(fresh)))
     }
 
     @Test

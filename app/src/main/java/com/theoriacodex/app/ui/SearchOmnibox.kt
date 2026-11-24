@@ -1,8 +1,6 @@
 package com.theoriacodex.app.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
@@ -23,7 +21,6 @@ import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.data.repository.SettingDestinations
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -96,9 +93,9 @@ private fun rememberFollowedSeriesEntries(shell: TheoriaShell): List<OmniboxEntr
     val dependencies = shell.container.series ?: return emptyList()
     val followed = rememberRetained("omnibox-followed-series") { dependencies.repository.observeFollowed() }.value.orEmpty()
     val keys = remember(followed) { followed.mapTo(LinkedHashSet()) { it.series.id.source } }
-    val names by produceState(emptyMap<SourceKey, String>(), dependencies, keys) {
-        val found = keys.mapNotNull { key -> runCatchingPreservingCancellation { dependencies.source(key) }.getOrNull() }
-        value = found.associate { it.key to it.label(found) }
+    val names = remember(dependencies, keys) {
+        val loaded = dependencies.loadedSources()
+        loaded.filter { it.key in keys }.associate { it.key to it.label(loaded) }
     }
     return remember(shell, followed, names) {
         followedSeriesEntries(followed.map(FollowedSeries::series), names, dependencies.covers) { id ->
