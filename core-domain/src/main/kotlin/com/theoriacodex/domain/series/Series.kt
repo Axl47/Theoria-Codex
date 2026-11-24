@@ -55,8 +55,8 @@ data class Series(
     val status: SeriesStatus = SeriesStatus.UNKNOWN,
     /**
      * What the source keeps with the series to find it again, such as a slug its address leaves out: a Mihon
-     * extension's memo, a JSON object as text. Stored as given and handed back to the source; null when it keeps none
-     * or gave one longer than [MAX_MEMO_LENGTH].
+     * extension's memo, a JSON object as text. Stored as given and handed back to the source; null when it keeps none.
+     * One longer than [MAX_MEMO_LENGTH] is not stored.
      */
     val memo: String? = null,
 )

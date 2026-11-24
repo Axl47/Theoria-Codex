@@ -13,6 +13,7 @@ import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.network.HttpException
 import java.io.IOException
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -167,9 +168,22 @@ internal fun extensionEntry(
     memo = memo.storedMemo(),
 )
 
-/** A source's memo as the app stores it: its JSON text, or null when it keeps nothing or more than [MAX_MEMO_LENGTH]. */
-private fun JsonObject?.storedMemo(): String? =
-    this?.takeIf(JsonObject::isNotEmpty)?.toString()?.takeIf { it.length <= MAX_MEMO_LENGTH }
+/**
+ * A source's memo as the app stores it: its JSON text, or null when it keeps nothing. One longer than
+ * [MAX_MEMO_LENGTH] is stored as an empty object, which replaces the stored memo where null would keep it, so after a
+ * restart the source gets no memo rather than an older one that may no longer match it. The first is reported.
+ */
+private fun JsonObject?.storedMemo(): String? {
+    val text = this?.takeIf(JsonObject::isNotEmpty)?.toString() ?: return null
+    if (text.length <= MAX_MEMO_LENGTH) return text
+    if (oversizedMemoReported.compareAndSet(false, true)) {
+        Diagnostics.report("extensions", "An extension memo of ${text.length} characters was too long to store and was cleared")
+    }
+    return EMPTY_MEMO
+}
+
+private val oversizedMemoReported = AtomicBoolean(false)
+private const val EMPTY_MEMO = "{}"
 
 /**
  * A memo the app stored, as its source's object again. One that is not a JSON object, which no source wrote, is

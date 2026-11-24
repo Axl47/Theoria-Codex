@@ -132,7 +132,7 @@ class MihonSeriesSourceTest {
     fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt`() = runTest {
         val slug = buildJsonObject { put("slug", "s-1") }
         source.listing = MangasPage(listOf(manga("/s", "Series").also { it.memo = slug }), hasNextPage = false)
-        // A memo longer than the app stores is dropped rather than kept.
+        // A memo longer than the app stores is cleared, so it replaces the stored one rather than keeping it.
         val oversized = buildJsonObject { put("blob", "x".repeat(MAX_MEMO_LENGTH)) }
         source.chapters = listOf(
             chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } },
@@ -140,7 +140,7 @@ class MihonSeriesSourceTest {
         )
         val listed = series.popular(1).series.single()
         assertEquals("""{"slug":"s-1"}""", listed.memo)
-        assertEquals(listOf("""{"id":1}""", null), series.entries(listed).map { it.memo })
+        assertEquals(listOf("""{"id":1}""", "{}"), series.entries(listed).map { it.memo })
 
         // A later run: nothing listed, so both are rebuilt from what the app stored.
         val later = MihonSeriesSource(source, HostServices(ExtensionImages()))
