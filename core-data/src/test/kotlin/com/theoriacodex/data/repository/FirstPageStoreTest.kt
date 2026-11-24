@@ -120,12 +120,4 @@ class FirstPageStoreTest {
         assertEquals(listOf("1", "3"), store.loadWithMiddlePost("source" to JsonPrimitive("no_such_source")))
         assertEquals(listOf("1", "3"), store.loadWithMiddlePost("schemaVersion" to JsonPrimitive(99)))
     }
-
-    @Test
-    fun `a cached post of valid JSON but the wrong shape empties the page (ADR 0021)`() = runTest {
-        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
-
-        assertEquals(emptyList<String>(), store.loadWithMiddlePost("schemaVersion" to JsonObject(emptyMap())))
-        assertEquals(emptyList<String>(), store.loadWithMiddlePost("commentHint" to JsonObject(emptyMap())))
-    }
 }

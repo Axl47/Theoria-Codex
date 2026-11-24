@@ -41,6 +41,18 @@ class StoredFormatTest {
     }
 
     @Test
+    fun `a retired key that no golden holds fails (ADR 0034)`() {
+        val failure = assertThrows(AssertionError::class.java) {
+            assertStoredFormat(
+                full to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
+                retiredKeys = setOf("retired", "gone"),
+            )
+        }
+
+        assertTrue(failure.message, "retiredKeys lists [gone]" in failure.message.orEmpty())
+    }
+
+    @Test
     fun `a retired nested path never excuses a key spelled like it (ADR 0034)`() {
         val literal = full.replace(""""retired":1""", """"retired":1,"children[].stale":true""")
         val failure = assertThrows(AssertionError::class.java) {

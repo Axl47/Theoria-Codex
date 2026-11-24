@@ -41,6 +41,8 @@ fun <T> assertStoredFormat(
     assertTrue("$type goldens never hold $missing; add a golden that sets them", missing.isEmpty())
     val stale = undeclared - retiredKeys
     assertTrue("$type goldens hold $stale, which it does not declare; list a deliberately old golden's keys in retiredKeys, escaping . [ ] { } and \\ inside a key with \\", stale.isEmpty())
+    val unused = retiredKeys - undeclared
+    assertTrue("$type retiredKeys lists $unused, which no golden holds; remove it", unused.isEmpty())
 }
 
 private fun SerialDescriptor.declaredPaths(prefix: String = "", visiting: Set<String> = emptySet()): Set<String> =
