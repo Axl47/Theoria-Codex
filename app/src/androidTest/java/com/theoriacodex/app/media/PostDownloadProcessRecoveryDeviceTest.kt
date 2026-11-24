@@ -31,7 +31,6 @@ import org.junit.Test
 import org.junit.Assume.assumeTrue
 import org.junit.runner.RunWith
 
-/** Two instrumentation launches with a host force-stop between them; no fake DownloadManager. */
 @RunWith(AndroidJUnit4::class)
 class PostDownloadProcessRecoveryDeviceTest {
     @Test fun nativeGalleryResumesAcrossProcessDeath() = runBlocking(Dispatchers.IO) {
@@ -60,7 +59,6 @@ class PostDownloadProcessRecoveryDeviceTest {
             afterAdmission = { page ->
                 if (phase == "write" && page == 1) {
                     admittedGap.complete(Unit)
-                    // Pin the actual native-enqueue/ID-checkpoint gap until this process is killed.
                     CountDownLatch(1).await()
                 }
             })
@@ -77,7 +75,6 @@ class PostDownloadProcessRecoveryDeviceTest {
             val gapId = requireNotNull(backend.findTransfer(checkpoint.items[1].request.marker))
             root.resolve("proof.json").writeText(JSONObject().put("pid", Process.myPid())
                 .put("completedId", checkpoint.items[0].downloadId).put("gapId", gapId).toString())
-            // Do not cancel the pinned admission: the host kills this exact isolated process.
         } else {
             require(phase == "read")
             val proof = JSONObject(root.resolve("proof.json").readText())
@@ -91,7 +88,6 @@ class PostDownloadProcessRecoveryDeviceTest {
                 (0..3).forEach { assertArrayEquals(expectedBytes(it), destination.resolve("$it.png").readBytes()) }
                 assertEquals(setOf("0.png", "1.png", "2.png", "3.png"), destination.listFiles().orEmpty().map { it.name }.toSet())
                 withTimeout(10_000) { while (store.load().single().savedCount != 4) delay(25) }
-                // Cleanup is restricted to this test's own native rows and private external directory.
                 manager.remove(*completed.items.mapNotNull { it.downloadId }.toLongArray())
                 assertTrue(destination.deleteRecursively())
                 assertTrue(root.deleteRecursively())
@@ -102,7 +98,6 @@ class PostDownloadProcessRecoveryDeviceTest {
     private fun expectedBytes(page: Int) = "native-recovery-page-$page".toByteArray()
 }
 
-/** Controlled transport/destination around the production queue and durable store. */
 private class NativeFixtureBackend(
     private val manager: DownloadManager,
     private val destination: File,

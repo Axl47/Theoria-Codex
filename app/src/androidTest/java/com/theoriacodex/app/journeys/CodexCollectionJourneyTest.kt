@@ -60,7 +60,6 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("More"))
         activate(compose.onNodeWithText("Delete Codex"))
 
-        // The Codex waits in the Library tile it vacated; nothing is deleted until the Library is left.
         val offer = compose.onNodeWithText("Deleted Journey collection")
         waitFor("Deleted Journey collection offer is displayed") { offer.isDisplayed() }
         compose.onNodeWithContentDescription("Create Codex").assertExists()
@@ -69,7 +68,6 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         waitFor("Journey collection is listed again after Undo") { compose.onNodeWithText("Journey collection").isDisplayed() }
     }
 
-    /** A Codex in the main profile holding three Pixiv fixture posts. */
     private fun savedCollection(): Codex = io {
         container.content.ensureCodex(profileScopedCodexId("profile-main", "journey"), "Journey collection")
             .also { container.content.addItems(it.codexId, posts.getValue(SourceKey.PIXIV).take(3)) }

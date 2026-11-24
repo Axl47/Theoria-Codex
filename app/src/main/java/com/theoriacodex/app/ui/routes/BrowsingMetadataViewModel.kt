@@ -37,26 +37,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 
-/**
- * Settings plus the posts whose file is liked, saved or watched: the stored IDs and every post known this session that
- * holds the same file on another site ([FileMirrorIndex]). The Library and like counts read the stored IDs instead.
- * [savedPostIds] counts every Codex, Likes included; [codexPostIds] only the Codices people make themselves.
- */
 internal data class BrowsingMetadata(
     val settings: AppSettings,
     val likedPostIds: Set<PostId>,
     val savedPostIds: Set<PostId>,
     val watchedPostIds: Set<PostId>,
     val codexPostIds: Set<PostId>,
-    /** The reading mode chosen for each gallery that has one. */
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
 )
 
-/**
- * One activity-owned read model is shared by every destination. Badges and filters read IDs only. Stored posts are
- * read beside that, once each, to teach [FileMirrorIndex] their file and picture hashes, so mirrors appear shortly after
- * the IDs.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class BrowsingMetadataViewModel(
     settingsRepository: SettingsRepository,
@@ -81,11 +70,6 @@ internal class BrowsingMetadataViewModel(
         combine(codices.observeSavedPostIds(ids), codices.observeSavedPostIds(madeCodexIds), ::SavedIds)
     }.shareIn(scope, started, replay = 1)
 
-    /**
-     * [FileMirrorIndex.links], while teaching the index the stored posts for as long as metadata is observed: the watch
-     * history and the Library once, then only the posts stored since, and the Library's stored picture hashes. No
-     * decoded Library stays in memory for this.
-     */
     private val mirrorLinks = channelFlow {
         launch { mirrors.learn(recentsRepository.observeWatchedPosts().first().map(RecentPostEntry::post)) }
         launch { pictureHashes.collect(mirrors::learnPictures) }
@@ -104,7 +88,6 @@ internal class BrowsingMetadataViewModel(
 
     val state = combine(settings, profileLikes, saved, recentsRepository.observeWatchedPostIds(), mirrorLinks) {
             current, membership, savedIds, watchedIds, _ ->
-        // A profile switch must never pair the new profile with the previous profile's Likes.
         if (current.activeRecommendationProfile().profileId != membership.profileId) null else BrowsingMetadata(
             current, mirrors.withCopies(membership.ids), mirrors.withCopies(savedIds.all), mirrors.withCopies(watchedIds),
             mirrors.withCopies(savedIds.inMadeCodices),
@@ -130,7 +113,6 @@ internal class BrowsingMetadataViewModel(
     private data class ProfileLikes(val profileId: String, val ids: Set<PostId>)
 
     private companion object {
-        /** Up to this many newly stored posts are read one by one; more (the first load, a restore) in one Library read. */
         const val SINGLE_READS = 20
     }
 }

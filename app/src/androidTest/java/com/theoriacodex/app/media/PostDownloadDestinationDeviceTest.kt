@@ -72,7 +72,6 @@ class PostDownloadDestinationDeviceTest {
                 }
             }
         } finally {
-            // All rows and files are created by this isolated test, outside the user's Downloads.
             if (ids.isNotEmpty()) manager.remove(*ids.toLongArray())
             folder.deleteRecursively()
         }

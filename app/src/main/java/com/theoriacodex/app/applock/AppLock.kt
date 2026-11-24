@@ -47,13 +47,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** How long the app may be away from the front before it asks again. */
 internal const val APP_LOCK_GRACE_MS = 60_000L
 
-/**
- * Whether this run of the app has passed the lock, and when time away ends that. Away means not in front: in the
- * background, or shrunk to picture-in-picture, which keeps playing but must not hand back the whole app later.
- */
 internal class AppLockSession {
     var unlocked by mutableStateOf(false)
         private set
@@ -74,20 +69,13 @@ internal class AppLockSession {
     }
 }
 
-/**
- * The lock choice and this run's [session]. It is scoped to the activity, so an unlock survives rotation and ends
- * with the process: a fresh start is always locked. The choice is kept on this device, outside the settings file,
- * so exporting or restoring a backup never switches it. The first read, which can wait on disk, runs on [io].
- */
 internal class AppLockViewModel @JvmOverloads constructor(
     application: Application,
     private val io: CoroutineContext = Dispatchers.IO,
 ) : AndroidViewModel(application) {
-    /** The loaded file, set together with [enabled]; writes to it only queue, so they can run on the main thread. */
     private var preferences: SharedPreferences? = null
     val session = AppLockSession()
 
-    /** The stored choice, or null until it has been read. The app counts as locked until then. */
     var enabled by mutableStateOf<Boolean?>(null)
         private set
     val locked: Boolean get() = enabled != false && !session.unlocked
@@ -103,11 +91,6 @@ internal class AppLockViewModel @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Called once the owner has proved themselves, so switching the lock on leaves the app open. The write is applied
-     * in call order and outlives this ViewModel. Before the choice is read this does nothing; Settings, its only
-     * caller, sits behind [AppLockGate], which draws nothing until then.
-     */
     fun update(value: Boolean) {
         val loaded = preferences ?: return
         enabled = value
@@ -120,17 +103,10 @@ internal class AppLockViewModel @JvmOverloads constructor(
     }
 }
 
-/** The one lock shared by the app root and Settings, whatever screen asks for it. */
 @Composable
 internal fun appLockViewModel(): AppLockViewModel =
     viewModel(viewModelStoreOwner = LocalContext.current.findActivity() as ComponentActivity)
 
-/**
- * Shows [content] only while the app is unlocked. A locked app does not compose [content] at all, so nothing plays or
- * can be read behind the lock; its saved UI state is kept and restored on unlock. Until the stored choice is read the
- * gate shows nothing: neither [content] nor a prompt its owner may have switched off. While the lock is on or not yet
- * known, Android also leaves the app out of the recent-apps preview.
- */
 @Composable
 internal fun AppLockGate(lock: AppLockViewModel = appLockViewModel(), content: @Composable () -> Unit) {
     val activity = LocalContext.current.findActivity()
@@ -160,10 +136,8 @@ private fun AppLockScreen(onUnlocked: () -> Unit) {
     val activity = LocalContext.current.findActivity()
     val lifecycleOwner = LocalLifecycleOwner.current
     val unlocked by rememberUpdatedState(onUnlocked)
-    // A device without a screen lock cannot ask, and must not shut its owner out.
     val ask = { activity.confirmDeviceOwner { result -> if (result != DeviceOwnerCheck.CANCELLED) unlocked() } }
     DisposableEffect(lifecycleOwner, activity) {
-        // Ask once each time the app comes to the front; after a cancel, the button asks again.
         var askOnResume = false
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -196,11 +170,6 @@ internal enum class DeviceOwnerCheck { CONFIRMED, CANCELLED, NO_SCREEN_LOCK }
 private const val OWNER_AUTHENTICATORS =
     BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
 
-/**
- * Asks whoever holds the device to prove they own it, with a biometric or the screen lock. Only a device with no
- * screen lock at all reports [DeviceOwnerCheck.NO_SCREEN_LOCK]; a prompt that cannot be shown right now counts as
- * cancelled, so the lock holds and can be tried again.
- */
 internal fun Activity?.confirmDeviceOwner(onResult: (DeviceOwnerCheck) -> Unit) {
     val keyguard = this?.getSystemService(KeyguardManager::class.java)
     if (this == null || keyguard == null) {

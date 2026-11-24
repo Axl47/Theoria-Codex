@@ -102,7 +102,6 @@ class SavedSearchesCodexJourneyTest {
             val verticalGrid = hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
             compose.onNode(verticalGrid, useUnmergedTree = true).performScrollToNode(hasTestTag(second))
             compose.onNodeWithTag(second).assertIsDisplayed().performClick()
-            // Saved also has a Back button; only Viewer's action menu proves navigation completed.
             compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
             val roots = graph.registry.requests.count { it.pageToken == null }
             compose.onNodeWithContentDescription("Back").performClick()
@@ -146,7 +145,6 @@ class SavedSearchesCodexJourneyTest {
 
 
     private fun verifySavedRouteReentry(graph: JourneyAppContainer, first: String, second: String, roots: Int): Unit {
-        // Leaving Saved entirely must retain the same feed, too.
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Codices)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(librarySectionTag(LibrarySection.Codices)).performClick()
         compose.onNodeWithTag(librarySectionTag(LibrarySection.Saved)).performClick()
@@ -154,11 +152,9 @@ class SavedSearchesCodexJourneyTest {
         compose.onNodeWithText("Searches").performScrollTo()
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
-        // The Home bottom bar covers the lowest shelf on this small screen, so a touch would miss it.
         compose.onNodeWithTag(second).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
         compose.onNodeWithContentDescription("Back").performClick()
-        // Other Home pages can hold "More actions" too, so Library's own header proves the return.
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Searches").performScrollTo().performClick()

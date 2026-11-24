@@ -33,20 +33,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * The app opened on a long history ([HeavyHistory]): many Likes, Codices that share posts with them, and hundreds of
- * watched posts. Covers what only that history decides: which For You lanes lead, how hiding one of their tags takes
- * the lane and its cards until Undo, a Viewer post's Trail chips, which Codex a post is suggested for, and Likes at scale.
- */
 class HeavyLibraryJourneyTest : AppJourneyFixture() {
     private lateinit var history: HeavyHistory
 
-    /** The deck cards decided so far, for failure messages. */
     private val dealt = mutableListOf<PostId>()
 
     override fun fixturePosts(media: ImageRef) = mapOf(HeavyHistory.SOURCE to HeavyHistory(media).also { history = it }.catalog)
 
-    /** Seeds the history through the app's own Likes, Codex and statistics owners, as using the app would. */
     @Before
     fun seedHistory() = io {
         val profile = container.settings.observeSettings().first().activeRecommendationProfile()
@@ -63,12 +56,10 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         launch()
         tab("For You")
         compose.waitUntil(20_000) { visibleLaneChips().size > 1 }
-        // Not blush (on most of what is watched), smile (kept as often as watched) or artist_name (text on the image).
         val lanes = setOf(setOf("Mix"), setOf("frieren", "fern"), setOf("hatsune miku"), setOf("kitagawa marin"))
         assertEquals(lanes.size, laneChipCount())
         assertEquals(lanes, allLaneChips())
 
-        // Hiding takes the lane and its cards, widening to the Mix; Undo brings back both.
         activate(compose.onNode(chip("hatsune miku")))
         compose.waitUntil(10_000) { history.groupOf(currentPost()) == "miku" }
         val hiddenCard = currentPost()
@@ -80,7 +71,6 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         compose.waitUntil(15_000) { visibleLaneChips() == lanes }
         compose.waitUntil(10_000) { currentPostOrNull() == hiddenCard }
 
-        // Hidden for good: no card left in the deck carries it, through to the deck's end.
         hideMiku()
         repeat(MAX_DEALS) {
             if (deckEnded()) return
@@ -95,7 +85,6 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         val post = history.freshFrieren
         val index = posts.getValue(HeavyHistory.SOURCE).indexOf(post)
         openSearchPost(index, "heavy:sketch", HeavyHistory.SOURCE, listOf(HeavyHistory.FRESH_TAG))
-        // The post lists fern first, but frieren is on more kept posts; blush and artist_name never make a chip.
         val expected = listOf("frieren", "fern")
         runCatching { compose.waitUntil(15_000) { trailTags() == expected } }
         assertEquals(expected, trailTags())
@@ -110,7 +99,6 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
     fun likesAtScaleCountOnceBesideTheirCodicesAndUnlikingKeepsTheCodexCopy() {
         launch()
         openSettings()
-        // Most Codex posts are also Liked; each saved post counts once.
         compose.waitUntil(10_000) { showsText("${history.watched.size} watched · ${history.savedPosts} saved") }
 
         back("Settings") { libraryTabShows() }
@@ -124,13 +112,11 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         assertEquals(history.likes.size - 1, likedIds().size)
         assertTrue(unliked.id in codexPosts(HeavyHistory.FRIEREN_CODEX))
 
-        // The Viewer holds Back while its media returns to the card, so each Back waits for the screen it leads to.
         back("the Viewer") { !viewerShows() && showsText("Likes") && !libraryTabShows() }
         back("Likes") { libraryTabShows() }
         library(LibrarySection.Saved)
         compose.waitUntil(10_000) { likesShelf(history.likes.size - 1).isDisplayed() }
         openSettings()
-        // Still saved in its Codex, so the saved count holds.
         compose.waitUntil(10_000) { showsText(" · ${history.savedPosts} saved") }
     }
 
@@ -142,17 +128,14 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         val unliked = history.likes.last()
         activate(compose.onNodeWithTag(searchCardTestTag(unliked.id)))
         compose.waitUntil(10_000) { viewerShows() }
-        // Unliking takes the card out of Likes, so the media's return waits on a card that is gone: the longest return.
         activate(compose.onNode(hasContentDescription("Unlike post") and hasClickAction()))
         compose.waitUntil(10_000) { unliked.id !in likedIds() }
 
-        // The second Back lands while the media is still returning; it is held, then leaves Likes.
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.mainClock.advanceTimeByFrame()
         back("Likes, during the Viewer's return") { !viewerShows() && libraryTabShows() }
     }
 
-    /** Presses Back on [from] and waits until [arrived], failing with what shows instead. */
     private fun back(from: String, arrived: () -> Boolean) {
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         try {
@@ -167,18 +150,15 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
 
     private fun libraryTabShows() = compose.onAllNodes(hasContentDescription("Library")).fetchSemanticsNodes().isNotEmpty()
 
-    /** Hides `hatsune_miku` from the deck's card, which must carry it. */
     private fun hideMiku() {
         perform("Hide hatsune miku")
         compose.waitUntil(10_000) { hiddenTags() == setOf("hatsune_miku") }
     }
 
-    /** The tags of each lane chip on screen, "Mix" included; the paired lane's order varies between Mixes. */
     private fun visibleLaneChips(): Set<Set<String>> =
         compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG))).fetchSemanticsNodes()
             .mapTo(mutableSetOf()) { it.text().split(" + ").toSet() }
 
-    /** [visibleLaneChips] across the whole row, scrolling it so chips past the screen's edge count too. */
     private fun allLaneChips(): Set<Set<String>> {
         val row = compose.onNodeWithTag(FOR_YOU_CHIPS_TAG)
         val chips = (0 until laneChipCount()).flatMapTo(mutableSetOf()) { index ->
@@ -189,7 +169,6 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         return chips
     }
 
-    /** How many chips the row holds, "Mix" included: the first index it cannot scroll to. */
     private fun laneChipCount(): Int {
         val row = compose.onNodeWithTag(FOR_YOU_CHIPS_TAG)
         val count = generateSequence(0) { it + 1 }.first { index -> runCatching { row.performScrollToIndex(index) }.isFailure }
@@ -212,7 +191,6 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         compose.runOnUiThread { action.action() }
     }
 
-    /** Decides the deck's card and waits for the next one, or for the deck's end. */
     private fun decide(label: String) {
         val before = currentPost()
         dealt += before
@@ -229,7 +207,6 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         return checkNotNull(currentPostOrNull())
     }
 
-    /** The post of the deck's card; at rest the deck composes only that one. */
     private fun currentPostOrNull(): PostId? {
         val card = SemanticsMatcher("a deck card") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("search_card_") == true
@@ -239,12 +216,10 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         return history.catalog.first { searchCardTestTag(it.id) == tag }.id
     }
 
-    /** The Viewer's tag chips, in the order the row shows them. */
     private fun trailTags(): List<String> = compose.onAllNodes(SemanticsMatcher("a tag chip") { node ->
         node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(TRAIL_TAG_PREFIX) == true
     }).fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag].removePrefix(TRAIL_TAG_PREFIX) }
 
-    /** The Library's Likes shelf heading while it shows [count] Likes. */
     private fun likesShelf(count: Int) = compose.onNode(hasText("Likes") and hasText(count.toString()) and hasClickAction())
 
     private fun showsText(text: String) = compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()

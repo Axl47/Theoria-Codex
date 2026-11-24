@@ -14,7 +14,6 @@ class ForYouHideTagJourneyTest : AppJourneyFixture() {
     fun hidingATagFromTheDeckHidesItForTheProfileAndUndoRestoresIt() {
         launch()
         tab("For You")
-        // The deck gives TalkBack what a pull down onto a tag does.
         val offersHide = SemanticsMatcher("offers to hide a tag") { node ->
             node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label.startsWith("Hide ") }
         }

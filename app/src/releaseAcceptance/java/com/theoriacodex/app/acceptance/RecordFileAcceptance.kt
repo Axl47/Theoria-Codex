@@ -31,12 +31,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/**
- * Record files under R8 across the process restart: reading positions, the offline and download queues, and the
- * profile-removal journal this build writes, beside reading positions and a journal exactly as the Gson stores wrote
- * them. The write phase leaves both removals pending, as a crash during the library deletion would; a fresh owner in
- * the read phase must decode each journal and finish removing the same profiles. Room deletion itself is unit-tested.
- */
 internal suspend fun verifyRecordFiles(context: Context, token: String, phase: String) {
     val directory = File(context.cacheDir, "release-contract-$token-records")
     val databaseName = "release-contract-$token-records.db"
@@ -116,7 +110,6 @@ private val positions = listOf(
     ReadingPosition(PostId(SourceKey.PIXIV, "12345"), RecentPostSection.WATCHED, 3, 1_700_000_000_000L),
 )
 
-// What the Gson store wrote for [positions], HTML escapes included.
 private const val SHIPPED_POSITIONS = """{"schemaVersion":1,"positions":[{"source":"custom_safebooru_org",""" +
     """"postId":"tom & jerry's <cut>=1","section":"CODEX","mediaNumber":12,""" +
     """"lastViewedAt":1700000100000},{"source":"PIXIV","postId":"12345","section":"WATCHED","mediaNumber":3,""" +

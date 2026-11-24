@@ -27,10 +27,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/**
- * The four DataStore files under R8: values this build writes survive a process restart with readable keys, and
- * files a Gson build wrote still load. [current] is written through the repositories; [shipped] holds literal files.
- */
 internal suspend fun writeDataStores(current: File, shipped: File) {
     check(current.mkdirs() && shipped.mkdirs()) { "could not create ${current.path} / ${shipped.path}" }
     withDataStoreScope { scope ->
@@ -143,7 +139,6 @@ private val feedFilters = FeedFabRestoreState(
 
 private val launchContext = ViewerLaunchContext("q", 4, ViewerStreamSource.CODEX, 21)
 
-// What Gson builds wrote: Gson's HTML escapes and since-retired keys included.
 private const val SHIPPED_SETTINGS = """{"schemaVersion":3,"settings":{"followedCreators":[{"source":"PIXIV",""" +
     """"name":"Artist","profileId":"3","uploadsQuery":"user:3","membershipId":"follow-1","seenPostIds":[],""" +
     """"latestPostIds":[]}],"sourceCatalogVersion":3,"enabledSources":["PIXIV"],"sourceWeights":{"PIXIV":1.0},""" +

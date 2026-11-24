@@ -10,7 +10,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** A [BrowserCookieStore] over a map keyed by host; records writes, flushes and expiries. */
 internal class FakeBrowserCookieStore : BrowserCookieStore {
     val cookies = mutableMapOf<String, String>()
     val written = mutableListOf<Pair<String, String>>()
@@ -59,7 +58,6 @@ class SiteCookieBridgeTest {
         assertTrue(bridge.keepsCookies("api.iwara.tv"))
         assertFalse(bridge.keepsCookies("new.example"))
         assertFalse(bridge.keepsCookies("danbooru.donmai.us"))
-        // The site being set up still gets its cookies; only the hidden check leaves it out.
         assertTrue(bridge.isAllowed("new.example"))
     }
 

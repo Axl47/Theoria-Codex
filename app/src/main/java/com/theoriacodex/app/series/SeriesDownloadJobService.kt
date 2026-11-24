@@ -30,10 +30,6 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
-/**
- * Downloads the chapter page at [url] into [file] through [client] and returns its image type. A page that is gone or
- * not an image makes its chapter [unavailable][ChapterUnavailable]; any other failure may pass and throws as it is.
- */
 internal suspend fun downloadChapterPage(url: String, file: File, client: OkHttpClient): String {
     try {
         downloadMediaFile(url, emptyMap(), file, client = client)
@@ -49,13 +45,6 @@ internal suspend fun downloadChapterPage(url: String, file: File, client: OkHttp
 private const val HTTP_NOT_FOUND = 404
 private const val HTTP_GONE = 410
 
-/**
- * Runs [SeriesDownloadJobService]. Chapters the user queued download in a user-initiated data transfer job on the
- * networks [downloadSettings] allow, as post downloads do: it keeps going once the app leaves the screen and waits for
- * such a network when there is none. Chapters the check for new chapters queued download in an ordinary job that waits
- * for an unmetered network. Both are kept across reboots; the manifest declares the service, `RUN_USER_INITIATED_JOBS`
- * and `RECEIVE_BOOT_COMPLETED` for that.
- */
 internal class SeriesDownloadScheduler(
     private val context: Context,
     private val downloadSettings: suspend () -> CacheSettings,
@@ -75,8 +64,6 @@ internal class SeriesDownloadScheduler(
             else -> JobInfo.NETWORK_TYPE_ANY
         }
         val userInitiated = AppJob.USER_DOWNLOAD.builder(context).setPersisted(true).setRequiredNetworkType(network)
-        // Only an app in view may start a user-initiated job. Out of view (resuming after a restart, say) the
-        // chapters still download, in an ordinary job.
         val scheduled = try {
             scheduler.schedule(userInitiated.setUserInitiated(true).build())
         } catch (_: IllegalArgumentException) {
@@ -90,22 +77,13 @@ internal class SeriesDownloadScheduler(
     }
 }
 
-/**
- * Drains the chapter download queue while the system lets it, with one ongoing notification for the queue. Each job
- * drains its own lane: the user's job the chapters the user queued, the automatic job those the check queued, so
- * automatic chapters only ever download while the system sees an unmetered network. When both run they take turns
- * chapter by chapter. A chapter in flight when the network changes finishes on the new one.
- */
 class SeriesDownloadJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val runs = ConcurrentHashMap<Int, Job>()
 
     override fun onStartJob(params: JobParameters): Boolean {
-        // A user-initiated job must name its notification at once.
         showProgress(params, null)
         runs[params.jobId] = scope.launch {
-            // A chapter that may download later, or a full disk while the queue is saved: the system runs the job again
-            // after a growing wait.
             val retry = runCatchingExceptionsPreservingCancellation { drain(params) }.getOrElse { error ->
                 showDownloadsWaiting(this@SeriesDownloadJobService, params.automatic, 0, null)
                 val paused = error is IOException
@@ -113,17 +91,12 @@ class SeriesDownloadJobService : JobService() {
                 paused
             }
             if (!params.isUserInitiatedJob) cancelDownloadProgress(this@SeriesDownloadJobService)
-            // Only this run's entry: a replacement of the job may already be running under the same id.
             runs.remove(params.jobId, coroutineContext.job)
             jobFinished(params, retry)
         }
         return true
     }
 
-    /**
-     * Drains the job's lane; true when it should run again later. The automatic lane waits while the default network is
-     * metered, even if the system started the job on an unmetered one, since requests go over the default network.
-     */
     private suspend fun drain(params: JobParameters): Boolean {
         val automatic = params.automatic
         if (automatic && getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) return true
@@ -135,15 +108,12 @@ class SeriesDownloadJobService : JobService() {
         return result.retry
     }
 
-    /** The network went away, say: the system runs the job again later. Stopped by the user, it waits for the next app start. */
     override fun onStopJob(params: JobParameters): Boolean {
         runs.remove(params.jobId)?.cancel()
         if (!params.isUserInitiatedJob) cancelDownloadProgress(this)
         return params.stopReason != JobParameters.STOP_REASON_USER
     }
 
-    // Requests use the system's default network, not the job's, so a new network needs nothing here; the system's
-    // version only logs that it was not overridden.
     override fun onNetworkChanged(params: JobParameters) = Unit
 
     override fun onDestroy() {

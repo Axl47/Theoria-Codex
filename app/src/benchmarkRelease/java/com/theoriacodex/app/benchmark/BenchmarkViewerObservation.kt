@@ -10,7 +10,6 @@ import androidx.core.view.descendants
 import androidx.media3.ui.PlayerView
 import java.lang.ref.WeakReference
 
-/** Reads the fitted native video surface, which gesture accessibility nodes can occlude. */
 internal object BenchmarkViewerObservation {
     private var foregroundRoot: WeakReference<ViewGroup>? = null
 

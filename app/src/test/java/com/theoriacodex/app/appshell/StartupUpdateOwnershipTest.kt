@@ -38,7 +38,6 @@ class StartupUpdateOwnershipTest {
         gateway.installed.complete(Unit)
         runCurrent()
         assertTrue(owner.state.value.startup.awaitingInstallerReturn)
-        // A new UI observer receives the retained state even when no collector existed during download.
         assertTrue(owner.state.first().startup.awaitingInstallerReturn)
         owner.onInstallerReturn(11)
         runCurrent()

@@ -18,10 +18,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * A trail fork's feed, which the Viewer level showing it follows as stream [ViewerStreamSource.TRAIL]. [start] loads the
- * first page before the fork opens; afterwards it pages as the Viewer asks. [close] it when its Viewer level is gone.
- */
 internal class TrailFeed(
     val queryHash: String,
     private val pager: TrailPager,
@@ -34,15 +30,10 @@ internal class TrailFeed(
     override val viewerFeed: ViewerFeedSnapshot get() = snapshot.value
     override val viewerFeedChanges: Flow<ViewerFeedSnapshot> = snapshot
 
-    // Trails keep no related shelf: Similar is itself a trail.
     override val related = RelatedPostsRouteController(
         scope, relatedLoader, currentState = { RelatedPostsUiState.Idle }, canonicalPosts = { snapshot.value.results }, updateState = {},
     )
 
-    /**
-     * Loads the first page, and up to [FIRST_PAGE_LIMIT] pages while [visible] finds nothing to show in them, as feeds
-     * do under filters. Returns what [visible] shows, empty when nothing loaded or a page failed.
-     */
     suspend fun start(visible: (List<Post>) -> List<Post> = { it }): List<Post> {
         repeat(FIRST_PAGE_LIMIT) {
             if (!step()) return emptyList()
@@ -65,7 +56,6 @@ internal class TrailFeed(
 
     fun close() = scope.cancel()
 
-    /** One page; a failure keeps what was loaded, so the Viewer can ask again later. */
     private suspend fun step(): Boolean {
         val page = pager.nextOrNull()
         snapshot.update { feed ->
@@ -75,7 +65,6 @@ internal class TrailFeed(
     }
 
     private companion object {
-        /** Search's own automatic page limit (FeedPageDemand), so a filtered fork gives up as soon as a feed would. */
         const val FIRST_PAGE_LIMIT = 3
     }
 }

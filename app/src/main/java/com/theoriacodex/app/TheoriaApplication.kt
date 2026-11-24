@@ -54,25 +54,16 @@ class TheoriaApplication :
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
 
-    /** The one place browser cookies reach the app's own requests: every client in [httpClients] carries its jar. */
     override val siteCookieBridge = SiteCookieBridge(AndroidBrowserCookieStore)
 
-    /** Whether the device is online, watched from the first time anything asks. */
     private val networkOnline by lazy { NetworkMonitor(this).online }
 
-    /**
-     * Hosts known to be down or behind a browser check this session: the one record every source's client keeps,
-     * extensions' included, and that the app shows and clears the same way whichever source hit it.
-     */
     private val hostOutages by lazy { HostOutageTracker(isOnline = { networkOnline.value }) }
 
-    /** The hidden browsers that pass checks out of sight, one set shared by the app's own clients and the extensions'. */
     val challengeBrowsers = ChallengeBrowsers(AndroidBrowserCookieStore, WebViewChallengeBrowser(this))
 
-    /** Series sources that run loaded extension code. It loads nothing until first used. */
     private val extensionHost = ExtensionSourceHost().also { it.attach(this, challengeBrowsers) { hostOutages } }
 
-    /** Every HTTP client in the app, so they share one connection pool and these cookies. */
     override val httpClients = AppHttpClients(
         siteCookieBridge.cookieJar,
         ConnectionMemory(
@@ -83,8 +74,6 @@ class TheoriaApplication :
         siteCookieBridge::isAllowed,
         siteCookieBridge::mediaAuthorizationFor,
         extensionHost.mediaInterceptor,
-        // Only hosts that keep the browser's cookies: a never-verified built-in site asks the user first. The hidden
-        // browser sees only the site's root, since these requests can carry API keys.
         ChallengePass(challengeBrowsers, { hostOutages.isChallenged(it) }, siteCookieBridge::keepsCookies, Request::siteRoot),
     )
 
@@ -95,7 +84,6 @@ class TheoriaApplication :
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
         get() = readiness.state
 
-    /** Null outside the main process, which alone owns the log files. */
     internal var diagnosticReporter: DiagnosticReporter? = null
         private set
 
@@ -142,7 +130,6 @@ class TheoriaApplication :
 
     override suspend fun retryAppContainer(): TheoriaAppContainer = readiness.retry()
 
-    /** Coil trims its own memory cache; this covers what the app owns, once the process is at risk of being killed. */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_BACKGROUND) releaseMemoryCaches()
@@ -156,13 +143,10 @@ class TheoriaApplication :
     private fun releaseMemoryCaches() {
         val state = readiness.state.value as? ApplicationDataState.Ready ?: return
         state.value.sources.pixivUgoiraClient.releaseMemoryCaches()
-        // The picture tagger holds about 350 MB while loaded; it loads again for the next picture.
         state.value.pictures?.let { pictures -> state.value.applicationScope.launch { pictures.tagger.release() } }
     }
 
     override fun newImageLoader(): ImageLoader {
-        // Same directory as Coil's default, so the existing cache is kept. Coil's default size
-        // (2% of disk, at most 250 MB) let a few Viewer originals evict the grid's thumbnails.
         val diskCache = DiskCache.Builder()
             .directory(cacheDir.resolve(IMAGE_DISK_CACHE_DIRECTORY))
             .maxSizeBytes(IMAGE_DISK_CACHE_MAX_BYTES)
@@ -173,9 +157,6 @@ class TheoriaApplication :
                 add(ImageDecoderDecoder.Factory())
             }
             .diskCache(diskCache)
-            // Media URLs name files that never change, so a cached copy is used as is. Revalidating it cost a
-            // round trip per cached image on origins that send only validators (nginx's default), including
-            // every Viewer page a prefetch had already downloaded; no-store responses were never cached.
             .respectCacheHeaders(false)
             .eventListener(NetworkUsage.countingImageResults(UndecodableImageEviction(diskCache)))
             .okHttpClient { httpClients.images }

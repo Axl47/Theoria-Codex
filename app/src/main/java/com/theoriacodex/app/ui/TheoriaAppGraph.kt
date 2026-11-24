@@ -18,9 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 
-/**
- * Resolves the application-owned graph without constructing dependencies in composition.
- */
 @Composable
 internal fun rememberTheoriaAppContainerOwner(appContext: Context): TheoriaAppContainerOwner {
     return remember(appContext) {

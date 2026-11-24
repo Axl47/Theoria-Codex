@@ -4,7 +4,6 @@ import androidx.compose.runtime.saveable.listSaver
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 
-/** The navigation handoff survives Activity/process recreation without retaining provider objects. */
 internal val CreatorProfileStateSaver = listSaver<CreatorProfile?, String>(
     save = { creator -> creator?.let(::encodeCreatorNavigationIdentity).orEmpty() },
     restore = ::decodeCreatorNavigationIdentity,

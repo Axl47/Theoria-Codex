@@ -6,7 +6,6 @@ import com.theoriacodex.app.ui.TopLevelDestination.Search
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Pages: Search 0, For You 1, Library 2. */
 class TabTapTest {
     @Test fun `a tap on the resting tab reselects it, and on another tab moves`() {
         assertEquals(TabTap.Reselect, tabTap(Library, targetPage = 2, settledPage = 2, scrolling = false))

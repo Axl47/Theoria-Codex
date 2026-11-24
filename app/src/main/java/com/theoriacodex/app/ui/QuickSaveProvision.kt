@@ -21,11 +21,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 
-/**
- * The app's [QuickSave]: an Activity-owned save and undo owner, plus suggestions ranked from the shared
- * relevance [loader] and this session's search saves (the same memory the picker ranks by). A Codex waiting to be
- * deleted is never suggested.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Composable
 internal fun rememberQuickSave(shell: TheoriaShell, loader: CodexSaveRelevanceLoader): QuickSave {

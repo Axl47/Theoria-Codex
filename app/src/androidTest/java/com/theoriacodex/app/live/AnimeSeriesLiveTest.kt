@@ -22,31 +22,11 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Proves watching an anime from a real Aniyomi extension end to end, through the app's screen: turning the extension
- * on, the Anime filter, browsing, a series, playing an episode, switching its stream, closing it mid-episode, resuming
- * it after a restart, a short watch moving Continue, and going on to the next episode, by hand and at an episode's end.
- * It talks to the live site, so it runs only with `-e extensionSourceLive true`, with the extension installed as a
- * package (`adb install`). Nothing names the extension or the series in the code: `-e extensionName` names the
- * extension as the Extensions page lists it, and `-e seriesQuery` the search that finds a series of four or more
- * episodes.
- *
- * `-e targetPackage com.theoriacodex.acceptance` drives the minified acceptance build instead of this debug app, by
- * its screen and the player state its media session reports; with the debug app, the stored progress is read as well,
- * which shows playback is recorded about every ten seconds and on pause.
- *
- * The story crosses a restart, so run each test as its own `am instrument` call with the app stopped between them:
- * [anEpisodePlaysSwitchesStreamAndIsLeftPartway], `am force-stop <targetPackage>`, then
- * [theEpisodeResumesAfterARestartAndPlaysOnIntoTheNext].
- *
- * The report is titles, labels, counts and times only: no screenshots, and nothing about what an episode shows.
- */
 @RunWith(AndroidJUnit4::class)
 class AnimeSeriesLiveTest {
     private val hand = AnimeViewerHand()
     private val live = hand.live
 
-    /** What the first run leaves for the second, in the debug app's data, which a force-stop keeps. */
     private val notes by lazy { live.context.getSharedPreferences("anime_series_live_test", Context.MODE_PRIVATE) }
 
     @Before
@@ -100,7 +80,6 @@ class AnimeSeriesLiveTest {
         assertEquals(episode, hand.episodeOnScreen(title))
         hand.assertResumesAt("resume", episode, leftAt, "after a restart")
 
-        // By hand from early on, the next episode is looked up when asked for.
         val pressedAt = System.currentTimeMillis()
         hand.press("Next episode", By.desc("Next episode"))
         val next = live.await("the next episode's title", { hand.episodeOnScreen(title) }) { it != episode }
@@ -108,7 +87,6 @@ class AnimeSeriesLiveTest {
         live.report("next", "\"$next\" after \"$episode\" by hand: playing from ${start.positionMs.seconds()} s, ${System.currentTimeMillis() - pressedAt} ms after the press")
         assertTrue("The next episode starts near its beginning", start.positionMs < NEAR_MS)
 
-        // A glance at an episode makes it the one Continue names.
         hand.press("Next episode", By.desc("Next episode"))
         val glanced = live.await("the episode after \"$next\"", { hand.episodeOnScreen(title) }) { it != next }
         val shownAt = System.currentTimeMillis()
@@ -126,16 +104,13 @@ class AnimeSeriesLiveTest {
         live.context.deleteSharedPreferences("anime_series_live_test")
     }
 
-    /** Browses [source], picking it from Browse's source picker unless it is already browsed, and reads its listing. */
     private fun browseAnime(source: String) {
         live.tap("the Browse view", By.text(SeriesLiveDriver.BROWSE))
-        // Browse's header names the browsed source first, after the Following and Browse switch.
         val browsed = live.await("the browsed source", { hand.labels().dropWhile { it != SeriesLiveDriver.BROWSE }.getOrNull(1) }) { it != null }
         if (browsed != source) {
             live.tap("the browsed source, which opens the picker", By.text(checkNotNull(browsed)))
             live.tap("$source in the picker", By.text(source))
         }
-        // The listing fills the grid below the source, Popular and Latest, above the navigation bar.
         val chrome = setOf(POPULAR, LATEST) + TopLevelDestination.entries.map { it.label }
         val listed = live.await("$source's listing", { hand.labels().dropWhile { it != source }.drop(1).filterNot { it in chrome } }) {
             it.size >= LISTED_AT_LEAST
@@ -143,19 +118,12 @@ class AnimeSeriesLiveTest {
         live.report("browse", "$source lists ${listed.size} labels")
     }
 
-    /**
-     * Takes [episode], which plays since [playingSince] and is not the series' last, past its watched point through the
-     * timeline and lets it end; the Viewer must then move on to the entry after it, whose series page row is [expected].
-     * Moving on is timed from the end to that entry playing, and the one episode lookup since [episode] began playing,
-     * the next entry's, must have begun before the end.
-     */
     private fun endOfEpisode(title: String, episode: String, expected: String, playingSince: Long) {
         live.viewerControl("Next episode, which the last episode lacks", By.desc("Next episode"))
         val durationMs = hand.durationOnScreen()
         hand.seekTo(durationMs)
         val nearEnd = hand.awaitPosition("the playback near its end") { it >= durationMs * 9 / 10 }
         live.report("end", "sought \"$episode\" to ${nearEnd.seconds()} s")
-        // The end shows as the position going back, to the next episode, or the player stopping.
         var furthest = nearEnd
         val ended = hand.awaitPlayback("the episode to end") { playback ->
             val wentBack = playback.positionMs < furthest - NEAR_MS
@@ -173,7 +141,6 @@ class AnimeSeriesLiveTest {
         assertTrue("The next entry was looked up before the end", lookups.single() < 0)
     }
 
-    /** Reads the stored progress for half a minute of playback and checks it is written about every ten seconds. */
     private fun recordsPlaybackEvery10Seconds(title: String, episode: String) {
         val changes = mutableListOf<Pair<Long, Long>>()
         var last: Long? = null
@@ -184,14 +151,12 @@ class AnimeSeriesLiveTest {
             last = stored
             Thread.sleep(SeriesLiveDriver.POLL_MS)
         }
-        // The first value was there before the watch began, so only the writes after it measure the gaps.
         val gaps = changes.drop(1).zipWithNext { a, b -> b.first - a.first }
         live.report("cadence", "stored positions ${changes.map { (at, ms) -> "${ms.seconds()} s at +${at.seconds()} s" }}; gaps ${gaps.map { it.seconds() }} s")
         assertTrue("Playback is recorded while it plays", gaps.size >= 2)
         assertTrue("About every ten seconds", gaps.all { it in REPORT_GAPS_MS })
     }
 
-    /** Pauses playback and checks the position is stored at once, then plays on. */
     private fun recordsPlaybackOnPause(title: String, episode: String) {
         hand.press("Pause", By.desc("Pause"))
         val paused = hand.awaitPlayback("the player to pause") { it.state == "PAUSED" }.positionMs
@@ -200,7 +165,6 @@ class AnimeSeriesLiveTest {
         hand.press("Play", By.desc("Play"))
     }
 
-    /** What the debug app stored for [episode] of the series titled [title]; read only. */
     private fun storedEpisode(title: String, episode: String): StoredSeriesEntry {
         val path = live.context.getDatabasePath(TheoriaRoomDatabase.DEFAULT_DATABASE_NAME).path
         val id = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY).use { database ->
@@ -212,7 +176,6 @@ class AnimeSeriesLiveTest {
         return runBlocking { live.series.repository.entries(id) }.first { it.entry.name == episode }
     }
 
-    /** Every label of the app on screen, in screen order. */
     private companion object {
         const val TITLE = "title"
         const val EPISODE = "episode"
@@ -223,7 +186,6 @@ class AnimeSeriesLiveTest {
         const val MIN_EPISODES = 4
         const val PLAYED_MS = 5_000L
 
-        /** How far a stream switch may land from where playback was: segments start every few seconds. */
         const val NEAR_MS = 20_000L
 
         const val PAUSE_NEAR_MS = 2_000L

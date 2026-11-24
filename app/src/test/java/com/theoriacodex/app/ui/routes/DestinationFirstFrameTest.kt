@@ -38,10 +38,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Screens return to composition constantly, so each must draw from what it already knows. The gates
- * block repeat subscriptions forever, which makes needing to re-query fail rather than merely race.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class DestinationFirstFrameTest {

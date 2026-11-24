@@ -13,11 +13,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Writes the installed Debug app's library as a normal profile backup (no credentials or media) to its private
- * cache, where `scripts/real_data_device.sh export-library` copies it out to seed realistic startup benchmarks.
- * Read-only against the library. Excluded from the default lane; requires `theoriaExportLibrary=true`.
- */
 @RunWith(AndroidJUnit4::class)
 class LibrarySnapshotExportTest {
     @Before

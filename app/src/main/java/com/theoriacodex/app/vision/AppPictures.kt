@@ -26,36 +26,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import okhttp3.OkHttpClient
 
-/**
- * The Library's picture upkeep and the opt-in picture tagger, as the app holds them: [model] is the tagger's download,
- * [tagger] what it predicts, [indexLibrary] the work the charging-only background job does, and [readFrames] the work
- * the idle-only one does.
- */
 class AppPictures(
     val model: VisualModelStore,
     val tagger: PictureTagger,
     private val hashes: LibraryPictureBackfill,
     val tags: LibraryVisionBackfill,
-    /** How many Library posts the current model has analysed, out of how many. */
     val progress: Flow<VisionProgress>,
 ) {
-    /** Hashes, then tags, the Library's pictures that lack either; returns whether tagging has more left. */
     suspend fun indexLibrary(): Boolean {
         hashes.drain()
         return tags.drain()
     }
 
-    /** Upgrades playing posts' still analyses with their frames; returns whether it should run again soon. */
     suspend fun readFrames(): Boolean = tags.drainFrames()
 }
 
-/**
- * Builds [AppPictures]: the model lives in no-backup storage, since it is large and downloads again, and its files come
- * from [BuildConfig.VISION_MODEL_BASE_URL]. Deleting it removes every stored prediction too. [hashes] is the Library's
- * picture hashing, which runs whether or not the model is there. [offlineCopy] finds a post's downloaded copy, whose
- * video plays from disk. [resolvePost] looks a post up again at its source, for a video whose saved address expired or
- * was never listed.
- */
 fun appPictures(
     context: Context,
     client: OkHttpClient,
@@ -77,13 +62,6 @@ fun appPictures(
     return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id))
 }
 
-/**
- * The tagger's pictures as the app holds them: stills through the image loader, from the disk cache cards fill; video
- * frames through the shared video cache ([VideoPlaybackInfrastructure.sampleFrames]), or from a downloaded copy on disk;
- * Pixiv animation frames from their archive. A post whose listing gave no stream yet, or whose server refuses its saved
- * address (addresses expire), is looked up again once; failures are classed by [frameSample]. One post's downloads,
- * video or animation, retries and a refreshed address included, share one [NetworkBudget].
- */
 private class AppPictureSource(
     private val context: Context,
     private val ugoira: PixivUgoiraClient,
@@ -104,7 +82,6 @@ private class AppPictureSource(
         return if (sample == FrameSample.Refused && motion is PostMotion.Video) refreshed(post, budget) else sample.asFrames()
     }
 
-    /** [post] as its source lists it now, sampled against the same [budget]; refused again, nothing beyond the still. */
     private suspend fun refreshed(post: Post, budget: NetworkBudget): PostFrames {
         val fresh = runCatchingPreservingCancellation { resolvePost(post.id) }
             .getOrElse { return frameSample(emptyList(), it).asFrames() }
@@ -127,11 +104,8 @@ private class AppPictureSource(
     }
 }
 
-/** The model reads 448 px squares; decoding the preview larger only costs memory. */
 private const val INPUT_PX = 448
 
-/** Frames read from across a playing post, beside its still. */
 private const val FRAMES = 6
 
-/** A light rendition's index and six keyframes, or a 600 px animation archive, usually take well under this. */
 private const val MAX_POST_NETWORK_BYTES = 6L * 1024 * 1024

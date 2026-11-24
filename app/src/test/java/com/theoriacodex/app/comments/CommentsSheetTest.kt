@@ -107,7 +107,6 @@ class CommentsSheetTest {
 
         compose.onNodeWithText("Comments").assertIsDisplayed()
         compose.onNodeWithText("author-a").assertIsDisplayed()
-        // Folded: the peek shows chips, but no group headings.
         compose.onNodeWithText("Artists").assertDoesNotExist()
         compose.onNode(hasText("sunset") and hasClickAction()).assertExists()
 

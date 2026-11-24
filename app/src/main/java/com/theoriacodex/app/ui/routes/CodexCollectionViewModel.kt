@@ -21,10 +21,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
-/**
- * Every Codex's post count and cover candidates, for all profiles. Activity-owned, so a save costs one summary query
- * and one thumbnail listing however many screens (Library, Save to Codex, Search) show covers; each filters by profile.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class CodexCollectionViewModel(codices: CodexRepository, source: CodexCollectionSource) : ViewModel() {
     private val thumbnailGeneration = MutableStateFlow(0)
@@ -36,7 +32,6 @@ internal class CodexCollectionViewModel(codices: CodexRepository, source: CodexC
         .flatMapLatest(source::observe)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
 
-    /** Resolves covers again after clearing the thumbnail cache deleted files they pointed at. */
     fun thumbnailCacheCleared() = thumbnailGeneration.update { it + 1 }
 }
 
@@ -49,7 +44,6 @@ internal fun codexCollectionOwner(data: DataDependencies): CodexCollectionViewMo
         )
     }
 
-/** The shared [CodexCollectionViewModel.presentation], empty until its first emission. */
 @Composable
 internal fun rememberCodexCollection(data: DataDependencies): CodexCollectionPresentation =
     codexCollectionOwner(data).presentation.collectAsStateWithLifecycle().value ?: CodexCollectionPresentation()

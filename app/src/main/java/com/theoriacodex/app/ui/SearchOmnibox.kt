@@ -29,14 +29,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.launch
 
-/** Creators of recently watched posts the one box offers after the followed ones. */
 private const val RECENT_CREATOR_LIMIT = 20
 
-/**
- * Everything besides tags that Search's composer matches typed text against: the active profile's Codices, followed
- * series, followed creators and those of recently watched posts, saved and recent searches, and every setting
- * definition (see [SETTING_BINDINGS]), each bound to what picking it does.
- */
 @Composable
 internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDestinationState): List<OmniboxEntry> {
     val profileId = state.activeProfile.profileId
@@ -119,7 +113,6 @@ internal fun followedSeriesEntries(
     ) { open(item.id) }
 }
 
-/** The creators of [watched] posts, latest first and each once, leaving out those already [followed]. */
 internal fun recentCreators(
     watched: List<RecentPostEntry>,
     followed: List<CreatorProfile>,
@@ -134,7 +127,6 @@ internal fun recentCreators(
         .toList()
 }
 
-/** Opens a saved search. Its "new posts" count is read once Search reports the results it showed ([SavedSearchOpenMarks]). */
 internal fun TheoriaShell.openSavedSearch(entry: SavedSearchEntry) {
     openHistoricalSearch(entry.search)
     savedSearchOpens.opened(entry)

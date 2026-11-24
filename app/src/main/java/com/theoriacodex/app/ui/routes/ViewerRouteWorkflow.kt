@@ -39,21 +39,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
-/**
- * Bridges Viewer route work to the application-scoped engines and repositories.
- *
- * The Viewer owns its screen state and jobs. This bridge owns only cross-route persistence and
- * restoration policy, keeping those decisions out of both the renderer and the navigation shell.
- */
 internal class ViewerRouteWorkflow(
     private val data: DataDependencies,
     private val cacheScope: CoroutineScope,
     private val sources: SourceDependencies,
-    /** The live feed a Viewer stream pages through, or null for a stream no feed owns. */
     private val feedOwner: (ViewerStreamSource) -> ViewerFeedOwner?,
     private val offlineMedia: OfflineMediaCoordinator,
     private val providerDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Reads and watches series; a [ViewerStreamSource.SERIES] session goes to it and leaves no trace anywhere else. */
     private val series: SeriesReader? = null,
 ) : ViewerPostResolver {
     override fun requiresResolution(post: Post): Boolean =
@@ -93,11 +85,6 @@ internal class ViewerRouteWorkflow(
         return resolved
     }
 
-    /**
-     * Recovers working media for [post]; a result that no longer [stillApplies] is dropped before anything records it.
-     * A series entry's media addresses expire within minutes, so a chapter's pages, or an episode's streams, are asked
-     * for again from the series [queryHash] names.
-     */
     suspend fun recoverMedia(
         post: Post,
         failedMedia: ImageRef,
@@ -128,7 +115,6 @@ internal class ViewerRouteWorkflow(
     ): List<Post> {
         val offlineIds = offlineMedia.store.load().availablePostIds
         val selected = context.startIndex.coerceIn(0, posts.lastIndex.coerceAtLeast(0))
-        // Normalizing every gallery can traverse thousands of media refs before navigation.
         val availablePosts = withContext(providerDispatcher) {
             posts.mapIndexed { index, post ->
                 currentCoroutineContext().ensureActive()
@@ -189,7 +175,6 @@ internal class ViewerRouteWorkflow(
                 startIndex = selectedIndex,
                 recentsSection = request.recentsSection ?: restoredContext.recentsSection,
             ),
-            // A cold reconstruction is the saved ordered window, never a fresh/unrelated feed.
             liveSearchBinding = false,
             sessionId = identity.value,
             initialMediaIndices = savedMediaIndices(request.recentsSection ?: recentPostSectionForViewer(restoredContext)) +
@@ -197,7 +182,6 @@ internal class ViewerRouteWorkflow(
         )
     }
 
-    /** Resume feed and Recents launches through the same saved-position policy. */
     suspend fun prepareResumableSession(
         session: ViewerSession,
         startOver: Boolean = false,
@@ -230,7 +214,6 @@ internal class ViewerRouteWorkflow(
                 .associate { it.postId to it.mediaNumber - 1 }
         }.getOrDefault(emptyMap())
 
-    /** Finds a post offline or on its site, giving up after 15 seconds; unlike [resolvePost] it records nothing. */
     suspend fun resolvePostWithoutSaving(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
         offlineMedia.find(postId)
             ?: runCatchingPreservingCancellation {
@@ -283,7 +266,6 @@ internal class ViewerRouteWorkflow(
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
             data.recentsRepository.recordWatchedMediaProgress(
-                // This callback can create the membership before the visible-post write completes.
                 post = offlineMedia.withoutOfflineLocations(post),
                 origin = origin,
                 originQueryHash = session?.context?.queryHash,
@@ -293,22 +275,13 @@ internal class ViewerRouteWorkflow(
         }
     }
 
-    /** An episode's playback position, which only a series session reports and only its series records. */
     suspend fun recordPlaybackProgress(post: Post, progress: ViewerPlaybackProgress, session: ViewerSession) {
         recordSeriesProgress(session) { recordPlaybackProgress(it, post, progress) }
     }
 
-    /**
-     * A visible page of a series entry, which goes to its series only ([SeriesReader.recordPageProgress]). True for any
-     * series session, so neither kind of entry reaches History or statistics.
-     */
     private fun recordSeriesPage(post: Post, page: Int, session: ViewerSession?): Boolean =
         recordSeriesProgress(session) { recordPageProgress(it, post, page) }
 
-    /**
-     * Records progress through a series entry on its series and reports true, so History and statistics never see it.
-     * The series writes in the app's scope, so the closing Viewer's last report outlives it.
-     */
     private fun recordSeriesProgress(session: ViewerSession?, record: SeriesReader.(ViewerSession) -> Unit): Boolean {
         if (session?.series == null) return false
         series?.record(session)
@@ -324,10 +297,6 @@ internal class ViewerRouteWorkflow(
     }
 }
 
-/**
- * The origin History stores for a post watched from [context]. A trail is stored as a search: History and profile backups
- * keep the origin by name, and a build from before trails cannot read a name it does not know.
- */
 internal fun historyOrigin(context: ViewerLaunchContext?): ViewerStreamSource =
     context?.streamSource?.takeUnless { it == ViewerStreamSource.TRAIL } ?: ViewerStreamSource.SEARCH
 
@@ -336,12 +305,7 @@ internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPo
     return context?.recentsSection ?: RecentPostSection.fromOrigin(origin)
 }
 
-/**
- * The related shelf of the feed a Viewer session came from, which the Viewer shows as its strip. Only the feeds in
- * [SOURCES] keep one; for any other source each call does nothing.
- */
 internal class ViewerRelatedShelves(private val feedOwner: (ViewerStreamSource) -> ViewerFeedOwner?) {
-    /** "More like this" from the Viewer. */
     fun show(source: ViewerStreamSource, post: Post) {
         feedOwner(source)?.related?.show(post)
     }
@@ -359,7 +323,6 @@ internal class ViewerRelatedShelves(private val feedOwner: (ViewerStreamSource) 
     }
 }
 
-/** The Codex a Viewer session was opened from, when its posts can be removed from it: not a feed, nor a virtual Codex. */
 internal fun ViewerLaunchContext.removableCodexId(): String? = queryHash.removePrefix("codex:").takeIf { id ->
     streamSource == ViewerStreamSource.CODEX && id != queryHash && id != SAVED_CODEX_ID && !isVirtualCodex(id)
 }

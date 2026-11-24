@@ -30,17 +30,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
-// Probes and helpers for MediaBufferingBenchmarkTest.
-
-/** Times one player's first frame, playback start, rebuffers and seek completions; attach and detach on main. */
 internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) : Player.Listener {
-    /** Elapsed-realtime clock value when the probe was made; server timelines are reported relative to it. */
     val attachedAt = SystemClock.elapsedRealtime()
 
-    /**
-     * Per seek: when it started (ms after [attachedAt]), then the player's load, render and state events in ms after
-     * the seek request, until it was ready. Read on main.
-     */
     val seekEvents = mutableListOf<MutableList<String>>()
     private var seekStartedAt = -1L
     private val seekLog = object : AnalyticsListener {
@@ -68,7 +60,6 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
     var rebufferMs = 0L
         private set
 
-    /** Each stall as "<start>+<duration>", in ms after [attachedAt]. Read on main. */
     val stalls = mutableListOf<String>()
 
     fun attach() {
@@ -87,21 +78,16 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
 
     suspend fun awaitPlaying(): Long = awaitPlayingAt() - attachedAt
 
-    /** Elapsed-realtime clock value of the first rendered frame. */
     suspend fun awaitFirstFrameAt(): Long = withTimeout(PLAYER_TIMEOUT_MS) { firstFrame.await() }
 
-    /** Elapsed-realtime clock value at which playback first started. */
     suspend fun awaitPlayingAt(): Long = withTimeout(PLAYER_TIMEOUT_MS) { playing.await() }
 
-    /** Where the player was when its latest timed seek became ready. Read on main. */
     var seekReadyPositionMs = -1L
         private set
 
-    /** Milliseconds from the seek request until the player is ready to play at [positionMs]. */
     suspend fun seekAndAwaitReady(positionMs: Long): Long =
         awaitReady(withContext(Dispatchers.Main) { startSeek { player.seekTo(positionMs) } })
 
-    /** Runs [seek] as a timed seek, on main; [awaitReady] waits for it. */
     fun startSeek(seek: () -> Unit): TimedSeek {
         val ready = CompletableDeferred<Long>()
         seekReady = ready
@@ -112,7 +98,6 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
         return TimedSeek(now, ready)
     }
 
-    /** Milliseconds from [seek]'s request until the player was ready. */
     suspend fun awaitReady(seek: TimedSeek): Long = withTimeout(PLAYER_TIMEOUT_MS) { seek.ready.await() } - seek.startedAt
 
     private fun log(eventTime: EventTime, event: String) {
@@ -152,10 +137,8 @@ internal class PlayerProbe(val player: ExoPlayer, private val surface: Surface) 
     }
 }
 
-/** A seek [PlayerProbe.startSeek] issued at [startedAt] (elapsed realtime); [ready] completes when it is ready. */
 internal class TimedSeek(val startedAt: Long, val ready: CompletableDeferred<Long>)
 
-/** A decoder output that drops every frame, standing in for the card's or Viewer's texture view. */
 internal class BenchSurface : AutoCloseable {
     private val thread = HandlerThread("media-bench-surface").apply { start() }
     private val reader = ImageReader.newInstance(
@@ -169,12 +152,6 @@ internal class BenchSurface : AutoCloseable {
     }
 }
 
-/**
- * One timeline drag through the page's scrub previews, as the popup drives it: the finger rests on each target
- * until its frame is published. With [release], the finger then lifts on the last target: as in the timeline, the
- * release runs on main while the popup still follows the drag, which stops right after. Returns, per target, when
- * the finger moved there and when its frame arrived.
- */
 internal suspend fun ViewerScrubPreviews.drag(
     targets: List<Long>,
     frameLog: PreviewFrameLog,
@@ -205,16 +182,10 @@ internal suspend fun ViewerScrubPreviews.drag(
     elapsed
 }
 
-/** One drag target: when the finger moved there and when its preview frame was published. */
 internal data class DragFrame(val movedAt: Long, val publishedAt: Long) {
     val elapsedMs: Long get() = publishedAt - movedAt
 }
 
-/**
- * Describes each published preview frame (its size, and "blank" when its pixels do not vary, as a failed read
- * would) and saves the latest to [file], the benchmark's generated media only, for a look at its orientation.
- * Record on main.
- */
 internal class PreviewFrameLog(private val file: File) {
     val frames = mutableListOf<String>()
     private var latest: Bitmap? = null
@@ -230,7 +201,6 @@ internal class PreviewFrameLog(private val file: File) {
     }
 }
 
-/** Samples Java plus native heap (where bitmaps live) until stopped. */
 internal class MemorySampler(scope: CoroutineScope) {
     val baselineBytes = usedBytes()
     @Volatile private var peak = baselineBytes

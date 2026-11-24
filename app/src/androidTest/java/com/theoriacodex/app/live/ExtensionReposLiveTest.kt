@@ -15,14 +15,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Proves repos on a device, through the Extensions page alone: adding Keiyoushi (whose catalog is only in its newer,
- * protobuf index) and Yūzōnō's anime and manga repos (one name and key for two repos), updating a Keiyoushi extension an older app installed as a package,
- * installing an anime extension that was not on the device, loading its sources from the app's own storage, and
- * removing it. Runs only with `-e extensionSourceLive true`, and with `-e adoptedPackage <package>` naming a
- * Keiyoushi extension installed beforehand with `adb install` at an older version than the repo's, which it leaves
- * installed. The report is names, versions and counts only.
- */
 @RunWith(AndroidJUnit4::class)
 class ExtensionReposLiveTest {
     private val live = SeriesLiveDriver()
@@ -45,18 +37,15 @@ class ExtensionReposLiveTest {
         live.tap("Repos", By.text("Repos"))
         addRepo(KEIYOUSHI, "Keiyoushi")
         addRepo(YUZONO, "Yūzōnō")
-        // Yūzōnō's manga repo has the anime repo's name and key, and is a repo of its own.
         addRepo(YUZONO_MANGA, "Yūzōnō")
         live.await("three repos", { repos.repos().map { it.url } }) { it.size == 3 }
         val listing = runBlocking { repos.available() }
         live.report("repos", "${listing.extensions.size} extensions offered; problems: ${listing.problems}")
         assertTrue("Keiyoushi's protobuf catalog is read", listing.extensions.count { it.repo.contains("keiyoushi") } > 100)
         assertTrue("Yūzōnō's legacy catalog is read", listing.extensions.any { it.packageName == ONSEN })
-        // Its catalog is now only a stub telling old apps to update, which offers nothing this app runs.
         assertTrue("Yūzōnō's manga repo is read", listing.problems.isEmpty())
         device.pressBack()
 
-        // The package an older app installed is offered as an update, which installs a private copy in its place.
         live.waitFor("the Updates group", By.text("Updates"))
         live.tap("Update", By.text("Update"))
         val updated = live.await("the update to be installed", ::installed) { listed -> listed.singleOrNull { it.id.contains(adopted) }?.removable == true }
@@ -67,7 +56,6 @@ class ExtensionReposLiveTest {
         assertTrue("The package itself is left installed", runCatching { live.context.packageManager.getPackageInfo(adopted, 0) }.isSuccess)
         assertTrue("Nothing is left to update", device.wait(Until.gone(By.text("Updates")), SeriesLiveDriver.UI_TIMEOUT_MS))
 
-        // An extension that was not on the device installs, turned on, and its sources load from the app's storage.
         live.tap("Get extensions", By.text("Get extensions"))
         live.waitFor("the search field", By.clazz("android.widget.EditText")).text = "AnimeOnsen"
         live.waitFor("AnimeOnsen in the results", By.text("AnimeOnsen"))
@@ -82,7 +70,6 @@ class ExtensionReposLiveTest {
         assertTrue("Its sources load", sources.any { it.startsWith("AnimeOnsen") })
         device.pressBack()
 
-        // Removing it deletes the copy and turns it off.
         live.tap("AnimeOnsen's page", By.text("AnimeOnsen"))
         live.tap("Remove", By.text("Remove"))
         live.await("AnimeOnsen to be gone", ::installed) { listed -> listed.none { it.id.contains(ONSEN) } }
@@ -92,7 +79,6 @@ class ExtensionReposLiveTest {
         startFromNothing()
     }
 
-    /** No repos, no extension installed from one, nothing on: what a first run sees. */
     private fun startFromNothing() = runBlocking {
         extensions.installed().filter { it.removable }.forEach { repos.uninstall(it.id) }
         repos.repos().forEach { repos.remove(it.url) }

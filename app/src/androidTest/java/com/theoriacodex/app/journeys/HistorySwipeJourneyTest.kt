@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** History rows claim only the leftward swipe: left removes the entry with Undo in place, right still pages tabs. */
 class HistorySwipeJourneyTest : AppJourneyFixture() {
     @Test
     fun swipingASearchLeftRemovesItUntilUndoAndSwipingRightChangesTab() {
@@ -40,7 +39,6 @@ class HistorySwipeJourneyTest : AppJourneyFixture() {
         val kept = compose.onNodeWithTag("Recent search:swipe-kept")
         waitFor("swipe-kept recent search is displayed") { kept.isDisplayed() }
         kept.performTouchInput { swipeRight() }
-        // The pager moved to For You; a rightward drag never removes an entry.
         waitFor("swipe-kept is no longer displayed after the pager moved to For You") { !kept.isDisplayed() }
         assertEquals(setOf("swipe-kept", "swipe-gone"), searches().toSet())
     }

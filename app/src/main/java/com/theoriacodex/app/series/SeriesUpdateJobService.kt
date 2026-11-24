@@ -15,12 +15,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * The background check for new chapters and episodes, run by `JobScheduler` on [scheduleSeriesUpdates]' terms. It loads the
- * extensions the way the Series tab does, stores the new chapters of the followed series due a check by their release
- * pace, and announces each series as soon as its chapters are stored, so a run the system stops midway has announced
- * what it stored.
- */
 class SeriesUpdateJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var check: Job? = null
@@ -42,7 +36,6 @@ class SeriesUpdateJobService : JobService() {
                     )
                 }
             }.onFailure { error ->
-                // Saved data that cannot open, say: the app's own start shows that failure, and the next period tries again.
                 Diagnostics.report("series", "The check for new chapters and episodes failed", error)
             }
             jobFinished(params, false)
@@ -50,7 +43,6 @@ class SeriesUpdateJobService : JobService() {
         return true
     }
 
-    /** The system took the job back (the network went away, say); the next period checks again. */
     override fun onStopJob(params: JobParameters): Boolean {
         check?.cancel()
         return false

@@ -28,7 +28,6 @@ class VideoHttpDataSourceTest {
         source.open(DataSpec(Uri.parse(origin.url)))
         source.read(ByteArray(SENT_BYTES), 0, SENT_BYTES)
 
-        // The origin sends nothing more, so a draining close would wait out its 100 ms timeout.
         val startedAt = System.nanoTime()
         source.close()
         val closeMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
@@ -37,8 +36,6 @@ class VideoHttpDataSourceTest {
         assertTrue("the origin saw its connection end", origin.disconnected.await(1, TimeUnit.SECONDS))
     }
 
-    // SourceMetadataTest covers how a custom site's agent reaches requestHeaders(). The headers are
-    // passed here directly because Robolectric's app start rewrites that shared catalog on its own.
     @Test fun `a custom site's video sends the agent its images do, once, with its other headers`() {
         val siteHeaders = mapOf("Referer" to "https://booru.example/", "User-Agent" to "SiteAgent/2")
         val source = AbandoningHttpDataSourceFactory(videoHttpClient()).createDataSource()
@@ -57,7 +54,6 @@ class VideoHttpDataSourceTest {
 private const val SENT_BYTES = 1024
 private const val DRAIN_TIMEOUT_MS = 100L
 
-/** An HTTP/1.1 origin that promises a large body, sends its first [SENT_BYTES], then stalls until disconnected. */
 private class StalledOrigin : AutoCloseable {
     private val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
     val url = "http://127.0.0.1:${server.localPort}/video.mp4"
@@ -76,7 +72,6 @@ private class StalledOrigin : AutoCloseable {
                 output.write("HTTP/1.1 200 OK\r\nContent-Length: ${1 shl 20}\r\n\r\n".toByteArray())
                 output.write(ByteArray(SENT_BYTES))
                 output.flush()
-                // A closed connection reads as end of stream (or a reset) here.
                 runCatching { while (socket.getInputStream().read() >= 0) Unit }
             }
         }

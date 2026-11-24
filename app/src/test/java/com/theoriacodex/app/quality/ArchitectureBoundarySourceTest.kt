@@ -4,7 +4,6 @@ import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Narrow source-level module boundaries; user behavior is verified by runtime tests. */
 class ArchitectureBoundarySourceTest {
     private val userDirectory = requireNotNull(System.getProperty("user.dir")) {
         "The JVM did not expose user.dir"
@@ -72,7 +71,6 @@ class ArchitectureBoundarySourceTest {
         isAppModule(name) || name == "app-logic" || name.startsWith("core-")
     }
 
-    /** :app and the kit and feature modules split out of it, which hold the app's UI code. */
     private fun isAppModule(name: String): Boolean =
         name == "app" || name.endsWith("-kit") || name.startsWith("feature-")
 

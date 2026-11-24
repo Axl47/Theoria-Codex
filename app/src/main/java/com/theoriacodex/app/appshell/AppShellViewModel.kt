@@ -57,7 +57,6 @@ internal sealed interface AppShellEffect {
     data class Startup(val effect: StartupUpdateWorkflowEffect) : AppShellEffect
 }
 
-/** Activity-scoped owner for system workflows; navigation and Android launchers remain in Compose. */
 internal class AppShellViewModel @JvmOverloads constructor(
     private val savedStateHandle: SavedStateHandle,
     scopeOverride: CoroutineScope? = null,
@@ -112,7 +111,6 @@ internal class AppShellViewModel @JvmOverloads constructor(
         }
     }
 
-    /** Idempotent attachment: recomposition/recreation cannot start a second check or download. */
     fun beginStartup(updater: StartupUpdateOperations, feed: UpdateFeedClient, installedVersion: Int, enabled: Boolean) {
         if (startupStarted) return
         startupStarted = true

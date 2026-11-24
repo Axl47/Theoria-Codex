@@ -208,7 +208,6 @@ private fun ReleaseChangelogSection(section: ChangelogSection) {
     }
 }
 
-/** Summarizes a release for the update prompt. Size and date appear only when GitHub supplied them. */
 internal fun releaseSummary(
     release: ReleaseChangelogEntry,
     formatSize: (Long) -> String,

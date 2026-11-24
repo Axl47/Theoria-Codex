@@ -12,7 +12,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The journey gates read posts back through the real Danbooru parser; a parser change that would empty them fails here. */
 class ProviderShapedSourceTest {
     @Test
     fun theDanbooruAdapterCarriesTheGeneratedPostsAcrossThreePages() = runTest {

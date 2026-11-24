@@ -15,7 +15,6 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.ui.TheoriaAppContent
 
-/** Test-only host: recreation runs the same shell with Android-owned navigation saved state. */
 @OptIn(ExperimentalComposeUiApi::class)
 class JourneyTestActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

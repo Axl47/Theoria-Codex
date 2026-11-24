@@ -39,10 +39,6 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.withContext
 
-/**
- * A deck's feed, plus [candidates]: the live owner's posts the deck picks from, whose lengths the deck resolves while
- * its grid filters by length, as the grid would.
- */
 internal class SeededTriageFeed(
     override val snapshots: Flow<TriageFeedSnapshot>,
     val candidates: Flow<List<Post>>,
@@ -53,13 +49,6 @@ internal class SeededTriageFeed(
     override fun retryPage() = retry()
 }
 
-/**
- * The feed [request] names, seeded with what its grid handed over ([seed]). A live feed gives the grid's posts in its
- * order, then whatever else of the owner's posts the grid's filter keeps with the lengths known so far, while the owner
- * still shows the deck's query; a Codex or Likes gives exactly the posts its grid showed, and cleaning's Review (a
- * [TriageMode.RemoveFromCodex] with Codices to compare) exactly the posts cleaning would remove. Null when the owner
- * no longer shows that query.
- */
 internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): SeededTriageFeed? = when (request.source) {
     ViewerStreamSource.SEARCH, ViewerStreamSource.CREATOR_PROFILE ->
         routes.feed(request.source)?.takeIf { it.viewerFeed.queryHash == request.feedKey }
@@ -70,23 +59,16 @@ internal fun TheoriaShell.triageFeed(request: TriageRequest, seed: TriageSeed): 
         else cleaningReviewSnapshots(codexId, alsoIn)
         SeededTriageFeed(snapshots, flowOf(emptyList()), nextPage = {})
     }
-    // For You is a deck itself and offers no Triage.
     ViewerStreamSource.FOR_YOU, ViewerStreamSource.RELATED, ViewerStreamSource.RECENTS, ViewerStreamSource.TRAIL,
     ViewerStreamSource.SERIES -> null
 }
 
-/** What the deck's left swipe removes through when [request] opens it on a Codex to remove from; null otherwise. */
 internal fun TheoriaShell.triageRemoval(request: TriageRequest): TriageRemoval? {
     val codexId = request.codexId?.takeIf { request.mode is TriageMode.RemoveFromCodex } ?: return null
     val commands = owners.codexCommands
     return TriageRemoval { post -> commands.removeWithOwnUndo(codexId, post) }
 }
 
-/**
- * [request] and [seed] once Search's filters have applied: a filter change still waiting to run starts now, and its
- * results arrive before the deck opens, so the deck works through the query the grid is about to show, filtered by
- * that query's date range (see [settled]). Other feeds apply their filters on the spot.
- */
 internal suspend fun TheoriaShell.settledTriage(request: TriageRequest, seed: TriageSeed): Pair<TriageRequest, TriageSeed> {
     val search = routes.search.current?.takeIf { request.source == ViewerStreamSource.SEARCH } ?: return request to seed
     routes.dispatchOrQueue(SearchAction.SettleSearch)
@@ -95,11 +77,6 @@ internal suspend fun TheoriaShell.settledTriage(request: TriageRequest, seed: Tr
     return settled to seed.settled(sameQuery = settled == request, query.applied.dateRange)
 }
 
-/**
- * This owner's feed while it shows [queryHash], filtered as [seed]'s grid filters it: the deck's posts and paging
- * follow that one query, and once the owner moves to another query the deck takes nothing more from it and stops
- * asking for pages. [lengths] are the app's decided lengths, which the filter reads while it filters by length.
- */
 private fun ViewerFeedOwner.seededTriageFeed(
     queryHash: String,
     seed: TriageSeed,
@@ -127,17 +104,12 @@ private fun ViewerFeedOwner.seededTriageFeed(
     )
 }
 
-/**
- * Codex [codexId]'s posts that one of [alsoIn] also holds, as they are when the deck opens: what cleaning against them
- * would remove. Removals and saves made in the deck do not reshuffle them.
- */
 private fun TheoriaShell.cleaningReviewSnapshots(codexId: String, alsoIn: Set<String>): Flow<TriageFeedSnapshot> = flow {
     val codices = data.codexRepository
     val posts = codices.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
     emit(TriageFeedSnapshot(codexCleaningReviewPosts(posts, alsoIn.map { codices.observeCodexItems(it).first() }), canLoadMore = false))
 }
 
-/** The lengths decided for [posts] whose media does not state its own, by post. */
 private fun decidedLengths(posts: List<Post>, decided: Map<MediaDurationKey, MediaDurationState>): Map<PostId, Long> =
     if (decided.isEmpty()) emptyMap() else buildMap {
         posts.forEach { post ->
@@ -146,11 +118,6 @@ private fun decidedLengths(posts: List<Post>, decided: Map<MediaDurationKey, Med
         }
     }
 
-/**
- * The deck's likes and hides. Likes go straight through the likes workflow, not the queued toggle feed cards use, so
- * each call returns once its Like commits and throws when it fails; hides go to the active profile's For You tag
- * blacklist, whose single-tag entries are what hiding adds. Each reversal names the profile its write used.
- */
 internal class ShellTriageActions(private val shell: TheoriaShell) : TriageActions {
     private val settings get() = shell.data.settingsRepository
     private val likes get() = shell.workflows.likesCodexSync
@@ -166,7 +133,6 @@ internal class ShellTriageActions(private val shell: TheoriaShell) : TriageActio
 
     override suspend fun hide(source: SourceKey, tag: String): TriageReversal? = hide(activeProfile.profileId, source, tag)
 
-    /** A swipe's write runs after earlier ones, by when the active profile may have changed; these keep the one it was made in. */
     override fun atDecision(): TriageActions {
         val profile = activeProfile
         val actions = this

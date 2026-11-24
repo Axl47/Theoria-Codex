@@ -79,7 +79,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** Dependencies whose lifetime is longer than one Viewer destination composition. */
 internal data class ViewerRouteDependencies(
     val sessionRetentionOwner: ViewerSessionRetentionViewModel,
     val postResolver: ViewerPostResolver,
@@ -91,14 +90,6 @@ internal data class ViewerRouteDependencies(
     val onCodexUsageTargetChanged: (CodexUsageTarget?) -> Unit = {},
 )
 
-/**
- * The live feeds a Viewer stream can extend from, keyed by the stream each one launches, plus the library state
- * their visibility filters read.
- *
- * Exact query identity prevents a source refresh or route replacement from appending unrelated
- * posts. Visibility policy is applied at the Viewer boundary so newly paged posts obey the same
- * filters as the launch payload.
- */
 internal data class ViewerRouteLiveSourceState(
     val feeds: Map<ViewerStreamSource, ViewerFeedSnapshot> = emptyMap(),
     val likedPostIds: Set<PostId> = emptySet(),
@@ -113,7 +104,6 @@ internal data class ViewerRouteLiveSourceState(
         return forSource(source)?.takeIf { it.queryHash == query }
     }
 
-    /** The snapshot of the source [session] was launched from, while that source still shows the launch's query. */
     fun matching(session: ViewerSession?): ViewerFeedSnapshot? = session?.let { active ->
         forSource(active.context.streamSource)?.takeIf { snapshot -> snapshot.queryHash == active.context.queryHash }
     }
@@ -141,28 +131,18 @@ internal data class ViewerDownloadRequest(
     val totalPages: Int,
 )
 
-/** Side effects emitted by the immutable Viewer reducer and hosted by the destination. */
 internal data class ViewerRouteEffectCallbacks(
     val onSavePost: (Post, ViewerLaunchContext) -> Unit,
     val onDownloadMedia: suspend (ViewerDownloadRequest?) -> Unit,
     val onToggleLike: suspend (Post) -> Unit,
     val onOpenCreatorProfile: suspend (CreatorProfile) -> Unit,
     val onApplyTag: (Post, PostTaxonomyTerm, Boolean) -> Unit,
-    /** Recovers media for a post; the last argument says whether the result still applies before anything records it. */
-    /** Working media for a post whose media failed, asked for in the session's launch context; null when there is none. */
     val onRecoverMedia: suspend (Post, ImageRef, ViewerLaunchContext, () -> Boolean) -> Post?,
     val onLoadMore: (ViewerStreamSource) -> Unit,
     val onDismiss: () -> Unit,
     val onRestorationUnavailable: suspend () -> Unit,
 )
 
-/**
- * Navigation-scoped Viewer host.
- *
- * The activity owner only holds a pending process-local navigation payload. This destination
- * consumes that payload once, restores a compact saved identity when necessary, and then keeps
- * all Viewer mutations, work, and effects behind [ViewerViewModel].
- */
 @Composable
 internal fun ViewerRoute(
     dependencies: ViewerRouteDependencies,
@@ -190,7 +170,6 @@ internal fun ViewerRoute(
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
     val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
-    // A fork's posts are not in the grid underneath; the root's stay retained there.
     SideEffect { if (!level.isFork) viewerReturn?.retainPosts(retainedPostIds) }
     val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
@@ -215,7 +194,6 @@ internal fun ViewerRoute(
         )
         return
     }
-    // A series' entry is not a post: its duration is the player's, never probed at its stream nor cached as a post's.
     val seriesSession = viewerState.series != null
     if (!seriesSession) ViewerDurationSync(activeSession, viewerState, durationOwner, dependencies.canonicalizePost)
     val sourceState = liveSourceState.matching(activeSession)
@@ -235,14 +213,12 @@ internal fun ViewerRoute(
     )
 }
 
-/** The trail row's crumbs and query for [level], naming a root level after what [session] was opened from. */
 @Composable
 private fun rememberViewerTrail(level: ViewerLevel, session: ViewerSession?): ViewerTrail {
     LaunchedEffect(session?.sessionId) { session?.let { level.nameRoot(it.context, it.saveQuery) } }
     return remember(level, session?.saveQuery) { ViewerTrail(level.crumbs, session?.saveQuery, level.popTo) }
 }
 
-/** The navigation-scoped owner. Its factory reads the latest dependencies and settings, not the first ones. */
 @Composable
 private fun rememberViewerOwner(
     latestDependencies: State<ViewerRouteDependencies>,
@@ -265,7 +241,6 @@ private fun rememberViewerOwner(
     return viewModel<ViewerViewModel>(factory = ownerFactory)
 }
 
-/** Keeps [durationOwner] working on the session's posts, nearest first. */
 @Composable
 private fun ViewerDurationSync(
     activeSession: ViewerSession?,
@@ -273,7 +248,6 @@ private fun ViewerDurationSync(
     durationOwner: MediaDurationRouteViewModel,
     canonicalizePost: (Post) -> Post,
 ) {
-    // Remembered so an unchanged session keeps one list, which is how the owner recognizes no new work.
     val durationPosts = remember(viewerState.pages) { viewerState.pages.map { page -> canonicalizePost(page.post) } }
     val nearbyPostIds = remember(viewerState) {
         val navigation = com.theoriacodex.app.viewer.viewerPostNavigation(viewerState)
@@ -289,15 +263,9 @@ private fun ViewerDurationSync(
         )
         durationOwner.onNearbyPostsChanged(nearbyPostIds)
     }
-    // The Viewer has no scrolling feed, so its duration work waits only on the lifecycle.
     com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect({ false }, durationOwner::onEnvironmentChanged)
 }
 
-/**
- * The screen's callbacks, bound to [viewerOwner]. One per owner and shell, so the screen's controls stay put while
- * Search, For You or settings change; the callbacks read the owner's current session when they run. A series session
- * passes no [durationOwner], so its entries get no post durations.
- */
 @Composable
 private fun rememberViewerScreenHost(
     viewerOwner: ViewerViewModel,
@@ -339,7 +307,6 @@ private fun rememberViewerScreenHost(
         onPlaybackProgress = { post, progress ->
             viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)
         },
-        // The Viewer's window onto the duration owner, keyed by each post's canonical identity; none for a series.
         durations = durationOwner?.let { owner ->
             ViewerPostDurations(
                 observe = { post ->
@@ -383,7 +350,6 @@ private fun rememberViewerContextActions(
     )
 }
 
-/** The owner's comments as the screen reads them, recomposing as pages arrive. */
 @Composable
 private fun rememberViewerComments(
     viewerOwner: ViewerViewModel,
@@ -399,7 +365,6 @@ private fun rememberViewerComments(
     }
 }
 
-/** Claims the pending session once per owner, or rebuilds one from its compact saved identity. */
 @Stable
 private class ViewerSessionRestoration(
     private val owner: ViewerViewModel,
@@ -449,7 +414,6 @@ private fun rememberViewerSessionRestoration(
     ViewerSessionRestoration(owner, dependencies.value.sessionRetentionOwner.session.value?.sessionId, dependencies)
 }
 
-/** Extends a live session with what its source has since loaded, under the launch's filters. */
 @Composable
 private fun ViewerLiveSourceMergeEffect(
     viewerOwner: ViewerViewModel,
@@ -472,11 +436,6 @@ private fun ViewerLiveSourceMergeEffect(
     }
 }
 
-/**
- * Appends to the live session what its source has loaded since, under the launch's filters. Filtering the source's
- * feed and finding the posts the session lacks walk both whole lists, so they run on [background]; the caller's
- * thread only appends the result, building pages for the new posts alone.
- */
 internal suspend fun appendLiveSourcePosts(
     viewerOwner: ViewerViewModel,
     liveSourceState: ViewerRouteLiveSourceState,
@@ -491,12 +450,6 @@ internal suspend fun appendLiveSourcePosts(
     viewerOwner.appendSessionPosts(session, basis, appended)
 }
 
-/**
- * Handles one effect against the state at its delivery, not when it was emitted. Effects run in
- * order because the collector awaits each one; media recovery waits on a provider, so it runs in
- * [routeScope] instead, where it cannot hold a later Dismiss behind it. [mediaRetries] keeps manual retries in
- * order, so an older retry cannot finish after a newer one and replace its post.
- */
 private suspend fun handleViewerEffect(
     effect: ViewerEffect.Route,
     viewerOwner: ViewerViewModel,
@@ -508,7 +461,6 @@ private suspend fun handleViewerEffect(
 ) {
     val currentState = viewerOwner.state.value
     if (!effect.isCurrentFor(currentState)) return
-    // A series' chapters and episodes are not posts: whichever control asked, none is saved, liked, tagged or downloaded.
     if (effect.collectsPost && viewerOwner.session.value?.series != null) return
     fun post(postId: PostId): Post? = currentState.pages.firstOrNull { page -> page.post.id == postId }?.post
     when (effect) {
@@ -540,7 +492,6 @@ private suspend fun handleViewerEffect(
     }
 }
 
-/** Whether this effect keeps the post somewhere of the user's: a Codex, likes, tags or the device. */
 private val ViewerEffect.Route.collectsPost: Boolean
     get() = this is ViewerEffect.SavePost || this is ViewerEffect.SetLiked || this is ViewerEffect.ApplyTag ||
         this is ViewerEffect.DownloadMedia
@@ -567,7 +518,6 @@ private suspend fun retryViewerMedia(
     recoverAndApplyMedia(viewerOwner, page.post, failedMedia, callbacks)
 }
 
-/** Reports which Codex and media this session is spending time on, for usage statistics. */
 @Composable
 private fun ViewerUsageTargetEffect(
     context: ViewerLaunchContext?,
@@ -607,7 +557,6 @@ private fun ViewerRestorationPlaceholder(
     }
 }
 
-/** The related drawer for this session: which source feeds it, its state, and its visible posts. */
 private class ViewerRelatedPosts(
     val source: ViewerStreamSource?,
     val state: RelatedPostsUiState,
@@ -622,7 +571,6 @@ private fun rememberViewerRelatedPosts(
     val relatedSource = activeSession?.relatedBinding?.source ?: activeSession?.context?.streamSource
     val relatedSnapshot = activeSession?.let(liveSourceState::relatedSourceFor)
     val relatedState = relatedSnapshot?.relatedPosts ?: RelatedPostsUiState.Idle
-    // New likes extend the drawer instead of replacing it, for as long as this Viewer session lasts.
     var shownRelatedPosts by remember(activeSession?.sessionId) { mutableStateOf(emptyList<Post>()) }
     val accumulatedRelatedPosts = remember(shownRelatedPosts, relatedState) { relatedState.accumulatedPosts(shownRelatedPosts) }
     SideEffect { shownRelatedPosts = accumulatedRelatedPosts }
@@ -643,10 +591,8 @@ private fun rememberViewerRelatedPosts(
     return remember(relatedSource, relatedState, relatedPosts) { ViewerRelatedPosts(relatedSource, relatedState, relatedPosts) }
 }
 
-/** Prevents buffered or suspended effects from crossing a Viewer session replacement. */
 internal fun ViewerEffect.isCurrentFor(state: ViewerUiState): Boolean = session == state.session
 
-/** Asks the source for working media for [post], in the session's launch context; see [recoverMedia]. */
 private suspend fun recoverAndApplyMedia(
     viewerOwner: ViewerViewModel,
     post: Post,

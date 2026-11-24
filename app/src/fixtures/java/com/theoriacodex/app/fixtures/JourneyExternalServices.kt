@@ -17,7 +17,6 @@ internal class JourneyAccounts(sources: Set<SourceKey>) : SourceAccountStore,
     override suspend fun resetAfterReconnectRequired() = true
 }
 
-/** Every unconfigured external request fails locally, before opening a socket. */
 object JourneyNoNetworkHttpClient : SourceHttpClient {
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
         error("Unexpected external request in offline fixture")

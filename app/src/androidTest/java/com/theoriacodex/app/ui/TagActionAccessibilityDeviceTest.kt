@@ -34,7 +34,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
-/** Actual Android semantics and narrow geometry; it does not change the user's accessibility services. */
 class TagActionAccessibilityDeviceTest {
     @get:Rule val compose = createComposeRule()
 

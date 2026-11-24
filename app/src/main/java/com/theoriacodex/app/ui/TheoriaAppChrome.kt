@@ -82,7 +82,6 @@ internal fun TheoriaBottomNavigation(
     }
 }
 
-/** A tab's icon, with a dot while something new waits behind it. */
 @Composable
 internal fun TopLevelDestination.TabIcon(marked: Boolean, size: Dp) {
     BadgedBox(
@@ -95,7 +94,6 @@ internal const val NEW_TAB_DOT_TAG = "tab-new-dot"
 
 internal fun TopLevelDestination.icon() = when (this) {
     TopLevelDestination.Search -> Icons.Default.Search
-    // Sparkles rather than a heart, which would read as Likes.
     TopLevelDestination.ForYou -> Icons.Default.AutoAwesome
     TopLevelDestination.Library -> Icons.Default.Collections
     TopLevelDestination.Series -> Icons.AutoMirrored.Filled.MenuBook

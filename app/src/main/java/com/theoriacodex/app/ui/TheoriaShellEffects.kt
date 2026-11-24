@@ -44,7 +44,6 @@ import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.update.mergeReleaseHistory
 import kotlinx.coroutines.flow.collect
 
-/** Hosts one-shot feedback from the shell's owners, and keeps usage time following the process. */
 @Composable
 internal fun ShellOwnerHosts(shell: TheoriaShell) {
     val owners = shell.owners
@@ -91,7 +90,6 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
     }
 }
 
-/** Runs startup once its updater allows it, and acts on what the updater asks of the platform. */
 @Composable
 internal fun ShellStartupEffects(shell: TheoriaShell, appShellState: AppShellUiState) {
     val appContext = shell.appContext
@@ -118,7 +116,6 @@ internal fun ShellStartupEffects(shell: TheoriaShell, appShellState: AppShellUiS
     }
 }
 
-/** Hands an incoming link to the owner that survives recreation, then acts on it once the app is ready. */
 @Composable
 internal fun ShellIncomingUriEffects(
     shell: TheoriaShell,
@@ -137,8 +134,6 @@ internal fun ShellIncomingUriEffects(
                 isCodexImport = isCodexImportUri(appContext, uri),
             )
         )
-        // The AppShell SavedStateHandle now owns the handoff. Clear the Activity's underlying
-        // singleTask intent so recreation cannot enqueue the same URI a second time.
         onIncomingUriConsumed()
     }
     val pendingPixivCallback = appShellState.pendingIncomingUri?.takeIf { it.kind == IncomingUriKind.PIXIV_AUTH_CALLBACK }
@@ -177,10 +172,6 @@ internal fun ShellIncomingUriEffects(
     ShellSeriesNotificationEffect(shell)
 }
 
-/**
- * Opens what a tapped series notification names: always a new series page, since reusing the one on top would keep
- * the series that page was opened for. The page opens an announced entry in the Viewer over itself.
- */
 @Composable
 private fun ShellSeriesNotificationEffect(shell: TheoriaShell) {
     LaunchedEffect(shell.navReady) {
@@ -192,7 +183,6 @@ private fun ShellSeriesNotificationEffect(shell: TheoriaShell) {
     }
 }
 
-/** Reports the current destination to usage statistics. */
 @Composable
 internal fun ShellUsageEffect(shell: TheoriaShell, currentRoute: String?, statisticsCodexId: String?) {
     val appUsageTracker = shell.features.appUsageTracker
@@ -211,7 +201,6 @@ internal fun ShellUsageEffect(shell: TheoriaShell, currentRoute: String?, statis
     }
 }
 
-/** Dismisses the keyboard as soon as the home pager starts to move. */
 @Composable
 internal fun PagerScrollFocusEffect(pagerState: PagerState) {
     val focusManager = LocalFocusManager.current
@@ -262,7 +251,6 @@ private suspend fun loadReleaseHistory(shell: TheoriaShell, latestInstalledChang
     }
 }
 
-/** Shows the selected home tab whenever Home is on top, and saves the tab once the pager rests. */
 @Composable
 internal fun HomeTabEffects(shell: TheoriaShell, currentRoute: String?) {
     val navigation = shell.navigation
@@ -291,7 +279,6 @@ internal suspend fun PagerState.scrollToRoute(route: String) {
     if (targetIndex != currentPage) scrollToPage(targetIndex)
 }
 
-/** Platform state that follows the Viewer, and the return from the system package installer. */
 @Composable
 internal fun ShellPlatformEffects(shell: TheoriaShell, currentRoute: String?) {
     val hostContext = LocalContext.current

@@ -55,10 +55,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Reference screenshots of the app's main screens, rendered from the real app graph over fixture posts whose
- * images are solid colors. `scripts/screenshots.sh` captures them; CI verifies them against Linux references.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, qualifiers = "w411dp-h914dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -85,7 +81,6 @@ class AppScreenshotTest {
                 mapOf(SourceKey.PIXIV to posts), scope).also {
                 it.awaitReady()
                 it.content.ensureCodex(CODEX_ID, "Fixture Codex")
-                // Distinct save times keep the newest-saved order stable; items added together can share a millisecond.
                 it.content.restoreItems(posts.mapIndexed { index, post -> CodexItem(CODEX_ID, post.id, index.toLong()) }, posts)
                 it.data.recentsRepository.recordSearch(
                     Query(QueryMode.Source(SourceKey.PIXIV), listOf("landscape"), emptyList(), SortMode.NEWEST, null, null),
@@ -107,14 +102,12 @@ class AppScreenshotTest {
         Coil.reset()
     }
 
-    /** Also the app shell: search bar and navigation. The empty Search screen is skipped for its bundled artwork. */
     @Test fun `search results`() {
         openSearchResults()
         capture("search_results")
     }
 
     @Test fun `for you deck`() {
-        // For You does not deal saved posts, so half of them leave the Codex first.
         runBlocking(Dispatchers.IO) { graph.content.removeItems(CODEX_ID, posts.drop(4).mapTo(mutableSetOf()) { it.id }) }
         compose.onNodeWithContentDescription("For You").performClick()
         waitFor { compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().isNotEmpty() }
@@ -133,7 +126,6 @@ class AppScreenshotTest {
         openSearchResults()
         compose.onNodeWithTag(searchCardTestTag(posts[0].id)).performClick()
         waitFor { compose.onNodeWithContentDescription("More actions").isDisplayed() }
-        // The Save button learns after the Viewer opens that the post is already in the only Codex.
         waitFor { compose.onAllNodesWithContentDescription("Saved in every Codex. Choose Codex").fetchSemanticsNodes().isNotEmpty() }
         capture("viewer")
     }
@@ -142,7 +134,6 @@ class AppScreenshotTest {
         compose.onNodeWithContentDescription("Library").performClick()
         waitFor { compose.onAllNodesWithTag(LIBRARY_SETTINGS_TAG).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(LIBRARY_SETTINGS_TAG).performClick()
-        // Stats load after the screen; the Codex's posts count as saved.
         waitFor { compose.onAllNodesWithText("${posts.size} saved", substring = true).fetchSemanticsNodes().isNotEmpty() }
         capture("settings")
     }
@@ -176,7 +167,6 @@ class AppScreenshotTest {
     }
 }
 
-/** Every image request succeeds at once with a solid color derived from its URL, so screens are deterministic. */
 private fun installSolidColorImages() {
     val context = ApplicationProvider.getApplicationContext<Application>()
     Coil.setImageLoader(

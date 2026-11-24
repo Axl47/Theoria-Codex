@@ -16,7 +16,6 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.launch
 
-/** Whether the hidden tags sheet is open; provided as [LocalHiddenTagsOpener] by [ShellCompositionLocals]. */
 @Stable
 internal class HiddenTagsRequests : HiddenTagsOpener {
     var open by mutableStateOf(false)
@@ -26,10 +25,6 @@ internal class HiddenTagsRequests : HiddenTagsOpener {
     }
 }
 
-/**
- * The hidden tags sheet, mounted once above the navigation host, for the active profile. Unhiding an entry
- * applies at once and offers Undo in the sheet, which puts the entry back for the profile it was removed from.
- */
 @Composable
 internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     val requests = LocalHiddenTagsOpener.current as? HiddenTagsRequests ?: return
@@ -38,7 +33,6 @@ internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     val settings by repository.observeSettings().collectAsStateWithLifecycle(null)
     val profileId = settings?.activeProfileId
     val undo = LocalUndoSlot.current
-    // Not the sheet's scope: closing the sheet, or a rotation, must not drop the Undo.
     val scope = undo.scope
     val saved: suspend (suspend () -> Boolean) -> Boolean? = { write ->
         runCatchingPreservingCancellation { write() }
@@ -49,7 +43,6 @@ internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
         onUnhide = { entry ->
             profileId?.let { profile ->
                 scope.launch {
-                    // A failed settings write (storage full) is reported, not thrown into a scope with no handler.
                     val removed = saved { repository.removeForYouBlacklistEntry(profile, entry.source, entry.tags) }
                     if (removed != true) return@launch
                     undo.offer(scope, UndoOffer("Unhid ${entry.tags.joinToString(" + ")}", HiddenTagsUndoAnchor) {
@@ -62,6 +55,5 @@ internal fun ShellHiddenTagsSheet(shell: TheoriaShell) {
     )
 }
 
-/** The active profile's hidden entries in a stable order. */
 private fun AppSettings.activeHiddenTags() = forYouBlacklistByProfile[activeProfileId].orEmpty()
     .sortedWith(compareBy({ it.source.id }, { it.tags.joinToString(" ") }))

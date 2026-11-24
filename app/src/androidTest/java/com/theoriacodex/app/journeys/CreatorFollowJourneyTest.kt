@@ -36,7 +36,6 @@ class CreatorFollowJourneyTest : AppJourneyFixture() {
 
     private fun follows(): List<FollowedCreator> = io { CreatorFollowsRepository(container.data.settingsRepository).observe().first() }
 
-    /** Opens the fixture artist's page from a search card's long-press menu. */
     private fun openCreatorPage() {
         io {
             container.data.recentsRepository.recordSearch(

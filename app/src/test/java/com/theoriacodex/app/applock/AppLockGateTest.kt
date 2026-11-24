@@ -19,10 +19,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * The stored lock choice is read off the main thread; nothing protected may be drawn before it is known, and
- * changes are stored in the order they were made.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class AppLockGateTest {

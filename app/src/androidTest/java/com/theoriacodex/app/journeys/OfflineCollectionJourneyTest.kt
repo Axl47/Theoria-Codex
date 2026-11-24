@@ -50,7 +50,6 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         waitFor("offline store keeps 2 posts") { offline.store.snapshot.value?.postCount == 2 }
-        // The Library header's entry opens the offline sheet, whose row reports what is kept.
         activate(compose.onNodeWithContentDescription("Offline and downloads", substring = true))
         waitFor("Library shows 2 posts offline") { compose.onNodeWithText("2 posts offline").isDisplayed() }
         val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
@@ -63,20 +62,17 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 decoded.recycle()
             }
         }
-        // Remove the per-test originals before clearing caches so only retained offline bytes can render.
         io {
             sourcePosts.mapNotNull { it.full?.localPath }.distinct().forEach { path ->
                 assertTrue(path !in localPaths)
                 assertTrue(File(path).delete())
             }
         }
-        // The same clearing Settings' Storage sheet runs; offline copies are not disposable cache.
         io {
             MediaCacheMaintenance(InstrumentationRegistry.getInstrumentation().targetContext, container.data.cacheRepository,
                 container.sources.pixivUgoiraClient).clear()
         }
         assertTrue(localPaths.all { File(it).isFile })
-        // Closing the Activity is the cold-start boundary, including an open offline sheet.
         coldGraphRelaunch()
         library(LibrarySection.Codices)
         activate(compose.onNodeWithText("Offline collection"))
@@ -92,8 +88,6 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         }
         awaitFixturePixels("first-offline-post", localPaths)
         compose.onNodeWithContentDescription(requireNotNull(ordered.first().title)).assertIsDisplayed()
-        // The active overlay owns the swipe detector; image semantics can exist during route entry.
-        // Stay away from system back-gesture edges while crossing well beyond the 12% paging threshold.
         activeMedia.performTouchInput {
             swipe(
                 start = Offset(width * 0.85f, height * 0.5f),

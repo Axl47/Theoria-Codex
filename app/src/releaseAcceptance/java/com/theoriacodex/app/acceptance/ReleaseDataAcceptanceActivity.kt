@@ -65,7 +65,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Installed only in the minified acceptance APK; write/read phases straddle a process restart. */
 class ReleaseDataAcceptanceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -153,7 +152,6 @@ private suspend fun verifyData(directory: File, phase: String) {
     }
 }
 
-/** kotlinx serializers survive R8 with readable keys, and a file the Gson store wrote still loads. */
 private suspend fun verifyUpdateState(updateFile: File, legacyUpdateFile: File) {
     val snapshot = FileBackedUpdateStateStore(updateFile).snapshot()
     check(snapshot == updateState) { "update state snapshot was $snapshot" }
@@ -186,7 +184,6 @@ private fun verifyCodexShare(json: String) {
     check(snapshotId == videoPostFixture().id) { "imported share snapshot id was $snapshotId" }
 }
 
-/** Exported stats files keep readable keys, and a file a Gson build exported still imports. */
 private fun verifyStatsShare(json: String) {
     val wire = Json.parseToJsonElement(json).jsonObject
     check(wire.keys == setOf("format", "version", "name", "codices", "overall")) { "stats wire keys were ${wire.keys}" }
@@ -196,7 +193,6 @@ private fun verifyStatsShare(json: String) {
     check(wire.getValue("overall").jsonObject.keys == STATS_OVERALL_KEYS) { "stats overall keys were ${wire.getValue("overall").jsonObject.keys}" }
     val parsed = parseStatsShare(json)
     check(parsed == statsShare) { "parsed stats share was $parsed" }
-    // The Gson export predates series time, which reads as zero.
     val parsedLegacy = parseStatsShare(LEGACY_STATS_SHARE)
     check(parsedLegacy == statsShare.copy(overall = statsShare.overall?.copy(readingMs = 0L, animeMs = 0L))) { "parsed legacy stats share was $parsedLegacy" }
 }
@@ -217,10 +213,6 @@ private val STATS_OVERALL_KEYS = setOf(
     "searches",
 )
 
-/**
- * Credential envelopes survive R8 and a process restart: one written by this build, one as the Gson store wrote it,
- * and two corrupt ones that must ask for reconnection. Each case has its own Keystore key, deleted in the read phase.
- */
 private suspend fun verifyCredentials(context: Context, token: String, phase: String) {
     fun store(case: String) = AndroidCredentialEnvelopeStore(
         context,
@@ -249,7 +241,6 @@ private suspend fun verifyCredentials(context: Context, token: String, phase: St
     }
 }
 
-/** Writes [payload] in an envelope exactly as the Gson store did, Base64 padding escaped as \u003d. */
 private fun Context.writeGsonEnvelope(file: File, alias: String, payload: String) {
     val encrypted = AndroidKeystoreAesGcm(alias, "$packageName|source-credentials|format-1".toByteArray())
         .encrypt(payload.toByteArray())
@@ -293,10 +284,6 @@ private val updateState = PendingPostInstallChangelog(
     )
 }
 
-/**
- * Room payloads written through kotlinx in one process read back after a restart, beside rows exactly as the Gson
- * encoders wrote them (HTML escapes included).
- */
 private suspend fun verifyRoomPayloads(context: Context, databaseName: String, phase: String) {
     val database = TheoriaRoomDatabase.create(context, databaseName)
     try {
@@ -325,7 +312,6 @@ private suspend fun verifyRoomPayloads(context: Context, databaseName: String, p
         check(gsonRow.title == "Tom & Jerry's <post>" && gsonRow.canonicalTags == listOf("a&b", "c=d")) { "gson row title ${gsonRow.title} tags ${gsonRow.canonicalTags}" }
         val gsonTags = likes.observeLikes(GSON_PROFILE).first().single().tags
         check(gsonTags == listOf("a&b", "it's")) { "gson like tags were $gsonTags" }
-        // A For You row reads as Unified with an entry of tags for every source it searched, so it never fails a read.
         check(searches.getValue("gson-search").let {
             it.kind == RecentSearchKind.UNIFIED &&
                 it.sourceTags == mapOf(SourceKey.GELBOORU to listOf("rock & roll", "<seed>"), SourceKey.PIXIV to emptyList())
@@ -372,7 +358,6 @@ private val QUERY_KEYS = setOf(
     "minScore", "includeTerms", "excludeTerms", "includeTermGroups",
 )
 
-/** Null values are omitted, as the Gson store omitted them. */
 private fun verifyVideoPost(json: String) {
     val wire = Json.parseToJsonElement(json).jsonObject
     val fullVariants = wire.getValue("fullVideoVariants").jsonArray.map { it.jsonObject.keys }
@@ -385,7 +370,6 @@ private fun verifyVideoPost(json: String) {
     check(restored.preview.videoVariants.isEmpty()) { "restored preview variants were ${restored.preview.videoVariants}" }
 }
 
-/** The manifest's kotlinx serializer must survive R8: written in one process, read with stable keys in the next. */
 private suspend fun saveOfflineCopy(offline: File) {
     val post = videoPostFixture()
     OfflineMediaStore(offline).save(post, post.media, "acceptance") { _, file -> file.writeText("offline bytes"); null }
@@ -437,19 +421,16 @@ private const val LEGACY_VIDEO_POST = """{
     "media":[{"url":"https://example.test/gallery.webm","mime":"video/webm"}]
 }"""
 
-// What the Gson store wrote, HTML escapes included.
 private const val LEGACY_UPDATE_STATE = """{"ignoredReleaseId":42,"remindLaterReleaseId":42,"remindLaterUntilEpochMs":123456,""" +
     """"pendingPostInstallChangelog":{"releaseId":42,"versionCode":2,"tagName":"v0.0.2","commitShaShort":"abc1234",""" +
     """"releaseName":"Tom \u0026 Jerry\u0027s \u003crelease\u003e","changelogMarkdown":"","changelogSections":[]}}"""
 
-// What the Gson exporter wrote for statsShare.
 private const val LEGACY_STATS_SHARE = """{"format":"theoria-codex-stats","version":1,"name":"Sam \u0026 \u003cAl\u003e\u0027s",""" +
     """"codices":[{"name":"Land \u0026 \u003cscapes\u003e","entries":3,"browsingMs":4,"watchingMs":5,"postOpens":6,""" +
     """"posts":[{"key":"GELBOORU:1","label":"Post \u003d 1","opens":7,"videoMs":8,"imageMs":9}]}],""" +
     """"overall":{"timeInAppMs":10,"browsingMs":11,"watchingMs":12,"codexMs":13,"appOpens":14,"postsWatched":15,""" +
     """"postsSaved":16,"searches":17}}"""
 
-// What the Gson store encrypted for credentials.
 private const val LEGACY_CREDENTIAL_PAYLOAD = """{"schemaVersion":1,"pixivAccessToken":"access\u003dtoken\u0026\u003c1\u003e\u0027",""" +
     """"pixivRefreshToken":"refresh\u003d\u003d","pixivExpiresAtEpochMs":1800000000000,"gelbooruUserId":"1",""" +
     """"gelbooruApiKey":"gel\u0026key","rule34XxxUserId":"2","rule34XxxApiKey":"r34\u003dkey",""" +

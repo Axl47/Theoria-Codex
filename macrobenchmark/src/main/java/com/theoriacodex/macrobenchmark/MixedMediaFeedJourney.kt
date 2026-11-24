@@ -25,15 +25,12 @@ private val MEDIA_PATTERN = Pattern.compile("search_media_pixiv_benchmark_(video
 private const val STATUS_TAG = "benchmark_journey_status"
 private val ANIMATED_KINDS = setOf("video", "gif", "webp", "ugoira")
 
-/** Uses the real bottom navigation, collection card and creator action; no synthetic feed switching. */
 internal fun UiDevice.completeFiveFeedJourney() {
     exerciseCurrentFeed("Search")
     clickDescription("For You")
-    // The deck presents one card, which must play like any visible preview; its grid shows the same posts.
     requireChangingMedia("For You deck", minimumVisible = 1)
     clickDescription("Grid")
     exerciseCurrentFeed("For You grid")
-    // The choice is saved, so the next run opens on the deck again.
     clickDescription("Deck")
     clickDescription("Library")
     clickText("History")
@@ -50,7 +47,6 @@ internal fun UiDevice.completeFiveFeedJourney() {
     clickText("Benchmark creator")
     exerciseCurrentFeed("Creator Profile")
     pressBack()
-    // Library opens on Codices, which shows covers but no moving previews.
     clickDescription("Library")
     requireNoPreviewLeases()
     clickDescription("Search")
@@ -67,7 +63,6 @@ internal fun UiDevice.completeFiveFeedJourney() {
     requirePreviewLeaseCount("foreground Search") { it > 0 }
     pressHome()
     requirePreviewLeaseCount("background Home") { it == 0 }
-    // Reorder the existing fixture activity; no CLEAR_TASK and no production launcher activity.
     val context = InstrumentationRegistry.getInstrumentation().context
     context.startActivity(Intent().setComponent(ComponentName("com.theoriacodex.benchmark",
         "com.theoriacodex.app.benchmark.BenchmarkFixtureActivity"))
@@ -109,10 +104,6 @@ private fun UiDevice.flingFeed(direction: Direction) {
     grid.fling(direction)
 }
 
-/**
- * Samples the actual image surface, so paused frames, spinner-only previews, and isPlaying-only
- * reports cannot satisfy the test. All visible media identities must advance, including siblings.
- */
 internal fun UiDevice.requireMovingFeedPreviews(label: String) = requireChangingMedia(label, minimumVisible = 2)
 
 internal fun UiDevice.requireMovingViewer(identity: String, label: String) = requireChangingMedia(
@@ -151,7 +142,6 @@ private fun UiDevice.requireChangingMedia(
     error("$label: every visibly presented MP4/GIF/WebP/Ugoira preview must render changing frames; visible=${snapshot().keys}")
 }
 
-/** Canonical identity and fitted image bounds; moving controls cannot satisfy pixel sampling. */
 internal fun viewerPreviewSnapshot(expectedIdentity: String): Map<String, Rect> {
     val completed = CountDownLatch(1)
     var preview = emptyMap<String, Rect>()
@@ -181,7 +171,6 @@ private fun UiDevice.visiblePreviews(pattern: Pattern = MEDIA_PATTERN): Map<Stri
         node.resourceName?.takeIf { bounds.width() > 0 && bounds.height() > 0 }?.let { it to bounds }
     }.toMap()
 } catch (_: StaleObjectException) {
-    // Retry the whole snapshot: dropping one stale node could omit a visibly playing sibling.
     emptyMap()
 }
 
@@ -243,7 +232,6 @@ internal fun UiDevice.requireIntegratedDurationSettled() {
 }
 
 
-/** The existing benchmark-only receiver answers from the actual application-owned player pool. */
 private fun requirePreviewLeaseCount(label: String, expected: (Int) -> Boolean) {
     val deadline = SystemClock.elapsedRealtime() + JOURNEY_TIMEOUT_MS
     var lastCount = -1

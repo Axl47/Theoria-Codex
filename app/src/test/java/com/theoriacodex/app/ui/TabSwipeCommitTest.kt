@@ -25,7 +25,6 @@ import org.robolectric.annotation.Config
 class TabSwipeCommitTest {
     @get:Rule val compose = createComposeRule()
 
-    /** Drags slowly leftwards from tab [from] across [fraction] of the width and returns the tab it lands on. */
     private fun slowDrag(fraction: Float, from: Int = 0, forYouGrid: Boolean = false): Int {
         lateinit var pager: PagerState
         compose.setContent {
@@ -35,7 +34,6 @@ class TabSwipeCommitTest {
                 userScrollEnabled = tabSwipeEnabled(pager.settledPage, forYouGrid),
                 flingBehavior = topLevelPagerFling(pager),
             ) {
-                // Takes taps, as a row or a card does: only a pager that scrolls keeps a drag from ending as one.
                 Box(Modifier.fillMaxSize().clickable { taps++ })
             }
         }
@@ -43,7 +41,6 @@ class TabSwipeCommitTest {
             val start = Offset(width * 0.9f, height / 2f)
             down(start)
             moveTo(start - Offset(width * fraction, 0f))
-            // Holding still removes the release velocity, so only distance decides.
             advanceEventTime(300)
             moveBy(Offset.Zero)
             advanceEventTime(300)

@@ -26,11 +26,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * The device proof that source calls are safe from the main thread: "Open original post" resolves the link on the
- * shell's Compose scope, which has no thread switch of its own, so only the adapter's own switch keeps the real
- * Danbooru parse of the single-post response off the main thread.
- */
 class SourceCallThreadJourneyTest : AppJourneyFixture() {
     override val providerShapedSources = setOf(SOURCE)
     override fun fixturePosts(media: ImageRef) = mapOf(
@@ -40,7 +35,6 @@ class SourceCallThreadJourneyTest : AppJourneyFixture() {
 
     @get:Rule val recorder = SourceParseRecorder()
 
-    /** Any failure to resolve opens the link in a browser; the test blocks and records that instead. */
     private val browserLaunches = CopyOnWriteArrayList<String>()
     private val browserBlocker = object : Instrumentation.ActivityMonitor() {
         override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
@@ -85,7 +79,6 @@ class SourceCallThreadJourneyTest : AppJourneyFixture() {
                 viewer.isDisplayed() || browserLaunches.isNotEmpty()
             }
         } catch (_: ComposeTimeoutException) {
-            // The assertions below say what was missing.
         }
 
         val client = container.registry.providerShaped.getValue(SOURCE)
@@ -93,7 +86,6 @@ class SourceCallThreadJourneyTest : AppJourneyFixture() {
         val parses = recorder.parses.get()
         val mainThreadParses = recorder.mainThreadParses.get()
         Log.i(TAG, "postRequests=$postRequests parses=$parses mainThreadParses=$mainThreadParses browser=$browserLaunches")
-        // The menu resolves the post once; the Viewer then refreshes it through its own switch.
         assertEquals("Single-post requests", setOf(RESOLVED_POST), postRequests.toSet())
         assertTrue("No provider response was parsed", parses >= 1)
         assertEquals("Provider responses parsed on the main thread", 0, mainThreadParses)

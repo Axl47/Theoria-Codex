@@ -42,7 +42,6 @@ class BaselineProfileGenerator {
         }
     }
 
-    /** The paths users repeat most, driven through the offline fixture app so no provider is contacted. */
     @Test
     fun feedViewerAndSearchEditor() = baselineProfileRule.collect(
         packageName = PACKAGE_NAME,
@@ -62,7 +61,6 @@ class BaselineProfileGenerator {
         device.pressBack()
         device.wait(Until.findObject(By.res(FEED_MEDIA)), UI_TIMEOUT_MS)
             ?: error("Viewer did not return to the fixture feed")
-        // The flings tucked the search bar away and it stays tucked across the Viewer, so open the editor from the strip.
         (device.wait(Until.findObject(By.desc(EXPAND_SEARCH)), UI_TIMEOUT_MS)
             ?: error("Collapsed search strip was unavailable")).click()
         device.waitForIdle()

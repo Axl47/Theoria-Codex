@@ -151,7 +151,6 @@ class ViewerProviderWorkTest {
             assertEquals(2, dispatchers.size)
             dispatchers.forEach { assertSame(Dispatchers.Default, it) }
             assertSame(callerDispatcher, currentCoroutineContext()[ContinuationInterceptor])
-            // A recovery the Viewer no longer wants is dropped instead of recorded.
             assertEquals(null, workflow.recoverMedia(post, post.preview, ViewerStreamSource.RELATED) { false })
 
             suspendResolution = true
@@ -199,8 +198,6 @@ class ViewerProviderWorkTest {
 
             val fromFeed = async { feed.resolvePostForSearch(post.id, "query") }
             val fromViewer = async { workflow.resolvePost(post.id, ViewerStreamSource.RELATED) }
-            // The Viewer first looks in the offline store on a real IO thread; wait until it is back and asking the
-            // provider, or it would miss the feed's request and send its own.
             val deadline = System.nanoTime() + 10_000_000_000L
             while (!viewerAsked.isCompleted) {
                 assertTrue("Timed out waiting for Viewer to request the post from the provider", System.nanoTime() < deadline)
@@ -209,7 +206,6 @@ class ViewerProviderWorkTest {
             }
             runCurrent()
             assertEquals(1, requests)
-            // A media recovery needs fresh URLs, so it never joins the request already in flight.
             val recovered = async { workflow.recoverMedia(post, post.preview, ViewerStreamSource.RELATED) }
             runCurrent()
             assertEquals(2, requests)

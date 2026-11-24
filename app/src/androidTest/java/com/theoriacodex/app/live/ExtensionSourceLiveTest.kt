@@ -33,20 +33,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Proves reading a series from a Mihon extension end to end in the real debug app. It talks to the live site, so it
- * runs only with `-e extensionSourceLive true`, after an extension has been turned on, which `ExtensionsLiveTest` does
- * (see `extension-host/README.md`).
- *
- * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
- * process anew: [aSeriesIsBrowsedReadResumedAndFollowed], [aFollowedSeriesIsOnTheShelfAfterARestart], then the
- * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], then either
- * [pullingDownOnFollowingNotifiesTheNewChapter] or the background check run by hand from a shell (`cmd jobscheduler run`,
- * see `extension-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
- * [unfollowingTheLastSeriesCancelsTheCheck].
- *
- * The report is counts and labels only, never images: provider media stays off screenshots and logs.
- */
 @RunWith(AndroidJUnit4::class)
 class ExtensionSourceLiveTest {
     private val live = SeriesLiveDriver()
@@ -60,7 +46,6 @@ class ExtensionSourceLiveTest {
     @Test
     fun aSeriesIsBrowsedReadResumedAndFollowed() {
         val source = runBlocking { series.sources() }.firstOrNull() ?: error("No extension is on; run ExtensionsLiveTest first")
-        // What the tab should list: the first source's popular series, asked for directly.
         val listed = unreadSeries(source)
         live.report("source", "${source.name} [${source.language}] lists \"${listed.title}\"")
 
@@ -77,7 +62,6 @@ class ExtensionSourceLiveTest {
         live.tap("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
         viewerControl("the chapter's name as the Viewer's title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
         val pages = pageTile(chapter.position.toInt().coerceAtLeast(1)).contentDescription.substringAfterLast(' ').toInt()
-        // The controls are showing here; a chapter is not a post to like or save to a Codex.
         assertNull("A chapter offers no Like", device.findObject(By.desc("Like post")))
         assertNull("A chapter offers no Save", device.findObject(By.desc("Save to Codex")))
         live.report("viewer", "title names \"${chapter.entry.name}\" pages=$pages")
@@ -91,7 +75,6 @@ class ExtensionSourceLiveTest {
         device.pressBack()
 
         live.tap("Continue naming the chapter left unfinished", By.text("Continue reading ${chapter.entry.name}"))
-        // The top bar counts the page on screen; the chapter opens on its first page until its pages arrive.
         viewerControl("page $target as the page Continue resumes on", By.textEndsWith("$target / $pages"))
         live.report("resume", "Continue reopened \"${chapter.entry.name}\" on page $target of $pages")
 
@@ -107,8 +90,6 @@ class ExtensionSourceLiveTest {
         assertTrue("The next chapter reads in the chosen mode", readingModeChecked(mode))
         live.report("next", "past the last page opened \"${next.entry.name}\", still \"$mode\"")
 
-        // The chapter just finished was left on its last page; picked again, it starts over.
-        // The strip redraws as chapters load, so an element found can be gone by the time it is tapped.
         val picked = By.desc("Open ${listed.title} · ${chapter.entry.name}")
         generateSequence { runCatching { viewerControl("the finished chapter in the strip", picked).click() } }.take(STRIP_TAPS).first { it.isSuccess }
         viewerControl("the finished chapter's name as the title", By.textStartsWith("${listed.title} · ${chapter.entry.name}"))
@@ -126,7 +107,6 @@ class ExtensionSourceLiveTest {
         follow(listed)
     }
 
-    /** Read as one column, a chapter's end card clears the dock, and a push up past it opens the next chapter. */
     @Test
     fun aVerticalChapterReadsOnPastItsLastPage() {
         val source = runBlocking { series.sources() }.firstOrNull() ?: error("No extension is on; run ExtensionsLiveTest first")
@@ -148,10 +128,6 @@ class ExtensionSourceLiveTest {
         val pushUp = { device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight / 4, SWIPE_STEPS) }
         val onChapter = { runBlocking { series.repository.series(listed.id) }?.lastOpenedEntry == chapter.entry.address }
         val cardEdge = { device.findObject(By.text("Next"))?.let { runCatching { it.visibleBounds.bottom }.getOrNull() } }
-        // The jump to the last page already ends at the end card when the last pages are short, and a push there
-        // opens the next chapter. So the card is looked for before every push, with the controls hidden: an element
-        // they cover is left out of what UiAutomator can see. A page can also be several screens tall, so the card
-        // can be many pushes away.
         val cardShown = {
             repeat(CONTROL_TAPS) {
                 if (device.hasObject(By.desc("Info"))) {
@@ -166,8 +142,6 @@ class ExtensionSourceLiveTest {
             pushUp()
             pushes++
         }
-        // A push stops wherever its fling ends. Short slow drags scroll the rest of the way and, at the end, are too
-        // short and too slow to open the next chapter; the card is at the end once one of them leaves it in place.
         val nudge = (NUDGE_DP * context.resources.displayMetrics.density).toInt()
         var settled = cardEdge()
         for (attempt in 0 until NUDGES) {
@@ -179,7 +153,6 @@ class ExtensionSourceLiveTest {
         }
         assertTrue("The Viewer left \"${chapter.entry.name}\" before its end card was reached; on screen: ${live.screenText()}", onChapter())
         val cardBottom = checkNotNull(settled) { "The end card did not show after $pushes pushes; on screen: ${live.screenText()}" }
-        // Scrolling down hid the controls; a tap on the page above the card shows them over it.
         device.click(x, device.displayHeight / 4)
         val dockTop = live.waitFor("the dock", By.desc("Info")).visibleBounds.top
         live.report("vertical", "after $pushes pushes the end card ends at y=$cardBottom, the dock starts at y=$dockTop")
@@ -190,7 +163,6 @@ class ExtensionSourceLiveTest {
         live.report("vertical", "a push up past the last page of ${pages} opened \"${next.entry.name}\"")
     }
 
-    /** A followed series whose extension is off keeps its page, says why it cannot be read, and reads again once it is on. */
     @Test
     fun aSeriesWhoseExtensionIsOffNamesThatAndCannotBeRead() {
         val followed = runBlocking { series.repository.observeFollowed().first() }.firstOrNull() ?: error("Follow a series first")
@@ -205,7 +177,6 @@ class ExtensionSourceLiveTest {
             live.waitFor("the stored chapter list", By.text(CHAPTER_COUNT))
             live.waitFor("Unfollow still on offer", By.text("Following"))
             val start = live.waitFor("the button that starts reading", By.text(Pattern.compile("Start reading|Continue reading .+")))
-            // The label sits inside the button, which is what is disabled.
             val enabled = generateSequence(start) { it.parent }.take(3).all { it.isEnabled }
             val titled = device.findObjects(By.text(followed.series.title)).size
             live.report("off", "page says \"Extension unavailable\", title shown $titled times, Continue enabled=$enabled")
@@ -217,11 +188,6 @@ class ExtensionSourceLiveTest {
         live.report("off", "turning the extension on again made the page readable")
     }
 
-    /**
-     * Run after the notification permission was taken back (`pm revoke`, then `pm clear-permission-flags` for
-     * `user-set user-fixed`) with a series already followed: following one more asks again. The series is unfollowed
-     * after, so the shelf is as it was.
-     */
     @Test
     fun aLaterFollowAsksToNotifyWhileThePermissionIsMissing() {
         val followed = runBlocking { series.repository.observeFollowed().first() }.map { it.series.id }
@@ -235,7 +201,6 @@ class ExtensionSourceLiveTest {
             val allow = By.res("com.android.permissioncontroller", "permission_allow_button")
             live.waitFor("the system's question", allow)
             live.report("permission", "following one more series (${followed.size} followed before) asked to send notifications")
-            // The dialog ignores taps while it slides in.
             repeat(SCROLLS) { device.wait(Until.findObject(allow), SeriesLiveDriver.SHORT_WAIT_MS)?.click() }
             live.waitFor("the series to read as followed", By.text("Following"))
         } finally {
@@ -243,7 +208,6 @@ class ExtensionSourceLiveTest {
         }
     }
 
-    /** The new-chapter story's start when the reading story above was not run: follows the first listed series. */
     @Test
     fun followingASeriesAsksToNotifyAndSchedulesTheCheck() {
         val listed = runBlocking { series.sources().first().popular(1) }.series.first()
@@ -265,11 +229,6 @@ class ExtensionSourceLiveTest {
         live.report("shelf", "\"${shelved.series.title}\" is in Following, unread=${shelved.unreadCount}")
     }
 
-    /**
-     * Makes the followed series' newest chapter one the app has not seen, so the next check finds it as new. The app
-     * itself never forgets a chapter (one its source drops is kept, hidden, and is not new when it returns), so the
-     * row is deleted from the database directly, and the series' check time cleared so the background run is due.
-     */
     @Test
     fun aFollowedSeriesForgetsItsNewestChapter() {
         val followed = runBlocking { series.repository.observeFollowed().first() }.first().series
@@ -289,16 +248,11 @@ class ExtensionSourceLiveTest {
         live.report("forgotten", "\"${followed.title}\" no longer stores \"${entries.first().entry.name}\"; chapters ${entries.size} -> ${left.size}")
     }
 
-    /**
-     * Run after [aFollowedSeriesForgetsItsNewestChapter]: pulling down on Following stores the forgotten chapter again
-     * and posts the series' notification, as the background check does.
-     */
     @Test
     fun pullingDownOnFollowingNotifiesTheNewChapter() {
         val followed = runBlocking { series.repository.observeFollowed().first() }.first().series
         val before = runBlocking { series.repository.entries(followed.id) }.size
         val notifications = context.getSystemService(NotificationManager::class.java)
-        // One left from an earlier run would pass the check below without this pull posting anything.
         notifications.cancel(followed.id.toString(), SERIES_NOTIFICATION_ID)
         live.openSeriesTab(By.text(followed.title), view = SeriesLiveDriver.FOLLOWING)
         val shelved = live.waitFor("the followed series", By.text(followed.title))
@@ -312,7 +266,6 @@ class ExtensionSourceLiveTest {
         live.report("pulled", "chapters $before -> $after; \"${followed.title}\" notified \"$text\"")
     }
 
-    /** Run after the background check posted a notification: tapping it opens that series' page. */
     @Test
     fun aNewChapterNotificationOpensItsSeries() {
         val followed = runBlocking { series.repository.observeFollowed().first() }.first()
@@ -327,7 +280,6 @@ class ExtensionSourceLiveTest {
         live.report("opened", "the notification opened \"${followed.series.title}\"'s page")
     }
 
-    /** A notification for one series, tapped while another series' page is open, opens its own series over it. */
     @Test
     fun aNotificationOpensItsSeriesOverAnotherSeriesPage() {
         val (open, announced) = runBlocking { series.sources().first().popular(1) }.series
@@ -360,7 +312,6 @@ class ExtensionSourceLiveTest {
         live.report("job", "after unfollowing the last series: cancelled")
     }
 
-    /** Opens the chapter's sheet from the dock twice: by a tap, then by the click an accessibility service sends. */
     private fun openInfoFromTheDock() {
         viewerControl("the dock's Info button", By.desc("Info")).click()
         live.waitFor("the chapter's sheet after a tap", By.desc("Start over"))
@@ -373,11 +324,9 @@ class ExtensionSourceLiveTest {
         device.pressBack()
     }
 
-    /** Follows the series whose page is open, answering the notification question a follow asks while the permission is missing. */
     private fun follow(listed: Series) {
         if (device.wait(Until.hasObject(By.text("Following")), SeriesLiveDriver.SHORT_WAIT_MS) != true) {
             live.tap("Follow", By.text("Follow"))
-            // An install that already allowed it is not asked again.
             device.wait(Until.findObject(By.res("com.android.permissioncontroller", "permission_allow_button")), SeriesLiveDriver.SHORT_WAIT_MS)?.let { allow ->
                 live.report("permission", "the follow asked to send notifications")
                 allow.click()
@@ -387,7 +336,6 @@ class ExtensionSourceLiveTest {
         live.report("follow", "\"${listed.title}\" is followed")
     }
 
-    /** Waits until the background check is [scheduled] or not, and returns it. */
     private fun awaitCheckJob(scheduled: Boolean): JobInfo? {
         val scheduler = context.getSystemService(JobScheduler::class.java)
         val deadline = System.currentTimeMillis() + SeriesLiveDriver.UI_TIMEOUT_MS
@@ -399,13 +347,7 @@ class ExtensionSourceLiveTest {
         }
     }
 
-    /**
-     * A popular series with more than one chapter, as if never read here: earlier runs and other testers leave read
-     * chapters and a reading mode behind on the emulator, so what is stored of its progress is wiped first.
-     */
     private fun unreadSeries(source: SeriesSource): Series {
-        // A series stored here is counted from storage: the app may be refreshing the page an earlier run left open,
-        // and the source refuses two requests for one series at a time.
         val listed = runBlocking {
             source.popular(1).series.take(CANDIDATES).first { listed ->
                 val chapters = if (series.repository.series(listed.id) != null) series.repository.entries(listed.id) else source.entries(source.details(listed), stored = emptyList()).entries
@@ -420,10 +362,7 @@ class ExtensionSourceLiveTest {
         return listed
     }
 
-    /** The chapter the series page's button opens and the one after it, read from what the page stored. */
-    /** Checks the page shows what the source said about [listed]: its status beside the chapter count, its synopsis below. */
     private fun readAbout(listed: Series) {
-        // A series opened before shows its stored chapters at once; what its source says about it arrives after.
         val deadline = System.currentTimeMillis() + SeriesLiveDriver.RESULTS_TIMEOUT_MS
         val stored = generateSequence { checkNotNull(runBlocking { series.repository.series(listed.id) }).series }
             .first { (it.description != null || it.status != SeriesStatus.UNKNOWN || System.currentTimeMillis() > deadline).also { told -> if (!told) Thread.sleep(SeriesLiveDriver.POLL_MS) } }
@@ -441,7 +380,6 @@ class ExtensionSourceLiveTest {
         resume to entries[entries.indexOf(resume) + 1]
     }
 
-    /** Searches every source for the first word of [listed]'s title and checks each visible source answers in a group of its own. */
     private fun searchEverySource(source: SeriesSource, listed: Series) {
         val sources = runBlocking { series.sources() }
         val field = live.waitFor("the search field", By.clazz("android.widget.EditText"))
@@ -456,7 +394,6 @@ class ExtensionSourceLiveTest {
         live.waitFor("the browse list back", By.text("Browse"))
     }
 
-    /** [selector], after scrolling the list down until something matches it. */
     private fun scrolledTo(selector: BySelector): BySelector {
         repeat(SCROLLS) {
             if (device.wait(Until.hasObject(selector), SeriesLiveDriver.SHORT_WAIT_MS) == true) return selector
@@ -465,7 +402,6 @@ class ExtensionSourceLiveTest {
         return selector
     }
 
-    /** Waits until the series' record of the chapter at [address] satisfies [reached]. */
     private fun awaitProgress(listed: Series, address: String, reached: (StoredSeriesEntry) -> Boolean) {
         val deadline = System.currentTimeMillis() + SeriesLiveDriver.UI_TIMEOUT_MS
         while (true) {
@@ -479,7 +415,6 @@ class ExtensionSourceLiveTest {
         }
     }
 
-    /** Opens the page overview, picks whichever sideways mode is not the current one, and returns its label. */
     private fun chooseOtherReadingMode(): String {
         viewerControl("the overview button", By.desc("Open media overview")).click()
         val mode = SIDEWAYS_MODES.first { it != checkedReadingMode() }
@@ -488,7 +423,6 @@ class ExtensionSourceLiveTest {
         return mode
     }
 
-    /** Whether the page overview shows [mode] as the one in use. */
     private fun readingModeChecked(mode: String): Boolean {
         viewerControl("the overview button", By.desc("Open media overview")).click()
         val checked = checkedReadingMode()
@@ -496,7 +430,6 @@ class ExtensionSourceLiveTest {
         return checked == mode
     }
 
-    /** The label of the checked button in the open overview's mode switch; the label is the button's own text or its child's. */
     private fun checkedReadingMode(): String? {
         live.waitFor("the reading mode switch", By.text(SIDEWAYS_MODES[0]))
         return device.findObjects(By.checked(true))
@@ -504,12 +437,10 @@ class ExtensionSourceLiveTest {
             .firstOrNull { it in READING_MODES }
     }
 
-    /** Hops along the page strip, a few tiles at a time, until the top bar counts the last page. */
     private fun goToLastPage(pages: Int) {
         repeat(pages * 2) {
             if (device.hasObject(By.textEndsWith("$pages / $pages"))) return
             viewerControl("the page strip", PAGE_TILE)
-            // The strip scrolls as pages are picked; a tile that has gone is skipped and the next round finds it again.
             val farthest = device.findObjects(PAGE_TILE)
                 .mapNotNull { tile -> runCatching { tile.contentDescription }.getOrNull() }
                 .maxByOrNull { it.removePrefix("Go to page ").substringBefore(' ').toInt() }
@@ -519,14 +450,12 @@ class ExtensionSourceLiveTest {
         viewerControl("the last page", By.textEndsWith("$pages / $pages"))
     }
 
-    /** Swipes past the last page: a finger moving left reads on left to right, and moving right reads on right to left. */
     private fun swipeToNextPost(mode: String) {
         val y = device.displayHeight / 2
         val (from, to) = (device.displayWidth * 4 / 5 to device.displayWidth / 5).let { if (mode == SIDEWAYS_MODES[0]) it else it.second to it.first }
         device.swipe(from, y, to, y, SWIPE_STEPS)
     }
 
-    /** The page strip's tile for [page] of the open chapter. */
     private fun pageTile(page: Int): UiObject2 = viewerControl("the tile for page $page", By.descStartsWith("Go to page $page of "))
 
     private fun viewerControl(what: String, selector: BySelector): UiObject2 = live.viewerControl(what, selector)
@@ -536,10 +465,8 @@ class ExtensionSourceLiveTest {
         const val DESCRIPTION_START = 30
         const val STRIP_TAPS = 5
 
-        /** The page the test stops on, far enough in that resuming there cannot be the start by accident. */
         const val TARGET_PAGE = 3
 
-        /** How many popular series are tried for one with more than one chapter. */
         const val CANDIDATES = 10
         val SIDEWAYS_MODES = listOf("Left to right", "Right to left")
         const val VERTICAL = "Vertical"
@@ -548,12 +475,10 @@ class ExtensionSourceLiveTest {
         const val SCROLLS = 6
         const val END_PUSHES = 60
 
-        /** A drag this short (under the Viewer's 64 dp) and this slow scrolls a vertical chapter but cannot leave it. */
         const val NUDGE_DP = 40
         const val NUDGE_STEPS = 40
         const val NUDGES = 12
 
-        /** A tap can land while the controls are still appearing, so hiding them is tried more than once. */
         const val CONTROL_TAPS = 3
         const val SWIPE_STEPS = 20
 

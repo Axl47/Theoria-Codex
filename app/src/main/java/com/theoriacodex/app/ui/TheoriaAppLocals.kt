@@ -36,7 +36,6 @@ import com.theoriacodex.domain.series.SeriesCovers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-/** Every app-wide CompositionLocal the shell provides to its overlays and destinations. */
 @Composable
 internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable () -> Unit) {
     val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
@@ -68,7 +67,6 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
     }
 }
 
-/** Ranks Codices for "Save to Codex" from the saved library. */
 @Composable
 private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRelevanceLoader = remember(shell) {
     val source = CodexCollectionSource(shell.data.codexRepository, shell.data.storageDirectory, shell.data.cacheRepository)
@@ -78,7 +76,6 @@ private fun rememberCodexSaveRelevanceLoader(shell: TheoriaShell): CodexSaveRele
     )
 }
 
-/** The app-wide in-a-Codex set behind [LocalCodexPostIds], read from the shared browsing metadata. */
 @Composable
 private fun rememberCodexPostIds(shell: TheoriaShell): State<Set<PostId>> {
     val metadata = browsingMetadataOwner(shell.data)

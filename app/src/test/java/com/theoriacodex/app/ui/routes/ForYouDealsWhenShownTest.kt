@@ -34,7 +34,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The tabs sit side by side, so going from Search to Library scrolls across For You. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class ForYouDealsWhenShownTest {
@@ -53,11 +52,9 @@ class ForYouDealsWhenShownTest {
     @Test fun `a tap on For You while the slide to Library is passing it goes to For You`() =
         tapForYouDuringSlideToLibrary(afterMs = TheoriaMotion.SCREEN_MS * 2L / 5)
 
-    /** On the test clock's frames this lands exactly on For You, where a redirecting animateScrollToPage does nothing. */
     @Test fun `a tap on For You just as the slide to Library is over it goes to For You`() =
         tapForYouDuringSlideToLibrary(afterMs = TheoriaMotion.SCREEN_MS / 3L)
 
-    /** Taps Library, then For You [afterMs] into the slide, where the pager's nearest page is For You. */
     private fun tapForYouDuringSlideToLibrary(afterMs: Long) = app { graph ->
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Library").performClick()
@@ -67,12 +64,10 @@ class ForYouDealsWhenShownTest {
         awaitDeal(graph)
     }
 
-    /** Waits for For You to finish planning its lanes off the main thread and ask the sources. */
     private fun awaitDeal(graph: JourneyAppContainer) = compose.waitUntilSettled(10_000) {
         graph.registry.requests.isNotEmpty()
     }
 
-    /** The app on its first tab, Search, over sources that record what they are asked. */
     private fun app(test: (JourneyAppContainer) -> Unit) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val show = mutableStateOf(true)

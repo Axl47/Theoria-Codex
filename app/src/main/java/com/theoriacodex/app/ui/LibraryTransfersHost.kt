@@ -27,10 +27,6 @@ import com.theoriacodex.app.ui.undo.UndoLifetime
 import kotlinx.coroutines.launch
 import com.theoriacodex.domain.series.SeriesId
 
-/**
- * The offline ring's state for every Codex kept offline, its pending removals, and what the ring and the Codex menu
- * can do to a copy, provided over the whole app so Codex tiles, detail screens and menus can use them.
- */
 @Composable
 internal fun libraryTransferLocals(tools: LibraryTransferTools): Array<ProvidedValue<*>> {
     val offline by tools.offline.state.collectAsStateWithLifecycle()
@@ -49,7 +45,6 @@ internal fun libraryTransferLocals(tools: LibraryTransferTools): Array<ProvidedV
     )
 }
 
-/** The Library header's entry to the offline and downloads sheet: a progress pill while work runs. */
 @Composable
 internal fun LibraryTransfersHeaderButton(tools: LibraryTransferTools) {
     val offline by tools.offline.state.collectAsStateWithLifecycle()
@@ -57,7 +52,6 @@ internal fun LibraryTransfersHeaderButton(tools: LibraryTransferTools) {
     LibraryTransfersButton(libraryTransfersStatus(offline, batches)) { tools.openTransfers(null) }
 }
 
-/** The open offline and downloads sheet, wired to the Activity-owned offline and download owners. */
 @Composable
 internal fun LibraryTransfersSheetHost(
     tools: LibraryTransferTools,

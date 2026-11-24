@@ -24,7 +24,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowToast
 
-/** A device with no screen lock is the case where the row must neither lock nor trap its owner. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class AppLockRowTest {
@@ -69,7 +68,6 @@ class AppLockRowTest {
         composeRule.runOnIdle { assertEquals(true, lock.enabled) }
     }
 
-    /** The row's lock, reading its stored choice inline so each test starts from a known choice. */
     private fun showRow(): AppLockViewModel {
         val factory = viewModelFactory {
             initializer { AppLockViewModel(ApplicationProvider.getApplicationContext(), Dispatchers.Unconfined) }

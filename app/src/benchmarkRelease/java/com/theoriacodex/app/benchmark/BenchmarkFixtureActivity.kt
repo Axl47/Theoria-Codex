@@ -54,7 +54,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-/** Exists only in benchmarkRelease and never initializes production repositories or providers. */
 class BenchmarkFixtureActivity : ComponentActivity() {
     private var journey: BenchmarkAppJourney? = null
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -155,7 +154,6 @@ class BenchmarkFixtureActivity : ComponentActivity() {
     )
 }
 
-/** Runs the duration workload over [posts] when [enabled] and returns its live duration states. */
 @Composable
 private fun rememberBenchmarkDurationStates(
     posts: List<Post>,

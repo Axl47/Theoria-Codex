@@ -55,7 +55,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-/** A full production navigation graph. Only provider responses, media bytes and storage are fixture-owned. */
 internal class BenchmarkAppJourney private constructor(
     private val fixture: JourneyAppContainer,
     val container: TheoriaAppContainer,
@@ -67,7 +66,6 @@ internal class BenchmarkAppJourney private constructor(
 
     override fun close() {
         fixture.close()
-        // Each activity owns a fresh directory inside the isolated benchmark application sandbox.
         storage.deleteRecursively()
     }
 
@@ -158,7 +156,6 @@ internal fun BenchmarkAppJourneyContent(
     }
 }
 
-/** Serves the real bundled MP4 through the production bounded range parser, with deterministic latency. */
 internal class BenchmarkByteTransport(
     private val mediaUri: String,
     private val media: ByteArray,

@@ -20,13 +20,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-/** A live session grows with its source's feed; the whole-list work runs off the thread that applies it. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerLiveSourceAppendTest {
     private val posts = (1..4).map { testPost(SourceKey.PIXIV, "p$it") }
     private val background = SteppedDispatcher()
 
-    // The feed has loaded p3 and p4; p4 is liked, and the launch hides liked posts.
     private val source = ViewerRouteLiveSourceState(
         feeds = mapOf(ViewerStreamSource.SEARCH to ViewerFeedSnapshot(queryHash = "q", results = posts)),
         likedPostIds = setOf(posts[3].id),

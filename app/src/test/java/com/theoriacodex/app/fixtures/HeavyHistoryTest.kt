@@ -11,10 +11,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The heavy-history journey expects one outcome from [HeavyHistory]; this pins the affinity behind it on the host, so
- * retuning a For You threshold fails here, before the Main branch's emulator run.
- */
 class HeavyHistoryTest {
     private val history = HeavyHistory(ImageRef(null, null, null))
     private val source = HeavyHistory.SOURCE
@@ -23,7 +19,6 @@ class HeavyHistoryTest {
         libraryPosts = history.codices.values.flatten(),
         savedTags = emptyList(),
         savedSearches = emptyList(),
-        // As recordWatchedPost counts them: each watched post once per tag.
         statistics = LifetimeStatistics(
             watchedBySource = mapOf(source to history.watched.size.toLong()),
             watchedByTag = history.watched.flatMap(List<String>::distinct)

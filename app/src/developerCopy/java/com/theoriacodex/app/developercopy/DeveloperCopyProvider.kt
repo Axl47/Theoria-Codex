@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import androidx.core.net.toUri
 
-/** Manifest entry exists only in opt-in personalRelease; every read authenticates Binder's UID. */
 class DeveloperCopyProvider : ContentProvider() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val exporting = AtomicBoolean(false)
@@ -60,7 +59,6 @@ class DeveloperCopyProvider : ContentProvider() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // Never expose exception messages: they can contain provider tokens or URLs.
             } finally {
                 if (!completed) runCatching { pipe[1].closeWithError("Production snapshot unavailable; open the ordinary app and retry") }
                 exporting.set(false)
@@ -82,7 +80,6 @@ class DeveloperCopyProvider : ContentProvider() {
             val library = try { RoomProfileBackupStore(database).snapshot(true) } finally { database.close() }
             files.requireUnchanged()
             require(credentials == readCredentials()) { "Accounts changed during export" }
-            // Stable document identity makes retrying an unchanged snapshot idempotent in Debug.
             val backup = ProfileBackupCodec().encode(ProfileBackup(0, files.settings, library,
                 files.savedSearches, files.readingPositions))
             return DeveloperCopyPayload(backup, credentials)

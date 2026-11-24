@@ -41,7 +41,6 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         compose.onNodeWithTag("Recent search:pin-journey")
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         activate(compose.onNodeWithText("Save search"))
-        // Saving is immediate, under the query's name; once it commits, Rename names it in the row.
         waitFor("Rename action appears on the saved search") { compose.onAllNodesWithText("Rename").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithText("Rename"))
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")
@@ -58,7 +57,6 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))
-        // The new-posts check also asks these sources, newest first; the feed keeps the saved sort.
         waitFor("at least two first-page requests use the saved sort") { container.registry.requests.count { it.pageToken == null && it.query.sort == query.sort } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }
         assertEquals(participating.toSet(), requests.filter { it.query.sort == query.sort }.map { it.source }.toSet())

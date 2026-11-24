@@ -61,7 +61,6 @@ import org.junit.runner.RunWith
 class InstalledJsonCompatibilityDeviceTest {
     @Test
     fun stableWireKeysSurviveTheInstalledTargetApk() {
-        // Stored posts and backups share this record graph; its generated serializers must keep every key.
         assertSerialNames(
             PostStorageRecord.serializer(),
             "source",
@@ -337,14 +336,12 @@ class InstalledJsonCompatibilityDeviceTest {
         val gsonRow = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified",""" +
             """"includeTags":["x"],"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],""" +
             """"sourceTags":{"PIXIV":["rock \u0026 roll"]}}"""
-        // A For You row from before the shelves page reads as Unified with its tags, for the saved-search conversion.
         val retired = RecentSearchPayloadCodec.decodeJson(gsonRow)
         assertEquals(RecentSearchKind.UNIFIED, retired.kind)
         assertEquals(mapOf(SourceKey.PIXIV to listOf("rock & roll")), retired.sourceTags)
     }
 
     private fun assertVariantWire(wire: JSONObject, expected: VideoVariant) {
-        // Null values are omitted, as Gson omitted them.
         val present = setOfNotNull("height".takeIf { expected.height != null }, "mime".takeIf { expected.mime != null })
         assertEquals(setOf("url", "original") + present, wire.keySetCompat())
         assertEquals(expected.url, wire.getString("url"))

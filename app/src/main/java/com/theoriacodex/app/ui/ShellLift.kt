@@ -20,7 +20,6 @@ import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import kotlinx.coroutines.launch
 
-/** Holds who is waiting for a new Codex's name while the Create Codex dialog is up; see [ShellLiftOverlay]. */
 @Stable
 internal class NewCodexRequests : NewCodexOpener {
     var onChosen by mutableStateOf<(suspend (ChosenCodex.New) -> Unit)?>(null)
@@ -35,12 +34,6 @@ internal class NewCodexRequests : NewCodexOpener {
     }
 }
 
-/**
- * The lift overlay and the Create Codex dialog, mounted once above the navigation host. The lift draws the
- * [LiftSession] that [ShellCompositionLocals] provides and is cancelled on Back or when the app leaves the
- * foreground; Back also stops a Similar lookup it started. A save it makes offers Undo in the app's undo pill.
- * The dialog names a new Codex for whoever asked through [LocalNewCodexOpener], in the active profile.
- */
 @Composable
 internal fun ShellLiftOverlay(shell: TheoriaShell) {
     val newCodex = LocalNewCodexOpener.current

@@ -8,10 +8,6 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.settings.SettingsSitesEntry
 import com.theoriacodex.app.source.SiteChecks
 
-/**
- * Builds the Settings home row and page for Sites from the Settings route's [CustomSitesViewModel]. A
- * removed site is removed in the app's scope, so leaving Settings still completes it.
- */
 @Composable
 internal fun rememberCustomSitesEntry(container: TheoriaAppContainer, checks: SiteChecks): SettingsSitesEntry {
     val owner = viewModel(key = "custom-sites") {

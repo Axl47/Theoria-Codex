@@ -51,7 +51,6 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
         waitFor("share sheet shows 1 open") { compose.onNodeWithText("1 opens", substring = true).isDisplayed() }
         compose.onNodeWithText("Share file").assertIsEnabled()
 
-        // The saved preview stands in until a ranked post has its own Stats thumbnail, and Back keeps this page.
         activate(compose.onNodeWithText("Landscapes").performScrollTo())
         val thumbnail = compose.onNodeWithTag("stats-post-thumbnail:${statisticsPostKey(post.id)}", useUnmergedTree = true)
         waitFor("top post thumbnail is displayed") { thumbnail.isDisplayed() }
@@ -62,7 +61,6 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
         waitFor("stats show 0 opens after leaving the post out") { compose.onAllNodesWithText("0 opens", substring = true).fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithContentDescription("Include Landscapes").performScrollTo())
         compose.onNodeWithText("Left out").performScrollTo().assertIsDisplayed()
-        // Overall stats alone still make a file, so the button disables only once they are left out too.
         compose.onNodeWithText("Share file").assertIsEnabled()
         activate(compose.onNodeWithContentDescription("Include overall stats").performScrollTo())
         val shareFile = compose.onNodeWithText("Share file")

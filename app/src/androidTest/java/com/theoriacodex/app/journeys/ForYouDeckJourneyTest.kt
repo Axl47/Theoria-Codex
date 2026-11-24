@@ -47,12 +47,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The For You deck with real owners: chips, forks and their crumbs, Save search, the grid, what a like brings, and
- * drags. Each journey saves one screenshot of its key moment ([saveScreenshot]).
- */
 class ForYouDeckJourneyTest : AppJourneyFixture() {
-    /** A second creator draws every third post, and one early post is animated. */
     override fun customizePost(index: Int, post: Post): Post {
         val source = post.id.source
         val drawn = if (index % 3 != 1) post else post.copy(
@@ -60,7 +55,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
             creatorProfile = CreatorProfile(source, "Second artist", "second-artist", uploadsQuery = "second-artist"),
         )
         if (index != ANIMATED_INDEX) return drawn
-        // Beside the fixture's image, in the folder the journey deletes when it ends.
         val animation = solidAnimation(File(checkNotNull(post.preview.localPath)).resolveSibling("pulse-${source.id}.gif"))
         return drawn.copy(preview = animation, full = animation)
     }
@@ -161,7 +155,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val scrolled = topGridCard()
         assertNotEquals(first, scrolled)
 
-        // Forks are offered on deck cards: open the card's creator from the deck, then come back to the grid.
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
         waitFor("deck shows a card") { currentCardOrNull() != null }
         waitFor("creator fork is offered") { compose.onAllNodesWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").fetchSemanticsNodes().isNotEmpty() }
@@ -170,7 +163,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
         waitFor("grid view is displayed") { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
 
-        // The crumb leaves the creator's trail as Back does.
         activate(compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1"))
         waitFor("creator crumb 2 is gone") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isEmpty() }
         waitFor("grid view is back") { compose.onAllNodesWithTag(FOR_YOU_GRID_TAG).fetchSemanticsNodes().isNotEmpty() }
@@ -219,7 +211,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         openDeck()
         val deck = compose.onNodeWithTag("triage-deck")
         val first = currentCard()
-        // A drag short of a swipe: the card springs back, and no tab moved under it.
         deck.performTouchInput {
             down(center)
             moveBy(Offset(-width * 0.15f, 0f))
@@ -248,7 +239,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         waitFor("deck origin is displayed", timeoutMillis = 15_000) { compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    /** Decides the card through the action the deck gives TalkBack, as a swipe would, and waits for the next card. */
     private fun decide(label: String) = decide { it == label }
 
     private fun decide(label: (String) -> Boolean) {
@@ -261,7 +251,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         waitFor("deck advanced to a new card after the decision") { currentCardOrNull().let { it != null && it != before } }
     }
 
-    /** Opens the first tag fork the current card offers and returns its label. */
     private fun forkByTag(): String {
         val fork = SemanticsMatcher("a tag fork") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("${FOR_YOU_FORK_TAG_PREFIX}tag:") == true
@@ -276,12 +265,10 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     private fun chip(label: String) = hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG)) and
         SemanticsMatcher("reads $label") { it.text() == label }
 
-    /** What the card says about why it is here; null while no card shows. */
     private fun origin(): String? = compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().singleOrNull()?.text()
 
     private fun currentCard(): String = checkNotNull(currentCardOrNull()) { "The deck shows no card" }
 
-    /** The test tag of the deck's card; at rest the deck composes only that one. */
     private fun currentCardOrNull(): String? {
         val card = SemanticsMatcher("a deck card") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("search_card_") == true
@@ -290,7 +277,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
             .singleOrNull()?.config?.get(SemanticsProperties.TestTag)
     }
 
-    /** The test tag of the highest card showing in the grid. */
     private fun topGridCard(): String {
         val card = SemanticsMatcher("a grid card") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("search_card_") == true
@@ -306,7 +292,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
 
     private fun savedSearches() = io { container.data.savedSearches.observeSavedSearches().first() }
 
-    /** A two-frame GIF on disk, each frame one colour, standing in for animated provider media. */
     private fun solidAnimation(file: File): ImageRef {
         file.writeBytes(twoFrameGif())
         return ImageRef(null, file.absolutePath, "image/gif", isAnimated = true)
@@ -321,7 +306,6 @@ private fun androidx.compose.ui.semantics.SemanticsNode.text(): String =
     config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
         ?: error("Node $id has no text")
 
-/** A 32 px square GIF that alternates cyan and magenta every half second, forever. */
 private fun twoFrameGif(): ByteArray {
     val size = 32
     val out = ByteArrayOutputStream()
@@ -332,7 +316,6 @@ private fun twoFrameGif(): ByteArray {
     out.write("GIF89a".toByteArray())
     short(size)
     short(size)
-    // A global table of two colours.
     out.write(byteArrayOf(0x80.toByte(), 0, 0, 0, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0, 0xFF.toByte()))
     out.write(byteArrayOf(0x21, 0xFF.toByte(), 11) + "NETSCAPE2.0".toByteArray() + byteArrayOf(3, 1, 0, 0, 0))
     repeat(2) { color ->
@@ -343,7 +326,6 @@ private fun twoFrameGif(): ByteArray {
         short(size)
         short(size)
         out.write(0)
-        // Codes of three bits with a clear code before every two pixels, so the code width never grows.
         out.write(2)
         val bits = buildList {
             repeat(size * size / 2) { addAll(listOf(4, color, color)) }

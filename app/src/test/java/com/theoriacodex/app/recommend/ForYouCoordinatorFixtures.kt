@@ -11,10 +11,6 @@ import com.theoriacodex.domain.recommendation.LikedTagDocument
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 
-/**
- * A coordinator that builds lanes inline and keeps interests in weight order. Lanes read Likes from the affinity inputs,
- * as the shared inputs carry them, so [likesRepository]'s Likes are added to [tagAffinity].
- */
 internal fun testForYouCoordinator(
     registry: SourceAdapterRegistry,
     likesRepository: LikesRepository = InMemoryLikesRepository(),

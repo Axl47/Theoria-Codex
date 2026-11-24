@@ -15,16 +15,10 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * Controlled external provider responses; production coordinators still own execution and paging. Sources in
- * [providerShaped] go through a real adapter that parses generated provider JSON; the others return ready-made posts,
- * and only those are logged in [requests].
- */
 class JourneySourceRegistry(
     postsBySource: Map<SourceKey, List<Post>>,
     private val pageSize: Int,
     val providerShaped: Map<SourceKey, ProviderShapedSource> = emptyMap(),
-    /** The app's listing step (picture hashes), as in the app's registry. */
     private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
 ) : SourceAdapterRegistry {
     data class Request(val source: SourceKey, val query: Query, val pageToken: String?)

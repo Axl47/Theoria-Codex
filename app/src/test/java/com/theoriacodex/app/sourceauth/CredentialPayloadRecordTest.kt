@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/** The encrypted payload's plaintext shape (plan D7): custom-site keys are an additive map. */
 class CredentialPayloadRecordTest {
     @Test
     fun `payloads without custom keys keep their previous bytes`() {
@@ -39,8 +38,6 @@ class CredentialPayloadRecordTest {
         assertEquals("1", decoded.gelbooruUserId)
     }
 
-    // The payload golden is the plaintext the Gson store encrypted; the envelope golden is a Gson-written envelope,
-    // Base64 padding escaped as \u003d. CredentialEnvelopeGoldenTest decrypts the envelope.
     @Test
     fun `the Gson-written envelope and payload hold every stored key`() {
         assertStoredFormat(golden("envelope-gson-written.json") to CredentialEnvelopeRecord(1, 1, GOLDEN_IV, GOLDEN_CIPHERTEXT))

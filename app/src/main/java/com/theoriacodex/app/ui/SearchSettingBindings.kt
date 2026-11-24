@@ -18,12 +18,9 @@ import com.theoriacodex.data.repository.SettingToggle
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
-/** What picking a setting definition in the search box does. */
 internal sealed interface SettingBinding {
-    /** A switch, flipped in place in the results. */
     data object Switch : SettingBinding
 
-    /** Opens Settings at [page], with [sheet] over its home. */
     data class Settings(val page: SettingsPage, val sheet: SettingsSheet? = null) : SettingBinding
 
     data object HiddenTags : SettingBinding
@@ -32,14 +29,11 @@ internal sealed interface SettingBinding {
 
     data object Extensions : SettingBinding
 
-    /** Search offers this one itself, beside the sheet it opens. */
     data object InSearch : SettingBinding
 
-    /** Set from the Viewer's playback menu, which needs a video open; the search box has no entry for it. */
     data object InViewer : SettingBinding
 }
 
-/** Every setting definition's id bound to what opens or changes it; a test checks none is missing. */
 internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
     SettingToggles.all.forEach { put(it.id, SettingBinding.Switch) }
     put(SettingChoices.DefaultVideoQuality.id, SettingBinding.InViewer)
@@ -62,12 +56,6 @@ internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
     put(SettingDestinations.Diagnostics.id, SettingBinding.Settings(SettingsPage.DIAGNOSTICS))
 }
 
-/**
- * The search box's entry for every setting definition as it stands in [settings]: toggles switch in place
- * through [dispatch], choices show their current value, and picking a choice or destination calls [open]
- * with its binding. [hidden] leaves out definitions this build cannot open (Diagnostics without a report, Extensions and
- * series checks without extensions).
- */
 internal fun searchSettingEntries(
     settings: AppSettings,
     hidden: Set<String> = emptySet(),
@@ -88,14 +76,12 @@ internal fun searchSettingEntries(
     }
 }
 
-/** A choice's current value as the search box shows it; null for a value type it cannot label yet. */
 internal fun settingValueLabel(value: Any?): String? = when (value) {
     is VideoQuality -> videoQualityLabel(value)
     is SeriesUpdateInterval -> seriesUpdateIntervalLabel(value)
     else -> null
 }
 
-/** Opens what [binding] names from the search box. */
 internal fun TheoriaShell.openSettingBinding(binding: SettingBinding, openHiddenTags: () -> Unit) = when (binding) {
     is SettingBinding.Settings -> openSettings(binding.page, binding.sheet)
     SettingBinding.HiddenTags -> openHiddenTags()

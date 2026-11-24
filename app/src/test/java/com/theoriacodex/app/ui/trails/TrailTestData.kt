@@ -20,7 +20,6 @@ internal object TrailTestData {
         createdAtEpochMs = null,
     )
 
-    /** Related posts for [supported] sources only; [load] answers every seed. */
     fun related(supported: Set<SourceKey> = emptySet(), load: (PostId) -> List<Post> = { emptyList() }) = object : RelatedPostsLoading {
         override fun supports(source: SourceKey) = source in supported
         override suspend fun load(seed: PostId) = load(seed)

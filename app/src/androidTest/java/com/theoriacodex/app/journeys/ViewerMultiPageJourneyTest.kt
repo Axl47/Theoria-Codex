@@ -33,7 +33,6 @@ class ViewerMultiPageJourneyTest : AppJourneyFixture() {
         val scrubber = compose.onNodeWithTag("viewer-page-scrubber")
         waitFor("page scrubber is displayed") { scrubber.isDisplayed() }
 
-        // The open post unfolds between its neighbours; a multi-page neighbour is marked before it is opened.
         compose.onNodeWithContentDescription("Go to page 1 of 12").assertIsDisplayed()
         compose.onNodeWithContentDescription("Open post journey-$STACKED_POST").assertIsDisplayed()
         compose.onNodeWithContentDescription("Open post journey-$NEXT_POST").assertIsDisplayed()
