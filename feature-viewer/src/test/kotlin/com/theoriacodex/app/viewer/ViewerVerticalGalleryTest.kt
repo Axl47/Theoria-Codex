@@ -195,6 +195,40 @@ class ViewerVerticalGalleryTest {
     }
 
     @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a chapter whose pages arrive after it opens still reopens inside its page (ADR 0192)`() {
+        val land = installGatedLoader(width = 100, height = 400)
+        val session = ViewerSessionIdentity("arriving")
+        state.value = createViewerUiState(
+            session, listOf(gallery.copy(media = listOf(page)), next), requiresResolution = { it.id == gallery.id },
+            initialMediaIndices = mapOf(gallery.id to 2),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.5f)),
+        )
+        show()
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.waitForIdle()
+        compose.runOnIdle { land() }
+        compose.waitForIdle()
+
+        val shown = compose.onNodeWithContentDescription("Page 3").fetchSemanticsNode()
+        val line = compose.onRoot().fetchSemanticsNode().size.height / 3f
+        assertEquals(0.5f, (line - shown.positionInRoot.y) / shown.size.height, 0.02f)
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a chapter left near the top of its page reopens with that page first on screen (ADR 0192)`() {
+        val land = installGatedLoader(width = 100, height = 400)
+        state.value = createViewerUiState(
+            ViewerSessionIdentity("near-top"), listOf(gallery, next), initialMediaIndices = mapOf(gallery.id to 2),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.05f)),
+        )
+        show()
+        compose.runOnIdle { land() }
+        compose.waitForIdle()
+
+        assertEquals(0f, compose.onNodeWithContentDescription("Page 3").fetchSemanticsNode().positionInRoot.y, 1f)
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
     @Test fun `scrolling inside a chapter's page reports how far into the page the reader is (ADR 0192)`() {
         val land = installGatedLoader(width = 100, height = 400)
         val reported = mutableListOf<Pair<Int, Float?>>()
@@ -214,9 +248,11 @@ class ViewerVerticalGalleryTest {
             }
         }
         compose.runOnIdle { land() }
-        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
         val before = reported.last().second
         compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 8f, endY = centerY - height / 8f) }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
 
         val (number, offset) = reported.last()
@@ -338,3 +374,5 @@ class ViewerVerticalGalleryTest {
         const val TAP_SETTLE_MS = 500L
     }
 }
+
+private const val SETTLE_MS = 1_000L

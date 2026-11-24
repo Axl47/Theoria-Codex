@@ -81,6 +81,14 @@ class RoomSeriesRepositoryTest {
         assertEquals(1f, offset())
         repository.setEntriesRead(id, listOf("/c/1"), read = false)
         assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
+        repository.setAllRead(id, read = false)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null)
+        assertEquals(0.3f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 5L, 9L, null, null)
+        assertNull(offset())
     }
 
     @Test
