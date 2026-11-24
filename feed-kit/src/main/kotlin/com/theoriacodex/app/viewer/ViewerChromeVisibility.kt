@@ -17,6 +17,6 @@ fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content: @Compo
     SideEffect { firstComposition[0] = false }
     if (!visible) return
     val alpha = remember { Animatable(if (firstComposition[0]) 1f else 0f) }
-    LaunchedEffect(alpha) { alpha.animateTo(1f, tween(TheoriaMotion.SHORT_MS)) }
+    LaunchedEffect(alpha) { if (alpha.value < 1f) alpha.animateTo(1f, tween(TheoriaMotion.SHORT_MS)) }
     Box(modifier.graphicsLayer { this.alpha = alpha.value }) { content() }
 }
