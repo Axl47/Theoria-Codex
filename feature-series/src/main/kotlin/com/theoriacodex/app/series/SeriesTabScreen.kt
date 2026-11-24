@@ -155,11 +155,12 @@ private fun SeriesTabHomeContent(
 
     SeriesScrollChromeEffect(scrollable = scrollable, onScrollStarted = { searchBarDismissed = true }, onAtTop = {})
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
-        searchBarDismissed = false
         when (scrollable) {
             is LazyGridState -> scrollable.animateScrollToItem(0)
             is LazyListState -> scrollable.animateScrollToItem(0)
         }
+        // After the scroll, which collapses the bar as any scroll does.
+        searchBarDismissed = false
     }
     BackHandler(enabled = search.searching, onBack = search.onClear)
 
