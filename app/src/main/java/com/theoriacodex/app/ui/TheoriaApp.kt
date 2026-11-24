@@ -21,6 +21,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.source.creatorBrowsingSources
+import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
@@ -368,17 +370,30 @@ private fun ShellDialogs(shell: TheoriaShell, appShellState: AppShellUiState) {
 
 /** The shell's post actions that work the same everywhere, shared by the Viewer and every feed post menu. */
 @Composable
-internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions = remember(shell) {
-    PostMenuActions(
-        shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites,
-        share = { url -> sharePostLink(shell.appContext, url) },
-        copyTags = { post -> if (!copyPostTagsToClipboard(shell.appContext, post)) shell.toast("Could not copy tags") },
-        copyLink = { url ->
-            if (copyTextToClipboard(shell.appContext, "post_url", url)) shell.recordPostUrlCopy() else shell.toast("Could not copy the link")
-        },
-        openCreator = shell::launchOpenCreator,
-        openPostCreator = shell::launchOpenCreator,
-    )
+internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions {
+    val metadata = browsingMetadataOwner(shell.data)
+    val liked = remember(metadata) { metadata.state.map { it?.likedPostIds.orEmpty() }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(emptySet())
+    val creatorSources = remember(shell) {
+        shell.sources.availableSources.map { available -> shell.sources.registry.creatorBrowsingSources().intersect(available) }
+    }.collectAsStateWithLifecycle(emptySet())
+    return remember(shell, liked, creatorSources) {
+        PostMenuActions(
+            shell::openOriginalPost, { url -> openInBrowser(shell.appContext, url) }, shell::findOnOtherSites,
+            share = { url -> sharePostLink(shell.appContext, url) },
+            copyTags = { post -> if (!copyPostTagsToClipboard(shell.appContext, post)) shell.toast("Could not copy tags") },
+            copyLink = { url ->
+                if (copyTextToClipboard(shell.appContext, "post_url", url)) shell.recordPostUrlCopy() else shell.toast("Could not copy the link")
+            },
+            openCreator = shell::launchOpenCreator,
+            openPostCreator = shell::launchOpenCreator,
+            likedPostIds = liked,
+            toggleLike = { post -> shell.toggleLikeAndSyncCodex(post) },
+            saveToDevice = shell::requestSaveToDevice,
+            saveToCodex = { post -> shell.requestSaveToCodex(post) },
+            creatorBrowsingSources = creatorSources,
+        )
+    }
 }
 
 @Composable

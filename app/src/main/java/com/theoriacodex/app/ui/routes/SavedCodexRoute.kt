@@ -51,6 +51,7 @@ import com.theoriacodex.app.codex.usesDuration
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
+import com.theoriacodex.app.ui.components.LocalPostMenuActions
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
@@ -86,8 +87,7 @@ internal fun SavedCodexRoute(
     onOpenViewer: (String, List<Post>, Int) -> Unit,
     onOpenCodexActions: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
-    postMenu: SavedPostMenu,
-    onToggleLike: (Post) -> Unit = {},
+    onGoToSearch: () -> Unit,
     header: @Composable () -> Unit,
 ) {
     val settings = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value?.settings ?: return
@@ -110,7 +110,7 @@ internal fun SavedCodexRoute(
                     item(key = child.codexId) {
                         SavedCodexShelf(child, counts.getValue(child.codexId), news[child.codexId].orEmpty(), data, sources, features, restoreRegistry, { scroll.isScrollInProgress },
                             SavedShelfActions({ onOpenCodex(child.codexId) }, { onOpenCodexActions(child.codexId) },
-                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike, postMenu))
+                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onGoToSearch))
                     }
                 }
             }
@@ -127,21 +127,13 @@ internal fun SavedBackHeader(onBack: () -> Unit) {
     }
 }
 
-/** What a held Saved post's menu can do besides liking. */
-internal class SavedPostMenu(
-    val saveToDevice: (Post) -> Unit,
-    val saveToCodex: (Post) -> Unit,
-    val goToSearch: () -> Unit,
-)
-
-/** What a Saved shelf can do: open its collection or its actions, open a post or its menu, and like. */
+/** What a Saved shelf can do: open its collection or its actions, open a post, or go to Search from its menu. */
 private class SavedShelfActions(
     val open: () -> Unit,
     val openActions: () -> Unit,
     val openViewer: (List<Post>, Int) -> Unit,
     val resolvePost: suspend (PostId) -> Post?,
-    val toggleLike: (Post) -> Unit,
-    val postMenu: SavedPostMenu,
+    val goToSearch: () -> Unit,
 )
 
 @Composable
@@ -206,7 +198,7 @@ private fun SavedCodexSection(
     val durations = remember(owner, durationStates) { owner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations) }
     val cards = rememberFeedCardEnvironment(
         sources.pixivUgoiraClient, state.likedPostIds, emptyMap(), durations,
-        actions.toggleLike.takeIf { liveOwner != null }, actions.resolvePost,
+        LocalPostMenuActions.current.toggleLike.takeIf { liveOwner != null }, actions.resolvePost,
     )
     var menuPost by remember { mutableStateOf<Post?>(null) }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
@@ -230,11 +222,5 @@ private fun SavedCodexSection(
             }
         }
     }
-    menuPost?.let { post ->
-        val menu = actions.postMenu
-        FeedPostActionSheet(
-            post, state.creatorBrowsingSources, { menuPost = null }, menu.saveToDevice, menu.saveToCodex, menu.goToSearch,
-            liked = post.id in state.likedPostIds, onToggleLike = actions.toggleLike,
-        )
-    }
+    menuPost?.let { post -> FeedPostActionSheet(post, { menuPost = null }, actions.goToSearch) }
 }

@@ -18,7 +18,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
 data class FeedCardEnvironment(
@@ -160,31 +159,23 @@ fun FeedRelatedPostsShelf(
 @Composable
 fun FeedPostActionSheet(
     post: Post,
-    creatorBrowsingSources: Set<SourceKey>,
     onDismiss: () -> Unit,
-    onSaveToDevice: (Post) -> Unit,
-    onSaveToCodex: (Post) -> Unit,
-    onGoToSearch: (() -> Unit)?,
+    onGoToSearch: (() -> Unit)? = null,
+    onToggleLike: ((Post) -> Unit)? = null,
+    onSaveToDevice: ((Post) -> Unit)? = null,
+    onSaveToCodex: ((Post) -> Unit)? = null,
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     removeLabel: String = "Remove from Codex",
     onStartOver: (() -> Unit)? = null,
     onShowRelated: (() -> Unit)? = null,
-    liked: Boolean = false,
-    onToggleLike: ((Post) -> Unit)? = null,
 ) {
     val searchActions = LocalPostTagSearchActions.current
-    val menuActions = LocalPostMenuActions.current
     PostActionSheet(
-        post, creatorBrowsingSources, onDismiss, { onSaveToDevice(post) },
-        liked = liked,
-        onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
-        onSaveToCodex = { onSaveToCodex(post) },
+        post, onDismiss, onToggleLike, onSaveToDevice, onSaveToCodex,
         saveToCodexLabel = saveToCodexLabel,
         onRemoveFromCodex = onRemoveFromCodex,
         removeLabel = removeLabel,
-        onOpenCreatorProfile = menuActions.openCreator,
-        onOpenLegacyCreatorProfile = { menuActions.openPostCreator(post) },
         onGoToSearch = onGoToSearch,
         onStartOver = onStartOver,
         onShowRelated = onShowRelated,

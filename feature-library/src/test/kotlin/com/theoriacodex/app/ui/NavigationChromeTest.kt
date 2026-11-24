@@ -90,7 +90,6 @@ class NavigationChromeTest {
                     codexName = "Collection", posts = listOf(first, hidden, second),
                     sortMode = CodexSortMode.OLDEST_SAVED,
                     availableSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-                    creatorBrowsingSources = emptySet(),
                     fabRestoreState = FeedFabRestoreState(source = SourceKey.PIXIV.id),
                     onOpenViewer = { posts, index -> launch = posts to index },
                     onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},

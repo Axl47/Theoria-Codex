@@ -10,9 +10,13 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Source
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SourceKey
 
 @Immutable
 class PostMenuActions(
@@ -24,6 +28,11 @@ class PostMenuActions(
     val copyLink: (url: String) -> Unit = {},
     val openCreator: (CreatorProfile) -> Unit = {},
     val openPostCreator: (Post) -> Unit = {},
+    val likedPostIds: State<Set<PostId>> = mutableStateOf(emptySet()),
+    val toggleLike: (Post) -> Unit = {},
+    val saveToDevice: (Post) -> Unit = {},
+    val saveToCodex: (Post) -> Unit = {},
+    val creatorBrowsingSources: State<Set<SourceKey>> = mutableStateOf(emptySet()),
 )
 
 val LocalPostMenuActions = staticCompositionLocalOf { PostMenuActions() }
