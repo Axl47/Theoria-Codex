@@ -120,7 +120,13 @@ class RenameTest(unittest.TestCase):
         base = check_comments.carried({"Old.kt": 1}, check_comments.renames("HEAD"))
         self.assertEqual(check_comments.check({"New.kt": 1}, {"New.kt": 1}, base), [])
         self.assertIn("may only shrink", check_comments.check({"New.kt": 2}, {"New.kt": 2}, base)[0])
-        self.assertIn("may only shrink", check_comments.check({"Old.kt": 1, "New.kt": 1}, {"New.kt": 1}, base)[0])
+        self.assertIn("--update", check_comments.check({"Old.kt": 1, "New.kt": 1}, {"New.kt": 1}, base)[0])
+
+    def test_unmoved_entry_points_to_update_instead_of_deleting(self) -> None:
+        base = check_comments.carried({"Old.kt": 1}, check_comments.renames("HEAD"))
+        problems = check_comments.check({"Old.kt": 1}, {"New.kt": 1}, base)
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(all("--update" in problem and "banned" not in problem for problem in problems))
 
     def test_update_carries_an_allowance_across_two_renames(self) -> None:
         check_comments.write_baseline({"New.kt": 1})

@@ -212,11 +212,16 @@ def check(
     problems = [
         f"{path}: baseline raised to {allowed} from {base.get(path, 0)}. The baseline may only shrink."
         for path, allowed in sorted(baseline.items())
-        if base is not None and allowed > base.get(path, 0)
+        if base is not None and allowed > base.get(path, 0) and counts.get(path, 0)
     ]
     for path in sorted(set(baseline) | set(counts)):
         allowed, found = baseline.get(path, 0), counts.get(path, 0)
-        if found > allowed:
+        if base is not None and allowed < found <= base.get(path, 0):
+            problems.append(
+                f"{path}: {found} comments, baseline allows {allowed}, but the base allows {base[path]} here "
+                "(a moved file keeps its allowance). Carry it: python3 scripts/check_comments.py --update"
+            )
+        elif found > allowed:
             comments = counted_comments(pathlib.Path(path))
             listed = "".join(f"\n  {path}:{comment.line}: {comment.text.splitlines()[0]}" for comment in comments)
             problems.append(
