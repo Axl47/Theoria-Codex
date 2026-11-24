@@ -84,8 +84,9 @@ class RoomSeriesRepository(
     }
 
     /**
-     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones (none for its first
-     * list). Must run in a transaction.
+     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones: none for its first
+     * list, when nothing was stored to compare with. A series imported from a backup brings its entries along, so the
+     * entries released since the backup are new. Must run in a transaction.
      */
     private fun storeEntries(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
         val id = stored.series.id
@@ -111,7 +112,7 @@ class RoomSeriesRepository(
         // The series first: its entries refer to its row.
         dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, lastCheckedAtEpochMs = now).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
-        return if (stored.lastCheckedAtEpochMs == null) emptyList() else newEntries
+        return if (known.isEmpty()) emptyList() else newEntries
     }
 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) {
