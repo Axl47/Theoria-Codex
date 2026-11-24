@@ -220,7 +220,7 @@
   "core-data/src/main/kotlin/com/theoriacodex/data/repository/DataStoreRepositories.kt": 1,
   "core-data/src/main/kotlin/com/theoriacodex/data/repository/ForYouVerdictRepository.kt": 6,
   "core-data/src/main/kotlin/com/theoriacodex/data/repository/ProfileBackupCodec.kt": 10,
-  "core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt": 62,
+  "core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt": 61,
   "core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryPolicies.kt": 7,
   "core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryStoreRecords.kt": 5,
   "core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesDownloads.kt": 61,

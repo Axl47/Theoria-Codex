@@ -348,11 +348,6 @@ data class CodexLikesClearResult(
     val undo: ClearedLikesSnapshot? = null,
 )
 
-data class CodexProfileDeleteResult(
-    val clearedLikes: Int,
-    val systemCodexDeleted: Boolean,
-)
-
 /**
  * Optional repository capability for operations that cross Codex and Likes ownership.
  *
@@ -399,13 +394,6 @@ interface CodexLikesTransactions {
     ): CodexLikesClearResult
 
     suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot)
-
-    /** Profile deletion owns both its likes and its entire profile-specific system Codex. */
-    suspend fun clearLikesAndDeleteSystemCodex(
-        profileId: String,
-        systemCodexId: String,
-    ): CodexProfileDeleteResult
-
 }
 
 private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(

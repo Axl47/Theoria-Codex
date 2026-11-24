@@ -11,7 +11,6 @@ import com.theoriacodex.data.repository.CodexLikesClearResult
 import com.theoriacodex.data.repository.DeletedCodexSnapshot
 import com.theoriacodex.data.repository.CodexLikesPolicy
 import com.theoriacodex.data.repository.CodexLikesTransactions
-import com.theoriacodex.data.repository.CodexProfileDeleteResult
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSummary
 import com.theoriacodex.data.repository.ProfileLibraryIds
@@ -434,23 +433,6 @@ class RoomCodexLikesRepository(
         database.withTransaction {
             restoreItems(snapshot.items, snapshot.posts)
             snapshot.likes.forEach { like -> dao.insertLike(like.toEntity()) }
-        }
-    }
-
-    override suspend fun clearLikesAndDeleteSystemCodex(
-        profileId: String,
-        systemCodexId: String,
-    ): CodexProfileDeleteResult {
-        val normalized = CodexLikesPolicy.normalizeProfileId(profileId)
-        if (normalized.isBlank()) return CodexProfileDeleteResult(0, false)
-        return database.withTransaction {
-            val removedIds = dao.likesForProfile(normalized).map { it.source to it.sourcePostId } +
-                dao.itemsForCodex(systemCodexId).map { it.source to it.sourcePostId }
-            val clearedLikes = dao.deleteLikes(normalized)
-            val systemCodexDeleted = dao.deleteCodex(systemCodexId) > 0
-            if (systemCodexDeleted) normalizeCodexOrderInside()
-            sharedPosts.releaseIfOrphaned(removedIds)
-            CodexProfileDeleteResult(clearedLikes, systemCodexDeleted)
         }
     }
 
