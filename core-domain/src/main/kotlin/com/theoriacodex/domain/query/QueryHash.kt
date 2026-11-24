@@ -3,6 +3,7 @@ package com.theoriacodex.domain.query
 import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.RetiredQueryField
 import com.theoriacodex.domain.model.SearchTerm
 import java.util.Locale
 
@@ -10,6 +11,7 @@ object QueryHash {
     private const val VERSION = "v3"
     private val whitespace = Regex("\\s+")
 
+    @OptIn(RetiredQueryField::class)
     fun from(query: Query): String {
         val mode = when (val modeValue = query.mode) {
             QueryMode.Unified -> "unified"

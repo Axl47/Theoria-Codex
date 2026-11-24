@@ -14,7 +14,7 @@ class DiagnosticLogStoreTest {
     private fun store() = DiagnosticLogStore(folder.root.resolve("diagnostics"), now = { 1_000L })
 
     @Test
-    fun `events reach disk redacted and survive a restart`() {
+    fun `events reach disk redacted and survive a restart (ADR 0002)`() {
         val first = store()
         first.record("http", "failed", IOException("GET https://site.example/post?api_key=abc123"))
         first.readEvents()

@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
+import com.theoriacodex.app.codex.LiveCodexSortFrames
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexActionOptions
@@ -520,7 +521,8 @@ private fun FollowedCodexDestinationStateBoundary(
         owner.synchronize(selected, available, sort, usage, durations)
     }
     val posts = rememberComputedOffMain(
-        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = "codex-sort:$FOLLOWED_CODEX_ID",
+        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT,
+        retainKey = LiveCodexSortFrames.at("codex-sort:$FOLLOWED_CODEX_ID"),
     ) {
         sortLiveCodexPosts(feed.posts, sort, usage, durations)
     }

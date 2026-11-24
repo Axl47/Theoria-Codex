@@ -30,28 +30,30 @@ class MediaTermsTest {
         Query(QueryMode.Source(SourceKey.DANBOORU), tags.toList(), emptyList(), sort, null, null).copy(media = media)
 
     @Test
-    fun `an animated search gains the source's term while it fits the limit`() {
+    fun `an animated search gains the source's term while it fits the limit (ADR 0008)`() {
         assertEquals(listOf("cat", "animated"), query("cat").withMediaTerms(danbooruLike).includeTags)
     }
 
     @Test
-    fun `a full term limit falls back to the no-cost term`() {
+    fun `a full term limit falls back to the no-cost term (ADR 0008)`() {
         assertEquals(listOf("cat", "dog", "filetype:gif,mp4,webm,zip"), query("cat", "dog").withMediaTerms(danbooruLike).includeTags)
         assertEquals(
             listOf("cat", "filetype:gif,mp4,webm,zip"),
             query("cat", sort = SortMode.TOP).withMediaTerms(danbooruLike).includeTags,
         )
+        val noFallback = danbooruLike.copy(animatedTerm = AnimatedSearchTerm(SearchTerm("animated")))
+        assertEquals(listOf("cat", "dog"), query("cat", "dog").withMediaTerms(noFallback).includeTags)
     }
 
     @Test
-    fun `nothing is added when unasked, already asked, or the source has no term`() {
+    fun `nothing is added when unasked, already asked, or the source has no term (ADR 0011)`() {
         assertEquals(listOf("cat"), query("cat", media = MediaFilter.ANY).withMediaTerms(danbooruLike).includeTags)
         assertEquals(listOf("Animated"), query("Animated").withMediaTerms(danbooruLike).includeTags)
         assertEquals(listOf("cat"), query("cat").withMediaTerms(danbooruLike.copy(animatedTerm = null)).includeTags)
     }
 
     @Test
-    fun `an animated alternative in an OR group still gets the term`() {
+    fun `an animated alternative in an OR group still gets the term (ADR 0011)`() {
         val either = query().withIncludeTermGroups(listOf(SearchTermGroup(listOf(SearchTerm("animated"), SearchTerm("landscape")))))
 
         assertEquals(listOf("animated", "landscape", "animated"), either.withMediaTerms(danbooruLike).includeTags)

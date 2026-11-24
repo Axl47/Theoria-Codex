@@ -13,7 +13,7 @@ class PerceptualHashTest {
         assertEquals("893636c13ece303f", hex(PerceptualHash.ofLuma(disc())))
     }
 
-    @Test fun `a solid or nearly solid picture has no hash`() {
+    @Test fun `a solid or nearly solid picture has no hash (ADR 0006)`() {
         assertNull(PerceptualHash.ofLuma(DoubleArray(32 * 32) { 128.0 }))
         assertNull(PerceptualHash.ofArgb(IntArray(40 * 30) { 0xFF336699.toInt() }, 40, 30))
     }

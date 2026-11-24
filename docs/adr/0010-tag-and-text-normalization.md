@@ -23,3 +23,9 @@ Changing a dialect or the entity pass would orphan stored tags. The Pixiv recove
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/tags/SourceTagNormalization.kt`: `TagDialect`, `tagDialect`, `normalizeGelbooruToken`, `decodeHtmlEntities`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/tags/PixivTags.kt`: `pixivSearchToken`, `withRecoveredPixivTranslations`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/encoding/StrictPercentDecoding.kt`: `decodePercentEncodedUtf8Strict`
+
+## Guarded by
+
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/tags/SourceTagNormalizationTest.kt`: `every built-in source keeps its tag dialect (ADR 0010)`, `custom sources spell tags the booru way (ADR 0004, 0010)`, `html entities decode once and escaped booru tags match their real names (ADR 0010)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/tags/PixivTagsTest.kt`: `search tokens rewrite booru spellings and keep native tags (ADR 0010)`, `legacy pixiv payloads recover translation pairs from canonical order (ADR 0010)`, `posts that already carry translations or have none are unchanged (ADR 0010)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/encoding/StrictPercentDecodingTest.kt`: `decodes escaped utf8 and preserves literal plus (ADR 0010)`, `rejects malformed escapes and malformed utf8 (ADR 0010)`, `rejects unpaired utf16 surrogates (ADR 0010)`

@@ -28,7 +28,7 @@ import org.junit.Test
 
 class SearchMetadataHydrationTest {
     @Test
-    fun `group verification hydrates overlapping identities once and deduplicates after canonical resolution`() = runTest {
+    fun `overlapping branches hydrate each original post id once (ADR 0011)`() = runTest {
         val resolved = mutableListOf<String>()
         val adapter = SparseAdapter(
             search = { query, _ ->
@@ -115,7 +115,7 @@ class SearchMetadataHydrationTest {
     }
 
     @Test
-    fun `metadata failures remain failures instead of becoming empty successful results`() = runTest {
+    fun `metadata failures remain failures instead of becoming empty successful results (ADR 0008, 0011)`() = runTest {
         val adapter = SparseAdapter(
             search = { _, _ -> Page(listOf(post("a")), "next") },
             resolve = { throw SourceAdapterException(SourceFailureReason.PARSE, "Changed detail page") },
@@ -129,7 +129,24 @@ class SearchMetadataHydrationTest {
     }
 
     @Test
-    fun `one unparseable detail page drops only that post and keeps the page`() = runTest {
+    fun `a source-wide failure on one detail page still fails the page (ADR 0011)`() = runTest {
+        val adapter = SparseAdapter(
+            search = { _, _ -> Page(listOf(post("blocked"), post("a")), "next") },
+            resolve = { sparse ->
+                if (sparse.id.sourcePostId == "blocked") {
+                    throw SourceAdapterException(SourceFailureReason.RATE_LIMITED, "Too many requests")
+                }
+                post(sparse.id.sourcePostId, "cat", "red")
+            },
+        )
+        val result = testOrchestrator(mapOf(adapter.sourceKey to adapter))
+            .search(groupedQuery(), setOf(adapter.sourceKey), emptyMap(), emptyMap())
+
+        assertEquals(SourceFailureReason.RATE_LIMITED, result.statuses.single().failureReason)
+    }
+
+    @Test
+    fun `one unparseable detail page drops only that post and keeps the page (ADR 0011)`() = runTest {
         val adapter = SparseAdapter(
             search = { _, _ -> Page(listOf(post("broken"), post("a")), "next") },
             resolve = { sparse ->
@@ -144,6 +161,33 @@ class SearchMetadataHydrationTest {
 
         assertEquals(listOf("a"), result.items.map { it.id.sourcePostId })
         assertEquals(null, result.statuses.single().failureReason)
+    }
+
+    @Test
+    fun `a post the source reports gone is dropped even when its listing matches (ADR 0011)`() = runTest {
+        val adapter = SparseAdapter(
+            search = { _, _ -> Page(listOf(post("gone", "cat", "red"), post("a", "cat", "red")), null) },
+            resolve = { sparse -> if (sparse.id.sourcePostId == "gone") null else post(sparse.id.sourcePostId, "cat", "red") },
+        )
+
+        val page = testOrchestrator().searchSource(adapter, groupedQuery(), null)
+
+        assertEquals(listOf("a"), page.items.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `hydration leaves the provider's continuation token as it was (ADR 0011)`() = runTest {
+        val adapter = SparseAdapter(
+            search = { _, _ -> Page(listOf(post("gone"), post("a")), "provider-next") },
+            resolve = { sparse -> if (sparse.id.sourcePostId == "gone") null else post("a", "cat") },
+        )
+
+        val result = testOrchestrator(mapOf(adapter.sourceKey to adapter)).search(
+            plainQuery().copy(excludeTerms = listOf(SearchTerm("blocked"))), setOf(adapter.sourceKey), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(listOf("a"), result.items.map { it.id.sourcePostId })
+        assertEquals("provider-next", result.nextPageTokens[adapter.sourceKey])
     }
 
     private class SparseAdapter(

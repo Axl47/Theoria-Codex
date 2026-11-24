@@ -27,7 +27,10 @@ internal class FeedRetainedState : ViewModel() {
     }
 
     @Suppress("UNCHECKED_CAST")
-    fun <E, T> frameCache(key: String): FrameCache<E, T> = frameCaches.getOrPut(key) { FrameCache<E, T>() } as FrameCache<E, T>
+    fun <E, T> frameCache(key: RetainedFrameKey<E, T>): FrameCache<E, T> {
+        val held = frameCaches[key.name]?.takeIf { it.frames === key.frames } ?: return FrameCache(key.frames).also { frameCaches[key.name] = it }
+        return held as FrameCache<E, T>
+    }
 }
 
 @Composable
@@ -59,7 +62,7 @@ internal fun rememberRetainedDurationProjection(key: String): DurationFilterProj
 }
 
 @Composable
-internal fun <E, T> rememberRetainedFrameCache(key: String): FrameCache<E, T> {
+internal fun <E, T> rememberRetainedFrameCache(key: RetainedFrameKey<E, T>): FrameCache<E, T> {
     val retained = viewModel<FeedRetainedState>()
     return remember(retained, key) { retained.frameCache(key) }
 }

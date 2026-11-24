@@ -3,7 +3,7 @@ package com.theoriacodex.app.settings
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.profileScopedCodexId
-import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
