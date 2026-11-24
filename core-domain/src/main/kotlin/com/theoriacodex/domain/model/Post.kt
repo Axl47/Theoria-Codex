@@ -1,6 +1,5 @@
 package com.theoriacodex.domain.model
 
-/** Canonical wire MIME emitted for Pixiv Ugoira animation archives. */
 const val PIXIV_UGOIRA_MIME: String = "image/ugoira"
 
 data class PostId(
@@ -16,72 +15,38 @@ data class CreatorProfile(
     val uploadsQuery: String? = null,
 )
 
-/** Alternate full-video renditions of one media item; previews never belong here. */
 data class VideoVariant(val url: String, val height: Int? = null, val original: Boolean = false, val mime: String? = null)
 
 enum class VideoQuality { AUTO, DATA_SAVER, BEST }
 
-/**
- * One way to play a series episode, as its source resolved it. Unlike a [VideoVariant] it is chosen by [label], not
- * height, and is never stored: its address can expire within minutes, so streams are asked for each time the episode
- * opens.
- */
 data class MediaStream(
     val url: String,
-    /**
-     * The source's name for it, such as `1080p · Server A`; the Viewer remembers a choice by it, since URLs change.
-     * Within one episode labels are unique and not blank, which [playable] sees to.
-     */
     val label: String,
-    /** The container or manifest type when the source names one (HLS, DASH); null leaves it to the player. */
     val mime: String? = null,
-    /**
-     * Request headers its host requires, sent as they are. The extension host fills them in: a stream without headers
-     * of its own gets its source's, browser agent included, so empty means the host needs none.
-     */
     val headers: Map<String, String> = emptyMap(),
-    /** External subtitle files, rendered by the player. */
     val subtitles: List<MediaTrack> = emptyList(),
-    /** Audio served apart from the video, merged by the player. */
     val audioTracks: List<MediaTrack> = emptyList(),
 )
 
-/** A subtitle or audio file served beside a [MediaStream]; [label] is what a picker shows, such as a language. */
 data class MediaTrack(val url: String, val label: String)
 
 data class ImageRef(
     val url: String?,
     val localPath: String?,
     val mime: String?,
-    /** Lighter renditions of [url], lightest first; shown before [url] and then replaced by it. */
     val progressiveUrls: List<String> = emptyList(),
     val isAnimated: Boolean = false,
     val videoVariants: List<VideoVariant> = emptyList(),
-    /** Small stand-in for choosing a page; never shown as the page itself. */
     val thumbnailUrl: String? = null,
-    /** Equivalent copies of [url] (mirrors, other formats, other shards); tried only when it fails, never shown as a lighter step. */
     val fallbackUrls: List<String> = emptyList(),
-    /**
-     * A series episode's streams, in its source's preferred order; empty for every other media. Live data only: no
-     * storage, backup, share or offline record carries them, so a stored post has none.
-     */
     val streams: List<MediaStream> = emptyList(),
 )
 
-/**
- * The streams of one episode that can play, as the Viewer lists them: those with an address, each under a label of
- * its own. A stream the source left unnamed is `Stream 2` by its place; a repeated label gains its count, `1080p (2)`.
- */
 fun List<MediaStream>.playable(): List<MediaStream> {
     val streams = filter { it.url.isNotBlank() }
     return streams.zip(uniqueLabels(streams.map { it.label }) { "Stream $it" }) { stream, label -> stream.copy(label = label) }
 }
 
-/**
- * [labels] fit to choose between by name: trimmed, a blank one named [unnamed] of its 1-based place, and a repeated
- * one with the first count no other label holds, `English (2)`. Episode streams ([playable]) and the player's tracks
- * follow this one rule.
- */
 fun uniqueLabels(labels: List<String>, unnamed: (place: Int) -> String): List<String> {
     val named = labels.mapIndexed { index, raw -> raw.trim().ifEmpty { unnamed(index + 1) } }
     val taken = named.toHashSet()
@@ -99,7 +64,6 @@ data class PostTaxonomyTerm(
     val facet: SearchFacet = SearchFacet.TAG,
     val sourceNamespace: String? = null,
     val count: Int? = null,
-    /** Provider-supplied translation of [value] (Pixiv's English name). Shown and learned, never searched. */
     val translation: String? = null,
 ) {
     fun toSearchTerm(): SearchTerm {
@@ -127,51 +91,23 @@ data class Post(
     val creatorProfile: CreatorProfile? = null,
     val durationMs: Long? = null,
     val mediaCount: Int? = null,
-    /**
-     * The listing is a multi-page gallery that names neither its pages nor how many there are; they arrive with the
-     * post's lookup. A listing that knows its length sets [mediaCount] instead.
-     */
     val galleryLengthUnknown: Boolean = false,
     val taxonomy: List<PostTaxonomyTerm> = canonicalTags.map { value ->
         PostTaxonomyTerm(value = value)
     },
     val creatorProfiles: List<CreatorProfile> = listOfNotNull(creatorProfile),
-    /** Live listing data only; never persisted, so saved or restored posts carry none. */
     val commentHint: CommentHint? = null,
-    /**
-     * MD5 of the original file as its site reports it, lowercase. Sites that host the same file report the same
-     * value, which is how [distinctByFile] recognises one post listed by several sites. Saved with the post; null when
-     * the site reports none or the post was saved before the hash was stored.
-     */
     val contentHash: String? = null,
-    /**
-     * 64-bit perceptual hash of the post's still preview, which the app computes from the image when the post is
-     * listed; providers never supply it. Copies of one picture on different sites (resized, re-encoded) hash within
-     * [SAME_PICTURE_MAX_DISTANCE] bits, which [distinctByFile] also collapses. Live listing data only: null when the
-     * preview could not be hashed in time or is too flat to tell apart, and never persisted with the post (the Library's
-     * hashes live in their own table).
-     */
     val pictureHash: Long? = null,
-    /**
-     * The page a booru says the file came from, usually the artist's own post on Pixiv or a social site. Live
-     * listing data only.
-     */
     val originUrl: String? = null,
 )
 
-/** A site-reported file MD5 in the form [Post.contentHash] holds, or null when [raw] is not one. */
 fun contentHashOrNull(raw: String?): String? =
     raw?.trim()?.lowercase()?.takeIf { hash -> hash.length == MD5_HEX_LENGTH && hash.all { it in '0'..'9' || it in 'a'..'f' } }
 
-/**
- * The original file's MD5: [Post.contentHash] when the site reported one, else the MD5 that booru file, sample and
- * thumbnail URLs carry (`/original/ab/cd/<md5>.jpg`, `sample_<md5>.jpg`, `/image/<md5>/name.jpg`). Stored posts keep
- * their URLs, so this also recognises saved and liked files without storing a hash. Null when no URL carries one.
- */
 val Post.fileHash: String?
     get() = contentHash ?: fileUrls().firstNotNullOfOrNull(::md5InUrlPath)
 
-/** Original file first, then lighter renditions, which name the original's MD5 on the same sites. */
 private fun Post.fileUrls(): Sequence<String> = sequence {
     for (image in listOfNotNull(full) + media + preview) {
         image.url?.let { yield(it) }
@@ -181,10 +117,6 @@ private fun Post.fileUrls(): Sequence<String> = sequence {
     }
 }
 
-/**
- * Exactly 32 hex digits in the file name or its folder. Longer hex runs (SHA-1 and SHA-256 names), query strings and
- * tokens deeper in the path (signed download links such as `/get_file/1/<token>/123/123_720p.mp4/`) never count.
- */
 private fun md5InUrlPath(url: String): String? {
     val path = url.substringBefore('?').substringBefore('#').substringAfter("://").substringAfter('/', "")
     return path.split('/').filter(String::isNotEmpty).takeLast(2).asReversed()
@@ -193,11 +125,6 @@ private fun md5InUrlPath(url: String): String? {
 
 private val MD5_IN_PATH = Regex("(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])")
 
-/**
- * A resolved or stored post replaces a listed one, keeping what only the listing said: detail responses seldom repeat
- * the comment hint, stored posts carry neither it, the origin page nor the picture hash, and older stored posts lack
- * the file hash.
- */
 fun Post.keepingListingDataOf(listed: Post): Post {
     val hint = commentHint ?: listed.commentHint
     val hash = contentHash ?: listed.contentHash
@@ -207,30 +134,19 @@ fun Post.keepingListingDataOf(listed: Post): Post {
     return copy(commentHint = hint, contentHash = hash, originUrl = origin, pictureHash = picture)
 }
 
-/**
- * Keeps the first post for each ID, each file and each picture, in order. Feeds that mix sites use it so a file or
- * picture hosted by several of them appears once: by [Post.contentHash], or by a [Post.pictureHash] within
- * [SAME_PICTURE_MAX_DISTANCE] of one kept earlier. Posts with neither are only compared by ID.
- */
 fun Iterable<Post>.distinctByFile(): List<Post> = FileSieve().let { sieve -> filter(sieve::admit) }
 
-/**
- * [this] as shown, even posts that are copies of one another, then each of [incoming] that [distinctByFile] would keep
- * after all of them: not a shown post, nor a copy of any shown or earlier incoming one.
- */
 fun List<Post>.plusDistinctFiles(incoming: Iterable<Post>): List<Post> {
     val sieve = FileSieve()
     forEach(sieve::remember)
     return this + incoming.filter(sieve::admit)
 }
 
-/** The IDs, files and pictures seen so far, for [distinctByFile]. */
 private class FileSieve {
     private val ids = HashSet<PostId>()
     private val files = HashSet<String>()
     private val pictures = PictureHashIndex<Unit>()
 
-    /** Whether [post] is new by ID, file and picture; what it brings is remembered either way, as far as it was read. */
     fun admit(post: Post): Boolean = ids.add(post.id) && (post.contentHash == null || files.add(post.contentHash)) &&
         (post.pictureHash == null || pictures.addUnlessMatched(Unit, post.pictureHash))
 
@@ -243,11 +159,6 @@ private class FileSieve {
 
 private const val MD5_HEX_LENGTH = 32
 
-/**
- * Marks an nhentai or Hitomi listing with no pages, cover or count as the gallery of unknown length it is, for posts that
- * arrive without the flag: records saved before it existed, and Codex shares, which don't carry it. The Viewer once
- * recognized these by their source; current listings of that shape set the flag themselves.
- */
 fun Post.withInferredGalleryLength(): Post {
     val sparseGallery = (id.source == SourceKey.NHENTAI || id.source == SourceKey.HITOMI) &&
         media.isEmpty() && full == null && mediaCount == null

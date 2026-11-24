@@ -41,8 +41,8 @@ class FileHashTest {
 
     @Test
     fun `tokens that are not a bounded 32-digit path segment never count`() {
-        assertNull(post(full = "https://safebooru.org/images/1/${MD5}abcdef01.png").fileHash) // SHA-1 name
-        assertNull(post(full = "https://ltn.hitomi.la/webp/1/23/$MD5$MD5.webp").fileHash) // SHA-256 name
+        assertNull(post(full = "https://safebooru.org/images/1/${MD5}abcdef01.png").fileHash)
+        assertNull(post(full = "https://ltn.hitomi.la/webp/1/23/$MD5$MD5.webp").fileHash)
         assertNull(post(full = "https://x.test/images/${MD5.drop(1)}.jpg").fileHash)
         assertNull(post(full = "https://x.test/image.jpg?token=$MD5").fileHash)
         assertNull(post(full = "https://$MD5.x.test/image.jpg").fileHash)

@@ -4,23 +4,10 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
-/** What the user decided about extensions on this device; kept where Android neither backs it up nor transfers it. */
 data class ExtensionChoices(
-    /**
-     * The extensions the user turned on: per extension (its package name, or for a file in the debug folder a name
-     * that stands in for one), the SHA-256 fingerprint (lowercase hex) of the signing certificate it had then. An
-     * extension runs only while it is here with its certificate, so an update signed with the same key stays on, a
-     * copy signed with another key is off, and so is any other extension, whoever signed it.
-     */
     val trusted: Map<String, String> = emptyMap(),
-    /** Per extension package, the source languages the user chose; a package not named here uses [defaultLanguages]. */
     val languages: Map<String, Set<String>> = emptyMap(),
-    /**
-     * Not a choice but what loading showed: per source (its key's id), the extension that offered it when last loaded,
-     * so a later lookup of that source loads only that extension.
-     */
     val owners: Map<String, String> = emptyMap(),
-    /** The extension repos the user added: where extensions are installed from, and the key each one's APKs must carry. */
     val repos: List<ExtensionRepo> = emptyList(),
 )
 
@@ -30,39 +17,26 @@ interface ExtensionChoiceStore {
     suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices)
 }
 
-/** An extension on the device, as the Extensions page shows it. */
 data class InstalledExtension(
-    /** Names this copy of the extension among those on the device. */
     val id: String,
     val name: String,
     val versionName: String,
-    /** Its signing certificate's SHA-256; null when it has none that can be read, and then it can never be turned on. */
     val signer: String?,
     val on: Boolean,
-    /** Why it offers no sources although it is on, or why it cannot be turned on. */
     val problem: String? = null,
-    /** Every language it has a source for; empty until it is on, because finding them runs its code. */
     val languages: List<ExtensionLanguage> = emptyList(),
-    /** What its sources offer, known from its package before any of its code runs. */
     val kind: SeriesKind = SeriesKind.MANGA,
-    /** Whether this app installed it from a repo, and so can remove it ([ExtensionRepos.uninstall]). */
     val removable: Boolean = false,
 )
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
 
-/** Why an extension source that is installed here is not on: its [extension] is off ([language] null), or it is on and [language] is off. */
 data class SourceOff(val extension: String, val language: String? = null)
 
-/**
- * Where the extension sources stand: the keys that are [on], and for each other source an installed extension is known
- * to offer, why it is [off]. A source in neither is not offered by any extension here, as far as this device knows.
- */
 data class SourceAvailability(val on: Set<SourceKey> = emptySet(), val off: Map<SourceKey, SourceOff> = emptyMap())
 
 data class ExtensionSourceSettings(val sourceId: String, val sourceName: String, val language: String, val settings: List<ExtensionSetting>)
 
-/** One setting an extension source defines. [summary] already describes the current value where the source asked for that. */
 sealed interface ExtensionSetting {
     val key: String
     val title: String
@@ -78,12 +52,10 @@ sealed interface ExtensionSetting {
         override val summary: String?,
         override val enabled: Boolean,
         val value: String,
-        /** What the source wants above the text field; null leaves [title]. */
         val dialogTitle: String? = null,
         val dialogMessage: String? = null,
     ) : ExtensionSetting
 
-    /** One of [options]; [value] is null when nothing is chosen yet. */
     data class Choice(
         override val key: String,
         override val title: String,
@@ -105,41 +77,22 @@ sealed interface ExtensionSetting {
 
 data class ExtensionSettingOption(val value: String, val label: String)
 
-/**
- * The extensions on the device and the user's choices about them. Listing an extension that is off reads only what
- * the package manager knows and runs none of its code. Every call can take seconds, so call off the main thread;
- * none throws for an extension's own failure, which becomes that extension's [InstalledExtension.problem].
- */
 interface SeriesExtensions {
-    /** Changes whenever the sources on offer or the extensions listed may have: one turned on or off, a language, a package installed or removed. */
     val revision: StateFlow<Int>
 
     suspend fun installed(): List<InstalledExtension>
 
-    /**
-     * Turns that one extension on or off. [signer] is the fingerprint the user was shown: when the extension's is
-     * another by now, because its file was replaced meanwhile, nothing is turned on and the returned list shows the
-     * new one to ask about.
-     */
     suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension>
 
     suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension>
 
-    /** The settings of each of the extension's sources that is on and has any; empty for one that is off. */
     suspend fun settings(id: String): List<ExtensionSourceSettings>
 
-    /** Stores [setting]'s value, unless the source refuses it or is no longer on, and returns [settings] as they now are. */
     suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings>
 }
 
-/** An extension runs only when it has a signing certificate and the user turned it on while it had that certificate. */
 fun ExtensionChoices.trusts(extension: String, signer: String?): Boolean = !signer.isNullOrBlank() && trusted[extension] == signer
 
-/**
- * The languages of an extension that are on before the user chooses: those among [offered] that one of the device's
- * languages matches, else English, else the first offered. Codes compare by their language part, so `pt-BR` matches a
- * device set to `pt-PT`.
- */
 fun defaultLanguages(offered: List<String>, deviceLanguages: List<String>): Set<String> {
     val device = deviceLanguages.mapTo(HashSet(), ::languagePart)
     val matching = offered.filterTo(LinkedHashSet()) { languagePart(it) in device }
@@ -148,7 +101,6 @@ fun defaultLanguages(offered: List<String>, deviceLanguages: List<String>): Set<
 
 private fun languagePart(code: String): String = code.substringBefore('-').substringBefore('_').lowercase()
 
-/** A source language's name in the device's language; Mihon's two codes that are not languages get plain words. */
 fun languageName(code: String): String = when (code) {
     "all" -> "All"
     "other" -> "Other"
