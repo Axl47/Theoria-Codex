@@ -166,29 +166,6 @@ fun ActionMenuRow(
     }
 }
 
-/** A menu row with custom [leading] content and optional secondary text at its end. */
-@Composable
-fun ActionMenuContentRow(
-    label: String,
-    leading: @Composable () -> Unit,
-    trailingText: String? = null,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 13.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        leading()
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        trailingText?.let { ActionMenuDetailText(it) }
-    }
-}
-
 /** The tinted row that leads from a menu into its dedicated follow-up sheet. */
 @Composable
 fun ActionMenuFollowUpRow(icon: ImageVector, label: String, onClick: () -> Unit) {
