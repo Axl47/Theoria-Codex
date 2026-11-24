@@ -102,6 +102,22 @@ class SeriesTabScreenTest {
     }
 
     @Test
+    fun followingCountsTheSeriesWhoseExtensionIsNotOnAndLeadsToExtensions() {
+        val followed = listOf("custom_mihon_1", "custom_mihon_2", "custom_mihon_3").map { id ->
+            FollowedSeries(Series(SeriesId(SourceKey.parseOrThrow(id), "/a"), "Series $id"), unreadCount = 0)
+        }
+        var opened = false
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) { NOTHING_CHECKED }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = { opened = true }) } }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("2 series need their extension").assertIsDisplayed()
+        compose.onNodeWithText(EXTENSIONS_TITLE).performClick()
+        assertTrue(opened)
+        assertEquals("1 series needs its extension", missingExtensionsLine(1))
+    }
+
+    @Test
     fun followingOpensFirstAndNarrowsByTitleAndFilter() {
         val source = SourceKey.parseOrThrow("custom_mihon_1")
         val followed = listOf(

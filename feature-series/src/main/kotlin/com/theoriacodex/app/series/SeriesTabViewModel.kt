@@ -156,6 +156,8 @@ data class SeriesTabContent(
     val sources: List<SeriesSource>?,
     val browse: SeriesSourceListing?,
     val search: List<SeriesSourceListing>?,
+    /** How many followed series' sources are not on, so none of them can be checked or opened; 0 until sources load. */
+    val missingExtensions: Int = 0,
 ) {
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
@@ -179,6 +181,10 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         sources = sources,
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
+        missingExtensions = sources?.let { on ->
+            val keys = on.mapTo(HashSet()) { it.key }
+            all.count { it.series.id.source !in keys }
+        } ?: 0,
     )
 }
 
