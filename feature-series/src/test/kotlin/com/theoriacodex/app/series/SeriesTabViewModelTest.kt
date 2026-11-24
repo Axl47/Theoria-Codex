@@ -681,7 +681,6 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
 private class Following(private val followed: Flow<List<FollowedSeries>>) : SeriesRepository by NothingStored {
     override fun observeFollowed() = followed
 
-    // Delegation would answer from NothingStored's own followed list.
     override fun observeHasFollowed() = followed.map { it.isNotEmpty() }
 }
 

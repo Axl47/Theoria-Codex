@@ -56,7 +56,6 @@ internal fun SwitchSourceSheet(
     ExpandedBottomSheet(onDismiss = viewModel::close, dismissible = !sheet.switching) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             SheetHeader(SWITCH_SOURCE, closeDescription = "Close", onDismiss = viewModel::close)
-            // Sources can title a series differently, so the search starts from the title and can be edited.
             OutlinedTextField(
                 value = sheet.query,
                 onValueChange = viewModel::editQuery,

@@ -77,7 +77,6 @@ class SwitchSourceViewModel(
     /** Every source that is on, the series' own too, which the labels tell apart. */
     private var sources = emptyList<SeriesSource>()
 
-    /** What the sources were last searched for. */
     private var searched = ""
     private val switching get() = state.value.sheet?.switching == true
 
@@ -106,7 +105,6 @@ class SwitchSourceViewModel(
 
     fun editQuery(query: String) = updateSheet { it.copy(query = query) }
 
-    /** Searches every other source again for the edited query, dropping what the last search found. */
     fun searchAgain() {
         val query = state.value.sheet?.query?.trim().orEmpty()
         if (!switching && query.isNotEmpty()) searchAll(query)

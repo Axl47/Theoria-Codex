@@ -15,6 +15,7 @@ The library database holds the user's likes, Codex collections and series progre
 - Version 14 deleted the extension spike's rows (source `custom_mihon_` plus digits only) from seven named tables: `codex_items`, `liked_posts`, `recent_watched`, `media_durations`, `codex_automatic_tags`, `post_visual_signatures`, then `posts`. It separately deleted `recent_searches` rows whose payload names a spike id in `modeSource`, the query's `modeSource`, `sources` or the keys of `sourceTags`. It did not sweep other tables such as `for_you_verdicts`, and left preferences alone. The `GLOB` pattern must not match real Custom Sites such as `custom_mihon_example_org`; their rows and searches containing the prefix stay.
 - Backfills pick defaults that match what was known before: picture-hash rows default to tried (every existing row had its hash tried); existing analyses are marked as awaiting frames since they read only a still; `chapters_share_first_page` is off until the Viewer finds it again; `followed_at_epoch_ms` for a series followed earlier uses the earliest first-seen time of its entries, and read times start empty.
 - Version 21 dropped the last-checked column, since nothing read it and keeping it would suggest it decides something.
+- Version 22 added the series `listed` column, false for every series stored before (see 0015).
 
 ## Consequences
 
@@ -22,6 +23,6 @@ Upgrades are safe but each schema change costs a migration and test. Migrations 
 
 ## Applies to
 
-- `core-data-android/src/main/java/com/theoriacodex/data/android/room/TheoriaRoomDatabase.java`: `MIGRATION_1_2`, `MIGRATION_6_7`, `MIGRATION_13_14`, `SPIKE_SOURCE`, `deleteSpikeSearches`, `MIGRATION_15_16`, `MIGRATION_16_17`, `MIGRATION_17_18`, `MIGRATION_18_19`, `MIGRATION_20_21`
+- `core-data-android/src/main/java/com/theoriacodex/data/android/room/TheoriaRoomDatabase.java`: `MIGRATION_1_2`, `MIGRATION_6_7`, `MIGRATION_13_14`, `SPIKE_SOURCE`, `deleteSpikeSearches`, `MIGRATION_15_16`, `MIGRATION_16_17`, `MIGRATION_17_18`, `MIGRATION_18_19`, `MIGRATION_20_21`, `MIGRATION_21_22`
 - `core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/ProfileLibraryReadiness.kt`: `openProfileLibrary`
 - `core-data-android/src/sharedTest/kotlin/com/theoriacodex/data/android/room/RoomUpgradeScenario.kt`: `RoomUpgradeScenario`

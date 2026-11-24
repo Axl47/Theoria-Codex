@@ -31,7 +31,6 @@ public final class SeriesEntity {
     @Nullable @ColumnInfo(name = "followed_at_epoch_ms") private final Long followedAtEpochMs;
     /** What its extension keeps with it, as JSON text; null when it keeps nothing. */
     @Nullable @ColumnInfo(name = "memo") private final String memo;
-    /** Whether its source has listed its entries, also when it listed none. */
     @ColumnInfo(name = "listed", defaultValue = "0") private final boolean listed;
 
     public SeriesEntity(

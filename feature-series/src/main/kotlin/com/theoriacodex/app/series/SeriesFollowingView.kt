@@ -98,7 +98,6 @@ internal fun FollowingBody(
     }
 }
 
-/** "4 series need their extension", or for one "1 series needs its extension". */
 internal fun missingExtensionsLine(count: Int): String =
     if (count == 1) "1 series needs its extension" else "$count series need their extension"
 

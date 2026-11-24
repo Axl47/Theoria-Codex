@@ -82,7 +82,6 @@ class RoomSeriesRepository(
         val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
         val stored = before.copy(series = series.keeping(before.series))
         if (!entries.isNullOrEmpty()) return storeEntries(stored, entries)
-        // An empty list is still a listing.
         dao.upsertSeries(stored.copy(listed = stored.listed || entries != null).toEntity())
         return emptyList()
     }
@@ -92,8 +91,7 @@ class RoomSeriesRepository(
             val stored = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction emptyList()
             val withMemo = stored.copy(series = stored.series.copy(memo = seriesMemo ?: stored.series.memo))
             if (entries.isNotEmpty()) return@withTransaction storeEntries(withMemo, entries)
-            // An empty list leaves the entries as they are, but the series counts as listed and the memo is stored, as
-            // [store] stores them.
+            // An empty list leaves the entries as they are, but the memo is stored, as [store] stores it.
             val listed = withMemo.copy(listed = true)
             if (listed != stored) dao.upsertSeries(listed.toEntity())
             emptyList()
