@@ -156,23 +156,26 @@ def source_files() -> list[pathlib.Path]:
 
 
 def check(paths: list[pathlib.Path]) -> list[str]:
-    """One problem line per banned comment in [paths]."""
-    return [
-        f"{path.as_posix()}:{comment.line}: {comment.text.splitlines()[0]}"
-        for path in paths
-        for comment in banned_comments(path)
-    ]
+    """One problem per file in [paths] that holds a banned comment: a summary line, then each comment indented.
+
+    The Main policy workflow compares only the unindented lines, since line numbers move with unrelated edits.
+    """
+    problems = []
+    for path in paths:
+        comments = banned_comments(path)
+        if comments:
+            listed = "".join(f"\n  {path.as_posix()}:{comment.line}: {comment.text.splitlines()[0]}" for comment in comments)
+            problems.append(
+                f"{path.as_posix()}: {len(comments)} comments. Code comments are banned: delete them, and "
+                f"record any decision they explain in docs/adr/.{listed}"
+            )
+    return problems
 
 
 def main() -> int:
     problems = check(source_files())
     for problem in problems:
         print(problem, file=sys.stderr)
-    if problems:
-        print(
-            "Code comments are banned: delete them, and record any decision they explain in docs/adr/.",
-            file=sys.stderr,
-        )
     return 1 if problems else 0
 
 

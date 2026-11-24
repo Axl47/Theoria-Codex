@@ -73,12 +73,11 @@ class FindCommentsTest(unittest.TestCase):
 
 
 class BanTest(unittest.TestCase):
-    def test_every_comment_fails_with_its_line(self) -> None:
-        path = write_source(self, "fun a() = 1\n// new\n/** Doc.\n second */\n")
-        self.assertEqual(
-            check_comments.check([path]),
-            [f"{path.as_posix()}:2: // new", f"{path.as_posix()}:3: /** Doc."],
-        )
+    def test_every_comment_fails_under_one_summary_per_file(self) -> None:
+        path = write_source(self, "fun a() = 1\n// new\n/** Doc.\n second */\n").as_posix()
+        summary, *locations = check_comments.check([pathlib.Path(path)])[0].splitlines()
+        self.assertTrue(summary.startswith(f"{path}: 2 comments. Code comments are banned"))
+        self.assertEqual(locations, [f"  {path}:2: // new", f"  {path}:3: /** Doc."])
 
 
 if __name__ == "__main__":
