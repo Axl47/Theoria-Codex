@@ -169,14 +169,17 @@ def host_tests_wait_settled() -> list[str]:
     return failures
 
 
+RULES = (
+    app_logic_stays_platform_free,
+    moved_owners_stay_in_app_logic,
+    quality_gates_cover_app_logic,
+    delivery_plans_ignore_source_names,
+    host_tests_wait_settled,
+)
+
+
 def main() -> int:
-    failures = (
-        app_logic_stays_platform_free()
-        + moved_owners_stay_in_app_logic()
-        + quality_gates_cover_app_logic()
-        + delivery_plans_ignore_source_names()
-        + host_tests_wait_settled()
-    )
+    failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:
         print(failure, file=sys.stderr)
     return 1 if failures else 0
