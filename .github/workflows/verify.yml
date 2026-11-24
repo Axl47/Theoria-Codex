@@ -81,8 +81,9 @@ jobs:
 
   # The parts check out the PR's head so their results can be reused for the same code, but a branch
   # made before a policy check existed carries no copy of it and passes without it. This job runs the
-  # seconds-long policy checks on the merge result GitHub would create instead. It sees main as of this
-  # run only; main-policy.yml catches a merge that breaks a check after main moved on.
+  # seconds-long policy checks on the merge result GitHub would create instead. The ruleset on main
+  # requires branches to be up to date before they merge, so the run that let a PR merge saw the main it
+  # lands on; main-policy.yml checks pushes that skip the ruleset, such as release commits.
   merge-policy:
     name: Merge policy
     if: github.event_name == 'pull_request'
