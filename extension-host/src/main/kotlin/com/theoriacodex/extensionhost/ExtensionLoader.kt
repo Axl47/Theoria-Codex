@@ -36,7 +36,7 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private fun createSources(classLoader: ClassLoader, className: String, extension: ExtensionPackage, host: HostServices): List<HostedSource> = try {
+    internal fun createSources(classLoader: ClassLoader, className: String, extension: ExtensionPackage, host: HostServices): List<HostedSource> = try {
         val instance = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()
         extension.kind.adapt(instance, host)
             ?: throw ExtensionRejectedException("$className in ${extension.packageName} is not a source of its kind")
