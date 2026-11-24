@@ -3,6 +3,7 @@ package com.theoriacodex.extensionhost
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import com.theoriacodex.domain.series.MAX_MEMO_LENGTH
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -166,8 +167,9 @@ internal fun extensionEntry(
     memo = memo.storedMemo(),
 )
 
-/** A source's memo as the app stores it: its JSON text, or null when it keeps nothing. */
-private fun JsonObject?.storedMemo(): String? = this?.takeIf(JsonObject::isNotEmpty)?.toString()
+/** A source's memo as the app stores it: its JSON text, or null when it keeps nothing or more than [MAX_MEMO_LENGTH]. */
+private fun JsonObject?.storedMemo(): String? =
+    this?.takeIf(JsonObject::isNotEmpty)?.toString()?.takeIf { it.length <= MAX_MEMO_LENGTH }
 
 /**
  * A memo the app stored, as its source's object again. One that is not a JSON object, which no source wrote, is

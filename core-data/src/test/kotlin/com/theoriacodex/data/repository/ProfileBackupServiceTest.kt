@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.series.MAX_MEMO_LENGTH
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -329,6 +330,10 @@ class ProfileBackupServiceTest {
         val emptyMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{}"""")
         assertTrue(emptyMemo != withMemo)
         assertEquals(null, codec.decode(emptyMemo.toByteArray()).library.series.single().series.series.memo)
+        // One longer than the app stores, as a hand-edited file could hold, restores as none rather than failing.
+        val longMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{\"slug\":\"${"t".repeat(MAX_MEMO_LENGTH)}\"}"""")
+        assertTrue(longMemo != withMemo)
+        assertEquals(null, codec.decode(longMemo.toByteArray()).library.series.single().series.series.memo)
         // Trust is never in a backup, with or without series.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
         val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))
