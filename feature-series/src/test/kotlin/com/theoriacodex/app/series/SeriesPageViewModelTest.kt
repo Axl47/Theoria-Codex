@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.sourceFailureDetail
 import com.theoriacodex.data.repository.ChapterDownload
 import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.EntryProgressRestore
@@ -285,10 +286,8 @@ class SeriesPageViewModelTest {
     fun `any other failure's own text is never shown (ADR 0007)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
-        val errors = listOf(
-            IllegalStateException("socket closed by 10.0.0.2"),
-            SourceAdapterException(SourceFailureReason.NETWORK, "socket closed by 10.0.0.2"),
-        )
+        val errors = listOf(IllegalStateException("socket closed by 10.0.0.2")) +
+            SourceFailureReason.entries.map { reason -> SourceAdapterException(reason, "socket closed by 10.0.0.2") }
 
         val shown = errors.map { error ->
             val source = Seasons(id.source, error)
@@ -299,7 +298,7 @@ class SeriesPageViewModelTest {
             checkNotNull(viewModel.state.value.failure).message
         }
 
-        assertEquals(emptyList<String>(), shown.filter { "10.0.0.2" in it })
+        assertEquals(listOf(sourceFailureDetail(null)) + SourceFailureReason.entries.map { sourceFailureDetail(it) }, shown)
     }
 
     @Test

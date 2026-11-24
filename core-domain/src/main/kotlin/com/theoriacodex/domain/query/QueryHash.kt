@@ -2,8 +2,8 @@ package com.theoriacodex.domain.query
 
 import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.RetiredQueryField
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.RetiredQueryField
 import com.theoriacodex.domain.model.SearchTerm
 import java.util.Locale
 

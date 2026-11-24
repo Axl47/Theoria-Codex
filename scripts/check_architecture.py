@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-import functools
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -184,18 +183,6 @@ def host_tests_wait_settled() -> list[str]:
     return failures
 
 
-@functools.lru_cache(maxsize=None)
-def kotlin_sources_under(root: Path) -> tuple[tuple[str, str], ...]:
-    return tuple(
-        (path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
-        for path in sorted(root.glob("*/src/main/**/*.kt"))
-    )
-
-
-def main_kotlin_sources() -> tuple[tuple[str, str], ...]:
-    return kotlin_sources_under(ROOT)
-
-
 OFF_MAIN_CALL = re.compile(r"(?:(?<![\w.])(?:[a-z]\w*\s*\.\s*)+)?\bOffMainWork\s*\.\s*note\s*\(")
 BARE_NOTE_IMPORT = re.compile(r"^import\s+com\.theoriacodex\.domain\.diagnostics\.OffMainWork\.note\s*$", re.MULTILINE)
 BARE_NOTE_CALL = re.compile(r"(?<![\w.])(?<!fun\s)note\s*\(")
@@ -242,7 +229,7 @@ def notes_in_a_suspend_or_late_spot(text: str, call: int) -> bool:
     return modifiers is not None and re.search(r"\bsuspend\b", modifiers.group(0)) is not None
 
 
-def off_main_note_failures(sources) -> list[str]:
+def off_main_note_failures(sources: Iterable[tuple[str, str]]) -> list[str]:
     failures = []
     for relative, source in sources:
         text = KOTLIN_LITERAL.sub(lambda literal: re.sub(r".", " ", literal.group(0)), source)
@@ -264,7 +251,9 @@ def off_main_note_failures(sources) -> list[str]:
 
 @rule
 def off_main_notes_run_where_work_runs() -> list[str]:
-    return off_main_note_failures(main_kotlin_sources())
+    return off_main_note_failures(
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8")) for path in sorted(ROOT.glob("*/src/main/**/*.kt"))
+    )
 
 
 def main() -> int:
