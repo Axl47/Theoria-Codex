@@ -56,11 +56,21 @@ data class QueuedChapter(val series: SeriesId, val entry: String, val automatic:
 /** The chapter a drain is fetching, for its notification: the [number]th of the [of] it has taken on so far. */
 data class DrainProgress(val series: String, val chapter: String, val seriesId: SeriesId, val number: Int, val of: Int, val pages: Int, val pageCount: Int)
 
+/** A queued chapter by name, for a notification: its series' id and title, and the chapter's name. */
+data class ChapterName(val seriesId: SeriesId, val series: String, val chapter: String)
+
 /**
- * How many chapters a drain finished and how many it gave up on, and whether it stopped at a failure that may pass, such
- * as no connection, a busy or refusing server, or a source that is off, which leaves the chapter queued to try again.
+ * How a drain ended: how many chapters it [downloaded], the ones it gave up on ([failed]), and whether it should run
+ * again later ([retry]) because a chapter failed in a way that may pass, such as no connection, a busy or refusing
+ * server, or a source that is off. Such a chapter stays queued. [waiting] are the chapters it left queued because their
+ * source is off, which only the user can change.
  */
-data class DrainResult(val downloaded: Int, val failed: Int, val retry: Boolean = false)
+data class DrainResult(
+    val downloaded: Int,
+    val failed: List<ChapterName> = emptyList(),
+    val retry: Boolean = false,
+    val waiting: List<ChapterName> = emptyList(),
+)
 
 /**
  * A chapter that cannot download however long one waits: its source no longer lists it, answers with no pages or a
@@ -155,7 +165,8 @@ private fun entryPost(series: Series, entry: SeriesEntry, cover: String?, media:
  * both lanes, which also keeps each source to one chapter at a time. A chapter's pages are asked for right before it
  * is fetched, since their addresses expire, and fetched a few at a time through [fetch], each tried [PAGE_ATTEMPTS]
  * times. A chapter that is [unavailable][ChapterUnavailable] then leaves the queue, not downloaded; any other failure
- * keeps it queued and stops its lane until the system runs the job again. Removing every offline copy while a chapter
+ * keeps it queued, and its source sits out the rest of the drain while the others' chapters go on, until the system
+ * runs the job again. Removing every offline copy while a chapter
  * is fetched is such a failure: [store] refuses to commit it, so call [cancelAll] first. [scheduler] runs drains:
  * queuing a chapter while its lane has none running schedules one, and [resume] does after the process restarts.
  */
@@ -337,10 +348,11 @@ class SeriesDownloads(
     suspend fun cancelAll() = withContext(NonCancellable) { remove { true } }
 
     /**
-     * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until it is empty or a
-     * chapter fails in a way that may pass, which stops the drain with [DrainResult.retry]. Cancelling it stops the
-     * chapter being fetched, which stays queued for the next drain. A drain that starts while a cancelled one of the same
-     * lane is still stopping takes the lane over, so the old one's end does not mark the lane idle.
+     * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until nothing is left it
+     * can try. A chapter that fails in a way that may pass stays queued, and the rest of its source's chapters wait with
+     * it for the next drain, which [DrainResult.retry] asks for, while other sources' chapters go on. Cancelling it stops
+     * the chapter being fetched, which stays queued for the next drain. A drain that starts while a cancelled one of the
+     * same lane is still stopping takes the lane over, so the old one's end does not mark the lane idle.
      */
     suspend fun drain(automatic: Boolean, onProgress: (DrainProgress) -> Unit = {}): DrainResult {
         val token = Any()
@@ -349,36 +361,55 @@ class SeriesDownloads(
             draining[automatic] = token
         }
         var downloaded = 0
-        var failed = 0
+        val failed = mutableListOf<ChapterName>()
+        // Sources sitting out the rest of the drain after a failure that may pass, and of those, the ones that are off.
+        val held = HashSet<SourceKey>()
+        val off = HashSet<SourceKey>()
         try {
             while (true) {
-                when (drains.withLock { fetchNext(automatic, token, downloaded + failed + 1, onProgress) }) {
+                val (chapter, outcome) = drains.withLock { fetchNext(automatic, token, held, downloaded + failed.size + 1, onProgress) } ?: break
+                val source = chapter.seriesId.source
+                when (outcome) {
                     Outcome.DOWNLOADED -> downloaded++
-                    Outcome.UNAVAILABLE -> failed++
-                    Outcome.LATER -> return DrainResult(downloaded, failed, retry = true)
+                    Outcome.UNAVAILABLE -> failed += chapter
+                    Outcome.SOURCE_OFF -> {
+                        held += source
+                        off += source
+                    }
+                    Outcome.LATER -> held += source
                     Outcome.REMOVED -> Unit
-                    null -> return DrainResult(downloaded, failed)
                 }
             }
+            val stuck = lock.withLock { queue.value.filter { it.automatic == automatic && it.series.source in off } }
+            return DrainResult(downloaded, failed, retry = held.isNotEmpty(), waiting = stuck.map { names(it) })
         } finally {
             withContext(NonCancellable) { lock.withLock { draining.remove(automatic, token) } }
         }
     }
 
     /**
-     * Fetches the first chapter of the [automatic] lane, the [number]th of the drain holding [token]; null when the lane
-     * is empty.
+     * Fetches the first chapter of the [automatic] lane whose source is not [skipped], the [number]th of the drain
+     * holding [token], and says how that went; null when the lane has no such chapter.
      */
-    private suspend fun fetchNext(automatic: Boolean, token: Any, number: Int, onProgress: (DrainProgress) -> Unit): Outcome? {
-        // The lane stops draining in the same step that finds it empty, so a chapter queued after is scheduled.
+    private suspend fun fetchNext(
+        automatic: Boolean,
+        token: Any,
+        skipped: Set<SourceKey>,
+        number: Int,
+        onProgress: (DrainProgress) -> Unit,
+    ): Pair<ChapterName, Outcome>? {
+        // The lane stops draining in the same step that finds nothing to try, so a chapter queued after is scheduled.
         val (next, remaining) = lock.withLock {
-            val lane = queue.value.filter { it.automatic == automatic }
+            val lane = queue.value.filter { it.automatic == automatic && it.series.source !in skipped }
             if (lane.isEmpty()) draining.remove(automatic, token)
             lane.firstOrNull() to lane.size
         }
         next ?: return null
-        val (series, chapter) = names(next)
-        return fetchQueued(next) { pages, of -> onProgress(DrainProgress(series, chapter, next.series, number, number + remaining - 1, pages, of)) }
+        val name = names(next)
+        val outcome = fetchQueued(next) { pages, of ->
+            onProgress(DrainProgress(name.series, name.chapter, next.series, number, number + remaining - 1, pages, of))
+        }
+        return name to outcome
     }
 
     /**
@@ -413,6 +444,8 @@ class SeriesDownloads(
         throw error
     } catch (_: ChapterUnavailable) {
         Outcome.UNAVAILABLE
+    } catch (_: SourceOff) {
+        Outcome.SOURCE_OFF
     } catch (_: Exception) {
         Outcome.LATER
     }
@@ -424,7 +457,7 @@ class SeriesDownloads(
         val owner = seriesOfflineOwner(chapter.series)
         // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
         if (store.retain(PostId(chapter.series.source, entry.address), owner) != null) return
-        val source = this.source(chapter.series.source) ?: throw IOException("The series' source is not on")
+        val source = this.source(chapter.series.source) ?: throw SourceOff()
         // An episode's streams are played, never downloaded; the series page offers no download for them.
         val pages = when (val media = attempts { source.media(entry) }) {
             is EntryMedia.Pages -> media.pages
@@ -459,10 +492,11 @@ class SeriesDownloads(
         return block()
     }
 
-    /** The titles of [chapter]'s series and of the chapter itself, as stored. */
-    private suspend fun names(chapter: QueuedChapter): Pair<String, String> {
+    /** [chapter] by the titles of its series and of the chapter itself, as stored. */
+    private suspend fun names(chapter: QueuedChapter): ChapterName {
         val series = repository.series(chapter.series)?.series?.title.orEmpty()
-        return series to repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry }?.entry?.name.orEmpty()
+        val name = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry }?.entry?.name.orEmpty()
+        return ChapterName(chapter.series, series, name)
     }
 
     /** Takes what [matches] out of the queue; a chapter being fetched stops, and is gone, before this returns. */
@@ -505,8 +539,14 @@ class SeriesDownloads(
     }
 }
 
-/** How fetching one queued chapter ended: on the device, unavailable for good, to try again later, or taken out meanwhile. */
-private enum class Outcome { DOWNLOADED, UNAVAILABLE, LATER, REMOVED }
+/**
+ * How fetching one queued chapter ended: on the device, unavailable for good, waiting for its source to be on, to try
+ * again later, or taken out meanwhile.
+ */
+private enum class Outcome { DOWNLOADED, UNAVAILABLE, SOURCE_OFF, LATER, REMOVED }
+
+/** A queued chapter's source is off, removed or failed to load; the chapter waits for it. */
+private class SourceOff : IOException("The series' source is not on")
 
 /**
  * The chapters [choice] queues, oldest first, leaving out [present]: those already queued or on the device. Next unread

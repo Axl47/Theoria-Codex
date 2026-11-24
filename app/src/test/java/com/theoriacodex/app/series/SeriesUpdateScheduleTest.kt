@@ -8,6 +8,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.AppJob
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ChapterName
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesUpdateInterval
 import com.theoriacodex.data.repository.SeriesUpdate
@@ -27,6 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -84,6 +86,21 @@ class SeriesUpdateScheduleTest {
         notifySeriesUpdate(context, SeriesUpdate(other, listOf(SeriesEntry("/c/2", "Chapter 2"))))
         assertEquals(1, summaries())
         assertEquals(3, manager.activeNotifications.size)
+    }
+
+    @Test
+    fun `a failed download names its one chapter and opens its series, and across series counts them`() {
+        val id = one.single().series.id
+        val other = SeriesId(SourceKey.parseOrThrow("custom_mihon_2"), "/series/b")
+        notifyDownloadsFailed(context, listOf(ChapterName(id, "Title", "Chapter 5")))
+
+        val posted = context.getSystemService(NotificationManager::class.java).activeNotifications.single().notification
+        assertEquals("Title", posted.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("Chapter 5 could not be downloaded", posted.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertEquals(id, seriesIdOfUri(checkNotNull(shadowOf(posted.contentIntent).savedIntent.data)))
+        val across = listOf(ChapterName(id, "Title", "Chapter 5"), ChapterName(other, "Other", "Chapter 2"))
+        assertEquals(ChaptersNotice("2 chapters could not be downloaded", null, null), failedNotice(across))
+        assertEquals(ChaptersNotice("Title", "2 chapters waiting · Extension unavailable", id), waitingNotice(List(2) { across.first() }))
     }
 
     @Test
