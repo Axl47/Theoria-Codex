@@ -43,7 +43,9 @@ class ViewerPageRequestTest {
             val request = buildViewerPageRequest(context, strip.path, SourceKey.PIXIV).newBuilder().allowHardware(false).build()
             // Coil finishes on the main thread, which is this one, so its looper runs while the decode completes.
             val result = MainScope().async { loader.execute(request) }
+            val deadline = System.currentTimeMillis() + DECODE_TIMEOUT_MS
             while (!result.isCompleted) {
+                check(System.currentTimeMillis() < deadline) { "decode did not finish" }
                 ShadowLooper.idleMainLooper()
                 Thread.sleep(5)
             }
@@ -60,5 +62,9 @@ class ViewerPageRequestTest {
         assertEquals(4096 to 4096, viewerPageDecodeBounds(viewportWidthPx = 5000, maxEdgePx = 4096))
         // 64 MiB of 4-byte pixels at 2560 wide.
         assertEquals(2560 to 6553, viewerPageDecodeBounds(viewportWidthPx = 2560, maxEdgePx = 16384))
+    }
+
+    private companion object {
+        const val DECODE_TIMEOUT_MS = 30_000L
     }
 }
