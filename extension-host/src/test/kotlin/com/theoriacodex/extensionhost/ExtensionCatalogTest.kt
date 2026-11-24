@@ -14,7 +14,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
-import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.ResponseBody.Companion.asResponseBody
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -51,7 +52,8 @@ class ExtensionCatalogTest {
             val url = chain.request().url.toString()
             val body = site[url]
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
-                .body((body ?: ByteArray(0)).toResponseBody("application/octet-stream".toMediaType())).build()
+                // Of unknown length, as a streamed answer is, so size limits are enforced while reading.
+                .body(Buffer().write(body ?: ByteArray(0)).asResponseBody("application/octet-stream".toMediaType(), contentLength = -1)).build()
         }.build(),
         kinds = listOf(MihonKind, AniyomiKind),
         packages = {
