@@ -7,7 +7,7 @@ import java.util.Locale
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 
 data class HitomiAutocompleteEntry(
     val name: String,

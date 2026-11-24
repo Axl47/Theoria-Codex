@@ -19,7 +19,7 @@ import java.util.Locale
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import com.theoriacodex.sources.common.parseEpochMs
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 
 internal data class ParsedHitomiGallery(
     val id: Int,

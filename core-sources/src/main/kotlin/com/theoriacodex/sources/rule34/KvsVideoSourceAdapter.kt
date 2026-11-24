@@ -25,7 +25,7 @@ import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseXml
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient

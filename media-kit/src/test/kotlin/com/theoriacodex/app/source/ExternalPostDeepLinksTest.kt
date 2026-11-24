@@ -4,10 +4,9 @@ import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.encoding.percentEncode
 import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.SourceKey
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -258,7 +257,7 @@ class ExternalPostDeepLinksTest {
     fun `hitomi artist identity limit counts unicode code points`() {
         val supplementaryCharacter = "\uD83D\uDE00"
         val maximumIdentity = supplementaryCharacter.repeat(256)
-        val maximumUrl = "https://hitomi.la/artist/${encodePathSegment(maximumIdentity)}-all.html"
+        val maximumUrl = "https://hitomi.la/artist/${maximumIdentity.percentEncode()}-all.html"
 
         assertCreatorDeepLink(
             url = maximumUrl,
@@ -270,7 +269,7 @@ class ExternalPostDeepLinksTest {
         val overLimitIdentity = supplementaryCharacter.repeat(257)
         assertNull(
             parseExternalCreatorDeepLink(
-                "https://hitomi.la/artist/${encodePathSegment(overLimitIdentity)}-all.html",
+                "https://hitomi.la/artist/${overLimitIdentity.percentEncode()}-all.html",
             ),
         )
     }
@@ -341,9 +340,5 @@ class ExternalPostDeepLinksTest {
         assertEquals(SharedPostFix.VERIFY, sharedPostFix(site, challenged))
         assertEquals(null, sharedPostFix(SourceKey.DANBOORU, refused))
         assertEquals(null, sharedPostFix(site, IllegalStateException("other")))
-    }
-
-    private fun encodePathSegment(value: String): String {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
     }
 }

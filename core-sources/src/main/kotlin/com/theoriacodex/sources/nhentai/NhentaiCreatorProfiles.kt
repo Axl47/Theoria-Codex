@@ -5,7 +5,7 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 
 internal fun List<PostTaxonomyTerm>.nhentaiCreatorProfiles(): List<CreatorProfile> {
     return asSequence()

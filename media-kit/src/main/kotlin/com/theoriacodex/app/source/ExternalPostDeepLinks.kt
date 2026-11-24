@@ -5,6 +5,7 @@ import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
+import com.theoriacodex.domain.encoding.percentEncode
 import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
 import com.theoriacodex.domain.model.CommentTarget
 import com.theoriacodex.domain.model.SourceKey
@@ -14,8 +15,6 @@ import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import java.net.URI
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 data class ExternalPostDeepLink(
     val source: SourceKey,
@@ -87,7 +86,7 @@ fun parseExternalCreatorDeepLink(rawUrl: String): ExternalCreatorDeepLink? {
             source = SourceKey.HITOMI,
             sourceLabel = SourceKey.HITOMI.displayName(),
             creatorId = creatorId,
-            profileUrl = "https://hitomi.la/artist/${encodePathSegment(creatorId)}-all.html",
+            profileUrl = "https://hitomi.la/artist/${creatorId.percentEncode()}-all.html",
         )
     }
     return null
@@ -270,10 +269,6 @@ private fun decodeQueryComponentStrict(value: String): String? {
 }
 
 private fun decodePathSegmentStrict(value: String): String? = decodePercentEncodedUtf8Strict(value)
-
-private fun encodePathSegment(value: String): String {
-    return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
-}
 
 private fun ParsedExternalUri.isHttpUrlFor(hosts: Set<String>): Boolean {
     return (scheme == "https" || scheme == "http") && host in hosts

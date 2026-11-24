@@ -2,7 +2,7 @@ package com.theoriacodex.sources.hitomi
 
 import java.net.URI
 import java.util.Locale
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 
 internal const val HITOMI_CDN_DOMAIN = "gold-usergeneratedcontent.net"
 
