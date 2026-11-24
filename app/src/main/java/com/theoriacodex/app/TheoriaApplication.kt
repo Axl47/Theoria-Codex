@@ -42,6 +42,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.theoriacodex.app.statistics.observeAppBackground
 
 class TheoriaApplication :
     Application(),
@@ -106,8 +110,18 @@ class TheoriaApplication :
             developerCopyEnabled = BuildConfig.DEVELOPER_COPY_ENABLED,
             packageName = packageName,
             processName = getProcessName(),
-            start = ::startAppContainer,
+            start = {
+                startAppContainer()
+                observeAppBackgroundWhenReady()
+            },
         )
+    }
+
+    private fun observeAppBackgroundWhenReady() {
+        applicationScope.launch(Dispatchers.Main.immediate) {
+            val container = readiness.state.mapNotNull { state -> (state as? ApplicationDataState.Ready)?.value }.first()
+            container.observeAppBackground(ProcessLifecycleOwner.get().lifecycle)
+        }
     }
 
     private fun startDiagnostics() {
