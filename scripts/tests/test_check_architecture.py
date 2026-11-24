@@ -137,5 +137,28 @@ class CoreDomainRulesTest(unittest.TestCase):
         )
 
 
+class CoreDataRulesTest(unittest.TestCase):
+    def test_reports_stored_json_configured_outside_durable_json_adr_0033(self) -> None:
+        self.assertIn(check_architecture.stored_json_uses_durable_json, check_architecture.RULES)
+        with main_sources({
+            "core-data/src/main/kotlin/com/theoriacodex/data/storage/DurableJson.kt": "val DurableJson: Json = Json {\n",
+            "core-data/src/main/kotlin/com/theoriacodex/data/repository/Records.kt": "val tree = DurableJson.parseToJsonElement(raw)\nval pretty = Json(DurableJson) { prettyPrint = true }\n",
+            "core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesBackupRecords.kt": "val memo = Json.parseToJsonElement(it)\n",
+            "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/Payloads.kt": "private val json = Json { ignoreUnknownKeys = true }\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/Queue.kt": "val jobs = Json.decodeFromString<List<Job>>(text)\n",
+            "feature-series/src/main/kotlin/com/theoriacodex/app/series/Memo.kt": "val memo = Json.parseToJsonElement(text)\n",
+            "core-sources/src/main/kotlin/com/theoriacodex/sources/repo/RepoIndex.kt": "private val json = Json { isLenient = true }\n",
+        }):
+            failures = check_architecture.stored_json_uses_durable_json()
+        self.assertEqual(
+            [
+                "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/Payloads.kt",
+                "feature-series/src/main/kotlin/com/theoriacodex/app/series/Memo.kt",
+                "media-kit/src/main/kotlin/com/theoriacodex/app/media/Queue.kt",
+            ],
+            [failure.split(" ", 1)[0] for failure in failures],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -256,6 +256,28 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
+AD_HOC_JSON = re.compile(r"\bJson(?:\s*\{|\.\w)")
+DURABLE_JSON = "core-data/src/main/kotlin/com/theoriacodex/data/storage/DurableJson.kt"
+SERIES_MEMO_CHECK = ("core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesBackupRecords.kt", "Json.parseToJsonElement(")
+JSON_WIRE_FORMAT_MODULES = ("app/", "core-sources/", "extension-host/")
+
+
+@rule
+def stored_json_uses_durable_json() -> list[str]:
+    failures = []
+    for relative, text in main_kotlin_sources():
+        if relative == DURABLE_JSON or relative.startswith(JSON_WIRE_FORMAT_MODULES):
+            continue
+        if relative == SERIES_MEMO_CHECK[0]:
+            text = text.replace(SERIES_MEMO_CHECK[1], "")
+        if AD_HOC_JSON.search(text):
+            failures.append(
+                f"{relative} configures or uses its own Json; stored and exported JSON goes through DurableJson "
+                "(docs/adr/0033-durable-json-configuration.md)"
+            )
+    return failures
+
+
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:
