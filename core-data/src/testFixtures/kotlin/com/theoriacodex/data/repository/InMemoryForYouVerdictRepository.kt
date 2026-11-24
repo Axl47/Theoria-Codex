@@ -2,7 +2,6 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.PostId
 
-/** The verdict log in memory: one verdict per profile and post, newest first, without the cap. */
 class InMemoryForYouVerdictRepository : ForYouVerdictRepository {
     private val stored = LinkedHashMap<Pair<String, PostId>, ForYouVerdict>()
 

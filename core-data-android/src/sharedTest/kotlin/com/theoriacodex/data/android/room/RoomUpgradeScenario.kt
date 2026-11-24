@@ -30,7 +30,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 
-/** Same persisted upgrade journey runs on Robolectric and Android SQLite through the production factory. */
 object RoomUpgradeScenario {
     private const val PICTURE_HASH = 0x5E5E_0000_FFFFL
     private val seriesId = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
@@ -43,8 +42,6 @@ object RoomUpgradeScenario {
             val durationKey = StoredMediaDurationKey(shared.id, "full-media-v1")
             val duration = StoredMediaDurationState.Known(12_000L, "PROVIDER")
 
-            // Opening this factory, rather than passing individual migrations to the helper, proves
-            // that an installed user's entire path is registered and Room accepts the final schema.
             withDatabase(context, name) { database ->
                 val collections = RoomCodexLikesRepository(database, clock = { 100L })
                 val recents = RoomRecentsRepository(database, clock = { 100L })
@@ -110,7 +107,6 @@ object RoomUpgradeScenario {
                 assertEquals("/c/1" to true, series.series(seriesId)?.let { it.lastOpenedEntry to it.followed })
                 assertEquals(4L to 9L, series.entries(seriesId).single { it.entry.address == "/c/1" }.let { it.position to it.length })
 
-                // Subsequent writes still honor membership isolation and actual foreign-key cascades.
                 assertFalse(collections.toggleLikeAndSyncSystemCodex("a", "likes-a", "Likes A", shared, emptyList()).nowLiked)
                 collections.deleteCodexForUndo("saved")
             }
@@ -144,7 +140,6 @@ object RoomUpgradeScenario {
         }
     }
 
-    /** The extension spike's posts are gone from every table, and the series tables that replace them open empty. */
     private fun assertSpikeRowsDeleted(database: TheoriaRoomDatabase) {
         val reader = database.openHelper.readableDatabase
         for (table in listOf("posts", "codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags")) {
@@ -157,7 +152,6 @@ object RoomUpgradeScenario {
             rows.moveToFirst()
             assertEquals(0, rows.getInt(0))
         }
-        // Real custom sites' rows share the prefix and stay, as does a search for a tag that contains it.
         reader.query("SELECT COUNT(*) FROM posts WHERE source IN ('custom_mihonbooru_org', 'custom_mihon_example_org')").use { rows ->
             rows.moveToFirst()
             assertEquals(2, rows.getInt(0))
@@ -200,13 +194,11 @@ object RoomUpgradeScenario {
             database.execSQL("INSERT INTO codex_items VALUES(?,'PIXIV','shared',15)", arrayOf("likes-$profile"))
             database.execSQL("INSERT INTO liked_posts VALUES(?,'PIXIV','shared',15,'[\"sky\"]')", arrayOf(profile))
         }
-        // What the extension spike stored as posts; the v13 migration deletes it. A custom site with a similar id stays.
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihon_7','L3M',?)", arrayOf(payload("spike")))
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihonbooru_org','1',?)", arrayOf(payload("site")))
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihon_example_org','1',?)", arrayOf(payload("named-site")))
         database.execSQL("INSERT INTO codex_items VALUES('saved','custom_mihon_7','L3M',5)")
         database.execSQL("INSERT INTO liked_posts VALUES('a','custom_mihon_7','L3M',5,'[]')")
-        // Proof rows the retired importers wrote; the v11 migration drops their tables, so v1.9.2's schema 11 has neither.
         if (version < 11) database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
         for ((index, id) in listOf("shared", "other").withIndex()) {
             val origin = if (index == 0) "SEARCH" else "CODEX"
@@ -220,7 +212,6 @@ object RoomUpgradeScenario {
         database.execSQL("INSERT INTO recent_searches VALUES('site-search',?,34,4)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_example_org")))
         database.execSQL("INSERT INTO recent_searches VALUES('tag-search',?,35,5)", arrayOf(LEGACY_QUERY.replace("sky", "custom_mihon_7")))
         database.execSQL("INSERT INTO recent_searches VALUES('old-search',?,32,1)", arrayOf(LEGACY_QUERY))
-        // For You history; the v12 migration deletes it, so only the rows above survive.
         database.execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,33,2)", arrayOf(FOR_YOU_SEARCH))
         database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section) " +
             "VALUES('PIXIV','other',34,3,'SEARCH','for_you:seed','FYP')")
@@ -230,7 +221,6 @@ object RoomUpgradeScenario {
         }
     }
 
-    // Frozen storage-v1 payloads, independent of today's encoder, exercise genuine backward reads.
     private fun payload(id: String) = """
         {"schemaVersion":1,"source":"PIXIV","sourcePostId":"$id","previewUrl":"https://example.com/$id.jpg",
         "previewMime":"image/jpeg","previewProgressiveUrls":[],"previewIsAnimated":false,
@@ -254,10 +244,6 @@ object RoomUpgradeScenario {
 
     private const val LEGACY_QUERY = """{"schemaVersion":1,"modeType":"source","modeSource":"PIXIV","includeTags":["sky"],"excludeTags":["comic"],"sort":"NEWEST"}"""
 
-    /**
-     * A version 14 library with a picture hash opens at the latest version with the hash kept as tried, no vision, and so
-     * nothing awaiting frames.
-     */
     suspend fun verifyPictureVisionUpgrade(context: Context, helper: MigrationTestHelper) = withContext<Unit>(Dispatchers.IO) {
         val name = "upgrade-vision-v14.db"
         context.deleteDatabase(name)

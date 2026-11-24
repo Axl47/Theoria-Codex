@@ -5,12 +5,6 @@ import kotlin.math.abs
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceTagKey
 
-/**
- * Settings normalization shared by DataStore persistence, migration and test fixtures.
- *
- * Storage mechanics intentionally stay in each repository. This object only decides what the
- * next observable domain state should be for an operation.
- */
 internal object RepositoryPolicies {
     data class Result<State, Value>(
         val state: State,
@@ -93,8 +87,6 @@ internal object RepositoryPolicies {
         val defaults = SourceRuntimeSettings().sourceWeights
         val knownWeights = orderedSources.associateWith { source -> rawWeights[source] ?: defaults[source] }
             .mapValues { (_, weight) -> weight?.takeIf(Double::isFinite)?.coerceAtLeast(0.0) }
-        // A source with no stored or default weight (a newly opted-in custom site) gets the others'
-        // mean, an even share, rather than a raw 1.0 that would dominate already-normalized weights.
         val fallbackWeight = knownWeights.values.filterNotNull().takeIf { it.isNotEmpty() }?.average() ?: 1.0
         val safeWeights = orderedSources.associateWith { source ->
             when {
@@ -102,7 +94,6 @@ internal object RepositoryPolicies {
                 else -> knownWeights[source] ?: 0.0
             }
         }
-        // Already-normalized weights pass through, so normalizing again never drifts in the last bit.
         if (abs(safeWeights.values.sum() - 1.0) <= NORMALIZED_WEIGHT_TOLERANCE) return safeWeights
         val largestWeight = safeWeights.values.maxOrNull().orZero()
         if (largestWeight <= 0.0) {
@@ -110,7 +101,6 @@ internal object RepositoryPolicies {
             return orderedSources.associateWith { uniformWeight }
         }
 
-        // Scale before summing so even several Double.MAX_VALUE inputs cannot overflow the total.
         val scaledWeights = safeWeights.mapValues { (_, weight) -> weight / largestWeight }
         val scaledTotal = scaledWeights.values.sum()
         if (!scaledTotal.isFinite() || scaledTotal <= 0.0) {
@@ -306,10 +296,6 @@ internal object RepositoryPolicies {
         )
     }
 
-    /**
-     * Normalizes each tag and drops blanks and repeats; null when no tag remains. Only a group keeps
-     * a [name], trimmed onto one line and capped at [MAX_FAVORITE_TAG_NAME_LENGTH] characters.
-     */
     fun normalizeFavoriteTagEntry(source: SourceKey, tags: List<String>, name: String? = null): FavoriteTagEntry? {
         val normalized = tags
             .map { tag -> normalizeFavoriteTagForStorage(source, tag) }
@@ -322,7 +308,6 @@ internal object RepositoryPolicies {
         return FavoriteTagEntry(source, normalized, groupName)
     }
 
-    /** An entry's identity: its tags as the source compares them, ignoring order. */
     private fun favoriteTagKeys(source: SourceKey, tags: List<String>): Set<String> =
         tags.mapNotNullTo(mutableSetOf()) { tag -> sourceTagKey(source, tag).takeIf(String::isNotBlank) }
 

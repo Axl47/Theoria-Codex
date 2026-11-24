@@ -38,7 +38,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One offline owner's row: a Codex kept offline, saved posts, a series' downloaded chapters, or a removed Codex. */
 data class OfflineStorageOwner(
     val id: String,
     val name: String,
@@ -47,12 +46,6 @@ data class OfflineStorageOwner(
     val preparing: Boolean = false,
 )
 
-/**
- * Offline copies and cache. [isOpen] is the Storage sheet (Settings); [owners] are the offline rows the
- * Library's sheet lists, without rows hidden while a removal holds them ([hiddenOwners]). [pendingRemovals] are
- * those removals by owner id, or [OFFLINE_ALL_REMOVAL] for Remove all, each drawn as its Undo row.
- * [message] is about something that has no row, such as a Codex that could not be loaded.
- */
 data class OfflineStorageUiState(
     val isOpen: Boolean = false,
     val offline: OfflineMediaSnapshot = OfflineMediaSnapshot(),
@@ -68,23 +61,14 @@ data class OfflineStorageUiState(
 ) {
     val controlsEnabled: Boolean get() = !working && !refreshing
 
-    /** The [pendingRemovals] of Codex copies, by Codex id, for their Undo on Codex detail and in the Library. */
     val codexRemovals: Map<String, PendingRemoval>
         get() = pendingRemovals.mapNotNull { (owner, removal) -> codexIdOfOfflineOwner(owner)?.let { it to removal } }.toMap()
 }
 
-/** Where the Library's offline sheet draws its offers; rows use their owner id as the key. */
 const val LIBRARY_TRANSFERS_UNDO_SCOPE = "library-transfers"
 
-/** The [OfflineStorageUiState.pendingRemovals] key of Remove all, which hides every row. */
 const val OFFLINE_ALL_REMOVAL = "*"
 
-/**
- * Activity-owned presentation and collection preparation; the coordinator owns acquisition and bytes. Removals
- * commit in [removalScope], which must be application-lived: clearing this owner commits what is still pending.
- * In a build with extensions, [seriesRepository] names the series whose chapters are offline and [seriesDownloads]
- * removes them, together with their queued chapters.
- */
 class OfflineStorageViewModel(
     private val codices: CodexRepository,
     private val offline: OfflineMediaCoordinator,
@@ -101,14 +85,12 @@ class OfflineStorageViewModel(
     private val controls = MutableStateFlow(OfflineStorageUiState())
     private val failures = Channel<String>(Channel.BUFFERED)
 
-    /** Why "Make available offline" could not start, once per attempt; the app shows it when the sheet is closed. */
     val preparationFailures: Flow<String> = failures.receiveAsFlow()
     private val codexNames = codices.observeCodices().map { list -> list.associate { codexOfflineOwner(it.codexId) to it.name } }
         .flowOn(dispatcher).catch {
             controls.update { it.copy(message = "Codex names could not be loaded.") }
             emit(emptyMap())
         }
-    /** The title of each series with chapters offline, by owner. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val seriesNames = offline.store.snapshot.map { snapshot ->
         snapshot?.postsByOwner.orEmpty().keys.mapNotNull { owner -> seriesIdOfOfflineOwner(owner)?.let { owner to it } }
@@ -120,7 +102,6 @@ class OfflineStorageViewModel(
         }
     }.flowOn(dispatcher).catch { emit(emptyMap()) }
     private val names = combine(codexNames, seriesNames) { codex, series -> codex + series }
-    /** The current posts of every Codex kept offline, by Codex id, for the ring's share of settled posts. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val members = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
         (snapshot?.postsByOwner.orEmpty().keys + jobs.keys).mapNotNullTo(mutableSetOf(), ::codexIdOfOfflineOwner)
@@ -169,11 +150,6 @@ class OfflineStorageViewModel(
 
     fun dismiss() { controls.update { it.copy(isOpen = false) } }
 
-    /**
-     * Keeps [codexId] offline, or tops up its copy: posts already retained are skipped, not downloaded again.
-     * When it cannot start, the reason goes to [message] and to [preparationFailures]. The coordinator owns the
-     * loading, so removing the copy (or deleting the Codex) stops it before clearing.
-     */
     fun makeAvailableOffline(codexId: String) {
         val owner = codexOfflineOwner(codexId)
         if (controls.value.working || owner in controls.value.preparingOwners || offline.jobs.value[owner]?.isRunning == true) return
@@ -205,35 +181,23 @@ class OfflineStorageViewModel(
 
     fun cancel(owner: String) = offline.cancel(owner)
 
-    /**
-     * Removes [owner]'s offline copies as deferred destruction: the row hides at once with Undo in its place, and
-     * the files go only when [lifetime] ends (copies another owner retains stay). Timed by default; until the
-     * surface is left for a surface that calls [commitRemovals] when left.
-     */
     fun removeDeferred(owner: String, lifetime: UndoLifetime = UndoLifetime.Timed()) {
         val row = state.value.owners.firstOrNull { it.id == owner } ?: return
         removals.remove(owner, "Removed ${row.name}", lifetime)
     }
 
-    /**
-     * Removes every offline copy as deferred destruction, like [removeDeferred]. It takes over the single removals
-     * still waiting, so its one Undo puts every copy back and no single Undo is left to outlive the copies it names.
-     */
     fun removeAll() {
         if (state.value.owners.isEmpty() && state.value.offline.bytes == 0L) return
         removals.pending.value.keys.forEach(removals::undo)
         removals.remove(OFFLINE_ALL_REMOVAL, "Removed all offline copies")
     }
 
-    /** Undo, or Retry after a failure, for the pending removal under [key] (see [OfflineStorageUiState.pendingRemovals]). */
     fun actOnRemoval(key: String) = removals.act(key)
 
-    /** Commits every pending removal now; called when the surface that shows them is left. */
     fun commitRemovals() = removals.commitAll()
 
     override fun onCleared() = removals.commitAll()
 
-    /** Removes [key]'s copies (see [OFFLINE_ALL_REMOVAL]); the coordinator stops preparations first. False on failure. */
     private suspend fun commitRemoval(key: String): Boolean {
         controls.update { it.copy(working = true) }
         try {
@@ -241,7 +205,6 @@ class OfflineStorageViewModel(
                 val series = seriesIdOfOfflineOwner(key)
                 when {
                     key == OFFLINE_ALL_REMOVAL -> {
-                        // Queued chapters go too, or the next drain would download them again.
                         seriesDownloads?.cancelAll()
                         offline.clear()
                     }
@@ -292,7 +255,6 @@ class OfflineStorageViewModel(
     }
 }
 
-/** The rows of every owner; [names] are the Codex and series names by owner. */
 private fun offlineStorageOwners(
     snapshot: OfflineMediaSnapshot,
     jobs: Map<String, OfflineMediaJob>,

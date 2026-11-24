@@ -39,10 +39,6 @@ import com.theoriacodex.app.ui.components.SearchBarMinHeight
 import com.theoriacodex.app.ui.components.SearchBarShape
 import kotlinx.coroutines.flow.collectLatest
 
-/**
- * Pill search bar matching Search tab's surface, shape, and height. Incrementing [focusRequest] focuses the field
- * on the next frame, used when expanding the bar from the collapsed corner strip.
- */
 @Composable
 internal fun SeriesSearchBar(
     query: String,
@@ -136,7 +132,6 @@ private fun SeriesSearchClearSlot(showClear: Boolean, onClear: () -> Unit) {
     }
 }
 
-/** Collapses the search bar and clears focus when [scrollable] starts moving. */
 @Composable
 internal fun SeriesScrollChromeEffect(
     scrollable: ScrollableState,

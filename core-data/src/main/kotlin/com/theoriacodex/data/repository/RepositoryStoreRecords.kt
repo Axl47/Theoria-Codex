@@ -8,16 +8,11 @@ import kotlinx.serialization.Serializable
 
 internal const val SHARED_SOURCE_CATALOG_VERSION = 3
 
-/** Sources each catalog version introduced; older stored selections gain them once on read. */
 private val SOURCES_ADDED_BY_CATALOG_VERSION = mapOf(
     2 to setOf(SourceKey.HITOMI),
     3 to setOf(SourceKey.DANBOORU, SourceKey.AIBOORU),
 )
 
-/**
- * The `settings` object of `settings_store_v3.json`, also the settings section of profile backups. Enum-like
- * values stay strings so a value this build does not know falls back instead of failing the whole file.
- */
 @Serializable
 internal data class SettingsStoreRecord(
     @SerialName("followedCreators")
@@ -42,9 +37,7 @@ internal data class SettingsStoreRecord(
     @SerialName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
     @SerialName("oldSearchBar") val oldSearchBar: Boolean = false,
-    /** Absent while the setting is at its default, so files written before it existed stay byte-for-byte current. */
     @SerialName("seriesUpdateInterval") val seriesUpdateInterval: String? = null,
-    /** Absent while off, as [seriesUpdateInterval] is while at its default. */
     @SerialName("seriesDeleteAfterReading") val seriesDeleteAfterReading: Boolean? = null,
     @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
     @SerialName("instantSeek") val instantSeek: Boolean = false,
@@ -250,11 +243,6 @@ internal data class ProviderHealthSnapshotRecord(
     }
 }
 
-/**
- * A saved tag keeps its first tag in [tag], so builds that predate "or" groups still read one.
- * [tags] is written only for a group and, when present, holds every alternative; [name] is a
- * group's optional label.
- */
 @Serializable
 internal data class FavoriteTagEntryRecord(
     @SerialName("source")

@@ -24,12 +24,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Application-owned jobs survive collection navigation. Only completed galleries count as available.
- *
- * A job is registered and saved to the pending queue at once, then waits for [awaitSources] before it resolves
- * its first post, so [recoverPendingJobs] can run during startup, before sources are ready, without failing posts.
- */
 class OfflineMediaCoordinator(
     val store: OfflineMediaStore,
     private val scope: CoroutineScope,
@@ -47,7 +41,6 @@ class OfflineMediaCoordinator(
     private val persistence = Mutex()
     private val active = mutableMapOf<String, Job>()
     private val preparations = mutableMapOf<String, Job>()
-    // Owners being removed (with how many removals run), and how many clears run: no job is admitted for them then.
     private val removing = mutableMapOf<String, Int>()
     private var clearing = 0
     private val requests = mutableMapOf<String, List<Post>>()
@@ -70,7 +63,6 @@ class OfflineMediaCoordinator(
                     canonicalTags = emptyList(), rawTags = emptyList(), authorName = null, createdAtEpochMs = null)
             }, start = false)
         }
-        // Register every owner before any worker can checkpoint the recovered intent.
         restoredJobs.forEach(Job::start)
     }
 
@@ -87,13 +79,6 @@ class OfflineMediaCoordinator(
 
     fun makeAvailableOffline(owner: String, posts: List<Post>) { enqueueOffline(owner, posts, start = true) }
 
-    /**
-     * Runs [prepare] as [owner]'s preparation: it loads what to keep, then passes it to `start`, which starts the
-     * job like [makeAvailableOffline]. `start` admits it only while this preparation is [owner]'s current one and not
-     * cancelled, checked under the lock that admits jobs (which also refuses during a removal or clear). A newer preparation,
-     * [cancel], [remove] and [clear] cancel it, so a list loaded before any of them can never start a job (for an
-     * owner that is gone, or a request the user stopped). The returned job completes when it ends.
-     */
     fun prepare(owner: String, prepare: suspend (start: (List<Post>) -> Unit) -> Unit): Job {
         lateinit var job: Job
         job = scope.launch(start = CoroutineStart.LAZY) {
@@ -109,12 +94,6 @@ class OfflineMediaCoordinator(
         return job
     }
 
-    /**
-     * Downloads [posts] (and only them) into [owner]'s offline copy, so a Codex kept offline stays complete as
-     * posts are saved into it. A running job takes them at its tail; an owner with copies starts a job for them
-     * alone. A request the user cancelled stays stopped, adding [posts] to what Retry runs, and an owner with
-     * neither copies nor a running job gets nothing.
-     */
     fun keepOffline(owner: String, posts: List<Post>) {
         val job = jobs.value[owner]
         if (job?.isCancelled == true) {
@@ -128,10 +107,6 @@ class OfflineMediaCoordinator(
         }
     }
 
-    /**
-     * The one place every offline job is admitted. While [remove] runs for [owner] or [clear] runs it admits nothing,
-     * so they stop every job admitted before them and no later one can write a copy after they clear.
-     */
     private fun enqueueOffline(owner: String, posts: List<Post>, start: Boolean): Job? {
         require(owner.isNotBlank())
         synchronized(lock) {
@@ -162,7 +137,6 @@ class OfflineMediaCoordinator(
         }
     }
 
-    /** A running job takes [posts] at its tail; repeating its own posts changes nothing. Called holding the lock. */
     private fun appendToRunningJob(owner: String, posts: List<Post>) {
         val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
         if (merged.size == requests[owner]?.size) return
@@ -234,7 +208,6 @@ class OfflineMediaCoordinator(
 
     fun withoutOfflineLocations(post: Post): Post = store.withoutOfflineLocations(post)
 
-    /** Admit app-owned work immediately after collection commit; saving feedback never waits on the network. */
     fun saveOnCollectionSave(post: Post) { makeAvailableOffline(AUTOMATIC_OFFLINE_OWNER, listOf(post)) }
 
     private suspend fun savePost(post: Post, owner: String): Post {
@@ -245,8 +218,6 @@ class OfflineMediaCoordinator(
                     val resolved = resolve(post)
                     check(resolved.id == post.id) { "The provider returned a different post" }
                     val media = selectMedia(resolved)
-                    // A collection ref that names no type shows online only by its address's extension, which the
-                    // saved file keeps, so there is no type to report.
                     store.save(resolved, media, owner, admission) { ref, output ->
                         acquire(resolved, ref, output)
                         null
@@ -309,7 +280,6 @@ data class OfflineMediaJob(
         "Some posts could not be saved. Check your connection and download preferences, then retry."
 }
 
-/** Full-media caching must acquire bytes; remote URL pointer files are never treated as downloads. */
 class OfflineAwareCacheRepository(
     private val delegate: CacheRepository,
     private val offline: OfflineMediaCoordinator,

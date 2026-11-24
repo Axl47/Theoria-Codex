@@ -17,7 +17,6 @@ internal data class PendingIncomingUri(
     val kind: IncomingUriKind,
 )
 
-/** Owns a single pending external handoff across Activity recreation and process restoration. */
 internal class IncomingUriWorkflow(
     private val savedStateHandle: SavedStateHandle,
 ) {

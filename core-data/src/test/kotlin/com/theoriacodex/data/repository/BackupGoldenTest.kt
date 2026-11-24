@@ -28,40 +28,29 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * Pins backups and the restore journal as written by the Gson-based codec (golden/backup/). The
- * goldens are the exact bytes production wrote; these tests assert what they must keep decoding to,
- * never the bytes a future encoder emits. Never regenerate a golden to make a refactor pass.
- */
 class BackupGoldenTest {
     @get:Rule val temporary = TemporaryFolder()
     private val codec = ProfileBackupCodec()
 
-    // Version 2 is what the codec writes today: characters & = < > ' in strings, null author and query hash.
     @Test fun `version 2 backup decodes to its source values`() {
         assertEquals(goldenBackup(), codec.decode(golden("backup-v2.json")))
     }
 
-    // The codec can no longer write v1; backup-v1.json is the v2 golden with version 1 and without customSources.
     @Test fun `version 1 backup decodes to the same values minus custom sources`() {
         assertEquals(goldenBackup().copy(customSources = emptyList()), codec.decode(golden("backup-v1.json")))
     }
 
-    // The previous release reads backups this build writes: same keys, nulls omitted, defaults present.
     @Test fun `a backup written now is the document the Gson codec wrote`() {
         val golden = golden("backup-v2.json")
         val written = DurableJson.parseToJsonElement(golden.decodeToString()).jsonObject
-        // Retired settings; no build acts on them from a backup.
         val settings = written.getValue("settings").jsonObject -
             setOf("lastSelectedTabRoute", "viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
-        // Series time began counting after the golden was written; older builds ignore it.
         val statistics = written.getValue("statistics").jsonObject +
             listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }
         assertEquals(JsonObject(written + ("settings" to JsonObject(settings)) + ("statistics" to JsonObject(statistics))),
             DurableJson.parseToJsonElement(codec.encode(codec.decode(golden)).decodeToString()))
     }
 
-    // The backup screen shows an IllegalArgumentException's message verbatim; parser errors must reach its generic text.
     @Test fun `malformed JSON fails as before while invalid fields keep their message`() {
         val v2 = golden("backup-v2.json").decodeToString()
         val wrongTypes = listOf("\"appOpenCount\":0" to "\"appOpenCount\":{}", "\"settings\":{" to "\"settings\":[],\"x\":{",
@@ -76,7 +65,6 @@ class BackupGoldenTest {
         assertEquals("Backup is missing favoriteTagsByProfile", runCatching { codec.decode(noFavorites) }.exceptionOrNull()?.message)
     }
 
-    // Backups have always required activeProfileId, so one carrying only the retired `activeProfile` key is refused.
     @Test fun `a backup with only the retired profile key is refused`() {
         val v2 = golden("backup-v2.json").decodeToString()
         val retired = v2.replace("\"activeProfileId\":\"profile-main\"", "\"activeProfile\":\"USER_2\"")
@@ -84,12 +72,10 @@ class BackupGoldenTest {
         assertEquals("Invalid backup field: activeProfileId", runCatching { codec.decode(retired.toByteArray()) }.exceptionOrNull()?.message)
     }
 
-    // pending_profile_restore.json as ProfileBackupService.writeJournal left it after a crash mid-restore.
     @Test fun `journal written mid-restore still matches its backup and finishes the restore`() = runTest {
         val harness = harness()
         harness.journal.writeBytes(golden("pending_profile_restore.json"))
 
-        // Same backup and flags as when the journal was written: restore resumes instead of refusing.
         val result = harness.service.restore(golden("backup-v2.json"), applyPreferences = true, selectImportedProfile = true)
 
         assertEquals(goldenBackup().library, harness.store.merged.single())
@@ -136,7 +122,6 @@ private class RestoreHarness(
     val journal: java.io.File,
 )
 
-/** The data behind the golden/backup files; edit only together with regenerated goldens, never to follow a refactor. */
 internal fun goldenBackup(): ProfileBackup {
     val tricky = "a&b=c<d>'e"
     val post = Post(

@@ -88,7 +88,6 @@ class ProfileBackupServiceTest {
         assertEquals(repos, codec.decode(codec.encode(written)).extensionRepos)
         assertEquals(4, encodedTree(written)["version"]?.toString()?.toInt())
 
-        // No repos: the field and the version bump stay out, and a document that never had the field decodes as before.
         val plain = encodedTree(backup())
         assertFalse("extensionRepos" in plain)
         assertEquals(2, plain["version"]?.toString()?.toInt())
@@ -337,7 +336,6 @@ class ProfileBackupServiceTest {
     @Test fun `a backup whose For You pins convert to fit the limit restores, and restores again`() = runTest {
         val harness = harness()
         val ordinary = List(MAX_SAVED_SEARCHES - 2) { SavedSearchEntry("pin-$it", "Pin $it", search().copy(queryHash = "hash-$it"), 5L) }
-        // Converted, the mix takes its own slot and the one the tagless pin leaves, under an ID the backup does not have.
         val mix = forYouPin("mix", listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.DANBOORU).associateWith { listOf("cat") })
         val tagless = forYouPin("tagless", mapOf(SourceKey.PIXIV to listOf(" ")))
         val bytes = codec.encode(backup().copy(savedSearches = ordinary + mix + tagless))
@@ -387,24 +385,19 @@ class ProfileBackupServiceTest {
         val withSeries = plain.copy(library = plain.library.copy(series = listOf(series)))
         val encoded = codec.encode(withSeries)
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"version\":3"))
-        // The cover travels as the plain address the source gave; a series without one is written without the field.
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"coverUrl\":\"https://example.test/cover.jpg\""))
         assertEquals(listOf(series), codec.decode(encoded).library.series)
-        // Older backups carry the retired check time; it is ignored on restore and no longer written.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("lastCheckedAt"))
         val withCheckTime = encoded.toString(Charsets.UTF_8).replace(""""followed":true""", """"followed":true,"lastCheckedAt":9""")
         assertTrue(withCheckTime.contains("lastCheckedAt"))
         assertEquals(listOf(series), codec.decode(withCheckTime.toByteArray()).library.series)
-        // A memo no build writes, an empty object or text that is not one, restores as none.
         val withMemo = encoded.toString(Charsets.UTF_8)
         val emptyMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{}"""")
         assertTrue(emptyMemo != withMemo)
         assertEquals(null, codec.decode(emptyMemo.toByteArray()).library.series.single().series.series.memo)
-        // One longer than the app stores, as a hand-edited file could hold, restores as none rather than failing.
         val longMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{\"slug\":\"${"t".repeat(MAX_MEMO_LENGTH)}\"}"""")
         assertTrue(longMemo != withMemo)
         assertEquals(null, codec.decode(longMemo.toByteArray()).library.series.single().series.series.memo)
-        // Trust is never in a backup, with or without series.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
         val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))
         assertTrue(runCatching { codec.encode(twice) }.isFailure)
@@ -425,8 +418,6 @@ class ProfileBackupServiceTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         fun entry(index: Int, order: Int, read: Boolean = false) =
             StoredSeriesEntry(SeriesEntry("/chapter/$index", "Ch.$index"), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read)
-        // Two over the limit: the dropped chapter without progress and the last listed chapter without progress are
-        // left out; the Continue target is kept although it is dropped and has no progress.
         val entries = listOf(entry(-3, order = -1), entry(-2, order = -1), entry(-1, order = -1, read = true)) +
             List(MAX_BACKUP_SERIES_ENTRIES - 1) { entry(it, order = it) }
         val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/chapter/-3")
@@ -435,12 +426,9 @@ class ProfileBackupServiceTest {
         assertEquals(MAX_BACKUP_SERIES_ENTRIES, restored.size)
         assertEquals(listOf("/chapter/-3", "/chapter/-1", "/chapter/0"), restored.take(3))
         assertTrue("/chapter/-2" !in restored && "/chapter/${MAX_BACKUP_SERIES_ENTRIES - 2}" !in restored)
-        // The same series in another order is cut the same way.
         val shuffled = huge.copy(library = huge.library.copy(series = listOf(BackupSeries(stored, entries.reversed()))))
         assertEquals(restored, codec.decode(codec.encode(shuffled)).library.series.single().entries.map { it.entry.address })
 
-        // What an extension can list must not stop the backup: a blank title is written as the address, and a chapter
-        // or a series without an address is left out. The same rows in a file are still refused on restore.
         val odd = backup().let { plain ->
             plain.copy(library = plain.library.copy(series = listOf(
                 BackupSeries(StoredSeries(Series(id, " ")), listOf(entry(1, 0), entry(2, 1).let { it.copy(entry = it.entry.copy(address = "")) })),
@@ -538,7 +526,6 @@ private fun backup(): ProfileBackup {
     )
 }
 
-/** A saved For You search over [tags], as backups made before the deck hold them. */
 private fun forYouPin(id: String, tags: Map<SourceKey, List<String>>) = SavedSearchEntry(
     id, id,
     RecentSearchEntry(

@@ -26,34 +26,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-/**
- * The offline copy of a Codex kept offline: [fraction] of its posts retained (0 to 1), whether a job is
- * [running], and whether the last one [failed]. Codices not kept offline have no state and show no ring.
- */
 data class CodexOfflineState(val fraction: Float, val running: Boolean = false, val failed: Boolean = false) {
     val complete: Boolean get() = fraction >= 1f && !running && !failed
 }
 
 val LocalCodexOfflineStates = compositionLocalOf<Map<String, CodexOfflineState>?> { null }
 
-/**
- * What can be done to a Codex's offline copy from outside the Library's offline sheet. The app provides it over
- * every screen through [LocalCodexOfflineControls]; the default does nothing, for previews and tests.
- */
 interface CodexOfflineControls {
-    /** Opens the Library's offline sheet, scrolled to and marking [codexId]'s row when one is given. */
     fun openSheet(codexId: String?)
 
-    /**
-     * Removes [codexId]'s offline copy as deferred destruction until the surface showing its Undo is left: the ring
-     * hides at once and [LocalCodexOfflineRemovals] holds the removal for [CodexOfflineRemovalUndo].
-     */
     fun remove(codexId: String)
 
-    /** Undo, or Retry after a failure, for [codexId]'s pending removal. */
     fun actOnRemoval(codexId: String)
 
-    /** Commits every pending offline removal; the surface showing their Undo calls it when left. */
     fun commitRemovals()
 
     companion object {
@@ -68,10 +53,6 @@ interface CodexOfflineControls {
 
 val LocalCodexOfflineControls = staticCompositionLocalOf { CodexOfflineControls.None }
 
-/**
- * A small progress ring for a Codex kept offline: full, running and failed each look different. With [onClick]
- * it is a button whose [clickLabel] says what a tap does; without, it is status only.
- */
 @Composable
 fun CodexOfflineRing(
     state: CodexOfflineState,
@@ -112,12 +93,10 @@ private fun PartialRing(fraction: Float, color: Color, badge: ImageVector?) {
     }
 }
 
-/** What TalkBack reads for the ring. */
 internal fun codexOfflineDescription(state: CodexOfflineState): String {
     val percent = (state.fraction.coerceIn(0f, 1f) * 100).roundToInt()
     return when {
         state.complete -> "Available offline"
-        // No percent: failed posts count as settled, so a failed ring is often full.
         state.failed -> "Offline copy failed"
         state.running -> "Making available offline, $percent%"
         else -> "Offline copy $percent%"

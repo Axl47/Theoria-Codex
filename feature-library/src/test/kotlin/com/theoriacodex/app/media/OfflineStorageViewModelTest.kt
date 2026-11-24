@@ -157,8 +157,6 @@ class OfflineStorageViewModelTest {
             assertEquals(1, completed.offline.postCount)
             assertEquals(1, completed.owners.single().job?.completedPosts)
             assertTrue(!completed.isOpen)
-            // The ring stays running until the preparation is cleared, a moment after its job reports done.
-            // Waited for without failing, so a ring that never settles is reported with the state it stuck in.
             withTimeoutOrNull(5_000) { owner.state.first { it.codexStates?.get("a") == CodexOfflineState(fraction = 1f) } }
             assertEquals(CodexOfflineState(fraction = 1f), owner.state.value.codexStates?.get("a"))
         }
@@ -308,7 +306,6 @@ class OfflineStorageViewModelTest {
             owner.makeAvailableOffline("a")
             started.await()
 
-            // The Codex delete's commit removes the owner straight through the coordinator.
             coordinator.remove(codexOfflineOwner("a"))
             release.complete(Unit)
             owner.state.first { it.preparingOwners.isEmpty() }
@@ -326,7 +323,6 @@ class OfflineStorageViewModelTest {
         clearDisposable = { true }, removalScope = scope, scopeOverride = scope,
     )
 
-    /** A repository that only observes [stored]; nothing else here asks it anything. */
     private fun seriesRepository(stored: StoredSeries) = Proxy.newProxyInstance(
         SeriesRepository::class.java.classLoader, arrayOf(SeriesRepository::class.java),
     ) { _, method, _ -> if (method.name == "observeSeries") flowOf(stored) else error("unused: ${method.name}") } as SeriesRepository
