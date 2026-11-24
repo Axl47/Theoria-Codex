@@ -72,7 +72,7 @@
 - Statistics count time spent reading series and watching anime as their own categories, Reading and Anime, also in shared stats and comparisons.
 - Sites: every built-in site has a Re-test button, as added sites do. A built-in site's page shows its address with Working and Re-test, so a site that needs no account no longer opens to a blank page.
 - Extensions: with nothing installed and no repo yet, the page offers Add repo. Once you have a repo, Repos leads on to Get extensions.
-- Get extensions can show other languages: pick one, or All languages, from the language chip. A search looks through the languages chosen there (your device's, by default). With both manga and anime on offer, All, Manga and Anime narrow the list to one kind.
+- Get extensions can show other languages: pick one, or All languages, from the language chip. A search looks through the languages chosen there (your device's, by default), and offers matches in other languages when it finds none. With both manga and anime on offer, All, Manga and Anime narrow the list to one kind.
 
 ### Changed
 

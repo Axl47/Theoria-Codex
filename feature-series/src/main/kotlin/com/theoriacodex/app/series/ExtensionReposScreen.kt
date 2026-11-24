@@ -50,6 +50,7 @@ import com.theoriacodex.app.ui.components.focusOnOpen
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.languageName
+import com.theoriacodex.domain.series.languagePart
 
 internal const val REPOS_TITLE = "Repos"
 internal const val BROWSE_TITLE = "Get extensions"
@@ -136,6 +137,7 @@ internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, 
     val rows = remember(listing, query, deviceLanguages, shownKind, language) {
         listing?.extensions?.let { browseRows(it, query, deviceLanguages, language, shownKind) }
     }
+    val elsewhere = remember(rows) { listing?.extensions?.let { otherLanguageMatches(it, rows, query, deviceLanguages, language, shownKind) } ?: 0 }
     val languages = remember(listing) { listing?.extensions?.let(::offeredLanguages).orEmpty() }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -153,22 +155,32 @@ internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, 
                     }
                 }
             }
-            browseRowItems(rows, query, state, showKind = bothKinds && shownKind == null, onInstall = viewModel::install)
+            browseRowItems(rows, query, elsewhere, state, showKind = bothKinds && shownKind == null, onInstall = viewModel::install) {
+                language = LanguageFilter.Every
+            }
         }
     }
 }
 
-/** The extensions found, or why there are none yet. */
+/** The extensions found, or why there are none yet; a search with matches only in [elsewhere] other languages offers them. */
 private fun LazyListScope.browseRowItems(
     rows: List<RepoExtension>?,
     query: String,
+    elsewhere: Int,
     state: ExtensionsState,
     showKind: Boolean,
     onInstall: (RepoExtension) -> Unit,
+    onShowAllLanguages: () -> Unit,
 ) {
     when {
         rows == null -> item(key = "loading") { LoadingState() }
-        rows.isEmpty() -> item(key = "empty") { EmptyState(if (query.isBlank()) "No extensions" else "No matches") }
+        rows.isEmpty() -> item(key = "empty") {
+            EmptyState(
+                if (query.isBlank()) "No extensions" else "No matches",
+                actionLabel = "Show $elsewhere in all languages".takeIf { elsewhere > 0 },
+                onAction = onShowAllLanguages.takeIf { elsewhere > 0 },
+            )
+        }
         else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
             Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall) }
         }
@@ -188,7 +200,10 @@ private fun BrowseSearchField(query: String, onQueryChange: (String) -> Unit) {
     )
 }
 
-/** Which languages Get extensions lists: the device's, every one, or [Only] one (with those covering every language). */
+/**
+ * Which languages Get extensions lists: the device's, every one, or [Only] one (with those covering every language).
+ * Languages compare by [languagePart], so Spanish includes `es-419`.
+ */
 internal sealed interface LanguageFilter {
     data object Yours : LanguageFilter
     data object Every : LanguageFilter
@@ -214,20 +229,37 @@ internal fun browseRows(
     kind: SeriesKind? = null,
 ): List<RepoExtension> {
     val search = query.trim()
-    val device = deviceLanguages.mapTo(HashSet()) { it.substringBefore('-').lowercase() } + "all"
+    val device = deviceLanguages.mapTo(HashSet(), ::languagePart) + "all"
     fun RepoExtension.inLanguage(): Boolean = when (language) {
         LanguageFilter.Every -> true
-        LanguageFilter.Yours -> languages.any { it.substringBefore('-').lowercase() in device }
-        is LanguageFilter.Only -> language.code in languages || "all" in languages
+        LanguageFilter.Yours -> languages.any { languagePart(it) in device }
+        is LanguageFilter.Only -> languages.any { languagePart(it) == language.code || it == "all" }
     }
     return extensions
         .filter { (kind == null || it.kind == kind) && it.inLanguage() && (search.isEmpty() || it.name.contains(search, ignoreCase = true)) }
         .sortedBy { it.name.lowercase() }
 }
 
-/** Every language some extension offers, by name; "all" is left out, since those extensions show under each, as are blank codes. */
+/**
+ * Every language some extension offers, by [languagePart] and sorted by name; "all" is left out, since those extensions
+ * show under each, as are blank codes.
+ */
 internal fun offeredLanguages(extensions: List<RepoExtension>): List<String> =
-    extensions.flatMap { it.languages }.distinct().filter { it.isNotBlank() && it != "all" }.sortedBy { languageName(it).lowercase() }
+    extensions.flatMap { it.languages }.map(::languagePart).filter { it.isNotBlank() && it != "all" }.distinct()
+        .sortedBy { languageName(it).lowercase() }
+
+/** How many extensions a search that found no [rows] would find in all languages; 0 when that would show nothing new. */
+internal fun otherLanguageMatches(
+    extensions: List<RepoExtension>,
+    rows: List<RepoExtension>?,
+    query: String,
+    deviceLanguages: List<String>,
+    language: LanguageFilter,
+    kind: SeriesKind?,
+): Int {
+    if (rows?.isEmpty() != true || query.isBlank() || language == LanguageFilter.Every) return 0
+    return browseRows(extensions, query, deviceLanguages, LanguageFilter.Every, kind).size
+}
 
 /** The chosen language as a chip; tapping it offers the device's languages, every language, or any one offered. */
 @Composable
