@@ -27,10 +27,6 @@ extensions.configure<LibraryExtension> {
         buildConfig = true
     }
 
-    testOptions {
-        unitTests.isIncludeAndroidResources = true
-    }
-
     // Shared test helpers (post fixtures, dispatchers) that tests in :app and other modules reuse.
     testFixtures {
         enable = true
@@ -61,9 +57,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.robolectric)
-    testImplementation(libs.androidx.test.core)
-    testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(project(":core-domain"))
     testImplementation(testFixtures(project(":core-data")))
