@@ -97,9 +97,12 @@ class RoomSeriesRepository(
         val moved = movedEntries(current.partition { it.address in known }, known.values.filter { it.entry.address !in listed })
         val newEntries = mutableListOf<SeriesEntry>()
         val rows = current.mapIndexed { order, entry ->
-            val before = known[entry.address] ?: moved[entry.address]
+            val kept = known[entry.address]
+            val before = kept ?: moved[entry.address]
             if (before == null) newEntries += entry
-            (before?.copy(entry = entry, sourceOrder = order) ?: StoredSeriesEntry(entry, order, firstSeenAtEpochMs = now))
+            // An entry listed without a memo keeps the one stored at its address, as a series does.
+            val listed = if (entry.memo == null && kept?.entry?.memo != null) entry.copy(memo = kept.entry.memo) else entry
+            (before?.copy(entry = listed, sourceOrder = order) ?: StoredSeriesEntry(listed, order, firstSeenAtEpochMs = now))
         }
         // A dropped entry keeps its row and progress, also when a new address took its progress over: if the source
         // lists both again, neither is new or unread.

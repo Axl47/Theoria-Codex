@@ -107,13 +107,18 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a listing or details without a description, status or memo keep the stored ones`() = runTest {
+    fun `a listing or details without a description, status or memo keep the stored ones, and entries their memos`() = runTest {
         val detailed = series.copy(description = "A synopsis.", status = SeriesStatus.COMPLETED)
         repository.store(detailed)
         assertEquals(detailed, repository.series(id)!!.series)
 
         repository.store(series.copy(title = "Renamed", memo = null))
         assertEquals(detailed.copy(title = "Renamed"), repository.series(id)!!.series)
+
+        // So does an entry listed without its memo, while one listed with a memo replaces it.
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", memo = """{"id":2}"""), SeriesEntry("/c/1", "Chapter 1", memo = """{"id":1}""")))
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1", memo = """{"id":"1b"}""")))
+        assertEquals(listOf("""{"id":2}""", """{"id":"1b"}"""), repository.entries(id).map { it.entry.memo })
 
         repository.store(series.copy(description = "Rewritten.", status = SeriesStatus.ON_HIATUS, memo = """{"slug":"b"}"""))
         assertEquals("Rewritten.", repository.series(id)!!.series.description)
