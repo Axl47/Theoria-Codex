@@ -121,6 +121,7 @@ internal fun ViewerVideoPlayer(
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
+    CountViewerPlayingVideo(state.actuallyPlaying)
     FollowViewerActiveTracks(state.player, controls.isActive, loading = state.loading && !state.failed)
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)

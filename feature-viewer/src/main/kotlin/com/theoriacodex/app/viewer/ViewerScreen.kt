@@ -187,6 +187,7 @@ private fun ViewerLoadedScreen(
         LocalViewerHoldScrub provides holdScrub,
         // Only episodes offer their tracks; no other video's player is followed for them.
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
+        LocalViewerPlayingVideos provides screen.playingVideos,
     ) {
         ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { screen.touchSerial += 1 }) {
             ViewerContentSurface(

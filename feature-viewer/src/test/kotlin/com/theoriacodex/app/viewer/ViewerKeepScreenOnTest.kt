@@ -13,6 +13,7 @@ import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.click
@@ -253,5 +254,22 @@ class ViewerKeepScreenOnTest {
         assertTrue(view.keepScreenOn)
         change { present.value = false }
         assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `a Viewer video counts toward keep-screen-on only while its player plays`() {
+        val playingVideos = mutableIntStateOf(0)
+        val playing = mutableStateOf(true)
+        compose.setContent {
+            CompositionLocalProvider(LocalViewerPlayingVideos provides playingVideos) {
+                if (present.value) CountViewerPlayingVideo(playing.value)
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(1, playingVideos.intValue)
+        change { playing.value = false }
+        assertEquals(0, playingVideos.intValue)
+        change { playing.value = true }
+        change { present.value = false }
+        assertEquals(0, playingVideos.intValue)
     }
 }

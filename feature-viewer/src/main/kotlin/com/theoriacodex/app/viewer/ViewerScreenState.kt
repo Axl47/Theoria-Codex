@@ -38,6 +38,7 @@ internal class ViewerScreenState {
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var touchSerial by mutableIntStateOf(0)
+    val playingVideos = mutableIntStateOf(0)
     var timelineInteractionActive by mutableStateOf(false)
     /** Set while a hold-scrub has shown chrome that was hidden, so the scrub's end can hide it again. */
     var chromeShownForScrub = false
@@ -207,7 +208,6 @@ internal class ViewerSelection(
     val isSeekable = kind?.seekable == true
     val canDownload = kind == ViewerMediaKind.UGOIRA || !media?.url.isNullOrBlank()
     val isAnimated = kind?.animated == true
-    val isVideo = kind == ViewerMediaKind.VIDEO
     val overviewAvailable = viewerMediaOverviewAvailable(overviewItems)
 }
 

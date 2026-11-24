@@ -8,7 +8,11 @@ Status: Accepted
 
 ## Decision
 
-`viewerKeepsScreenOn` is the only code that decides it during normal use, and the Viewer's backdrop applies Compose's `Modifier.keepScreenOn()` while it holds. It keeps the screen on while the selected media is a video the page is showing (not hidden behind the page overview) whose playback is playing and the Viewer is at least started, so picture-in-picture counts; and, as before, while a slideshow runs or a chapter is read without 10 idle minutes, only while the Viewer is resumed. Player views never request it themselves.
+`viewerKeepsScreenOn` is the only code that decides it during normal use, and the Viewer's backdrop applies Compose's `Modifier.keepScreenOn()` while it holds. It keeps the screen on while a Viewer video's player is actually playing (`Player.isPlaying`, counted through `LocalViewerPlayingVideos`) and the Viewer is at least started, so picture-in-picture counts; and, as before, while a slideshow runs or a chapter is read without 10 idle minutes, only while the Viewer is resumed. Player views never request it themselves.
+
+The video rule reads the player, not the reducer's play intent: ExoPlayer pauses on its own for audio-focus loss, when the Viewer pauses outside picture-in-picture, and on errors, and none of those reach the intent. A renderer that is unmounted, such as behind the page overview, stops counting with it. A long buffering stall lets the screen sleep on the system timeout.
+
+Looping clips keep the screen on for as long as they play, unlike GIFs and animated WebP, which never request it.
 
 The modifier counts requests per Compose owner, unlike `View.keepScreenOn`. During a trail transition two Viewers are composed under the same owner and the incoming one can request at started; a plain view flag would be cleared by the outgoing Viewer's disposal.
 

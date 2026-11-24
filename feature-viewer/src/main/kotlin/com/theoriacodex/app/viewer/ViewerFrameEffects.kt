@@ -7,6 +7,8 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -150,14 +152,23 @@ internal fun ViewerFrameEffects(
 }
 
 @Composable
-internal fun viewerKeepsScreenOn(frame: ViewerFrame, screen: ViewerScreenState): Boolean {
-    val videoShown = frame.selection.isVideo && !(frame.mediaOverviewVisible && frame.selection.overviewAvailable)
-    return viewerKeepsScreenOn(
+internal fun viewerKeepsScreenOn(frame: ViewerFrame, screen: ViewerScreenState): Boolean =
+    viewerKeepsScreenOn(
         slideshow = frame.uiState.controls.slideshow,
         reading = frame.reading,
-        videoPlaying = videoShown && frame.uiState.controls.playback.playing,
+        videoPlaying = screen.playingVideos.intValue > 0,
         activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
     )
+
+internal val LocalViewerPlayingVideos = staticCompositionLocalOf<MutableIntState?> { null }
+
+@Composable
+internal fun CountViewerPlayingVideo(playing: Boolean) {
+    val playingVideos = LocalViewerPlayingVideos.current
+    DisposableEffect(playingVideos, playing) {
+        if (playing) playingVideos?.let { it.intValue += 1 }
+        onDispose { if (playing) playingVideos?.let { it.intValue -= 1 } }
+    }
 }
 
 @Composable
