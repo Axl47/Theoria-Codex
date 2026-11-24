@@ -23,6 +23,6 @@
   "feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchApplyScrollTest.kt": 2,
   "feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchInputSubmissionTest.kt": 1,
   "feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchUndoScrollTest.kt": 6,
-  "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt": 56,
-  "feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabViewModelTest.kt": 13
+  "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt": 48,
+  "feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabViewModelTest.kt": 10
 }
