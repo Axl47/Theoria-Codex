@@ -43,6 +43,10 @@ scroll, its legacy bundled-retriever duration workload, and six-video Viewer swi
 card fixture is deliberately smaller than the real app. The original MP4 bytes remain frozen.
 Do not describe that retriever workload as the production remote-duration path.
 
+`viewerChromeToggle` shows and hides the Viewer's chrome three times each on a solid-colour still, the
+fixture video and a five-page still gallery, waiting for the dock after every tap. Its frame timing
+covers the whole journey, the two swipes between posts included.
+
 Workload version 2 adds two complete app journeys:
 
 - `mixedMediaFiveFeedJourney` launches the real app shell and production navigation, ViewModels,
