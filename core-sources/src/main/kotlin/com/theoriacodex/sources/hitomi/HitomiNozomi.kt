@@ -4,7 +4,7 @@ import com.theoriacodex.sources.http.SourceByteRange
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 
 enum class HitomiNozomiSort(
     internal val orderBy: String,
