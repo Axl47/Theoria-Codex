@@ -22,7 +22,7 @@ private const val NEW_CHAPTERS_CHANNEL = "new_chapters"
 private const val NEW_CHAPTERS_GROUP = "new_chapters"
 
 /** Every series' notification has this id and its series as the tag, so a later one for the same series replaces it. */
-private const val SERIES_NOTIFICATION_ID = 1
+internal const val SERIES_NOTIFICATION_ID = 1
 private const val SUMMARY_NOTIFICATION_ID = 2
 
 /**
