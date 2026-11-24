@@ -22,7 +22,6 @@ fun SavedSearchNameDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    // The suggested name opens selected, so typing replaces it.
     var name by rememberSaveable(initialName, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length)))
     }

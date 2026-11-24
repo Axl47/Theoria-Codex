@@ -47,7 +47,6 @@ class PostCommentsControllerTest {
         val none = FakeCommentsLoader(pages)
         controller(none).show(commentsTestPost(hint = CommentHint.None))
         assertTrue(unsupported.requests.isEmpty() && none.requests.isEmpty())
-        // A listing that only says "some", or says nothing, is still asked.
         val asked = FakeCommentsLoader(pages)
         controller(asked).apply { show(commentsTestPost("x", CommentHint.Some)); show(commentsTestPost("y")) }
         assertEquals(2, asked.requests.size)

@@ -13,7 +13,6 @@ fun videoQualityLabel(quality: com.theoriacodex.domain.model.VideoQuality): Stri
     com.theoriacodex.domain.model.VideoQuality.BEST -> "Best available"
 }
 
-/** Ugoira export uses the application transport rather than Android's queued DownloadManager. */
 internal fun Context.animationExportNetworkBlock(settings: com.theoriacodex.data.repository.CacheSettings): String? {
     val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     val roaming = connectivity?.getNetworkCapabilities(connectivity.activeNetwork)

@@ -16,7 +16,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** A series episode's media has streams and no address of its own; what decides from media must read the streams. */
 class EpisodeMediaTest {
     private val series = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/anime/1"), "Anime")
     private val entry = SeriesEntry("/e/1", "Episode 1")
@@ -36,7 +35,6 @@ class EpisodeMediaTest {
             VideoPlaybackRequest(stream.url, stream.headers, mime = stream.mime, cache = false),
             media.viewerPlayback(post.id.source, VideoQuality.AUTO, metered = false),
         )
-        // Nothing that reads only an address, with its source's headers, reaches the expiring stream link.
         assertNull(authoritativeDurationProbeRef(post))
         assertEquals("https://covers.test/1.jpg", postDownloadMediaCandidate(post)?.url)
         assertNull(postMotion(post))

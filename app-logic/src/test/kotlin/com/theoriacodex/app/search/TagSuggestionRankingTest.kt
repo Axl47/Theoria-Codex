@@ -66,7 +66,6 @@ class TagSuggestionRankingTest {
         )
         fun rank(scope: FacetedSearchScope) = rankSearchedTags(counts, setOf(SourceKey.HITOMI), "mi", 10, scope::accepts)
 
-        // The same value as an artist and as a general tag are two rows; general spellings merge.
         assertEquals(listOf(artist, female, SearchTerm("Mika", sourceNamespace = "tag")), rank(FacetedSearchScope.All))
         assertEquals(listOf(artist), rank(FacetedSearchScope(SearchFacet.ARTIST, "artist")))
         assertEquals(listOf(female), rank(FacetedSearchScope(SearchFacet.TAG, "female")))

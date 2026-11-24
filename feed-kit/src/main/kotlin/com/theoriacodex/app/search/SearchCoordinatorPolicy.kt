@@ -54,14 +54,12 @@ internal const val FACETED_AUTOCOMPLETE_CACHE_LIMIT = 120
 internal const val AUTOCOMPLETE_CACHE_MATCH_LIMIT = 120
 internal const val AUTOCOMPLETE_RESULT_LIMIT = 20
 
-/** Previously searched tags shown ahead of provider suggestions, few enough to keep those in view. */
 internal const val SEARCHED_TAG_SUGGESTION_LIMIT = 3
 
 const val AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 4_000L
 internal const val AUTOCOMPLETE_REFRESH_INTERVAL_MS = 15L * 60L * 1000L
 internal const val MAX_AUTOCOMPLETE_REFRESH_KEYS = 256
 
-/** A single-source retry gives up after this long; its first and next pages wait on the provider. */
 internal const val SINGLE_SOURCE_RETRY_TIMEOUT_MS = 15_000L
 internal const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
 internal const val TRENDING_FETCH_PER_SOURCE_LIMIT = 10
@@ -75,7 +73,6 @@ internal const val RATE_LIMIT_BACKOFF_FIRST_MS = 30_000L
 internal const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
 internal const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
 
-/** The prefix [source]'s provider autocompletes for typed [input], without any scope prefix. */
 internal fun autocompletePrefixForSource(source: SourceKey, input: String): String =
     sourceAutocompletePrefix(source, parseScopedInput(input).value)
 

@@ -65,19 +65,10 @@ import kotlin.math.roundToLong
 
 val LocalViewerInstantSeek = staticCompositionLocalOf { false }
 
-/** Height of the controls row above a portrait timeline's track, shared by every kind of animated media. */
 val VIEWER_TIMELINE_ROW_HEIGHT = 36.dp
 
-/** Touch height of the track. With the row above, this stays inside the height gestures reserve for the footer. */
 val VIEWER_TIMELINE_TRACK_HEIGHT = 34.dp
 
-/**
- * The seekable timeline shared by video, GIF and ugoira. [leading] holds the player's own buttons.
- * [positionMs] is read while drawing, so playback redraws the track each frame but recomposes only
- * when the shown second changes. A track that is not [seekable] only shows progress.
- * A drag shows [preview]s and seeks once, through [onSeekFinished] on release; with instant seek it shows no
- * preview and calls [onSeekMoved] on every move instead, still ending in [onSeekFinished].
- */
 @Composable
 fun MediaTimelineBar(
     positionMs: () -> Long,
@@ -148,7 +139,6 @@ fun MediaTimelineBar(
     }
 }
 
-/** Drives [scrub] from a drag that began as a held press elsewhere on the media; see [ViewerHoldScrub]. */
 @Composable
 private fun FollowHoldScrub(scrub: TimelineScrubState, durationMs: Long, instantSeek: Boolean, positionMs: () -> Long) {
     val holdScrub = LocalViewerHoldScrub.current ?: return
@@ -157,7 +147,6 @@ private fun FollowHoldScrub(scrub: TimelineScrubState, durationMs: Long, instant
     val position by rememberUpdatedState(positionMs)
     LaunchedEffect(holdScrub, scrub) {
         val follower = HoldScrubFollower(scrub, { duration }, { instant }, { position() })
-        // The shared state keeps its last Ended; one that predates this timeline belongs to an earlier gesture.
         val staleEnd = holdScrub.phase as? ViewerHoldScrubPhase.Ended
         snapshotFlow { holdScrub.phase }.collect { phase ->
             when (phase) {
@@ -169,18 +158,15 @@ private fun FollowHoldScrub(scrub: TimelineScrubState, durationMs: Long, instant
     }
 }
 
-/** Moves [scrub] by a held drag's distance from the handle's position when the drag took hold. */
 private class HoldScrubFollower(
     private val scrub: TimelineScrubState,
     private val duration: () -> Long,
     private val instant: () -> Boolean,
     private val position: () -> Long,
 ) {
-    /** The handle's x when this drag took hold; null until then, and again once it ends. */
     private var originX: Float? = null
 
     fun follow(offsetPx: Float) {
-        // A timeline that just appeared has not measured its track yet; the next move begins it.
         if (originX == null && scrub.widthPx > 1f) {
             val start = position().coerceIn(0L, duration())
             scrub.begin(start)
@@ -189,7 +175,6 @@ private class HoldScrubFollower(
         originX?.let { scrub.moveTo(it + offsetPx, duration(), instant()) }
     }
 
-    /** Snapshot state conflates updates, so a quick release can arrive without a Dragging state before it. */
     fun finish(ended: ViewerHoldScrubPhase.Ended) {
         follow(ended.offsetPx)
         if (originX == null) return
@@ -198,7 +183,6 @@ private class HoldScrubFollower(
     }
 }
 
-/** What the timeline tells its player about a drag. */
 private class TimelineSeekCallbacks(
     val onStarted: () -> Unit,
     val onMoved: (Long) -> Unit,
@@ -207,7 +191,6 @@ private class TimelineSeekCallbacks(
     val onInteractionActiveChanged: (Boolean) -> Unit,
 )
 
-/** A drag in progress: where it is now, where it began, and the track width that maps touches to time. */
 private class TimelineScrubState(private val callbacks: State<TimelineSeekCallbacks>) {
     var active by mutableStateOf(false)
         private set
@@ -229,7 +212,6 @@ private class TimelineScrubState(private val callbacks: State<TimelineSeekCallba
         if (instantSeek) callbacks.value.onMoved(positionMs)
     }
 
-    /** A released drag seeks; anything else leaves playback where it was. */
     fun end(released: Boolean) {
         if (active) {
             active = false
@@ -238,11 +220,9 @@ private class TimelineScrubState(private val callbacks: State<TimelineSeekCallba
         callbacks.value.onInteractionActiveChanged(false)
     }
 
-    /** The timeline left composition, so a held drag cannot complete. */
     fun abandon() = end(released = false)
 }
 
-/** One finger scrubs a track; a second finger or a stolen pointer cancels instead of seeking. A new key restarts the gesture. */
 fun Modifier.timelineScrubGestures(
     key1: Any?,
     key2: Any?,
@@ -262,7 +242,6 @@ fun Modifier.timelineScrubGestures(
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                 if (change.isConsumed) break
                 change.consume()
-                // A drag lands where the finger last moved, the spot its preview shows, not where it slips as it lifts.
                 if (!change.pressed) {
                     released = true
                     break
@@ -275,17 +254,14 @@ fun Modifier.timelineScrubGestures(
     }
 }
 
-/** Portrait gives a timeline's track its own full-width line; landscape keeps one line so the frame stays tall. */
 @Composable
 @ReadOnlyComposable
 fun viewerTimelineOnOneLine(): Boolean = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-/** How tall an animated page's timeline stands above the strip, for controls that sit just over it. */
 @Composable
 @ReadOnlyComposable
 fun viewerTimelineFooterHeight(): Dp = if (viewerTimelineOnOneLine()) VIEWER_TIMELINE_ROW_HEIGHT else VIEWER_TIMELINE_HEIGHT
 
-/** Lays a timeline out on one line or two; see [viewerTimelineOnOneLine]. */
 @Composable
 private fun ViewerTimelineLayout(
     positionMs: Long,
@@ -307,7 +283,6 @@ private fun ViewerTimelineLayout(
         }
         return
     }
-    // The preview shows the time while scrubbing, so the row steps aside and nothing competes with it.
     val rowAlpha by animateFloatAsState(if (showingPreview) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer timeline row")
     Column(modifier.fillMaxWidth()) {
         Row(
@@ -338,7 +313,6 @@ private fun ViewerTimelineTime(positionMs: Long, durationMs: Long) {
     )
 }
 
-/** Speed is only worth a mention when it differs from normal. */
 @Composable
 private fun ViewerSpeedChip(playbackRate: Float) {
     if (abs(playbackRate - 1f) < 0.01f) return
@@ -352,11 +326,6 @@ private fun ViewerSpeedChip(playbackRate: Float) {
     )
 }
 
-/**
- * The one progress bar for all animated media. At rest it is thin with a small dot. While [emphasized]
- * it thickens and the dot becomes a handle, showing the drag took hold. Media that cannot seek omits the handle.
- * [fraction] is read while drawing; semantics follow it in whole percents so playback does not recompose the track.
- */
 @Composable
 fun ViewerTimelineTrack(
     fraction: () -> Float,
@@ -386,7 +355,6 @@ fun ViewerTimelineTrack(
     }
 }
 
-/** Right x-coordinate of the buffered track segment, or null when nothing buffered extends past [trailingStart]. */
 internal fun viewerBufferedTrackEnd(bufferedFraction: Float?, trailingStart: Float, width: Float): Float? {
     val fraction = bufferedFraction?.takeIf { it.isFinite() } ?: return null
     val end = (width * fraction.coerceIn(0f, 1f)).coerceAtMost(width)
@@ -418,10 +386,6 @@ fun TimelinePlaybackButton(
     }
 }
 
-/**
- * Display-only progress at the content edge; gestures pass through to the Viewer. [positionMs] is read
- * while drawing, so a position that changes every frame redraws the bar without recomposing its caller.
- */
 @Composable
 fun ViewerPassiveProgressBar(positionMs: () -> Long, durationMs: Long, modifier: Modifier = Modifier) {
     if (durationMs <= 0L) return
@@ -433,7 +397,6 @@ fun ViewerPassiveProgressBar(positionMs: () -> Long, durationMs: Long, modifier:
     }
 }
 
-/** How a seekable [ViewerPlaybackTimeline] moves its player during a drag, and the frame its popup shows. */
 class ViewerTimelineSeek(
     val onStarted: () -> Unit,
     val onMoved: (Long) -> Unit,
@@ -442,12 +405,6 @@ class ViewerTimelineSeek(
     val preview: @Composable (Long) -> Unit,
 )
 
-/**
- * The Viewer's playback timeline in its veiled footer: a play/pause button and [MediaTimelineBar] at [positionMs] of
- * [durationMs]. Without [seek] the track only shows the time and reports no drags. A play/pause tap sends the route's
- * toggle, then [onToggled], then a brief interaction so the chrome's hide timer restarts. Callers wrap it in
- * [ViewerChromeVisibility] on [ViewerRendererControls.showControls].
- */
 @Composable
 fun ViewerPlaybackTimeline(
     controls: ViewerRendererControls,
@@ -488,11 +445,6 @@ fun ViewerPlaybackTimeline(
     }
 }
 
-/**
- * Stands in for a player's timeline while its media loads: the [ViewerRendererControls.expectedDurationMs] already
- * known, at 0:00 and not yet seekable, so swiping to a post keeps the timeline on screen. Its play/pause flips the
- * playback intent the player picks up once it loads. Nothing shows while the length is unknown.
- */
 @Composable
 fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier) {
     val expected = controls.expectedDurationMs?.takeIf { it > 0L && (controls.isActive || controls.isPreloading) } ?: return
@@ -501,10 +453,6 @@ fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRender
     }
 }
 
-/**
- * [ViewerPassiveProgressBar] along the bottom edge of the fitted media, as wide as it, in a parent that lays the
- * media out centred. An unknown [aspectRatio] falls back to the parent's bottom edge.
- */
 @Composable
 fun ViewerMediaPassiveProgress(positionMs: () -> Long, durationMs: Long, aspectRatio: Float?) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -514,6 +462,5 @@ fun ViewerMediaPassiveProgress(positionMs: () -> Long, durationMs: Long, aspectR
     }
 }
 
-/** Width over height of a [width] by [height] frame, or null while either is unknown. */
 fun viewerAspectRatio(width: Int, height: Int): Float? =
     if (width > 0 && height > 0) width.toFloat() / height.toFloat() else null

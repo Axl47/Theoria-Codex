@@ -23,7 +23,6 @@ data class FeedPageDemandResult(
     val showContinue: Boolean = false,
 )
 
-/** Bounds page draining between user demands, independently of provider continuation and visible counts. */
 class FeedPageDemand(
     private val automaticPageLimit: Int = 3,
     private val minimumVisiblePosts: Int = 12,
@@ -50,17 +49,12 @@ class FeedPageDemand(
 
         if (input.failed) failureBlocked = true
         if (!input.ready || input.refreshing || input.paging || failureBlocked) return FeedPageDemandResult()
-        // A generation changes even when a provider page adds no canonical posts. Repeated viewport
-        // callbacks cannot acknowledge a request; only its route owner's settled generation can.
         requestedGeneration?.let { requested ->
             if (requested == input.completedGeneration) return FeedPageDemandResult()
             requestedGeneration = null
         }
         if (!input.canLoadMore || input.durationsBlockPaging) return FeedPageDemandResult()
 
-        // A saved place is a known target, not open-ended draining: its pages load until it is present or the
-        // provider runs out. Capping them would strand the restore on a grid that cannot show Continue without a
-        // scroll, and a scroll supersedes the restore.
         val needsRestorationTarget = input.requiredCanonicalIndex?.let { it >= input.canonicalCount } == true
         if (!needsRestorationTarget) {
             if (!viewportWantsPage(input)) return FeedPageDemandResult()
@@ -71,7 +65,6 @@ class FeedPageDemand(
         return FeedPageDemandResult(loadNextPage = true)
     }
 
-    /** The viewport nears the loaded end, or local filters leave too few posts to show. */
     private fun viewportWantsPage(input: FeedPageDemandInput): Boolean {
         val nearCanonicalEnd = input.lastVisibleCanonicalIndex?.let { index ->
             input.canonicalCount > 0 && index >= ((input.canonicalCount - 1) * PREFETCH_RATIO).toInt()

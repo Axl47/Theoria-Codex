@@ -41,5 +41,4 @@ object UnsupportedRelatedPostsLoader : RelatedPostsLoading {
     override suspend fun load(seed: PostId): List<Post> = emptyList()
 }
 
-/** Whether a post's source can answer "More like this"; the shell provides its loader's answer. */
 val LocalRelatedPostsSupport = staticCompositionLocalOf<(SourceKey) -> Boolean> { { false } }

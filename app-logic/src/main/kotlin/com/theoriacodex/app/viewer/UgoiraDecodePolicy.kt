@@ -16,7 +16,6 @@ fun ugoiraPlaybackBudget(bucket: UgoiraSizeBucket): Long = when (bucket) {
     UgoiraSizeBucket.EXPORT -> UGOIRA_MAX_DECODED_PLAYBACK_BYTES
 }
 
-/** Long animations trade preview resolution for a bounded complete playback, preserving export quality. */
 fun ugoiraFrameSampleSize(width: Int, height: Int, frameCount: Int, bucket: UgoiraSizeBucket): Int {
     if (width <= 0 || height <= 0 || width > UGOIRA_MAX_FRAME_DIMENSION || height > UGOIRA_MAX_FRAME_DIMENSION ||
         width.toLong() * height > UGOIRA_MAX_FRAME_PIXELS || frameCount !in 1..UGOIRA_MAX_FRAME_COUNT

@@ -14,11 +14,6 @@ import okio.ForwardingSource
 import okio.Source
 import okio.buffer
 
-/**
- * Continues an nhentai page that has gone quiet. Its page hosts sometimes stop sending partway through a file for
- * 15 to 30 seconds, about one page in forty when measured, while a new request on another connection answers in
- * about a second. So a page silent for [stallMs] carries on from its last byte, through [rescue]'s own connections.
- */
 internal class StalledPageRescue(
     private val rescue: () -> OkHttpClient,
     private val stallMs: Int = DEFAULT_STALL_MS,
@@ -74,7 +69,6 @@ internal class StalledPageRescue(
     }
 }
 
-/** A rescue is a separate call that cancelling [original] can't reach, so each read checks it and stops with it. */
 internal class StopsWithCall(delegate: Source, private val original: Call) : ForwardingSource(delegate) {
     override fun read(sink: Buffer, byteCount: Long): Long {
         if (original.isCanceled()) throw IOException("Canceled")
@@ -82,7 +76,6 @@ internal class StopsWithCall(delegate: Source, private val original: Call) : For
     }
 }
 
-/** Reads [current], and after one read timeout carries on from what [reopen] returns for the bytes already delivered. */
 internal class ResumingSource(private var current: Source, private val reopen: (offset: Long) -> Source) : Source {
     private var offset = 0L
     private var resumed = false

@@ -51,18 +51,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Reports whether the feed under a [FeedFilterFab] is scrolling. Install [connection] with
- * `nestedScroll` on the screen; only the button reads the state, so scrolling does not recompose
- * the feed.
- */
 class FeedScrollSignal(private val scope: CoroutineScope) {
     var scrolling by mutableStateOf(false)
         private set
     private var settle: Job? = null
     private var scrollEvents = 0
 
-    // Scroll events arrive every frame, so each only bumps a counter; one job watches for a quiet window.
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             if (available.y != 0f) {
@@ -74,7 +68,6 @@ class FeedScrollSignal(private val scope: CoroutineScope) {
         }
     }
 
-    /** Clears [scrolling] once no scroll has arrived for [SCROLL_SETTLE_MS], give or take one tick. */
     private suspend fun awaitSettle() {
         var quietMs = 0L
         while (quietMs < SCROLL_SETTLE_MS) {
@@ -92,11 +85,6 @@ fun rememberFeedScrollSignal(): FeedScrollSignal {
     return remember(scope) { FeedScrollSignal(scope) }
 }
 
-/**
- * The feeds' filter button. It names up to [MAX_NAMED_FILTERS] active filters; beyond that, and
- * while the feed scrolls, it animates down to just their number so it covers less of the feed.
- * [onClear] clears every filter and returns how to restore them, which the button offers briefly.
- */
 @Composable
 fun FeedFilterFab(
     labels: List<String>,
@@ -135,7 +123,6 @@ fun FeedFilterFab(
     }
 }
 
-/** Undo reads as just "Undo", and is announced as it replaces the clear button that had focus. */
 private fun Modifier.feedFilterSemantics(active: Boolean, undoing: Boolean) = semantics {
     if (undoing) liveRegion = LiveRegionMode.Polite
     else stateDescription = if (active) "Filters active" else "No active filters"
@@ -192,10 +179,6 @@ private fun ActiveFilterContent(
     }
 }
 
-/**
- * The shared filter sheet: every feed shows the same title, Reset placement, and scrolling. A feed the triage deck
- * can work through passes [onTriage], which adds a Triage action to the header; it closes the sheet, then runs.
- */
 @Composable
 fun FeedFilterSheet(
     onDismiss: () -> Unit,
@@ -223,7 +206,6 @@ fun FeedFilterSheet(
     }
 }
 
-/** A titled group of filter choices; they wrap so no option is hidden off to the side. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FilterSection(title: String, content: @Composable FlowRowScope.() -> Unit) {

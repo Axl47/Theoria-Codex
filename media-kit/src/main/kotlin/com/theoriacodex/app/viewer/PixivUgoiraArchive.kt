@@ -31,10 +31,6 @@ internal fun validateUgoiraArchive(
     }
 }
 
-/**
- * Envelope and entry-name checks from the central directory only, without decompressing frames. Used for
- * archives whose metadata sidecar records an earlier [validateUgoiraArchive] pass.
- */
 internal fun checkUgoiraArchiveStructure(archive: File, specs: List<UgoiraFrameSpec>) {
     validateArchiveEnvelope(archive, specs)
     ZipFile(archive).use { zip -> checkEntries(zip, specs) }

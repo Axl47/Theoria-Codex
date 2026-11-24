@@ -34,14 +34,12 @@ import androidx.compose.ui.window.PopupProperties
 import com.theoriacodex.app.ui.formatTimelineTime
 import kotlin.math.roundToInt
 
-/** The current media's width over height, so scrub previews can take its real shape. */
 val LocalViewerMediaAspectRatio = staticCompositionLocalOf<Float?> { null }
 
 private val SCRUB_FRAME_LONG_EDGE = 224.dp
 private val SCRUB_FRAME_PORTRAIT_HEIGHT = 168.dp
 private val SCRUB_FRAME_MIN_EDGE = 72.dp
 
-/** A preview frame in the media's shape, with both edges clamped so extreme panoramas stay visible. */
 fun viewerScrubFrameSize(aspectRatio: Float?): DpSize {
     val ratio = aspectRatio?.takeIf { it > 0f } ?: (16f / 9f)
     return if (ratio >= 1f) {
@@ -54,7 +52,6 @@ fun viewerScrubFrameSize(aspectRatio: Float?): DpSize {
 fun formatScrubDelta(deltaMs: Long): String =
     "${if (deltaMs < 0L) "-" else "+"}${formatTimelineTime(abs(deltaMs))}"
 
-/** A timeline drag's floating frame and time. */
 @Composable
 internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float, content: @Composable () -> Unit) {
     ViewerScrubPopup(formatTimelineTime(positionMs), formatScrubDelta(deltaMs), progress) {
@@ -62,16 +59,11 @@ internal fun ViewerScrubPreview(positionMs: Long, deltaMs: Long, progress: Float
     }
 }
 
-/** One floating preview's surface: a rounded black frame with a shadow, so it stands off the artwork behind it. */
 fun Modifier.viewerScrubFrame(frameSize: DpSize): Modifier {
     val shape = RoundedCornerShape(12.dp)
     return size(frameSize).shadow(12.dp, shape).background(Color.Black, shape).clip(shape)
 }
 
-/**
- * Floats [frames] and a readout over the track at [progress], kept inside the window.
- * It is presentation only; the track below owns the drag gesture.
- */
 @Composable
 fun ViewerScrubPopup(readout: String, detail: String, progress: Float, frames: @Composable () -> Unit) {
     val gapPx = with(LocalDensity.current) { 8.dp.roundToPx() }

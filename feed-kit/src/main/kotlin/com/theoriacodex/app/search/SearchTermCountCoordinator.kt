@@ -16,7 +16,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Typed counts stay separate from the plain-tag store so equal names cannot cross namespaces. */
 internal class SearchTermCountCoordinator(
     private val registry: SourceAdapterRegistry,
     private val clock: () -> Long = System::currentTimeMillis,

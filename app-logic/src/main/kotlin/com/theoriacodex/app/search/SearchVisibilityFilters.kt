@@ -12,24 +12,20 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
-/** Platform-free visibility context carried from Search rendering into Viewer navigation. */
 data class SearchVisibilityFilters(
     val animatedOnly: Boolean = false,
     val hideLiked: Boolean = false,
     val hideSaved: Boolean = false,
     val hideWatched: Boolean = false,
     val animatedDurationRange: AnimatedDurationRange = AnimatedDurationRange.Full,
-    /** Applied on the device so every source can filter by date, including those with no server support. */
     val dateRange: DateRange? = null,
 )
 
-/** One source's saved tags and "or" groups, in the order they were saved. */
 data class FavoriteTagSection(
     val source: SourceKey,
     val entries: List<FavoriteTagEntry>,
 )
 
-/** The liked, saved and watched marks a filter pass actually reads; marks for hide toggles that are off stay empty. */
 data class PostMarkInputs(
     val liked: Set<PostId>,
     val saved: Set<PostId>,
@@ -37,10 +33,6 @@ data class PostMarkInputs(
     val retained: Set<PostId>,
 )
 
-/**
- * Narrows the marks to what these filters use. Feeds key their filter pass on the result, so liking,
- * saving or watching a post does not refilter the whole feed while the matching hide toggle is off.
- */
 fun SearchVisibilityFilters.markInputs(
     liked: Set<PostId>,
     saved: Set<PostId>,
@@ -53,7 +45,6 @@ fun SearchVisibilityFilters.markInputs(
     retained = if (hideLiked || hideSaved || hideWatched) retained else emptySet(),
 )
 
-/** Keep recommendation seeds reachable until dismissal, including after viewing or automatic saving. */
 fun filterSearchResults(
     results: List<Post>,
     filters: SearchVisibilityFilters,
@@ -73,27 +64,18 @@ fun filterSearchResults(
     }
 }
 
-/**
- * Whether [this] query's media has the phone hide still posts, as a backup for sources that cannot ask for animated
- * posts themselves. nhentai alone is exempt: its galleries are never animated.
- */
 val Query.hidesStillsOnPhone: Boolean
     get() = media == MediaFilter.ANIMATED && mode != QueryMode.Source(SourceKey.NHENTAI)
 
-/** The posts [query]'s media keeps on the phone; see [hidesStillsOnPhone]. */
 fun List<Post>.keptByMedia(query: Query): List<Post> = if (query.hidesStillsOnPhone) filter(::matchesAnimatedFilter) else this
 
-/** Tags that mark a post as animated across sources, for posts whose previews are stills. */
 private val ANIMATED_TAG_MARKERS = listOf("video", "animated", "animation", "animated_gif", "animated_image", "gif")
 
-/** One rule for every source: animated media, or a tag that says so (covers sites whose previews are stills). */
 private fun matchesAnimatedFilter(post: Post): Boolean =
     isAnimatedPost(post) || post.rawTags.any(::isAnimatedTag) || post.canonicalTags.any(::isAnimatedTag)
 
-/** Compares case-insensitively in place, so a filter pass copies and lowercases no tags. */
 private fun isAnimatedTag(tag: String): Boolean = ANIMATED_TAG_MARKERS.any { it.equals(tag, ignoreCase = true) }
 
-/** A length filter shows only animated posts whose length is known and in range; an unknown length stays hidden. */
 private fun matchesAnimatedDurationFilter(post: Post, filters: SearchVisibilityFilters, acquiredDurationMs: Long?): Boolean {
     val range = filters.animatedDurationRange
     if (range.isFullRange) return true

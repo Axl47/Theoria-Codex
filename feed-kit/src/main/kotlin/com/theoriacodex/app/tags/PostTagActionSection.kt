@@ -68,34 +68,16 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * What the Viewer's info sheet adds around a post's tag list. With it, a "Tags" header row folds the grouped
- * list away to a one-row peek, and [afterTags] places more items in the same list, between the tags and the
- * hint. Without it the list is exactly the tags, always shown.
- *
- * [tagsInitiallyCollapsed] only sets the state when the sheet opens; later changes to it never move the
- * user's own choice. With [scrollToAfterTags], a sheet that opens collapsed starts scrolled to [afterTags].
- * [scrollToKey] names an item of [afterTags] to scroll to as soon as the list has it.
- * [filterBehindIcon] keeps a long list's tag filter behind a search button in the "Tags" header, for
- * sheets short on height, instead of always showing it above the tags.
- */
 class PostTagSheetExtras(
     val tagsInitiallyCollapsed: Boolean,
     val scrollToAfterTags: Boolean = false,
     val scrollToKey: Any? = null,
     val filterBehindIcon: Boolean = false,
     val afterTags: LazyListScope.() -> Unit = {},
-    /** When set, tapping a general tag forks a trail from it and holding it offers the Search moves instead. */
     val onFork: ((SearchTerm) -> Unit)? = null,
-    /** The search this sheet's level shows: on forking chips, its tags show as Required or Excluded even when the Search draft differs. */
     val levelQuery: Query? = null,
 )
 
-/**
- * A post's tags beside the search they feed. Tapping a tag edits the live Search draft, and the tray
- * below shows the result. [onSearch] runs the draft; it is null where this screen cannot reach Search.
- * Counts, term edits and saving default to what [PostTagContextProvider] supplies; Search passes its own edits.
- */
 @Composable
 fun PostTagActionSection(
     post: Post,
@@ -145,7 +127,6 @@ fun PostTagActionSection(
     )
 
     Column(Modifier.fillMaxWidth()) {
-        // The sheet's comments sit right after the folded tags, so a sheet opened for them starts there.
         val listState = rememberLazyListState(
             initialFirstVisibleItemIndex = if (sheetExtras?.scrollToAfterTags == true && collapsed) AFTER_FOLDED_TAGS_INDEX else 0,
         )
@@ -175,7 +156,6 @@ fun PostTagActionSection(
     }
 }
 
-/** Draws a tag as a chip that edits the Search draft through [editor]; compact chips (the folded peek) drop their count. */
 @Composable
 private fun rememberTagChip(
     editor: PostTagEditor,
@@ -191,17 +171,14 @@ private fun rememberTagChip(
     }
 }
 
-/** Scrolls [listState] to the item with [key] once the list has it, and only that once per [key]. */
 @Composable
 private fun ScrollToKeyEffect(key: Any, listState: LazyListState, keyIndex: LazyListKeyIndex) {
     LaunchedEffect(key) {
-        // The item count changes as the list is laid out and as pages arrive, which is when the key may first exist.
         val index = snapshotFlow { listState.layoutInfo.totalItemsCount }.mapNotNull { keyIndex.indexOf(key) }.first()
         listState.scrollToItem(index)
     }
 }
 
-/** Looks up each tag's count: general tags by name, typed tags by their full identity. */
 @Composable
 private fun rememberPostTagCounts(
     post: Post,
@@ -222,7 +199,6 @@ private fun rememberPostTagCounts(
     return { term -> if (term.isGeneralTag) tagVideoCounts[term.value] else typedCounts[term] }
 }
 
-/** A typed tag from another source, waiting because adding it would drop terms from the draft. */
 private class PendingSourceSwitch(val term: SearchTerm, val excluded: Boolean, val lost: List<SearchTerm>) {
     fun message(source: SourceKey): String {
         val removed = lost.joinToString(", ") { searchTermChipLabel(it, excluded = false) }
@@ -241,7 +217,6 @@ private class PendingSourceSwitch(val term: SearchTerm, val excluded: Boolean, v
     )
 }
 
-/** Turns chip gestures into edits of the Search draft, holding back any that would lose terms. */
 private class PostTagEditor(
     val post: Post,
     val draft: Query?,
@@ -257,16 +232,11 @@ private class PostTagEditor(
 ) {
     val onFork: ((SearchTerm) -> Unit)? get() = extras?.onFork
 
-    /** The terms the sheet's level searches, which fork chips show as active. */
     val levelSelection: PostTagSelection? = extras?.levelQuery?.let { PostTagSelection(post.id.source, it.includeTerms, it.excludeTerms) }
 
     fun commit(term: SearchTerm, excluded: Boolean): Boolean =
         if (excluded) onAddExclude(term) else onAddInclude(term)
 
-    /**
-     * Every addition passes here, so none can drop terms unasked. [onAccepted] removes an opposing
-     * entry only once the draft takes the new one; a confirmed switch has already dropped it.
-     */
     private fun add(term: SearchTerm, excluded: Boolean, onAccepted: () -> Unit = {}) {
         val lost = draft?.let { SearchDraftReducer.termsLostToPostTerm(it, post.id.source, term) }.orEmpty()
         when {
@@ -287,7 +257,6 @@ private class PostTagEditor(
     fun canTap(term: SearchTerm): Boolean = targetGroup == null || selection.chipState(term) != TagChipState.NONE ||
         draft?.let { SearchDraftReducer.postTermForGroup(it, post.id.source, targetGroup, term) } != null
 
-    /** The states TalkBack can reach directly, leaving out what a tap on the chip already does. */
     fun alternateActions(term: SearchTerm): List<TagChipAction> {
         val name = searchTermChipLabel(term, excluded = false)
         return when (selection.chipState(term)) {
@@ -320,7 +289,6 @@ private fun PostTagChip(
     val state = editor.selection.chipState(term)
     val favorite = onFavoriteLongPress?.takeIf { term.isGeneralTag }
     val haptics = LocalHapticFeedback.current
-    // Holding toggles the saved tag; the bookmark mark appearing or leaving is the feedback.
     val toggleSaved = favorite?.let { save ->
         {
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -334,7 +302,6 @@ private fun PostTagChip(
     if (fork != null) {
         val moves = listOfNotNull(TagChipAction(tagTapLabel(name, state)) { editor.tap(term) }.takeIf { editor.canTap(term) }) +
             editor.alternateActions(term) + listOfNotNull(toggleSaved?.let { TagChipAction(savedLabel.orEmpty(), it) })
-        // A tag the level searches is active whatever the draft says; the moves above still edit the draft.
         val active = editor.levelSelection?.chipState(term)?.takeIf { it != TagChipState.NONE } ?: state
         TagForkChip(name, postTagChipLabel(term.value, translation), shownCount, compact, active, icon, "saved".takeIf { saved }, moves) { fork(term) }
         return
@@ -355,10 +322,6 @@ private fun PostTagChip(
     )
 }
 
-/**
- * Saved tags and "or" groups with actions to search for them or remove them. Single tags show
- * counts; a named group shows its alternatives instead, and groups can be renamed when [onRenameTag] is set.
- */
 @Composable
 fun FavoriteTagActionGrid(
     source: SourceKey,
@@ -411,7 +374,6 @@ fun FavoriteTagActionGrid(
     }
 }
 
-/** Both tag surfaces publish local counts first and keep all enrichment off the UI dispatcher. */
 @Composable
 private fun rememberTagCounts(source: SourceKey, tags: List<String>,
     cached: (SourceKey, String) -> Int?, fetch: suspend (SourceKey, List<String>) -> Map<String, Int?>,
@@ -427,7 +389,6 @@ private fun rememberTagCounts(source: SourceKey, tags: List<String>,
     return counts
 }
 
-/** Type headings over wrapping chips; a long group shows its first tags until it is expanded. */
 private fun LazyListScope.postTagList(
     groups: List<PostActionTermGroup>,
     expandedGroups: Set<String>,
@@ -469,7 +430,6 @@ private fun LazyListScope.postTagList(
     }
 }
 
-/** The "Your search" tray under the tag list. */
 @Composable
 private fun PostTagQueryTray(
     draft: Query?,
@@ -487,14 +447,8 @@ private fun PostTagQueryTray(
     confirmation = confirmation,
 )
 
-/** Whether the tag list can be folded away, and whether it is. */
 private class TagFold(val enabled: Boolean, val collapsed: Boolean, val onToggle: () -> Unit)
 
-/**
- * The filter over a long tag list and the [groups] it leaves. It is [available] past the length where groups
- * start folding; [open] shows the field, which is always unless it waits [behindIcon]. [focus] asks a freshly
- * opened field for the keyboard.
- */
 private class TagFilter(
     val groups: List<PostActionTermGroup>,
     val available: Boolean,
@@ -510,7 +464,6 @@ private class TagFilter(
     val active: Boolean get() = text.isNotBlank()
 }
 
-/** One post's filter state; a new post starts with the filter empty and, behind its button, closed. */
 @Composable
 private fun rememberTagFilter(
     postId: PostId,
@@ -545,7 +498,6 @@ private fun rememberTagFilter(
     )
 }
 
-/** The groups keeping only tags whose name or translation contains [normalizedFilter]; empty groups drop out. */
 internal fun filterPostTagGroups(
     groups: List<PostActionTermGroup>,
     normalizedFilter: String,
@@ -574,7 +526,6 @@ private fun PostTagFilterField(filter: TagFilter) {
     }
 }
 
-/** Everything between the actions and the footer: the tags (or their folded peek) with their hint, then what the sheet adds. */
 private fun LazyListScope.postTagSections(
     groups: List<PostActionTermGroup>,
     terms: List<SearchTerm>,
@@ -606,7 +557,6 @@ private fun LazyListScope.postTagSections(
     sheetExtras?.afterTags?.invoke(this)
 }
 
-/** The first tags on one line that fades out at the edge instead of wrapping; chips stay tappable. */
 @Composable
 private fun TagPeekRow(terms: List<SearchTerm>, chip: @Composable (SearchTerm, Boolean) -> Unit) {
     Row(
@@ -701,7 +651,6 @@ fun TagSelectionSurface(
     }
 }
 
-/** A saved tag's one-shot action button. */
 @Composable
 private fun TagActionPill(
     actionLabel: String,
@@ -721,7 +670,6 @@ private fun TagActionPill(
     }
 }
 
-/** The sheet's header, the tags' header and the tag peek come before whatever follows the folded tags. */
 private const val AFTER_FOLDED_TAGS_INDEX = 3
 private const val PEEK_TAG_COUNT = 10
 private const val COLLAPSE_TAGS_OVER = 16

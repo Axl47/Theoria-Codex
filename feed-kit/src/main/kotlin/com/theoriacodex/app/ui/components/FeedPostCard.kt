@@ -21,10 +21,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
-/**
- * What every tile of one feed shares: its player, like state, and duration reporting. Likes and known
- * durations are held as state so one like or newly acquired duration recomposes only the tile it concerns.
- */
 data class FeedCardEnvironment(
     val pixivUgoiraClient: PixivUgoiraClient?,
     val likedPostIds: State<Set<PostId>>,
@@ -33,11 +29,9 @@ data class FeedCardEnvironment(
     val onToggleLike: ((Post) -> Unit)?,
     val onViewportChanged: (Post, Boolean) -> Unit,
     val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
-    /** Loads a post's details for tiles whose list result lacks its video; null where the feed cannot. */
     val resolvePostById: (suspend (PostId) -> Post?)? = null,
 )
 
-/** Keeps one environment while its callbacks are unchanged, so visible tiles can skip recomposition. */
 @Composable
 fun rememberFeedCardEnvironment(
     pixivUgoiraClient: PixivUgoiraClient?,
@@ -49,7 +43,6 @@ fun rememberFeedCardEnvironment(
 ): FeedCardEnvironment {
     val liked = rememberUpdatedState(likedPostIds)
     val known = rememberUpdatedState(acquiredDurations)
-    // A fresh resolver instance each recomposition must not rebuild the environment, so tiles call through the latest one.
     val latestResolve = rememberUpdatedState(resolvePostById)
     val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
         remember<suspend (PostId) -> Post?> { { postId -> latestResolve.value?.invoke(postId) } }
@@ -64,12 +57,6 @@ fun rememberFeedCardEnvironment(
     }
 }
 
-/**
- * Every feed tile, in grids and shelves alike, showing the best duration known so far and reporting events against its
- * post. Long-press lifts the post onto collect targets where the shell provides a lift, and opens [onLongPress] when
- * released in place; a null [onLongPress] leaves long-press unhandled. [likeEnabled] hides the like button while another gesture owns taps (Codex selection).
- * [modifier] goes on the card's clickable node, so semantics added there (custom actions) reach the node TalkBack focuses.
- */
 @Composable
 fun FeedPostCard(
     post: Post,
@@ -118,7 +105,6 @@ fun FeedPostCard(
     )
 }
 
-/** The feed's related-posts shelf; each feed supplies only what its own actions do. */
 @Composable
 fun FeedRelatedPostsShelf(
     state: RelatedPostsUiState,
@@ -148,7 +134,6 @@ fun FeedRelatedPostsShelf(
     )
 }
 
-/** The shelf [shelf] drives: its controller handles dismiss, retry and paging, and its posts open through the binding. */
 @Composable
 fun FeedRelatedPostsShelf(
     shelf: RelatedShelfBinding,
@@ -172,7 +157,6 @@ fun FeedRelatedPostsShelf(
     )
 }
 
-/** A feed post's action sheet, with its tag section bound to that post. */
 @Composable
 fun FeedPostActionSheet(
     post: Post,

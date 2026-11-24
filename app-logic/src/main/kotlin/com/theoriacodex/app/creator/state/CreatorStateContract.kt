@@ -16,7 +16,6 @@ import com.theoriacodex.domain.model.Post
 enum class CreatorEmptyReason { NO_CREATOR, UNSUPPORTED_SOURCE, NO_RESULTS }
 enum class CreatorFailureReason {
     UNSUPPORTED_SOURCE,
-    /** The source needs an account or a fresh sign-in; reconnecting won't fix it. */
     ACCOUNT,
     REQUEST_FAILED;
 
@@ -35,11 +34,6 @@ data class CreatorRequestIdentity(
     }
 }
 
-/**
- * A feed's list while another feed is selected. Requests never outlive a tab switch, so only what the
- * feed would show again is kept; an empty snapshot with no [emptyReason] or [errorMessage] has not
- * finished its first load and is reloaded when selected.
- */
 data class CreatorFeedState(
     val results: List<Post> = emptyList(),
     val nextPageToken: String? = null,
@@ -50,19 +44,11 @@ data class CreatorFeedState(
     val needsLoad: Boolean get() = results.isEmpty() && emptyReason == null && errorMessage == null
 }
 
-/**
- * The creator page. For an account creator ([feeds] non-empty) it has one list per [AccountFeed]: the
- * selected feed's list lives in the top-level fields below, so the Viewer and every other reader of
- * `results`, `nextPageToken` or `activeRequest` sees the feed on screen, and the others wait in
- * [parkedFeeds]. Other creators keep [feeds] empty and behave as a single uploads list.
- */
 data class CreatorUiState(
     val creator: CreatorProfile? = null,
-    /** The feeds the source lists for this account, in tab order; empty for a creator that is not an account. */
     val feeds: List<AccountFeed> = emptyList(),
     val selectedFeed: AccountFeed = AccountFeed.UPLOADS,
     val parkedFeeds: Map<AccountFeed, CreatorFeedState> = emptyMap(),
-    /** Header facts, loaded after the first feed starts; null while loading or when the source has none. */
     val details: AccountDetails? = null,
     val queryHash: String? = null,
     val results: List<Post> = emptyList(),
@@ -78,33 +64,24 @@ data class CreatorUiState(
 ) {
     val canLoadMore: Boolean get() = !nextPageToken.isNullOrBlank()
 
-    /** Tabs to show: the feeds, minus Favorites once the source reports none (private favorites count 0). */
     val tabs: List<AccountFeed>
         get() = feeds.filter { it != AccountFeed.FAVORITES || details?.favoriteCount != 0 }
 
-    /** The uploads list, which Follow records, whichever feed is selected. */
     val uploads: List<Post>
         get() = if (selectedFeed == AccountFeed.UPLOADS) results else parkedFeeds[AccountFeed.UPLOADS]?.results.orEmpty()
 
-    /**
-     * Whether the uploads list has not finished its first page yet; Follow waits for it, since following
-     * records the uploads seen so far. A parked uploads feed whose load was cancelled by a tab switch still counts.
-     */
     val uploadsRefreshing: Boolean
         get() = if (selectedFeed == AccountFeed.UPLOADS) isRefreshing else parkedFeeds[AccountFeed.UPLOADS]?.needsLoad ?: true
 }
 
 sealed interface CreatorAction {
-    /** [feeds] is the source's answer for [creator]; the route owner fills it in, and empty means a plain creator. */
     data class OpenCreator(val creator: CreatorProfile, val feeds: List<AccountFeed> = emptyList()) : CreatorAction
-    /** Shows [feed]'s list, parking the current one; a feed that has not loaded starts loading. */
     data class SelectFeed(val feed: AccountFeed) : CreatorAction
     data class DetailsLoaded(val creator: CreatorProfile, val details: AccountDetails) : CreatorAction
     data object Refresh : CreatorAction
     data object LoadNextPage : CreatorAction
     data object RetryPage : CreatorAction
     data object SourceUnavailable : CreatorAction
-    /** The network came back: retries the selected feed's failed request, and lets parked feeds that failed load again when shown. */
     data object Reconnected : CreatorAction
     data class OpenResult(
         val index: Int,
@@ -112,7 +89,6 @@ sealed interface CreatorAction {
         val visibleResults: List<Post>? = null,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : CreatorAction
-    /** Opens a related-shelf post in a Viewer session that stays bound to this feed. */
     data class OpenRelatedResult(val index: Int, val visibleResults: List<Post>) : CreatorAction
     data object Back : CreatorAction
     data class PageLoaded(val request: CreatorRequestIdentity, val page: Page<Post>) : CreatorAction
@@ -237,7 +213,6 @@ private fun CreatorUiState.beginRequest(kind: CreatorRequestKind): CreatorTransi
     )
 }
 
-/** Starts [action]'s creator on its first feed, dropping everything the previous creator left. */
 private fun CreatorUiState.openCreator(action: CreatorAction.OpenCreator): CreatorTransition {
     val first = action.feeds.firstOrNull() ?: AccountFeed.UPLOADS
     return copy(
@@ -251,10 +226,6 @@ private fun CreatorUiState.openCreator(action: CreatorAction.OpenCreator): Creat
     ).beginRequest(CreatorRequestKind.REFRESH)
 }
 
-/**
- * Records the details of a still-current creator, and leaves a Favorites tab they just hid for the
- * first remaining one.
- */
 private fun CreatorUiState.detailsLoaded(action: CreatorAction.DetailsLoaded): CreatorTransition {
     if (action.creator != creator) return unchanged()
     val updated = copy(details = action.details)
@@ -262,10 +233,6 @@ private fun CreatorUiState.detailsLoaded(action: CreatorAction.DetailsLoaded): C
     return if (fallback == null || updated.selectedFeed in updated.tabs) CreatorTransition(updated) else updated.selectFeed(fallback)
 }
 
-/**
- * Parks the selected feed, cancelling its request, and shows [feed]'s parked list. A feed whose first
- * load never finished (including one never shown) starts loading again.
- */
 private fun CreatorUiState.selectFeed(feed: AccountFeed): CreatorTransition {
     val selected = creator ?: return unchanged()
     if (feed == selectedFeed || feed !in tabs) return unchanged()
@@ -321,7 +288,6 @@ private fun CreatorUiState.failed(
 
 private fun CreatorUiState.unchanged(): CreatorTransition = CreatorTransition(this)
 
-/** Identifies one list of [creator]; the uploads list keeps the key it has always had. */
 fun creatorQueryHash(creator: CreatorProfile, feed: AccountFeed = AccountFeed.UPLOADS): String {
     val key = creator.uploadsQuery ?: creator.profileId ?: creator.profileUrl ?: creator.displayName
     val suffix = if (feed == AccountFeed.UPLOADS) "" else ":${feed.name.lowercase()}"

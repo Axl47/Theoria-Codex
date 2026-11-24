@@ -2,7 +2,6 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.source.displayName
 
-/** What a [SearchTermLimitNotice] tells the user, in the composer and when a search is refused. */
 fun SearchTermLimitNotice.message(): String {
     val name = source.displayName()
     val sort = if (reducedBySort) " with this sort" else ""

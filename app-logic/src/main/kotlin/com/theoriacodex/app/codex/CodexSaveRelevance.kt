@@ -8,13 +8,6 @@ import com.theoriacodex.domain.vision.PredictedTagIndex
 import com.theoriacodex.app.recommend.evidence
 import kotlin.math.ln
 
-/**
- * How well each Codex fits the incoming posts. The applied search dominates; without one, a Codex scores by the incoming
- * tags its posts carry, each weighted by [TagRarity] so a tag on half the library counts for little, over the Codex's
- * size plus a few posts, so a two-post Codex needs more than one lucky match to lead. Tags the picture tagger [predicted]
- * with [PredictedTagUse.EVIDENCE] confidence count beside the provider's, each weighted by its score, so a post its
- * provider tagged in another language, or not at all, still finds the Codex it fits.
- */
 class CodexSaveRelevance(posts: List<Post>, searchQuery: Query? = null, private val predicted: PredictedTagIndex = PredictedTagIndex.Empty) {
     private val groupQueries = searchQuery?.effectiveIncludeTermGroups.orEmpty()
         .filter { group -> group.terms.any { it.value.isNotBlank() } }
@@ -53,20 +46,14 @@ private const val WHOLE_QUERY_WEIGHT = 0.75
 private const val SEARCH_GROUP_WEIGHT = 0.20
 private const val INCIDENTAL_TAG_WEIGHT = 0.05
 
-/** Posts added to every Codex's size when scoring tag matches; see [CodexSaveRelevance]. */
 private const val SMALL_CODEX_POSTS = 3
 
-/**
- * How much a tag match says: the rarer the tag across a saved library, the more (inverse document frequency). A tag on
- * every post weighs nothing. [Uniform] weighs every tag alike.
- */
 class TagRarity private constructor(private val posts: Int, private val postsByTag: Map<String, Int>) {
     fun weight(token: String): Double = if (posts == 0) 1.0 else ln((posts + 1.0) / ((postsByTag[token] ?: 0) + 1.0))
 
     companion object {
         val Uniform = TagRarity(0, emptyMap())
 
-        /** Rarity across [library], counting each post once, with the tags [predicted] for it. */
         fun of(library: Collection<Post>, predicted: PredictedTagIndex = PredictedTagIndex.Empty): TagRarity {
             val unique = library.distinctBy(Post::id)
             return TagRarity(unique.size, unique.flatMap { it.matchingTags(predicted).keys }.groupingBy { it }.eachCount())
@@ -74,7 +61,6 @@ class TagRarity private constructor(private val posts: Int, private val postsByT
     }
 }
 
-/** The post's tag tokens, weighted: its provider's at 1, the [evidence] predicted for it at its score. */
 private fun Post.matchingTags(predicted: PredictedTagIndex): Map<String, Double> {
     val provided = canonicalTags.ifEmpty { rawTags }.map(::normalizeMatchToken).filter(String::isNotBlank).associateWith { 1.0 }
     return predicted.evidence(id) + provided

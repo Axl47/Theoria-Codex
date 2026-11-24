@@ -24,7 +24,6 @@ class TagAffinityTest {
 
     @Test
     fun `a tag on most watched posts is universal, so specific liked tags lead`() {
-        // The motivating case: "image" sits on 70% of Likes and on nearly everything watched.
         val likes = List(10) { index -> like(if (index < 7) listOf("image", "fox") else listOf("fox_ears")) }
         val watched = statistics(watched = 100, "image" to 95, "fox" to 10, "fox_ears" to 4)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
@@ -68,12 +67,10 @@ class TagAffinityTest {
 
     @Test
     fun `a Like learns every tag of the Library's copy of its post, not only the ones it stored`() {
-        // A Like saved before every tag was stored kept the provider's first ones, alphabetically.
         val inputs = tagAffinityInputs(listOf(like(listOf("aardvark"), id = "aardvark-zebra")), listOf(post("aardvark", "zebra")),
             emptyList(), emptyList(), LifetimeStatistics())
 
         assertEquals(listOf("aardvark", "zebra"), inputs.liked.single().tags)
-        // A copy saved after the Like, with fewer tags, keeps the Like's own.
         val sparse = tagAffinityInputs(listOf(like(listOf("aardvark", "moth"), id = "zebra")), listOf(post("zebra")),
             emptyList(), emptyList(), LifetimeStatistics())
         assertEquals(listOf("zebra", "aardvark", "moth"), sparse.liked.single().tags)
@@ -95,7 +92,6 @@ class TagAffinityTest {
         val share = feedTagShare(feed)
 
         assertTrue(tagAffinities(post("animated", "tag1"), TagAffinityInputs.Empty, share).single { it.tag == "animated" }.universal)
-        // Below ten posts a share says too little.
         assertEquals(emptyMap<String, Double>(), feedTagShare(feed.take(9)))
     }
 
@@ -112,7 +108,6 @@ class TagAffinityTest {
 
     @Test
     fun `with enough history a tag must be clearly more common in what was kept than in what was watched`() {
-        // 40 kept posts: blush on half, as on half of what was watched; the character on a quarter, but rare when watching.
         val likes = List(40) { index ->
             like(listOfNotNull("blush".takeIf { index % 2 == 0 }, "miku".takeIf { index % 4 == 0 }, "tree"), "$index")
         }
@@ -129,7 +124,6 @@ class TagAffinityTest {
     @Test
     fun `a tag too rare in what was watched to judge is still offered, after the proven ones`() {
         val likes = List(40) { index -> like(listOfNotNull("miku".takeIf { index % 4 == 0 }, "tree"), "$index") }
-        // At these rates 40 kept posts would hold about 0.1 fox and 4 dog: missing dog says something, missing fox does not.
         val watched = statistics(watched = 400, "miku" to 12, "tree" to 400, "fox" to 1, "dog" to 40, "owl" to 2)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
 
@@ -141,7 +135,6 @@ class TagAffinityTest {
     @Test
     fun `text drawn on the image is never offered unless chosen, however specific`() {
         val likes = List(40) { index -> like(listOfNotNull("artist_name".takeIf { index % 4 == 0 }, "tree"), "$index") }
-        // A handle on a platform the list never names is caught by its ending.
         val watched = statistics(watched = 400, "artist_name" to 12, "tree" to 400, "watermark" to 1, "bluesky_username" to 1)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
         val chosen = tagAffinityInputs(likes, emptyList(), listOf("watermark"), emptyList(), watched)
@@ -154,7 +147,6 @@ class TagAffinityTest {
     @Test
     fun `a tag about the file is never offered unless chosen, however much more often it is kept`() {
         val likes = List(40) { index -> like(listOfNotNull("audible_music".takeIf { index % 4 == 0 }, "tree"), "$index") }
-        // Families the list never names are caught by their wording.
         val watched = statistics(watched = 400, "audible_music" to 12, "tree" to 400, "3d" to 1, "longer_than_one_minute" to 1, "fox" to 1)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
         val chosen = tagAffinityInputs(likes, emptyList(), listOf("3d"), emptyList(), watched)
@@ -171,7 +163,6 @@ class TagAffinityTest {
         val inputs = tagAffinityInputs(kept, emptyList(), listOf("tree"), emptyList(), watched)
 
         assertTrue(inputs.lift(source, "moth")!! > 10)
-        // The same tag on another source's post has no kept history there to compare.
         assertEquals(null, inputs.lift(SourceKey.DANBOORU, "moth"))
         assertTrue(tagAffinities(post("tree", "moth"), inputs).single { it.tag == "tree" }.universal)
     }

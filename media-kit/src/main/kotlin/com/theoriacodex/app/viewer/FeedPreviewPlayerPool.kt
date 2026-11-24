@@ -22,13 +22,6 @@ internal const val FEED_PREVIEW_IDLE_TIMEOUT_MS = 30_000L
 internal const val FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS = 5_000L
 internal const val FEED_PREVIEW_RELEASE_SPACING_MS = 1_000L
 
-/**
- * Application-owned preview players outlive individual lazy-grid items.
- *
- * Returning a lease pauses the player immediately. Excess idle bindings cool after a short grace
- * period so their codecs do not accumulate, while slow player/thread release remains paced after
- * the UI path and route disposal never synchronously releases every visible player one by one.
- */
 class FeedPreviewPlayerPool(
     private val infrastructure: VideoPlaybackInfrastructure,
     private val handler: Handler = Handler(Looper.getMainLooper()),
@@ -85,10 +78,6 @@ class FeedPreviewPlayerPool(
         headers: Map<String, String>,
     ): VideoPlayerLease {
         checkMainThread()
-        // A card keeps loading until the Viewer stops it, so it must not lock the rest of a clip the Viewer reads.
-        // No mime: a card gets only its rendition's address (app-logic's feedPreviewLocation, through feed-kit), so the
-        // address decides the stream type. A manifest whose address lacks .m3u8 or .mpd plays as a file and fails as an
-        // ordinary player error; carrying the mime means widening that chain to the rendition.
         val request = infrastructure.bind(VideoPlaybackRequest(location, headers), boundedLocks = true)
         val slotLease = slots.acquire(request.request)
         if (slotLease.requiresBinding || slotLease.resource.playerError != null) {
@@ -102,7 +91,6 @@ class FeedPreviewPlayerPool(
             slotLease.resource.setMediaSource(mediaSource, true)
             enqueuePrepare(slotLease)
         } else if (slotLease.resource.playbackState == Player.STATE_IDLE) {
-            // Stopped behind a Viewer: the binding and position remain, only loading restarts.
             enqueuePrepare(slotLease)
         }
         publishTraceCounters()
@@ -130,13 +118,6 @@ class FeedPreviewPlayerPool(
         }
     }
 
-    /**
-     * An open Viewer hides every feed card, so each preview stops: none keeps downloading or holds a decoder,
-     * and none holds the cache range of a stream the Viewer is about to read. A held range makes the Viewer
-     * read around the cache, so the Viewer's own bytes for that stream would never be cached. Stopped players
-     * keep their media, position and, through the card's keep-content player view, their last frame. A card
-     * shown again resumes through [resume]; a returned binding re-prepares on its next lease.
-     */
     fun stopForViewer() {
         checkMainThread()
         pendingPrepares.clear()
@@ -151,7 +132,6 @@ class FeedPreviewPlayerPool(
         }
     }
 
-    /** Restarts loading for a leased card that [stopForViewer] stopped; a no-op for a loaded or failed player. */
     fun resume(lease: VideoPlayerLease) {
         checkMainThread()
         traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RESUME) {
@@ -245,7 +225,6 @@ class FeedPreviewPlayerPool(
     }
 }
 
-/** A feed or Viewer pool's loan of one player; return it to the pool that lent it. */
 class VideoPlayerLease internal constructor(
     internal val slotLease: ReusableVideoSlotPool.Lease<ExoPlayer>,
 ) {
@@ -253,11 +232,6 @@ class VideoPlayerLease internal constructor(
         get() = slotLease.resource
 }
 
-/**
- * Pure lease/retention policy kept separate from Media3 so reuse remains directly testable.
- * Idle resources beyond [maxIdleResources] are released [FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS] after cleanup is
- * scheduled, in the feed and the Viewer alike.
- */
 class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
     private val maxIdleResources: Int,
     private val idleTimeoutMs: Long,
@@ -290,7 +264,6 @@ class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
     val totalResourceCount: Int
         get() = slotsByResource.size
 
-    /** Every resource the pool owns, leased or idle. */
     val resources: Collection<Resource>
         get() = slotsByResource.keys
 

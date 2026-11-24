@@ -45,7 +45,6 @@ class SearchScrollRestorationTest {
         assertEquals(null, SearchRestorationUiState.Restoring.openScrollRequestId)
     }
 
-    // A search with 40 posts loaded, more pages available, and an open request for post 22 at 17 px.
     private fun ready(
         request: SearchRestorationUiState = pending,
         loaded: Int = 40,
@@ -141,8 +140,6 @@ class SearchScrollRestorationTest {
         assertEquals(ScrollStep.Wait, ready().scrollStepAfterJump(reachedTarget = false, canScrollForward = false))
     }
 
-    // Whether the grid was showing posts is decided once, when the request arrives, so the next page still
-    // sees false and the stopped-short jump is retried.
     @Test fun `keep-live request that arrived on a grid without posts retries a jump that stopped short`() {
         val keepLive = ready(pending.copy(keepLiveGrid = true))
         assertEquals(jump, keepLive.step(wasShowingPosts = false))

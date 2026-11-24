@@ -18,11 +18,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/**
- * Loads the card images just past the end of the visible feed, so a card scrolling in usually finds its image ready.
- * [entries] holds one post per grid item, null for items that are not posts. A preload is the same request the card
- * makes, so the card finds it in the memory cache. Unmetered networks only, and never for cards already passed.
- */
 @Composable
 internal fun FeedImagePreloadEffect(entries: List<Post?>, gridState: LazyStaggeredGridState) {
     val context = LocalContext.current
@@ -35,7 +30,6 @@ internal fun FeedImagePreloadEffect(entries: List<Post?>, gridState: LazyStagger
             snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
                 .distinctUntilChanged()
                 .collect { lastVisible ->
-                    // Checked per batch: the network can become metered while the grid stays open.
                     if (lastVisible == null || context.isMediaNetworkMetered()) return@collect
                     inFlight.removeAll(Disposable::isDisposed)
                     currentEntries.subList(
@@ -56,7 +50,6 @@ private fun preloadRequest(context: Context, post: Post, screenWidthPx: Int): Im
     val decodeSize = feedPreviewDecodeSize(screenWidthPx, previewAspectRatio(post))
     return buildFeedImageRequest(context, location, post.id.source, decodeSize)
         .newBuilder()
-        // Null keeps this out of the memory cache key, so the card's own request still matches.
         .setParameter(FEED_PRELOAD_PARAMETER, true, memoryCacheKey = null)
         .build()
 }

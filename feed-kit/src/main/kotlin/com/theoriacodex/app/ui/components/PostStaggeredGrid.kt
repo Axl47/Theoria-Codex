@@ -28,11 +28,6 @@ import com.theoriacodex.app.related.RelatedFeedEntry
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.requestOrNull
 
-/**
- * For You, Creator and Codex's one feed grid over a [FeedView]: its visible posts with the related shelf placed among
- * them. [post] gets each post's index in [FeedView.visiblePosts], the list the Viewer opens; [shelf] draws the shelf.
- * Each screen still owns its cards and paging policy.
- */
 @Composable
 fun FeedGrid(
     view: FeedView,
@@ -51,20 +46,13 @@ fun FeedGrid(
         showPagingTile = showPagingTile,
         footerMessage = footerMessage,
         divider = divider,
-        // Each item carries its own index: a card the grid composed ahead of time can recompose with its old entry
-        // after the post left the feed, so a lookup beside the items could miss.
         postContent = { visibleIndex, entry -> post(visibleIndex, entry) },
         shelfContent = shelf,
     )
 }
 
-/** A full-line item drawn before the post [beforePost], such as Creator's "new since last visit" divider. */
 class FeedGridDivider(val beforePost: PostId, val content: @Composable () -> Unit)
 
-/**
- * Feed projection that inserts one full-line transient section without rewriting posts, and [divider] before its
- * post when that post is shown and is not the first.
- */
 @Composable
 fun TwoColumnProjectedPostStaggeredGrid(
     projection: RelatedFeedProjection,
@@ -104,7 +92,6 @@ fun TwoColumnProjectedPostStaggeredGrid(
     }
 }
 
-/** A null placed at [index], for a grid item that is not a post; unchanged when [index] is null. */
 private fun <T> List<T?>.withGapAt(index: Int?): List<T?> = if (index == null) this else toMutableList().apply { add(index, null) }
 
 private fun LazyStaggeredGridScope.projectedEntries(
@@ -123,7 +110,6 @@ private fun LazyStaggeredGridScope.projectedEntries(
                 }
             }
         },
-        // Single-lane posts and the full-line related shelf must not reuse each other's compositions.
         contentType = { _, entry -> entry.javaClass },
         span = { _, entry ->
             if (entry is RelatedFeedEntry.ShelfEntry) {
@@ -140,10 +126,6 @@ private fun LazyStaggeredGridScope.projectedEntries(
     }
 }
 
-/**
- * Every feed's grid: adaptive columns, Viewer return, and card image preloading. [posts] holds one entry per grid
- * item, null for items that are not posts (headings, shelves, footers), so both find each post by its grid position.
- */
 @Composable
 fun AdaptivePostGrid(
     posts: List<Post?>,

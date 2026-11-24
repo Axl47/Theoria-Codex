@@ -26,7 +26,6 @@ class OffMainComputationTest {
 
     private data class Call(val list: List<String>, val input: String, val onMain: Boolean)
 
-    /** One composition: what the helper was given and what it returned. */
     private data class Frame(val list: List<String>, val input: String, val value: List<String>)
 
     private var list by mutableStateOf(listOf("p1", "p2"))
@@ -35,7 +34,6 @@ class OffMainComputationTest {
     private val extends = CopyOnWriteArrayList<List<String>>()
     private val frames = CopyOnWriteArrayList<Frame>()
 
-    /** When set, an off-main compute waits here; [entered] and [returning] mark where it is. */
     private var gate: CountDownLatch? = null
     private val entered = CountDownLatch(1)
     private val returning = CountDownLatch(1)
@@ -53,7 +51,6 @@ class OffMainComputationTest {
         return list.map { "$it$input" }
     }
 
-    /** Marks its items with `+`, so a value that went through [extend] is told apart from a full compute. */
     private fun extend(previous: List<String>, appended: List<String>, input: String): List<String> {
         extends += appended
         return previous + appended.map { "$it$input+" }
@@ -68,18 +65,14 @@ class OffMainComputationTest {
         frames += Frame(list, input, value)
     }
 
-    /** Lets the composition pick up a state change and launch its off-main compute, then waits for it to start. */
     private fun awaitOffMainCompute() {
         compose.waitForIdle()
         assertTrue(entered.await(5, TimeUnit.SECONDS))
     }
 
-    /** Releases the off-main compute (if gated) and waits until its result has been delivered or dropped. */
     private fun landOffMainCompute() {
         gate?.countDown()
         assertTrue(returning.await(5, TimeUnit.SECONDS))
-        // A parked worker has finished resuming the helper's coroutine, which either ran it or queued it for
-        // the composition's dispatcher; waitForIdle then drains that queue.
         compose.waitUntilWithoutIdling(5_000) { worker?.state in setOf(Thread.State.WAITING, Thread.State.TIMED_WAITING) }
         compose.waitForIdle()
     }
@@ -127,7 +120,6 @@ class OffMainComputationTest {
         show()
         compose.runOnIdle { input = "b" }
         awaitOffMainCompute()
-        // An append, so a late answer for the old list that overwrote the cache would be extended into a `+` value.
         compose.runOnIdle { list = list + "p3" }
         compose.waitForIdle()
         assertEquals(listOf("p1b", "p2b", "p3b"), frames.last().value)

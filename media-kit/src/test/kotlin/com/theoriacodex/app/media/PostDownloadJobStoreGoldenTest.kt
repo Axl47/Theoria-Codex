@@ -8,7 +8,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/** Download queues older builds wrote must restore the same jobs; gson-written.json is the Gson store's own v3 output. */
 class PostDownloadJobStoreGoldenTest {
     @get:Rule val temporary = TemporaryFolder()
 
@@ -22,7 +21,6 @@ class PostDownloadJobStoreGoldenTest {
         assertEquals(listOf(1L to "Codex & <friends>", 4L to "Done"), batches.map { it.id to it.title })
         assertEquals(
             listOf(
-                // An interrupted transfer comes back queued with its native download id.
                 "2|PIXIV|100|Tom & Jerry's <cut>|m-1|Codex · A=B|false|QUEUED|77|true|2/5",
                 "3|custom_safebooru_org|a'b|null|m-2|Downloads|true|FAILED|null|false|null",
                 "5|GELBOORU|9|é☃|m-3|Downloads|false|SAVED|null|false|null",
@@ -32,7 +30,6 @@ class PostDownloadJobStoreGoldenTest {
         assertTrue(batches.flatMap { it.items }.all { it.request.restored })
     }
 
-    // The golden is the Gson store's own output.
     @Test
     fun `the v3 download queue golden pins every stored key`() {
         assertStoredFormat(

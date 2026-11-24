@@ -70,7 +70,6 @@ class VideoPlaybackInfrastructureTest {
 
         assertFalse(startsWith(bufferedMs = 400L, rebuffering = false))
         assertTrue(startsWith(bufferedMs = 500L, rebuffering = false))
-        // A stall waits for 2 s, and a seek after it for 1 s, until the next stream is prepared.
         assertFalse(startsWith(bufferedMs = 1_900L, rebuffering = true))
         assertTrue(startsWith(bufferedMs = 2_000L, rebuffering = true))
         assertFalse(startsWith(bufferedMs = 900L, rebuffering = false))

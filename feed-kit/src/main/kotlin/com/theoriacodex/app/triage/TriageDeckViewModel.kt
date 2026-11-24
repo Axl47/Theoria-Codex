@@ -7,10 +7,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.vision.PictureTags
 import kotlinx.coroutines.CoroutineScope
 
-/**
- * Keeps a pushed Triage route's [TriageDeck] across rotation: the deck collects its feed in [viewModelScope] and
- * closes when the route is gone, while its pending writes still finish in [writeScope].
- */
 class TriageDeckViewModel(
     feed: TriageFeed,
     actions: TriageActions,

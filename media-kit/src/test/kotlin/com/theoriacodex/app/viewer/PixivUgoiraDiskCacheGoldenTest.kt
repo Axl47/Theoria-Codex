@@ -4,7 +4,6 @@ import com.theoriacodex.data.storage.assertStoredFormat
 import org.junit.Test
 
 class PixivUgoiraDiskCacheGoldenTest {
-    // gson-written.json is the sidecar the Gson writer stored, HTML-sensitive file name included.
     @Test
     fun `the ugoira sidecar older builds wrote decodes the same`() {
         assertStoredFormat(

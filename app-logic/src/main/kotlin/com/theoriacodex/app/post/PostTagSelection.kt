@@ -6,7 +6,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
 import java.util.Locale
 
-/** The real draft is the only selection authority; removal returns its exact stored term. */
 class PostTagSelection(private val source: SourceKey, includes: List<SearchTerm>, excludes: List<SearchTerm>) {
     private val included = includes.associateBy(::key)
     private val excluded = excludes.associateBy(::key)

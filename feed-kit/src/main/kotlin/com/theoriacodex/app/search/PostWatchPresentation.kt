@@ -28,21 +28,12 @@ data class PostWatchPresentation(
     val watched: Map<PostId, RecentPostEntry> = emptyMap(),
 )
 
-/**
- * A stable holder rather than the value: watch history changes every time a post opens, and a static
- * local whose value changes recomposes everything beneath it, which here is the whole app.
- */
 val LocalPostWatchPresentation = staticCompositionLocalOf<State<PostWatchPresentation>> {
     mutableStateOf(PostWatchPresentation())
 }
 
-/** One post's slice of [PostWatchPresentation]. */
 data class PostWatchEntry(val position: ReadingPosition?, val watched: RecentPostEntry?)
 
-/**
- * This post's watch history, read through a derived state: every open and reading-position write replaces
- * the whole history, and a card reading the full map would recompose for every other post's change.
- */
 @Composable
 fun rememberPostWatchEntry(postId: PostId): State<PostWatchEntry> {
     val presentation = LocalPostWatchPresentation.current
@@ -51,7 +42,6 @@ fun rememberPostWatchEntry(postId: PostId): State<PostWatchEntry> {
     }
 }
 
-/** Watch history for every card, built off the main thread so opening a post cannot stall on it. */
 @Composable
 fun rememberPostWatchPresentation(
     positions: ReadingPositionRepository,
@@ -78,7 +68,6 @@ fun postWatchPresentation(
         .sortedByDescending { it.viewedAtEpochMs }.distinctBy { it.post.id }.associateBy { it.post.id },
 )
 
-/** Select only this page's locations; fallback must never silently display a different page. */
 internal fun postForCardPreview(post: Post, mediaNumber: Int?): Post {
     if (mediaNumber == null) return post
     val media = postMediaItems(post)

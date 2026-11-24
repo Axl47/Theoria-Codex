@@ -39,10 +39,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/**
- * Bottom sheet that opens fully expanded, shared by long-press menus and their follow-up sheets. While [dismissible] is
- * false, Back, the scrim and dragging leave it open, for work that must finish where it started.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpandedBottomSheet(onDismiss: () -> Unit, dismissible: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
@@ -54,7 +50,6 @@ fun ExpandedBottomSheet(onDismiss: () -> Unit, dismissible: Boolean = true, cont
     )
 }
 
-/** Scrollable long-press menu: compose an [ActionMenuHeader], then rows and dividers. */
 @Composable
 fun ActionMenuSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     ExpandedBottomSheet(onDismiss) {
@@ -68,13 +63,11 @@ fun ActionMenuSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -
     }
 }
 
-/** Names what the menu acts on; [image] receives the thumbnail's size, shape, and backdrop. */
 @Composable
 fun ActionMenuHeader(
     title: String,
     image: @Composable (Modifier) -> Unit,
     details: @Composable () -> Unit,
-    /** Makes the title a [HeaderLink] to the creator, instead of plain text. */
     titleLink: HeaderLink? = null,
 ) {
     Row(
@@ -100,10 +93,8 @@ fun ActionMenuHeader(
     }
 }
 
-/** A creator name that opens their profile. */
 class HeaderLink(val label: String, val onClick: () -> Unit)
 
-/** Accent color, a person mark and a chevron say the name opens a profile. */
 @Composable
 fun HeaderLinkText(link: HeaderLink, style: TextStyle) {
     val accent = MaterialTheme.colorScheme.primary
@@ -121,7 +112,6 @@ fun HeaderLinkText(link: HeaderLink, style: TextStyle) {
     }
 }
 
-/** Secondary text for an [ActionMenuHeader]; [singleLine] clips long text with an ellipsis. */
 @Composable
 fun ActionMenuDetailText(text: String, singleLine: Boolean = false) {
     Text(
@@ -133,13 +123,11 @@ fun ActionMenuDetailText(text: String, singleLine: Boolean = false) {
     )
 }
 
-/** Separates a menu's action groups. */
 @Composable
 fun ActionMenuDivider() {
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
 }
 
-/** One labeled menu action. Pass the error color as [tint] for destructive actions. */
 @Composable
 fun ActionMenuRow(
     icon: ImageVector,
@@ -166,7 +154,6 @@ fun ActionMenuRow(
     }
 }
 
-/** The tinted row that leads from a menu into its dedicated follow-up sheet. */
 @Composable
 fun ActionMenuFollowUpRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     Surface(

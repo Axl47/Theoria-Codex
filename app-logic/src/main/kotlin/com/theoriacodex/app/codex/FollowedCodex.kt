@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.followKey
 
 const val FOLLOWED_CODEX_ID = "system:followed"
 
-/** OR within each selection, AND across selections. Provider identity scopes each author. */
 fun selectFollowedCreators(
     follows: List<FollowedCreator>,
     sources: Set<String>,

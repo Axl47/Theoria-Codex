@@ -2,10 +2,6 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.domain.adapter.SourceFailureReason
 
-/**
- * One short line saying why a source's request failed. [rawMessage], where a caller has one fit to show, replaces the
- * general line; a rate limit always reads the same.
- */
 fun sourceFailureDetail(reason: SourceFailureReason?, rawMessage: String = ""): String = when (reason) {
     SourceFailureReason.RATE_LIMITED -> "Rate limited. Wait a bit, then retry."
     SourceFailureReason.NETWORK -> rawMessage.takeIf(String::isNotBlank)

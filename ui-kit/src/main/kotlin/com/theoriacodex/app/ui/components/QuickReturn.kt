@@ -12,11 +12,6 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.sign
 
-/**
- * Quick-return for controls over a scrolling list: once the content has scrolled [QUICK_RETURN_DISTANCE] one way,
- * [onReveal] hears true for towards the top and false for further down. Only scroll the list consumed counts, so
- * pulling past either end changes nothing.
- */
 @Composable
 fun rememberQuickReturn(onReveal: (Boolean) -> Unit): NestedScrollConnection {
     val currentOnReveal by rememberUpdatedState(onReveal)

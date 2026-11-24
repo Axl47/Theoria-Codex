@@ -28,7 +28,6 @@ enum class MediaDeliveryActivation {
     PRIMARY,
     QUALITY_UPGRADE,
 
-    /** Full animated media replacing a visible poster; consecutive entries are mirrors of one file. */
     ANIMATION_UPGRADE,
     FAILURE_FALLBACK,
 }
@@ -46,7 +45,6 @@ data class MediaDeliveryPlan(
     val primary: MediaDeliveryCandidate?
         get() = candidates.firstOrNull()
 
-    /** Candidates to try in order to replace the displayed one; the first success ends the attempt. */
     fun upgradeIndicesAfter(displayedIndex: Int): List<Int> {
         if (candidates.getOrNull(displayedIndex)?.activation == MediaDeliveryActivation.ANIMATION_UPGRADE) {
             return emptyList()
@@ -97,21 +95,12 @@ fun postPlaybackMediaCandidate(post: Post): PostMediaCandidate? {
     }
 }
 
-/** What a post plays that the picture tagger can read frames from, beside its still preview ([postMotion]). */
 sealed interface PostMotion {
-    /** A video at [location] (web or local), fetched with [headers]. */
     data class Video(val location: String, val headers: Map<String, String>) : PostMotion
 
-    /** A Pixiv animation, whose frames come from its archive. */
     data class Ugoira(val postId: PostId) : PostMotion
 }
 
-/**
- * The moving media [post] offers the picture tagger, whatever the source: its video at the lightest rendition it lists
- * (the model reads 448 px squares, as metered feeds pick: [feedPreviewLocation]), or its Pixiv animation. Animated GIF,
- * WebP, APNG and AVIF images give null and keep their still: they are short loops whose first frame the still preview
- * already shows, and the platform cannot step through WebP, APNG or AVIF frames.
- */
 fun postMotion(post: Post): PostMotion? {
     if (isPixivUgoiraPost(post)) return PostMotion.Ugoira(post.id)
     val video = postPlaybackMediaCandidate(post) ?: return null
@@ -119,10 +108,6 @@ fun postMotion(post: Post): PostMotion? {
     return PostMotion.Video(normalizeMediaUrl(post.id.source, location) ?: location, video.requestHeaders)
 }
 
-/**
- * A video whose stream resolves only after it opens: its listing gave just a preview and a running time (Iwara's, for
- * one). GIFs and ugoira carry their media up front.
- */
 val Post.awaitsVideoStream: Boolean
     get() = full == null && media.isEmpty() && (durationMs ?: 0L) > 0L
 
@@ -132,7 +117,6 @@ fun postDownloadMediaCandidate(post: Post): PostMediaCandidate? {
     }
 }
 
-/** The post's pages as the provider listed them, or its single full file; downloads and offline copies count pages by it. */
 val Post.downloadablePages: List<ImageRef>
     get() = media.ifEmpty { listOfNotNull(full) }
 
@@ -144,15 +128,6 @@ fun postMediaItems(post: Post): List<ImageRef> {
         .ifEmpty { listOf(normalizedMediaRef(post, post.preview)) }
 }
 
-/**
- * Orders what a feed card shows. Remote animated images must download completely before their first
- * frame, so the card paints its poster first and swaps to the animation once that is ready.
- *
- * Feed cards render at most half the screen wide, so quality upgrades stop at the largest downscaled
- * rendition (Gelbooru sample, Pixiv large); originals stay failure fallbacks and are left to the Viewer.
- * An original with no lighter rendition is the step up only when the post says it is small
- * ([FEED_SMALL_ORIGINAL_MAX_EDGE_PX]), which is when boorus skip generating a sample.
- */
 fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     val animatedFull = post.full?.takeIf(::isAnimatedImageMediaRef)
     val hasLocalAnimation = !animatedFull?.localPath.isNullOrBlank()
@@ -179,7 +154,6 @@ fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
     )
 }
 
-/** Long-edge size up to which a card may load an original that has no lighter rendition. */
 internal const val FEED_SMALL_ORIGINAL_MAX_EDGE_PX = 1_280
 
 private fun Post.hasSmallOriginal(): Boolean {
@@ -187,7 +161,6 @@ private fun Post.hasSmallOriginal(): Boolean {
     return longEdge in 1..FEED_SMALL_ORIGINAL_MAX_EDGE_PX
 }
 
-/** Originals that have a smaller rendition; a feed card never downloads them just to downsample. */
 private fun feedOriginalLocations(post: Post): Set<String> =
     listOfNotNull(post.full, post.media.firstOrNull())
         .filter { ref -> ref.progressiveUrls.any(String::isNotBlank) }
@@ -265,13 +238,11 @@ private fun mediaDeliveryActivation(
     else -> MediaDeliveryActivation.FAILURE_FALLBACK
 }
 
-/** One place to load an image from; [isFallbackCopy] marks an equivalent copy that is only tried after a failure. */
 private data class ImageLocation(val location: String, val isFallbackCopy: Boolean = false)
 
 private fun imageLocations(ref: ImageRef, isAnimationUpgrade: Boolean, urlFirst: Boolean): List<ImageLocation> =
     if (isAnimationUpgrade) animatedImageLocations(ref) else orderedImageLocations(ref, urlFirst)
 
-/** Lighter renditions, then the URL, then equivalent copies; [urlFirst] puts the URL ahead of the renditions. */
 private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<ImageLocation> = buildList {
     ref.localPath?.takeIf(String::isNotBlank)?.let { add(ImageLocation(it)) }
     val renditions = ref.progressiveUrls.filter(String::isNotBlank).map(::ImageLocation)
@@ -280,7 +251,6 @@ private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<ImageL
     ref.fallbackUrls.filter(String::isNotBlank).mapTo(this) { ImageLocation(it, isFallbackCopy = true) }
 }
 
-/** The animated URL and its animated mirrors; a static sample must never replace a playing animation. */
 private fun animatedImageLocations(ref: ImageRef): List<ImageLocation> = buildList {
     ref.url?.takeIf(String::isNotBlank)?.let { add(ImageLocation(it)) }
     (ref.progressiveUrls + ref.fallbackUrls)
@@ -289,7 +259,6 @@ private fun animatedImageLocations(ref: ImageRef): List<ImageLocation> = buildLi
         .mapTo(this, ::ImageLocation)
 }
 
-/** Only a ref with lighter renditions has a step up; a lone URL or equivalent copies are just the file. */
 private fun ImageRef.hasLighterRenditions(): Boolean = progressiveUrls.any(String::isNotBlank)
 
 private fun String.fileExtension(): String =
@@ -337,7 +306,6 @@ private fun Post.candidate(
     )
 }
 
-/** Whether the media has something to show: a file, an address, or a series episode's streams. */
 private fun ImageRef.hasAnyLocation(): Boolean = !url.isNullOrBlank() || !localPath.isNullOrBlank() || streams.isNotEmpty()
 
 private fun ImageRef.bestLocation(): String? =

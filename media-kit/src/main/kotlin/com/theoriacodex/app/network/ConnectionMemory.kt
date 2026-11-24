@@ -13,20 +13,17 @@ import okhttp3.Dns
 import okhttp3.EventListener
 import okhttp3.Protocol
 
-/** Where the hosts the app last connected to are kept between launches, newest first. */
 interface RecentHostStore {
     fun load(): List<String>
     fun save(hosts: List<String>)
 }
 
-/** For code that never launches again, such as tests. */
 internal object NoRecentHosts : RecentHostStore {
     override fun load(): List<String> = emptyList()
     override fun save(hosts: List<String>) = Unit
 }
 
 class SharedPreferencesRecentHostStore(context: Context) : RecentHostStore {
-    // Built with the Application, before its context can open preferences.
     private val preferences by lazy { context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE) }
 
     override fun load(): List<String> = preferences.getString(KEY_HOSTS, null)?.split('\n').orEmpty().filter(String::isNotBlank)
@@ -39,14 +36,6 @@ class SharedPreferencesRecentHostStore(context: Context) : RecentHostStore {
     }
 }
 
-/**
- * What the app's own connections teach it, for the first requests after a launch that would otherwise wait on each
- * one: which hosts it uses, so the next launch can connect ahead of need, and whether IPv6 gets through here.
- *
- * A network can offer IPv6 and then drop it; a half-configured router is enough. OkHttp's race turns that into a
- * quarter-second wait per new connection. Once IPv4 has beaten IPv6 on [IPV6_LOSSES_TO_AVOID] sites that offer both,
- * IPv6 stops being offered for [IPV6_AVOID_MS], then gets another chance. Another network starts with a clean slate.
- */
 class ConnectionMemory(
     private val store: RecentHostStore,
     private val activeNetwork: () -> Any?,
@@ -81,7 +70,6 @@ class ConnectionMemory(
         }
     }
 
-    /** With IPv6 ruled out, IPv4 is the only way left, so a failure there means this judgement can't be trusted. */
     override fun connectFailed(
         call: Call,
         inetSocketAddress: InetSocketAddress,

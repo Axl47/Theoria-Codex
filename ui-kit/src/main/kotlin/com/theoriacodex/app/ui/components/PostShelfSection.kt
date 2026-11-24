@@ -71,10 +71,6 @@ fun PostShelfSection(
     }
 }
 
-/**
- * A shelf heading that identifies its collection and shows where See all and its actions are; a
- * [highlight] such as "3 new" follows the [count] in the accent color.
- */
 @Composable
 private fun RowScope.ManagedShelfHeading(
     title: String,

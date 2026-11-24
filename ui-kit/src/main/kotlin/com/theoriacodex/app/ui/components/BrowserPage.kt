@@ -43,10 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.net.URI
 
-/**
- * One in-app browser on [url], made by [rememberBrowserState] and shown by [BrowserPage]. [available] is false when
- * the system WebView is missing or updating, which the page shows as a state of its own.
- */
 @Stable
 class BrowserState internal constructor(val url: String, private val create: (BrowserState) -> WebView) {
     internal var webView by mutableStateOf<WebView?>(null)
@@ -57,11 +53,9 @@ class BrowserState internal constructor(val url: String, private val create: (Br
     var available by mutableStateOf(true)
         private set
 
-    /** The host of the page on screen, which is no longer [url]'s once the page has navigated elsewhere. */
     var host by mutableStateOf(hostOf(url))
         internal set
 
-    /** The agent the browser sends, which a clearance cookie it earns is bound to. */
     val userAgent: String? get() = webView?.settings?.userAgentString
 
     internal fun open() {
@@ -69,14 +63,12 @@ class BrowserState internal constructor(val url: String, private val create: (Br
         available = webView != null
     }
 
-    /** Loads [url] again, in a new WebView when the last one's renderer died. */
     fun reload() {
         loadFailed = false
         val view = webView
         if (view == null) open() else view.loadUrl(url)
     }
 
-    /** The renderer died or was killed for memory: the view is dropped, and the page offers to load again. */
     internal fun rendererGone(view: WebView) {
         if (webView !== view) return
         webView = null
@@ -84,12 +76,6 @@ class BrowserState internal constructor(val url: String, private val create: (Br
     }
 }
 
-/**
- * Starts loading [url] in a browser that lives as long as [url] and [userAgent] do, so recomposition never reloads it.
- * [userAgent] replaces the WebView's own when given. [onPageLoaded] gets the browser's agent after each main-frame page
- * that loaded, and whether the site let it through: false when it answered the page with an HTTP error, as a
- * challenge's 403 is.
- */
 @Composable
 fun rememberBrowserState(
     url: String,
@@ -106,11 +92,6 @@ fun rememberBrowserState(
     }
 }
 
-/**
- * [state]'s page under [header], with a load bar while it loads and [footer] below. A missing system WebView covers
- * the page with a message and Close ([onClose]); a page that could not load, or whose renderer died, with Try again.
- * The WebView is destroyed when the page leaves the screen.
- */
 @Composable
 fun BrowserPage(state: BrowserState, onClose: () -> Unit, header: @Composable () -> Unit, footer: @Composable () -> Unit = {}) {
     Column(Modifier.fillMaxSize()) {
@@ -120,7 +101,6 @@ fun BrowserPage(state: BrowserState, onClose: () -> Unit, header: @Composable ()
         }
         Box(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
             state.webView?.let { webView ->
-                // A WebView made after its renderer died replaces the old one, which is released and destroyed.
                 key(webView) {
                     AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize(), onRelease = ::release)
                 }
@@ -134,10 +114,6 @@ fun BrowserPage(state: BrowserState, onClose: () -> Unit, header: @Composable ()
     }
 }
 
-/**
- * Runs once the view is detached, which destroy() requires. The page's callbacks go first: stopping a load reports
- * its end later, and nothing may touch the view once it is destroyed.
- */
 private fun release(view: WebView) {
     view.webViewClient = WebViewClient()
     view.webChromeClient = null
@@ -145,7 +121,6 @@ private fun release(view: WebView) {
     view.destroy()
 }
 
-/** Status text that TalkBack reads when it appears or changes. */
 @Composable
 fun AnnouncedText(text: String, modifier: Modifier = Modifier, error: Boolean = false) {
     Text(
@@ -156,7 +131,6 @@ fun AnnouncedText(text: String, modifier: Modifier = Modifier, error: Boolean = 
     )
 }
 
-/** Covers the WebView with a message and its way out. */
 @Composable
 private fun PageProblem(message: String, action: @Composable () -> Unit) {
     Column(
@@ -173,12 +147,6 @@ private fun hostOf(url: String): String = runCatching { URI(url).host }.getOrNul
 
 private fun loadFailedMessage(url: String): String = "Couldn't load ${hostOf(url)}. Check your connection and try again."
 
-/**
- * Makes [state]'s WebView and starts loading its address: it can read neither files nor content providers, goes only
- * to web addresses (another app's scheme is ignored, never handed to that app), and paints [backgroundColor] until the
- * page does, so a dark theme has no white flash. Only main-frame loads are reported: [onPageLoaded] after a page that
- * loaded, the state's `loadFailed` when one could not load at all (an HTTP 403 challenge is a page that loaded).
- */
 @SuppressLint("SetJavaScriptEnabled")
 private fun createBrowserWebView(
     context: Context,
@@ -202,8 +170,6 @@ private fun createBrowserWebView(
     webViewClient = object : WebViewClient() {
         private var failed = false
 
-        // Set by an HTTP error on the main frame and read when that page finishes, whichever order the page's start
-        // and the error arrive in.
         private var refused = false
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = request.url.scheme !in WEB_SCHEMES

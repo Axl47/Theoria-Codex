@@ -8,11 +8,6 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.isLegacyFacetType
 
-/**
- * Every tag [post] teaches recommendations, once each, in the post's own order. A Like stores them all, and the kept
- * evidence in [tagAffinityInputs] reads them from each stored post, so no tag is lost to its place in the list; what
- * ranks them is [TagAffinityInputs.affinity], when they are used.
- */
 fun trainingTagsFor(post: Post): List<String> {
     return recommendationTaxonomyFor(post)
         .asSequence()
@@ -22,11 +17,6 @@ fun trainingTagsFor(post: Post): List<String> {
         .toList()
 }
 
-/**
- * Keeps each source's established recommendation vocabulary while using the typed taxonomy as
- * the authority for which values are general tags. Pixiv intentionally learns native raw tags
- * instead of counting native and translated canonical aliases as separate interests.
- */
 fun recommendationTaxonomyFor(post: Post): List<PostTaxonomyTerm> {
     val preferredValues = if (post.id.source == SourceKey.PIXIV) {
         post.rawTags.ifEmpty { post.canonicalTags }
@@ -35,7 +25,6 @@ fun recommendationTaxonomyFor(post: Post): List<PostTaxonomyTerm> {
     }
     if (preferredValues.isEmpty()) return emptyList()
 
-    // A post with no typed taxonomy at all (a raw-tag-only legacy copy, say) has only general tags.
     val taxonomy = post.taxonomy.ifEmpty { preferredValues.map { PostTaxonomyTerm(value = it) } }
     val tagTermsByValue = taxonomy
         .asSequence()

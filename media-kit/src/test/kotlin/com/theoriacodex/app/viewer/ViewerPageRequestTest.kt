@@ -39,9 +39,7 @@ class ViewerPageRequestTest {
         }
         val loader = ImageLoader(context)
         try {
-            // Hardware bitmaps need a GPU; the decode size is the same either way.
             val request = buildViewerPageRequest(context, strip.path, SourceKey.PIXIV, viewport).newBuilder().allowHardware(false).build()
-            // Coil finishes on the main thread, which is this one, so its looper runs while the decode completes.
             val result = MainScope().async { loader.execute(request) }
             val deadline = System.currentTimeMillis() + DECODE_TIMEOUT_MS
             while (!result.isCompleted) {
@@ -60,7 +58,6 @@ class ViewerPageRequestTest {
     @Test fun `the decode box stays within the GPU's texture edge and the bitmap budget`() {
         assertEquals(1080 to 8192, viewerPageDecodeBounds(viewportWidthPx = 1080, maxEdgePx = 8192))
         assertEquals(4096 to 4096, viewerPageDecodeBounds(viewportWidthPx = 5000, maxEdgePx = 4096))
-        // 64 MiB of 4-byte pixels at 2560 wide.
         assertEquals(2560 to 6553, viewerPageDecodeBounds(viewportWidthPx = 2560, maxEdgePx = 16384))
     }
 

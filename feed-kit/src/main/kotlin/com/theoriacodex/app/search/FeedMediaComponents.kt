@@ -67,7 +67,6 @@ internal fun SearchVideoPreview(
     onDurationKnown: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
-    // The metered check is a system call, so it runs when a card picks its stream, not on every recomposition.
     val location = remember(media) { media.feedPreviewLocation(context.isMediaNetworkMetered()) }
     if (location.isNullOrBlank()) {
         onPlaybackError()
@@ -78,13 +77,10 @@ internal fun SearchVideoPreview(
     val viewerClosing = LocalViewerReturnTransition.current?.mediaSettling == true
     LaunchedEffect(location, sourceKey, isActive, viewerClosing) {
         if (!isActive) {
-            // Releasing at once would blank the card behind an opening Viewer until its poster decodes.
             delay(FEED_PLAYER_RELEASE_GRACE_MS)
             shouldLeasePlayer = false
             return@LaunchedEffect
         }
-        // Binding a player and attaching its surface blocks the main thread, which would stutter the
-        // Viewer's closing animation. Cards show their posters, then all start together when it lands.
         if (viewerClosing) return@LaunchedEffect
         delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
         shouldLeasePlayer = true
@@ -186,7 +182,6 @@ private fun rememberFeedPreviewPlayerState(
     LaunchedEffect(state.player, isActive) {
         val player = state.player ?: return@LaunchedEffect
         runCatching {
-            // A Viewer that opened and closed within the release grace stopped this still-leased player.
             if (isActive) state.lease?.let(context.videoPlaybackInfrastructure().feedPreviewPlayerPool::resume)
             traceMediaSection(MediaTraceSections.PREVIEW_PLAY_PAUSE) {
                 player.playWhenReady = isActive
@@ -355,10 +350,6 @@ private class FeedPreviewPlayerState {
         isActuallyPlaying = false
     }
 
-    /**
-     * Points [playerView] at [player] inside a surface trace section. PlayerView ignores an assignment of the player it
-     * already shows, so that case is skipped before the section and only real attaches and detaches are timed.
-     */
     fun showPlayerIn(playerView: PlayerView, player: ExoPlayer?) {
         if (playerView.player === player) return
         val section = if (player == null) MediaTraceSections.PREVIEW_SURFACE_DETACH else MediaTraceSections.PREVIEW_SURFACE_ATTACH
@@ -379,7 +370,6 @@ fun buildFeedImageRequest(
         url = url,
         sourceKey = sourceKey,
         crossfade = false,
-        // Cards only draw their bitmap, so it can skip the upload to the GPU on the frame it scrolls in.
         allowHardware = true,
         targetWidthPx = decodeSize.widthPx,
         targetHeightPx = decodeSize.heightPx,

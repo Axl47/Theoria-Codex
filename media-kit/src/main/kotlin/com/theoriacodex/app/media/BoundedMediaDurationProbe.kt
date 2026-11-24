@@ -22,7 +22,6 @@ class BoundedMediaDurationProbe(
         require(retryDelayMs > 0L) { "Duration probe retry delay must be positive" }
     }
 
-    /** Unbounded in time: [MediaDurationAcquisitionEngine] times out the whole lookup, probe included. */
     suspend fun probe(post: Post): MediaDurationState {
         val ref = authoritativeDurationProbeRef(post)
             ?: return MediaDurationState.Unsupported(
@@ -43,10 +42,6 @@ class BoundedMediaDurationProbe(
         }
     }
 
-    /**
-     * Most media names its duration in the first bytes, so a small read settles it. MP4 box sizes
-     * then point at a later `moov`; anything else falls back to full-size head and tail windows.
-     */
     private suspend fun probeWithinBudget(
         post: Post,
         ref: ImageRef,
@@ -80,7 +75,6 @@ class BoundedMediaDurationProbe(
         }
     }
 
-    /** Follows top-level MP4 boxes to `moov`. Null hands over to the fallback windows. */
     private suspend fun seekMovieBox(
         post: Post,
         location: String,

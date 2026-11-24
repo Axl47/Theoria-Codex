@@ -13,7 +13,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.MediaRequestFactory
 
-/** Draws the first of [candidates] that loads, or [fallback] when none does. */
 @Composable
 fun CodexCoverImage(
     candidates: List<CodexCoverCandidate>,

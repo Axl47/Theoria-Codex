@@ -15,7 +15,6 @@ import kotlinx.coroutines.withContext
 
 data class DownloadedPostFile(val uri: Uri, val mime: String?)
 
-/** Restored jobs have no remote preview; decode videos from their tracked local destination. */
 suspend fun downloadedPostPreview(context: Context, file: DownloadedPostFile): Any? =
     withContext(Dispatchers.IO) {
         if (file.mime?.startsWith("video/") != true) return@withContext file.uri
@@ -25,7 +24,6 @@ suspend fun downloadedPostPreview(context: Context, file: DownloadedPostFile): A
         }
     }
 
-/** Resolve tracked Android destinations; never persist or guess a provider's media path. */
 internal class PostDownloadFiles(private val context: Context) {
     private val manager get() = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
 
@@ -52,7 +50,6 @@ internal class PostDownloadFiles(private val context: Context) {
         return DownloadedPostFile(contentUri, mime ?: context.contentResolver.getType(contentUri))
     }
 
-    /** Existing-file collisions may point at a file without a successful native transfer. */
     private fun existingDestination(item: PostDownloadItem): Uri? {
         if (item.status != PostDownloadStatus.ALREADY_EXISTS && item.status != PostDownloadStatus.FAILED) return null
         val id = item.downloadId ?: return null
@@ -87,7 +84,6 @@ internal class PostDownloadFiles(private val context: Context) {
     }
 }
 
-/** A missing file or missing Android viewer falls back to the canonical post inside the app. */
 fun openDownloadedPostFile(context: Context, file: DownloadedPostFile): Boolean = runCatching {
     context.startActivity(Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(file.uri, file.mime ?: "application/octet-stream")
@@ -95,7 +91,6 @@ fun openDownloadedPostFile(context: Context, file: DownloadedPostFile): Boolean 
     })
 }.isSuccess
 
-/** Cancellation stays cancellation; unavailable files and missing Android handlers open the post. */
 suspend fun openPostDownload(
     item: PostDownloadItem,
     findFile: suspend (PostDownloadItem) -> DownloadedPostFile?,

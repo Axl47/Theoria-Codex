@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-/** Disposable owners clear their own stores; pinned offline media is deliberately separate. */
 @OptIn(coil.annotation.ExperimentalCoilApi::class)
 class MediaCacheMaintenance(
     private val context: Context,
@@ -30,7 +29,6 @@ class MediaCacheMaintenance(
         )
     }
 
-    /** Returns false when an active animation kept its archive; callers can offer another clear later. */
     suspend fun clear(): Boolean {
         withContext(Dispatchers.IO) {
             context.imageLoader.diskCache?.clear()

@@ -12,14 +12,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val LANE_JUMP_LOG_TAG = "TheoriaGridJump"
 
-/** Outlives a feed's composition, so a card that changes column across the Viewer is still caught. */
 private val laneHistories = ConcurrentHashMap<String, FeedLaneHistory>()
 
-/**
- * Debug-only check for "no shown card changes column": logs every layout where one did, or where a card came
- * back at another height (the usual reason columns re-balance). Read it with `adb logcat -s TheoriaGridJump`
- * to tell which interaction reshuffled a feed.
- */
 @Composable
 fun FeedLaneJumpLogger(gridId: String, state: LazyStaggeredGridState) {
     if (!BuildConfig.DEBUG) return

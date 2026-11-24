@@ -19,10 +19,6 @@ import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 
-/**
- * The identity of [query] run in [sourceScope], after dropping what the scope's mode cannot run. Results, cached
- * first pages and saved scroll positions are kept per key; a temporary source pick is its own search.
- */
 fun searchExecutionKey(query: Query, sourceScope: SearchSourceScope): String {
     val queryHash = QueryHash.from(query.normalizedForMode(sourceScope.queryMode()).query)
     val temporary = sourceScope as? SearchSourceScope.Temporary ?: return queryHash
@@ -30,7 +26,6 @@ fun searchExecutionKey(query: Query, sourceScope: SearchSourceScope): String {
 }
 
 interface SearchExecutionService {
-    /** Runs [query]'s first page; [onPartial], when given, receives usable results before every source has answered. */
     suspend fun executeInitial(
         query: Query,
         sourceScope: SearchSourceScope,
@@ -40,7 +35,6 @@ interface SearchExecutionService {
 
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
 
-    /** Retries only the failed [source] at its exact page in [previous], keeping every other source's place. */
     suspend fun retrySource(
         query: Query,
         sourceScope: SearchSourceScope,
@@ -49,10 +43,6 @@ interface SearchExecutionService {
         source: SourceKey,
     ): SearchPageResult
 
-    /**
-     * The first page last remembered for [executionKey], shown while it refreshes; empty when there is none.
-     * The key doesn't cover the enabled sources, so posts from outside [sources] are dropped.
-     */
     suspend fun cachedFirstPage(executionKey: String, sources: Set<SourceKey>): List<Post> = emptyList()
 
     suspend fun rememberFirstPage(executionKey: String, posts: List<Post>) = Unit
@@ -73,24 +63,16 @@ data class SearchInitialization(
     val availableSources: List<SourceKey>,
     val hasExecutedSearch: Boolean,
     val validationMessage: String? = null,
-    /** The source settings stored when Search restored, used until the route hears newer ones. */
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
-    /** The faceted search scopes each available source offers, for those that offer any. */
     val scopesBySource: Map<SourceKey, List<FacetedSearchScope>> = emptyMap(),
-    /** The available sources that match only exactly spelled tags, each with its name for the input error. */
     val exactTagSources: Map<SourceKey, String> = emptyMap(),
 )
 
-/**
- * What one search runs on, resolved by its caller from settings: the enabled sources and their
- * Unified weights. The engine keeps no settings of its own, so every caller can share it.
- */
 data class SearchSources(
     val enabled: Set<SourceKey>,
     val weights: Map<SourceKey, Double>,
 ) {
     companion object {
-        /** [scope]'s sources among [available], weighted as [runtime] weights exactly that set. */
         fun of(runtime: SourceRuntimeSettings, scope: SearchSourceScope, available: Set<SourceKey>): SearchSources {
             val enabled = scope.sources(runtime.enabledSources, available)
             return SearchSources(enabled, SourceWeightSettings.weightsFor(runtime, enabled))
@@ -104,11 +86,9 @@ data class SearchAutocompleteResult(
     val validationMessage: String? = null,
     val autocomplete: List<TagSuggestion> = emptyList(),
     val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
-    /** Previously searched terms matching the input and its scope, most-searched first; see [rankSearchedTags]. */
     val searchedTags: List<SearchTerm> = emptyList(),
 )
 
-/** Immutable provider continuation owned by the Search route owner. A single-source search keeps its token in [cursor] too. */
 data class SearchContinuation(
     val executionKey: String,
     val sourceScope: SearchSourceScope,
@@ -123,7 +103,6 @@ data class SearchContinuation(
     val canLoadMore: Boolean
         get() = cursor.pageTokens.any { (source, token) -> source !in failedSources && !token.isNullOrBlank() }
 
-    /** Folds in a page fetched from [attempted]; sources that failed join [failedSources] and the rest leave it. */
     fun accept(page: UnifiedSearchResult, attempted: Set<SourceKey>): SearchContinuation = copy(
         cursor = cursor.accept(page, attempted),
         failedSources = failedSources - attempted +
@@ -156,7 +135,6 @@ sealed interface SearchExecutionResult {
     ) : SearchExecutionResult
 }
 
-/** Successful empty and partial responses count; failed and capability-excluded attempts do not. */
 val SearchExecutionResult.completedSuccessfully: Boolean
     get() = this is SearchExecutionResult.Success && statuses.any { it.state == SourceRunState.SUCCESS }
 
@@ -178,11 +156,9 @@ sealed interface SearchPageResult {
     ) : SearchPageResult
 }
 
-/** Whether an answer carrying [executionKey] belongs to the request in flight: same request, same search. */
 fun com.theoriacodex.app.search.state.SearchUiState.admits(requestId: Long, executionKey: String): Boolean =
     execution.request?.let { request -> request.id == requestId && request.executionKey == executionKey } == true
 
-/** Results that arrive early go on screen unless a cached first page is already there. */
 fun com.theoriacodex.app.search.state.SearchUiState.showsPartialResults(
     requestId: Long, result: SearchExecutionResult.Success,
 ): Boolean = admits(requestId, result.executionKey) &&

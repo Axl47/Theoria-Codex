@@ -5,7 +5,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 
-/** A booru-shaped post whose file URL carries [hash]. */
 fun filePost(source: SourceKey, id: String, hash: String): Post = testPost(
     source = source,
     sourcePostId = id,

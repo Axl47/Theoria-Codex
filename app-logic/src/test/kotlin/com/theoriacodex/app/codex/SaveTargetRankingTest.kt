@@ -67,7 +67,6 @@ class SaveTargetRankingTest {
 
         val ranked = rankSaveTargets(listOf(a, b), profile, emptySet(), mapOf("b" to 0.95), memory, search, lastSavedAt, nowEpochMs = now)
         assertEquals(listOf("a", "b"), ranked.suggestions.ids())
-        // The picker passes relevance the search already lifted, and ranks the same.
         val picker = rankSaveTargets(listOf(a, b), profile, emptySet(), memory.boost(search, mapOf("b" to 0.95)), lastSavedAt = lastSavedAt, nowEpochMs = now)
         assertEquals(listOf("a", "b"), picker.ordered.ids())
     }

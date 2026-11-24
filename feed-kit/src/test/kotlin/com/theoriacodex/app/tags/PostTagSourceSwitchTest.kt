@@ -59,7 +59,6 @@ class PostTagSourceSwitchTest {
         compose.onNodeWithText("Switch source").performClick()
         compose.runOnIdle { assertEquals(listOf(SearchTerm("aoi", SearchFacet.ARTIST)), added) }
 
-        // The second group is "sea", which a general tag from any source may join.
         compose.onAllNodes(androidx.compose.ui.test.hasText("+ or"))[1].performClick()
         compose.tagChip("snow").performClick()
         compose.runOnIdle { assertEquals(listOf(1 to SearchTerm("snow")), alternatives) }

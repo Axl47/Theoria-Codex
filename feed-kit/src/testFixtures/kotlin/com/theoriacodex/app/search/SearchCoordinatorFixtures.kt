@@ -49,7 +49,6 @@ fun testSearchCoordinator(
     )
 }
 
-/** What [scope] searches under default settings, which enable every built-in source. */
 fun SearchCoordinator.defaultSources(scope: SearchSourceScope): SearchSources =
     SearchSources.of(SourceRuntimeSettings(), scope, availableSources.toSet())
 
