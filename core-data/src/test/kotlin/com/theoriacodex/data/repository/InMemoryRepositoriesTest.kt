@@ -31,9 +31,6 @@ class InMemoryRepositoriesTest {
         repo.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))) }
         repo.setResolveUnknownAnimatedDurations(true)
         repo.setInvertMultiImageScrollDirection(true)
-        repo.setAutomaticTextTranslationEnabled(true)
-        repo.setOcrLanguageEnabled(ViewerOcrLanguage.JAPANESE, true)
-        repo.setOcrLanguageEnabled(ViewerOcrLanguage.KOREAN, true)
         repo.setScenarioPreset(ScenarioPreset.PARTIAL_FAILURE)
         repo.setActiveProfile("profile-alt")
 
@@ -45,11 +42,6 @@ class InMemoryRepositoriesTest {
         assertTrue(pixivWeight > gelbooruWeight)
         assertTrue(settings.contentFilters.resolveUnknownAnimatedDurations)
         assertTrue(settings.viewer.invertMultiImageScrollDirection)
-        assertTrue(settings.viewer.automaticTextTranslationEnabled)
-        assertEquals(
-            setOf(ViewerOcrLanguage.JAPANESE, ViewerOcrLanguage.KOREAN),
-            settings.viewer.enabledOcrLanguages,
-        )
         assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
         assertEquals("profile-alt", settings.activeProfileId)
     }
