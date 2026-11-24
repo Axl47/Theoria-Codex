@@ -10,7 +10,7 @@ import org.junit.Test
 
 class CustomSitesTest {
     @Test
-    fun `addresses normalize to an HTTPS root and derive the planned ids`() {
+    fun `addresses normalize to an HTTPS root and derive the planned ids (ADR 0004)`() {
         val cases = listOf(
             Triple("safebooru.org", "https://safebooru.org", "custom_safebooru_org"),
             Triple(
@@ -27,7 +27,9 @@ class CustomSitesTest {
             Triple("https://booru.example:8443/", "https://booru.example:8443", "custom_booru_example__p8443"),
             Triple("HTTPS://Booru.Example:443/#top", "https://booru.example", "custom_booru_example"),
             Triple("//booru.example//posts/123", "https://booru.example", "custom_booru_example"),
-        )
+        ) + listOf("index.php", "posts", "post", "tags", "pools", "wiki_pages", "artists", "comments", "Wiki_Pages").map { segment ->
+            Triple("https://booru.example/board/$segment/1", "https://booru.example/board", "custom_booru_example__h${sha256("/board").take(8)}")
+        }
 
         cases.forEach { (input, baseUrl, sourceId) ->
             val address = valid(input)
@@ -49,7 +51,7 @@ class CustomSitesTest {
     }
 
     @Test
-    fun `unusable addresses are rejected before any request`() {
+    fun `unusable addresses are rejected before any request (ADR 0004)`() {
         val cases = mapOf(
             "" to SiteAddressError.MALFORMED,
             "   " to SiteAddressError.MALFORMED,
@@ -73,7 +75,7 @@ class CustomSitesTest {
     }
 
     @Test
-    fun `id validation accepts only the custom alphabet`() {
+    fun `id validation accepts only the custom alphabet (ADR 0004)`() {
         listOf(
             "custom_safebooru_org",
             "custom_example-booru_net",
@@ -81,6 +83,7 @@ class CustomSitesTest {
             "custom_booru_example__p8443",
             "custom_booru_example__h0a1b2c3d",
             "custom_booru_example__p8443__h0a1b2c3d",
+            "custom_${"a".repeat(89)}",
         ).forEach { assertTrue(it, CustomSourceIds.isValid(it)) }
 
         listOf(
@@ -93,7 +96,7 @@ class CustomSitesTest {
             "custom_booru__p0",
             "custom_booru__hXYZ",
             "custom_booru___org",
-            "custom_${"a".repeat(CustomSourceIds.MAX_LENGTH)}",
+            "custom_${"a".repeat(90)}",
         ).forEach { assertFalse(it, CustomSourceIds.isValid(it)) }
     }
 
@@ -112,7 +115,7 @@ class CustomSitesTest {
     }
 
     @Test
-    fun `profiles validate identity, label and headers and keep unknown families`() {
+    fun `profiles validate identity, label and headers and keep unknown families (ADR 0004)`() {
         val address = valid("safebooru.org")
         val profile = SiteProfile(
             sourceId = address.derivedSourceId,
@@ -130,6 +133,10 @@ class CustomSitesTest {
         assertRejected { profile.copy(searchTermLimit = 0) }
         assertRejected { SiteHeaders(userAgent = "Theoria\r\nX-Injected: 1") }
         assertRejected { SiteCredentials(user = "", apiKey = "key") }
+    }
+
+    @Test
+    fun `site credentials never show in text (ADR 0004)`() {
         assertEquals("SiteCredentials([REDACTED])", SiteCredentials("user", "secret-key").toString())
     }
 

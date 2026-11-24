@@ -92,7 +92,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `each status number Mihon and Aniyomi use has its status, and any other is unknown`() {
+    fun `each status number Mihon and Aniyomi use has its status, and any other is unknown (ADR 0007)`() {
         val expected = listOf(
             SeriesStatus.UNKNOWN, SeriesStatus.ONGOING, SeriesStatus.COMPLETED, SeriesStatus.LICENSED,
             SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UPCOMING, SeriesStatus.UNKNOWN,
@@ -129,7 +129,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt`() = runTest {
+    fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt (ADR 0007)`() = runTest {
         val slug = buildJsonObject { put("slug", "s-1") }
         source.listing = MangasPage(listOf(manga("/s", "Series").also { it.memo = slug }), hasNextPage = false)
         val oversized = buildJsonObject { put("blob", "x".repeat(MAX_MEMO_LENGTH)) }
@@ -171,7 +171,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `a listing is handed the stored chapters, memos included, and the series memo it leaves comes back`() = runTest {
+    fun `a listing is handed the stored chapters, memos included, and the series memo it leaves comes back (ADR 0007)`() = runTest {
         source.chapters = listOf(chapter("Chapter 2", "/c/2"), chapter("Chapter 1", "/c/1"))
         source.listingMemo = buildJsonObject { put("pages", 3) }
         val stored = Series(SeriesId(series.key, "/s"), "Series")

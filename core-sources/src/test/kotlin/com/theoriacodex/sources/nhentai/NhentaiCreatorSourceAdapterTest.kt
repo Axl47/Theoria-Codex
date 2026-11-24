@@ -17,7 +17,7 @@ import org.junit.Test
 
 class NhentaiCreatorSourceAdapterTest {
     @Test
-    fun `tag count lookup publishes completed counts before a later request times out`() = runTest {
+    fun `tag count lookup publishes completed counts before a later request times out (ADR 0008)`() = runTest {
         var requests = 0
         val http = object : SourceHttpClient by FakeHttpClient() {
             override suspend fun postJson(url: String, body: String, headers: Map<String, String>): SourceHttpResponse {

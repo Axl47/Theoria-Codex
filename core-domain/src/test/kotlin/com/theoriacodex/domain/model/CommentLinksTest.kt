@@ -17,7 +17,7 @@ class CommentLinksTest {
     }
 
     @Test
-    fun `links round-trip and other fragments are ignored`() {
+    fun `links round-trip and other fragments are ignored (ADR 0001)`() {
         listOf(CommentTarget("5"), CommentTarget("6", parentId = "5")).forEach { target ->
             val link = commentLink("https://example.com/p/1", target, null)
             assertEquals(target, parseCommentTarget(link.substringAfter('#')))
