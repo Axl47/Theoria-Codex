@@ -3,7 +3,6 @@ package com.theoriacodex.app.series
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -16,6 +15,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SettingsGroup
@@ -131,12 +131,12 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
 /** The one place a mistake is costly: what turning an extension on lets it do, and who signed it. */
 @Composable
 private fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Turn on ${extension.name}?") },
-        text = { Text("Its code runs inside this app and can read this app's data.\n\nSigned by ${extension.signer}") },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Turn on") } },
+    ConfirmDialog(
+        title = "Turn on ${extension.name}?",
+        text = "Its code runs inside this app and can read this app's data.\n\nSigned by ${extension.signer}",
+        confirmLabel = "Turn on",
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
     )
 }
 

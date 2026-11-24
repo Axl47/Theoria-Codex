@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.customsites.BuiltInSiteSummary
 import com.theoriacodex.app.customsites.BuiltInTestResult
 import com.theoriacodex.app.customsites.CustomSiteAvailability
+import com.theoriacodex.app.customsites.CustomSiteMutation
 import com.theoriacodex.app.settings.BuiltInAccounts
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
@@ -66,6 +67,30 @@ class CustomSitesScreenTest {
         compose.onNodeWithText("Example Booru").assertExists()
         compose.onNodeWithText("danbooru.example · Danbooru · Ready").assertExists()
         assertEquals("https://danbooru.example/posts?tags=cat", controller.probes.single().input)
+    }
+
+    @Test
+    fun `adding a site seen before asks to reconnect, and Cancel keeps it unsaved`() {
+        val controller = FakeCustomSitesController().apply {
+            onProbe = { supported("danbooru.example", ProtocolFamily.DANBOORU, label = "Example Booru") }
+            onAdd = { draft ->
+                if (draft.confirmReconnect) CustomSiteMutation.Success else CustomSiteMutation.ReconnectConfirmationNeeded("danbooru.example")
+            }
+        }
+        show(controller)
+        compose.onNodeWithContentDescription("Add site").performClick()
+        compose.onNodeWithText("Site address").performTextInput("https://danbooru.example")
+        compose.onNodeWithText("Check site").performClick()
+        compose.onNode(hasText("Add site") and hasClickAction()).performClick()
+
+        compose.onNodeWithText("Reconnect site?").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText("Reconnect site?").assertDoesNotExist()
+
+        compose.onNode(hasText("Add site") and hasClickAction()).performClick()
+        compose.onNodeWithText("Reconnect").performClick()
+
+        compose.onNodeWithText("danbooru.example · Danbooru · Ready").assertExists()
     }
 
     @Test
