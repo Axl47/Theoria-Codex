@@ -57,4 +57,4 @@ and link the record that replaces it.
 | [0037](0037-statistics-thumbnail-store.md) | Statistics thumbnails are private files owned by the top lists and fetched only for promoted or opened posts |
 | [0038](0038-stored-record-compatibility.md) | Durable records are separate from domain models and keep decoding every shape this app ever stored |
 | [0039](0039-tachiyomi-backup-import.md) | Mihon-family backups are decoded from their protobuf wire format and import their followed or started series |
-| [0018](0018-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |
+| [0040](0040-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |
