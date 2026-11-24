@@ -110,6 +110,10 @@ class DanbooruCommentsTest {
         assertEquals(97, page.comments.size)
         assertEquals("2", page.nextPageToken)
         assertNull(page.total)
+
+        val withEntries = (1..98).map { """{"id":$it,"body":"c","creator":{"name":"a"}}""" } + listOf("null", "\"gone\"")
+        http.enqueueGet(url, query(2), body = withEntries.joinToString(",", "[", "]"))
+        assertEquals("3", adapter.comments(post, pageToken = "2").nextPageToken)
     }
 
     @Test

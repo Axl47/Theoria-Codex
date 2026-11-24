@@ -59,7 +59,7 @@ class HostOutageTrackerTest {
         assertTrue(tracker.outages.value.isEmpty())
     }
 
-    @Test fun `a challenge keeps the request it refused and counts as challenged until it expires (ADR 0050)`() {
+    @Test fun `a challenge keeps the request it refused, is not renewed while active, and counts as challenged until it expires (ADR 0050)`() {
         val refused = RefusedRequest("https://api.site.test/list", "agent/1")
         tracker.record(refused.url, HostOutageKind.CHALLENGE, refused)
         tracker.record("https://down.test/", HostOutageKind.MAINTENANCE)
@@ -69,6 +69,17 @@ class HostOutageTrackerTest {
         assertFalse(tracker.isChallenged("https://down.test/"))
         now += 60_001L
         assertFalse(tracker.isChallenged("https://api.site.test/other"))
+
+        val first = RefusedRequest("https://cf.test/a", "agent/1")
+        tracker.recordChallenge(first.url, first)
+        now += 10_000L
+        tracker.recordChallenge("https://cf.test/b", RefusedRequest("https://cf.test/b", "agent/2"))
+        assertEquals(HostOutage(HostOutageKind.CHALLENGE, now - 10_000L + 60_000L, first), tracker.outages.value["cf.test"])
+
+        tracker.record("https://bare.test/", HostOutageKind.CHALLENGE)
+        val gained = RefusedRequest("https://bare.test/c", "agent/3")
+        tracker.recordChallenge(gained.url, gained)
+        assertEquals(gained, tracker.outages.value["bare.test"]?.refused)
     }
 
     @Test fun `an unresolved domain counts only while online (ADR 0050)`() {
@@ -80,6 +91,7 @@ class HostOutageTrackerTest {
         assertTrue(gated.outages.value.isEmpty())
         online = true
         gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
+        assertTrue("an offline miss counted toward the two", gated.outages.value.isEmpty())
         now += 10_000L
         gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
         assertEquals(HostOutageKind.UNRESOLVED, gated.outages.value["gone.example"]?.kind)
@@ -135,7 +147,7 @@ class HostOutageTrackerTest {
         }
     }
 
-    @Test fun `a maintenance page fails at once and the next request never reaches the host`() = runBlocking {
+    @Test fun `a maintenance page fails at once and the next request never reaches the host (ADR 0050, 0051)`() = runBlocking {
         val hits = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/") { exchange ->
@@ -221,7 +233,11 @@ class SiteHealthCheckTest {
     @Test fun `challenges count only for user-added sites (ADR 0050)`() = runBlocking {
         val cf = mapOf("cf-mitigated" to listOf("challenge"))
         check(403, headers = cf).check("https://builtin.example/", emptyMap(), countChallenges = false)
+        check(200, "<html>Verify you are not a robot to pass this challenge</html>").check("https://builtin.example/", emptyMap(), countChallenges = false)
         assertTrue(tracker.outages.value.isEmpty())
+        check(200, "<html>Verify you are not a robot to pass this challenge</html>").check("https://custom.example/", emptyMap(), countChallenges = true)
+        assertEquals(HostOutageKind.CHALLENGE, tracker.outages.value["custom.example"]?.kind)
+        tracker.clear("custom.example")
         check(403, headers = cf).check("https://custom.example/", emptyMap(), countChallenges = true)
         assertEquals(HostOutageKind.CHALLENGE, tracker.outages.value["custom.example"]?.kind)
     }

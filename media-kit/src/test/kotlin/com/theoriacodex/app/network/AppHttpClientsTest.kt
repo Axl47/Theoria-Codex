@@ -101,13 +101,22 @@ class AppHttpClientsTest {
     @Test
     fun `every app client turns a blocked lookup into an ordinary failure (ADR 0051)`() {
         val clients = AppHttpClients(CookieJar.NO_COOKIES)
-        val getters = AppHttpClients::class.java.methods.filter { it.parameterCount == 0 && it.returnType == OkHttpClient::class.java }
+        val public = AppHttpClients::class.java.methods
+            .filter { it.parameterCount == 0 && it.returnType == OkHttpClient::class.java }
+            .associate { it.name to it.invoke(clients) as OkHttpClient }
+        val lazy = AppHttpClients::class.java.declaredFields
+            .filter { Lazy::class.java.isAssignableFrom(it.type) }
+            .mapNotNull { field ->
+                field.isAccessible = true
+                ((field.get(clients) as Lazy<*>).value as? OkHttpClient)?.let { field.name to it }
+            }
+            .toMap()
 
-        assertTrue(getters.isNotEmpty())
-        for (getter in getters) {
-            val blocked = (getter.invoke(clients) as OkHttpClient).newBuilder().dns { throw SecurityException("blocked") }.build()
+        assertTrue(lazy.keys.toString(), "stalledPageRescue\$delegate" in lazy.keys)
+        for ((name, client) in public + lazy) {
+            val blocked = client.newBuilder().dns { throw SecurityException("blocked") }.build()
             val failure = runCatching { blocked.newCall(Request.Builder().url("https://example.test/").build()).execute() }.exceptionOrNull()
-            assertTrue("${getter.name}: $failure", failure is IOException)
+            assertTrue("$name: $failure", failure is IOException)
         }
     }
 }

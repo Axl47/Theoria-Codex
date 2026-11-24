@@ -56,10 +56,15 @@ class Rule34PahealSourceAdapterTest {
 
         assertEquals("image/png", fullMime(SAMPLE_PAHEAL_RSS))
         assertEquals("image/gif", fullMime(SAMPLE_PAHEAL_RSS.replace("data-ext='png'", "data-mime='image/gif; animated=true' data-ext='png'")))
+
+        val postPage = SAMPLE_PAHEAL_POST_HTML.replace("data-mime=\"image/jpeg\"", "data-mime=\"image/gif; animated=true\"")
+        val pageClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = postPage) }
+        val post = Rule34PahealSourceAdapter(httpClient = pageClient).resolvePost(PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = "5773878"))
+        assertEquals("image/gif", post?.full?.mime)
     }
 
     @Test
-    fun `no tags reads the listing page with the same file types`() = runTest {
+    fun `no tags reads the listing page with the same file types (ADR 0053)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_PAHEAL_LISTING_HTML)
         }

@@ -30,13 +30,15 @@ class GelbooruRelatedPostsSourceAdapterTest {
 
     @Test
     fun `related posts survive single failures and rethrow the first failure only when none resolve (ADR 0042)`() = runTest {
-        suspend fun related(failing: Set<String>) = runCatching {
-            val adapter = gelbooru(RelatedGelbooruHttpClient(RELATED_HTML, failingIds = failing)) as RelatedPostsSourceAdapter
-            adapter.relatedPosts(PostId(SourceKey.GELBOORU, "100"), limit = 6)
+        suspend fun related(failing: Set<String>, malformed: Set<String> = emptySet()) = runCatching {
+            val client = RelatedGelbooruHttpClient(RELATED_HTML, malformedIds = malformed, failingIds = failing)
+            (gelbooru(client) as RelatedPostsSourceAdapter).relatedPosts(PostId(SourceKey.GELBOORU, "100"), limit = 6)
         }
 
         assertEquals(listOf("101", "103"), related(setOf("102")).getOrThrow().map { post -> post.id.sourcePostId })
         assertEquals("101 unavailable", related(setOf("101", "102", "103")).exceptionOrNull()?.cause?.message)
+        assertEquals("101 unavailable", related(setOf("101", "103"), malformed = setOf("102")).exceptionOrNull()?.cause?.message)
+        assertEquals(emptyList<String>(), related(emptySet(), malformed = setOf("101", "102", "103")).getOrThrow())
     }
 
     private fun gelbooru(httpClient: SourceHttpClient) = GelbooruSourceAdapter(GelbooruSite.GELBOORU, httpClient)

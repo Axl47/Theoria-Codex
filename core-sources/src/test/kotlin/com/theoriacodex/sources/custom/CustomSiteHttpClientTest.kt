@@ -13,6 +13,7 @@ import com.theoriacodex.sources.http.defaultSourceOkHttpClient
 import com.theoriacodex.sources.http.httpTransport
 import java.io.IOException
 import java.net.InetSocketAddress
+import okhttp3.OkHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -64,13 +65,18 @@ class CustomSiteHttpClientTest {
 
     @Test
     fun `refuses redirects to another host or port without requesting them (ADR 0051)`() = runTest {
-        listOf("https://evil.example/a", "https://booru.example.evil.example/a", "https://booru.example:8443/a").forEach { target ->
+        listOf(
+            "https://evil.example/a",
+            "https://booru.example.evil.example/a",
+            "https://cdn.booru.example/a",
+            "https://booru.example:8443/a",
+        ).forEach { target ->
             requested.clear()
             val http = client(mapOf("https://booru.example/a" to redirect(target)))
 
             val failure = runCatching { http.get("https://booru.example/a") }.exceptionOrNull()
 
-            assertEquals(target, ProbeFailure.CROSS_HOST_REDIRECT, (failure as CustomSiteRedirectException).failure)
+            assertEquals(target, ProbeFailure.CROSS_HOST_REDIRECT, (failure as? CustomSiteRedirectException)?.failure)
             assertEquals(listOf("https://booru.example/a"), requested)
         }
     }
@@ -119,6 +125,62 @@ class CustomSiteHttpClientTest {
 
         assertEquals(302, response.statusCode)
         assertEquals(0, followedHits)
+    }
+
+    private fun <T> withLoopbackSite(
+        answer: (path: String, hit: Int, port: Int) -> Pair<Int, String?>,
+        use: suspend (OkHttpClient) -> T,
+    ): Pair<T, List<String>> {
+        val hits = mutableListOf<String>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                val path = exchange.requestURI.toString()
+                synchronized(hits) { hits += path }
+                val (status, location) = answer(path, hits.size, address.port)
+                location?.let { exchange.responseHeaders.add("Location", it) }
+                exchange.sendResponseHeaders(status, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val port = server.address.port
+        val loopback = OkHttpClient.Builder().addInterceptor { chain ->
+            val url = chain.request().url.newBuilder().scheme("http").host("127.0.0.1").port(port).build()
+            chain.proceed(chain.request().newBuilder().url(url).build())
+        }.build()
+        val result = try {
+            kotlinx.coroutines.runBlocking { use(loopback) }
+        } finally {
+            server.stop(0)
+        }
+        return result to synchronized(hits) { hits.toList() }
+    }
+
+    @Test
+    fun `the shipped client never lets the transport follow a redirect (ADR 0051)`() {
+        val (failure, hits) = withLoopbackSite({ path, _, port ->
+            if (path.startsWith("/a")) 302 to "http://127.0.0.1:$port/stolen?api_key=k" else 200 to null
+        }) { okHttp ->
+            runCatching { CustomSiteHttpClient(okHttpClient = okHttp).get("https://booru.example/a", mapOf("api_key" to "k")) }.exceptionOrNull()
+        }
+
+        assertEquals(listOf("/a?api_key=k"), hits)
+        assertEquals(ProbeFailure.INSECURE_REDIRECT, (failure as? CustomSiteRedirectException)?.failure)
+    }
+
+    @Test
+    fun `the shipped client follows three hops and retries a transient 503 once outages are tracked (ADR 0040, 0050, 0051)`() {
+        val (hopFailure, hops) = withLoopbackSite({ path, _, _ -> 302 to "/${path.removePrefix("/").toInt() + 1}" }) { okHttp ->
+            runCatching { CustomSiteHttpClient(okHttpClient = okHttp).get("https://booru.example/0") }.exceptionOrNull()
+        }
+        val (status, attempts) = withLoopbackSite({ _, hit, _ -> (if (hit == 1) 503 else 200) to null }) { okHttp ->
+            runCatching { CustomSiteHttpClient(outages = HostOutageTracker(), okHttpClient = okHttp).get("https://booru.example/index.php").statusCode }
+        }
+
+        assertTrue(hopFailure is IOException && hopFailure !is CustomSiteRedirectException)
+        assertEquals(listOf("/0", "/1", "/2", "/3"), hops)
+        assertEquals(2, attempts.size)
+        assertEquals(200, status.getOrNull())
     }
 
     @Test

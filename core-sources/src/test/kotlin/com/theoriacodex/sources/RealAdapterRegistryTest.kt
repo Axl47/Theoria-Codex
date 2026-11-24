@@ -91,20 +91,24 @@ class RealAdapterRegistryTest {
 
     @Test
     fun `every source fails a lookup on a failed request instead of answering null (ADR 0008)`() = runTest {
-        val refused = FailingTransport { SourceByteResponse(503, ByteArray(0)) }
+        val unavailable = FailingTransport { SourceByteResponse(503, ByteArray(0)) }
+        val rateLimited = FailingTransport { SourceByteResponse(429, ByteArray(0)) }
         val unreachable = IOException("transport down")
         val down = FailingTransport { throw unreachable }
 
-        val refusedReport = failedRequestReport(refused) { failure -> failure is SourceAdapterException }
+        val unavailableReport = failedRequestReport(unavailable) { failure -> failure is SourceAdapterException }
+        val rateLimitedReport = failedRequestReport(rateLimited) { failure -> failure is SourceAdapterException }
         val downReport = failedRequestReport(down) { failure ->
             failure is SourceAdapterException && generateSequence(failure.cause) { it.cause }.any { it === unreachable }
         }
 
-        assertEquals(emptyList<String>(), refusedReport.wrong)
+        assertEquals(emptyList<String>(), unavailableReport.wrong)
+        assertEquals(emptyList<String>(), rateLimitedReport.wrong)
         assertEquals(emptyList<String>(), downReport.wrong)
-        assertEquals("checked lookups", 27, refusedReport.checked)
-        assertEquals(refusedReport.checked, downReport.checked)
-        assertEquals(setOf("AIBOORU", "DANBOORU", "GELBOORU", "IWARA", "PIXIV", "custom_booru_example"), refusedReport.accountsAsking)
+        assertEquals("checked lookups", 27, unavailableReport.checked)
+        assertEquals(unavailableReport.checked, rateLimitedReport.checked)
+        assertEquals(unavailableReport.checked, downReport.checked)
+        assertEquals(setOf("AIBOORU", "DANBOORU", "GELBOORU", "IWARA", "PIXIV", "custom_booru_example"), unavailableReport.accountsAsking)
     }
 
     private class FailedRequestReport(val checked: Int, val wrong: List<String>, val accountsAsking: Set<String>)
@@ -115,8 +119,10 @@ class RealAdapterRegistryTest {
             gelbooruCredentials = UserApiKey("1", "key")
             rule34XxxCredentials = UserApiKey("1", "key")
         }
-        val registry = RealAdapterRegistry(credentials, http, exposedSources = SourceKey.builtIns.toSet())
-        val adapters = SourceKey.builtIns.map { key -> requireNotNull(registry.adapterFor(key)) } + customFamilyAdapters(http).values
+        val registered = RealAdapterRegistry::class.java.getDeclaredField("adaptersBySource")
+            .apply { isAccessible = true }
+            .get(RealAdapterRegistry(credentials, http)) as Map<*, *>
+        val adapters = registered.values.map { it as SourceAdapter } + customFamilyAdapters(http).values
         var checked = 0
         val wrong = mutableListOf<String>()
         val accountsAsking = mutableSetOf<String>()

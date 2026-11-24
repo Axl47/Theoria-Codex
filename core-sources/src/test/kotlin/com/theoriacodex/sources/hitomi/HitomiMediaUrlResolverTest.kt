@@ -117,6 +117,13 @@ class HitomiMediaUrlResolverTest {
             ),
             hitomiThumbnailUrls(hash, primaryShard = 2, rendition = HitomiThumbnail.CARD),
         )
+        assertEquals(
+            listOf(
+                "https://atn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
+                "https://btn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
+            ),
+            hitomiThumbnailUrls(hash, primaryShard = 1, rendition = HitomiThumbnail.CARD),
+        )
     }
 
     @Test
@@ -193,23 +200,22 @@ class HitomiMediaUrlResolverTest {
 
     @Test
     fun `non cancellation refresh failure consumes the failed version retry (ADR 0043)`() = runTest {
-        val client = QueueHttpClient(
-            fixture(),
-            SourceHttpResponse(statusCode = 503, body = "unavailable"),
-        )
-        val resolver = HitomiMediaUrlResolver(client)
-        val file = mediaFile()
-        val initial = resolver.candidates(file)
-        val failedVersion = initial.first().configurationVersion
+        for (refreshFailure in listOf<Any>(SourceHttpResponse(statusCode = 503, body = "unavailable"), java.io.IOException("reset"))) {
+            val client = QueueHttpClient(fixture(), refreshFailure, fixture())
+            val resolver = HitomiMediaUrlResolver(client)
+            val file = mediaFile()
+            val initial = resolver.candidates(file)
+            val failedVersion = initial.first().configurationVersion
 
-        val failure = runCatching {
-            resolver.refreshCandidates(file, failedVersion)
-        }.exceptionOrNull()
-        val guardedRetry = resolver.refreshCandidates(file, failedVersion)
+            val failure = runCatching {
+                resolver.refreshCandidates(file, failedVersion)
+            }.exceptionOrNull()
+            val guardedRetry = resolver.refreshCandidates(file, failedVersion)
 
-        assertTrue(failure is HitomiProtocolException)
-        assertEquals(2, client.getCount)
-        assertEquals(initial, guardedRetry)
+            assertTrue("$failure", failure is HitomiProtocolException || failure is java.io.IOException)
+            assertEquals("$refreshFailure", 2, client.getCount)
+            assertEquals(initial, guardedRetry)
+        }
     }
 
     @Test

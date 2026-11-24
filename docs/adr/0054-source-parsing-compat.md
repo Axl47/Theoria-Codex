@@ -28,5 +28,6 @@ Dropping the Gson-encoder compatibility fixture or the lenient parsing is a deci
 
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/common/SourceParsingTest.kt`: `comment markup is read as a body fragment (ADR 0054)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapterTest.kt`: `score search spends a term on its order metatag and keeps numbered pages (ADR 0041, 0054)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruCommentsTest.kt`: `Safebooru's column layout is read too (ADR 0042, 0054)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiGalleryMetadataTest.kt`: `reads numbers sent as strings and ignores fields of the wrong type (ADR 0043, 0054)`, `reads tag namespace flags in every shape Hitomi sends (ADR 0043, 0054)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiPageTokenCodecTest.kt`: `tokens the Gson encoder issued decode the same (ADR 0054)`, `a token of another format version is rejected (ADR 0043, 0054)`

@@ -3,13 +3,16 @@ package com.theoriacodex.sources.pixiv
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.PixivCredentialSession
 import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,5 +77,53 @@ class PixivAccountDecisionTest {
         assertTrue(reset.isFailure)
         assertTrue(task.await().isFailure)
         assertEquals(old, accounts.getPixivTokens())
+    }
+
+    @Test fun `saving the same tokens again still rejects a refresh that started before it (ADR 0046)`() = runTest {
+        val old = PixivAuthTokens("old", "old-refresh", 1L)
+        val accounts = SessionBoundSourceCredentials(FakeCredentialsProvider().apply { pixivTokens = old })
+        val session = accounts.getPixivSession()
+
+        accounts.savePixivTokens(old)
+
+        assertFalse(accounts.commitPixivRefresh(session, PixivAuthTokens("new", "new-refresh", 1_000_000L)))
+        assertEquals(old, accounts.getPixivTokens())
+    }
+
+    @Test fun `an account decision and a refresh commit never run inside each other (ADR 0046)`() = runTest {
+        val old = PixivAuthTokens("old", "old-refresh", 1L)
+        val refreshed = PixivAuthTokens("new", "new-refresh", 1_000_000L)
+        val delegate = FakeCredentialsProvider().apply { pixivTokens = old }
+        val saveGate = CompletableDeferred<Unit>()
+        val accounts = SessionBoundSourceCredentials(object : com.theoriacodex.sources.credentials.SourceCredentialsProvider by delegate {
+            override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
+                saveGate.await()
+                delegate.savePixivTokens(tokens)
+            }
+
+            override suspend fun commitPixivRefresh(session: PixivCredentialSession, tokens: PixivAuthTokens?): Boolean =
+                error("SessionBoundSourceCredentials commits itself")
+        })
+
+        val commit = async { accounts.commitPixivRefresh(accounts.getPixivSession(), refreshed) }
+        runCurrent()
+        val decisionDuringCommit = async { accounts.invalidatePixivSession { "decided" } }
+        runCurrent()
+        assertFalse("an account decision ran inside a refresh commit", decisionDuringCommit.isCompleted)
+        saveGate.complete(Unit)
+        assertTrue(commit.await())
+        assertEquals("decided", decisionDuringCommit.await())
+
+        val decisionGate = CompletableDeferred<Unit>()
+        val staleSession = accounts.getPixivSession()
+        val decision = async { accounts.invalidatePixivSession { decisionGate.await() } }
+        runCurrent()
+        val commitDuringDecision = async { accounts.commitPixivRefresh(staleSession, old) }
+        runCurrent()
+        assertFalse("a refresh commit ran inside an account decision", commitDuringDecision.isCompleted)
+        decisionGate.complete(Unit)
+        decision.await()
+        assertFalse(commitDuringDecision.await())
+        assertEquals(refreshed, accounts.getPixivTokens())
     }
 }

@@ -131,6 +131,13 @@ class GelbooruSourceAdapterTest {
                 .search(sampleQuery(), pageToken = "26")
             assertTrue(body, page.items.isEmpty() && page.nextPageToken == null)
         }
+        val shortPage = (1..39).joinToString(",", """{"post":[""", "]}") { id ->
+            """{"id":"$id","preview_url":"https://gelbooru.com/p$id.jpg","file_url":"https://gelbooru.com/f$id.jpg","tags":"a"}"""
+        }
+        val last = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, shortPage) })
+            .search(sampleQuery(), pageToken = "26")
+        assertEquals(39, last.items.size)
+        assertNull(last.nextPageToken)
     }
 
     @Test
@@ -265,6 +272,10 @@ class GelbooruSourceAdapterTest {
 
         adapter.search(sampleQuery().withIncludeTermGroups(emptyList()), pageToken = null)
         assertEquals("", httpClient.lastGet?.query?.get("tags"))
+
+        val sketchOnly = Query(QueryMode.Source(SourceKey.GELBOORU), emptyList<String>(), listOf("sketch"), SortMode.NEWEST, null, null)
+        adapter.search(sketchOnly, pageToken = null)
+        assertEquals("-sketch sort:id:desc", httpClient.lastGet?.query?.get("tags"))
     }
 
     @Test

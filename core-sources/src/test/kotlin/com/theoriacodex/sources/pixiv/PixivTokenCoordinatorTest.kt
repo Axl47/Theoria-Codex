@@ -7,9 +7,12 @@ import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -42,21 +45,33 @@ class PixivTokenCoordinatorTest {
         val failed = tokens("failed", expiresAt = 1_000_000L)
         val winner = tokens("winner", expiresAt = 2_000_000L)
         val credentials = FakeCredentials(failed)
-        var refreshCount = 0
+        val refreshCalls = AtomicInteger()
+        val firstEntered = CompletableDeferred<Unit>()
+        val secondEntered = CompletableDeferred<Unit>()
         val coordinator = PixivTokenCoordinator(
             credentialsProvider = SessionBoundSourceCredentials(credentials),
             authApi = PixivAuthApi(UnusedHttpClient),
             clock = { 100_000L },
             refresh = {
-                refreshCount += 1
+                if (refreshCalls.incrementAndGet() == 1) {
+                    firstEntered.complete(Unit)
+                    withTimeoutOrNull(SECOND_CALLER_GRACE_MS) { secondEntered.await() }
+                } else {
+                    secondEntered.complete(Unit)
+                }
                 winner
             },
         )
 
-        val results = List(6) { async { coordinator.refreshAfterAuthFailure(failed) } }.awaitAll()
+        val first = async { runCatching { coordinator.refreshAfterAuthFailure(failed) } }
+        firstEntered.await()
+        val second = async { runCatching { coordinator.refreshAfterAuthFailure(failed) } }
 
-        assertEquals(List(6) { winner }, results)
-        assertEquals(1, refreshCount)
+        val results = listOf(first, second).map { it.await() }
+
+        assertEquals(1, refreshCalls.get())
+        assertEquals(listOf(winner, winner), results.map { it.getOrThrow() })
+        assertEquals(winner, credentials.pixiv)
     }
 
     @Test
@@ -92,6 +107,10 @@ class PixivTokenCoordinatorTest {
         override suspend fun clearPixivTokens() {
             pixiv = null
         }
+    }
+
+    private companion object {
+        const val SECOND_CALLER_GRACE_MS = 2_000L
     }
 
     private object UnusedHttpClient : SourceHttpClient {

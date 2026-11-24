@@ -151,9 +151,11 @@ class ChallengePassTest {
     fun `no pass for a site whose check is on screen, keeping the clearance the visible browser earned (ADR 0050)`() {
         cookies.values["cf_clearance"] = "visible"
         answers += { _, request -> challenge(request) }
+        passableHosts += "cdn.site.test"
         browsers.showCheck("https://www.site.test/")
 
         assertEquals(403, call("https://site.test/a").use { it.code })
+        assertEquals(403, call("https://cdn.site.test/a").use { it.code })
         assertEquals(emptyList<Request>(), passes)
         assertEquals("visible", cookies.values["cf_clearance"])
 
@@ -232,6 +234,45 @@ class ChallengePassTest {
         listOf(first, second).forEach(Thread::join)
 
         assertEquals(1, browsersRun.get())
+    }
+
+    @Test
+    fun `a pass cut short by cancellation leaves a waiting request its own pass (ADR 0050)`() {
+        val calls = java.util.Collections.synchronizedList(mutableListOf<okhttp3.Call>())
+        val started = CountDownLatch(1)
+        val browsersRun = AtomicInteger()
+        browser = object : ChallengeBrowser {
+            override fun mayWait() = true
+
+            override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
+                if (browsersRun.incrementAndGet() > 1) {
+                    cookies.values["cf_clearance"] = "new"
+                    return passed()
+                }
+                started.countDown()
+                Thread.sleep(500)
+                calls.first().cancel()
+                return false
+            }
+        }
+        answers += { chain, request ->
+            calls += chain.call()
+            challenge(request)
+        }
+        answers += { chain, request ->
+            calls += chain.call()
+            challenge(request)
+        }
+        answers += { _, request -> canned(request, body = "listing") }
+
+        val first = thread { runCatching { call("https://site.test/a").close() } }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        var waited: String? = null
+        val second = thread { waited = call("https://site.test/b").use { it.body.string() } }
+        listOf(first, second).forEach(Thread::join)
+
+        assertEquals(2, browsersRun.get())
+        assertEquals("listing", waited)
     }
 
     private fun call(url: String, client: OkHttpClient = this.client): Response =

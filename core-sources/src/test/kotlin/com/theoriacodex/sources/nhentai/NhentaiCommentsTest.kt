@@ -11,6 +11,7 @@ import com.theoriacodex.sources.testing.commentTestPost
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NhentaiCommentsTest {
@@ -82,9 +83,19 @@ class NhentaiCommentsTest {
             failure = HostUnavailableException("nhentai.net", HostOutageKind.CHALLENGE),
         )
 
+        http.enqueueGet(
+            url = "https://nhentai.net/api/v2/galleries/123/comments",
+            query = mapOf("page" to "1", "per_page" to "50"),
+            body = "<!DOCTYPE html><html><title>Just a moment...</title></html>",
+            statusCode = 403,
+            responseHeaders = mapOf("cf-mitigated" to listOf("challenge")),
+        )
+
         val failure = runCatching { adapter.comments(post, pageToken = null) }.exceptionOrNull()
+        val rawChallenge = runCatching { adapter.comments(post, pageToken = null) }
 
         assertEquals(HostOutageKind.CHALLENGE.userMessage, failure?.message)
+        assertTrue("$rawChallenge", rawChallenge.exceptionOrNull() is SourceAdapterException)
         http.assertExhausted()
     }
 }

@@ -216,16 +216,18 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
 
     @Test
     fun `tags come from the first metadata mirror that lists any (ADR 0044)`() = runTest {
-        val httpClient = blockedApiWithMirroredReader(SourceHttpResponse(200, "<html><body></body></html>"), mirrorTags)
+        for (firstMirror in listOf(SourceHttpResponse(200, "<html><body></body></html>"), SourceHttpResponse(503, ""))) {
+            val httpClient = blockedApiWithMirroredReader(firstMirror, mirrorTags)
 
-        val post = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
-            .resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
+            val post = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
+                .resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
 
-        assertEquals(
-            listOf("https://nhentai.to/g/634609/", "https://nhentai.website/g/634609/"),
-            httpClient.requests.drop(2).map { it.url },
-        )
-        assertEquals(listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)
+            assertEquals(
+                listOf("https://nhentai.to/g/634609/", "https://nhentai.website/g/634609/"),
+                httpClient.requests.drop(2).map { it.url },
+            )
+            assertEquals("${firstMirror.statusCode}", listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)
+        }
     }
 
     @Test

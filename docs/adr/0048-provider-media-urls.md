@@ -29,7 +29,7 @@ Cards load fast and safely; a provider that only serves HTTP media would need an
 ## Guarded by
 
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/common/OriginUrlTest.kt`: `Pixiv image addresses and a known Pixiv ID become the artwork page (ADR 0048)`
-- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapterTest.kt`: `a card uses the 720 px variant rather than the 180 px default (ADR 0048)`, `provider media addresses are upgraded to HTTPS, plain or protocol-relative (ADR 0048)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapterTest.kt`: `post maps Danbooru timestamps artists samples and durations (ADR 0048)`, `a card uses the 720 px variant rather than the 180 px default (ADR 0048)`, `provider media addresses are upgraded to HTTPS, plain or protocol-relative (ADR 0048)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt`: `search canonicalizes numbered video cdn urls with invalid host certificates (ADR 0048)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/iwara/IwaraSourceAdapterTest.kt`: `a custom thumbnail card loads the small rendition, not the uploaded original (ADR 0048)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiResolutionSourceAdapterTest.kt`: `resolve post maps v2 gallery details with page paths (ADR 0048)`

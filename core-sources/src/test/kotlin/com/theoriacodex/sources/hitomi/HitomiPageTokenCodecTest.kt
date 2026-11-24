@@ -54,13 +54,16 @@ class HitomiPageTokenCodecTest {
     }
 
     @Test
-    fun `the token reader ignores unknown keys and the writer leaves out nulls (ADR 0043)`() {
+    fun `the token reader ignores unknown keys but not lenient syntax, and the writer leaves out nulls (ADR 0043)`() {
         val token = HitomiPageToken(version = 4, queryHash = "q", primaryKey = "all", primaryOffset = 0L, randomSeed = 7L)
         val written = String(Base64.getUrlDecoder().decode(codec.encode(token)))
-        val withUnknownKey = Base64.getUrlEncoder().withoutPadding().encodeToString(written.replace("{", "{\"addedLater\":1,").toByteArray())
+        fun encoded(json: String) = Base64.getUrlEncoder().withoutPadding().encodeToString(json.toByteArray())
 
         assertEquals("""{"version":4,"queryHash":"q","primaryKey":"all","primaryOffset":0,"randomSeed":7}""", written)
+        val withUnknownKey = encoded(written.replace("{", "{\"addedLater\":1,"))
         assertEquals(DecodedHitomiPageToken("q", "all", 0L, 7L, null, null, null), codec.decode(withUnknownKey))
+        val unquoted = runCatching { codec.decode(encoded(written.replace("\"q\"", "q"))) }.exceptionOrNull()
+        assertTrue("$unquoted", unquoted is HitomiPageTokenException)
     }
 
     private fun golden(name: String) =

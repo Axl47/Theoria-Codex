@@ -274,7 +274,7 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `oversized range ignoring Nozomi response becomes a typed source error`() = runTest {
+    fun `oversized range ignoring Nozomi response becomes a typed source error (ADR 0043)`() = runTest {
         val all = HitomiNozomi.urlFor(HitomiNozomiRequest())
         val http = RoutingHitomiHttpClient().apply {
             binaryFailures[all] = SourceHttpBodyTooLargeException(64)
@@ -310,7 +310,7 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `a media recovery whose configuration refresh fails becomes a typed source error`() = runTest {
+    fun `a media recovery whose configuration refresh fails becomes a typed source error (ADR 0043)`() = runTest {
         val http = RoutingHitomiHttpClient().apply {
             textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = fixture("gg-shape.js")
             galleryBodies[4_042_375] = fixture("gallery-4042375.js")

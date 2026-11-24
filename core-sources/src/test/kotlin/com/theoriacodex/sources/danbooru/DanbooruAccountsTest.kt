@@ -68,11 +68,14 @@ class DanbooruAccountsTest {
     @Test
     fun `favorites page by number because ordfav is not id ordered (ADR 0041)`() = runTest {
         http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "1"), body = fullPage(500))
-        http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "2"), body = "[]")
+        http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "2"), body = fullPage(400))
+        http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "3"), body = "[]")
 
         val first = adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = null)
         assertEquals("2", first.nextPageToken)
-        assertNull(adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = "2").nextPageToken)
+        val second = adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = "2")
+        assertEquals("3", second.nextPageToken)
+        assertNull(adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = "3").nextPageToken)
     }
 
     @Test

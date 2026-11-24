@@ -25,6 +25,7 @@ class ProbeEvidenceTest {
 
         assertFalse(basicAuth.isGelbooruAuthRefusal())
         assertFalse(deniedPage.isGelbooruAuthRefusal())
+        assertFalse(SourceHttpResponse(200, "<!DOCTYPE html><html><p>Access denied: api key required</p></html>").isGelbooruAuthRefusal())
         assertTrue(SourceHttpResponse(401, "").isGelbooruAuthRefusal())
         assertEquals(FamilyProbe.Failed(ProbeFailure.BLOCKED), deniedPage.unclaimed())
     }
