@@ -22,6 +22,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -80,6 +81,8 @@ class ViewerViewModelTest {
         }, scopeOverride = this)
         owner.replaceSession(session("exit", listOf(gallery, post("next", SourceKey.HITOMI, emptyList()))))
         owner.onAction(ViewerAction.SelectMedia(1))
+        // The neighbour's lookup starts once the current media shows, or after the wait for it.
+        advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS)
         runCurrent()
         val previous = owner.state.value
 
@@ -104,7 +107,7 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `lookahead resolves only the next sparse post and swipe reuses active resolution`() = runTest {
+    fun `lookahead resolves only the next sparse post once the current media shows and swipe reuses active resolution`() = runTest {
         val started = mutableListOf<PostId>()
         val release = CompletableDeferred<Unit>()
         val posts = listOf(post("first"), post("next", SourceKey.HITOMI, emptyList()),
@@ -115,6 +118,9 @@ class ViewerViewModelTest {
             post(id.sourcePostId, id.source)
         }, scopeOverride = this)
         owner.replaceSession(session("lookahead", posts))
+        runCurrent()
+        assertTrue(started.isEmpty())
+        owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), requireNotNull(owner.state.value.currentMedia).key, 0L))
         runCurrent()
         assertEquals(listOf(posts[1].id), started)
         owner.onAction(ViewerAction.SelectPage(1))
@@ -194,6 +200,8 @@ class ViewerViewModelTest {
             try { awaitCancellation() } finally { cancelled += id }
         }, scopeOverride = this)
         owner.replaceSession(session("jump", posts))
+        // A sparse current post shows no media, so its neighbour's lookup starts after the wait for it.
+        advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS)
         runCurrent()
         owner.onAction(ViewerAction.SelectPage(3))
         runCurrent()
