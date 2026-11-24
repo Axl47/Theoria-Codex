@@ -142,7 +142,8 @@ abstract class VerifyPublicDeveloperCopyAbsentTask : DefaultTask() {
 /**
  * Fails when a packaged native library has a LOAD segment aligned below 16 KB. Android flags such an app (a debuggable
  * build shows a dialog at launch) and a device with 16 KB pages may refuse to load the library. The libraries come from
- * dependencies, so this catches a new or bumped one; zip alignment is AGP's and isn't checked here.
+ * dependencies, so this catches a new or bumped one; zip alignment is AGP's and isn't checked here. There is
+ * deliberately no exception list: a misaligned library gets replaced with an aligned build, as QuickJS was.
  */
 abstract class VerifyNativePageAlignmentTask : DefaultTask() {
     @get:InputFiles
@@ -151,27 +152,33 @@ abstract class VerifyNativePageAlignmentTask : DefaultTask() {
 
     @TaskAction
     fun verify() {
-        val misaligned = apkDirectory.get().asFileTree.matching { include("*.apk") }.flatMap { apk ->
+        // Each packaged 64-bit library's smallest LOAD alignment; 32-bit libraries aren't bound by 16 KB pages.
+        val alignments = apkDirectory.get().asFileTree.matching { include("*.apk") }.flatMap { apk ->
             ZipFile(apk).use { zip ->
                 zip.entries().asSequence()
                     .filter { it.name.startsWith("lib/") && it.name.endsWith(".so") }
                     .mapNotNull { entry ->
-                        val alignment = zip.getInputStream(entry).use { loadAlignments(it.readBytes()).min() }
-                        "${apk.name}!${entry.name} (${alignment / 1024} KB)".takeIf { alignment < PAGE_SIZE }
+                        val path = "${apk.name}!${entry.name}"
+                        zip.getInputStream(entry).use { loadAlignments(path, it.readBytes()) }?.let { path to it.min() }
                     }
                     .toList()
             }
         }
+        // Every APK packages zstd, QuickJS and LiteRT, so finding none means this check stopped looking.
+        check(alignments.isNotEmpty()) { "No 64-bit native libraries found in ${apkDirectory.get().asFile}" }
+        val misaligned = alignments.filter { (_, alignment) -> alignment < PAGE_SIZE }
         check(misaligned.isEmpty()) {
             "Native libraries aligned below 16 KB, which Android 16 flags and 16 KB-page devices may not load. " +
-                "Use a build linked for 16 KB pages (NDK r28+):\n" + misaligned.joinToString("\n")
+                "Use a build linked for 16 KB pages (NDK r28+):\n" +
+                misaligned.joinToString("\n") { (path, alignment) -> "$path (${alignment / 1024} KB)" }
         }
     }
 
-    /** The `p_align` of every PT_LOAD program header in a little-endian 64-bit ELF file. */
-    private fun loadAlignments(elf: ByteArray): List<Long> {
+    /** The `p_align` of every PT_LOAD program header in a little-endian 64-bit ELF file, or null for 32-bit. */
+    private fun loadAlignments(path: String, elf: ByteArray): List<Long>? {
         val bytes = ByteBuffer.wrap(elf).order(ByteOrder.LITTLE_ENDIAN)
-        check(bytes.getInt(0) == ELF_MAGIC && elf[4] == ELF_CLASS_64) { "Not a 64-bit ELF file" }
+        check(elf.size >= ELF_HEADER_SIZE && bytes.getInt(0) == ELF_MAGIC) { "$path is not an ELF file" }
+        if (elf[4] != ELF_CLASS_64) return null
         val headersAt = bytes.getLong(0x20).toInt()
         val headerSize = bytes.getShort(0x36).toInt()
         return (0 until bytes.getShort(0x38).toInt())
@@ -184,6 +191,7 @@ abstract class VerifyNativePageAlignmentTask : DefaultTask() {
         const val PAGE_SIZE = 16_384L
         const val ELF_MAGIC = 0x464c457f // 0x7f "ELF", read little-endian
         const val ELF_CLASS_64: Byte = 2
+        const val ELF_HEADER_SIZE = 64
         const val PT_LOAD = 1
     }
 }
