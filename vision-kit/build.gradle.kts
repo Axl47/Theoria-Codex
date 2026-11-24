@@ -33,9 +33,9 @@ dependencies {
     // Perceptual hashes, to analyse a video's repeated frames once.
     implementation(project(":app-logic"))
     // The app's OkHttp, for the model download.
-    implementation(project(":core-sources"))
 
     implementation(libs.litert)
+    implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit)
