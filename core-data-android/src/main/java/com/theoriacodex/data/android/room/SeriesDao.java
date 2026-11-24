@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow;
 
 @Dao
 public interface SeriesDao {
+    /** Whether a `series_entries` row has progress, as `StoredSeriesEntry.hasProgress` says it. */
+    String ENTRY_HAS_PROGRESS = "(series_entries.read = 1 OR series_entries.last_page > 0)";
+
     @Query("SELECT series.*, (SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND series_entries.read = 0 "
             + "AND series_entries.source_order >= 0) AS unread_count, "
@@ -22,7 +25,7 @@ public interface SeriesDao {
             + "AS last_read_at_epoch_ms, "
             + "(series.last_opened_entry IS NOT NULL OR EXISTS (SELECT 1 FROM series_entries "
             + "WHERE series_entries.source = series.source AND series_entries.series_address = series.address "
-            + "AND (series_entries.read = 1 OR series_entries.last_page > 0))) AS started "
+            + "AND " + ENTRY_HAS_PROGRESS + ")) AS started "
             + "FROM series WHERE followed = 1 "
             + "ORDER BY CASE WHEN unread_count > 0 THEN 0 ELSE 1 END ASC, unread_count DESC, "
             + "title COLLATE NOCASE ASC, source ASC, address ASC")
@@ -65,7 +68,7 @@ public interface SeriesDao {
      */
     @Query("SELECT * FROM series WHERE followed = 1 OR reading_mode IS NOT NULL OR last_opened_entry IS NOT NULL "
             + "OR EXISTS (SELECT 1 FROM series_entries WHERE series_entries.source = series.source "
-            + "AND series_entries.series_address = series.address AND (series_entries.read = 1 OR series_entries.last_page > 0)) "
+            + "AND series_entries.series_address = series.address AND " + ENTRY_HAS_PROGRESS + ") "
             + "ORDER BY source ASC, address ASC")
     List<SeriesEntity> keptSeries();
 
