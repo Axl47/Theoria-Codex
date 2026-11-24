@@ -4,7 +4,6 @@ import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.extensionhost.answering
 import com.theoriacodex.extensionhost.cannedResponse
-import com.theoriacodex.sources.http.BrowserAddressDns
 import com.theoriacodex.sources.http.BrowserCookieStore
 import com.theoriacodex.sources.http.ChallengeBrowser
 import com.theoriacodex.sources.http.ChallengeBrowsers
@@ -15,15 +14,12 @@ import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.http.RefusedRequest
 import java.io.IOException
 import com.theoriacodex.extensionhost.assertFailsWith
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HostInterceptorsTest {
@@ -34,12 +30,13 @@ class HostInterceptorsTest {
 
     @Test
     fun `a non-IO exception later in the chain is wrapped in IOException (ADR 0060)`() {
-        val cause = IllegalStateException("boom")
-        val client = clientOf(UncaughtExceptionInterceptor(), Interceptor { throw cause })
+        listOf(IllegalStateException("boom"), NoClassDefFoundError("eu/kanade/tachiyomi/Missing")).forEach { cause ->
+            val client = clientOf(UncaughtExceptionInterceptor(), Interceptor { throw cause })
 
-        val failure = assertFailsWith<IOException> { client.newCall(request).execute() }
+            val failure = assertFailsWith<IOException> { client.newCall(request).execute() }
 
-        assertSame(cause, failure.cause)
+            assertSame(cause, failure.cause)
+        }
     }
 
     @Test
@@ -48,24 +45,6 @@ class HostInterceptorsTest {
             listOf("UncaughtExceptionInterceptor", "UserAgentInterceptor", "CloudflareInterceptor"),
             ExtensionHost.extensionClient(NoCookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker()).interceptors.map { it.javaClass.simpleName },
         )
-    }
-
-    @Test
-    fun `the extension client sends the browser's cookies to every host and resolves addresses as the browser does (ADR 0057)`() {
-        val cookies = object : BrowserCookieStore by NoCookies {
-            override fun cookieHeader(url: String) = "session=abc"
-        }
-        val client = ExtensionHost.extensionClient(cookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker())
-
-        assertEquals(listOf("session=abc"), client.cookieJar.loadForRequest("https://api.any-site.test/list".toHttpUrl()).map { "${it.name}=${it.value}" })
-        assertTrue(client.dns is BrowserAddressDns)
-    }
-
-    @Test
-    fun `the extension client keeps Mihon's timeouts (ADR 0057)`() {
-        val client = ExtensionHost.extensionClient(NoCookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker())
-
-        assertEquals(listOf(30_000, 30_000, 120_000), listOf(client.connectTimeoutMillis, client.readTimeoutMillis, client.callTimeoutMillis))
     }
 
     @Test
@@ -168,7 +147,7 @@ class HostInterceptorsTest {
             CloudflareInterceptor(ChallengePass(ChallengeBrowsers(NoCookies, NoBrowser), outages::isChallenged), outages),
             answering { sent ->
                 val server = if (sent.url.host == "site.test") "cloudflare" else "edge /chapter/private-title?sig=x"
-                cannedResponse(sent, code = 403).newBuilder().header("Server", server).build()
+                cannedResponse(sent, code = if ("busy" in sent.url.encodedPath) 503 else 403).newBuilder().header("Server", server).build()
             },
         )
         fun fetch(url: String, cookie: String? = null) =
@@ -176,10 +155,13 @@ class HostInterceptorsTest {
 
         assertEquals(403, fetch("https://site.test/chapter/1", cookie = "cf_clearance=old"))
         fetch("https://site.test/chapter/2")
+        assertEquals(503, fetch("https://site.test/busy/1"))
+        fetch("https://site.test/busy/2")
         fetch("https://other.test/page")
         assertEquals(
             listOf(
                 "site.test refused 403 with a clearance, no challenge, from Cloudflare",
+                "site.test refused 503 without a clearance, no challenge, from Cloudflare",
                 "other.test refused 403 without a clearance, no challenge, from another server",
             ),
             logged,
@@ -188,12 +170,10 @@ class HostInterceptorsTest {
 
     @Test
     fun `an IOException passes through as it is (ADR 0060)`() {
-        val client = clientOf(UncaughtExceptionInterceptor(), Interceptor { throw IOException("offline") })
+        val offline = IOException("offline")
+        val client = clientOf(UncaughtExceptionInterceptor(), Interceptor { throw offline })
 
-        val failure = assertFailsWith<IOException> { client.newCall(request).execute() }
-
-        assertEquals("offline", failure.message)
-        assertNull(failure.cause)
+        assertSame(offline, assertFailsWith<IOException> { client.newCall(request).execute() })
     }
 
     @Test

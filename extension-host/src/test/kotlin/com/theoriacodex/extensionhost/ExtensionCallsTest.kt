@@ -3,6 +3,7 @@ package com.theoriacodex.extensionhost
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import eu.kanade.tachiyomi.network.HttpException
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -33,7 +34,7 @@ class ExtensionCallsTest {
 
     @Test
     fun `a failure keeps the extension's own message, never its class name, and an adapter's exception passes unchanged (ADR 0060)`() = runBlocking {
-        listOf(IllegalStateException("bad html"), IOException("offline"), NoSuchMethodError("missing")).forEach { thrown ->
+        listOf(IllegalStateException("bad html"), IOException("offline"), NoSuchMethodError("missing"), IllegalStateException()).forEach { thrown ->
             assertEquals(thrown.message, assertFailsWith<SourceAdapterException> { calls.calling { throw thrown } }.message)
         }
         val adapter = SourceAdapterException(SourceFailureReason.NETWORK, "kept")
@@ -43,7 +44,7 @@ class ExtensionCallsTest {
 
     @Test
     fun `only a virtual machine error escapes an extension, and every other throwable is its failure (ADR 0060)`() = runBlocking {
-        listOf(OutOfMemoryError("extension"), InternalError("extension")).forEach { thrown ->
+        listOf(OutOfMemoryError("extension"), InternalError("extension"), StackOverflowError("extension")).forEach { thrown ->
             assertEquals(thrown.javaClass, assertFailsWith<VirtualMachineError> { calls.calling { throw thrown } }.javaClass)
             assertEquals(thrown.javaClass, assertFailsWith<VirtualMachineError> { failingAsIo { throw thrown } }.javaClass)
         }
@@ -58,7 +59,7 @@ class ExtensionCallsTest {
         val logged = mutableListOf<String>()
         Diagnostics.install { _, message, _ -> logged += message }
 
-        listOf(IllegalStateException("bad html"), IOException("offline"), NoSuchMethodError("missing"), AssertionError("broken")).forEach(calls::failure)
+        listOf(IllegalStateException("bad html"), IOException("offline"), HttpException(500), NoSuchMethodError("missing"), AssertionError("broken")).forEach(calls::failure)
 
         assertEquals(listOf("Ext needs host API this module lacks", "Ext failed"), logged)
     }

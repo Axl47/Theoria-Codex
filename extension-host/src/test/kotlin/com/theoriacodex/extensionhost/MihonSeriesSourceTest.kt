@@ -103,7 +103,7 @@ class MihonSeriesSourceTest {
     @Test
     fun `details that name only what they add keep the listed title and cover (ADR 0064)`() = runTest {
         source.listing = MangasPage(listOf(manga("/s", "Series", cover = "https://cdn.test/c.jpg")), hasNextPage = false)
-        source.details = SManga.create().also { it.genre = "Webtoon" }
+        source.details = SManga.create().also { it.title = " "; it.thumbnail_url = ""; it.genre = "Webtoon" }
         val listed = series.popular(1).series.single()
 
         val detailed = series.details(listed)
@@ -188,6 +188,35 @@ class MihonSeriesSourceTest {
         source.listingMemo = JsonObject(emptyMap())
         assertEquals("{}", series.entries(stored, emptyList()).seriesMemo)
         assertTrue(source.asked.last().memo.isEmpty())
+    }
+
+    @Test
+    fun `a chapter the source listed without a memo takes the stored one when it is handed back (ADR 0064)`() = runTest {
+        source.chapters = listOf(chapter("Chapter 1", "/c/1"))
+        val stored = Series(SeriesId(series.key, "/s"), "Series")
+        series.entries(stored, emptyList())
+
+        series.entries(stored, listOf(SeriesEntry("/c/1", "Chapter 1", 1f, memo = """{"id":1}""")))
+
+        val handed = source.handedChapters.last().single()
+        assertSame(source.chapters.single(), handed)
+        assertEquals(buildJsonObject { put("id", 1) }, handed.memo)
+    }
+
+    @Test
+    fun `a series memo the source clears in place while listing is cleared, not kept (ADR 0064)`() = runTest {
+        source.clearListingMemoInPlace = true
+
+        val listed = series.entries(Series(SeriesId(series.key, "/s"), "Series", memo = """{"pages":3}"""), emptyList())
+
+        assertEquals("{}", listed.seriesMemo)
+    }
+
+    @Test
+    fun `a source's filter list is asked like its other calls, so its failure is the source's (ADR 0060)`() = runTest {
+        source.filterFailure = IllegalStateException("No filters")
+
+        assertEquals(SourceFailureReason.PARSE, assertFailsWith<SourceAdapterException> { series.filters() }.reason)
     }
 
     @Test
@@ -309,6 +338,12 @@ class MihonSeriesSourceTest {
 
         var clearMemo = false
 
+        var clearListingMemoInPlace = false
+
+        var filterFailure: Throwable? = null
+
+        override fun getFilterList(): FilterList = filterFailure?.let { throw it } ?: FilterList()
+
         var listingMemo: JsonObject? = null
         val handedChapters = mutableListOf<List<SChapter>>()
 
@@ -331,6 +366,7 @@ class MihonSeriesSourceTest {
         ): SMangaUpdate {
             asked += manga
             if (fetchDetails && clearMemo) manga.memo = JsonObject(emptyMap())
+            if (!fetchDetails && clearListingMemoInPlace) manga.memo = JsonObject(emptyMap())
             updates += "${manga.url}${if (fetchDetails) " details" else ""}${if (fetchChapters) " chapters" else ""}"
             if (fetchChapters) handedChapters += chapters
             val listingCopy = listingMemo?.takeIf { !fetchDetails }?.let { memo -> manga.copy().also { it.memo = memo } }

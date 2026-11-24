@@ -90,11 +90,32 @@ class SourceSettingsTest {
             screen.addPreference(EditTextPreference(screen.context).apply { key = "typed"; defaultValue = true })
             screen.addPreference(EditTextPreference(screen.context).apply { key = "host"; defaultValue = "https://a.test" })
             screen.addPreference(SwitchPreferenceCompat(screen.context).apply { key = "data"; defaultValue = true })
+            screen.addPreference(SwitchPreferenceCompat(screen.context).apply { key = "bare" })
+            screen.addPreference(
+                ListPreference(screen.context).apply {
+                    key = "chosen"
+                    entries = arrayOf("A")
+                    entryValues = arrayOf("a")
+                    defaultValue = true
+                },
+            )
         }
 
         settings.list()
 
         assertEquals(mapOf("host" to "https://stored.test", "data" to true), store.all)
+    }
+
+    @Test
+    fun `a summary the source works out is worked out again for each listing (ADR 0061)`() {
+        val settings = settings { screen ->
+            screen.addPreference(EditTextPreference(screen.context).apply { key = "host"; title = "Address"; summary = "Using ${this@SourceSettingsTest.store.getString("host", "none")}" })
+        }
+        val first = settings.list().single().summary
+
+        store.edit().putString("host", "b.test").commit()
+
+        assertEquals(listOf("Using none", "Using b.test"), listOf(first, settings.list().single().summary))
     }
 
     @Test
