@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.navigation
 
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.theoriacodex.app.recommend.TagAffinity
 import com.theoriacodex.app.ui.components.TrailChipIcons
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -34,11 +35,11 @@ sealed interface TrailFork {
 fun trailForks(
     creator: CreatorProfile?,
     similarSupported: Boolean,
-    tags: List<String>,
+    affinities: List<TagAffinity>,
     covered: Collection<String>,
 ): List<TrailFork> {
     val searched = covered.mapTo(mutableSetOf(), ::normalizeMatchToken)
-    val fresh = tags.asSequence().filter { normalizeMatchToken(it) !in searched }.distinctBy(::normalizeMatchToken).take(MAX_TAG_FORKS)
+    val fresh = affinities.asSequence().filter { it.informative }.map { it.tag }.filter { normalizeMatchToken(it) !in searched }.distinctBy(::normalizeMatchToken).take(MAX_TAG_FORKS)
     return listOfNotNull(creator?.let(TrailFork::Creator), TrailFork.Similar.takeIf { similarSupported }) + fresh.map(TrailFork::Tag)
 }
 

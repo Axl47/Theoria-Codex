@@ -53,7 +53,7 @@ internal fun ViewerTrailRow(
         if (opener == TrailOpener.None) emptyList() else trailForks(
             creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile },
             similarSupported,
-            tagAffinities(post, affinity, feedShare).filter { it.informative }.map { it.tag },
+            tagAffinities(post, affinity, feedShare),
             trail.levelQuery?.includeTags.orEmpty(),
         ).filterNot { it.request(post, trail.levelQuery).trailKey() == trail.levelTrailKey }
     }

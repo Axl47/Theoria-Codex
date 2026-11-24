@@ -51,8 +51,8 @@ internal fun ForYouCardFooter(
     val forks = remember(post, affinity, feedShare, similarSupported, creatorBrowsingSources, level, origin) {
         val creator = creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile }
             ?.takeUnless { (level.fork as? TrailRequest.Creator)?.creator == it || origin is DeckOrigin.Creator }
-        val tags = tagAffinities(post, affinity, feedShare).filter { it.informative }.map { it.tag }
-        trailForks(creator, similarSupported, tags, level.query?.includeTags.orEmpty() + owner.laneTags(post.id))
+        val covered = level.query?.includeTags.orEmpty() + owner.laneTags(post.id)
+        trailForks(creator, similarSupported, tagAffinities(post, affinity, feedShare), covered)
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
         if (origin != null) {
