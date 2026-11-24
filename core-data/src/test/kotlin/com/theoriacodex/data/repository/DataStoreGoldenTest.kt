@@ -50,10 +50,10 @@ class DataStoreGoldenTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), settings)
     }
 
-    @Test fun `settings holding the retired scenario and extension keys load and drop them on the next write`() = runTest {
+    @Test fun `settings holding the retired scenario key load and drop it on the next write`() = runTest {
         val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, "settings-full")
         val file = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
-        val retired = listOf("scenarioPreset", "trustedExtensions", "extensionLanguages")
+        val retired = listOf("scenarioPreset")
         retired.forEach { key -> assertTrue("golden lacks $key", file.readText().contains("\"$key\"")) }
 
         withDataStoreScope { scope ->

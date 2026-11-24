@@ -41,7 +41,7 @@ class DataStoreFormatTest {
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
         )
         val full = SettingsDataStoreFile(settings = settings)
-        assertStoredFormat(golden("settings-full.json") to full)
+        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = setOf("settings.scenarioPreset"))
     }
 
     @Test
