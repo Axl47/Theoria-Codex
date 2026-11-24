@@ -1,7 +1,7 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.domain.series.SeriesSource
-import java.util.Locale
+import com.theoriacodex.domain.series.languageName
 
 /**
  * What the screens call [this] among the sources that are on, [sources]: its name, with its language after it, as the
@@ -10,10 +10,3 @@ import java.util.Locale
  */
 internal fun SeriesSource.label(sources: List<SeriesSource>): String =
     if (sources.any { it.key != key && it.name == name }) "$name · ${languageName(language)}" else name
-
-/** A source language's name in the device's language; Mihon's two codes that are not languages get plain words. */
-internal fun languageName(code: String): String = when (code) {
-    "all" -> "All"
-    "other" -> "Other"
-    else -> Locale.forLanguageTag(code).getDisplayName(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) }.ifBlank { code }
-}

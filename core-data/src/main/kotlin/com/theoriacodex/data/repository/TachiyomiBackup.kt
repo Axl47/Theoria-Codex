@@ -8,6 +8,7 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.domain.series.extensionSeriesStatus
 import com.theoriacodex.domain.series.extensionSourceKey
 import com.theoriacodex.domain.series.seriesKind
@@ -74,13 +75,17 @@ internal fun TachiyomiImport.importPreview(): SeriesImportPreview {
     )
 }
 
-/** The preview of importing [this] on a device where [sourcesOn] are the extension sources that are on and [newRepos] of its repos can be added. */
-internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, newRepos: List<NewExtensionRepo>): BackupPreview.Series {
-    val missing = series.map { it.series.series.id.source }.filterNot { it in sourcesOn }
-        .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+/**
+ * The preview of importing [this] on a device where the sources stand as [sources] says and [newRepos] of its repos can be
+ * added. A source that is not on is missing unless an installed extension offers it, which is then named to turn on.
+ */
+internal fun TachiyomiImport.preview(sources: SourceAvailability, newRepos: List<NewExtensionRepo>): BackupPreview.Series {
+    val (off, missing) = series.map { it.series.series.id.source }.filterNot { it in sources.on }
+        .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }.partition { it in sources.off }
     return BackupPreview.Series(
         importPreview(),
         newRepos = newRepos.map { repoNames[it.url] ?: it.url },
+        turnOn = off.mapNotNull(sources.off::get).distinct(),
         missingSources = missing.mapNotNull(sourceNames::get).distinct(),
         unnamedMissingSources = missing.count { it !in sourceNames },
     )

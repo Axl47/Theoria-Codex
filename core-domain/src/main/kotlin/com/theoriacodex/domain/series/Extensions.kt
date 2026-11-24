@@ -1,6 +1,8 @@
 package com.theoriacodex.domain.series
 
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.StateFlow
+import java.util.Locale
 
 /** What the user decided about extensions on this device; kept where Android neither backs it up nor transfers it. */
 data class ExtensionChoices(
@@ -48,6 +50,15 @@ data class InstalledExtension(
 )
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
+
+/** Why an extension source that is installed here is not on: its [extension] is off ([language] null), or it is on and [language] is off. */
+data class SourceOff(val extension: String, val language: String? = null)
+
+/**
+ * Where the extension sources stand: the keys that are [on], and for each other source an installed extension is known
+ * to offer, why it is [off]. A source in neither is not offered by any extension here, as far as this device knows.
+ */
+data class SourceAvailability(val on: Set<SourceKey> = emptySet(), val off: Map<SourceKey, SourceOff> = emptyMap())
 
 data class ExtensionSourceSettings(val sourceId: String, val sourceName: String, val language: String, val settings: List<ExtensionSetting>)
 
@@ -136,3 +147,10 @@ fun defaultLanguages(offered: List<String>, deviceLanguages: List<String>): Set<
 }
 
 private fun languagePart(code: String): String = code.substringBefore('-').substringBefore('_').lowercase()
+
+/** A source language's name in the device's language; Mihon's two codes that are not languages get plain words. */
+fun languageName(code: String): String = when (code) {
+    "all" -> "All"
+    "other" -> "Other"
+    else -> Locale.forLanguageTag(code).getDisplayName(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) }.ifBlank { code }
+}

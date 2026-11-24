@@ -27,6 +27,7 @@ import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
+import com.theoriacodex.domain.series.languageName
 
 internal const val EXTENSIONS_TITLE = "Extensions"
 
