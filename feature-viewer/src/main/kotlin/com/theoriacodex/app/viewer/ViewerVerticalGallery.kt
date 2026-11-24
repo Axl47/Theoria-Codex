@@ -163,7 +163,7 @@ internal fun ViewerVerticalGallery(
     ) {
         items(pages.size, key = { index -> index }) { index ->
             val placeholder = remember { latestShape.value }
-            val painted = shapes.getOrPut(index) { mutableFloatStateOf(Float.NaN) }
+            val painted = remember(shapes, index) { shapes.getOrPut(index) { mutableFloatStateOf(Float.NaN) } }
             val shape = painted.floatValue.takeUnless { it.isNaN() } ?: placeholder
             VerticalGalleryPage(
                 post, pageState, index, shape, gallery, screen.imageSession,
