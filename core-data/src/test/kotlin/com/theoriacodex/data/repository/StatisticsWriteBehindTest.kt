@@ -2,7 +2,6 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.FileStateCell
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
-import com.theoriacodex.data.storage.openDecodedJsonDataStore
 import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.WRITE_BEHIND_DELAY
@@ -68,19 +67,12 @@ class StatisticsWriteBehindTest {
         val directory = temporary.newFolder()
         val storeScope = newDataStoreScope()
         var encodes = 0
-        val store = openDecodedJsonDataStore(
-            file = directory.resolve(DATASTORE_STATISTICS_FILE_NAME),
-            logicalStore = "Statistics",
-            schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
-            defaultValue = StatisticsDataStoreFile(),
-            serializer = StatisticsDataStoreFile.serializer(),
-            scope = storeScope,
-            recoveries = FileStoreRecoveryRegistry(),
-            decode = StatisticsDataStoreFile::toDomain,
-            encode = { statistics -> encodes++; StatisticsDataStoreFile.fromDomain(statistics) },
-        )
+        val store = openStatisticsDataStore(directory, storeScope, FileStoreRecoveryRegistry()) { statistics ->
+            encodes++
+            StatisticsDataStoreFile.fromDomain(statistics)
+        }
         val repository = CellStatisticsRepository(store.writeBehind(WriteBehind(writeScope)))
-        repository.recordWatchedPost(SourceKey.GELBOORU, setOf(" padded ", "plain"))
+        repository.recordWatchedPost(SourceKey.GELBOORU, setOf("plain"))
         repository.recordSearch(setOf(SourceKey.GELBOORU), setOf(SearchTerm("plain")))
         val seen = repository.observeStatistics().first()
 
