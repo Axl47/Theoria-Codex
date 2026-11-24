@@ -82,14 +82,14 @@ class PixivUgoiraClient constructor(
 
     fun cached(
         postId: String,
-        sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
+        sizeBucket: UgoiraSizeBucket,
     ): UgoiraPlayback? = synchronized(cacheLock) {
         playbackCache[UgoiraLoadKey(postId, sizeBucket)]
     }
 
     suspend fun load(
         postId: String,
-        sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
+        sizeBucket: UgoiraSizeBucket,
     ): Result<UgoiraPlayback> = observeLoad(postId, sizeBucket).first { result ->
         result.isFailure || result.getOrThrow().isComplete
     }
@@ -158,7 +158,7 @@ class PixivUgoiraClient constructor(
     /** Share partial frames and completion; the final departing consumer cancels its work. */
     fun observeLoad(
         postId: String,
-        sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
+        sizeBucket: UgoiraSizeBucket,
     ): Flow<Result<UgoiraPlayback>> = flow {
         cached(postId, sizeBucket)?.let { emit(Result.success(it)); return@flow }
         val key = UgoiraLoadKey(postId, sizeBucket)

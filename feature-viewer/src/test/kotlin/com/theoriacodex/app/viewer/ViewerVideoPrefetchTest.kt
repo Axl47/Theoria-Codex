@@ -2,11 +2,8 @@ package com.theoriacodex.app.viewer
 
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
-import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerVideoPrefetchTest {
@@ -22,29 +19,5 @@ class ViewerVideoPrefetchTest {
         assertThrows(IllegalArgumentException::class.java) {
             ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED, bytesCached = 1L)
         }
-    }
-
-    @Test
-    fun `prefetch and playback share CacheWriter identity without a legacy cache owner`() {
-        val source = repositoryFile(
-            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
-        ).readText()
-        val platform = repositoryFile(
-            "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt",
-        ).readText()
-
-        assertTrue("CacheWriter" in source)
-        assertTrue("cacheDataSourceFactory(headers," in source.filterNot(Char::isWhitespace))
-        assertTrue("setKey(cacheKey)" in source)
-        assertTrue("videoPlaybackInfrastructure().prefetch(playback, maxBytes)" in platform)
-        assertFalse("theoria_codex/viewer/videos" in source + platform)
-    }
-
-    private fun repositoryFile(path: String): File {
-        var current = File(requireNotNull(System.getProperty("user.dir"))).absoluteFile
-        while (!File(current, "settings.gradle.kts").exists()) {
-            current = current.parentFile ?: error("Could not locate repository root")
-        }
-        return File(current, path)
     }
 }

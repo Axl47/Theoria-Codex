@@ -54,14 +54,14 @@ class PixivUgoiraClientTest {
 
         var thrown: CancellationException? = null
         try {
-            client.load("42")
+            client.load("42", UgoiraSizeBucket.VIEWER)
         } catch (error: CancellationException) {
             thrown = error
         }
 
         assertNotNull(thrown)
         assertEquals(expected.message, thrown?.message)
-        assertNull(client.cached("42"))
+        assertNull(client.cached("42", UgoiraSizeBucket.VIEWER))
     }
 
     @Test

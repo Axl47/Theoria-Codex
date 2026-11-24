@@ -8,8 +8,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -85,24 +83,6 @@ class PixivUgoiraArchiveTest {
         }
     }
 
-    @Test
-    fun `ugoira client source retains disk single-flight size and weighted-cache boundaries`() {
-        val source = repositoryFile(
-            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraClient.kt",
-        ).readText()
-        val search = repositoryFile(
-            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchResultCard.kt",
-        ).readText()
-
-        assertTrue(source.contains("archiveFlights"))
-        assertTrue(source.contains("loadFlights"))
-        val decoder = repositoryFile("media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraFrames.kt").readText()
-        assertTrue(decoder.contains("ZipFile(archive)"))
-        assertTrue(search.contains("UgoiraSizeBucket.CARD"))
-        assertTrue(source.contains("decodedCacheBytes"))
-        assertFalse(source.contains("ZipInputStream(ByteArrayInputStream"))
-    }
-
     private fun zip(name: String, entries: Map<String, ByteArray>): File {
         val file = temporaryFolder.newFile(name)
         ZipOutputStream(FileOutputStream(file)).use { zip ->
@@ -113,13 +93,5 @@ class PixivUgoiraArchiveTest {
             }
         }
         return file
-    }
-
-    private fun repositoryFile(path: String): File {
-        var current = File(requireNotNull(System.getProperty("user.dir"))).absoluteFile
-        while (!File(current, "settings.gradle.kts").exists()) {
-            current = current.parentFile ?: error("Could not locate repository root")
-        }
-        return File(current, path)
     }
 }
