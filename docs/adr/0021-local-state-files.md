@@ -28,3 +28,11 @@ A schema bump needs a decoder that still rejects newer versions. Keep per-entry 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ForYouVerdictRepository.kt`: `FOR_YOU_VERDICT_LIMIT`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedCacheRepository.kt`: `ensureReconciled`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryStoreRecords.kt`: `SettingsStoreRecord`, `FavoriteTagEntryRecord`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionRepositoryTest.kt`: `a missing schema reads as version 1 and a newer schema fails without touching the file (ADR 0021)`, `malformed entries do not discard valid positions (ADR 0021, 0033)`, `one swipe reported twice writes once and keeps the first timestamp (ADR 0021)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/GalleryReadingModeRepositoryTest.kt`: `unreadable and extension-source entries are skipped and a newer schema fails without touching the file (ADR 0021)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreSiteProfileRepositoryTest.kt`: `a newer schema is refused rather than overwritten (ADR 0021)`, `an unreadable file is set aside and reported, also after a restart (ADR 0021)`, `unreadable records are skipped but written back untouched (ADR 0021, 0031)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/FirstPageStoreTest.kt`: `a saved page comes back for its own search only (ADR 0021)`, `comment hints survive a restore, including a listing that gave none (ADR 0021)`, `file and picture hashes survive a restore (ADR 0021)`, `an unreadable file only costs the instant paint (ADR 0021)`
+- Left to prose: compact encoding, writing off the main thread and the media cache's single scan are performance intents with no host seam to count them; the verdict log stays out of backups because neither `BackupLibrary` nor the backup codec has a verdict field, and its 20,000-row cap is a tuning value; that the cache files live in the cache directory is app wiring.

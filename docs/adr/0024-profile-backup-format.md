@@ -37,3 +37,11 @@ Adding a backup field means bumping the version only when the field is present, 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesBackupRecords.kt`: `BackupSeriesRecord`, `storedMemo`, `validateBackupSeries`, `writable`, `withinEntryLimit`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ProfileBackupService.kt`: `ProfileBackupService`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: backup encoding tests
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: `series round trip as version 3 and a backup without them is written and read as before (ADR 0024)`, `a backup carries the extension repos, and one without them stays readable by the previous release (ADR 0024)`, `statistics with a watched-tag floor are written as version 5 and restore the floor (ADR 0024)`, `a backup carries no extension trust (ADR 0024)`, `a backup the app writes is one it restores even for a series over the chapter limit (ADR 0024)`, `a backup whose For You pins convert to fit the limit restores, and restores again (ADR 0024, 0025)`, `decoding refuses a repo, site or series list one past its limit, and takes repos and series at it (ADR 0024)`, `a series' shared-first-page flag is never backed up (ADR 0024)`, `rows of the retired For You history section are dropped on import (ADR 0024)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupSiteProfilesTest.kt`: `version 1 backups still decode and versions past 5 are refused (ADR 0024)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `a backup written now is the document the Gson codec wrote (ADR 0024, 0033)`, `malformed JSON fails as before while invalid fields keep their message (ADR 0024)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/SiteProfileRecordsTest.kt`: `records round trip every profile field through JSON without credentials (ADR 0024, 0031)`
+- Left to prose: credentials cannot reach a backup because they live in `:app`, which `:core-data` cannot depend on; the backup screen showing an `IllegalArgumentException`'s text verbatim is `:feature-settings` wiring; the 20,000-entry series limit is pinned on the export side only, since a decode-side case needs a 20,001-entry valid series.

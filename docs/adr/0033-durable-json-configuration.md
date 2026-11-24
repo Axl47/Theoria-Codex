@@ -24,3 +24,13 @@ Changing a flag changes how every stored file loads; the golden-file tests pin t
 ## Applies to
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/DurableJson.kt`: `DurableJson`, `decodeEachOrSkip`, `storedVersion`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreGoldenTest.kt`: `settings null on a defaulted boolean repairs to the default (ADR 0033, 0034)`, `settings unknown and retired keys are ignored (ADR 0033)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `a backup written now is the document the Gson codec wrote (ADR 0024, 0033)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_stored_json_configured_outside_durable_json_adr_0033`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionRepositoryTest.kt`: `malformed entries do not discard valid positions (ADR 0021, 0033)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/DurableJsonTest.kt`: `a record check that fails while decoding a list element is not skipped (ADR 0033)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `newer settings schema fails closed without corruption replacement (ADR 0032, 0033)`
+- Left to prose: `isLenient` has no guard, because kotlinx reads quoted numbers and booleans without it and no stored file depends on what it adds; the policy rule misses a `Json` imported under another name and a `Json(base) { }` built from a base other than `DurableJson`; it covers every module except `:app`, whose `extension_choices.json` exception is the app batch's call, and `:core-sources` and `:extension-host`, whose own `Json` instances for provider and repository formats are left to their batches.

@@ -22,3 +22,12 @@ The stored list can hold more sites than the limit after a restore. Tightening v
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileRecords.kt`: `SiteProfileRecord`, `toDomainOrNull`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileListPolicy.kt`: `mergeRestored`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileRepository.kt`: `mergeRestored`, `SiteProfileMergeResult`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/SiteProfileRecordsTest.kt`: `records round trip every profile field through JSON without credentials (ADR 0024, 0031)`, `invalid records decode to null (ADR 0031)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreSiteProfileRepositoryTest.kt`: `unreadable records are skipped but written back untouched (ADR 0021, 0031)`, `the site limit applies to adds but never to restores (ADR 0031)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupSiteProfilesTest.kt`: `a null site entry rejects the whole backup (ADR 0031)`, `journal recovery finishes even if sites filled the device after preflight (ADR 0025, 0031)`, `a conflicting site keeps the device profile and is reported (ADR 0031)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/CustomSourceIdentityTest.kt`: `post payloads and offline manifests keep a custom source (ADR 0031)`, `a backup with custom rows and no site profile restores them (ADR 0031)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt`: `likes and Codex items from a custom source round trip without a site profile (ADR 0031)`
+- Left to prose: custom-source survival is proven for post payloads, offline manifests, backups and Room rows; settings, Recents and statistics hold custom keys by the same parse but no mutation was run against them; that rewritten records drop keys this version does not know follows from writing typed records; the test fixture cannot show it without a record that is both unknown-keyed and invalid.

@@ -31,3 +31,17 @@ Adding a field means making it optional and omitted when unset. Removing the leg
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/LegacyImageRefCopies.kt`: `withLegacyEquivalentCopies`
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/SavedSearchSnapshot.kt`: `SavedSearchSnapshotSerializer`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryStoreRecords.kt`: `SettingsStoreRecord`, `FavoriteTagEntryRecord`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/PostStorageRecordsTest.kt`: `versioned storage record round trips every supported Post field (ADR 0038)`, `pre-versioned storage record retains safe typed fallbacks (ADR 0038)`, `unknown explicit storage version fails closed (ADR 0038)`, `a gallery of unknown length keeps its flag, and other records stay as they were (ADR 0006, 0038)`, `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks (ADR 0038)`, `an explicit fallback field is never reinterpreted (ADR 0038)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt`: `unsupported and malformed local Post payloads fail explicitly (ADR 0038)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomPayloadGoldenTest.kt`: `upserting an unchanged post keeps the Gson-written row (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/QueryStoreGoldenTest.kt`: `a search without a media filter is stored without a media key (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadGoldenTest.kt`: `a bare Query row infers its source metadata (ADR 0038)`, `a Gson-written For You row reads as Unified and keeps its tags by source (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadCodecTest.kt`: `a retired For You payload reads as Unified with tags for every source it searched (ADR 0038)`, `normalize gives the entry storing would keep, sources once and tags only for searched sources (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedQueryRepositoryTest.kt`: `query repository falls back when persisted source or sort is unknown (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `settings values this build does not know fall back without resetting the file (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/FavoriteTagEntryRecordTest.kt`: `a saved group keeps its first tag readable by older builds and round trips (ADR 0038)`, `a record written before or groups reads as one saved tag (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedSavedSearchRepositoryTest.kt`: `a file from a newer build is refused and left in place (ADR 0038)`, `semantic corruption is quarantined before recovering an empty library (ADR 0038)`
+- Left to prose: stores serializing storage records rather than domain models holds because `:core-domain` has no serialization plugin, so a domain model cannot be encoded; adding a field as optional and omitted when unset, and migrating before dropping a legacy shape, are rules for authors.

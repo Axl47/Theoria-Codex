@@ -22,3 +22,9 @@ Thumbnails survive cache clearing and are removed when a post leaves every top l
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/StatisticsThumbnails.kt`: `StatisticsThumbnailStore`, `reconcile`, `rankedStatisticsPosts`
 - `feature-settings/src/main/kotlin/com/theoriacodex/app/statistics/ThumbnailStatisticsRepository.kt`: `ThumbnailStatisticsRepository`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsThumbnailsTest.kt`: `promotion copies once survives other list demotion and removes final demotion (ADR 0037)`, `failed fetch discards partial file and later open can retry (ADR 0037)`
+- `feature-settings/src/test/kotlin/com/theoriacodex/app/statistics/ThumbnailStatisticsRepositoryTest.kt`: `fetch failure never blocks recording and only promotion or available post retries (ADR 0037)`, `a post seen before the first snapshot keeps retained thumbnails (ADR 0037)`, `statistics updates outside Codex rankings skip the thumbnail directory pass (ADR 0037)`, `a fetch that hangs is abandoned after 15 seconds and the next available post retries (ADR 0037)`
+- Left to prose: one shared ranking and no provider lookups hold by construction (`rankedStatisticsPosts` has one definition, and the repository's only network-capable input is the injected `fetch`); a second ranking or a new source dependency would be a visible new declaration rather than an edit a test could catch.

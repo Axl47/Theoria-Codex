@@ -20,3 +20,9 @@ New profile-owned writes must consult the guard. Changing the journal shape need
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ProfileDeletionService.kt`: `ProfileDeletionService`, `readPending`, `ProfileDeletionJournal`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ProfileLibraryWriteGuard.kt`: `ProfileLibraryWriteGuard`, `reinstate`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileDeletionServiceTest.kt`: `a caller that leaves after the intent is admitted still removes the profile (ADR 0026)`, `a journal from a newer or damaged writer is kept and never acted on (ADR 0026)`, `capacity preflight and invalid durable intent fail before library mutation (ADR 0026)`, `retired profile checks execute inside Settings writes without affecting another profile (ADR 0026)`, `a journal the Gson store wrote resumes the same removal (ADR 0026)`, `the profile removal journal golden pins every stored key (ADR 0026)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: `a profile deleted this session is usable again once restored, and others stay retired (ADR 0025, 0026)`
+- Left to prose: that each new profile-owned write consults `ProfileLibraryWriteGuard` is a rule for whoever adds a write; a text rule over Room repositories would be guesswork.
