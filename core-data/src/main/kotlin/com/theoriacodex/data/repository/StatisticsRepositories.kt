@@ -396,7 +396,6 @@ internal fun openStatisticsDataStore(
     baseDirectory: File,
     scope: CoroutineScope,
     recoveries: FileStoreRecoveryRegistry,
-    encode: (LifetimeStatistics) -> StatisticsDataStoreFile = StatisticsDataStoreFile::fromDomain,
 ): JsonDataStore<LifetimeStatistics> = openDecodedJsonDataStore(
     file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
     logicalStore = "Statistics",
@@ -408,7 +407,8 @@ internal fun openStatisticsDataStore(
     validate = StatisticsDataStoreFile::validate,
     recoveries = recoveries,
     decode = StatisticsDataStoreFile::toDomain,
-    encode = encode,
+    encode = StatisticsDataStoreFile::fromDomain,
+    canonical = { statistics -> statistics },
 )
 
 internal class CellStatisticsRepository(

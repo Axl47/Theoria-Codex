@@ -2,12 +2,14 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.FileStateCell
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.MemoryStateCell
 import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.WRITE_BEHIND_DELAY
 import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -63,24 +66,48 @@ class StatisticsWriteBehindTest {
     }
 
     @Test
-    fun `a flush encodes statistics once and skips the store's round trip (ADR 0215)`() = runTest {
+    fun `the statistics store writes values without a decode-encode round trip (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val storeScope = newDataStoreScope()
-        var encodes = 0
-        val store = openStatisticsDataStore(directory, storeScope, FileStoreRecoveryRegistry()) { statistics ->
-            encodes++
-            StatisticsDataStoreFile.fromDomain(statistics)
-        }
+        val store = openStatisticsDataStore(directory, storeScope, FileStoreRecoveryRegistry())
         val repository = CellStatisticsRepository(store.writeBehind(WriteBehind(writeScope)))
         repository.recordWatchedPost(SourceKey.GELBOORU, setOf("plain"))
         repository.recordSearch(setOf(SourceKey.GELBOORU), setOf(SearchTerm("plain")))
         val seen = repository.observeStatistics().first()
 
         repository.flush()
-        storeScope.closeDataStores()
 
-        assertEquals(1, encodes)
+        assertSame(seen, store.value())
+        storeScope.closeDataStores()
         assertEquals(seen, reopened(directory))
+    }
+
+    @Test
+    fun `normalized statistics survive the file encoding unchanged (ADR 0215)`() = runTest {
+        val custom = SourceKey.parseOrThrow("custom_example_com")
+        val repository = CellStatisticsRepository(MemoryStateCell(LifetimeStatistics()))
+        repository.recordAppOpen()
+        repository.addUsageDuration(UsageDurationDelta(totalMs = 9_000L, browsingMs = 4_000L, readingMs = 2_000L))
+        repository.recordWatchedPost(SourceKey.GELBOORU, setOf("Plain", " padded ", "shared"), CodexPostOpen("codex-a", "post-1", "First"))
+        repository.recordWatchedPost(custom, setOf("shared"))
+        repeat(TAGGED_VIEWS) { index -> repository.recordWatchedPost(SourceKey.PIXIV, setOf("tag-$index", "tag-${index / 2}")) }
+        repository.recordSearch(
+            setOf(SourceKey.GELBOORU, custom),
+            setOf(
+                SearchTerm("Plain"),
+                SearchTerm("Some Artist", SearchFacet.ARTIST),
+                SearchTerm("meta", SearchFacet.TAG, " Meta "),
+                SearchTerm("Hero", SearchFacet.CHARACTER),
+            ),
+        )
+        repository.addCodexUsage(CodexUsageTarget("codex-a"), 3_000L)
+        repository.recordCodexEntry(" codex-b ")
+        repository.recordForYouSave()
+        repository.recordPostUrlCopy()
+        val recorded = repository.observeStatistics().first()
+        val normalized = StatisticsPolicies.normalize(recorded.copy(watchedTagFloors = mapOf(SourceKey.PIXIV to 1L)))
+
+        assertEquals(normalized, StatisticsDataStoreFile.fromDomain(normalized).toDomain())
     }
 
     @Test
@@ -145,5 +172,6 @@ class StatisticsWriteBehindTest {
 
     private companion object {
         const val VIEWS = 50
+        const val TAGGED_VIEWS = 40
     }
 }

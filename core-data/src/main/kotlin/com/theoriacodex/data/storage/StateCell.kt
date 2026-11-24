@@ -29,8 +29,6 @@ internal interface StateCell<T> {
     suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R
 
     suspend fun flush() = Unit
-
-    suspend fun replace(value: T) = update { value }
 }
 
 internal suspend fun <T> StateCell<T>.update(transform: (T) -> T) {
@@ -107,7 +105,7 @@ private class WriteBehindStateCell<T : Any>(
     private suspend fun flushOnce() = flushing.withLock {
         val (latest, latestRevision) = mutex.withLock { state.value to revision }
         if (latest == null || latestRevision == persistedRevision) return@withLock
-        durable.replace(latest)
+        durable.update { latest }
         mutex.withLock { persistedRevision = maxOf(persistedRevision, latestRevision) }
     }
 
