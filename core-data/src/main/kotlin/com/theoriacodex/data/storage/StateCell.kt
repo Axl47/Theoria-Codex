@@ -79,8 +79,8 @@ class WriteBehind(
 
 internal val WRITE_BEHIND_DELAY = 2.seconds
 
-internal fun <T : Any> StateCell<T>.writeBehind(config: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY): StateCell<T> =
-    config?.wrap(this, delay) ?: this
+internal fun <T : Any> StateCell<T>.writeBehind(writeBehind: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY): StateCell<T> =
+    writeBehind?.wrap(this, delay) ?: this
 
 private class WriteBehindStateCell<T : Any>(
     private val durable: StateCell<T>,
@@ -127,7 +127,7 @@ private class WriteBehindStateCell<T : Any>(
     }
 
     private fun schedule(attempt: Int) {
-        if (scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush(attempt) }
+        if (writeDelay.isFinite() && scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush(attempt) }
     }
 
     private suspend fun scheduledFlush(attempt: Int) {

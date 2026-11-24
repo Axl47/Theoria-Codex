@@ -4,8 +4,6 @@ import java.io.IOException
 import java.util.concurrent.Executors
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -40,10 +38,9 @@ class StateCellTest {
     @Test
     fun `flushAll writes every cell it wrapped on its queue even when one fails (ADR 0215)`() = runTest {
         val executor = Executors.newSingleThreadExecutor { task -> Thread(task, QUEUE_THREAD) }
-        val job = Job()
         try {
             val queue = executor.asCoroutineDispatcher()
-            val writeBehind = WriteBehind(CoroutineScope(job), timed = false, newQueue = { queue })
+            val writeBehind = WriteBehind(this, timed = false, newQueue = { queue })
             val writes = mutableListOf<String>()
             val threads = mutableSetOf<String>()
             val record: suspend (String) -> Unit = { value -> threads += Thread.currentThread().name.substringBefore(" @"); writes += value }
@@ -60,7 +57,6 @@ class StateCellTest {
             assertEquals(setOf("new position", "new statistics"), writes.toSet())
             assertEquals(setOf(QUEUE_THREAD), threads)
         } finally {
-            job.cancel()
             executor.shutdown()
         }
     }
