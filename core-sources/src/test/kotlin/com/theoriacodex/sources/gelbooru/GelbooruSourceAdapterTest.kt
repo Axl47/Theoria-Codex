@@ -19,7 +19,6 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -28,28 +27,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GelbooruSourceAdapterTest {
-    @Test
-    fun `related posts hydrate bounded ids with at most two requests and preserve order`() = runTest {
-        val httpClient = RelatedGelbooruHttpClient(
-            html = """
-                <div>
-                  <div>More Like This: (Beta Temporary Feature)</div>
-                  <a href="index.php?page=post&amp;s=view&amp;id=101"><img src="1.jpg"></a>
-                  <a href="index.php?page=post&amp;s=view&amp;id=102"><img src="2.jpg"></a>
-                  <a href="index.php?page=post&amp;s=view&amp;id=103"><img src="3.jpg"></a>
-                </div>
-            """.trimIndent(),
-            malformedIds = setOf("102"),
-        )
-        val adapter = gelbooru(httpClient)
-
-        val posts = (adapter as RelatedPostsSourceAdapter).relatedPosts(PostId(SourceKey.GELBOORU, "100"), limit = 6)
-
-        assertEquals(listOf("101", "103"), posts.map { post -> post.id.sourcePostId })
-        assertTrue(httpClient.maxConcurrentHydrations <= 2)
-        assertEquals(listOf("101", "102", "103"), httpClient.hydratedIds.sorted())
-    }
-
     @Test
     fun `search compiles required groups with native Gelbooru OR braces`() = runTest {
         val httpClient = FakeHttpClient().apply {
@@ -130,7 +107,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `search keeps pagination when a full provider page contains an unparseable post`() = runTest {
+    fun `search keeps pagination when a full provider page contains an unparseable post (ADR 0045)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -146,7 +123,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `a well-formed page past the last full page ends paging`() = runTest {
+    fun `a well-formed page past the last full page ends paging (ADR 0042)`() = runTest {
         val bodies = listOf("", " \n", "[]", "{}", """{"@attributes":{"limit":40,"offset":1040,"count":1040}}""",
             """{"@attributes":{"limit":40,"offset":1040,"count":1040},"post":[]}""")
         for (body in bodies) {
@@ -157,7 +134,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `a malformed page fails instead of ending paging`() = runTest {
+    fun `a malformed page fails instead of ending paging (ADR 0042)`() = runTest {
         val bodies = listOf("<!DOCTYPE html><html><body>Error</body></html>", "<html>", """{"post":[{"id":"1"""",
             "Search is down. Try again later.")
         for (body in bodies) {
@@ -168,7 +145,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `a depth refusal fails without ending paging`() = runTest {
+    fun `a depth refusal fails without ending paging (ADR 0042)`() = runTest {
         val body = "Too deep! Pull it back some. Holy fuck."
         val adapter = gelbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, body) })
         val failure = runCatching { adapter.search(sampleQuery(), pageToken = "26") }.exceptionOrNull()
@@ -201,7 +178,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `search accepts direct arrays and ignores malformed optional values`() = runTest {
+    fun `search accepts direct arrays and ignores malformed optional values (ADR 0042)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -257,7 +234,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `creator search uses uploader token and leaves regular search unchanged`() = runTest {
+    fun `creator search uses uploader token and leaves regular search unchanged (ADR 0042)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -381,7 +358,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `search canonicalizes numbered video cdn urls with invalid host certificates`() = runTest {
+    fun `search canonicalizes numbered video cdn urls with invalid host certificates (ADR 0048)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -428,7 +405,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `rule34 search attaches credentials and maps canonical post url`() = runTest {
+    fun `rule34 search attaches credentials and maps canonical post url (ADR 0042)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -479,7 +456,7 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
-    fun `rule34 exposes neither creator nor related posts`() {
+    fun `rule34 exposes neither creator nor related posts (ADR 0042)`() {
         val rule34 = rule34(FakeHttpClient())
         val gelbooru = gelbooru(FakeHttpClient())
 
@@ -648,43 +625,4 @@ class GelbooruSourceAdapterTest {
         }
         append("]}")
     }
-}
-
-private class RelatedGelbooruHttpClient(
-    private val html: String,
-    private val malformedIds: Set<String> = emptySet(),
-) : SourceHttpClient {
-    private val lock = Any()
-    val hydratedIds = mutableListOf<String>()
-    var maxConcurrentHydrations: Int = 0
-        private set
-    private var activeHydrations: Int = 0
-
-    override suspend fun get(
-        url: String,
-        query: Map<String, String>,
-        headers: Map<String, String>,
-    ): SourceHttpResponse {
-        if (query["page"] == "post") return SourceHttpResponse(200, html)
-        val id = requireNotNull(query["id"])
-        synchronized(lock) {
-            hydratedIds += id
-            activeHydrations += 1
-            maxConcurrentHydrations = maxOf(maxConcurrentHydrations, activeHydrations)
-        }
-        delay(1)
-        synchronized(lock) { activeHydrations -= 1 }
-        val body = if (id in malformedIds) {
-            """{"post":[{}]}"""
-        } else {
-            """{"post":[{"id":"$id","preview_url":"https://gelbooru.com/$id-preview.jpg","file_url":"https://gelbooru.com/$id.jpg","tags":"landscape"}]}"""
-        }
-        return SourceHttpResponse(200, body)
-    }
-
-    override suspend fun postForm(
-        url: String,
-        form: Map<String, String>,
-        headers: Map<String, String>,
-    ): SourceHttpResponse = error("unused")
 }

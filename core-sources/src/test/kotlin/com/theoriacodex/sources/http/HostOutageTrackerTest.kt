@@ -47,7 +47,7 @@ class HostOutageTrackerTest {
         assertEquals(setOf("danbooru.donmai.us", "a.example", "b.example"), tracker.outages.value.keys)
     }
 
-    @Test fun `an outage refuses requests until it expires or is cleared`() {
+    @Test fun `an outage refuses requests until it expires or is cleared (ADR 0050)`() {
         tracker.record("https://danbooru.donmai.us/posts.json", HostOutageKind.MAINTENANCE)
         val refused = runCatching { tracker.ensureAvailable("https://danbooru.donmai.us/tags.json") }.exceptionOrNull()
         assertEquals(HostOutageKind.MAINTENANCE, (refused as HostUnavailableException).kind)
@@ -59,7 +59,7 @@ class HostOutageTrackerTest {
         assertTrue(tracker.outages.value.isEmpty())
     }
 
-    @Test fun `a challenge keeps the request it refused and counts as challenged until it expires`() {
+    @Test fun `a challenge keeps the request it refused and counts as challenged until it expires (ADR 0050)`() {
         val refused = RefusedRequest("https://api.site.test/list", "agent/1")
         tracker.record(refused.url, HostOutageKind.CHALLENGE, refused)
         tracker.record("https://down.test/", HostOutageKind.MAINTENANCE)
@@ -71,7 +71,7 @@ class HostOutageTrackerTest {
         assertFalse(tracker.isChallenged("https://api.site.test/other"))
     }
 
-    @Test fun `an unresolved domain counts only while online`() {
+    @Test fun `an unresolved domain counts only while online (ADR 0050)`() {
         var online = false
         val gated = HostOutageTracker(clock = { now }, isOnline = { online })
         gated.recordFailure("https://gone.example/", UnknownHostException("gone.example"))
@@ -85,7 +85,7 @@ class HostOutageTrackerTest {
         assertEquals(HostOutageKind.UNRESOLVED, gated.outages.value["gone.example"]?.kind)
     }
 
-    @Test fun `one blip of failed lookups marks nothing, separated failures do`() {
+    @Test fun `one blip of failed lookups marks nothing, separated failures do (ADR 0050)`() {
         val miss = UnknownHostException("gone.example")
         tracker.recordFailure("https://gone.example/", miss)
         now += 1_000L
@@ -112,7 +112,7 @@ class HostOutageTrackerTest {
         assertTrue(tracker.working.value.isEmpty())
     }
 
-    @Test fun `a Cloudflare challenge served as a 503 is a challenge, not maintenance, and is not retried`() = runBlocking {
+    @Test fun `a Cloudflare challenge served as a 503 is a challenge, not maintenance, and is not retried (ADR 0050)`() = runBlocking {
         val hits = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/") { exchange ->
@@ -174,7 +174,7 @@ class SiteHealthCheckTest {
         assertTrue(tracker.outages.value.isEmpty())
     }
 
-    @Test fun `a browser check reports a challenge or outage and leaves the tracker alone`() = runBlocking {
+    @Test fun `a browser check reports a challenge or outage and leaves the tracker alone (ADR 0050)`() = runBlocking {
         tracker.record("https://site.example/", HostOutageKind.CHALLENGE)
         val cf = mapOf("cf-mitigated" to listOf("challenge"))
         assertFalse(check(403, headers = cf).clearsChallenge("https://site.example/", emptyMap()))
@@ -188,7 +188,7 @@ class SiteHealthCheckTest {
         assertTrue(runCatching { unreachable.clearsChallenge("https://site.example/", emptyMap()) }.exceptionOrNull() is IOException)
     }
 
-    @Test fun `a verified site's browser agent replaces the request's own and proves the host works`() = runBlocking {
+    @Test fun `a verified site's browser agent replaces the request's own and proves the host works (ADR 0050)`() = runBlocking {
         val seenAgents = mutableListOf<String?>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/") { exchange ->
@@ -208,7 +208,17 @@ class SiteHealthCheckTest {
         assertEquals(setOf("127.0.0.1"), tracker.working.value)
     }
 
-    @Test fun `challenges count only for user-added sites`() = runBlocking {
+    @Test fun `an oversized home page counts as answered and clears a standing outage (ADR 0050)`() = runBlocking {
+        val oversized = SiteHealthCheck(tracker) { throw SourceHttpBodyTooLargeException(1) }
+        tracker.record("https://site.example/", HostOutageKind.MAINTENANCE)
+
+        oversized.check("https://site.example/", emptyMap(), countChallenges = true)
+
+        assertTrue(tracker.outages.value.isEmpty())
+        assertTrue(oversized.clearsChallenge("https://site.example/", emptyMap()))
+    }
+
+    @Test fun `challenges count only for user-added sites (ADR 0050)`() = runBlocking {
         val cf = mapOf("cf-mitigated" to listOf("challenge"))
         check(403, headers = cf).check("https://builtin.example/", emptyMap(), countChallenges = false)
         assertTrue(tracker.outages.value.isEmpty())

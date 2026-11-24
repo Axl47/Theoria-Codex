@@ -46,7 +46,7 @@ class HitomiGlobalIndexCacheTest {
     }
 
     @Test
-    fun `activating a new provider version clears every cached index`() = runTest {
+    fun `activating a new provider version clears every cached index (ADR 0043)`() = runTest {
         val cache = HitomiGlobalIndexCache(maxBytes = 64L)
         cache.getOrLoad("v1", "term-a") { intArrayOf(1) }
         cache.getOrLoad("v1", "term-b") { intArrayOf(2) }
@@ -61,7 +61,7 @@ class HitomiGlobalIndexCacheTest {
     }
 
     @Test
-    fun `concurrent callers share one load for the same version and key`() = runTest {
+    fun `concurrent callers share one load for the same version and key (ADR 0043)`() = runTest {
         val cache = HitomiGlobalIndexCache(maxBytes = 64L)
         val loadStarted = CompletableDeferred<Unit>()
         val releaseLoad = CompletableDeferred<Unit>()
@@ -146,7 +146,7 @@ class HitomiGlobalIndexCacheTest {
     }
 
     @Test
-    fun `different versions never share an in flight load`() = runTest {
+    fun `different versions never share an in flight load (ADR 0043)`() = runTest {
         val cache = HitomiGlobalIndexCache(maxBytes = 64L)
         val v1Started = CompletableDeferred<Unit>()
         val releaseV1 = CompletableDeferred<Unit>()

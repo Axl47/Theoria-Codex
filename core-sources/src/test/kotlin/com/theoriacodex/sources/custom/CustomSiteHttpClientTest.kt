@@ -31,7 +31,7 @@ class CustomSiteHttpClientTest {
         SourceByteResponse(status, ByteArray(0), mapOf("location" to listOf(location)))
 
     @Test
-    fun `follows same-site HTTPS redirects, including relative ones and the www twin`() = runTest {
+    fun `follows same-site HTTPS redirects, including relative ones and the www twin (ADR 0051)`() = runTest {
         val http = client(
             mapOf(
                 "https://sakugabooru.com/post.json?limit=1" to redirect("https://www.sakugabooru.com/post.json?limit=1", 301),
@@ -53,7 +53,7 @@ class CustomSiteHttpClientTest {
     }
 
     @Test
-    fun `refuses a redirect to plain HTTP without requesting it`() = runTest {
+    fun `refuses a redirect to plain HTTP without requesting it (ADR 0051)`() = runTest {
         val http = client(mapOf("https://booru.example/a?api_key=k" to redirect("http://booru.example/a?api_key=k")))
 
         val failure = runCatching { http.get("https://booru.example/a", mapOf("api_key" to "k")) }.exceptionOrNull()
@@ -63,7 +63,7 @@ class CustomSiteHttpClientTest {
     }
 
     @Test
-    fun `refuses redirects to another host or port without requesting them`() = runTest {
+    fun `refuses redirects to another host or port without requesting them (ADR 0051)`() = runTest {
         listOf("https://evil.example/a", "https://booru.example.evil.example/a", "https://booru.example:8443/a").forEach { target ->
             requested.clear()
             val http = client(mapOf("https://booru.example/a" to redirect(target)))
@@ -76,7 +76,7 @@ class CustomSiteHttpClientTest {
     }
 
     @Test
-    fun `stops after three redirect hops`() = runTest {
+    fun `stops after three redirect hops (ADR 0040, 0051)`() = runTest {
         val http = client((0..3).associate { "https://booru.example/$it" to redirect("/${it + 1}") })
 
         val failure = runCatching { http.get("https://booru.example/0") }.exceptionOrNull()
@@ -163,7 +163,7 @@ class CustomSiteHttpClientTest {
         }
 
     @Test
-    fun `a transient 503 is retried and the next answer wins`() = runTest {
+    fun `a transient 503 is retried and the next answer wins (ADR 0050)`() = runTest {
         val tracker = HostOutageTracker()
         val http = retryingClient(tracker) { attempt ->
             if (attempt == 1) SourceByteResponse(503, ByteArray(0)) else SourceByteResponse(200, "ok".toByteArray())
@@ -197,7 +197,7 @@ class CustomSiteHttpClientTest {
     }
 
     @Test
-    fun `a probe without a retry policy sees the first answer raw`() = runTest {
+    fun `a probe without a retry policy sees the first answer raw (ADR 0040)`() = runTest {
         val http = retryingClient(retry = null) { SourceByteResponse(503, ByteArray(0)) }
 
         assertEquals(503, http.get("https://booru.example/index.php").statusCode)

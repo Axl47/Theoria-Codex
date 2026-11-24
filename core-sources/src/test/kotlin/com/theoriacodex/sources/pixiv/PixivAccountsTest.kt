@@ -62,7 +62,7 @@ class PixivAccountsTest {
     }
 
     @Test
-    fun `favorites are public bookmarks and continue through next_url`() = runTest {
+    fun `favorites are public bookmarks and continue through next_url (ADR 0046)`() = runTest {
         val next = "$api/v1/user/bookmarks/illust?user_id=7&restrict=public&max_bookmark_id=900"
         val client = RoutedHttpClient(
             mapOf(
@@ -82,7 +82,7 @@ class PixivAccountsTest {
     }
 
     @Test
-    fun `a next page link away from the Pixiv API is refused before the token is sent`() = runTest {
+    fun `a next page link away from the Pixiv API is refused before the token is sent (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(emptyMap())
 
         val failure = runCatching { adapter(client).accountPosts(account, AccountFeed.FAVORITES, "https://evil.example/x") }.exceptionOrNull()

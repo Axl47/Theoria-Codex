@@ -40,7 +40,7 @@ class PixivCommentsTest {
     """.trimIndent()
 
     @Test
-    fun `the first page maps comments and stamps and takes its total from the illustration`() = runTest {
+    fun `the first page maps comments and stamps and takes its total from the illustration (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(
             mapOf(
                 comments to SourceHttpResponse(200, firstPage),
@@ -72,7 +72,7 @@ class PixivCommentsTest {
     }
 
     @Test
-    fun `a failed total lookup leaves the total unknown instead of failing the page`() = runTest {
+    fun `a failed total lookup leaves the total unknown instead of failing the page (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(
             mapOf(comments to SourceHttpResponse(200, firstPage), detail to SourceHttpResponse(500, "")),
         )
@@ -84,7 +84,7 @@ class PixivCommentsTest {
     }
 
     @Test
-    fun `a page token is requested as given`() = runTest {
+    fun `a page token is requested as given (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(mapOf(nextUrl to SourceHttpResponse(200, """{"comments":[],"next_url":null}""")))
 
         val page = adapter(client).comments(post, pageToken = nextUrl)
@@ -95,7 +95,7 @@ class PixivCommentsTest {
     }
 
     @Test
-    fun `replies are requested for the parent comment`() = runTest {
+    fun `replies are requested for the parent comment (ADR 0046)`() = runTest {
         val replies = "https://app-api.pixiv.net/v2/illust/comment/replies"
         val client = RoutedHttpClient(
             mapOf(
@@ -114,7 +114,7 @@ class PixivCommentsTest {
     }
 
     @Test
-    fun `a next link outside Pixiv's API is never followed with the token`() = runTest {
+    fun `a next link outside Pixiv's API is never followed with the token (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(emptyMap())
 
         val failure = runCatching { adapter(client).comments(post, pageToken = "https://evil.example/x") }.exceptionOrNull()

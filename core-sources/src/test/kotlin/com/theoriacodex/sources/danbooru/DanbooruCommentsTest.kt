@@ -45,7 +45,7 @@ class DanbooruCommentsTest {
     }
 
     @Test
-    fun `a short page maps live comments and knows its total`() = runTest {
+    fun `a short page maps live comments and knows its total (ADR 0045)`() = runTest {
         http.enqueueGet(
             url, query(1),
             body = """[
@@ -89,7 +89,7 @@ class DanbooruCommentsTest {
     }
 
     @Test
-    fun `a full page points at the next one and hides the total`() = runTest {
+    fun `a full page points at the next one and hides the total (ADR 0045)`() = runTest {
         val full = (1..100).joinToString(",", "[", "]") { """{"id":$it,"body":"c","is_deleted":false,"creator":{"name":"a"}}""" }
         http.enqueueGet(url, query(2), body = full)
 
@@ -97,6 +97,18 @@ class DanbooruCommentsTest {
 
         assertEquals(100, page.comments.size)
         assertEquals("3", page.nextPageToken)
+        assertNull(page.total)
+    }
+
+    @Test
+    fun `a full page that loses deleted comments still points at the next one (ADR 0045)`() = runTest {
+        val full = (1..100).joinToString(",", "[", "]") { """{"id":$it,"body":"c","is_deleted":${it <= 3},"creator":{"name":"a"}}""" }
+        http.enqueueGet(url, query(1), body = full)
+
+        val page = adapter.comments(post, pageToken = null)
+
+        assertEquals(97, page.comments.size)
+        assertEquals("2", page.nextPageToken)
         assertNull(page.total)
     }
 

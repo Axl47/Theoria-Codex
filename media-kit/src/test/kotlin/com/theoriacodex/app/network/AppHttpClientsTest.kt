@@ -1,6 +1,7 @@
 package com.theoriacodex.app.network
 
 import com.sun.net.httpserver.HttpServer
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import okhttp3.CookieJar
@@ -8,6 +9,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppHttpClientsTest {
@@ -94,5 +96,18 @@ class AppHttpClientsTest {
     private fun status(client: OkHttpClient, path: String): Int {
         val request = Request.Builder().url("http://127.0.0.1:${server.address.port}/$path").build()
         return client.newCall(request).execute().use { it.code }
+    }
+
+    @Test
+    fun `every app client turns a blocked lookup into an ordinary failure (ADR 0051)`() {
+        val clients = AppHttpClients(CookieJar.NO_COOKIES)
+        val getters = AppHttpClients::class.java.methods.filter { it.parameterCount == 0 && it.returnType == OkHttpClient::class.java }
+
+        assertTrue(getters.isNotEmpty())
+        for (getter in getters) {
+            val blocked = (getter.invoke(clients) as OkHttpClient).newBuilder().dns { throw SecurityException("blocked") }.build()
+            val failure = runCatching { blocked.newCall(Request.Builder().url("https://example.test/").build()).execute() }.exceptionOrNull()
+            assertTrue("${getter.name}: $failure", failure is IOException)
+        }
     }
 }

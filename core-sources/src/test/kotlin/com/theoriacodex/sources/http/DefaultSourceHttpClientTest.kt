@@ -1,11 +1,15 @@
 package com.theoriacodex.sources.http
 
+import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -87,7 +91,7 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `blocked network access is an ordinary failure instead of a crash`() = runBlocking {
+    fun `blocked network access is an ordinary failure instead of a crash (ADR 0051)`() = runBlocking {
         val client = OkHttpClient.Builder()
             .dns { throw SecurityException("Permission denied (missing INTERNET permission?)") }
             .addInterceptor(unexpectedFailuresAsIoExceptions)
@@ -99,6 +103,15 @@ class DefaultSourceHttpClientTest {
 
         assertTrue(failure is IOException)
         assertTrue(generateSequence(failure) { it.cause }.any { it is SecurityException })
+    }
+
+    @Test
+    fun `the default source client turns a blocked lookup into an ordinary failure (ADR 0051)`() {
+        val blocked = defaultSourceOkHttpClient.newBuilder().dns { throw SecurityException("blocked") }.build()
+
+        val failure = runCatching { blocked.newCall(Request.Builder().url("https://example.test/").build()).execute() }.exceptionOrNull()
+
+        assertTrue("$failure", failure is IOException)
     }
 
     @Test
@@ -153,7 +166,7 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `cancellation disconnects an active post response read`() = runBlocking {
+    fun `cancellation disconnects an active post response read (ADR 0051)`() = runBlocking {
         val releaseServer = CountDownLatch(1)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/stalled-post") { exchange ->
@@ -192,7 +205,7 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `returns exact binary range response and headers`() = runTest {
+    fun `returns exact binary range response and headers (ADR 0051)`() = runTest {
         var capturedRange: String? = null
         var capturedEncoding: String? = null
         val expectedBody = byteArrayOf(0, 1, 0xFF.toByte(), 2)
@@ -351,7 +364,7 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `encodes query spaces as percent-20 for get requests`() = runTest {
+    fun `encodes query spaces as percent-20 for get requests (ADR 0051)`() = runTest {
         var capturedRawQuery: String? = null
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/probe") { exchange ->
@@ -383,19 +396,101 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `iwara 429 responses are not retried by default policy`() {
+    fun `a redirect may change host but never scheme (ADR 0051)`() = runBlocking {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            val port = address.port
+            createContext("/cross-host") { exchange -> redirect(exchange, "http://localhost:$port/landed") }
+            createContext("/to-https") { exchange -> redirect(exchange, "https://127.0.0.1:$port/landed") }
+            createContext("/landed") { exchange ->
+                exchange.sendResponseHeaders(200, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 0)
+
+        val (crossHost, toHttps) = try {
+            val base = "http://127.0.0.1:${server.address.port}"
+            client.get("$base/cross-host").statusCode to runCatching { client.get("$base/to-https").statusCode }.getOrNull()
+        } finally {
+            server.stop(0)
+        }
+
+        assertEquals(200, crossHost)
+        assertEquals(302, toHttps)
+    }
+
+    @Test
+    fun `same-host requests beyond OkHttp's default per-host limit run at once (ADR 0051)`() = runBlocking {
+        val burst = 8
+        val arrived = CountDownLatch(burst)
+        val handlers = Executors.newFixedThreadPool(burst)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            executor = handlers
+            createContext("/page") { exchange ->
+                arrived.countDown()
+                val body = (if (arrived.await(2, TimeUnit.SECONDS)) "together" else "queued").toByteArray()
+                exchange.sendResponseHeaders(200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 0)
+
+        val bodies = try {
+            List(burst) { async { client.get("http://127.0.0.1:${server.address.port}/page").body } }.awaitAll()
+        } finally {
+            server.stop(0)
+            handlers.shutdownNow()
+        }
+
+        assertEquals(List(burst) { "together" }, bodies)
+    }
+
+    @Test
+    fun `a request without its own agent carries the platform http agent (ADR 0051)`() = runBlocking {
+        val seenAgents = mutableListOf<String?>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                seenAgents += exchange.requestHeaders.getFirst("User-Agent")
+                exchange.sendResponseHeaders(200, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val previous = System.setProperty("http.agent", "Platform/1.0")
+        try {
+            val client = DefaultSourceHttpClient(maxRetries = 0)
+            client.get("http://127.0.0.1:${server.address.port}/")
+            client.get("http://127.0.0.1:${server.address.port}/", headers = mapOf("user-agent" to "Source/2.0"))
+        } finally {
+            if (previous == null) System.clearProperty("http.agent") else System.setProperty("http.agent", previous)
+            server.stop(0)
+        }
+
+        assertEquals(listOf<String?>("Platform/1.0", "Source/2.0"), seenAgents)
+    }
+
+    private fun redirect(exchange: HttpExchange, location: String) {
+        exchange.responseHeaders.add("Location", location)
+        exchange.sendResponseHeaders(302, -1)
+        exchange.close()
+    }
+
+    @Test
+    fun `iwara 429 responses are not retried by default policy (ADR 0051)`() {
         assertFalse(defaultShouldRetryStatus("https://api.iwara.tv/search?type=videos", 429))
         assertFalse(defaultShouldRetryStatus("https://filesq.iwara.tv/file/abc", 429))
         assertFalse(defaultShouldRetryStatus("https://mikoto.iwara.tv/view?file=video.mp4", 429))
     }
 
     @Test
-    fun `non iwara 429 responses still retry by default policy`() {
+    fun `non iwara 429 responses still retry by default policy (ADR 0051)`() {
         assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 429))
     }
 
     @Test
-    fun `server errors still retry by default policy`() {
+    fun `server errors still retry by default policy (ADR 0051)`() {
         assertTrue(defaultShouldRetryStatus("https://api.iwara.tv/search?type=videos", 503))
         assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 500))
     }
@@ -406,7 +501,7 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
-    fun `a long retry after is not waited out`() {
+    fun `a long retry after is not waited out (ADR 0051)`() {
         assertNull(retryDelayMs(mapOf("Retry-After" to listOf("3600")), attempt = 1, baseDelayMs = 300L))
     }
 

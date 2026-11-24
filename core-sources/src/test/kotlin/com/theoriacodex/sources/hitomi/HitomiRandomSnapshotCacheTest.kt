@@ -17,7 +17,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class HitomiRandomSnapshotCacheTest {
     @Test
-    fun `initial walks reuse only fresh snapshots while continuations retain exact snapshots`() = runTest {
+    fun `initial walks reuse only fresh snapshots while continuations retain exact snapshots (ADR 0043)`() = runTest {
         var now = 1_000L
         val cache = HitomiRandomSnapshotCache(initialReuseTtlMillis = 100L, nowMillis = { now })
         val loads = AtomicInteger(0)
@@ -91,7 +91,7 @@ class HitomiRandomSnapshotCacheTest {
     }
 
     @Test
-    fun `the load stops when every caller leaves and nothing is retained`() = runTest {
+    fun `the load stops when every caller leaves and nothing is retained (ADR 0043)`() = runTest {
         val cache = HitomiRandomSnapshotCache()
         val started = CompletableDeferred<Unit>()
         var loadCancelled = false

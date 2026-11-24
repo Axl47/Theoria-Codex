@@ -33,7 +33,7 @@ class Rule34PahealSourceAdapterTest {
     }
 
     @Test
-    fun `rss types extensionless files from data-mime and keeps thumbnails as images`() = runTest {
+    fun `rss types extensionless files from data-mime and keeps thumbnails as images (ADR 0053)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,

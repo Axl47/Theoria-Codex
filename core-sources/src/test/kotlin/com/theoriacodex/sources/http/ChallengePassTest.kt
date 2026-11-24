@@ -63,7 +63,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a challenge is passed out of sight with the request's agent, then sent once more`() {
+    fun `a challenge is passed out of sight with the request's agent, then sent once more (ADR 0050)`() {
         cookies.values["cf_clearance"] = "old"
         answers += { _, request -> challenge(request) }
         answers += { _, request -> canned(request, body = "listing") }
@@ -75,7 +75,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a request that can carry keys shows the hidden browser only its site's root and agent, then is sent whole`() {
+    fun `a request that can carry keys shows the hidden browser only its site's root and agent, then is sent whole (ADR 0050)`() {
         answers += { _, request -> challenge(request) }
         answers += { _, request -> canned(request) }
 
@@ -102,7 +102,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a clearance stored while the challenge was on its way is used, not deleted`() {
+    fun `a clearance stored while the challenge was on its way is used, not deleted (ADR 0050)`() {
         cookies.values["cf_clearance"] = "old"
         answers += { _, request ->
             cookies.values["cf_clearance"] = "fresh"
@@ -130,7 +130,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no pass for a host already waiting on the user's check, one not allowed, or a main-thread call`() {
+    fun `no pass for a host already waiting on the user's check, one not allowed, or a main-thread call (ADR 0050)`() {
         answers += { _, request -> challenge(request) }
         challengedHosts += "site.test"
         call("https://www.site.test/a").close()
@@ -145,7 +145,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no pass for a site whose check is on screen, keeping the clearance the visible browser earned`() {
+    fun `no pass for a site whose check is on screen, keeping the clearance the visible browser earned (ADR 0050)`() {
         cookies.values["cf_clearance"] = "visible"
         answers += { _, request -> challenge(request) }
         browsers.showCheck("https://www.site.test/")
@@ -160,7 +160,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a cancelled call never waits for a pass`() {
+    fun `a cancelled call never waits for a pass (ADR 0050)`() {
         cookies.values["cf_clearance"] = "old"
         answers += { chain, request ->
             chain.call().cancel()
@@ -174,11 +174,11 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no more than two hidden browsers run at once, however many hosts and clients challenge`() {
+    fun `no more than two hidden browsers run at once, however many hosts and clients challenge (ADR 0050)`() {
         val running = AtomicInteger()
         val most = AtomicInteger()
         val release = CountDownLatch(1)
-        val started = CountDownLatch(ChallengeBrowsers.MAX_BROWSERS)
+        val started = CountDownLatch(2)
         browser = object : ChallengeBrowser {
             override fun mayWait() = true
 
@@ -201,11 +201,11 @@ class ChallengePassTest {
         release.countDown()
         calls.forEach(Thread::join)
 
-        assertEquals(ChallengeBrowsers.MAX_BROWSERS, most.get())
+        assertEquals(2, most.get())
     }
 
     @Test
-    fun `a request that waited on a pass that failed shares the failure, with no browser of its own`() {
+    fun `a request that waited on a pass that failed shares the failure, with no browser of its own (ADR 0050)`() {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
         val browsersRun = AtomicInteger()

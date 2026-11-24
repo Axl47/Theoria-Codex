@@ -14,7 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PixivAccountDecisionTest {
-    @Test fun `disconnect new login and reusing identical credentials all reject the older refresh`() = runTest {
+    @Test fun `disconnect new login and reusing identical credentials all reject the older refresh (ADR 0046)`() = runTest {
         val old = PixivAuthTokens("old", "old-refresh", 1L)
         val replacement = PixivAuthTokens("new", "new-refresh", 1_000_000L)
         for (next in listOf(null, replacement, old)) {
@@ -37,7 +37,7 @@ class PixivAccountDecisionTest {
         }
     }
 
-    @Test fun `expired response cannot clear a newer login`() = runTest {
+    @Test fun `expired response cannot clear a newer login (ADR 0046)`() = runTest {
         val delegate = FakeCredentialsProvider().apply { pixivTokens = PixivAuthTokens("old", "old-refresh", 1L) }
         val accounts = SessionBoundSourceCredentials(delegate)
         val entered = CompletableDeferred<Unit>()
@@ -54,5 +54,25 @@ class PixivAccountDecisionTest {
         release.complete(Unit)
         assertTrue(task.await().isFailure)
         assertEquals(replacement, accounts.getPixivTokens())
+    }
+
+    @Test fun `a reset that fails to persist still rejects the older refresh (ADR 0046)`() = runTest {
+        val old = PixivAuthTokens("old", "old-refresh", 1L)
+        val accounts = SessionBoundSourceCredentials(FakeCredentialsProvider().apply { pixivTokens = old })
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val coordinator = PixivTokenCoordinator(accounts, PixivAuthApi(FakeHttpClient()), clock = { 100L }, refresh = {
+            entered.complete(Unit)
+            release.await()
+            PixivAuthTokens("new", "new-refresh", 1_000_000L)
+        })
+        val task = async { runCatching { coordinator.activeTokens() } }
+        entered.await()
+        val reset = runCatching { accounts.invalidatePixivSession { error("storage unavailable") } }
+        release.complete(Unit)
+
+        assertTrue(reset.isFailure)
+        assertTrue(task.await().isFailure)
+        assertEquals(old, accounts.getPixivTokens())
     }
 }

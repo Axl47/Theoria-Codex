@@ -9,6 +9,7 @@ import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
+import java.io.IOException
 import java.net.UnknownHostException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
@@ -23,7 +24,7 @@ class SiteProberTest {
     private val prober = SiteProber(SiteFamilyRegistry.default(), http, builtInHosts = emptyMap())
 
     @Test
-    fun `AIBooru is Danbooru with its measured guest term limit`() = runTest {
+    fun `AIBooru is Danbooru with its measured guest term limit (ADR 0040)`() = runTest {
         assertEquals(supported("https://aibooru.online", ProtocolFamily.DANBOORU, "aibooru.online", termLimit = 4), prober.probe("aibooru.online"))
         assertEquals(
             listOf(
@@ -46,7 +47,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `an envelope the family adapter cannot read is not locked in`() = runTest {
+    fun `an envelope the family adapter cannot read is not locked in (ADR 0040)`() = runTest {
         val envelopeOnly = object : SourceHttpClient by NoWrites {
             override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
                 when {
@@ -62,7 +63,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `Gelbooru's empty 401 and rule34's missing-authentication reply ask for keys`() = runTest {
+    fun `Gelbooru's empty 401 and rule34's missing-authentication reply ask for keys (ADR 0040)`() = runTest {
         listOf("https://gelbooru.com", "https://api.rule34.xxx").forEach { url ->
             assertEquals(SiteProbeResult.CredentialsRequired(address(url), ProtocolFamily.GELBOORU_02, rejected = false), prober.probe(url))
         }
@@ -77,7 +78,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a working key gets through where anonymous access is refused with a page`() = runTest {
+    fun `a working key gets through where anonymous access is refused with a page (ADR 0040)`() = runTest {
         val site = danbooruSite(anonymous = SourceHttpResponse(403, "<!DOCTYPE html><html><title>Access denied</title></html>"))
 
         val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example", GOOD_KEYS) as SiteProbeResult.Supported
@@ -87,7 +88,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a bad key is reported even on a site open to everyone`() = runTest {
+    fun `a bad key is reported even on a site open to everyone (ADR 0040)`() = runTest {
         val site = danbooruSite(anonymous = null)
 
         val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example", SiteCredentials("name", "wrong"))
@@ -96,7 +97,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a good key on an open site leaves the site usable without keys`() = runTest {
+    fun `a good key on an open site leaves the site usable without keys (ADR 0040)`() = runTest {
         val result = SiteProber(SiteFamilyRegistry.default(), danbooruSite(anonymous = null)).probe("booru.example", GOOD_KEYS)
 
         result as SiteProbeResult.Supported
@@ -105,7 +106,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a saved site is checked with its keys alone`() = runTest {
+    fun `a saved site is checked with its keys alone (ADR 0040)`() = runTest {
         val site = danbooruSite(anonymous = SourceHttpResponse(403, "<!DOCTYPE html><html></html>"))
 
         val result = SiteProber(SiteFamilyRegistry.default(), site)
@@ -133,7 +134,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a maintenance page makes the probe inconclusive`() = runTest {
+    fun `a maintenance page makes the probe inconclusive (ADR 0040)`() = runTest {
         assertEquals(SiteProbeResult.Unreachable(address("https://danbooru.donmai.us"), ProbeFailure.BLOCKED), prober.probe("danbooru.donmai.us"))
     }
 
@@ -171,7 +172,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `the overall deadline ends a hanging probe`() = runTest {
+    fun `the overall deadline ends a hanging probe (ADR 0040)`() = runTest {
         val hanging = object : SourceHttpClient by NoWrites {
             override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
                 awaitCancellation()
@@ -198,6 +199,63 @@ class SiteProberTest {
     }
 
     @Test
+    fun `a keyed Danbooru match with its anonymous repeat spends exactly the default request budget (ADR 0040)`() = runTest {
+        val site = danbooruSite(anonymous = null)
+
+        val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example", GOOD_KEYS)
+
+        assertTrue(result is SiteProbeResult.Supported)
+        assertEquals(SiteProber.MAX_REQUESTS, site.requests.size)
+        assertEquals("https://booru.example/apple-touch-icon.png", site.requests.last().first)
+    }
+
+    @Test
+    fun `a failed home page leaves the host as label and the touch icon still answers (ADR 0040)`() = runTest {
+        val site = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) TOUCH_ICON else throw IOException("home page down") }
+
+        val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example") as SiteProbeResult.Supported
+
+        assertEquals("booru.example", result.suggestedLabel)
+        assertEquals("https://booru.example/apple-touch-icon.png", result.iconUrl)
+    }
+
+    @Test
+    fun `the touch icon replaces a declared icon under 64 px and leaves one of 64 px (ADR 0040)`() = runTest {
+        suspend fun iconFor(size: Int): String? {
+            val page = """<title>Booru</title><link rel="icon" sizes="${size}x$size" href="/declared.png">"""
+            val site = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) TOUCH_ICON else SourceHttpResponse(200, page) }
+            return (SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example") as SiteProbeResult.Supported).iconUrl
+        }
+
+        assertEquals("https://booru.example/apple-touch-icon.png", iconFor(63))
+        assertEquals("https://booru.example/declared.png", iconFor(64))
+    }
+
+    @Test
+    fun `a declared icon must be HTTPS and not SVG by extension or type (ADR 0040)`() {
+        val html = """
+            <link rel="icon" sizes="512x512" href="http://booru.example/cleartext.png">
+            <link rel="icon" sizes="256x256" type="image/svg+xml" href="/typed.png">
+            <link rel="icon" sizes="128x128" href="/vector.SVG?v=2">
+            <link rel="icon" sizes="16x16" href="/raster.png">
+        """
+
+        assertEquals("https://booru.example/raster.png", parseHomePage(html, "https://booru.example/").iconUrl)
+    }
+
+    @Test
+    fun `a Danbooru site that does not report its tag limit falls back to two (ADR 0041)`() = runTest {
+        val silent = withHomePage(profile = SourceHttpResponse(200, "{}")) { SourceHttpResponse(404, "") }
+        val missing = withHomePage(profile = SourceHttpResponse(404, "")) { SourceHttpResponse(404, "") }
+        val unreachable = withHomePage(profile = null) { SourceHttpResponse(404, "") }
+
+        for (site in listOf(silent, missing, unreachable)) {
+            val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example") as SiteProbeResult.Supported
+            assertEquals(2, result.searchTermLimit)
+        }
+    }
+
+    @Test
     fun `site name comes from og site_name, else the title before its separator`() {
         assertEquals("Moebooru Fans", siteNameFromHtml("""<meta property="og:site_name" content="Moebooru Fans"><title>x | y</title>"""))
         assertEquals("Gelbooru", siteNameFromHtml("<title>Gelbooru | Anime and Hentai Imageboard</title>"))
@@ -205,7 +263,7 @@ class SiteProberTest {
     }
 
     @Test
-    fun `site icon is the largest declared raster icon, resolved against the page`() {
+    fun `site icon is the largest declared raster icon, resolved against the page (ADR 0040)`() {
         val html = """
             <link rel="icon" href="/favicon.ico">
             <link rel="icon" type="image/svg+xml" href="/logo.svg">
@@ -239,6 +297,19 @@ class SiteProberTest {
         }
     }
 
+    private fun withHomePage(
+        profile: SourceHttpResponse? = SourceHttpResponse(200, """{"tag_query_limit":4}"""),
+        home: (String) -> SourceHttpResponse,
+    ) = object : SourceHttpClient by NoWrites {
+        override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
+            when {
+                url.endsWith("/counts/posts.json") -> SourceHttpResponse(200, """{"counts":{"posts":3}}""")
+                url.endsWith("/profile.json") -> profile ?: throw IOException("profile unreachable")
+                url.endsWith("/posts.json") -> SourceHttpResponse(200, "[]")
+                else -> home(url)
+            }
+    }
+
     private object NoWrites : SourceHttpClient {
         override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
             error("unused")
@@ -249,6 +320,7 @@ class SiteProberTest {
 
     companion object {
         private val GOOD_KEYS = SiteCredentials("name", "good-key")
+        private val TOUCH_ICON = SourceHttpResponse(200, "", mapOf("Content-Type" to listOf("image/png")))
         val FIXTURE_SITES = arrayOf("danbooru", "aibooru", "safebooru", "gelbooru", "rule34xxx", "sakugabooru", "sakugabooru_apex", "challenge_gate", "example")
     }
 }

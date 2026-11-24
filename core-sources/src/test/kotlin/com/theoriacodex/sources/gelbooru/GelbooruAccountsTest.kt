@@ -59,7 +59,7 @@ class GelbooruAccountsTest {
     }
 
     @Test
-    fun `feeds follow the profile shape and the site (ADR 0008)`() {
+    fun `feeds follow the profile shape and the site (ADR 0008, 0042)`() {
         val gelbooru = gelbooru()
         val named = CreatorProfile(SourceKey.GELBOORU, "alice", uploadsQuery = "user:alice")
         val idOnly = CreatorProfile(SourceKey.GELBOORU, "9", profileId = "9")
@@ -74,7 +74,7 @@ class GelbooruAccountsTest {
     }
 
     @Test
-    fun `a site without public profiles has no details and makes no request`() = runTest {
+    fun `a site without public profiles has no details and makes no request (ADR 0042)`() = runTest {
         val rule34 = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http)
 
         assertNull(rule34.accountDetails(GelbooruSite.RULE34XXX.creatorProfile("bob", "4")!!))
@@ -90,7 +90,7 @@ class GelbooruAccountsTest {
     }
 
     @Test
-    fun `favorites are the fav search by account id, paged like any search`() = runTest {
+    fun `favorites are the fav search by account id, paged like any search (ADR 0042)`() = runTest {
         http.enqueueGet(index, mapOf("page" to "dapi", "json" to "1", "s" to "post", "q" to "index", "pid" to "2", "limit" to "40", "tags" to "fav:9"), body = postJson(7))
 
         assertEquals(listOf("7"), gelbooru().accountPosts(account, AccountFeed.FAVORITES, pageToken = "2").items.map { it.id.sourcePostId })
@@ -106,7 +106,7 @@ class GelbooruAccountsTest {
     }
 
     @Test
-    fun `the profile owner lookup names the account and fails loudly on a refused page`() = runTest {
+    fun `the profile owner lookup names the account and fails loudly on a refused page (ADR 0042)`() = runTest {
         val profile = mapOf("page" to "account", "s" to "profile", "id" to "9")
         val headers = mapOf("User-Agent" to "theoria")
         http.enqueueGet(index, profile, body = "<a href='?tags=user:author_name'>Posts</a>", requiredHeaders = headers)

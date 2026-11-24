@@ -244,7 +244,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
     }
 
     @Test
-    fun `search maps blocked html response to network failure`() = runTest {
+    fun `search maps blocked html response to network failure (ADR 0044)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -261,7 +261,7 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
     }
 
     @Test
-    fun `non-challenge forbidden response keeps nhentai unknown failure semantics`() = runTest {
+    fun `non-challenge forbidden response keeps nhentai unknown failure semantics (ADR 0044)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 403, body = "forbidden")
         }

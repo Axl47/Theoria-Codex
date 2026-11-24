@@ -78,7 +78,7 @@ class ProviderHealthCheckCliTest {
     }
 
     @Test
-    fun `public safe summary lists only source status and reason enum`() {
+    fun `public safe summary lists only source status and reason enum (ADR 0047)`() {
         val report = ProviderHealthReport(
             liveProvidersEnabled = true,
             generatedAtEpochMs = 1L,

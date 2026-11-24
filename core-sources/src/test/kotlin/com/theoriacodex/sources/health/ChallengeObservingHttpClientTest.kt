@@ -21,7 +21,7 @@ class ChallengeObservingHttpClientTest {
     }
 
     @Test
-    fun `maintenance pages and plain refusals are not browser challenges`() {
+    fun `maintenance pages and plain refusals are not browser challenges (ADR 0047)`() {
         val maintenance = SourceHttpResponse(503, "<!doctype html><h1>Down for maintenance</h1>")
         val forbidden = SourceHttpResponse(403, """{"message":"forbidden"}""")
 

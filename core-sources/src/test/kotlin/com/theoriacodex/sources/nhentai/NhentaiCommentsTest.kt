@@ -4,6 +4,8 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import com.theoriacodex.sources.testing.ScriptedHttpClient
 import com.theoriacodex.sources.testing.commentTestPost
 import kotlinx.coroutines.test.runTest
@@ -17,7 +19,7 @@ class NhentaiCommentsTest {
     private val post = commentTestPost(SourceKey.NHENTAI, "123")
 
     @Test
-    fun `a page maps authors, absolute avatars and epoch milliseconds and points at the next page`() = runTest {
+    fun `a page maps authors, absolute avatars and epoch milliseconds and points at the next page (ADR 0044)`() = runTest {
         http.enqueueGet(
             url = "https://nhentai.net/api/v2/galleries/123/comments",
             query = mapOf("page" to "1", "per_page" to "50"),
@@ -70,5 +72,19 @@ class NhentaiCommentsTest {
         val failure = runCatching { adapter.comments(post, pageToken = null) }.exceptionOrNull()
 
         assertEquals(SourceFailureReason.NETWORK, (failure as SourceAdapterException).reason)
+    }
+
+    @Test
+    fun `a challenged comments request fails with the challenge instead of reading a mirror (ADR 0044)`() = runTest {
+        http.enqueueGet(
+            url = "https://nhentai.net/api/v2/galleries/123/comments",
+            query = mapOf("page" to "1", "per_page" to "50"),
+            failure = HostUnavailableException("nhentai.net", HostOutageKind.CHALLENGE),
+        )
+
+        val failure = runCatching { adapter.comments(post, pageToken = null) }.exceptionOrNull()
+
+        assertEquals(HostOutageKind.CHALLENGE.userMessage, failure?.message)
+        http.assertExhausted()
     }
 }

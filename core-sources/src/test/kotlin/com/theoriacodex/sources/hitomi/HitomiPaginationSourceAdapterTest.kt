@@ -205,7 +205,7 @@ internal class HitomiPaginationSourceAdapterTest : HitomiSourceAdapterTestFixtur
     }
 
     @Test
-    fun `all retained Hitomi search caches expose finite byte budgets`() = runTest {
+    fun `all retained Hitomi search caches expose finite byte budgets (ADR 0043)`() = runTest {
         val snapshot = adapter(RoutingHitomiHttpClient()).cacheSnapshot()
 
         assertEquals(HitomiGlobalIndexCache.DEFAULT_MAX_BYTES, snapshot.globalIndex.maxBytes)

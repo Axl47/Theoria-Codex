@@ -11,7 +11,7 @@ import org.junit.Test
 
 class HitomiGalleryMetadataTest {
     @Test
-    fun `reads numbers sent as strings and ignores fields of the wrong type`() {
+    fun `reads numbers sent as strings and ignores fields of the wrong type (ADR 0043, 0054)`() {
         val gallery = parse(
             """
             {
@@ -61,7 +61,7 @@ class HitomiGalleryMetadataTest {
     }
 
     @Test
-    fun `reads tag namespace flags in every shape Hitomi sends`() {
+    fun `reads tag namespace flags in every shape Hitomi sends (ADR 0043, 0054)`() {
         val gallery = parse(
             """
             {

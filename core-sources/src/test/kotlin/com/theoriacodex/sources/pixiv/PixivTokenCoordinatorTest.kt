@@ -1,5 +1,7 @@
 package com.theoriacodex.sources.pixiv
 
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
@@ -36,7 +38,7 @@ class PixivTokenCoordinatorTest {
     }
 
     @Test
-    fun `auth failure reuses token persisted by concurrent winner`() = runTest {
+    fun `auth failure reuses token persisted by concurrent winner (ADR 0046)`() = runTest {
         val failed = tokens("failed", expiresAt = 1_000_000L)
         val winner = tokens("winner", expiresAt = 2_000_000L)
         val credentials = FakeCredentials(failed)
@@ -55,6 +57,23 @@ class PixivTokenCoordinatorTest {
 
         assertEquals(List(6) { winner }, results)
         assertEquals(1, refreshCount)
+    }
+
+    @Test
+    fun `a provider that cannot commit refreshes fails the refresh instead of using its tokens (ADR 0046)`() = runTest {
+        val expired = tokens("old", expiresAt = 1L)
+        val credentials = FakeCredentials(expired)
+        val coordinator = PixivTokenCoordinator(
+            credentialsProvider = credentials,
+            authApi = PixivAuthApi(UnusedHttpClient),
+            clock = { 100_000L },
+            refresh = { tokens("new", expiresAt = 1_000_000L) },
+        )
+
+        val failure = runCatching { coordinator.activeTokens() }.exceptionOrNull()
+
+        assertEquals(SourceFailureReason.AUTH_REQUIRED, (failure as? SourceAdapterException)?.reason)
+        assertEquals(expired, credentials.pixiv)
     }
 
     private fun tokens(access: String, expiresAt: Long) = PixivAuthTokens(

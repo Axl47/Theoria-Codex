@@ -25,7 +25,7 @@ import org.junit.Test
 
 internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixture() {
     @Test
-    fun `resolve post maps v2 gallery details with page paths`() = runTest {
+    fun `resolve post maps v2 gallery details with page paths (ADR 0048)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -73,7 +73,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
     }
 
     @Test
-    fun `search falls back to mirrored web page when api is cloudflare blocked`() = runTest {
+    fun `search falls back to mirrored web page when api is cloudflare blocked (ADR 0044)`() = runTest {
         val httpClient = QueueHttpClient(
             SourceHttpResponse(
                 statusCode = 403,
@@ -115,7 +115,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
     }
 
     @Test
-    fun `a challenge the http client turned into an outage still falls back to the mirror`() = runBlocking {
+    fun `a challenge the http client turned into an outage still falls back to the mirror (ADR 0050)`() = runBlocking {
         ChallengingHost(
             mirrorPrefix = "https://r.jina.ai/",
             mirrorResponse = SourceHttpResponse(
@@ -136,7 +136,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
     }
 
     @Test
-    fun `resolve post falls back to mirrored reader page when api is cloudflare blocked`() = runTest {
+    fun `resolve post falls back to mirrored reader page when api is cloudflare blocked (ADR 0044)`() = runTest {
         val httpClient = blockedApiWithMirroredReader()
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 

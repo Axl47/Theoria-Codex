@@ -92,7 +92,7 @@ class GelbooruCommentsTest {
     }
 
     @Test
-    fun `a disabled DAPI falls back to the post page, remembers that, and pages by pid`() = runTest {
+    fun `a disabled DAPI falls back to the post page, remembers that, and pages by pid (ADR 0042)`() = runTest {
         val adapter = gelbooru()
         http.enqueueGet(api, dapiQuery, body = "Disabled due to abuse.")
         http.enqueueGet(api, viewQuery, body = gelbooruPostPage)
@@ -171,13 +171,13 @@ class GelbooruCommentsTest {
     }
 
     @Test
-    fun `native comment anchors follow the site's markup (ADR 0008)`() {
+    fun `native comment anchors follow the site's markup (ADR 0008, 0042)`() {
         assertNull(gelbooru().nativeCommentAnchor("100"))
         assertEquals("c100", GelbooruSourceAdapter(safebooru, http).nativeCommentAnchor("100"))
     }
 
     @Test
-    fun `comment text that mentions keys is not mistaken for a key failure`() = runTest {
+    fun `comment text that mentions keys is not mistaken for a key failure (ADR 0042)`() = runTest {
         http.enqueueGet(api, dapiQuery, body = dapiXml.replace("second", "invalid api key lol"))
 
         val page = gelbooru().comments(gelbooruPost, pageToken = null)
@@ -198,6 +198,23 @@ class GelbooruCommentsTest {
         val failure = runCatching { adapter.comments(commentTestPost(SourceKey.RULE34XXX, "77"), pageToken = null) }.exceptionOrNull()
 
         assertEquals(SourceFailureReason.AUTH_REQUIRED, (failure as SourceAdapterException).reason)
+    }
+
+    @Test
+    fun `a key failure does not switch the DAPI off for later comment reads (ADR 0042)`() = runTest {
+        val credentials = FakeCredentialsProvider().apply { rule34XxxCredentials = UserApiKey("1", "k") }
+        val adapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http, { credentials.userApiKey(SourceKey.RULE34XXX) })
+        val rule34Post = commentTestPost(SourceKey.RULE34XXX, "77")
+        val keyedDapi = dapiQuery + mapOf("user_id" to "1", "api_key" to "k")
+        http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, body = "<?xml version=\"1.0\"?><error>Missing authentication.</error>")
+        http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, body = dapiXml)
+
+        val refused = runCatching { adapter.comments(rule34Post, pageToken = null) }.exceptionOrNull()
+        val page = adapter.comments(rule34Post, pageToken = null)
+
+        assertEquals(SourceFailureReason.AUTH_REQUIRED, (refused as SourceAdapterException).reason)
+        assertEquals(listOf("5", "6"), page.comments.map { it.id })
+        http.assertExhausted()
     }
 
     @Test

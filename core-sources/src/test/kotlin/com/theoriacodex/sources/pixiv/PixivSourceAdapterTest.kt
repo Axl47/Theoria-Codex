@@ -87,7 +87,7 @@ class PixivSourceAdapterTest {
     }
 
     @Test
-    fun `unauthorized search refreshes once and retries with the new access token`() = runTest {
+    fun `unauthorized search refreshes once and retries with the new access token (ADR 0046)`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(
                 accessToken = "expired-access",
@@ -384,7 +384,7 @@ class PixivSourceAdapterTest {
 
 
     @Test
-    fun `creator search uses user illustrations endpoint and preserves pagination`() = runTest {
+    fun `creator search uses user illustrations endpoint and preserves pagination (ADR 0046)`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(
                 accessToken = "access",
