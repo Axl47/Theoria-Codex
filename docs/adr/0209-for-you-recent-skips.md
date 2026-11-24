@@ -23,6 +23,7 @@ Skips survive restarts without becoming permanent, and a small source refills as
 
 ## Applies to
 
-- `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckViewModel.kt`: `readRecentSkips`, `startOver`, `isKnown`, `push`, `SKIP_MEMORY_MS`, `SKIP_READ_LIMIT`, `SKIP_READ_TIMEOUT_MS`
+- `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouVerdictLog.kt`: `readSkips`, `reset`, `SKIP_MEMORY_MS`, `SKIP_READ_LIMIT`, `SKIP_READ_TIMEOUT_MS`
+- `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckViewModel.kt`: `startOver`, `isKnown`, `push`
 - `core-data-android/src/main/java/com/theoriacodex/data/android/room/ForYouVerdictDao.java`: `between`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ForYouVerdictRepository.kt`: `skippedBetween`
