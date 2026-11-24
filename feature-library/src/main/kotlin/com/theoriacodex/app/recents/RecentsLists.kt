@@ -28,7 +28,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -340,8 +342,15 @@ private fun RecentPostsRow(
     val row = rememberLazyListState()
     val postIds = remember(entries) { entries.map { it.post.id } }
     // Rows are newest first, but a list keeps its place by key, so a post viewed since would
-    // land off-screen to the left. Show the newest whenever it changes.
-    LaunchedEffect(postIds.firstOrNull()) { if (row.firstVisibleItemIndex != 0) row.scrollToItem(0) }
+    // land off-screen to the left. Show the newest whenever it changes, but not on a return
+    // (from another Library section) that finds the same newest post.
+    val lead = postIds.firstOrNull()?.let { "${it.source.id}:${it.sourcePostId}" }
+    var shownLead by rememberSaveable { mutableStateOf(lead) }
+    LaunchedEffect(lead) {
+        if (lead == shownLead) return@LaunchedEffect
+        shownLead = lead
+        if (row.firstVisibleItemIndex != 0) row.scrollToItem(0)
+    }
     ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
         LazyRow(
             state = row,
