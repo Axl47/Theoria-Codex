@@ -11,6 +11,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import com.theoriacodex.app.series.SERIES_NOTIFICATION_ID
 import com.theoriacodex.app.series.SERIES_UPDATE_JOB_ID
 import com.theoriacodex.app.series.notifySeriesUpdate
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
@@ -292,12 +293,14 @@ class ExtensionSourceLiveTest {
     fun pullingDownOnFollowingNotifiesTheNewChapter() {
         val followed = runBlocking { series.repository.observeFollowed().first() }.first().series
         val before = runBlocking { series.repository.entries(followed.id) }.size
+        val notifications = context.getSystemService(NotificationManager::class.java)
+        // One left from an earlier run would pass the check below without this pull posting anything.
+        notifications.cancel(followed.id.toString(), SERIES_NOTIFICATION_ID)
         live.openSeriesTab(By.text(followed.title), view = SeriesLiveDriver.FOLLOWING)
         val shelved = live.waitFor("the followed series", By.text(followed.title))
         val x = device.displayWidth / 2
         device.swipe(x, shelved.visibleBounds.top, x, device.displayHeight * 3 / 4, SWIPE_STEPS)
         val after = live.await("the forgotten chapter stored again", { series.repository.entries(followed.id).size }) { it > before }
-        val notifications = context.getSystemService(NotificationManager::class.java)
         val posted = live.await("the series' notification", { notifications.activeNotifications.filter { it.tag == followed.id.toString() } }) {
             it.isNotEmpty()
         }
