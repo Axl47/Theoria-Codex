@@ -127,6 +127,10 @@
 
 ### Fixed
 
+- In the Viewer's page overview, the Back arrow at the top closes the overview instead of the whole Viewer, the trail row no longer covers the reading-mode switch, and the last pages are no longer hidden behind the buttons at the bottom.
+- Manga chapters read page by page fill the screen's width, without the gap at the top and the border around each page.
+- The screen no longer turns off while you read a manga chapter.
+- Start over in a manga chapter's information sheet closes the sheet, as it does for episodes.
 - Series from extensions that need extra details to find a series or chapter again now open after you restart the app or import a Mihon or TachiyomiJ2K backup, instead of failing to load their chapters or pages.
 - Tapping the Series tab again while on it no longer collapses its search bar.
 - Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires. The cover now also shows for the first chapter you open after starting the app, and for downloaded chapters.
