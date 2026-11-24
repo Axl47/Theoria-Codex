@@ -84,9 +84,10 @@ class RoomSeriesRepository(
     }
 
     /**
-     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones: none for its first
-     * list, when nothing was stored to compare with. A series imported from a backup brings its entries along, so the
-     * entries released since the backup are new. Must run in a transaction.
+     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones: none when no entries
+     * were stored before, since nothing was there to compare with. Entries are written only by a listing or an import,
+     * so a series imported from a backup counts what its source lists beyond the backup's entries as new. Must run in a
+     * transaction.
      */
     private fun storeEntries(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
         val id = stored.series.id

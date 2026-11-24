@@ -102,8 +102,8 @@ interface SeriesRepository {
      * Returns the new entries, in the source's order: those whose address was never stored, unless one is plainly a
      * dropped entry at a new address. That takes both to be the only release of their chapter number by their
      * translator group, among the dropped entries and among the listed ones; the new address then starts with the
-     * dropped one's progress. The first list a series ever gets has no new entries, because nothing was there to
-     * compare it with.
+     * dropped one's progress. A series with no stored entries gets none from its first list, because nothing was there
+     * to compare it with; one imported with its entries compares against those.
      */
     suspend fun store(series: Series, entries: List<SeriesEntry>? = null): List<SeriesEntry>
 
