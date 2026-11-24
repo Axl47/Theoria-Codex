@@ -44,7 +44,7 @@ private const val CHROME_VIDEO_POST = 1
 private const val CHROME_GALLERY_POST = 2
 private const val CHROME_GALLERY_FIRST_PAGE = "Page 1 of 5"
 private const val CHROME_TOGGLES = 6
-private const val CHROME_DOCK_DESCRIPTION = "Info"
+private const val CHROME_STRIP_DESCRIPTION = "Open post chrome_still"
 private const val SEARCH_GRID_TAG = "benchmark_search_grid"
 private const val DURATION_STATUS_TAG = "benchmark_duration_status"
 private const val DURATION_SETTLED_DESCRIPTION = "Settled 24/24"
@@ -223,6 +223,7 @@ class TheoriaMacrobenchmark {
         setupBlock = {
             pressHome()
             startActivityAndWait(fixtureIntent(SCENARIO_VIEWER_CHROME))
+            device.wait(Until.hasObject(By.desc(CHROME_STRIP_DESCRIPTION)), UI_TIMEOUT_MS)
             device.setViewerChrome(visible = false)
         },
     ) {
@@ -419,10 +420,10 @@ private fun UiDevice.requireChromePost(post: Int) {
 }
 
 private fun UiDevice.setViewerChrome(visible: Boolean) {
-    val dock = By.desc(CHROME_DOCK_DESCRIPTION)
-    if (hasObject(dock) == visible) return
+    val strip = By.desc(CHROME_STRIP_DESCRIPTION)
+    if (hasObject(strip) == visible) return
     click(displayWidth / 2, displayHeight / 2 - displayHeight / 12)
-    val reached = if (visible) wait(Until.hasObject(dock), UI_TIMEOUT_MS) else wait(Until.gone(dock), UI_TIMEOUT_MS)
+    val reached = if (visible) wait(Until.hasObject(strip), UI_TIMEOUT_MS) else wait(Until.gone(strip), UI_TIMEOUT_MS)
     check(reached) { "Viewer chrome did not become ${if (visible) "visible" else "hidden"} within ${UI_TIMEOUT_MS}ms" }
 }
 
