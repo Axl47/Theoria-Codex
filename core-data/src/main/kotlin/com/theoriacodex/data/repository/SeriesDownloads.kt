@@ -69,7 +69,7 @@ data class DrainResult(
     val downloaded: Int,
     val failed: List<ChapterName> = emptyList(),
     val retry: Boolean = false,
-    val waiting: List<ChapterName> = emptyList(),
+    val waiting: List<QueuedChapter> = emptyList(),
 )
 
 /**
@@ -185,7 +185,7 @@ class SeriesDownloads(
     private val files: AtomicJsonFileStore = AtomicJsonFileStore(),
     private val retryDelay: Duration = 2.seconds,
 ) {
-    /** Guards the queue, its file, [draining] and [active]. */
+    /** Guards the queue, its file, [draining], [active] and [sourceChanges]. */
     private val lock = Mutex()
 
     /** Held while a chapter is fetched, so the lanes take turns chapter by chapter. */
@@ -197,6 +197,9 @@ class SeriesDownloads(
     /** The lanes with a drain under way, by [QueuedChapter.automatic], each with the token of its newest drain. */
     private val draining = mutableMapOf<Boolean, Any>()
     private var active: Pair<QueuedChapter, Job>? = null
+
+    /** Counts changes of the sources that are on, so a drain gives the sources it held back another go. */
+    private var sourceChanges = 0
 
     /** Each chapter of [id] that is queued or on the device, by address. */
     fun states(id: SeriesId): Flow<Map<String, ChapterDownload>> = flow {
@@ -255,6 +258,7 @@ class SeriesDownloads(
     suspend fun rescheduleOnChanges(sources: Flow<*>, network: Flow<*>): Unit = coroutineScope {
         launch {
             sources.distinctUntilChanged().drop(1).collect {
+                lock.withLock { sourceChanges++ }
                 reschedule(automatic = false, evenDraining = false)
                 reschedule(automatic = true, evenDraining = false)
             }
@@ -350,21 +354,20 @@ class SeriesDownloads(
     /**
      * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until nothing is left it
      * can try. A chapter that fails in a way that may pass stays queued, and the rest of its source's chapters wait with
-     * it for the next drain, which [DrainResult.retry] asks for, while other sources' chapters go on. Cancelling it stops
+     * it for the next drain, which [DrainResult.retry] asks for, while other sources' chapters go on; once the sources
+     * that are on change, held sources are tried again. Cancelling it stops
      * the chapter being fetched, which stays queued for the next drain. A drain that starts while a cancelled one of the
      * same lane is still stopping takes the lane over, so the old one's end does not mark the lane idle.
      */
     suspend fun drain(automatic: Boolean, onProgress: (DrainProgress) -> Unit = {}): DrainResult {
         val token = Any()
-        lock.withLock {
+        val held = lock.withLock {
             load()
             draining[automatic] = token
+            Held(sourceChanges)
         }
         var downloaded = 0
         val failed = mutableListOf<ChapterName>()
-        // Sources sitting out the rest of the drain after a failure that may pass, and of those, the ones that are off.
-        val held = HashSet<SourceKey>()
-        val off = HashSet<SourceKey>()
         try {
             while (true) {
                 val (chapter, outcome) = drains.withLock { fetchNext(automatic, token, held, downloaded + failed.size + 1, onProgress) } ?: break
@@ -373,34 +376,35 @@ class SeriesDownloads(
                     Outcome.DOWNLOADED -> downloaded++
                     Outcome.UNAVAILABLE -> failed += chapter
                     Outcome.SOURCE_OFF -> {
-                        held += source
-                        off += source
+                        held.sources += source
+                        held.off += source
                     }
-                    Outcome.LATER -> held += source
+                    Outcome.LATER -> held.sources += source
                     Outcome.REMOVED -> Unit
                 }
             }
-            val stuck = lock.withLock { queue.value.filter { it.automatic == automatic && it.series.source in off } }
-            return DrainResult(downloaded, failed, retry = held.isNotEmpty(), waiting = stuck.map { names(it) })
+            val waiting = lock.withLock { queue.value.filter { it.automatic == automatic && it.series.source in held.off } }
+            return DrainResult(downloaded, failed, retry = held.sources.isNotEmpty(), waiting = waiting)
         } finally {
             withContext(NonCancellable) { lock.withLock { draining.remove(automatic, token) } }
         }
     }
 
     /**
-     * Fetches the first chapter of the [automatic] lane whose source is not [skipped], the [number]th of the drain
+     * Fetches the first chapter of the [automatic] lane whose source is not [held], the [number]th of the drain
      * holding [token], and says how that went; null when the lane has no such chapter.
      */
     private suspend fun fetchNext(
         automatic: Boolean,
         token: Any,
-        skipped: Set<SourceKey>,
+        held: Held,
         number: Int,
         onProgress: (DrainProgress) -> Unit,
     ): Pair<ChapterName, Outcome>? {
         // The lane stops draining in the same step that finds nothing to try, so a chapter queued after is scheduled.
         val (next, remaining) = lock.withLock {
-            val lane = queue.value.filter { it.automatic == automatic && it.series.source !in skipped }
+            if (held.changes != sourceChanges) held.forget(sourceChanges)
+            val lane = queue.value.filter { it.automatic == automatic && it.series.source !in held.sources }
             if (lane.isEmpty()) draining.remove(automatic, token)
             lane.firstOrNull() to lane.size
         }
@@ -544,6 +548,21 @@ class SeriesDownloads(
  * again later, or taken out meanwhile.
  */
 private enum class Outcome { DOWNLOADED, UNAVAILABLE, SOURCE_OFF, LATER, REMOVED }
+
+/**
+ * One drain's [sources] sitting out the rest of it after a failure that may pass, and of those, the ones that are
+ * [off]; forgotten once the sources that are on have changed since the count of [changes].
+ */
+private class Held(var changes: Int) {
+    val sources = HashSet<SourceKey>()
+    val off = HashSet<SourceKey>()
+
+    fun forget(changes: Int) {
+        this.changes = changes
+        sources.clear()
+        off.clear()
+    }
+}
 
 /** A queued chapter's source is off, removed or failed to load; the chapter waits for it. */
 private class SourceOff : IOException("The series' source is not on")

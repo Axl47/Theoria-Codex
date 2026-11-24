@@ -16,11 +16,13 @@ import com.theoriacodex.domain.series.SeriesSource
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -152,9 +154,30 @@ class SeriesDownloadsTest {
 
         val result = harness.downloads.drain(automatic = false)
 
-        assertEquals(DrainResult(downloaded = 1, retry = true, waiting = listOf(ChapterName(id, "Title", "Ch. 1"))), result)
+        assertEquals(DrainResult(downloaded = 1, retry = true, waiting = listOf(QueuedChapter(id, "/c1"))), result)
         assertEquals(mapOf("/c1" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(elsewhere).first())
+    }
+
+    @Test fun `a source turned on while the drain fetches another source's chapter is tried again in the same drain`() = runTest {
+        val elsewhere = SeriesId(SourceKey.parseOrThrow("custom_mihon_8"), "/title/2")
+        val harness = Harness(this, others = listOf(StoredSeries(Series(elsewhere, "Other"))))
+        val sources = MutableStateFlow(0)
+        val watching = launch { harness.downloads.rescheduleOnChanges(sources, flowOf(Unit)) }
+        harness.off = setOf(source)
+        harness.onFetch = { url ->
+            if (url == "$PAGES/c2/1") {
+                harness.off = emptySet()
+                sources.value = 1
+                // Lets the change reach the downloads before this chapter finishes.
+                delay(1)
+            }
+        }
+        harness.downloads.download(id, listOf("/c1"))
+        harness.downloads.download(elsewhere, listOf("/c2"))
+
+        assertEquals(DrainResult(downloaded = 2), harness.downloads.drain(automatic = false))
+        watching.cancel()
     }
 
     @Test fun `an unavailable chapter leaves the queue and the lane goes on`() = runTest {

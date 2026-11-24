@@ -71,7 +71,7 @@ internal fun FollowingBody(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (failedCheck != null && content.followsAny) {
-                    fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message(content.words)) }
+                    fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
                 }
                 when {
                     following == null -> Unit
@@ -91,9 +91,9 @@ internal fun FollowingBody(
     }
 }
 
-/** "Couldn't check 2 series", or when none could be checked, "Couldn't check for new chapters". */
-internal fun FollowedCheck.message(words: EntryWords): String =
-    if (failed == checked) "Couldn't check for new ${words.many}" else "Couldn't check $failed series"
+/** "Couldn't check 2 series", or when none could be checked, "Couldn't check for updates". */
+internal val FollowedCheck.message: String
+    get() = if (failed == checked) "Couldn't check for updates" else "Couldn't check $failed series"
 
 /** The kind filter, when both kinds are followed or on, and Sort & filter, marked while a filter hides series. */
 @Composable

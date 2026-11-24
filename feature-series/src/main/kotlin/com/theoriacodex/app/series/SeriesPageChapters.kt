@@ -154,8 +154,8 @@ internal fun EntryRow(
                 }
             }
         }
-        // Composed only while open: a long chapter list would otherwise hold a closed menu per row.
-        if (menuOpen) EntryContextMenu(
+        EntryContextMenu(
+            expanded = menuOpen,
             words = kind.words,
             read = entry.read,
             hasPreviousUnread = hasPreviousUnread,
@@ -183,6 +183,7 @@ private fun Modifier.entryRowInteraction(key: String, actionsLabel: String, enab
 
 @Composable
 private fun EntryContextMenu(
+    expanded: Boolean,
     words: EntryWords,
     read: Boolean,
     hasPreviousUnread: Boolean,
@@ -193,6 +194,8 @@ private fun EntryContextMenu(
     onMarkPreviousRead: () -> Unit,
     onToggleDownload: () -> Unit,
 ) {
+    // Composed only while open: a long chapter list would otherwise hold a closed menu per row.
+    if (!expanded) return
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         DropdownMenuItem(
             text = { Text("Mark as ${if (read) words.notDone else words.done}") },

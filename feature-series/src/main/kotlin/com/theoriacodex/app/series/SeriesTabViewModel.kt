@@ -340,12 +340,12 @@ class SeriesTabViewModel(
     }
 
     /**
-     * Browses the source browsed before process death, else the first, once Browse shows with nothing browsed and the
-     * sources have loaded. Following never asks a source for a listing it hides.
+     * Browses the source browsed before process death, else the first, once Browse shows its listing with nothing
+     * browsed and the sources have loaded. Following and a search never ask a source for a listing they hide.
      */
     private fun browseWhenShown() {
         val current = state.value
-        if (current.view != SeriesView.BROWSE || current.browse != null) return
+        if (current.view != SeriesView.BROWSE || current.browse != null || current.search != null) return
         val sources = current.sources ?: return
         val browsed = saved.get<String>(SAVED_BROWSE)
         (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
@@ -584,6 +584,7 @@ class SeriesTabViewModel(
         saved.remove<String>(SAVED_SEARCH)
         if (state.value.dedicated != null) closeFilters()
         mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
+        browseWhenShown()
     }
 
     /** Stores [series], so its page has something to show at once, then reports it stored. */
