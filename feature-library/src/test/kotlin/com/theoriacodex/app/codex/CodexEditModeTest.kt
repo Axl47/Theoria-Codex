@@ -5,12 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.theoriacodex.app.testing.FEED_POST_CARD
+import com.theoriacodex.app.testing.countCompositions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -23,22 +27,29 @@ import org.robolectric.annotation.Config
 class CodexEditModeTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun `the checkmark selects its post and Back leaves selection before the Codex`() {
-        val media = ImageRef(null, "/missing/post.jpg", "image/jpeg")
-        val post = testPost(sourcePostId = "saved").copy(preview = media, full = media, media = listOf(media))
-        var destinationBacks = 0
+    private fun post(id: String): Post {
+        val media = ImageRef(null, "/missing/$id.jpg", "image/jpeg")
+        return testPost(sourcePostId = id).copy(preview = media, full = media, media = listOf(media))
+    }
+
+    private fun render(posts: List<Post>, onDestinationBack: () -> Unit = {}) {
         compose.setContent {
-            BackHandler { destinationBacks++ }
+            BackHandler(onBack = onDestinationBack)
             MaterialTheme {
                 CodexDetailScreen(
                     codexId = "mine",
-                    codexName = "Mine", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
+                    codexName = "Mine", posts = posts, sortMode = CodexSortMode.NEWEST_SAVED,
                     availableSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
                     onBack = {},
                 )
             }
         }
+    }
+
+    @Test fun `the checkmark selects its post and Back leaves selection before the Codex`() {
+        var destinationBacks = 0
+        render(listOf(post("saved"))) { destinationBacks++ }
         compose.onNodeWithContentDescription("Select posts").performClick()
         compose.onNodeWithContentDescription("Not selected").performClick()
         compose.onNodeWithContentDescription("Selected").assertExists()
@@ -50,5 +61,16 @@ class CodexEditModeTest {
 
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.runOnIdle { assertEquals(1, destinationBacks) }
+    }
+
+    @Test fun `selecting a post recomposes only its own cell`() = countCompositions { counter ->
+        render((0 until 4).map { post("saved-$it") })
+        compose.onNodeWithContentDescription("Select posts").performClick()
+        compose.waitForIdle()
+        counter.reset()
+        compose.onAllNodesWithContentDescription("Not selected")[0].performClick()
+        compose.onNodeWithContentDescription("Selected").assertExists()
+        assertEquals("selection cells recomposed", 1, counter.count("com.theoriacodex.app.codex.CodexSelectablePostCard"))
+        assertEquals("cards recomposed", 0, counter.count(FEED_POST_CARD))
     }
 }

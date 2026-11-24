@@ -39,6 +39,8 @@ import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.related.testRelatedShelf
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.search.sortModeLabel
+import com.theoriacodex.app.testing.FEED_POST_CARD
+import com.theoriacodex.app.testing.countCompositions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.trails.TrailPage
 import com.theoriacodex.app.trails.TrailPager
@@ -79,6 +81,7 @@ class ForYouDeckScreenTest {
     private var grid by mutableStateOf(false)
     private var sort by mutableStateOf(SortMode.NEWEST)
     private var animated by mutableStateOf(false)
+    private var liked by mutableStateOf(emptySet<PostId>())
 
     private val opened = mutableListOf<Pair<String, PostId>>()
     private val savedSearches = mutableStateListOf<Query>()
@@ -94,33 +97,33 @@ class ForYouDeckScreenTest {
 
     private fun render(): ForYouDeckViewModel {
         val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails)).also { it.synchronize(environment()) }
-        val callbacks = ForYouDeckCallbacks(
-            onSelectProfile = { selectedProfiles += it },
-            onSelectSource = {},
-            onSelectSort = { sort = it },
-            onAnimatedOnlyChange = { animated = it },
-            onResetFilters = {
-                sort = SortMode.NEWEST
-                animated = false
-            },
-            onGridChange = { shown ->
-                grid = shown
-                owner.synchronize(environment())
-            },
-            onOpenPost = { level, post, _ -> opened += level.id to post },
-            onPickCodex = { _, _ -> },
-            onRequestSaveToCodex = { menuActions += "save ${it.id.sourcePostId}" },
-            onSaveSearch = { savedSearches += it },
-            onToggleLike = { menuActions += "like ${it.id.sourcePostId}" },
-            onOpenSourceAccounts = { sourcesOpened++ },
-            onGoToSearch = { wentToSearch++ },
-        )
         compose.setContent {
             MaterialTheme {
                 CompositionLocalProvider(LocalRelatedPostsSupport provides { true }, LocalHiddenTagsOpener provides HiddenTagsOpener { hiddenTagsOpened++ }) {
-                    val cards = rememberFeedCardEnvironment(null, emptySet(), emptyMap(), FeedDurations.NONE, {})
+                    val callbacks = ForYouDeckCallbacks(
+                        onSelectProfile = { selectedProfiles += it },
+                        onSelectSource = {},
+                        onSelectSort = { sort = it },
+                        onAnimatedOnlyChange = { animated = it },
+                        onResetFilters = {
+                            sort = SortMode.NEWEST
+                            animated = false
+                        },
+                        onGridChange = { shown ->
+                            grid = shown
+                            owner.synchronize(environment())
+                        },
+                        onOpenPost = { level, post, _ -> opened += level.id to post },
+                        onPickCodex = { _, _ -> },
+                        onRequestSaveToCodex = { menuActions += "save ${it.id.sourcePostId}" },
+                        onSaveSearch = { savedSearches += it },
+                        onToggleLike = { menuActions += "like ${it.id.sourcePostId}" },
+                        onOpenSourceAccounts = { sourcesOpened++ },
+                        onGoToSearch = { wentToSearch++ },
+                    )
+                    val cards = rememberFeedCardEnvironment(null, liked, emptyMap(), FeedDurations.NONE, {})
                     val config = ForYouScreenConfig(
-                        sort, animated, grid, emptySet(), setOf(DECK_SOURCE), FeedDurations.NONE,
+                        sort, animated, grid, liked, setOf(DECK_SOURCE), FeedDurations.NONE,
                         TriageCardSupport(cards, resolvePostById = { null }, recoverPostMedia = { _, _ -> null }),
                         isSearchSaved = { it in savedSearches },
                     )
@@ -232,6 +235,16 @@ class ForYouDeckScreenTest {
         compose.onNodeWithText("Save to Codex").performClick()
 
         compose.runOnIdle { assertEquals(listOf("like sea-0-0", "save sea-0-0"), menuActions) }
+    }
+
+    @Test fun `a like rebuilds the screen's config but recomposes only the liked grid card`() = countCompositions { counter ->
+        render()
+        compose.onNodeWithContentDescription("Grid").performClick()
+        card("sea-0-0").assertIsDisplayed()
+        counter.reset()
+        compose.runOnIdle { liked = setOf(lanePost("sea", 0, 0).id) }
+        compose.waitForIdle()
+        assertEquals(1, counter.count(FEED_POST_CARD))
     }
 
     @Test fun `a chip narrows the deck to its interest`() {

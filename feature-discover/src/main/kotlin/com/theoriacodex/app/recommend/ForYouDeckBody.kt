@@ -10,6 +10,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -73,23 +74,25 @@ private fun ForYouDeck(
     end: @Composable () -> Unit,
 ) {
     val newCodex = LocalNewCodexOpener.current
-    val deckCallbacks = remember(level, callbacks, newCodex) {
+    val currentCallbacks by rememberUpdatedState(callbacks)
+    val deckCallbacks = remember(level, newCodex) {
         val save = { post: Post -> { codex: ChosenCodex -> level.deck.decide(TriageChoice.Save(codex), post.id) } }
         TriageDeckCallbacks(
-            onOpenPost = { posts, index -> posts.getOrNull(index)?.let { callbacks.onOpenPost(level, it.id, 0) } },
-            onOpenSavePicker = { post -> callbacks.onPickCodex(post, save(post)) },
+            onOpenPost = { posts, index -> posts.getOrNull(index)?.let { currentCallbacks.onOpenPost(level, it.id, 0) } },
+            onOpenSavePicker = { post -> currentCallbacks.onPickCodex(post, save(post)) },
             onNewCodex = { post -> newCodex.openNewCodex { codex -> save(post)(codex) } },
             onClose = {},
         )
     }
     val feedShare = remember(feed.posts) { feedTagShare(feed.posts) }
+    val creatorBrowsingSources = config.creatorBrowsingSources
     TriageDeckScreen(
         deck = level.deck,
         query = level.query,
         support = config.support,
         callbacks = deckCallbacks,
         showTopBar = false,
-        cardFooter = { post -> ForYouCardFooter(owner, level, post, feedShare, config.creatorBrowsingSources) },
+        cardFooter = { post -> ForYouCardFooter(owner, level, post, feedShare, creatorBrowsingSources) },
         endContent = end,
     )
 }
@@ -106,6 +109,8 @@ private fun ForYouGrid(
     mixFailed: Boolean,
 ) {
     val retainKey = level.id
+    val environment = config.support.environment
+    val currentCallbacks by rememberUpdatedState(callbacks)
     val gridState = rememberRetainedFeedGridState(retainKey)
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, config.durations.onEnvironmentChanged)
@@ -141,12 +146,12 @@ private fun ForYouGrid(
                 ),
                 modifier = Modifier.fillMaxSize().testTag(FOR_YOU_GRID_TAG),
                 showPagingTile = feed.loadingMore,
-                shelf = { FeedRelatedPostsShelf(related, view.related, config.support.environment, onLongPress) },
+                shelf = { FeedRelatedPostsShelf(related, view.related, environment, onLongPress) },
                 post = { _, post ->
                     FeedPostCard(
                         post = post,
-                        environment = config.support.environment,
-                        onClick = { callbacks.onOpenPost(level, post.id, gridState.firstVisibleItemScrollOffset) },
+                        environment = environment,
+                        onClick = { currentCallbacks.onOpenPost(level, post.id, gridState.firstVisibleItemScrollOffset) },
                         onLongPress = { onLongPress(post) },
                         showWatchHistory = true,
                         showSourceBadge = true,
