@@ -35,7 +35,6 @@ dependencies {
     implementation(project(":app-logic"))
     implementation(project(":core-domain"))
     implementation(project(":core-data"))
-    implementation(project(":core-data-android"))
     implementation(project(":core-sources"))
     implementation(project(":ui-kit"))
     implementation(project(":media-kit"))

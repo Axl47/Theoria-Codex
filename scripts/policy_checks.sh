@@ -26,7 +26,7 @@ project_dependencies() {
 
 # Module layering that Gradle cannot see: a feature never depends on another feature, a kit never on a
 # feature, a kit only on kits to its left in ui-kit, media-kit, vision-kit, feed-kit, and nothing below the kits
-# (app-logic, core-*) on a kit or a feature.
+# (app-logic, core-*) on a kit or a feature. Only :app may depend on :core-data-android in main code.
 module_layering() {
   local kits=(ui-kit media-kit vision-kit feed-kit) build module name index failed=0
   for build in feature-*/build.gradle.kts *-kit/build.gradle.kts app-logic/build.gradle.kts core-*/build.gradle.kts; do
@@ -45,6 +45,15 @@ module_layering() {
           echo "$build depends on :$name; a kit may only depend on kits before it (${kits[*]})." >&2; failed=1
         fi
       done
+    done
+  done
+  for build in */build.gradle.kts; do
+    module="${build%%/*}"
+    [[ "$module" == app || "$module" == core-data-android ]] && continue
+    for name in $(perl -0pe 's{/\*.*?\*/}{ }gs; s{//[^\n]*}{}g; s/\n/ /g' "$build" \
+      | grep -oE '[A-Za-z]+"?[[:space:]]*[(,][[:space:]]*project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?":core-data-android"' \
+      | grep -oE '^[A-Za-z]+' | grep -v '[Tt]est'); do
+      echo "$build depends on :core-data-android through $name; only :app may in main code." >&2; failed=1
     done
   done
   return "$failed"
