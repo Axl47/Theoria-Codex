@@ -8,7 +8,7 @@ import org.junit.Test
 
 class NhentaiGalleryParserTest {
     @Test
-    fun `a listing with no pages, cover or page count is a gallery of unknown length`() {
+    fun `a listing with no pages, cover or page count is a gallery of unknown length (ADR 0006)`() {
         val post = requireNotNull(parseNhentaiGallery(JsonParser.parseString("""{"id":1,"media_id":"9"}""").asJsonObject))
 
         assertTrue(post.media.isEmpty())

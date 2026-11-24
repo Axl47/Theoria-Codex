@@ -5,7 +5,7 @@ import org.junit.Test
 
 class MediaStreamTest {
     @Test
-    fun `playable streams have an address and a label of their own`() {
+    fun `playable streams have an address and a label of their own (ADR 0007)`() {
         val streams = listOf(
             MediaStream("https://a.example/1", "1080p"),
             MediaStream(" ", "720p"),
@@ -19,7 +19,7 @@ class MediaStreamTest {
     }
 
     @Test
-    fun `a repeated label skips a count another label already holds`() {
+    fun `a repeated label skips a count another label already holds (ADR 0007)`() {
         val labels = uniqueLabels(listOf("English", "English", "English (2)", "", "Track 4")) { "Track $it" }
 
         assertEquals(listOf("English", "English (3)", "English (2)", "Track 4", "Track 4 (2)"), labels)

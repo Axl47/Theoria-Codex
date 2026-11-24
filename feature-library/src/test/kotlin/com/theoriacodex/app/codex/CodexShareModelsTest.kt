@@ -129,7 +129,7 @@ class CodexShareModelsTest {
     }
 
     @Test
-    fun `a shared gallery listing with no pages reads as a gallery of unknown length`() {
+    fun `a shared gallery listing with no pages reads as a gallery of unknown length (ADR 0009)`() {
         fun restored(source: String) = codexSharePostSnapshot(
             parseCodexShareFile(
                 """{"version": 2, "posts": [{"source": "$source", "sourcePostId": "1", "snapshot": {"preview": {"url": "https://example.com/t.webp"}}}]}""",
