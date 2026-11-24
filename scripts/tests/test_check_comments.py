@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -55,10 +56,21 @@ class FindCommentsTest(unittest.TestCase):
         self.assertEqual(texts(source, kotlin=False), ["/* outer /* inner */"])
 
     def test_tool_directives_are_not_counted(self) -> None:
-        source = "// Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE.\n"
+        source = "// Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; "
+        source += "see LICENSE-APACHE-2.0.txt in this module.\n"
+        source += "// Derived from Mihon (https://github.com/mihonapp/mihon), Fake License. TODO\n"
+        source += "//noinspection AndroidLintSdCardPath and prose\n"
         source += "//noinspection AndroidLintSdCardPath\n// @formatter:off\n// prose\n/* @formatter:on\nTODO */\n"
         path = write_source(self, source)
-        self.assertEqual([c.text for c in check_comments.counted_comments(path)], ["// prose", "/* @formatter:on\nTODO */"])
+        self.assertEqual(
+            [c.text for c in check_comments.counted_comments(path)],
+            [
+                "// Derived from Mihon (https://github.com/mihonapp/mihon), Fake License. TODO",
+                "//noinspection AndroidLintSdCardPath and prose",
+                "// prose",
+                "/* @formatter:on\nTODO */",
+            ],
+        )
 
 
 class RatchetTest(unittest.TestCase):
@@ -71,6 +83,10 @@ class RatchetTest(unittest.TestCase):
         problems = check_comments.check({"a.kt": 3, "b.kt": 1}, {"a.kt": 3, "b.kt": 1}, base={"a.kt": 2})
         self.assertEqual(len(problems), 2)
         self.assertTrue(all("may only shrink" in problem for problem in problems))
+
+    def test_unknown_base_fails(self) -> None:
+        with self.assertRaises(subprocess.CalledProcessError):
+            check_comments.baseline_at("no-such-revision")
 
     def test_new_comments_fail(self) -> None:
         path = str(write_source(self, "// new\n"))
