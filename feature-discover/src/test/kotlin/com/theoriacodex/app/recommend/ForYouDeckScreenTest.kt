@@ -46,6 +46,7 @@ import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.ui.navigation.HiddenTagsOpener
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
+import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -200,18 +201,17 @@ class ForYouDeckScreenTest {
     }
 
     @Test fun `the fork row scrolls only when its forks overflow it, so a card that fits still swipes from it`() {
-        val request = TrailRequest.Similar(testPost(source = DECK_SOURCE, sourcePostId = "1"))
-        val similar = ForYouFork("similar", "Similar", request)
+        val similar = TrailFork.Similar
         // Each capped well short of the row, but together wider than it whatever the test font's width.
-        val long = List(5) { ForYouFork("tag:$it", "long ".repeat(100), request) }
-        var forks by mutableStateOf(listOf(similar))
+        val long = List(5) { TrailFork.Tag("long_".repeat(100) + it) }
+        var forks by mutableStateOf<List<TrailFork>>(listOf(similar))
         compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) { ForYouForkRow(forks) {} } } }
 
         compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.ScrollBy))
         forks = listOf(similar) + long
         compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).assert(SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollBy))
-            .performScrollToKey("tag:4")
-        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}tag:4").assertIsDisplayed()
+            .performScrollToKey(long.last().key)
+        compose.onNodeWithTag("$FOR_YOU_FORK_TAG_PREFIX${long.last().key}").assertIsDisplayed()
     }
 
     @Test fun `a tag trail saves its search, and then shows it saved`() {
