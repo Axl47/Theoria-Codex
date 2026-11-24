@@ -1,7 +1,6 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.search.TagSuggestionStore
-import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -25,12 +24,12 @@ internal fun forYouSourceQuery(
 )
 
 /** Lets Likes on one tag-compatible source train the others, using learned Pixiv translations. */
-internal suspend fun crossSourceTraining(likes: List<LikedPost>, store: TagSuggestionStore): CrossSourceTraining {
+internal suspend fun crossSourceTraining(likes: List<LikedTagDocument>, store: TagSuggestionStore): CrossSourceTraining {
     store.awaitLoaded()
     val pixivPairs = store.get(SourceKey.PIXIV, Int.MAX_VALUE)
         .mapNotNull { suggestion -> suggestion.alternateText?.let { suggestion.text to it } }
     return CrossSourceTraining(
-        likes = likes.map { liked -> LikedTagDocument(liked.postId.source, liked.tags) },
+        likes = likes,
         dictionary = PixivTagDictionary.from(pixivPairs),
     )
 }

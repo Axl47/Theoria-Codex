@@ -20,7 +20,7 @@ class HeavyHistoryTest {
     private val source = HeavyHistory.SOURCE
     private val inputs = tagAffinityInputs(
         likes = history.likes.map { LikedPost("profile-main", it.id, 0L, it.canonicalTags) },
-        codexPosts = history.codices.values.flatten(),
+        libraryPosts = history.codices.values.flatten(),
         savedTags = emptyList(),
         savedSearches = emptyList(),
         // As recordWatchedPost counts them: each watched post once per tag.

@@ -554,7 +554,6 @@ internal class DefaultTheoriaAppContainer(
         ),
         forYou = ForYouCoordinator(
             registry = sourceRegistry,
-            likesRepository = likesRepository,
             statisticsRepository = statisticsRepository,
             // Deleting the model plans lanes again at once, before the shared inputs drop its evidence.
             tagAffinity = { profile ->
