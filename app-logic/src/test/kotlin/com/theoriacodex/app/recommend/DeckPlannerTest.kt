@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -26,21 +27,21 @@ class DeckPlannerTest {
     }
 
     @Test fun `three skips in a row halve a lane until a like restores it`() {
-        val skipped = (1..3).fold(DeckSteering()) { steering, _ -> steering.after(DeckSignal.Skipped, a) }
+        val skipped = (1..3).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.SKIPPED, a) }
         assertEquals(0.5, skipped.weight("a"), 0.0)
 
         val lanes = listOf(lane(a, "a1", "a2", "a3", "a4"), lane(b, "b1", "b2", "b3", "b4"))
         assertEquals(listOf("b", "a", "b", "b", "a", "b"), nextBatch(lanes, skipped, { false }, 6).cards.map { (it.origin as DeckOrigin.Lane).laneId })
 
-        assertEquals(1.0, skipped.after(DeckSignal.Liked, a).weight("a"), 0.0)
+        assertEquals(1.0, skipped.after(ForYouVerdictKind.LIKED, a).weight("a"), 0.0)
     }
 
     @Test fun `a like between skips ends the run and weight never falls below the floor`() {
-        val broken = DeckSteering().after(DeckSignal.Skipped, a).after(DeckSignal.Skipped, a).after(DeckSignal.Saved, a)
-            .after(DeckSignal.Skipped, a)
+        val broken = DeckSteering().after(ForYouVerdictKind.SKIPPED, a).after(ForYouVerdictKind.SKIPPED, a).after(ForYouVerdictKind.SAVED, a)
+            .after(ForYouVerdictKind.SKIPPED, a)
         assertEquals(1.0, broken.weight("a"), 0.0)
 
-        val floor = (1..30).fold(DeckSteering()) { steering, _ -> steering.after(DeckSignal.Hid, a) }
+        val floor = (1..30).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }
         assertEquals(DeckSteering.MIN_WEIGHT, floor.weight("a"), 0.0)
     }
 
