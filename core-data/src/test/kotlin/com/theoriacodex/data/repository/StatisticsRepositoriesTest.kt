@@ -41,7 +41,6 @@ class StatisticsRepositoriesTest {
         repository.recordForYouSave()
         repository.recordPostUrlCopy()
         repository.recordCodexEntry(" codex-1 ")
-        repository.recordTranslationUsage(phraseCount = 2L, sourceCharacterCount = 7L)
 
         val statistics = repository.observeStatistics().first()
         assertEquals(1L, statistics.appOpenCount)
@@ -62,8 +61,6 @@ class StatisticsRepositoriesTest {
         assertEquals(1L, statistics.forYouSaveCount)
         assertEquals(1L, statistics.postUrlCopyCount)
         assertEquals(mapOf("codex-1" to 1L), statistics.codexEntryCounts)
-        assertEquals(2L, statistics.translatedPhraseCount)
-        assertEquals(7L, statistics.translatedSourceCharacterCount)
     }
 
     @Test
@@ -172,7 +169,6 @@ class StatisticsRepositoriesTest {
         first.recordWatchedPost(SourceKey.GELBOORU, setOf("landscape"))
         first.recordSearch(setOf(SourceKey.PIXIV), setOf(SearchTerm("animation"), SearchTerm("mika", SearchFacet.ARTIST)))
         first.addUsageDuration(UsageDurationDelta(totalMs = 12_345L, codexMs = 2_345L))
-        first.recordTranslationUsage(phraseCount = 3L, sourceCharacterCount = 18L)
         first.recordCodexPostOpen("first", "PIXIV:1", "A post")
         first.addCodexUsage(CodexUsageTarget("first"), 100L)
         first.addCodexUsage(CodexUsageTarget("first", "PIXIV:1", video = true), 250L)
@@ -198,8 +194,6 @@ class StatisticsRepositoriesTest {
         )
         assertEquals(12_345L, restored.totalForegroundMs)
         assertEquals(2_345L, restored.codexMs)
-        assertEquals(3L, restored.translatedPhraseCount)
-        assertEquals(18L, restored.translatedSourceCharacterCount)
         assertTrue(directory.resolve(DATASTORE_STATISTICS_FILE_NAME).isFile)
         secondScope.closeDataStores()
     }
@@ -228,36 +222,35 @@ class StatisticsRepositoriesTest {
             LifetimeStatistics(
                 appOpenCount = Long.MAX_VALUE,
                 totalForegroundMs = Long.MAX_VALUE - 1L,
-                translatedPhraseCount = Long.MAX_VALUE,
-                translatedSourceCharacterCount = Long.MAX_VALUE - 1L,
             )
         )
 
         repository.recordAppOpen()
         repository.addUsageDuration(UsageDurationDelta(totalMs = 50L, browsingMs = -50L))
-        repository.recordTranslationUsage(phraseCount = 1L, sourceCharacterCount = 2L)
 
         val statistics = repository.observeStatistics().first()
         assertEquals(Long.MAX_VALUE, statistics.appOpenCount)
         assertEquals(Long.MAX_VALUE, statistics.totalForegroundMs)
         assertEquals(0L, statistics.browsingMs)
-        assertEquals(Long.MAX_VALUE, statistics.translatedPhraseCount)
-        assertEquals(Long.MAX_VALUE, statistics.translatedSourceCharacterCount)
     }
 
     @Test
-    fun `existing statistics files default translation usage to zero`() = runTest {
-        val directory = tempFolder.newFolder("statistics-before-translation-usage")
-        directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText(
-            """{"schemaVersion":2,"statistics":{"appOpenCount":4}}"""
+    fun `statistics files holding retired translation counters still load and drop them on the next write`() = runTest {
+        val directory = tempFolder.newFolder("statistics-with-translation-usage")
+        val file = directory.resolve(DATASTORE_STATISTICS_FILE_NAME)
+        file.writeText(
+            """{"schemaVersion":2,"statistics":{"appOpenCount":4,"translatedPhraseCount":3,"translatedSourceCharacterCount":18}}"""
         )
         val scope = newDataStoreScope()
-        val statistics = DataStoreStatisticsRepository(directory, scope).observeStatistics().first()
+        val repository = DataStoreStatisticsRepository(directory, scope)
 
-        assertEquals(4L, statistics.appOpenCount)
-        assertEquals(0L, statistics.translatedPhraseCount)
-        assertEquals(0L, statistics.translatedSourceCharacterCount)
+        assertEquals(4L, repository.observeStatistics().first().appOpenCount)
+        repository.recordAppOpen()
         scope.closeDataStores()
+
+        val rewritten = file.readText()
+        assertTrue(rewritten.contains("\"appOpenCount\":5"))
+        assertFalse(rewritten.contains("translated"))
     }
 
     @Test

@@ -40,12 +40,20 @@ class BackupGoldenTest {
         assertEquals(goldenBackup().copy(customSources = emptyList()), codec.decode(golden("backup-v1.json")))
     }
 
+    @Test fun `backups holding retired OCR and translation keys still import`() {
+        listOf("backup-v1.json", "backup-v2.json").forEach { name ->
+            val raw = golden(name).decodeToString()
+            (RETIRED_SETTINGS + RETIRED_STATISTICS).forEach { key -> assertTrue("$name lacks $key", raw.contains("\"$key\"")) }
+            val rewritten = codec.encode(codec.decode(golden(name))).decodeToString()
+            (RETIRED_SETTINGS + RETIRED_STATISTICS).forEach { key -> assertFalse("$name kept $key", rewritten.contains("\"$key\"")) }
+        }
+    }
+
     @Test fun `a backup written now is the document the Gson codec wrote`() {
         val golden = golden("backup-v2.json")
         val written = DurableJson.parseToJsonElement(golden.decodeToString()).jsonObject
-        val settings = written.getValue("settings").jsonObject -
-            setOf("lastSelectedTabRoute", "viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
-        val statistics = written.getValue("statistics").jsonObject +
+        val settings = written.getValue("settings").jsonObject - (RETIRED_SETTINGS + "lastSelectedTabRoute")
+        val statistics = written.getValue("statistics").jsonObject - RETIRED_STATISTICS +
             listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }
         assertEquals(JsonObject(written + ("settings" to JsonObject(settings)) + ("statistics" to JsonObject(statistics))),
             DurableJson.parseToJsonElement(codec.encode(codec.decode(golden)).decodeToString()))
@@ -108,6 +116,9 @@ class BackupGoldenTest {
     private fun golden(name: String): ByteArray =
         checkNotNull(javaClass.classLoader.getResource("golden/backup/$name")) { "Missing golden $name" }.readBytes()
 }
+
+private val RETIRED_SETTINGS = setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
+private val RETIRED_STATISTICS = setOf("translatedPhraseCount", "translatedSourceCharacterCount")
 
 private class RecordingBackupStore : ProfileBackupStore {
     val merged = mutableListOf<BackupLibrary>()

@@ -79,7 +79,7 @@ Workload version 2 adds two complete app journeys:
 
 The full app fixture uses `app/src/fixtures` with a fresh activity-owned storage directory inside
 its isolated app sandbox. Providers, media and credentials are controlled local fixtures; there
-are no live provider calls, translation calls or downloads. The target manifest removes Internet,
+are no live provider calls or downloads. The target manifest removes Internet,
 install-package permission, production deep links, App Links verification and FileProvider.
 The normal production container is skipped only in the exact fixture process. Source and
 packaged-artifact isolation checks remain separate from behavior tests.

@@ -108,7 +108,6 @@ class InputKeyTest(unittest.TestCase):
         for path in [
             "core-sources/src/test/resources/site/README.md",
             "scripts/check.sh",
-            "deploy/libretranslate/server.py",
             ".jscpd.json",
         ]:
             with self.subTest(path=path):
