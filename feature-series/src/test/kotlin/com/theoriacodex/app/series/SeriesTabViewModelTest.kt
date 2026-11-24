@@ -410,6 +410,28 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun theFollowedSeriesWaitForTheSavedSortAndFilter() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val manga = Answering("custom_mihon_7")
+        val saved = CompletableDeferred<LibraryOptions>()
+        val slow = object : SeriesLibraryPreferences {
+            override suspend fun read() = saved.await()
+            override fun write(options: LibraryOptions) = Unit
+        }
+        val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0)))
+        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }, library = slow) {}
+        val collecting = launch { viewModel.content.collect {} }
+        advanceUntilIdle()
+        assertEquals(null, viewModel.content.value.following)
+
+        saved.complete(LibraryOptions(sort = LibrarySort.TITLE))
+        advanceUntilIdle()
+        assertEquals(listOf("M"), viewModel.content.value.following?.map { it.series.title })
+        assertEquals(LibrarySort.TITLE, viewModel.content.value.library.sort)
+        collecting.cancel()
+    }
+
+    @Test
     fun followingOptionsAreRememberedAndShowAllClearsEveryFilter() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val kept = object : SeriesLibraryPreferences {

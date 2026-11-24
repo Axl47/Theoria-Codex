@@ -188,7 +188,8 @@ class AnimeViewerLiveTest {
         if (device.wait(Until.hasObject(By.text(FOLLOW)), SeriesLiveDriver.SHORT_WAIT_MS) == true) live.tap("Follow", By.text(FOLLOW))
         live.waitFor("the series to read as followed", By.text(FOLLOWING))
         device.executeShellCommand("am force-stop ${live.targetPackage}")
-        live.openSeriesTab(By.text(title), view = FOLLOWING)
+        // No view is chosen: with a series followed, the tab opens on Following.
+        live.openSeriesTab(By.text(title), view = null)
         val shelf = live.waitFor("\"$title\" in Following", By.text(title)).visibleBounds
         live.report("shelf", "after a cold open, Following lists \"$title\" at $shelf")
     }
