@@ -26,6 +26,18 @@ const val MIHON_SOURCE_ID_PREFIX = "custom_mihon_"
 const val ANIYOMI_SOURCE_ID_PREFIX = "custom_aniyomi_"
 
 /**
+ * The app-wide id of the extension source numbered [id] that lists series of this kind: its kind's prefix and the
+ * number, which no site's host can be. Mihon's and Aniyomi's apps name sources by the same numbers, so their backups
+ * resolve to these ids too.
+ */
+fun SeriesKind.extensionSourceKey(id: Long): SourceKey = SourceKey.parseOrThrow(
+    when (this) {
+        SeriesKind.MANGA -> MIHON_SOURCE_ID_PREFIX
+        SeriesKind.ANIME -> ANIYOMI_SOURCE_ID_PREFIX
+    } + id,
+)
+
+/**
  * The kind of the series this source lists, read from its id alone: nothing is stored for it. Meaningful only for a
  * series source; any source but an Aniyomi extension's reads as [SeriesKind.MANGA].
  */

@@ -35,7 +35,7 @@ internal fun parseBackupObject(raw: String): JsonObject = rejectMalformedBackup 
 internal inline fun <T> rejectMalformedBackup(decode: () -> T): T = try {
     decode()
 } catch (malformed: SerializationException) {
-    throw IllegalStateException("Malformed backup JSON", malformed)
+    throw IllegalStateException("Malformed backup", malformed)
 }
 
 internal fun <T> backupArray(values: List<T>, encode: (T) -> JsonElement) = JsonArray(values.map(encode))

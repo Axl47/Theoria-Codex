@@ -78,10 +78,7 @@ internal fun rememberLibraryTransferTools(
     val context = LocalContext.current.applicationContext
     val downloads = container.features.postDownloads
     val backup = viewModel(key = "profile-backup") {
-        BackupViewModel(
-            ProfileBackupActions(container.workflows.profileBackup, container.workflows.seriesImport),
-            AndroidBackupDocuments(context.contentResolver),
-        )
+        BackupViewModel(ProfileBackupActions(container.workflows.profileBackup), AndroidBackupDocuments(context.contentResolver))
     }
     val maintenance = remember(container) {
         MediaCacheMaintenance(context, container.data.cacheRepository, container.sources.pixivUgoiraClient)
@@ -109,7 +106,7 @@ internal fun rememberLibraryTransferTools(
     val tools = remember(downloads, downloadRemovals, backup, offline, export, import, autoBackup, autoBackupFolder) {
         LibraryTransferTools(downloads, downloadRemovals, backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
-            chooseBackup = { import.launch(arrayOf("application/json", "application/octet-stream", "application/gzip")) },
+            chooseBackup = { import.launch(arrayOf("*/*")) },
             chooseAutoBackupFolder = { autoBackupFolder.launch(null) },
             turnOffAutoBackup = {
                 context.contentResolver.releaseAutoBackupFolder(autoBackup?.status?.value?.folderUri)

@@ -15,6 +15,7 @@ import com.theoriacodex.data.repository.ProfileRestorePendingException
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.data.repository.SeriesImportPreview
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
@@ -29,6 +30,7 @@ import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import java.io.IOException
+import java.util.Base64
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -85,6 +87,11 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
     check(withRestoreService(restore, store) { it.recoverPendingRestore() })
     check(!restore.resolve(RESTORE_JOURNAL).exists() && imported.single() == expected.library)
     check(FileBackedSavedSearchRepository(restore.resolve("pins")).observeSavedSearches().first() == pins)
+
+    // Mihon-family backups decode through protobuf models, which R8 must keep with their field numbers.
+    val series = withRestoreService(restore, store) { it.importSeries(Base64.getDecoder().decode(MIHON_BACKUP)) }
+    check(series == SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0))
+    check(imported.last().series.single().entries.single().read)
 }
 
 /** A restore service over durable stores in [directory], as the app builds one, with [store] for the library. */
@@ -190,3 +197,6 @@ private const val SHIPPED_PINS =
     """"sort":"NEWEST","includeTerms":[{"value":"a & b","facet":"ARTIST","sourceNamespace":"artist"}],""" +
     """"excludeTerms":[],"includeTermGroups":[[{"value":"a & b","facet":"ARTIST",""" +
     """"sourceNamespace":"artist"}]]},"kind":"MULTI_SEARCH","sources":["GELBOORU","PIXIV"],"sourceTags":{}}}]}"""
+
+/** A Mihon backup following one manga, `/s` on source 7, with its one chapter read. */
+private const val MIHON_BACKUP = "H4sIAAAAAAAC/+MS4WAXYtIvlmIMbmLk4GLRL9Y3VGAEACrdYIsWAAAA"

@@ -81,7 +81,6 @@ import com.theoriacodex.data.repository.SavedSearchRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.repository.OfflinePendingJobStore
 import com.theoriacodex.data.repository.ProfileBackupService
-import com.theoriacodex.data.repository.TachiyomiBackupImport
 import com.theoriacodex.data.repository.ProfileDeletionService
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.SettingsRepository
@@ -218,7 +217,6 @@ data class WorkflowDependencies(
     val likesCodexSync: LikesCodexSyncService,
     val codexTransfer: CodexTransferService,
     val profileBackup: ProfileBackupService,
-    val seriesImport: TachiyomiBackupImport,
     val autoBackup: AutoBackupWorkflow? = null,
     val profileDeletion: ProfileDeletionService,
 )
@@ -416,10 +414,9 @@ internal class DefaultTheoriaAppContainer(
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
-    private val backupStore = RoomProfileBackupStore(contentDatabase)
     private val profileBackup = ProfileBackupService(
         settings = settingsRepository,
-        store = backupStore,
+        store = RoomProfileBackupStore(contentDatabase),
         savedSearches = savedSearches,
         readingPositions = readingPositions,
         journalFile = File(storageDirectory, "pending_profile_restore.json"),
@@ -572,7 +569,6 @@ internal class DefaultTheoriaAppContainer(
             keepOffline = { codexId, posts -> offlineMedia.keepOffline(codexOfflineOwner(codexId), posts) },
         ),
         profileBackup = profileBackup,
-        seriesImport = TachiyomiBackupImport(backupStore),
         autoBackup = autoBackup,
         profileDeletion = profileDeletion,
     )

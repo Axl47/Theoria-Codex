@@ -4,6 +4,7 @@ import android.content.pm.PackageInfo
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.extensionSourceKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,13 +29,10 @@ interface ExtensionKind {
     val seriesKind: SeriesKind
 
     /**
-     * What its sources' ids start with: one prefix per kind, since both interfaces number their sources the same way
-     * and two sources must never share an id.
+     * The app-wide identity of this kind's source numbered [id]. Each kind has its own id prefix, since both interfaces
+     * number their sources the same way and two sources must never share an id.
      */
-    val sourceIdPrefix: String
-
-    /** The app-wide identity of this kind's source numbered [id]: its prefix and the number, which no site's host can be. */
-    fun sourceKey(id: Long): SourceKey = SourceKey.parseOrThrow("$sourceIdPrefix$id")
+    fun sourceKey(id: Long): SourceKey = seriesKind.extensionSourceKey(id)
 
     /**
      * Why this host cannot run the extension [info] describes, such as an interface version it does not provide; null

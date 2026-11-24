@@ -3,15 +3,20 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.series.SeriesStatus
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 /** Backups are written field by field here, so the field numbers are checked against Mihon's and Anikku's, not ours. */
 class TachiyomiBackupTest {
+    @get:Rule val temporary = TemporaryFolder()
+
     @Test
     fun `manga keep their source, follow and progress, in Theoria's units`() {
         val series = decodeTachiyomiBackup(backup {
@@ -70,19 +75,39 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `preview counts followed series by kind and finished entries`() = runTest {
+    fun `an unfollowed series with progress but no history continues from its furthest entry`() {
+        val series = decodeTachiyomiBackup(backup {
+            message(1) {
+                long(1, 1); string(2, "/s"); string(3, "S"); bool(100, false)
+                message(16) { string(1, "/s/2"); long(10, 0) }
+                message(16) { string(1, "/s/1"); bool(4, true); long(10, 1) }
+            }
+        }, now = 0)
+
+        assertEquals("/s/1", series.single().series.lastOpenedEntry)
+    }
+
+    @Test
+    fun `the backup service previews and imports a Mihon-family backup as series only`() = runTest {
         val bytes = backup {
             message(1) { long(1, 1); string(2, "/m"); string(3, "M"); message(16) { string(1, "/m/1"); bool(4, true) } }
             message(501) { long(1, 1); string(2, "/a"); string(3, "A"); message(16) { string(1, "/a/1") } }
         }
         val store = RecordingStore()
-        val import = TachiyomiBackupImport(store) { 0 }
+        val directory = temporary.newFolder()
+        val service = ProfileBackupService(InMemorySettingsRepository(), store, InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"))
+        val expected = SeriesImportPreview(manga = 1, anime = 1, chaptersRead = 1, episodesWatched = 0)
 
-        assertEquals(TachiyomiBackupPreview(manga = 1, anime = 1, chaptersRead = 1, episodesWatched = 0), import.preview(bytes))
-        import.import(bytes)
+        assertEquals(BackupPreview.Series(expected), service.preview(bytes))
+        assertEquals(expected, service.importSeries(bytes))
         val merged = store.merged.single()
         assertEquals(2, merged.series.size)
         assertTrue(merged.codices.isEmpty() && merged.posts.isEmpty() && merged.likes.isEmpty())
+
+        directory.resolve("restore.json").writeText("{}")
+        assertThrows(IllegalStateException::class.java) { runBlocking { service.importSeries(bytes) } }
+        assertEquals(1, store.merged.size)
     }
 
     @Test
@@ -90,6 +115,12 @@ class TachiyomiBackupTest {
         assertThrows(IllegalArgumentException::class.java) { decodeTachiyomiBackup("{}".toByteArray(), 0) }
         assertThrows(IllegalArgumentException::class.java) { decodeTachiyomiBackup(backup { message(101) { string(1, "Source") } }, 0) }
         assertThrows(IllegalArgumentException::class.java) { decodeTachiyomiBackup(backup { message(1) { long(1, 0) } }, 0) }
+    }
+
+    @Test
+    fun `a corrupt backup reaches the generic message, not the parser's`() {
+        // The backup screen shows an IllegalArgumentException's message, which kotlinx's parse errors are.
+        assertThrows(IllegalStateException::class.java) { decodeTachiyomiBackup(backup { long(1, 5) }, 0) }
     }
 }
 

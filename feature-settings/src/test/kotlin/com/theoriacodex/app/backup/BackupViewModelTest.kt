@@ -3,7 +3,8 @@ package com.theoriacodex.app.backup
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.ProfileRestoreResult
-import com.theoriacodex.data.repository.TachiyomiBackupPreview
+import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.BackupPreview
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
@@ -69,7 +70,7 @@ class BackupViewModelTest {
 
     @Test
     fun `a Mihon-family backup imports its series instead of restoring profiles`() = runTest {
-        actions.nextPreview = BackupPreview.Series(TachiyomiBackupPreview(manga = 212, anime = 1, chaptersRead = 900, episodesWatched = 3))
+        actions.nextPreview = BackupPreview.Series(SeriesImportPreview(manga = 212, anime = 1, chaptersRead = 900, episodesWatched = 3))
         val owner = owner()
         owner.import("document")
         advanceUntilIdle()
@@ -233,7 +234,7 @@ private class FakeBackupActions : BackupActions {
         return ProfileRestoreResult(2, 3)
     }
 
-    override suspend fun importSeries(bytes: ByteArray): TachiyomiBackupPreview {
+    override suspend fun importSeries(bytes: ByteArray): SeriesImportPreview {
         seriesImports++
         return (nextPreview as BackupPreview.Series).preview
     }

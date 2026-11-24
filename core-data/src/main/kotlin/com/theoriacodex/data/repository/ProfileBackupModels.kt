@@ -57,6 +57,15 @@ data class ProfileBackup(
     )
 }
 
+/** What restoring a chosen file would add: a Theoria backup's profiles, or the series of a Mihon-family app's backup. */
+sealed interface BackupPreview {
+    data class Profiles(val preview: ProfileBackupPreview) : BackupPreview
+    data class Series(val preview: SeriesImportPreview) : BackupPreview
+}
+
+/** What importing a Mihon-family backup adds: the series it follows by kind, and the entries it finished. */
+data class SeriesImportPreview(val manga: Int, val anime: Int, val chaptersRead: Int, val episodesWatched: Int)
+
 data class ProfileBackupPreview(
     val createdAtEpochMs: Long,
     val profileNames: List<String>,

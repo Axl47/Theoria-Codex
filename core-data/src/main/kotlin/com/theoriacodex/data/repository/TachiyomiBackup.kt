@@ -2,14 +2,12 @@
 
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.ANIYOMI_SOURCE_ID_PREFIX
-import com.theoriacodex.domain.series.MIHON_SOURCE_ID_PREFIX
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.extensionSeriesStatus
+import com.theoriacodex.domain.series.extensionSourceKey
 import com.theoriacodex.domain.series.seriesKind
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
@@ -19,41 +17,21 @@ import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.protobuf.ProtoNumber
 
-/** What importing a Mihon-family backup adds: the series it follows by kind, and the entries it finished. */
-data class TachiyomiBackupPreview(val manga: Int, val anime: Int, val chaptersRead: Int, val episodesWatched: Int)
-
 /**
- * Imports the library of a backup made by Mihon, TachiyomiJ2K, Anikku or another app of their family (a `.tachibk`
- * file) into the Series tab. Those apps run the same extensions, which name a series and its entries by the same
- * source number and addresses, so each series lands on the extension source that lists it here and keeps its read
- * or watched state. It merges as a profile restore merges series ([ProfileBackupStore.merge]): nothing on the device is
- * removed, progress takes the further of the two sides, and importing twice adds nothing more.
+ * The wire format of the backups Mihon, TachiyomiJ2K, Anikku and the other apps of their family write (`.tachibk`:
+ * gzip around protobuf), read for the series [ProfileBackupService.importSeries] adds to the Series tab. Those apps run
+ * the same extensions, which name a series and its entries by the same source number and addresses, so each series
+ * lands on the extension source that lists it here and keeps its read or watched state.
  *
  * A series comes along when the backup follows it or has progress in it. Categories, trackers, downloads and the
- * apps' settings stay behind, and so does the apps' local source, whose files Theoria cannot read. A series whose
- * extension is not installed and on here shows as unavailable until it is.
+ * apps' settings stay behind, and so does the apps' local source, whose files Theoria cannot read.
  */
-class TachiyomiBackupImport(
-    private val store: ProfileBackupStore,
-    private val clock: () -> Long = System::currentTimeMillis,
-) {
-    fun preview(bytes: ByteArray): TachiyomiBackupPreview = decodeTachiyomiBackup(bytes, clock()).preview()
-
-    /** Returns what was imported. */
-    suspend fun import(bytes: ByteArray): TachiyomiBackupPreview {
-        val series = decodeTachiyomiBackup(bytes, clock())
-        store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = series))
-        return series.preview()
-    }
-}
-
-/** Whether [bytes] are gzip, as every Mihon-family backup is; Theoria's own backups are plain JSON. */
-fun isTachiyomiBackup(bytes: ByteArray): Boolean = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+internal fun isTachiyomiBackup(bytes: ByteArray): Boolean = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
 
 /** The series of a Mihon-family backup as Theoria stores them, checked as a profile backup's series are. */
 internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): List<BackupSeries> {
     require(isTachiyomiBackup(bytes)) { "This is not a Mihon or Aniyomi backup." }
-    val backup = ProtoBuf.decodeFromByteArray<TachiyomiBackup>(gunzip(bytes))
+    val backup = rejectMalformedBackup { ProtoBuf.decodeFromByteArray<TachiyomiBackup>(gunzip(bytes)) }
     val series = (backup.manga.mapNotNull { it.toBackup(SeriesKind.MANGA, now) } + backup.anime.mapNotNull { it.toBackup(SeriesKind.ANIME, now) })
         .distinctBy { it.series.series.id }
         .writable()
@@ -62,9 +40,10 @@ internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): List<BackupSeri
     return series
 }
 
-private fun List<BackupSeries>.preview(): TachiyomiBackupPreview {
+/** What importing [this] adds, for the preview and the message after it. */
+internal fun List<BackupSeries>.importPreview(): SeriesImportPreview {
     val (anime, manga) = partition { it.series.series.id.source.seriesKind == SeriesKind.ANIME }
-    return TachiyomiBackupPreview(
+    return SeriesImportPreview(
         manga = manga.count { it.series.followed },
         anime = anime.count { it.series.followed },
         chaptersRead = manga.sumOf { series -> series.entries.count { it.read } },
@@ -89,16 +68,19 @@ private fun gunzip(bytes: ByteArray): ByteArray = GZIPInputStream(bytes.inputStr
  * [this] as a stored series of [kind], or null when it has nothing to keep: neither followed nor started, or on a
  * source no extension has (the local source is number 0). Positions convert to [StoredSeriesEntry]'s units: Mihon keeps
  * the last page's index from 0, so page 0 is untouched; Aniyomi keeps milliseconds, though its fields say seconds.
+ *
+ * The entry opened last is the one history read last, else the furthest one with progress. A series therefore keeps
+ * one whenever it has progress, which is also what keeps an unfollowed series in Theoria's own backups.
  */
 private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries? {
     if (source <= 0) return null
-    val prefix = if (kind == SeriesKind.ANIME) ANIYOMI_SOURCE_ID_PREFIX else MIHON_SOURCE_ID_PREFIX
     val stored = entries.filter { it.url.isNotBlank() }.distinctBy { it.url }.map { it.toStored(kind, now) }
     val addresses = stored.mapTo(HashSet()) { it.entry.address }
     val lastOpened = history.filter { it.url in addresses }.maxByOrNull { it.lastRead }?.url
-    if (!favorite && lastOpened == null && stored.none { it.read || it.position > 0 }) return null
+        ?: stored.filter { it.read || it.position > 0 }.minByOrNull { it.sourceOrder }?.entry?.address
+    if (!favorite && lastOpened == null) return null
     val series = Series(
-        id = SeriesId(SourceKey.parseOrThrow("$prefix$source"), url),
+        id = SeriesId(kind.extensionSourceKey(source), url),
         title = title,
         coverUrl = thumbnailUrl?.takeIf(String::isNotBlank),
         author = author?.takeIf(String::isNotBlank),
@@ -161,7 +143,8 @@ private class TachiyomiEntry(
     @ProtoNumber(6) val lastPosition: Long = 0,
     @ProtoNumber(7) val dateFetch: Long = 0,
     @ProtoNumber(8) val dateUpload: Long = 0,
-    @ProtoNumber(9) val number: Float = -1f,
+    /** Mihon's default, so a chapter it numbered 0 has no field; -1 is its "unknown". */
+    @ProtoNumber(9) val number: Float = 0f,
     @ProtoNumber(10) val sourceOrder: Long = 0,
     @ProtoNumber(16) val totalSeconds: Long = 0,
 )

@@ -23,7 +23,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
-import com.theoriacodex.data.repository.TachiyomiBackupPreview
+import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.BackupPreview
 
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
@@ -161,8 +162,9 @@ private fun RestoreBackupDialog(
 
 /** A Mihon-family backup brings only series, so its preview says what of them comes along and nothing else. */
 @Composable
-private fun ImportSeriesDialog(preview: TachiyomiBackupPreview, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
-    val progress = listOfNotNull(
+private fun ImportSeriesDialog(preview: SeriesImportPreview, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
+    val counts = listOfNotNull(
+        preview.summary(),
         countLabel(preview.chaptersRead, "chapter read", "chapters read").takeIf { preview.chaptersRead > 0 },
         countLabel(preview.episodesWatched, "episode watched", "episodes watched").takeIf { preview.episodesWatched > 0 },
     )
@@ -170,9 +172,11 @@ private fun ImportSeriesDialog(preview: TachiyomiBackupPreview, busy: Boolean, o
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Import series") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (preview.manga > 0 || preview.anime > 0) Text(preview.summary())
-                if (progress.isNotEmpty()) Text(progress.joinToString(" · "))
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
                 Text("A series stays unavailable until its extension is on here.")
                 if (busy) Text("Importing…")

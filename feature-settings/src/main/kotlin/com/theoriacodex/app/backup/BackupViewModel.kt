@@ -4,13 +4,11 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.source.displayName
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileRestoreResult
 import com.theoriacodex.data.repository.ProfileRestorePendingException
-import com.theoriacodex.data.repository.TachiyomiBackupImport
-import com.theoriacodex.data.repository.TachiyomiBackupPreview
-import com.theoriacodex.data.repository.isTachiyomiBackup
+import com.theoriacodex.data.repository.BackupPreview
+import com.theoriacodex.data.repository.SeriesImportPreview
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -23,26 +21,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** What restoring a chosen file would add: a Theoria backup's profiles, or the series of a Mihon-family app's backup. */
-sealed interface BackupPreview {
-    data class Profiles(val preview: ProfileBackupPreview) : BackupPreview
-    data class Series(val preview: TachiyomiBackupPreview) : BackupPreview
-}
-
 interface BackupActions {
     suspend fun export(includeRecents: Boolean): ByteArray
     fun preview(bytes: ByteArray): BackupPreview
     suspend fun restore(bytes: ByteArray, applyPreferences: Boolean): ProfileRestoreResult
-    suspend fun importSeries(bytes: ByteArray): TachiyomiBackupPreview
+    suspend fun importSeries(bytes: ByteArray): SeriesImportPreview
 }
 
-/** Restore takes either kind of backup, told apart by its bytes. */
-class ProfileBackupActions(private val service: ProfileBackupService, private val seriesImport: TachiyomiBackupImport) : BackupActions {
+class ProfileBackupActions(private val service: ProfileBackupService) : BackupActions {
     override suspend fun export(includeRecents: Boolean) = service.export(includeRecents)
-    override fun preview(bytes: ByteArray) =
-        if (isTachiyomiBackup(bytes)) BackupPreview.Series(seriesImport.preview(bytes)) else BackupPreview.Profiles(service.preview(bytes))
+    override fun preview(bytes: ByteArray) = service.preview(bytes)
     override suspend fun restore(bytes: ByteArray, applyPreferences: Boolean) = service.restore(bytes, applyPreferences)
-    override suspend fun importSeries(bytes: ByteArray) = seriesImport.import(bytes)
+    override suspend fun importSeries(bytes: ByteArray) = service.importSeries(bytes)
 }
 
 enum class BackupOperation { EXPORT, READ, RESTORE }
@@ -178,12 +168,13 @@ private fun ProfileRestoreResult.message(): String {
     return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
 }
 
-/** "12 manga · 1 anime", leaving out a kind the backup does not follow; "series progress" when it follows none. */
-internal fun TachiyomiBackupPreview.summary(): String =
-    listOfNotNull("$manga manga".takeIf { manga > 0 }, "$anime anime".takeIf { anime > 0 }).joinToString(" · ").ifEmpty { "series progress" }
+/** "212 manga · 1 anime", leaving out a kind the backup does not follow; "series progress" when it follows none. */
+internal fun SeriesImportPreview.summary(): String =
+    listOfNotNull(countLabel(manga, "manga", "manga").takeIf { manga > 0 }, countLabel(anime, "anime", "anime").takeIf { anime > 0 })
+        .joinToString(" · ").ifEmpty { "series progress" }
 
-/** "1 profile", "2 profiles": [count] with [noun] or [plural]; used by the restore preview and its messages. */
-internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "$count ${if (count == 1) noun else plural}"
+/** "1 profile", "2 profiles", "1,204 chapters": [count] with [noun] or [plural]; used by the restore previews and their messages. */
+internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "${"%,d".format(count)} ${if (count == 1) noun else plural}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {
