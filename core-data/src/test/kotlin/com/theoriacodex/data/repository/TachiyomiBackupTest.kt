@@ -191,12 +191,12 @@ class TachiyomiBackupTest {
         assertEquals(1, preview.unnamedMissingSources)
 
         val result = service.importSeries(bytes)
+        // The manga repo is added already, so it is not asked for again.
         val given = listOf(
-            NewExtensionRepo("https://manga.example/repo", "aa11"),
             NewExtensionRepo("https://anime.example/repo", "bb22"),
             NewExtensionRepo("https://more.example/repo", "cc33"),
         )
-        assertEquals(given, repos.given)
+        assertEquals(given.toSet(), repos.given.toSet())
         assertEquals(1, result.reposAdded)
         assertEquals(mapOf("https://anime.example/repo" to "Now signed with another key"), result.repoProblems)
     }
@@ -244,15 +244,16 @@ private class RecordingStore : ProfileBackupStore {
 }
 
 /** Holds [added] already and adds each other repo but [refuse], which it refuses as [ExtensionRepos.add] does a repo whose key changed. */
-private class RecordingRepos(private val refuse: String, added: String) : ExtensionRepos {
+internal class RecordingRepos(private val refuse: String, added: String) : ExtensionRepos {
     val given = mutableListOf<NewExtensionRepo>()
     private val stored = mutableListOf(ExtensionRepo(added, added, ""))
     override suspend fun repos() = stored.toList()
-    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> {
+    // Repos may be added from several threads at once.
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = synchronized(this) {
         given += repos
         val new = repos.filter { repo -> stored.none { it.url == repo.url } }
         stored += new.filter { it.url != refuse }.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
-        return new.filter { it.url == refuse }.associate { it.url to "Now signed with another key" }
+        new.filter { it.url == refuse }.associate { it.url to "Now signed with another key" }
     }
     override suspend fun remove(url: String) = error("unused")
     override suspend fun available(refresh: Boolean): RepoListing = error("unused")

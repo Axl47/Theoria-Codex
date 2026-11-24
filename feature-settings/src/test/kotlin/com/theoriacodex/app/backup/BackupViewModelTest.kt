@@ -70,6 +70,21 @@ class BackupViewModelTest {
     }
 
     @Test
+    fun `a Theoria restore says which extension repos were added and why others were not`() = runTest {
+        actions.nextRestore = ProfileRestoreResult(2, 3, reposAdded = 1, repoProblems = mapOf("https://old.example" to "Now signed with another key"))
+        val owner = owner()
+        owner.import("document")
+        advanceUntilIdle()
+        owner.restore()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Backup restored: 2 profiles and 3 Codices added. Added 1 extension repo. Could not add 1 extension repo: Now signed with another key.",
+            owner.effects.first(),
+        )
+    }
+
+    @Test
     fun `a Mihon-family backup imports its series instead of restoring profiles`() = runTest {
         actions.nextPreview = BackupPreview.Series(SeriesImportPreview(manga = 212, anime = 1, chaptersRead = 900, episodesWatched = 3))
         val owner = owner()
@@ -258,6 +273,7 @@ private class FakeBackupActions : BackupActions {
     var nextPreview: BackupPreview = preview
     var seriesImports = 0
 
+    var nextRestore = ProfileRestoreResult(2, 3)
     var nextImport: SeriesImportResult? = null
 
     override suspend fun preview(bytes: ByteArray) = nextPreview
@@ -268,7 +284,7 @@ private class FakeBackupActions : BackupActions {
         appliedPreferences = applyPreferences
         restoreGate?.await()
         restoreFailure?.let { throw it }
-        return ProfileRestoreResult(2, 3)
+        return nextRestore
     }
 
     override suspend fun importSeries(bytes: ByteArray): SeriesImportResult {

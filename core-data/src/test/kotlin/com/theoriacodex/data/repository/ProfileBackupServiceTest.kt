@@ -11,6 +11,8 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.ExtensionRepo
+import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -77,6 +79,45 @@ class ProfileBackupServiceTest {
 
         assertEquals(afterFirst.recommendationProfiles, settings.observeSettings().first().recommendationProfiles)
         assertEquals(1, pins.observeSavedSearches().first().size)
+    }
+
+    @Test fun `a backup carries the extension repos, and one without them stays readable by the previous release`() {
+        val repos = listOf(ExtensionRepo("https://a.example/repo", "A", "aa11"), ExtensionRepo("https://b.example/repo", "B", "bb22"))
+        val written = backup().copy(extensionRepos = repos)
+        assertEquals(repos, codec.decode(codec.encode(written)).extensionRepos)
+        assertEquals(4, encodedTree(written)["version"]?.toString()?.toInt())
+
+        // No repos: the field and the version bump stay out, and a document that never had the field decodes as before.
+        val plain = encodedTree(backup())
+        assertFalse("extensionRepos" in plain)
+        assertEquals(2, plain["version"]?.toString()?.toInt())
+        assertEquals(emptyList<ExtensionRepo>(), codec.decode(codec.encode(backup())).extensionRepos)
+    }
+
+    @Test fun `exporting writes the device's repos and restoring adds the missing ones, skips present ones and reports a changed key`() = runTest {
+        val held = listOf(ExtensionRepo("https://present.example/repo", "Present", "aa11"))
+        val source = object : ExtensionRepos by RecordingRepos(refuse = "", added = "") {
+            override suspend fun repos() = held
+        }
+        val directory = temporary.newFolder()
+        val exporting = ProfileBackupService(InMemorySettingsRepository(), FakeBackupStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"), extensionRepos = source)
+        val exported = codec.decode(exporting.export())
+        assertEquals(held, exported.extensionRepos)
+        val bytes = codec.encode(exported.copy(extensionRepos = held + listOf(
+            ExtensionRepo("https://new.example/repo", "New", "bb22"),
+            ExtensionRepo("https://changed.example/repo", "Changed", "cc33"),
+        )))
+
+        val repos = RecordingRepos(refuse = "https://changed.example/repo", added = "https://present.example/repo")
+        val restoreDirectory = temporary.newFolder()
+        val restoring = ProfileBackupService(InMemorySettingsRepository(), FakeBackupStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(restoreDirectory), restoreDirectory.resolve("restore.json"), extensionRepos = repos)
+        val result = restoring.restore(bytes)
+
+        assertEquals(setOf("https://new.example/repo", "https://changed.example/repo"), repos.given.map { it.url }.toSet())
+        assertEquals(1, result.reposAdded)
+        assertEquals(mapOf("https://changed.example/repo" to "Now signed with another key"), result.repoProblems)
     }
 
     @Test fun `portable round trip preserves profile libraries rules settings and exact search replay`() {
@@ -383,7 +424,7 @@ class ProfileBackupServiceTest {
             byteArrayOf(0xc3.toByte(), 0x28),
             "{}".toByteArray(),
             "[".repeat(65).toByteArray(),
-            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":4").toByteArray(),
+            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":5").toByteArray(),
             codec.encode(backup()).toString(Charsets.UTF_8).replace("\"PIXIV\"", "\"UNKNOWN\"").toByteArray(),
         )
         invalid.forEach { assertTrue(runCatching { codec.decode(it) }.isFailure) }

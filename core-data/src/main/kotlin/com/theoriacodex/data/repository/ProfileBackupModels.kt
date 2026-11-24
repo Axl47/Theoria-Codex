@@ -3,6 +3,7 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.source.SiteProfile
 
 /** A logical transaction snapshot, independent of Room's tables and database version. */
@@ -43,6 +44,8 @@ data class ProfileBackup(
     val statistics: LifetimeStatistics? = null,
     /** User-added sites. Credentials are never part of a backup. */
     val customSources: List<SiteProfile> = emptyList(),
+    /** The user's extension repos, so a new device finds the repos its series came from. Absent from older backups. */
+    val extensionRepos: List<ExtensionRepo> = emptyList(),
 ) {
     fun preview() = ProfileBackupPreview(
         createdAtEpochMs = createdAtEpochMs,
@@ -98,4 +101,7 @@ data class ProfileRestoreResult(
     val profilesAdded: Int,
     val collectionsAdded: Int,
     val keptExistingSites: List<String> = emptyList(),
+    /** How many of the backup's extension repos were new here and added, and why each refused one was not, by address. */
+    val reposAdded: Int = 0,
+    val repoProblems: Map<String, String> = emptyMap(),
 )

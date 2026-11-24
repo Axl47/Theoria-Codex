@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -17,12 +18,21 @@ import kotlinx.serialization.json.put
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
 /**
- * 2 added the optional `customSources` list and 3 the optional `library.series` list; older apps refuse a version
- * they do not know with their "newer version" message. A backup without series is still written as 2, which the
- * previous release reads; one with series is 3, so no app restores it and silently leaves the series out.
+ * 2 added the optional `customSources` list, 3 the optional `library.series` list and 4 the optional `extensionRepos`
+ * list; older apps refuse a version they do not know with their "newer version" message. A backup is written with the
+ * lowest version that holds what it has, so the previous release still reads one without repos (or series), and no
+ * app restores one with them and silently leaves them out.
  */
-private const val PROFILE_BACKUP_VERSION = 3
-private const val VERSION_WITHOUT_SERIES = 2
+private const val PROFILE_BACKUP_VERSION = 4
+
+private fun ProfileBackup.version() = when {
+    extensionRepos.isNotEmpty() -> PROFILE_BACKUP_VERSION
+    library.series.isNotEmpty() -> 3
+    else -> 2
+}
+
+/** A sanity bound on the repos a backup lists. */
+private const val MAX_BACKUP_EXTENSION_REPOS = 256
 
 /** A sanity bound; a device allows [SiteProfile.MAX_CUSTOM_SITES] plus any added during a restore. */
 private const val MAX_BACKUP_SITE_PROFILES = 256
@@ -44,7 +54,7 @@ class ProfileBackupCodec {
         validate(backup)
         return buildJsonObject {
             put("format", "theoria-profile-backup")
-            put("version", if (backup.library.series.isEmpty()) VERSION_WITHOUT_SERIES else PROFILE_BACKUP_VERSION)
+            put("version", backup.version())
             put("createdAt", backup.createdAtEpochMs)
             put("settings", DurableJson.encodeToJsonElement(
                 SettingsStoreRecord.serializer(), SettingsStoreRecord.fromDomain(portableSettings(backup.settings)),
@@ -71,6 +81,13 @@ class ProfileBackupCodec {
                 put("customSources", backupArray(backup.customSources) {
                     DurableJson.encodeToJsonElement(SiteProfileRecord.serializer(), SiteProfileRecord.fromDomain(it))
                 })
+            }
+            if (backup.extensionRepos.isNotEmpty()) {
+                put("extensionRepos", backupArray(backup.extensionRepos) { repo -> buildJsonObject {
+                    put("url", repo.url)
+                    put("name", repo.name)
+                    put("signingKey", repo.signingKey)
+                } })
             }
         }
     }
@@ -102,6 +119,9 @@ class ProfileBackupCodec {
                 StatisticsStoreRecord.serializer(), root.backupObject("statistics"),
             ).also(StatisticsStoreRecord::validate).toDomain(),
             customSources = decodeCustomSources(root),
+            extensionRepos = if ("extensionRepos" !in root) emptyList() else root.backupObjects("extensionRepos", MAX_BACKUP_EXTENSION_REPOS).map { repo ->
+                ExtensionRepo(repo.backupString("url"), repo.backupString("name"), repo.backupString("signingKey"))
+            },
         ).also(::validate)
     }
 
@@ -241,6 +261,7 @@ private fun validate(backup: ProfileBackup) {
     require(backup.savedSearches.all { it.id.isNotBlank() && it.name.isNotBlank() && it.name.length <= MAX_SAVED_SEARCH_NAME_LENGTH })
     require(backup.readingPositions.size <= MAX_READING_POSITIONS)
     require(backup.readingPositions.distinctBy { it.postId to it.section }.size == backup.readingPositions.size)
+    require(backup.extensionRepos.size <= MAX_BACKUP_EXTENSION_REPOS)
     require(backup.customSources.size <= MAX_BACKUP_SITE_PROFILES)
     require(backup.customSources.distinctBy(SiteProfile::sourceId).size == backup.customSources.size) {
         "Backup contains duplicate sites"

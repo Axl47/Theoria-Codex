@@ -167,15 +167,22 @@ private fun ProfileRestoreResult.message(): String {
     val restored = if (profilesAdded == 0 && collectionsAdded == 0) "Backup restored into your existing Codices."
     else "Backup restored: ${countLabel(profilesAdded, "profile")} and ${countLabel(collectionsAdded, "Codex", "Codices")} added."
     val kept = keptExistingSites.mapNotNull { id -> SourceKey.parse(id)?.displayName() }
-    return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
+    return listOfNotNull(
+        restored,
+        "Kept this device's settings for ${kept.joinToString()}.".takeIf { kept.isNotEmpty() },
+        repoSentences(reposAdded, repoProblems),
+    ).joinToString(" ")
 }
 
+/** "Added 2 extension repos. Could not add 1 extension repo: Now signed with another key." Either half is left out when it has nothing to say. */
+private fun repoSentences(added: Int, problems: Map<String, String>): String? = listOfNotNull(
+    "Added ${countLabel(added, "extension repo")}.".takeIf { added > 0 },
+    "Could not add ${countLabel(problems.size, "extension repo")}: ${problems.values.distinct().joinToString()}.".takeIf { problems.isNotEmpty() },
+).joinToString(" ").takeIf { it.isNotEmpty() }
+
 /** "Imported 212 manga. Added 2 extension repos.", with why any of the backup's repos could not be added. */
-private fun SeriesImportResult.message(): String = listOfNotNull(
-    "Imported ${imported.summary()}.",
-    "Added ${countLabel(reposAdded, "extension repo")}.".takeIf { reposAdded > 0 },
-    "Could not add ${countLabel(repoProblems.size, "extension repo")}: ${repoProblems.values.distinct().joinToString()}.".takeIf { repoProblems.isNotEmpty() },
-).joinToString(" ")
+private fun SeriesImportResult.message(): String =
+    listOfNotNull("Imported ${imported.summary()}.", repoSentences(reposAdded, repoProblems)).joinToString(" ")
 
 /** "212 manga · 1 anime", leaving out a kind the backup does not follow; "series progress" when it follows none. */
 internal fun SeriesImportPreview.summary(): String =
