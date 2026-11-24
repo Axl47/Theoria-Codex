@@ -70,6 +70,9 @@ class RoomSeriesRepository(
     override suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? =
         withContext(Dispatchers.IO) { dao.listedEntry(id.source.id, id.address, address) }?.toStored()
 
+    override suspend fun storedEntry(id: SeriesId, address: String): StoredSeriesEntry? =
+        withContext(Dispatchers.IO) { dao.entry(id.source.id, id.address, address) }?.toStored()
+
     override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> =
         database.withTransaction { write(series, entries) }
 
@@ -96,8 +99,9 @@ class RoomSeriesRepository(
         }
 
     /**
-     * Writes [stored] with [entries] as its entry list, and returns the new ones. It returns none when
-     * no entries were stored before, since nothing was there to compare with, and none when no listed entry matches a
+     * Writes [stored] with [entries] as its entry list, and returns the new ones. When no entries were stored before,
+     * nothing was there to compare with, so it returns only those dated after a followed series was followed. It returns
+     * none when no listed entry matches a
      * stored one by address or as a moved entry: such a list almost always means the source changed its addresses, not
      * that the whole series came out at once, so it is stored as a new baseline. A source that only ever lists its one
      * newest chapter therefore never reports a new one. Entries are written only by a listing or an import, so a series
@@ -128,7 +132,11 @@ class RoomSeriesRepository(
         dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
         // No listed entry matched a stored one: the list is a baseline, as when nothing was stored.
-        return if (newEntries.size == current.size) emptyList() else newEntries
+        return when {
+            newEntries.size != current.size -> newEntries
+            known.isEmpty() -> datedAfterFollowing(stored, newEntries)
+            else -> emptyList()
+        }
     }
 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) {
@@ -258,6 +266,13 @@ private fun movedEntries(listed: Pair<List<SeriesEntry>, List<SeriesEntry>>, dro
         if (release == null || release in taken || before == null) null else entries.singleOrNull()?.let { it.address to before }
     }.toMap()
 }
+
+private fun datedAfterFollowing(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
+    val since = (stored.followedAtEpochMs ?: return emptyList()) - DATE_SLACK_MS
+    return entries.filter { entry -> entry.uploadedAtEpochMs?.let { it > since } == true }
+}
+
+private const val DATE_SLACK_MS = 24 * 60 * 60 * 1_000L
 
 internal fun SeriesEntity.toStored() = StoredSeries(
     series = Series(

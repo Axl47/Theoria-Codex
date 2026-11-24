@@ -436,7 +436,9 @@ internal class DefaultTheoriaAppContainer(
         SeriesDependencies(
             repository, host::sources, host::source, host.extensions, host.repos(httpClients.shared), downloads, scope = durableStoreScope, covers = host.covers,
             pictures = ChapterPictures(repository) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
-        ) { Log.i("SeriesReader", it) }
+            log = { Log.i("SeriesReader", it) },
+            loadedSources = host::loadedSources,
+        )
     }
 
     private val profileBackup = ProfileBackupService(

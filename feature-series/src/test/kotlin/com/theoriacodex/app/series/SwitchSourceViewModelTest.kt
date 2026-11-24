@@ -62,6 +62,31 @@ class SwitchSourceViewModelTest {
     }
 
     @Test
+    fun anEditedQuerySearchesEverySourceAgainAndRetriesUseIt() = runTest {
+        val failing = Finding("custom_mihon_2", listOf("Yuusha")).apply { fails = true }
+        val other = Finding("custom_mihon_3", listOf("Yuusha"))
+        val viewModel = viewModel(failing, other)
+        advanceUntilIdle()
+        viewModel.open("The Hero")
+        advanceUntilIdle()
+        assertEquals("The Hero", viewModel.state.value.sheet!!.query)
+
+        viewModel.editQuery("  Yuusha ")
+        viewModel.searchAgain()
+        advanceUntilIdle()
+        failing.fails = false
+        viewModel.retry(failing.key)
+        advanceUntilIdle()
+
+        assertEquals(listOf("The Hero", "Yuusha"), other.searched)
+        assertEquals(listOf("The Hero", "Yuusha", "Yuusha"), failing.searched)
+        viewModel.editQuery(" ")
+        viewModel.searchAgain()
+        advanceUntilIdle()
+        assertEquals("A blank query searches nothing", 2, other.searched.size)
+    }
+
+    @Test
     fun aFailedSourceCanBeRetriedWhileTheOthersStand() = runTest {
         val failing = Finding("custom_mihon_2", listOf("Hero")).apply { fails = true }
         val viewModel = viewModel(failing)
@@ -130,7 +155,7 @@ class SwitchSourceViewModelTest {
 
         viewModel.close()
         viewModel.confirm(match)
-        assertEquals(SwitchSourceSheet(viewModel.state.value.sheet!!.results, switching = true), viewModel.state.value.sheet)
+        assertEquals(SwitchSourceSheet(viewModel.state.value.sheet!!.results, query = "Hero", switching = true), viewModel.state.value.sheet)
 
         outcome.complete(false)
         advanceUntilIdle()
@@ -186,6 +211,7 @@ private class Finding(
     /** What a search throws, when set. */
     var failure: Exception? = null
     var counted = 0
+    val searched = mutableListOf<String>()
 
     /** What a search waits for, when set; [cancelled] says whether a waiting search was cancelled. */
     var wait: CompletableDeferred<Unit>? = null
@@ -193,6 +219,7 @@ private class Finding(
 
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage {
+        searched += text
         try {
             wait?.await()
         } catch (error: CancellationException) {

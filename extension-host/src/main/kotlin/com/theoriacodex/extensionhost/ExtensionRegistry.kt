@@ -122,6 +122,8 @@ class ExtensionRegistry(
     private val mutableRevision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = mutableRevision
 
+    fun loadedSources(): List<SeriesSource> = offer?.sources.orEmpty()
+
     /** The sources of the extensions and languages that are on. The first call loads them all; later calls read what is on offer. */
     suspend fun sources(): List<SeriesSource> = offer?.takeIf { it.complete }?.sources ?: locked {
         loadEverything()

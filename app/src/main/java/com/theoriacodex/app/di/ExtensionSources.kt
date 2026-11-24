@@ -36,6 +36,7 @@ class SeriesDependencies(
     val pictures: ChapterPictures = ChapterPictures(repository),
     /** Writes a line to the app's log, such as when an entry's lookup starts. */
     val log: (String) -> Unit,
+    val loadedSources: () -> List<SeriesSource> = { emptyList() },
 ) {
     private val checking = Mutex()
 

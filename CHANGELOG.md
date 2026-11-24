@@ -4,6 +4,9 @@
 
 ### Added
 
+- The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
+- Following says how many followed series need their extension, such as after restoring a Mihon backup, with a button to Extensions. Those series can't be checked for new chapters until their extension is on.
+- Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
 - When no sources are enabled, For You offers Manage sources, which opens Settings › Sites.
 - Restore backup also takes backups from Mihon, TachiyomiJ2K and Anikku. Their followed manga and anime appear in Series, with the chapters you read, the episodes you watched, where you stopped in each, and each manga's reading mode. Nothing you already have is removed, and importing the same backup twice adds nothing more. The extension repos the backup lists are added too, without contacting them. The preview names the extensions still missing, so you only need to install them, and a series opens once its extension is on here. The next background check for new chapters notifies you of chapters and episodes the backup didn't have yet, unless you already refreshed that series.
 - Backups Theoria makes include your extension repos. Restoring one adds the repos you don't have yet, so a new device finds the repos your series came from; which extensions are on stays on each device.
@@ -138,6 +141,7 @@
 ### Fixed
 
 - Saved searches and Followed show their new posts first when you open them after the count says there are some. They used to show the posts from your last visit, and the new ones only turned up while scrolling, some jumping to the top.
+- A series you followed before its source listed any chapters now notifies you when its first ones come out, when the source dates its chapters. Before, those first chapters arrived silently.
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
 - Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.
 - A turned-off or removed extension no longer holds up other chapter downloads: chapters from other sources keep downloading, and a notification says how many chapters wait for their extension.

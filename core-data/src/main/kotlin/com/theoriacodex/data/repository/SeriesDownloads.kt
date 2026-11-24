@@ -471,7 +471,7 @@ class SeriesDownloads(
 
     private suspend fun fetchChapter(chapter: QueuedChapter, onPage: (pages: Int, of: Int) -> Unit) {
         val series = repository.series(chapter.series)?.series ?: throw ChapterUnavailable("The series is not stored")
-        val entry = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry && it.sourceOrder >= 0 }?.entry
+        val entry = repository.listedEntry(chapter.series, chapter.entry)?.entry
             ?: throw ChapterUnavailable("The source no longer lists this chapter")
         val owner = seriesOfflineOwner(chapter.series)
         // A copy already on the device, such as one saved to a Codex, needs only the series as another owner.
@@ -514,7 +514,7 @@ class SeriesDownloads(
     /** [chapter] by the titles of its series and of the chapter itself, as stored. */
     private suspend fun names(chapter: QueuedChapter): ChapterName {
         val series = repository.series(chapter.series)?.series?.title.orEmpty()
-        val name = repository.entries(chapter.series).firstOrNull { it.entry.address == chapter.entry }?.entry?.name.orEmpty()
+        val name = repository.storedEntry(chapter.series, chapter.entry)?.entry?.name.orEmpty()
         return ChapterName(chapter.series, series, name)
     }
 
