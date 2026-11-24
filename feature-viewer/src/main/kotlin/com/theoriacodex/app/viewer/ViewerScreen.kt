@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -34,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -164,7 +164,7 @@ private fun ViewerLoadedScreen(
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
     val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisible, opening, returning)
-    val frame = remember(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
+    val frame = remember(uiState, navigation, posts, selection, chromeVisible, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
         ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     }
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
@@ -345,16 +345,17 @@ internal const val VIEWER_CHROME_STAGE_STRIPS = 3
  * short frames instead of one long one while video plays. Hiding is immediate.
  */
 @Composable
-internal fun rememberViewerChromeStage(visible: Boolean): Int {
-    var stage by remember { mutableIntStateOf(if (visible) VIEWER_CHROME_STAGE_STRIPS else 0) }
+internal fun rememberViewerChromeStage(visible: Boolean): State<Int> {
+    val revealed = remember { mutableIntStateOf(if (visible) VIEWER_CHROME_STAGE_STRIPS else 0) }
+    val currentVisible = rememberUpdatedState(visible)
     LaunchedEffect(visible) {
-        if (!visible) stage = 0
-        while (visible && stage < VIEWER_CHROME_STAGE_STRIPS) {
+        if (!visible) revealed.intValue = 0
+        while (visible && revealed.intValue < VIEWER_CHROME_STAGE_STRIPS) {
             withFrameNanos { }
-            stage += 1
+            revealed.intValue += 1
         }
     }
-    return if (visible) stage else 0
+    return remember { derivedStateOf { if (currentVisible.value) revealed.intValue else 0 } }
 }
 
 private const val VIEWER_DISMISS_DIM = 0.7f

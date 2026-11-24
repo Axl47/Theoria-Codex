@@ -1,6 +1,8 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Application
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -21,7 +23,7 @@ class ViewerChromeStageTest {
     private fun show(initiallyVisible: Boolean) {
         visible.value = initiallyVisible
         compose.mainClock.autoAdvance = false
-        compose.setContent { stage = rememberViewerChromeStage(visible.value) }
+        compose.setContent { stage = rememberViewerChromeStage(visible.value).value }
         compose.mainClock.advanceTimeByFrame()
     }
 
@@ -44,5 +46,25 @@ class ViewerChromeStageTest {
         setVisible(false)
         compose.mainClock.advanceTimeByFrame()
         assertEquals(0, stage)
+    }
+
+    @Test fun `revealing chrome recomposes only what reads the stage`() {
+        var screenCompositions = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            val chromeStage = rememberViewerChromeStage(visible.value)
+            screenCompositions += 1
+            ChromeStageReader(chromeStage)
+        }
+        compose.mainClock.advanceTimeByFrame()
+        setVisible(true)
+        repeat(6) { compose.mainClock.advanceTimeByFrame() }
+        assertEquals(VIEWER_CHROME_STAGE_STRIPS, stage)
+        assertEquals(2, screenCompositions)
+    }
+
+    @Composable
+    private fun ChromeStageReader(chromeStage: State<Int>) {
+        stage = chromeStage.value
     }
 }
