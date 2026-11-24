@@ -126,17 +126,19 @@ internal fun ViewerMediaPage(
     }
     val mediaPadding = if (layout.landscape || animated) 0.dp else 16.dp
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
+    val transformAspectRatio = if (controls.fillScreen) null else viewerMediaAspectRatio(post, media)
+    val overlayAspectRatio = if (controls.fillScreen) null else viewerAspectRatio(post)
     val transformBounds = with(LocalDensity.current) {
-        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), viewerMediaAspectRatio(post, media))
+        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), transformAspectRatio)
     }
     Box(Modifier.fillMaxSize().onSizeChanged { pageSize = it }) {
         Box(
             Modifier.fillMaxSize().padding(mediaPadding)
-                .viewerReturnMedia(returnProgress, viewerAspectRatio(post))
+                .viewerReturnMedia(returnProgress, overlayAspectRatio)
                 .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
         ) {
-            CompositionLocalProvider(LocalViewerMediaAspectRatio provides viewerAspectRatio(post), LocalViewerHoldScrub provides holdScrub) {
+            CompositionLocalProvider(LocalViewerMediaAspectRatio provides overlayAspectRatio, LocalViewerHoldScrub provides holdScrub) {
                 ViewerMediaContent(
                     post, media, key, kind,
                     controls.copy(
@@ -147,7 +149,7 @@ internal fun ViewerMediaPage(
                     events, videoOptions, videoPositions, imageSession, pixivUgoiraClient, transformModifier, onRequestMediaRecovery,
                 )
             }
-            FittedSeekJumpFeedbackOverlay(interactions.feedback, viewerAspectRatio(post), interactions::clearFeedback, Modifier.matchParentSize())
+            FittedSeekJumpFeedbackOverlay(interactions.feedback, overlayAspectRatio, interactions::clearFeedback, Modifier.matchParentSize())
         }
         ViewerMediaGestureLayer(key, kind.seekable, animated, interactions, holdScrub, controls,
             transform, transformBounds, onTransformChanged, layout, onAction, onInteraction, onToggleChrome, onPassiveInteraction)

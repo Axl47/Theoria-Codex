@@ -127,8 +127,10 @@ internal fun BoxScope.ViewerRotationControl(
     chromeVisible: Boolean,
     suppressed: Boolean,
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
+    /** Pre-computed rotation offer when the caller also shows an inline rotate button. */
+    existingOffer: ViewerRotationOffer? = null,
 ) {
-    val offer = rememberViewerRotation(selection, rotation, inPictureInPicture)
+    val offer = existingOffer ?: rememberViewerRotation(selection, rotation, inPictureInPicture)
     var hinting by remember { mutableStateOf(false) }
     LaunchedEffect(selection.post.id, selection.mediaIndex, offer?.fits) {
         hinting = offer?.fits == true

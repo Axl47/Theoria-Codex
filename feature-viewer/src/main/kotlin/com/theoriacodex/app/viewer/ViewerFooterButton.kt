@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +42,7 @@ internal fun BoxScope.ViewerFooterButton(
     onClick: () -> Unit,
 ) {
     // The dock's inset already follows the chrome; the timeline or page scrubber and the row above it hide with it too.
-    val footer = LocalViewerTimelineInset.current + if (chromeVisible) viewerFooterBarHeight(selection) + bottomRowHeight else 0.dp
+    val footer = viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
     val lift by animateDpAsState(footer, tween(TheoriaMotion.SHORT_MS), label = "Viewer footer button lift")
     ViewerChromeVisibility(
         visible,
@@ -56,9 +57,24 @@ internal fun BoxScope.ViewerFooterButton(
     }
 }
 
+/** Total bottom chrome height (dock/nav bar + timeline + episode/strip bar) that Viewer subtitles stay clear of while chrome is visible. */
+internal val LocalViewerSubtitleBottomLift = staticCompositionLocalOf { 0.dp }
+
+/**
+ * Total height of the Viewer's bottom chrome stack (dock/nav-bar inset + timeline or page bar + strip/episode bar).
+ * Shared by floating footer buttons and Viewer subtitle bottom clearance.
+ */
+@Composable
+internal fun viewerFooterHeight(
+    selection: ViewerSelection,
+    chromeVisible: Boolean,
+    bottomRowHeight: Dp,
+    timelineInset: Dp = LocalViewerTimelineInset.current,
+): Dp = timelineInset + if (chromeVisible) viewerFooterBarHeight(selection) + bottomRowHeight else 0.dp
+
 /** The bar the current media shows between the dock and the post strip: its timeline, or the page scrubber's track on multi-page posts. */
 @Composable
-private fun viewerFooterBarHeight(selection: ViewerSelection) = when {
+internal fun viewerFooterBarHeight(selection: ViewerSelection): Dp = when {
     selection.isAnimated -> viewerTimelineFooterHeight()
     selection.overviewItems.size > 1 -> VIEWER_TIMELINE_TRACK_HEIGHT
     else -> 0.dp

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
@@ -64,25 +65,29 @@ internal fun closestViewerPlaybackRate(rate: Float): ViewerPlaybackRate {
     return ViewerPlaybackRate.entries.minBy { option -> abs(option.speed - rate) }
 }
 
-/** The Viewer's top bar: Back, the source and the page index, with [below] (the trail row) under it. */
+/** The Viewer's top bar: Back, the source/title (with optional [subtitle] and [trailing] actions), and [below] (the trail row) under it. */
 @Composable
 internal fun ViewerChrome(
     source: String,
     indexLabel: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    trailing: @Composable RowScope.() -> Unit = {},
     below: @Composable () -> Unit = {},
 ) {
-    ViewerTopBar(source, indexLabel, onBack, modifier, below)
+    ViewerTopBar(source, subtitle, indexLabel, onBack, modifier, trailing, below)
 }
 
 /** Floats over the media on a scrim, unlike the solid bars of secondary screens. */
 @Composable
 private fun ViewerTopBar(
     source: String,
+    subtitle: String?,
     indexLabel: String?,
     onBack: () -> Unit,
     modifier: Modifier,
+    trailing: @Composable RowScope.() -> Unit,
     below: @Composable () -> Unit,
 ) {
     Box(modifier.fillMaxWidth()) {
@@ -93,20 +98,39 @@ private fun ViewerTopBar(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                    Text(
-                        text = buildAnnotatedString {
-                            append(source)
-                            if (indexLabel != null) {
-                                withStyle(SpanStyle(color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), fontWeight = FontWeight.Normal, fontSize = 14.sp, fontFeatureSettings = "tnum")) {
-                                    append("  $indexLabel")
+                    if (subtitle != null) {
+                        Column(Modifier.weight(1f).padding(end = 4.dp)) {
+                            Text(
+                                text = source,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = buildAnnotatedString {
+                                append(source)
+                                if (indexLabel != null) {
+                                    withStyle(SpanStyle(color = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA), fontWeight = FontWeight.Normal, fontSize = 14.sp, fontFeatureSettings = "tnum")) {
+                                        append("  $indexLabel")
+                                    }
                                 }
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                            },
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    trailing()
                 }
                 below()
             }

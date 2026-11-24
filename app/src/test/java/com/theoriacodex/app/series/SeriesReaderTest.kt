@@ -188,7 +188,7 @@ class SeriesReaderTest {
         assertEquals(listOf("/e1", "/e2", "/e3"), session.posts.map { it.id.sourcePostId })
         assertEquals(1, session.context.startIndex)
         val starts = listOf("/e1" to 0L, "/e2" to 61_000L, "/e3" to 0L).associate { (address, ms) -> PostId(anime.source, address) to ms }
-        assertEquals(ViewerSeries.Watching(starts), session.series)
+        assertEquals(ViewerSeries.Watching(starts, seriesTitle = "Title"), session.series)
         assertEquals(emptyMap<PostId, Int>(), session.initialMediaIndices)
         // Strip marks number chapters; an episode session has none.
         assertEquals(emptyMap<PostId, ViewerStripMark>(), session.stripMarks)

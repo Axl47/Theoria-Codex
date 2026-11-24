@@ -15,12 +15,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -162,6 +164,61 @@ class MediaTimelineBarTest {
         compose.runOnIdle { assertTrue(seeks.isEmpty()); assertFalse(dragging) }
         compose.runOnIdle { holdScrub.holding = true; holdScrub.drag(width * 0.25f) }
         compose.onNodeWithText("Frame 35000").assertIsDisplayed()
+    }
+
+    @Test fun `buffered track draws only past the playhead, clamps to track width, and skips unknown values`() {
+        assertNull(viewerBufferedTrackEnd(null, trailingStart = 50f, width = 200f))
+        assertNull(viewerBufferedTrackEnd(Float.NaN, trailingStart = 50f, width = 200f))
+        assertNull(viewerBufferedTrackEnd(0.25f, trailingStart = 50f, width = 200f))
+        assertNull(viewerBufferedTrackEnd(0.10f, trailingStart = 50f, width = 200f))
+        assertEquals(150f, viewerBufferedTrackEnd(0.75f, trailingStart = 50f, width = 200f))
+        assertEquals(200f, viewerBufferedTrackEnd(1.50f, trailingStart = 50f, width = 200f))
+    }
+
+    @Test fun `buffered progress does not recompose the timeline bar when bufferedPosition advances`() {
+        val buffered = mutableStateOf(30_000L)
+        var timelineCompositions = 0
+        compose.setContent {
+            MaterialTheme {
+                timelineCompositions++
+                MediaTimelineBar(
+                    positionMs = { playbackPosition.value },
+                    durationMs = 100_000L,
+                    bufferedPositionMs = { buffered.value },
+                    onSeekMoved = {},
+                    onSeekFinished = {},
+                    preview = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        val initial = timelineCompositions
+        compose.runOnIdle { buffered.value = 65_000L }
+        compose.waitForIdle()
+        assertEquals(initial, timelineCompositions)
+    }
+
+    @Test fun `timeline hides leading playback button and speed chip when opted out`() {
+        val controls = ViewerRendererControls(
+            isActive = true, isPlaying = true, showControls = true, loopPlayback = false,
+            playbackRate = 1.5f, restartRequest = 0L, loadGeneration = 0L,
+            showLeadingPlaybackButton = false, showSpeedChip = false,
+        )
+        val events = ViewerRendererEvents.feedCard {}
+        compose.setContent {
+            MaterialTheme {
+                ViewerPlaybackTimeline(
+                    controls = controls,
+                    events = events,
+                    positionMs = { 10_000L },
+                    durationMs = 100_000L,
+                    bufferedPositionMs = { 45_000L },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Pause").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Play").assertDoesNotExist()
+        compose.onNodeWithText("1.5×").assertDoesNotExist()
     }
 
     private fun showTimeline(instantSeek: Boolean = false) {

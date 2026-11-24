@@ -52,6 +52,7 @@ internal fun ViewerPostPagerSurface(
     host: ViewerScreenHost,
     config: ViewerScreenConfig,
     scope: CoroutineScope,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
     val selection = frame.selection
@@ -65,11 +66,11 @@ internal fun ViewerPostPagerSurface(
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerTimelineInset.current).toPx() }
     } else 0f
     Box(
-        Modifier.fillMaxSize()
+        modifier.fillMaxSize()
             .viewerGestures(
                 ViewerGestureConfig(
                     enabled = !layoutZoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
-                        !screen.pendingDismiss && !frame.returning && !frame.opening,
+                        !screen.pendingDismiss && !frame.returning && !frame.opening && !frame.locked,
                     levels = levelControls,
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
                     holdScrub = LocalViewerHoldScrub.current,
@@ -139,6 +140,12 @@ private fun viewerGestureHandler(
     override fun onLevelLimit() = haptics.performHapticFeedback(TheoriaHaptics.Limit)
     override fun onScrubStart() = controls.beginScrub()
     override fun onScrubEnd() = controls.endScrub()
+}
+
+/** Opens the post before [index] at its [entryMediaIndex]; null on the first post. */
+internal fun previousPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
+    val previous = frame.navigation.pages.getOrNull(index - 1) ?: return null
+    return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index - 1, config.entryMediaIndex(previous, frame.uiState.series, back = true))) }
 }
 
 /** Opens the post after [index] at its [entryMediaIndex]; null on the last post. */
@@ -282,6 +289,7 @@ private fun viewerRendererControls(
     frame: ViewerFrame, active: Boolean, preloading: Boolean, loadGeneration: Long, expectedDurationMs: Long?,
 ): ViewerRendererControls {
     val controls = frame.uiState.controls
+    val watching = frame.watching
     return ViewerRendererControls(
         isActive = active,
         isPlaying = controls.playback.playing,
@@ -295,6 +303,10 @@ private fun viewerRendererControls(
         loadGeneration = loadGeneration,
         systemControlsReady = frame.systemControlsReady,
         expectedDurationMs = expectedDurationMs,
+        showLeadingPlaybackButton = !watching,
+        showSpeedChip = !watching,
+        dimBackdrop = watching,
+        fillScreen = watching && controls.fillScreen && frame.isLandscape && !frame.inPictureInPicture,
     )
 }
 

@@ -69,6 +69,10 @@ sealed interface ViewerAction {
     data class ChooseSubtitle(val choice: ViewerSubtitleChoice) : ViewerAction
     /** Plays the audio labelled [label] in this episode and every later one that has it; it closes the episode menus. */
     data class ChooseAudio(val label: String) : ViewerAction
+    /** Locks or unlocks episode controls; only takes effect while watching a series. */
+    data class SetLocked(val locked: Boolean) : ViewerAction
+    /** Toggles landscape crop-to-fill for the watched series session. */
+    data object ToggleFillScreen : ViewerAction
 
     data class RequestPageResolution(val postId: PostId) : ViewerAction
     data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction

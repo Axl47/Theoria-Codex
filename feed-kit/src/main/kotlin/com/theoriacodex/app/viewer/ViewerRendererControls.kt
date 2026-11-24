@@ -18,6 +18,14 @@ data class ViewerRendererControls(
     val systemControlsReady: Boolean = true,
     /** The media's length as known before its player loads; timelines show it at 0:00 meanwhile instead of vanishing. */
     val expectedDurationMs: Long? = null,
+    /** Whether the timeline shows its own leading play/pause button; false when center playback controls replace it. */
+    val showLeadingPlaybackButton: Boolean = true,
+    /** Whether the timeline shows a speed chip; false when the episode bar already shows one. */
+    val showSpeedChip: Boolean = true,
+    /** Whether a subtle dark veil backs the chrome behind the timeline and spinner. */
+    val dimBackdrop: Boolean = false,
+    /** Whether the video crops to fill the screen instead of fitting with letterbox/pillarbox bars. */
+    val fillScreen: Boolean = false,
 ) {
     companion object {
         /** A feed card's animation: plays and loops while [isActive], with no timeline and no route commands. */

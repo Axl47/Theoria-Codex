@@ -62,9 +62,19 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         return title to episodeOnScreen(title)
     }
 
-    /** The episode the Viewer's title names, read as "series · episode"; a title replaced as it is read is read again. */
+    /** The episode the Viewer's top bar names (two-line series/episode, or single-line fallback); re-reads if controls hide mid-read. */
     fun episodeOnScreen(title: String): String = fresh {
-        live.viewerControl("the episode's name as the Viewer's title", By.textStartsWith("$title · "), PLAYBACK_TIMEOUT_MS).text.removePrefix("$title · ")
+        val header = live.viewerControl(
+            "the series title in the Viewer's top bar",
+            By.text(title),
+            PLAYBACK_TIMEOUT_MS,
+        )
+        val siblings = header.parent?.children.orEmpty().mapNotNull { it.text }.filter { it.isNotBlank() && it != title }
+        siblings.firstOrNull() ?: live.viewerControl(
+            "the episode's name as the Viewer's title",
+            By.textStartsWith("$title · "),
+            PLAYBACK_TIMEOUT_MS,
+        ).text.removePrefix("$title · ")
     }
 
     /** The stream the Viewer's pill names: the text of its one node, described "Stream". */
@@ -126,12 +136,13 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
         assertTrue("It resumes where it was left", resumed - leftAt in -RESUME_NEAR_MS..RESUME_NEAR_MS)
     }
 
-    /** Opens the stream list; returns the stream playing and another one to switch to. */
+    /** Opens the stream sheet; returns the stream playing and another clickable stream option to switch to. */
     fun switchStream(): Pair<String, String> {
         val current = streamOnScreen()
-        val before = labels()
-        press("the stream pill", By.desc(STREAM))
-        val listed = live.await("the stream list", { labels() - before.toSet() - current }) { it.isNotEmpty() }
+        val before = clickableLabels().toSet()
+        press("the stream button", By.desc(STREAM))
+        live.waitFor("the Servers sheet", By.text("Servers"))
+        val listed = live.await("the stream list", { clickableLabels() - before - current }) { it.isNotEmpty() }
         live.report("streams", "playing \"$current\"; listed $listed")
         return current to (listed.firstOrNull { it != current } ?: error("The episode offers one stream: $listed"))
     }
@@ -197,6 +208,11 @@ internal class AnimeViewerHand(val live: SeriesLiveDriver = SeriesLiveDriver()) 
     /** Every text the target shows. */
     fun labels(): List<String> = device.findObjects(By.pkg(live.targetPackage))
         .mapNotNull { runCatching { it.text }.getOrNull() }
+        .filter(String::isNotBlank)
+
+    /** Text of every clickable item the target shows, excluding non-clickable sheet headings. */
+    private fun clickableLabels(): List<String> = device.findObjects(By.pkg(live.targetPackage).clickable(true))
+        .mapNotNull { node -> runCatching { node.text ?: node.findObject(By.text(ANY_TEXT))?.text }.getOrNull() }
         .filter(String::isNotBlank)
 
     /** The episode's length, the longest time the Viewer's timeline shows. */

@@ -7,7 +7,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -168,22 +172,22 @@ private fun ViewerLoadedScreen(
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
+    val timelineInset = viewerTimelineInset(chromeVisible, frame.watching)
+    val bottomRowHeight = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
+    val subtitleBottomLift = viewerFooterHeight(selection, chromeVisible, bottomRowHeight, timelineInset)
     CompositionLocalProvider(
-        LocalViewerTimelineInset provides if (chromeVisible) viewerDockInset() else 0.dp,
+        LocalViewerTimelineInset provides timelineInset,
+        LocalViewerSubtitleBottomLift provides subtitleBottomLift,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
         // Only episodes offer their tracks; no other video's player is followed for them.
-        LocalViewerActiveTracks provides screen.activeTracks.takeIf { uiState.series is ViewerSeries.Watching },
+        LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
-            if (frame.mediaOverviewVisible && selection.overviewAvailable) {
-                ViewerOverview(frame, config, controls, host)
-            } else {
-                ViewerPostPagerSurface(
-                    frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, flingVelocity,
-                    quality.value, qualityHeight.value, videoPositions, host, config, scope,
-                )
-            }
+            ViewerContentSurface(
+                frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
+                readReturnProgress, flingVelocity, quality, qualityHeight, videoPositions, host, config, scope,
+            )
             ViewerChromeOverlays(
                 frame, postPagerState, screen, controls, swipe, activity, quality, qualityHeight, pendingPostId, host, config,
                 loadMoreFromStrip, relatedShelf, comments, saveContext, trail,
@@ -195,6 +199,43 @@ private fun ViewerLoadedScreen(
     }
 }
 
+@Composable
+private fun viewerTimelineInset(chromeVisible: Boolean, watching: Boolean): androidx.compose.ui.unit.Dp = when {
+    !chromeVisible -> 0.dp
+    watching -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    else -> viewerDockInset()
+}
+
+@Composable
+private fun ViewerContentSurface(
+    frame: ViewerFrame,
+    postPagerState: androidx.compose.foundation.pager.PagerState,
+    viewerTransform: MutableState<ViewerTransformState>,
+    screen: ViewerScreenState,
+    controls: ViewerControls,
+    swipe: ViewerSwipeController,
+    dismissDrag: ViewerDismissDrag,
+    levelControls: ViewerLevelControls,
+    readReturnProgress: () -> Float,
+    flingVelocity: Float,
+    quality: MutableState<com.theoriacodex.domain.model.VideoQuality>,
+    qualityHeight: MutableState<Int?>,
+    videoPositions: ViewerVideoPositions,
+    host: ViewerScreenHost,
+    config: ViewerScreenConfig,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    if (frame.mediaOverviewVisible && frame.selection.overviewAvailable) {
+        ViewerOverview(frame, config, controls, host)
+    } else {
+        ViewerPostPagerSurface(
+            frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, flingVelocity,
+            quality.value, qualityHeight.value, videoPositions, host, config, scope,
+            modifier = if (frame.locked) Modifier.clearAndSetSemantics {} else Modifier,
+        )
+    }
+}
+
 private fun viewerChromeVisible(
     uiState: ViewerUiState,
     touchExplorationEnabled: Boolean,
@@ -203,7 +244,8 @@ private fun viewerChromeVisible(
     opening: Boolean,
     dismissDrag: ViewerDismissDrag,
 ): Boolean {
-    val wanted = uiState.controls.chromeVisible || touchExplorationEnabled
+    val locked = uiState.controls.locked && uiState.series is ViewerSeries.Watching
+    val wanted = (uiState.controls.chromeVisible || touchExplorationEnabled) && !locked
     return wanted && !inPictureInPicture && !returning && !opening && !dismissDrag.active
 }
 

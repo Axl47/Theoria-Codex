@@ -131,12 +131,12 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         ViewerAction.TogglePlayback -> ViewerReduction(state.setPlaying(!state.controls.playback.playing))
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
-        is ViewerAction.ChooseStream -> ViewerReduction(state.chooseStream(action.label))
-        is ViewerAction.FallBackToStream -> ViewerReduction(state.copy(controls = state.controls.copy(
-            episode = state.controls.episode.let { it.copy(episodeStreams = it.episodeStreams + (action.media to ViewerEpisodeStream(action.label, pickedByHand = false))) },
-        )))
-        is ViewerAction.ChooseSubtitle -> ViewerReduction(state.chooseEpisodeTracks { copy(subtitle = action.choice) })
-        is ViewerAction.ChooseAudio -> ViewerReduction(state.chooseEpisodeTracks { copy(audioLabel = action.label) })
+        is ViewerAction.ChooseStream,
+        is ViewerAction.FallBackToStream,
+        is ViewerAction.ChooseSubtitle,
+        is ViewerAction.ChooseAudio,
+        is ViewerAction.SetLocked,
+        ViewerAction.ToggleFillScreen -> ViewerReduction(state.reduceEpisodeAction(action))
         is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
         is ViewerAction.ResolutionCancelled,
         is ViewerAction.ResolutionStarted,
@@ -171,8 +171,32 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
 private fun ViewerUiState.withControls(controls: ViewerControlsState): ViewerReduction =
     ViewerReduction(copy(controls = controls))
 
+private fun ViewerUiState.reduceEpisodeAction(action: ViewerAction): ViewerUiState = when (action) {
+    is ViewerAction.ChooseStream -> chooseStream(action.label)
+    is ViewerAction.FallBackToStream -> copy(controls = controls.copy(
+        episode = controls.episode.let { it.copy(episodeStreams = it.episodeStreams + (action.media to ViewerEpisodeStream(action.label, pickedByHand = false))) },
+    ))
+    is ViewerAction.ChooseSubtitle -> chooseEpisodeTracks { copy(subtitle = action.choice) }
+    is ViewerAction.ChooseAudio -> chooseEpisodeTracks { copy(audioLabel = action.label) }
+    is ViewerAction.SetLocked -> setLocked(action.locked)
+    ViewerAction.ToggleFillScreen -> if (series is ViewerSeries.Watching) {
+        copy(controls = controls.copy(fillScreen = !controls.fillScreen))
+    } else this
+    else -> error("Not an episode action: $action")
+}
+
 private fun ViewerUiState.chooseEpisodeTracks(change: ViewerEpisodeChoice.() -> ViewerEpisodeChoice): ViewerUiState =
     copy(controls = controls.copy(episode = controls.episode.change(), panel = controls.panel?.takeUnless(ViewerPanel::inChrome)))
+
+/** Locks episode controls without mutating chromeVisible; unlocking restores visible chrome. */
+private fun ViewerUiState.setLocked(locked: Boolean): ViewerUiState {
+    if (locked && series !is ViewerSeries.Watching) return this
+    return if (locked) {
+        copy(controls = controls.copy(locked = true, panel = controls.panelOutsideChrome()))
+    } else {
+        copy(controls = controls.copy(locked = false, chromeVisible = true))
+    }
+}
 
 /** A new stream replaces the player, and with it any failure the last one showed. */
 private fun ViewerUiState.chooseStream(label: String): ViewerUiState {
@@ -207,6 +231,10 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
                     chromeVisible = if (session == action.session) controls.chromeVisible else replacement.controls.chromeVisible,
                     // Nor may it end a running slideshow; a new session starts without one.
                     slideshow = session == action.session && controls.slideshow,
+                    // Lock, fillScreen and episode track choices survive a live update of the same session.
+                    locked = session == action.session && controls.locked && action.series is ViewerSeries.Watching,
+                    fillScreen = session == action.session && controls.fillScreen && action.series is ViewerSeries.Watching,
+                    episode = if (session == action.session) controls.episode else ViewerEpisodeChoice(),
                 ),
                 // A live update keeps the branch the user entered; a new session starts on its original feed.
                 related = if (session == action.session) related else ViewerRelatedBranch(),
@@ -268,7 +296,7 @@ private fun ViewerControlsState.panelOutsideChrome(): ViewerPanel? = panel?.take
 
 private fun ViewerUiState.prepareDismiss(): ViewerUiState {
     val paused = setPlaying(false)
-    return paused.copy(controls = paused.controls.copy(panel = null), overview = overview.copy(visible = false))
+    return paused.copy(controls = paused.controls.copy(panel = null, locked = false), overview = overview.copy(visible = false))
 }
 
 private fun ViewerUiState.reduceResolution(action: ViewerAction): ViewerReduction = when (action) {

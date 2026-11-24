@@ -51,6 +51,27 @@ internal class ViewerScreenState {
 
     /** Read when the info sheet opens; the sheet resets it on close, so any other way of opening it starts at the top. */
     var infoSheetTarget by mutableStateOf(InfoSheetTarget.Top)
+
+    /** Whether tapping or pressing Back while locked is currently showing the Unlock icon button. */
+    var unlockPeekVisible by mutableStateOf(false)
+    var unlockPeekSerial by mutableIntStateOf(0)
+
+    fun revealUnlock() {
+        unlockPeekVisible = true
+        unlockPeekSerial += 1
+    }
+
+    fun hideUnlock() {
+        unlockPeekVisible = false
+    }
+}
+
+/** Restarts an episode from the beginning and closes any open panel. Shared by More -> Start over and the info sheet. */
+internal fun restartViewerEpisode(post: Post, controls: ViewerControls, onAction: (ViewerAction) -> Unit) {
+    controls.jumpToMedia(post.id, 0)
+    onAction(ViewerAction.RestartPlayback)
+    controls.setPanelOpen(ViewerPanel.INFO, false)
+    controls.setPanelOpen(ViewerPanel.ACTIONS_MENU, false)
 }
 
 /**
@@ -206,6 +227,12 @@ internal class ViewerFrame(
     val isLandscape: Boolean,
 ) {
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
+
+    /** Whether the current session is watching long-form episodes. */
+    val watching = uiState.series is ViewerSeries.Watching
+
+    /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
+    val locked = uiState.controls.locked && watching && !inPictureInPicture
 
     // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture

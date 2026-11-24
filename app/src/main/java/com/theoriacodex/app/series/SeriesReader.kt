@@ -86,7 +86,10 @@ internal class SeriesReader(private val series: SeriesDependencies) {
             // Where an episode starts is a time; its one media item is never paged, and the strip carries no marks.
             SeriesKind.ANIME -> ViewerSession(
                 entries.map { episodePost(stored.series, it.entry, cover) }, context,
-                series = ViewerSeries.Watching(entries.associate { postId(it) to it.resumePositionMs() }),
+                series = ViewerSeries.Watching(
+                    startPositionsMs = entries.associate { postId(it) to it.resumePositionMs() },
+                    seriesTitle = stored.series.title,
+                ),
             )
         }
         return if (sessionId == null) session else session.copy(sessionId = sessionId)

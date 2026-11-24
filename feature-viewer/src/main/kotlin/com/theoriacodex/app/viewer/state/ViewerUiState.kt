@@ -107,6 +107,10 @@ data class ViewerControlsState(
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     /** A slideshow is moving through the queue; session-only, never saved. */
     val slideshow: Boolean = false,
+    /** Blocks media gestures and chrome while watching episodes; survives episode advance and clears on exit. */
+    val locked: Boolean = false,
+    /** Landscape crop-to-fill display mode for watched episodes; kept separate from track choices so toggling never re-applies tracks. */
+    val fillScreen: Boolean = false,
     val episode: ViewerEpisodeChoice = ViewerEpisodeChoice(),
 )
 

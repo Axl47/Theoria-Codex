@@ -153,11 +153,11 @@ internal fun ViewerInfoSheet(
     if (series != null) {
         AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
             ViewerChapterActions(post) {
-                controls.jumpToMedia(post.id, 0)
                 if (series is ViewerSeries.Watching) {
                     // An episode is one video: starting over plays it from its start, which the sheet would hide.
-                    host.onAction(ViewerAction.RestartPlayback)
-                    controls.setInfoSheetVisible(false)
+                    restartViewerEpisode(post, controls, host.onAction)
+                } else {
+                    controls.jumpToMedia(post.id, 0)
                 }
             }
         }
