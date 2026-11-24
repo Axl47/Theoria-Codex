@@ -243,7 +243,7 @@ private fun SettingsSourcesGroup(
             SettingsRowDivider()
         }
         if (onOpenExtensions != null) {
-            SettingsRow("Extensions", icon = Icons.Default.Extension, onClick = onOpenExtensions)
+            SettingsRow(SettingDestinations.Extensions.title, icon = Icons.Default.Extension, onClick = onOpenExtensions)
             SettingsRowDivider()
         }
         OpenLinksRow()
