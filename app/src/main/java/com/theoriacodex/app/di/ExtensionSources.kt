@@ -14,6 +14,7 @@ import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,9 +47,10 @@ class SeriesDependencies(
      * asks for that. The
      * Series tab's refresh and the background job both call this and both post a notification per update; one check
      * runs at a time, so neither repeats the other's requests midway, and a chapter one stores is not new to the other.
+     * Only the job passes [runEvery], its period, to skip series not due yet.
      */
-    suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): FollowedCheck = checking.withLock {
-        repository.checkFollowed(source) { update ->
+    suspend fun checkFollowed(runEvery: Duration? = null, onUpdate: suspend (SeriesUpdate) -> Unit = {}): FollowedCheck = checking.withLock {
+        repository.checkFollowed(source, runEvery) { update ->
             downloads.downloadNew(update)
             onUpdate(update)
         }

@@ -268,7 +268,7 @@ class ExtensionSourceLiveTest {
     /**
      * Makes the followed series' newest chapter one the app has not seen, so the next check finds it as new. The app
      * itself never forgets a chapter (one its source drops is kept, hidden, and is not new when it returns), so the
-     * row is deleted from the database directly.
+     * row is deleted from the database directly, and the series' check time cleared so the background run is due.
      */
     @Test
     fun aFollowedSeriesForgetsItsNewestChapter() {
@@ -278,6 +278,10 @@ class ExtensionSourceLiveTest {
             database.delete(
                 "series_entries", "source = ? AND series_address = ? AND address = ?",
                 arrayOf(followed.id.source.id, followed.id.address, entries.first().entry.address),
+            )
+            database.execSQL(
+                "UPDATE series SET checked_at_epoch_ms = NULL WHERE source = ? AND address = ?",
+                arrayOf(followed.id.source.id, followed.id.address),
             )
         }
         val left = runBlocking { series.repository.entries(followed.id) }
