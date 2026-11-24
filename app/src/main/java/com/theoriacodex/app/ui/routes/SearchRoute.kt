@@ -4,6 +4,8 @@ import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.LocalNetworkOnline
+import com.theoriacodex.app.ui.ReportLaunchContent
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import androidx.compose.runtime.Composable
@@ -31,6 +33,7 @@ import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
+import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
@@ -162,6 +165,7 @@ internal fun SearchRoute(
     SideEffect { currentOnOwnerAvailable(owner) }
 
     ReportShownResults(state, callbacks.onResultsShown)
+    ReportLaunchContent(TopLevelDestination.Search, drawn = state.firstContentDrawn)
 
     LaunchedEffect(owner) {
         owner.onAction(SearchAction.Restore)
@@ -259,3 +263,8 @@ private fun SearchRouteContent(
 
 private const val SEARCH_ROUTE_OWNER_KEY = "search-route-owner"
 private const val SEARCH_DURATION_OWNER_KEY = "search-duration-owner"
+
+private val SearchUiState.firstContentDrawn: Boolean
+    get() = (restoration is SearchRestorationUiState.Restored || restoration is SearchRestorationUiState.Failed) &&
+        (content.results.isNotEmpty() || !loading &&
+            (!content.hasExecutedSearch || hasPendingChanges || content.error != null || content.statuses.isNotEmpty()))

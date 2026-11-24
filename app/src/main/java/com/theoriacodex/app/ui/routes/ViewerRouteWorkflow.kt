@@ -57,7 +57,7 @@ internal class ViewerRouteWorkflow(
     private val series: SeriesReader? = null,
 ) : ViewerPostResolver {
     override fun requiresResolution(post: Post): Boolean =
-        post.id in offlineMedia.store.snapshot.value.availablePostIds && !offlineMedia.store.hasOfflineLocations(post)
+        offlineMedia.store.snapshot.value?.availablePostIds.orEmpty().contains(post.id) && !offlineMedia.store.hasOfflineLocations(post)
 
     override suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post? {
         val source = ViewerStreamSource.entries.firstOrNull { it.name == session.streamKey } ?: ViewerStreamSource.SEARCH
@@ -130,7 +130,7 @@ internal class ViewerRouteWorkflow(
         posts: List<Post>,
         context: ViewerLaunchContext,
     ): List<Post> {
-        val offlineIds = offlineMedia.store.snapshot.value.availablePostIds
+        val offlineIds = offlineMedia.store.load().availablePostIds
         val selected = context.startIndex.coerceIn(0, posts.lastIndex.coerceAtLeast(0))
         // Normalizing every gallery can traverse thousands of media refs before navigation.
         val availablePosts = withContext(providerDispatcher) {
@@ -148,6 +148,7 @@ internal class ViewerRouteWorkflow(
     }
 
     suspend fun restoreSession(request: ViewerRestorationRequest): ViewerSession? {
+        offlineMedia.store.load()
         val identity = request.session
         val streamSource = identity.streamKey
             ?.let { name -> ViewerStreamSource.entries.firstOrNull { source -> source.name == name } }
