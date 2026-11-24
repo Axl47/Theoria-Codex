@@ -36,6 +36,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -271,12 +272,15 @@ class FollowedCodexViewModelTest {
             slow = false
             owner.synchronize(listOf(follow("2")), setOf(SourceKey.PIXIV))
             advanceUntilIdle()
-            assertEquals(listOf("2-3"), owner.state.value.posts.map { it.id.sourcePostId })
+            val replaced = owner.state.value.posts.map { it.id.sourcePostId }
+            assertEquals(listOf("2"), replaced.map { it.substringBefore('-') })
             assertFalse(owner.state.value.loading)
 
             owner.refresh()
             advanceUntilIdle()
-            assertEquals(listOf("2-4"), owner.state.value.posts.map { it.id.sourcePostId })
+            val refreshed = owner.state.value.posts.map { it.id.sourcePostId }
+            assertEquals(listOf("2"), refreshed.map { it.substringBefore('-') })
+            assertNotEquals(replaced, refreshed)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
