@@ -168,7 +168,7 @@ class JourneyAppContainer(
     override val features = FeatureDependencies(
         search = SearchCoordinator(registry, data.queryRepository, settings, restore, data.recentsRepository,
             statisticsRepository = statistics, tagSuggestionStore = tags),
-        forYou = ForYouCoordinator(registry, content, statistics, tagAffinity::forProfile, tagSuggestionStore = tags),
+        forYou = ForYouCoordinator(registry, statistics, tagAffinity::forProfile, tagSuggestionStore = tags),
         tagAffinity = tagAffinity,
         relatedPosts = RelatedPostsLoader(registry),
         comments = CommentsLoader(registry),

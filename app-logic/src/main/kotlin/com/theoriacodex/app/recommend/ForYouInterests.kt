@@ -3,6 +3,7 @@ package com.theoriacodex.app.recommend
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.RecommendationTagNormalization
 import com.theoriacodex.domain.recommendation.TagAffinityBuilder
+import com.theoriacodex.domain.recommendation.TagAffinityStats
 import com.theoriacodex.domain.recommendation.sharesBooruVocabulary
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlin.math.abs
@@ -22,34 +23,29 @@ data class ForYouInterest(val tags: List<String>)
  */
 object ForYouInterests {
     /**
-     * Up to [maxInterests] interests, strongest first, then the best guess (a tag too rare in what the profile watches
-     * to judge yet) to explore. Tags in [unavailable] (ones the source has no posts for) are never candidates. [random]
-     * varies each score by up to a fifth, so which interests lead changes between Mixes; null keeps score order.
+     * Weighs every candidate once, so a caller that picks again around unavailable tags ([ForYouInterestPicker.pick])
+     * repeats none of this work. Every tag of every document is a candidate; only the leads are paired.
      */
-    fun generate(
+    fun prepare(
         source: SourceKey,
         documents: List<List<String>>,
         affinity: TagAffinityInputs,
         translate: (tag: String, into: SourceKey) -> String? = { tag, _ -> tag },
-        unavailable: Set<String> = emptySet(),
-        random: Random? = null,
-        maxInterests: Int = 4,
         pictureCandidates: Map<String, String> = emptyMap(),
-    ): List<ForYouInterest> {
-        val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
-        val stats = TagAffinityBuilder.build(normalized, maxTagsPerDocument = 40)
-        val counts = stats.tagDocumentCounts
+    ): ForYouInterestPicker {
+        val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it) }
+        val liked = normalized.flatten().distinct()
         val ownTags = RecommendationTagNormalization.normalizeDistinct(source, affinity.keptByTag[source].orEmpty().keys + affinity.explicit)
         val judged = affinity.hasHistory(source)
         val kin = affinity.keptBySource.keys.filter { other ->
             other != source && source.sharesBooruVocabulary && other.sharesBooruVocabulary && affinity.hasHistory(other)
         }
-        val leads = mutableMapOf<String, Double>()
-        val guesses = mutableMapOf<String, Double>()
-        val provided = (counts.keys + ownTags).mapTo(mutableSetOf(), ::normalizeMatchToken)
+        val leads = LinkedHashMap<String, TagAffinity>()
+        val guesses = LinkedHashMap<String, Double>()
+        val provided = (liked + ownTags).mapTo(mutableSetOf(), ::normalizeMatchToken)
         val pictured = pictureCandidates.mapKeys { normalizeMatchToken(it.key) }
         // One candidate per matching key, in the spelling a Like gave it when one did.
-        for (tag in (counts.keys + ownTags + pictureCandidates.keys).distinctBy(::normalizeMatchToken) - unavailable) {
+        for (tag in (liked + ownTags + pictureCandidates.keys).distinctBy(::normalizeMatchToken)) {
             val token = normalizeMatchToken(tag)
             val here = affinity.affinity(source, tag)
             if (here.universal) continue
@@ -62,12 +58,48 @@ object ForYouInterests {
                     .filter(TagAffinity::proven).maxByOrNull(TagAffinity::score) ?: picture
             }
             when {
-                evidence != null -> leads[tag] = evidence.score + abs(evidence.score) * (random?.nextDouble(-JITTER, JITTER) ?: 0.0)
+                evidence != null -> leads[tag] = evidence
                 here.informative && token in provided -> guesses[tag] = here.score
             }
         }
+        // Only leads can pair, so only theirs are counted: pairs of every tag grow with the square of a post's tags.
+        val stats = TagAffinityBuilder.build(normalized.map { document -> document.filter(leads::containsKey) }, Int.MAX_VALUE)
+        return ForYouInterestPicker(leads, guesses, stats)
+    }
+
+    /** [prepare]s [source]'s candidates and picks once; see [ForYouInterestPicker.pick]. */
+    fun generate(
+        source: SourceKey,
+        documents: List<List<String>>,
+        affinity: TagAffinityInputs,
+        translate: (tag: String, into: SourceKey) -> String? = { tag, _ -> tag },
+        unavailable: Set<String> = emptySet(),
+        random: Random? = null,
+        maxInterests: Int = 4,
+        pictureCandidates: Map<String, String> = emptyMap(),
+    ): List<ForYouInterest> = prepare(source, documents, affinity, translate, pictureCandidates).pick(unavailable, random, maxInterests)
+}
+
+/** A source's weighed candidates, from [ForYouInterests.prepare]: [leads] and [guesses] in candidate order, [stats] over the leads. */
+class ForYouInterestPicker internal constructor(
+    private val leads: Map<String, TagAffinity>,
+    private val guesses: Map<String, Double>,
+    internal val stats: TagAffinityStats,
+) {
+    /**
+     * Up to [maxInterests] interests, strongest first, then the best guess (a tag too rare in what the profile watches
+     * to judge yet) to explore. Tags in [unavailable] (ones the source has no posts for) are never candidates. [random]
+     * varies each score by up to a fifth, so which interests lead changes between Mixes; null keeps score order.
+     */
+    fun pick(unavailable: Set<String> = emptySet(), random: Random? = null, maxInterests: Int = 4): List<ForYouInterest> {
+        val counts = stats.tagDocumentCounts
+        val scores = LinkedHashMap<String, Double>()
+        for ((tag, evidence) in leads) {
+            if (tag in unavailable) continue
+            scores[tag] = evidence.score + abs(evidence.score) * (random?.nextDouble(-JITTER, JITTER) ?: 0.0)
+        }
         // Ties, such as every tag before any history, go to the tag liked most often.
-        val anchors = leads.keys.sortedByDescending { counts[it] ?: 0 }.sortedByDescending(leads::getValue)
+        val anchors = scores.keys.sortedByDescending { counts[it] ?: 0 }.sortedByDescending(scores::getValue)
         val chosen = mutableListOf<ForYouInterest>()
         for (anchor in anchors) {
             if (chosen.size == maxInterests.coerceIn(1, 40)) break
@@ -80,7 +112,7 @@ object ForYouInterests {
             }
             chosen += ForYouInterest(listOfNotNull(anchor, partner))
         }
-        guesses.maxByOrNull { it.value }?.let { chosen += ForYouInterest(listOf(it.key)) }
+        guesses.filterKeys { it !in unavailable }.maxByOrNull { it.value }?.let { chosen += ForYouInterest(listOf(it.key)) }
         return chosen
     }
 }

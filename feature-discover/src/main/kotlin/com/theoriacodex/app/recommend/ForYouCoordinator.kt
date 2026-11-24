@@ -8,7 +8,6 @@ import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -26,7 +25,6 @@ import kotlinx.coroutines.Dispatchers
  */
 class ForYouCoordinator(
     private val registry: SourceAdapterRegistry,
-    likesRepository: LikesRepository,
     private val statisticsRepository: StatisticsRepository,
     /** A profile's tag affinity, which ranks each source's interests; see [SharedTagAffinity.forProfile]. */
     tagAffinity: suspend (profileId: String) -> TagAffinityInputs,
@@ -37,7 +35,7 @@ class ForYouCoordinator(
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
     random: () -> Random? = { Random.Default },
 ) : ForYouRouteEngine {
-    private val lanes = ForYouLanesLoader(registry, tagSuggestionStore, likesRepository, tagAffinity, computationDispatcher, random)
+    private val lanes = ForYouLanesLoader(registry, tagSuggestionStore, tagAffinity, computationDispatcher, random)
 
     override fun availableSources(settings: AppSettings): List<SourceKey> =
         settings.runtime.enabledSources.intersect(registry.availableSources()).inPresentationOrder()
