@@ -3,8 +3,8 @@ package com.theoriacodex.app.series
 import android.app.job.JobParameters
 import android.app.job.JobService
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,7 +23,7 @@ class SeriesUpdateJobService : JobService() {
 
     override fun onStartJob(params: JobParameters): Boolean {
         check = scope.launch {
-            try {
+            runCatchingExceptionsPreservingCancellation {
                 val series = (application as TheoriaAppContainerOwner).awaitAppContainer().series
                 val check = series?.checkFollowed { notifySeriesUpdate(this@SeriesUpdateJobService, it) }
                 if (check != null) {
@@ -32,10 +32,7 @@ class SeriesUpdateJobService : JobService() {
                         "Checked ${check.checked} followed series: ${check.updates.size} with new chapters or episodes, ${check.failed} failed",
                     )
                 }
-            } catch (error: CancellationException) {
-                // onStopJob ended this run; the job is not reported finished a second time.
-                throw error
-            } catch (error: Exception) {
+            }.onFailure { error ->
                 // Saved data that cannot open, say: the app's own start shows that failure, and the next period tries again.
                 Diagnostics.report("series", "The check for new chapters and episodes failed", error)
             }

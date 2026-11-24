@@ -160,6 +160,7 @@ subprojects {
     }
 
     pluginManager.withPlugin("dev.detekt") {
+        dependencies.add("detektPlugins", project(":detekt-rules"))
         extensions.configure<DetektExtension> {
             config.setFrom(rootProject.file("config/detekt/detekt.yml"))
             baseline.set(rootProject.layout.projectDirectory.file("config/detekt/baseline-${project.name}.xml"))
@@ -202,7 +203,10 @@ gradle.projectsEvaluated {
 // Detekt's CLI for scripts/detekt_changed.sh, which runs it directly on changed files without
 // Gradle's per-run cost. Writes the CLI classpath once; the script reruns it when versions change.
 val detektCli = configurations.create("detektCli")
-dependencies { detektCli("dev.detekt:detekt-cli:${libs.versions.detekt.get()}") }
+dependencies {
+    detektCli("dev.detekt:detekt-cli:${libs.versions.detekt.get()}")
+    detektCli(project(":detekt-rules"))
+}
 tasks.register("writeDetektCliClasspath") {
     val classpath: FileCollection = detektCli
     val output = layout.buildDirectory.file("detekt-cli/classpath.txt")

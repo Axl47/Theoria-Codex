@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -7,7 +8,6 @@ import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesSource
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -66,7 +66,7 @@ private suspend fun SeriesRepository.check(
     source: suspend (SourceKey) -> SeriesSource?,
     series: Series,
     onUpdate: suspend (SeriesUpdate) -> Unit,
-): Checked = try {
+): Checked = runCatchingExceptionsPreservingCancellation {
     refreshLocks.getOrPut(series.id.source, ::Mutex).withLock {
         val found = source(series.id.source) ?: return@withLock Checked.Skipped
         val listed = fetchEntries(found, series)
@@ -75,9 +75,7 @@ private suspend fun SeriesRepository.check(
             if (added.isEmpty()) Checked.Unchanged else SeriesUpdate(series, added).also { onUpdate(it) }.let(Checked::Updated)
         }
     }
-} catch (error: CancellationException) {
-    throw error
-} catch (error: Exception) {
+}.getOrElse { error ->
     Diagnostics.report("series", "Checking a followed series on ${series.id.source.id} failed", error)
     Checked.Failed
 }

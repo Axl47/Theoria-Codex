@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.flow.emptyFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -719,7 +720,7 @@ class SearchViewModel(
         if (mutableState.value.restoration is SearchRestorationUiState.Restored) return
         reduce(SearchStateChange.BeginRestoration)
         restorationJob = viewModelScope.launch {
-            try {
+            runCatchingPreservingCancellation {
                 val initialization = coordinator.initializeRoute()
                 runtime = initialization.runtime
                 val appliedHash = searchExecutionKey(
@@ -752,9 +753,7 @@ class SearchViewModel(
                 } else {
                     resumeSearchIfNeeded()
                 }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
+            }.onFailure { error ->
                 reduce(
                     SearchStateChange.RestorationFailed(
                         error.message ?: "Could not restore Search",

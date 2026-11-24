@@ -6,6 +6,7 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.legacyTagType
@@ -13,7 +14,6 @@ import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagKey
 import java.io.File
 import java.util.Locale
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -337,11 +337,9 @@ class FileBackedTagSuggestionStore(
         debounceJob = scope.launch {
             delay(persistenceDebounceMs)
             loadJob.await()
-            try {
+            runCatchingExceptionsPreservingCancellation {
                 persistPending()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
+            }.onFailure {
                 // Keep the dirty version pending so flush or the next mutation can retry it.
             }
         }

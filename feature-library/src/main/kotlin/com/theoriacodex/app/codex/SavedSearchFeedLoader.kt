@@ -12,13 +12,13 @@ import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.domain.coroutines.mapConcurrent
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.distinctByFile
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,7 +65,7 @@ class SavedSearchFeedLoader(
     private fun sourcesFor(scope: SearchSourceScope) = SearchSources.of(runtime, scope, availableSources)
 
     suspend fun load(branch: SavedSearchBranch, retry: Boolean): SavedSearchBranch = withContext(dispatcher) {
-        try {
+        runCatchingExceptionsPreservingCancellation {
             withTimeoutOrNull(15_000L) {
                 val parts = branch.parts.ifEmpty { plans(branch.entry) }
                 branch.copy(parts = parts.mapConcurrent(concurrency = 2) { part ->
@@ -76,9 +76,7 @@ class SavedSearchFeedLoader(
                     }
                 }, requestError = null)
             } ?: branch.copy(requestError = "Saved search timed out")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
+        }.getOrElse { error ->
             branch.copy(requestError = error.message ?: "Could not load saved search")
         }
     }

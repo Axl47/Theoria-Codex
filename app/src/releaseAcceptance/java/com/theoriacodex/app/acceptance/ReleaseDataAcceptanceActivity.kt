@@ -40,6 +40,7 @@ import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -54,7 +55,6 @@ import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
 import java.security.MessageDigest
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -75,7 +75,7 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
         val status = TextView(this).also { setContentView(it) }
         status.text = "Checking minified data contracts"
         lifecycleScope.launch {
-            try {
+            runCatchingExceptionsPreservingCancellation {
                 withContext(Dispatchers.IO) {
                     verifyData(File(cacheDir, "release-contract-$token"), phase)
                     verifyCredentials(applicationContext, token, phase)
@@ -84,9 +84,7 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
                 }
                 status.text = "Minified data contracts passed: $phase"
                 Log.i(RESULT_TAG, "PASS:$token:$phase")
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
+            }.onFailure { failure ->
                 status.text = "Minified data contracts failed"
                 Log.e(RESULT_TAG, "FAIL:$token:$phase:${failure.javaClass.simpleName}: ${failure.message}", failure)
             }

@@ -89,3 +89,9 @@ potential-bugs:
 
 style:
   active: false
+
+theoria:
+  active: true
+  CancellationCatchRule:
+    active: true
+    excludes: ['**/CoroutineResults.kt']

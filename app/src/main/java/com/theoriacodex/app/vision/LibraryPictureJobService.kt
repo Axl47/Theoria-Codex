@@ -7,9 +7,9 @@ import android.app.job.JobService
 import android.content.Context
 import com.theoriacodex.app.AppJob
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,12 +81,9 @@ abstract class LibraryJobService internal constructor(private val job: LibraryJo
         job.running.set(true)
         job.requested.set(false)
         run = scope.launch {
-            val more = try {
+            val more = runCatchingExceptionsPreservingCancellation {
                 (application as TheoriaAppContainerOwner).awaitAppContainer().pictures?.let { work(it) } ?: false
-            } catch (error: CancellationException) {
-                // onStopJob ended this run; the job is not reported finished a second time.
-                throw error
-            } catch (error: Exception) {
+            }.getOrElse { error ->
                 Diagnostics.report("similarity", failure, error)
                 false
             }

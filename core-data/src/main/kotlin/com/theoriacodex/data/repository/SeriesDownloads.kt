@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
@@ -327,13 +328,11 @@ class SeriesDownloads(
      */
     suspend fun downloadNew(update: SeriesUpdate) {
         if (update.series.id.source.seriesKind != SeriesKind.MANGA) return
-        try {
+        runCatchingExceptionsPreservingCancellation {
             val series = repository.series(update.series.id) ?: return
             if (!series.followed || !series.downloadNewChapters) return
             download(update.series.id, update.newEntries.asReversed().map { it.address }, automatic = true)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
+        }.onFailure { error ->
             Diagnostics.report("series", "New chapters could not be queued for download", error)
         }
     }
@@ -500,11 +499,9 @@ class SeriesDownloads(
     /** [block], tried up to [PAGE_ATTEMPTS] times, waiting longer before each retry. */
     private suspend fun <T> attempts(block: suspend () -> T): T {
         repeat(PAGE_ATTEMPTS - 1) { attempt ->
-            try {
+            runCatchingExceptionsPreservingCancellation {
                 return block()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
+            }.onFailure {
                 delay(retryDelay * (attempt + 1))
             }
         }

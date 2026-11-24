@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
 import com.theoriacodex.data.repository.matchKey
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
@@ -188,14 +189,10 @@ class SwitchSourceViewModel(
     }
 
     private suspend fun entryCount(source: SeriesSource, series: Series): Int? = calls.withPermit {
-        try {
+        runCatchingExceptionsPreservingCancellation {
             // Counted as the source lists it from scratch: only the count is shown, and nothing is stored.
             source.entries(series, stored = emptyList()).entries.size
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrNull()
     }
 
     private fun setEntries(key: SourceKey, id: SeriesId, count: Int) = updateResult(key) { result ->

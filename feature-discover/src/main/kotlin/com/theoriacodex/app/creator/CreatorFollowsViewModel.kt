@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.newPostsCheckDue
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.mapConcurrent
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
@@ -54,21 +55,20 @@ class CreatorFollowsViewModel(
     /** The creator page's Follow button: follows, or unfollows with Undo drawn in the button's place. */
     fun toggle(creator: CreatorProfile, posts: List<Post>, undo: UndoSlot) {
         viewModelScope.launch {
-            try {
+            runCatchingExceptionsPreservingCancellation {
                 if (repository.observe().first().any { it.creator.followKey() == creator.followKey() }) {
                     unfollowWithUndo(creator, undo, CreatorFollowAnchors.page(creator))
                 } else repository.follow(creator, posts)
-            } catch (error: CancellationException) { throw error }
-            catch (error: Exception) { messageChannel.send(error.message ?: "Could not update followed creator") }
+            }.onFailure { error -> messageChannel.send(error.message ?: "Could not update followed creator") }
         }
     }
 
     /** The followed-creators sheet's unfollow, with Undo drawn in the row it vacated. */
     fun unfollow(creator: CreatorProfile, undo: UndoSlot) {
         viewModelScope.launch {
-            try { unfollowWithUndo(creator, undo, CreatorFollowAnchors.sheetRow(creator)) }
-            catch (error: CancellationException) { throw error }
-            catch (_: Exception) { messageChannel.send("Could not unfollow creator") }
+            runCatchingExceptionsPreservingCancellation {
+                unfollowWithUndo(creator, undo, CreatorFollowAnchors.sheetRow(creator))
+            }.onFailure { messageChannel.send("Could not unfollow creator") }
         }
     }
 
@@ -122,13 +122,12 @@ class CreatorFollowsViewModel(
     }
 
     /** [follow]'s newest posts, or null after recording why the check failed. */
-    private suspend fun checkCreator(follow: FollowedCreator): List<Post>? = try {
+    private suspend fun checkCreator(follow: FollowedCreator): List<Post>? = runCatchingExceptionsPreservingCancellation {
         val adapter = registry.adapterFor(follow.creator.source) as? CreatorPostsSourceAdapter
             ?: error("Source unavailable; check source accounts")
         withTimeoutOrNull(15_000L) { adapter.searchCreatorPosts(follow.creator, null) }?.items
             ?: error("Source timed out; check again")
-    } catch (error: CancellationException) { throw error }
-    catch (error: Exception) {
+    }.getOrElse { error ->
         mutableErrors.update { it + (follow.creator.followKey() to (error.message ?: "Could not check creator")) }
         null
     }

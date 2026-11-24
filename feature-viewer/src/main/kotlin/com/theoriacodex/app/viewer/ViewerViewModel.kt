@@ -416,7 +416,7 @@ class ViewerViewModel(
         launchSessionJob(ViewerWorkKey.Resolution(effect.postId)) {
             awaitResolutionTurn(effect.postId)
             onAction(ViewerAction.ResolutionStarted(effect.session, effect.postId))
-            try {
+            runCatchingPreservingCancellation {
                 val outcome = withTimeoutOrNull(viewerResolutionTimeoutMs(state.value.series)) { Result.success(postResolver.resolve(effect.session, effect.postId)) }
                     ?: throw java.io.IOException("Post resolution timed out")
                 val resolved = outcome.getOrThrow()
@@ -443,9 +443,7 @@ class ViewerViewModel(
                 } else {
                     applyResolvedPost(resolved)
                 }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
+            }.onFailure { error ->
                 onAction(
                     ViewerAction.ResolutionFailed(
                         session = effect.session,
@@ -484,11 +482,9 @@ class ViewerViewModel(
         synchronized(lock) {
             if (request.key !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
         }
-        val result = try {
+        val result = runCatchingPreservingCancellation {
             mediaPrefetcher.prefetch(session, media, request).also { currentCoroutineContext().ensureActive() }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
+        }.getOrElse {
             ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
         }
         synchronized(lock) {

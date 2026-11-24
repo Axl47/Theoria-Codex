@@ -21,10 +21,18 @@ done < <({ git diff --name-only "$base" -- '*.kt'; git ls-files --others --exclu
 
 (( ${#files[@]} > 0 )) || exit 0
 
-# Resolve Detekt's CLI classpath through Gradle once, and again only when dependency versions change.
+# Resolve Detekt's CLI classpath through Gradle once, and again only when dependency versions or the custom rule change, or a jar it names is gone.
 classpath_file=build/detekt-cli/classpath.txt
-if [[ ! -s "$classpath_file" || gradle/libs.versions.toml -nt "$classpath_file" ]]; then
+classpath_stale() {
+  [[ -s "$classpath_file" && gradle/libs.versions.toml -ot "$classpath_file" ]] || return 0
+  [[ -z "$(find detekt-rules/src detekt-rules/build.gradle.kts -newer "$classpath_file" -print -quit)" ]] || return 0
+  local entry
+  while IFS= read -r entry || [[ -n "$entry" ]]; do [[ -e "$entry" ]] || return 0; done < <(tr ':' '\n' < "$classpath_file")
+  return 1
+}
+if classpath_stale; then
   ./gradlew --quiet writeDetektCliClasspath >/dev/null
+  touch "$classpath_file"
 fi
 
 temp="$(mktemp -d)"

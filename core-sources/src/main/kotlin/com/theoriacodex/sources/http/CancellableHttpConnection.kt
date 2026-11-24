@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.http
 
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.net.HttpURLConnection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +19,7 @@ suspend fun <T> executeCancellableHttpConnection(
     block: () -> T,
 ): T = suspendCancellableCoroutine { continuation ->
     val request = connectionIoScope.launch {
-        try {
+        runCatchingPreservingCancellation {
             val result = runInterruptible {
                 try {
                     block()
@@ -27,9 +28,7 @@ suspend fun <T> executeCancellableHttpConnection(
                 }
             }
             continuation.resumeWith(Result.success(result))
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Throwable) {
+        }.onFailure { failure ->
             continuation.resumeWith(Result.failure(failure))
         }
     }

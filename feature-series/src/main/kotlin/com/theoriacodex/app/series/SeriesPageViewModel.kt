@@ -15,6 +15,7 @@ import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
@@ -22,7 +23,6 @@ import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.UnsupportedEntriesException
 import com.theoriacodex.domain.series.seriesKind
 import java.io.IOException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -118,7 +118,7 @@ data class SeriesPageState(
  * ([UnsupportedEntriesException]), so the page offers Retry only when [retryable].
  */
 data class RefreshFailure(val message: String, val retryable: Boolean) {
-    constructor(error: Exception) : this(failureLine(error), error !is UnsupportedEntriesException)
+    constructor(error: Throwable) : this(failureLine(error), error !is UnsupportedEntriesException)
 }
 
 /**
@@ -226,16 +226,11 @@ class SeriesPageViewModel(
             return
         }
         refresh.update { it.copy(source = source, sourceName = source.label(sources), sourceMissing = false) }
-        val failure = try {
+        val failure = runCatchingExceptionsPreservingCancellation {
             repository.series(id)?.let { stored ->
                 repository.refresh(source, stored.series) { added -> downloads?.downloadNew(SeriesUpdate(stored.series, added)) }
             }
-            null
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            error
-        }
+        }.exceptionOrNull()
         refresh.update { it.copy(refreshing = false, userRefreshing = false, failure = failure?.let(::RefreshFailure)) }
     }
 

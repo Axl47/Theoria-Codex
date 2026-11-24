@@ -11,6 +11,7 @@
     "core-sources",
     "extension-host",
     "core-stubs",
+    "detekt-rules",
     "ui-kit",
     "media-kit",
     "vision-kit",

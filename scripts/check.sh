@@ -171,6 +171,7 @@ test_tasks=(
   :core-data:test
   :core-sources:test
   :core-stubs:test
+  :detekt-rules:test
   :app-logic:test
   :core-data-android:testDebugUnitTest
   :extension-host:testDebugUnitTest
@@ -264,6 +265,7 @@ shared_tasks=(
   :core-data:testClasses
   :core-sources:testClasses
   :core-stubs:testClasses
+  :detekt-rules:testClasses
   :app-logic:testClasses
 )
 
