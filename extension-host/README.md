@@ -39,7 +39,7 @@ checking that it is the package the index named, signed with the pinned key, no 
 and that no copy on the device is signed with another key. It is kept as `noBackupFilesDir/extensions/<package>.apk`
 and loaded like a debug-folder file, from a private read-only copy, so it is no Android package: no install dialog, no
 developer verification, and another app cannot replace or remove it. A copy of its own stands in for an installed
-package of the same name. A fresh install turns the extension on, since installing it is the choice; an update keeps
+package of the same name, unless the other app has updated that package past it with the same key. A fresh install turns the extension on, since installing it is the choice; an update keeps
 the user's choice; removing it deletes the file and its trust. Repos live in `ExtensionChoices` beside trust and, like
 it, are not in profile backups. Nothing checks for updates in the background: the Extensions page asks the repos each
 time it opens.
@@ -115,7 +115,7 @@ once more.
 | `MihonKind` | same | Mihon's manga interface, API 1.6, presented by `MihonSeriesSource`, with its covers and pages fetched by `MihonImages`. |
 | `AniyomiKind` | same | Aniyomi's anime interface, versions 14 and 16, presented by `AniyomiSeriesSource` (see "Anime extensions"). Refuses other versions and extensions that stream by torrent, saying why on the Extensions page. |
 | `ExtensionCalls`, `ExtensionFilters.kt` | same | What both adapters share: running an extension call off the caller's thread and reporting its failure the way built-in sources do, and the filter tree as `SeriesFilter`s. The status numbers are `core-domain`'s `extensionSeriesStatus`, shared with the backup import. |
-| `ExtensionPackages` | same | Lists the extensions on the device without running them: those installed from repos into the app's storage, installed packages that declare a kind's feature (unless one from a repo stands in for it) and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
+| `ExtensionPackages` | same | Lists the extensions on the device without running them: those installed from repos into the app's storage, installed packages that declare a kind's feature (unless one from a repo stands in for it), reading each file again only once it changes and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
 | `RepoReader` | same | Reads a repo's name, key and extensions from any address users and backups give for one, in the legacy JSON or the newer protobuf format. Anime and manga protobuf stores number their fields differently; the anime layout is tried first. |
 | `ExtensionCatalog` | same | The user's repos (`ExtensionRepos` in `core-domain`): adds and removes them, lists what they offer with how the device stands with each (available, installed, update, signed with another key), and installs, updates and removes extensions in the app's storage. |
 | `ExtensionRegistry` | same | The rule for what runs: loads extensions that are on, on first use, each with 15 s to finish: a lookup of one source loads only the extension last seen offering it (`ExtensionChoices.owners`), and the whole list loads all of them. It offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
