@@ -63,16 +63,17 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
  * [to] and its listed [toEntries] after taking over the progress the user made on [from] and its [fromEntries], the
  * same work on another source. Returns the series, with [from]'s settings, and only the entries that changed.
  *
- * An entry of [to] that is a chapter [from] has, by number or, where either lacks one, by name, is read when [from]
- * read that chapter, and stays unread otherwise. Each entry of [from] passes its place and its read time to its
- * [matchingEntry], the further place and the later time winning, the place capped at a known page count or duration.
+ * Each entry of [from] goes to the entry of [to] that [EntryMatcher.match] finds for it. An entry of [to] that entries
+ * went to takes their progress: read when one of them was read, and the further place and the later read time, the
+ * place capped at a known page count or duration. One no entry went to, but that is a chapter [from] has, another
+ * release of its number or one of its name ([EntryMatcher.sameName]), is read when [from] read that chapter.
  *
  * An entry [from] has no chapter for is read when it is numbered below the entry [from] opened last, as a source that
  * skips chapters still reads past them; that is only for manga, since episodes are watched one by one and an episode
  * missing on [from] was never seen.
  *
- * Continue goes on from where the user is: the [matchingEntry] of the entry [from] opened last, else the furthest
- * entry this marks read.
+ * Continue goes on from where the user is: the match of the entry [from] opened last, else the furthest entry this
+ * marks read.
  *
  * [to]'s own progress stays: read entries stay read, places never go back, and an entry opened last that is as far or
  * further in reading order is kept.
@@ -90,30 +91,35 @@ fun carryProgress(
     val olds = fromEntries.map(StoredSeriesEntry::entry)
     val ordered = toEntries.inReadingOrder()
     val targets = ordered.map(StoredSeriesEntry::entry)
-    val matched = fromEntries.groupBy { matchingEntry(it.entry, olds, targets)?.address }
+    val forward = EntryMatcher(olds, targets)
+    val backward = EntryMatcher(targets, olds)
+    val matched = fromEntries.groupBy { forward.match(it.entry)?.address }
     val byNumber = fromEntries.filter { it.entry.number != null }.groupBy { it.entry.number }
     val byAddress = fromEntries.associateBy { it.entry.address }
     val opened = byAddress[from.lastOpenedEntry]
-    val resumed = opened?.let { matchingEntry(it.entry, olds, targets) }
+    val resumed = opened?.let { forward.match(it.entry) }
     val boundary = opened?.entry?.number?.takeIf { kind == SeriesKind.MANGA }
 
-    // [from]'s entries for the chapter [entry] is: those matched to it, every release of its number, the one of its name.
-    fun sameChapter(entry: SeriesEntry): List<StoredSeriesEntry> = matched[entry.address].orEmpty() +
-        entry.number?.let(byNumber::get).orEmpty() + listOfNotNull(sameName(entry, targets, olds)?.let { byAddress[it.address] })
-
     val carried = ordered.map { stored ->
-        val chapter = sameChapter(stored.entry)
+        val own = matched[stored.entry.address].orEmpty()
         val number = stored.entry.number
+        val chapter = own.ifEmpty {
+            number?.let(byNumber::get).orEmpty() + listOfNotNull(backward.sameName(stored.entry)?.let { byAddress[it.address] })
+        }
         when {
             chapter.isNotEmpty() -> {
-                val further = matched[stored.entry.address]?.maxOf { it.position } ?: 0
-                val position = stored.length?.let { further.coerceAtMost(it) } ?: further
-                stored.copy(read = stored.read || chapter.any { it.read }, position = maxOf(stored.position, position))
+                val further = maxOf(stored.position, own.maxOfOrNull { it.position } ?: 0)
+                val readAt = (own.mapNotNull { it.lastReadAtEpochMs } + listOfNotNull(stored.lastReadAtEpochMs)).maxOrNull()
+                stored.copy(
+                    read = stored.read || chapter.any { it.read },
+                    position = stored.length?.let { further.coerceAtMost(it) } ?: further,
+                    lastReadAtEpochMs = readAt,
+                )
             }
             boundary != null && number != null && number < boundary -> stored.copy(read = true)
             else -> stored
         }
-    }.withReadTimesOf(fromEntries, olds, targets)
+    }
     val own = carried.indexOfFirst { it.entry.address == to.lastOpenedEntry }
     val reached = if (resumed != null) carried.indexOfFirst { it.entry.address == resumed.address }
     else carried.indices.lastOrNull { carried[it].read && !ordered[it].read } ?: -1
@@ -121,45 +127,37 @@ fun carryProgress(
     return to.withSettingsOf(from).copy(lastOpenedEntry = lastOpened) to carried.filterIndexed { index, entry -> entry != ordered[index] }
 }
 
-/** [this] with each read time in [fromEntries] on the entry it matches, where it is later than the entry's own. */
-private fun List<StoredSeriesEntry>.withReadTimesOf(
-    fromEntries: List<StoredSeriesEntry>,
-    olds: List<SeriesEntry>,
-    targets: List<SeriesEntry>,
-): List<StoredSeriesEntry> {
-    val readAt = HashMap<String, Long>()
-    fromEntries.forEach { old ->
-        val at = old.lastReadAtEpochMs ?: return@forEach
-        matchingEntry(old.entry, olds, targets)?.let { readAt.merge(it.address, at, ::maxOf) }
-    }
-    return map { stored ->
-        val at = readAt[stored.entry.address] ?: return@map stored
-        if (stored.lastReadAtEpochMs != null && stored.lastReadAtEpochMs >= at) stored else stored.copy(lastReadAtEpochMs = at)
-    }
-}
-
 /**
- * The entry among [candidates] (in reading order) that is [entry], one of [own], on another source: the same chapter
- * number, by the same translator group when one has it, else the first in reading order. Otherwise, by [sameName].
- * Null when nothing matches.
+ * Finds, for an entry of one series ([own]), the entry that is the same chapter on another source ([candidates], in
+ * reading order). A switch asks for every entry of both lists, so each list is indexed once.
  */
-fun matchingEntry(entry: SeriesEntry, own: List<SeriesEntry>, candidates: List<SeriesEntry>): SeriesEntry? {
-    val sameNumber = entry.number?.let { number -> candidates.filter { it.number == number } }.orEmpty()
-    val group = entry.translatorGroup?.let(::matchKey)?.ifEmpty { null }
-    return sameNumber.firstOrNull { group != null && it.translatorGroup?.let(::matchKey) == group }
-        ?: sameNumber.firstOrNull()
-        ?: sameName(entry, own, candidates)
-}
+class EntryMatcher(own: List<SeriesEntry>, private val candidates: List<SeriesEntry>) {
+    private val ownNames = own.groupingBy { matchKey(it.name) }.eachCount()
+    private val candidatesByName = candidates.groupBy { matchKey(it.name) }
+    private val candidatesByNumber = candidates.filter { it.number != null }.groupBy { it.number }
 
-/**
- * The entry among [candidates] with [entry]'s name by [matchKey], where either of the two lacks a number: numbers,
- * when both have them, say more than names. Only a name that no other entry has, among [own] and among [candidates],
- * matches, since "Extra" or "Notice" can name several.
- */
-private fun sameName(entry: SeriesEntry, own: List<SeriesEntry>, candidates: List<SeriesEntry>): SeriesEntry? {
-    val key = matchKey(entry.name).ifEmpty { return null }
-    if (own.count { matchKey(it.name) == key } != 1) return null
-    return candidates.filter { matchKey(it.name) == key }.singleOrNull()?.takeIf { entry.number == null || it.number == null }
+    /**
+     * The candidate that is [entry]: the same chapter number, by the same translator group when one has it, else the
+     * first in reading order. Otherwise, by [sameName]. Null when nothing matches.
+     */
+    fun match(entry: SeriesEntry): SeriesEntry? {
+        val sameNumber = entry.number?.let(candidatesByNumber::get).orEmpty()
+        val group = entry.translatorGroup?.let(::matchKey)?.ifEmpty { null }
+        return sameNumber.firstOrNull { group != null && it.translatorGroup?.let(::matchKey) == group }
+            ?: sameNumber.firstOrNull()
+            ?: sameName(entry)
+    }
+
+    /**
+     * The candidate with [entry]'s name by [matchKey], where either of the two lacks a number: numbers, when both have
+     * them, say more than names. Only a name that no other entry has, among own entries and among candidates, matches,
+     * since "Extra" or "Notice" can name several.
+     */
+    fun sameName(entry: SeriesEntry): SeriesEntry? {
+        val key = matchKey(entry.name).ifEmpty { return null }
+        if (ownNames[key] != 1) return null
+        return candidatesByName[key]?.singleOrNull()?.takeIf { entry.number == null || it.number == null }
+    }
 }
 
 /**

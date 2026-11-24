@@ -212,10 +212,11 @@ fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).c
 /**
  * The playback position, in milliseconds, an episode starts at: where the user left it, watched or not, unless
  * [episodeStartsOver] there. Watching [ANIME_FINISHED_PERCENT] still marks it watched and moves Continue on, but one
- * left at 20:30 of 24:00 reopens there.
+ * left at 20:30 of 24:00 reopens there. Without a known duration, as after a switch of source, the Viewer applies
+ * [episodeStartsOver] once the duration is known.
  */
 fun StoredSeriesEntry.resumePositionMs(): Long {
-    val length = length ?: return if (read) 0 else position
+    val length = length ?: return position
     return if (episodeStartsOver(position, length)) 0 else position
 }
 
@@ -224,7 +225,8 @@ fun StoredSeriesEntry.resumePositionMs(): Long {
  * tail, the last [RESUME_TAIL_MS] or last 10% of it, whichever is shorter. For a 24-minute episode that is its ending
  * and next-episode preview, where it was as good as played out. The Viewer applies the same rule within a session.
  */
-fun episodeStartsOver(positionMs: Long, lengthMs: Long): Boolean = positionMs >= lengthMs - minOf(RESUME_TAIL_MS, lengthMs / 10)
+fun episodeStartsOver(positionMs: Long, lengthMs: Long): Boolean =
+    lengthMs > 0 && positionMs >= lengthMs - minOf(RESUME_TAIL_MS, lengthMs / 10)
 
 /** The longest tail of an episode in which a saved position counts as having played it out; see [episodeStartsOver]. */
 const val RESUME_TAIL_MS = 120_000L
