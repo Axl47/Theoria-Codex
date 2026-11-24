@@ -11,7 +11,7 @@ Likes and system Codex memberships are owned by different repositories but must 
 - `CodexLikesTransactions` implementations commit each method atomically, so domain APIs stay free of Room.
 - Reorder requires a complete, duplicate-free permutation of known ids (`resolveCompleteCodexOrder`), otherwise nothing is applied.
 - Clearing likes removes only the matching system-Codex memberships; independently saved ones stay. `removeProfileLibrary` (profile deletion) removes all the profile's Codices, Likes and For You verdicts; posts shared with other owners stay while still referenced.
-- An automatic Codex tag set matches a post when, within the post's source, every tag group has at least one tag the post carries. `postMatchesAnyAutomaticTag` is an older name for this rule (`postMatchesAutomaticTagGroups`) and is tracked for removal in issue #351.
+- An automatic Codex tag set matches a post when, within the post's source, every tag group has at least one tag the post carries. `postMatchesAutomaticTagGroups` implements it.
 - Undo payloads (`CodexCleaningSnapshot`, `ClearedLikesSnapshot`, `DeletedCodexSnapshot`) are process-only authority and restore without overwriting newer memberships or Likes.
 
 ## Consequences
@@ -21,5 +21,5 @@ Memberships cannot be repaired after a process restart through Undo.
 ## Applies to
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt`: `CodexLikesTransactions`, `removeProfileLibrary`
-- `core-data/src/main/kotlin/com/theoriacodex/data/repository/CodexLikesPolicy.kt`: `resolveCompleteCodexOrder`, `postMatchesAutomaticTagGroups`, `postMatchesAnyAutomaticTag`
+- `core-data/src/main/kotlin/com/theoriacodex/data/repository/CodexLikesPolicy.kt`: `resolveCompleteCodexOrder`, `postMatchesAutomaticTagGroups`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/CodexCleaning.kt`: `CodexCleaningSnapshot`

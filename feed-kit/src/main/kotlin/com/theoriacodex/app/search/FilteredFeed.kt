@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.theoriacodex.app.media.DurationFilterMetadata
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.ListFrame
+import com.theoriacodex.app.ui.components.RetainedFrames
 import com.theoriacodex.app.ui.components.appendedAfterRemovals
 import com.theoriacodex.app.ui.components.appendedTo
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
@@ -22,12 +23,14 @@ fun rememberCarriedFilter(
     val pass = { candidates: List<Post> -> filter(candidates, known) }
     val durationsKey = if (posts === durations.presentedPosts) durations.presentedDurationsKey else known
     return rememberComputedOffMain(
-        posts, *inputs, durationsKey, section = FeedTraceSections.FILTER, retainKey = retainKey,
+        posts, *inputs, durationsKey, section = FeedTraceSections.FILTER, retainKey = FilteredFrames.at(retainKey),
         extend = { previous -> extendFiltered(previous, posts, known, pass) },
     ) { FilteredPosts(pass(posts), known) }.visible
 }
 
 internal class FilteredPosts(val visible: List<Post>, val durations: Map<PostId, Long>)
+
+private val FilteredFrames = RetainedFrames<Post, FilteredPosts>()
 
 internal fun extendFiltered(
     previous: ListFrame<Post, FilteredPosts>,

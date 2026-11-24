@@ -4,7 +4,7 @@ import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexSharePost
 import com.theoriacodex.app.codex.buildCodexShareFile
 import com.theoriacodex.app.codex.encodeCodexShareFile
-import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository

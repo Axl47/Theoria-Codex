@@ -5,6 +5,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.media.reconnections
+import com.theoriacodex.app.related.RelatedPostsDiagnostics
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.search.state.SearchUiState
@@ -26,6 +27,7 @@ fun searchViewModelFactory(
             savedStateHandle = createSavedStateHandle(),
             relatedPostsLoader = relatedPostsLoader,
             reconnections = networkOnline.reconnections(),
+            relatedPostsLog = RelatedPostsDiagnostics.logcat,
         )
     }
 }

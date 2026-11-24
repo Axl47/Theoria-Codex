@@ -134,14 +134,14 @@ class CodexLikesPolicyTest {
 
         assertEquals(
             true,
-            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.PIXIV, "blue sky")),
             ),
         )
         assertEquals(
             false,
-            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.GELBOORU, "blue sky")),
             ),

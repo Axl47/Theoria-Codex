@@ -9,7 +9,6 @@
 0020-for-you-retired-searches.md
 0021-local-state-files.md
 0023-post-snapshots.md
-0024-profile-backup-format.md
 0025-profile-backup-restore.md
 0026-profile-deletion-journal.md
 0027-series-download-queue.md
@@ -75,7 +74,6 @@
 0103-diagnostics-log-and-usage.md
 0104-duration-lookups.md
 0105-feed-media-delivery.md
-0106-feed-state-retained-across-viewer.md
 0107-frame-sampling-for-tagger.md
 0108-media-disk-caches.md
 0109-media-kit-device-and-fixture-tests.md
@@ -104,7 +102,6 @@
 0132-creator-page-seen-marks-and-account-header.md
 0133-for-you-lanes-and-deals.md
 0134-for-you-mix-owner-and-levels.md
-0135-for-you-picture-vetting.md
 0136-search-and-discover-test-timing.md
 0137-search-composer-sheet-and-bar-gestures.md
 0138-search-composer-tag-editing.md
@@ -157,7 +154,6 @@
 0186-app-container-startup-and-wiring.md
 0187-app-lock.md
 0188-custom-source-runtime.md
-0189-extension-host-wiring.md
 0190-home-pager-and-tab-navigation.md
 0191-series-background-work.md
 0192-series-reader-session.md

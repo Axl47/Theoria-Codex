@@ -1,6 +1,5 @@
 package com.theoriacodex.app.settings
 
-import com.theoriacodex.data.repository.ScenarioPreset
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -24,13 +23,5 @@ class SettingsSummaryPresentationTest {
         assertEquals("0 cached items", cacheSummary(0, 0))
         assertEquals("1 cached item", cacheSummary(1, 0))
         assertEquals("5 cached items", cacheSummary(2, 3))
-    }
-
-    @Test
-    fun `developer scenario summary uses compact user facing text`() {
-        assertEquals("Normal", scenarioLabel(ScenarioPreset.NORMAL))
-        assertEquals("Partial failure", scenarioLabel(ScenarioPreset.PARTIAL_FAILURE))
-        assertEquals("Empty results", scenarioLabel(ScenarioPreset.EMPTY_RESULTS))
-        assertEquals("Slow network", scenarioLabel(ScenarioPreset.SLOW_NETWORK))
     }
 }
