@@ -306,17 +306,13 @@ internal object RepositoryPolicies {
         )
     }
 
-    fun normalizeFavoriteTag(source: SourceKey, tag: String): String {
-        return normalizeFavoriteTagForStorage(source, tag)
-    }
-
     /**
      * Normalizes each tag and drops blanks and repeats; null when no tag remains. Only a group keeps
      * a [name], trimmed onto one line and capped at [MAX_FAVORITE_TAG_NAME_LENGTH] characters.
      */
     fun normalizeFavoriteTagEntry(source: SourceKey, tags: List<String>, name: String? = null): FavoriteTagEntry? {
         val normalized = tags
-            .map { tag -> normalizeFavoriteTag(source, tag) }
+            .map { tag -> normalizeFavoriteTagForStorage(source, tag) }
             .filter(String::isNotBlank)
             .distinctBy { tag -> sourceTagKey(source, tag) }
             .takeIf(List<String>::isNotEmpty)

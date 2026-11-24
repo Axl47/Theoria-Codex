@@ -21,6 +21,7 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.query.SearchTermLimit
+import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.sourceTagsMatch
 
@@ -586,7 +587,7 @@ internal fun Query.nhentaiLanguageFilter(): NhentaiLanguageFilter =
 
 private fun SearchTerm.nhentaiLanguageFilterOrNull(): NhentaiLanguageFilter? {
     if (facet != SearchFacet.LANGUAGE && !isPortableGeneralTag) return null
-    return when (normalizeNhentaiTag(value)) {
+    return when (normalizeMatchToken(value)) {
         "english" -> NhentaiLanguageFilter.ENGLISH
         "chinese" -> NhentaiLanguageFilter.CHINESE
         "japanese" -> NhentaiLanguageFilter.JAPANESE
@@ -598,10 +599,7 @@ internal fun Query.nhentaiFullColorFilter(): Boolean = includeTerms.any(SearchTe
 
 private fun SearchTerm.isNhentaiFullColorFilter(): Boolean =
     facet == SearchFacet.TAG && sourceNamespace in setOf(null, NHENTAI_TAG_NAMESPACE) &&
-        normalizeNhentaiTag(value) == NHENTAI_FULL_COLOR_TAG
-
-private fun normalizeNhentaiTag(value: String): String = value.trim().lowercase()
-    .replace('_', ' ').replace(Regex("\\s+"), " ")
+        normalizeMatchToken(value) == NHENTAI_FULL_COLOR_TAG
 
 private fun Query.directNhentaiGalleryIdCandidate(): String? {
     if (mode != QueryMode.Unified && mode != QueryMode.Source(SourceKey.NHENTAI)) return null
