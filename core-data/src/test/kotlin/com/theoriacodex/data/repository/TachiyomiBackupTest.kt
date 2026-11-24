@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
@@ -87,6 +88,22 @@ class TachiyomiBackupTest {
         assertEquals(listOf(1L, 5L, 10L), entries.map { it.position })
         assertEquals(listOf(20L, 10L, 10L), entries.map { it.length })
         assertNull("A number no chapter has is none", entries.last().entry.number)
+    }
+
+    @Test
+    fun `a manga's reading mode comes from Mihon's reader flags, else the older viewer field`() {
+        fun mode(fields: Proto.() -> Unit) = decodeTachiyomiBackup(backup {
+            message(1) { long(1, 1); string(2, "/s"); string(3, "S"); fields() }
+        }, now = 0).series.single().series.readingMode
+
+        // Orientation bits above the low three are ignored.
+        assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, mode { long(14, 1); long(103, 0x18 or 2) })
+        assertEquals(GalleryReadingMode.LEFT_TO_RIGHT, mode { long(103, 1) })
+        assertEquals("Webtoon reads top to bottom", GalleryReadingMode.VERTICAL, mode { long(103, 4) })
+        assertEquals("Continuous vertical too", GalleryReadingMode.VERTICAL, mode { long(103, 5) })
+        assertEquals("A backup from before the flags", GalleryReadingMode.VERTICAL, mode { long(14, 3) })
+        assertNull("Mihon's default follows Theoria's", mode { long(14, 2); long(103, 0x08) })
+        assertNull(mode {})
     }
 
     @Test
