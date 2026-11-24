@@ -15,6 +15,7 @@ import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SourceAvailability
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,6 +36,8 @@ class SeriesDependencies(
     val covers: SeriesCovers,
     /** Which page pictures each series' chapters on the Viewer's strip; lives as long as the app. */
     val pictures: ChapterPictures = ChapterPictures(repository),
+    /** Which sources are on and why an installed extension's are not; by default only what [sources] has on. */
+    val availability: suspend () -> SourceAvailability = { SourceAvailability(sources().mapTo(HashSet()) { it.key }) },
     /** Writes a line to the app's log, such as when an entry's lookup starts. */
     val log: (String) -> Unit,
 ) {

@@ -17,6 +17,7 @@ import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.extensionhost.AniyomiKind
 import com.theoriacodex.extensionhost.ExtensionCatalog
 import com.theoriacodex.extensionhost.ExtensionHost
@@ -202,6 +203,12 @@ internal class ExtensionSourceHost : ExtensionSites {
     suspend fun sources(): List<SeriesSource> {
         watching.value
         return registry.sources()
+    }
+
+    /** Which sources are on and which an installed extension offers but is off; loads every extension that is on, as [sources] does. */
+    suspend fun availability(): SourceAvailability {
+        watching.value
+        return registry.availability()
     }
 
     /** The source [key] names when it is on, else null; loads only its extension when this device knows which that is. */

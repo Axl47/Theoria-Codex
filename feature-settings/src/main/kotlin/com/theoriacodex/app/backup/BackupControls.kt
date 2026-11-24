@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.BackupPreview
+import com.theoriacodex.domain.series.languageName
 
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
@@ -181,6 +182,7 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
                 import.newRepos.reposNotice()?.let { Text(it) }
                 import.missingNotice()?.let { Text(it) }
+                import.turnOnNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
             }
         },
@@ -204,6 +206,11 @@ internal fun BackupPreview.Series.missingNotice(): String? {
     val subject = if (named.size + unnamedMissingSources == 1) "this extension" else "these extensions"
     return "Needs $subject: ${named.joinToString()}$others."
 }
+
+/** "Turn on in Extensions: Comix, Comix (Spanish).": installed extensions, and the language where only that is off; null when none. */
+internal fun BackupPreview.Series.turnOnNotice(): String? = turnOn.takeIf { it.isNotEmpty() }?.joinToString(
+    prefix = "Turn on in Extensions: ", postfix = ".",
+) { off -> off.language?.let { "${off.extension} (${languageName(it)})" } ?: off.extension }
 
 @Composable
 private fun BackupCheckbox(

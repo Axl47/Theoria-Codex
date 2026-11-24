@@ -111,6 +111,7 @@ import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.custom.CustomSiteHttpClient
@@ -434,6 +435,7 @@ internal class DefaultTheoriaAppContainer(
         SeriesDependencies(
             repository, host::sources, host::source, host.extensions, host.repos(httpClients.shared), downloads, scope = durableStoreScope, covers = host.covers,
             pictures = ChapterPictures(repository) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
+            availability = host::availability,
         ) { Log.i("SeriesReader", it) }
     }
 
@@ -447,7 +449,7 @@ internal class DefaultTheoriaAppContainer(
         writeGuard = profileWriteGuard,
         siteProfiles = siteProfiles,
         extensionRepos = series?.repos,
-        extensionSources = { series?.sources?.invoke().orEmpty().mapTo(HashSet()) { it.key } },
+        extensionSources = { series?.availability?.invoke() ?: SourceAvailability() },
     )
     private val autoBackup = AutoBackupWorkflow(
         store = SharedPreferencesAutoBackupStore(appContext),

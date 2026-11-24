@@ -8,6 +8,7 @@ import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SourceOff
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
@@ -456,6 +457,31 @@ class ExtensionRegistryTest {
         assertEquals(listOf("custom_mihon_3"), registry.sources().map { it.key.id })
         assertEquals(mapOf("a" to setOf("ko")), store.choices.languages)
         assertEquals(listOf(ExtensionLanguage("en", false), ExtensionLanguage("es", false), ExtensionLanguage("ko", true)), registry.installed().single().languages)
+    }
+
+    @Test
+    fun `an extension that is off, or a language that is, is told apart from a source no extension offers`() = runBlocking {
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"), extension("c", signer = "key-1"))
+        sourcesOf = { listOf(StubSource(it.packageName[0].code.toLong(), "en"), StubSource(it.packageName[0].code + 100L, "es")) }
+        store.choices = store.choices.copy(
+            // "a" is on with only English; "b" was on once, so its sources are known; "c" never was.
+            trusted = mapOf("a" to "key-1"),
+            languages = mapOf("a" to setOf("en")),
+            owners = mapOf(MihonKind.sourceKey('b'.code.toLong()).id to "b", MihonKind.sourceKey('b'.code + 100L).id to "b"),
+        )
+
+        val availability = registry.availability()
+
+        assertEquals(setOf(MihonKind.sourceKey('a'.code.toLong())), availability.on)
+        assertEquals(
+            mapOf(
+                MihonKind.sourceKey('a'.code + 100L) to SourceOff("a", "es"),
+                MihonKind.sourceKey('b'.code.toLong()) to SourceOff("b"),
+                MihonKind.sourceKey('b'.code + 100L) to SourceOff("b"),
+            ),
+            availability.off,
+        )
+        assertNull(availability.off[MihonKind.sourceKey('c'.code.toLong())])
     }
 
     @Test

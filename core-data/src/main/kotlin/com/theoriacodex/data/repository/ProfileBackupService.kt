@@ -7,9 +7,9 @@ import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
+import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
@@ -47,8 +47,8 @@ class ProfileBackupService(
     private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
     /** Where a backup's repos are added, and read from when making one; null where no extensions run. */
     private val extensionRepos: ExtensionRepos? = null,
-    /** The extension sources that are on, so a Mihon-family import can name the ones its series still need. */
-    private val extensionSources: suspend () -> Set<SourceKey> = { emptySet() },
+    /** Which extension sources are on, and why an installed extension's are not, so a Mihon-family import can name what its series still need. */
+    private val extensionSources: suspend () -> SourceAvailability = { SourceAvailability() },
 ) {
     private val mutex = Mutex()
 
@@ -88,7 +88,7 @@ class ProfileBackupService(
         }
         val backup = decodeTachiyomiBackup(bytes, clock())
         // Sources that cannot be listed are unavailable in Series too, so they count as missing.
-        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos(backup.repos))
+        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(SourceAvailability()), newRepos(backup.repos))
     }
 
     /** The [listed] repos not added here yet. Details only: a device that cannot answer leaves them out rather than refuse the backup. */
