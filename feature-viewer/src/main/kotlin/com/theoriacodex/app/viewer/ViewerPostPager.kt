@@ -61,7 +61,7 @@ internal fun ViewerPostPagerSurface(
     val vertical = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series) == GalleryReadingMode.VERTICAL
     val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
     val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
-    val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
+    val reservedBottom = if (selection.isAnimated && frame.chromeVisible) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerTimelineInset.current).toPx() }
     } else 0f
     Box(
@@ -298,7 +298,7 @@ private fun viewerRendererControls(
         isPlaying = controls.playback.playing,
         isPreloading = preloading,
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
-        showPassiveProgress = !frame.chromeVisible && active && !frame.inPictureInPicture,
+        showPassiveProgress = active && !frame.inPictureInPicture && !frame.chromeVisible,
         loopPlayback = frame.uiState.loopsPlayback,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,
