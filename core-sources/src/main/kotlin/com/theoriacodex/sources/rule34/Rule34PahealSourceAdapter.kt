@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.getChecked
+import com.theoriacodex.sources.common.getCheckedOrNull
 import com.theoriacodex.sources.common.normalizeBooruTag
 import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.parseHtml
@@ -108,12 +109,8 @@ class Rule34PahealSourceAdapter(
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {
         if (id.source != SourceKey.RULE34PAHEAL) return@sourceCall null
-        val html = httpClient.getChecked(
-            PAHEAL_LABEL,
-            "$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}",
-            headers = PAHEAL_HEADERS,
-            notFound = { return@sourceCall null },
-        )
+        val html = httpClient.getCheckedOrNull(PAHEAL_LABEL, "$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}", PAHEAL_HEADERS)
+            ?: return@sourceCall null
         val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
         parsePostDocument(doc, id.sourcePostId)
     }

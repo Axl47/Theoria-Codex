@@ -18,7 +18,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.elementsOrEmpty
-import com.theoriacodex.sources.common.getChecked
+import com.theoriacodex.sources.common.getCheckedOrNull
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.optionalJsonArray
 import com.theoriacodex.sources.common.parseEpochMs
@@ -313,7 +313,7 @@ class KvsVideoSourceAdapter(
 
     /** A page's body; a missing page is empty. */
     private suspend fun request(url: String): String =
-        httpClient.getChecked(baseUrl, url, headers = RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/"), notFound = { "" })
+        httpClient.getCheckedOrNull(baseUrl, url, RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/")).orEmpty()
 }
 
 /** Turns a pager's `key:value;a+b:value` parameters into a query string, giving joined keys the same value. */

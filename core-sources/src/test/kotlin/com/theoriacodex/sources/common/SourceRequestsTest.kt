@@ -5,6 +5,7 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.RoutedHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SourceRequestsTest {
@@ -17,12 +18,13 @@ class SourceRequestsTest {
     )
 
     @Test
-    fun `getChecked answers notFound for a 404 and fails it otherwise`() = runTest {
-        assertEquals("body", client.getChecked("Site", "https://site/ok", notFound = { "unused" }))
-        assertEquals("", client.getChecked("Site", "https://site/missing", notFound = { "" }))
+    fun `only getCheckedOrNull reads a 404 as no body`() = runTest {
+        assertEquals("body", client.getChecked("Site", "https://site/ok"))
+        assertEquals("body", client.getCheckedOrNull("Site", "https://site/ok", emptyMap()))
+        assertNull(client.getCheckedOrNull("Site", "https://site/missing", emptyMap()))
 
         val missing = runCatching { client.getChecked("Site", "https://site/missing") }.exceptionOrNull()
-        val broken = runCatching { client.getChecked("Site", "https://site/broken", notFound = { "" }) }.exceptionOrNull()
+        val broken = runCatching { client.getCheckedOrNull("Site", "https://site/broken", emptyMap()) }.exceptionOrNull()
         assertEquals("Site request failed (404)", (missing as SourceAdapterException).message)
         assertEquals("Site request failed (500)", (broken as SourceAdapterException).message)
     }

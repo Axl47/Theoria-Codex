@@ -34,18 +34,21 @@ internal fun SourceHttpResponse.requireSuccess(
     )
 }
 
-internal suspend inline fun SourceHttpClient.getChecked(
+internal suspend fun SourceHttpClient.getChecked(
     siteLabel: String,
     url: String,
     query: Map<String, String> = emptyMap(),
     headers: Map<String, String> = emptyMap(),
-    noinline authBlockedBody: (String) -> Boolean = { false },
-    noinline providerMessage: (String) -> String? = { null },
-    notFound: () -> String? = { null },
-): String {
-    val response = sourceRequest(siteLabel) { get(url = url, query = query, headers = headers) }
-    if (response.statusCode == 404) notFound()?.let { return it }
-    return response.requireSuccess("$siteLabel request failed", authBlockedBody, providerMessage).body
+    authBlockedBody: (String) -> Boolean = { false },
+    providerMessage: (String) -> String? = { null },
+): String = sourceRequest(siteLabel) { get(url = url, query = query, headers = headers) }
+    .requireSuccess("$siteLabel request failed", authBlockedBody, providerMessage)
+    .body
+
+internal suspend fun SourceHttpClient.getCheckedOrNull(siteLabel: String, url: String, headers: Map<String, String>): String? {
+    val response = sourceRequest(siteLabel) { get(url = url, headers = headers) }
+    if (response.statusCode == 404) return null
+    return response.requireSuccess("$siteLabel request failed").body
 }
 
 /** The keys [use] attaches to a site's API calls; a site that requires keys fails before the request without them. */
