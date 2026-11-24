@@ -85,10 +85,11 @@ class CoroutineResultsTest {
     }
 
     @Test
-    fun `caller-only variant turns a timeout inside the block into a failure`() = runTest {
+    fun `caller-only variant turns a timeout or an exception inside the block into a failure`() = runTest {
         val result = runCatchingUnlessCallerCancelled { withTimeout(10) { awaitCancellation() } }
 
         assertTrue(result.exceptionOrNull() is TimeoutCancellationException)
+        assertEquals("provider unavailable", runCatchingUnlessCallerCancelled<String> { error("provider unavailable") }.exceptionOrNull()?.message)
     }
 
     @Test
