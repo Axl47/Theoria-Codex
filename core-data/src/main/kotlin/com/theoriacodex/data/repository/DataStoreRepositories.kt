@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
@@ -24,7 +23,7 @@ class DataStoreSettingsRepository private constructor(
 ) : SettingsRepository by CellSettingsRepository(store, profileWriteGuard), AsynchronousStore by store {
     constructor(
         baseDirectory: File,
-        scope: CoroutineScope = newDataStoreScope(),
+        scope: CoroutineScope,
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
     ) : this(
@@ -173,7 +172,7 @@ internal class CellSettingsRepository(
 
 class DataStoreUiRestoreRepository(
     baseDirectory: File,
-    scope: CoroutineScope = newDataStoreScope(),
+    scope: CoroutineScope,
     recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)

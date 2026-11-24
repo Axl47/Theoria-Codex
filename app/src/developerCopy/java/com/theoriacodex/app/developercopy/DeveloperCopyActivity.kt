@@ -101,8 +101,8 @@ class DeveloperCopyActivity : Activity() {
                 // Recover any earlier admitted restore before starting a new snapshot's import.
                 backup.recoverPendingRestore()
                 backup.restore(payload.backup, applyPreferences = true, selectImportedProfile = true)
+                check(AndroidCredentialEnvelopeStore(this).writeVerified(payload.credentials) == CredentialStoreWriteResult.Success)
             }
-            check(AndroidCredentialEnvelopeStore(this).writeVerified(payload.credentials) == CredentialStoreWriteResult.Success)
         } finally {
             database.close()
         }
