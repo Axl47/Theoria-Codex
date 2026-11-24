@@ -1,7 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.HorizontalPager
@@ -214,8 +213,6 @@ private fun ViewerPostPage(
         userScrollEnabled = false,
         reverseLayout = config.readingModeOf(pageState, frame.uiState.series).reversed,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = if (frame.mediaEdgeToEdge) PaddingValues(0.dp) else PaddingValues(top = 40.dp),
-        pageSpacing = if (frame.mediaEdgeToEdge) 0.dp else 8.dp,
     ) { mediaPage ->
         val media = postMedia[mediaPage].ref
         val loadGeneration = pageState.media.getOrNull(mediaPage)?.loadGeneration ?: 0L
@@ -239,7 +236,7 @@ private fun ViewerPostPage(
             ),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
-            layout = ViewerMediaLayout(frame.stillsEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
+            layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
             videoOptions = host.videoOptions(key, pageState, frame.uiState, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,

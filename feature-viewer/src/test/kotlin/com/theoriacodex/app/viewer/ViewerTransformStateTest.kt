@@ -57,7 +57,7 @@ class ViewerTransformStateTest {
 
     @Test
     fun `pan cannot move zoomed media past its edges and fitted axes stay centred`() {
-        val bounds = viewerTransformBounds(width = 400f, height = 800f, padding = 0f, aspectRatio = 1f)
+        val bounds = viewerTransformBounds(width = 400f, height = 800f, aspectRatio = 1f)
         assertEquals(400f, bounds.contentHeight, 0.0001f)
         val zoomed = ViewerTransformState().doubleTap(bounds = bounds)
             .transform(1f, panChangeX = 10_000f, panChangeY = 10_000f, bounds = bounds)

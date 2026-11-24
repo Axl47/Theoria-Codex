@@ -13,12 +13,10 @@ internal data class ViewerTransformBounds(
     private fun overflow(content: Float, viewport: Float, zoom: Float) = ((content * zoom - viewport) / 2f).coerceAtLeast(0f)
 }
 
-/** Fits media of [aspectRatio] inside the viewport less [padding]; unknown ratios fill it. */
-internal fun viewerTransformBounds(width: Float, height: Float, padding: Float, aspectRatio: Float?): ViewerTransformBounds {
-    val availableWidth = (width - padding * 2f).coerceAtLeast(0f)
-    val availableHeight = (height - padding * 2f).coerceAtLeast(0f)
-    val ratio = aspectRatio?.takeIf { it.isFinite() && it > 0f } ?: return ViewerTransformBounds(width, height, availableWidth, availableHeight)
-    val contentWidth = minOf(availableWidth, availableHeight * ratio)
+/** Fits media of [aspectRatio] inside the viewport; unknown ratios fill it. */
+internal fun viewerTransformBounds(width: Float, height: Float, aspectRatio: Float?): ViewerTransformBounds {
+    val ratio = aspectRatio?.takeIf { it.isFinite() && it > 0f } ?: return ViewerTransformBounds(width, height, width, height)
+    val contentWidth = minOf(width, height * ratio)
     return ViewerTransformBounds(width, height, contentWidth, contentWidth / ratio)
 }
 
