@@ -192,7 +192,7 @@ class ViewerWatchingTest {
         fun frame() = owner.state.value.let { state ->
             ViewerFrame(
                 state, viewerPostNavigation(state), listOf(episode), ViewerSelection(episode, episode.media, 0, false, emptyList()),
-                chromeVisible = false, chromeStageState = mutableIntStateOf(0), opening = false, returning = false, inPictureInPicture = false,
+                chromeVisible = false, chromeStage = mutableIntStateOf(0), opening = false, returning = false, inPictureInPicture = false,
                 touchExplorationEnabled = false, isLandscape = false,
             )
         }
