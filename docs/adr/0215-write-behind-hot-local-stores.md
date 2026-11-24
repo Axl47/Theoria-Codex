@@ -9,7 +9,7 @@ The Viewer records a reading position on every page turn and statistics on every
 ## Decision
 
 - A hot store takes a `WriteBehind` and wraps its durable cell with `writeBehind`. Reads and observers see the newest value immediately; the durable write runs once, `WRITE_BEHIND_DELAY` (reading positions) or `STATISTICS_WRITE_DELAY` (statistics) after the first unsaved change. Statistics change once per viewed post and a post often stays on screen longer than two seconds, so their window is longer; a crash can cost a few view counts, never a reading position. The timer does not restart on later changes, so continuous page turning still saves every few seconds and a crash loses at most that window.
-- One write runs at a time and each writes the newest value at the moment it starts, so writes never reorder and the newest value is never dropped. A change made while a write runs schedules another write. A flush with nothing unsaved writes nothing, and a failed timed write is retried up to `WRITE_BEHIND_RETRIES` times without waiting for another change.
+- One write runs at a time and each writes the newest value at the moment it starts, so writes never reorder and the newest value is never dropped. A change made while a write runs schedules another write. A flush with nothing unsaved writes nothing, and a failed timed write is retried up to `WRITE_BEHIND_RETRIES` times without waiting for another change. A write hands the cell's value to the durable store with `replace`, which skips the store's canonical decode/encode round trip: observers already hold the normalized value, so the file still encodes it once.
 - The Viewer records each visible post and page without cancellation and under one lock, and the stop and exit flushes wait for that lock first, so closing the Viewer never drops a view between its reading-position and statistics updates or saves before it.
 - Each cell runs its reads, updates and flushes on its own single-threaded queue off the main thread, and updates run without cancellation. A record the Viewer reports therefore reaches memory before any stop or exit flush queued after it, even if the Viewer's scope is cancelled first or the record waits for the store's first load, and neither the statistics recount (several milliseconds with full watched-tag tables) nor the reading-position sort runs on the main thread.
 - Pending writes flush when the activity stops (at once, so a quick swipe from recents still finds them saved) and again on process `ON_STOP`, when the Viewer closes, before creating, switching or removing a profile, and before restore's `replace`, `merge` and `mergeRestored` return, so a cleared restore journal never outlives unsaved data. `AppUsageTracker` flushes statistics again after it records the session's usage on background. A backup that includes recents flushes both stores before it reads them.
@@ -22,7 +22,8 @@ A process crash (not a normal swipe-away) can lose the last delay window of page
 
 ## Applies to
 
-- `core-data/src/main/kotlin/com/theoriacodex/data/storage/StateCell.kt`: `WriteBehind`, `WriteBehind.flushOnly`, `WRITE_BEHIND_DELAY`, `writeBehind`, `WriteBehindStateCell`, `WRITE_BEHIND_RETRIES`
+- `core-data/src/main/kotlin/com/theoriacodex/data/storage/StateCell.kt`: `WriteBehind`, `WriteBehind.flushOnly`, `WRITE_BEHIND_DELAY`, `writeBehind`, `WriteBehindStateCell`, `WRITE_BEHIND_RETRIES`, `StateCell.replace`
+- `core-data/src/main/kotlin/com/theoriacodex/data/storage/DataStoreStorage.kt`: `JsonDataStore.replace`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ReadingPositionRepository.kt`: `FileBackedReadingPositionRepository`, `CellReadingPositionRepository.replace`, `CellReadingPositionRepository.merge`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/StatisticsRepositories.kt`: `STATISTICS_WRITE_DELAY`, `DataStoreStatisticsRepository`, `CellStatisticsRepository.mergeRestored`
 - `feature-settings/src/main/kotlin/com/theoriacodex/app/statistics/AppUsageTracker.kt`: `handleBackground`
@@ -47,6 +48,7 @@ A process crash (not a normal swipe-away) can lose the last delay window of page
 - `app/src/androidTest/java/com/theoriacodex/app/journeys/ViewerResumeJourneyTest.kt`: `aGalleryReopenedAfterTheAppStopsResumesOnItsLastPage_adr_0215`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `many viewed posts write once with the newest counts (ADR 0215)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `a stop flush persists exactly what observers saw (ADR 0215)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `a flush encodes statistics once and skips the store's round trip (ADR 0215)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `cancelling during the delay keeps the last written statistics readable (ADR 0215)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `restored statistics are on disk before restore returns (ADR 0215)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `a backup with recents saves pending positions and statistics first (ADR 0215)`

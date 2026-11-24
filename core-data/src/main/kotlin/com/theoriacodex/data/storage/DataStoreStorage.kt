@@ -125,6 +125,10 @@ internal class JsonDataStore<T>(
         if (next == current) current else canonical(next)
     }
 
+    override suspend fun replace(value: T) {
+        store.updateDataInBackground { value }
+    }
+
     override suspend fun value(): T = data.first()
 
     override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R {
