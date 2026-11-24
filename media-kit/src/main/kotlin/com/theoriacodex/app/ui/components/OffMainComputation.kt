@@ -18,7 +18,7 @@ class RetainedFrames<E, T> {
     fun at(name: String) = RetainedFrameKey(this, name)
 }
 
-class RetainedFrameKey<E, T> internal constructor(internal val frames: RetainedFrames<E, T>, internal val name: String)
+data class RetainedFrameKey<E, T>(internal val frames: RetainedFrames<E, T>, internal val name: String)
 
 internal class FrameCache<E, T>(val frames: RetainedFrames<E, T>? = null) {
     var frame: ListFrame<E, T>? = null
