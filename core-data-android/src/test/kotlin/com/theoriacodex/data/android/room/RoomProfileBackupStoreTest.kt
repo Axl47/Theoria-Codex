@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.ProfileLibraryIds
+import com.theoriacodex.data.repository.READ_STAMP_INTERVAL_MS
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -90,7 +91,8 @@ class RoomProfileBackupStoreTest {
 
         val restoredDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
             TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
-        val restored = RoomSeriesRepository(restoredDatabase, clock = { 40L })
+        val restoredAt = 30L + READ_STAMP_INTERVAL_MS
+        val restored = RoomSeriesRepository(restoredDatabase, clock = { restoredAt })
         RoomProfileBackupStore(restoredDatabase).merge(snapshot)
         assertEquals(series.series(id), restored.series(id))
         assertEquals(series.entries(id), restored.entries(id))
@@ -104,7 +106,7 @@ class RoomProfileBackupStoreTest {
         val kept = restored.series(id)!!
         assertTrue(kept.followed)
         // Followed again by the restore, since the backup's follow; read last on the device, after the backup's read.
-        assertEquals(30L to 40L, kept.followedAtEpochMs to kept.lastReadAtEpochMs)
+        assertEquals(30L to restoredAt, kept.followedAtEpochMs to kept.lastReadAtEpochMs)
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
         restoredDatabase.close()
