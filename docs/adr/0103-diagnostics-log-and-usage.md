@@ -25,3 +25,11 @@ The log is safe to attach to a report and cannot grow or stall the app. A crash 
 - `media-kit/src/main/kotlin/com/theoriacodex/app/diagnostics/DiagnosticReporter.kt`: `DiagnosticReporter`, `systemLog`
 - `media-kit/src/main/kotlin/com/theoriacodex/app/diagnostics/NetworkUsage.kt`: `NetworkUsage`
 - `media-kit/src/main/kotlin/com/theoriacodex/app/diagnostics/ThreadDiagnostics.kt`: `installOffMainChecker`, `installDebugStrictMode`, `strictModeViolations`
+
+## Guarded by
+
+- `media-kit/src/test/kotlin/com/theoriacodex/app/diagnostics/DiagnosticLogStoreTest.kt`: `events reach disk redacted and survive a restart (ADR 0002, 0103)`, `the log stays bounded (ADR 0103)`, `only the newest crashes are kept and clear removes everything (ADR 0103)`, `a flood past the pending cap keeps the earliest lines and drops the newest, off the caller's thread (ADR 0103)`, `a read waits for every event recorded before it (ADR 0103)`, `a crash is on disk before the previous handler ends the process (ADR 0103)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/diagnostics/DiagnosticReporterTest.kt`: `the whole report passes through redaction, not only the stored log (ADR 0103)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/diagnostics/ThreadDiagnosticsTest.kt`: `debug StrictMode adds disk checks and keeps the thread's existing protections (ADR 0103)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_a_manifest_that_asks_to_read_other_apps_logs_adr_0103`
+- Left to prose: that Android shows an app only its own logcat lines is platform behaviour, and the manifest rule cannot see a permission merged in from a dependency's manifest; that release builds install no `NetworkUsage` hooks and R8 removes it shows only in a release build; that `installOffMainChecker` runs once and only in the main process is wiring in `TheoriaApplication` that no test covers; counting StrictMode violations by the reading code's outer class is shown only by the app's device test on an emulator.

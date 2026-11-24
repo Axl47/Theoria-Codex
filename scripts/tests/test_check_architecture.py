@@ -77,6 +77,23 @@ def main_sources(files: dict[str, str]):
             yield
 
 
+class DiagnosticsRulesTest(unittest.TestCase):
+    def test_reports_a_manifest_that_asks_to_read_other_apps_logs_adr_0103(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for module, permission in [("app", "READ_LOGS"), ("media-kit", "INTERNET")]:
+                manifest = root / module / "src/debug/AndroidManifest.xml"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(f'<uses-permission android:name="android.permission.{permission}" />\n', encoding="utf-8")
+            self.assertIn(check_architecture.no_manifest_reads_other_apps_logs, check_architecture.RULES)
+            with mock.patch.object(check_architecture, "ROOT", root):
+                self.assertEqual(
+                    ["app/src/debug/AndroidManifest.xml requests READ_LOGS; the diagnostic report reads only the app's own log "
+                     "(docs/adr/0103-diagnostics-log-and-usage.md)"],
+                    check_architecture.no_manifest_reads_other_apps_logs(),
+                )
+
+
 class CoreDomainRulesTest(unittest.TestCase):
     def test_reports_off_main_notes_outside_the_start_of_a_parse_helper_adr_0002(self) -> None:
         self.assertIn(check_architecture.off_main_notes_run_where_work_runs, check_architecture.RULES)

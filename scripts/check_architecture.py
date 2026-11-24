@@ -256,6 +256,16 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
+@rule
+def no_manifest_reads_other_apps_logs() -> list[str]:
+    return [
+        f"{path.relative_to(ROOT).as_posix()} requests READ_LOGS; the diagnostic report reads only the app's own log "
+        "(docs/adr/0103-diagnostics-log-and-usage.md)"
+        for path in sorted(ROOT.glob("*/src/*/AndroidManifest.xml"))
+        if "android.permission.READ_LOGS" in path.read_text(encoding="utf-8")
+    ]
+
+
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:

@@ -1,6 +1,9 @@
 package com.theoriacodex.app.diagnostics
 
 import java.io.IOException
+import java.io.PrintWriter
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,7 +17,7 @@ class DiagnosticLogStoreTest {
     private fun store() = DiagnosticLogStore(folder.root.resolve("diagnostics"), now = { 1_000L })
 
     @Test
-    fun `events reach disk redacted and survive a restart (ADR 0002)`() {
+    fun `events reach disk redacted and survive a restart (ADR 0002, 0103)`() {
         val first = store()
         first.record("http", "failed", IOException("GET https://site.example/post?api_key=abc123"))
         first.readEvents()
@@ -37,7 +40,7 @@ class DiagnosticLogStoreTest {
     }
 
     @Test
-    fun `the log stays bounded`() {
+    fun `the log stays bounded (ADR 0103)`() {
         val store = store()
         repeat(4_000) { index ->
             store.record("area", "message $index " + "x y ".repeat(50), null)
@@ -50,7 +53,7 @@ class DiagnosticLogStoreTest {
     }
 
     @Test
-    fun `only the newest crashes are kept and clear removes everything`() {
+    fun `only the newest crashes are kept and clear removes everything (ADR 0103)`() {
         var time = 0L
         val store = DiagnosticLogStore(folder.root.resolve("diagnostics"), now = { ++time })
         repeat(7) { store.writeCrash(Thread.currentThread(), IllegalStateException("crash $it")) }
@@ -61,5 +64,71 @@ class DiagnosticLogStoreTest {
 
         store.clear()
         assertTrue(store.readCrashes().isEmpty())
+    }
+
+    @Test
+    fun `a flood past the pending cap keeps the earliest lines and drops the newest, off the caller's thread (ADR 0103)`() {
+        val store = store()
+        val release = CountDownLatch(1)
+        var writerThread: Thread? = null
+        store.record("area", "message 0", heldOnTheWriter(release) { writerThread = Thread.currentThread() })
+        try {
+            (1..600).forEach { store.record("area", "message $it", null) }
+        } finally {
+            release.countDown()
+        }
+
+        val kept = Regex("""\[area] message (\d+)""").findAll(store.readEvents()).map { it.groupValues[1].toInt() }.toList()
+        assertEquals((0..511).toList(), kept)
+        assertTrue(writerThread != null && writerThread != Thread.currentThread())
+    }
+
+    @Test
+    fun `a read waits for every event recorded before it (ADR 0103)`() {
+        val store = store()
+        val release = CountDownLatch(1)
+        store.record("area", "held", heldOnTheWriter(release) {})
+        store.record("area", "after", null)
+        Thread {
+            Thread.sleep(100)
+            release.countDown()
+        }.start()
+
+        val events = store.readEvents()
+
+        assertTrue(events, "[area] held" in events)
+        assertTrue(events, "[area] after" in events)
+    }
+
+    @Test
+    fun `a crash is on disk before the previous handler ends the process (ADR 0103)`() {
+        val directory = folder.root.resolve("diagnostics")
+        val store = DiagnosticLogStore(directory, now = { 1_000L })
+        val release = CountDownLatch(1)
+        store.record("area", "held", heldOnTheWriter(release) {})
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        val handedOver = mutableListOf<Pair<Throwable, Boolean>>()
+        val crash = IllegalStateException("crash on the main thread")
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, error ->
+                handedOver += error to (directory.listFiles().orEmpty().any { it.name.startsWith("crash-") })
+            }
+            installCrashCapture(store)
+
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+            release.countDown()
+        }
+
+        assertEquals(listOf(crash to true), handedOver)
+        assertTrue("crash on the main thread" in store.readCrashes().single())
+    }
+
+    private fun heldOnTheWriter(release: CountDownLatch, onWriter: () -> Unit) = object : IllegalStateException("held") {
+        override fun printStackTrace(s: PrintWriter) {
+            onWriter()
+            release.await(10, TimeUnit.SECONDS)
+        }
     }
 }
