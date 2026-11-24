@@ -8,7 +8,7 @@ Saved data was written by Gson before kotlinx.serialization replaced it. Older b
 
 ## Decision
 
-- `DurableJson` is the shared configuration for files, Room payloads, exports, and fixed-shape network, asset and developer-copy JSON; the exception is series backup memos, which are checked as JSON objects with plain `Json` (`storedMemo`). Each flag preserves Gson behaviour:
+- `DurableJson` is the shared configuration for files, Room payloads, exports, and fixed-shape network, asset and developer-copy JSON; the exceptions are series backup memos, which are checked as JSON objects with plain `Json` (`storedMemo`), and `RepoReader`, which keeps its own `Json { ignoreUnknownKeys = true }` because extension-host does not depend on core-data. Each flag preserves Gson behaviour:
   - `ignoreUnknownKeys`: newer files and retired fields are not rejected.
   - `encodeDefaults`: backup validation requires defaulted keys to be present, as Gson wrote them.
   - `explicitNulls = false`: Gson omits nulls, and some readers treat a present key as data.

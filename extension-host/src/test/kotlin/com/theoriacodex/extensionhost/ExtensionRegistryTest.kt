@@ -417,7 +417,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `a file replaced in place loads anew and its old code is no longer offered (ADR 0062)`() = runBlocking {
+    fun `a file replaced in place loads anew and its old code is no longer offered (ADR 0062, 0063)`() = runBlocking {
         registry.setOn("/a.apk", "key-1", true)
         val replacements = listOf<(ExtensionPackage) -> ExtensionPackage>({ it.copy(modified = 2) }, { it.copy(versionCode = 2) }, { it.copy(size = 2) })
 
