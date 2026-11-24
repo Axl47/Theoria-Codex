@@ -106,7 +106,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
 
-    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
+    ViewerChromeVisibility(frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
         ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
             ViewerEpisodeBar(frame, controls, rotationOffer, pictureInPicture, host.onAction)
         }
@@ -157,7 +157,7 @@ private fun BoxScope.ViewerDockOverlay(
 ) {
     if (watching) return
     val selection = frame.selection
-    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
+    ViewerChromeVisibility(frame.chromeStage.value >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.BottomCenter).then(fadesWhileScrubbing)) {
         val dock = viewerDockActions(
             frame, controls, activity, quality, qualityHeight, selection.post.id in config.likedPostIds, comments.countOf(selection.post), host.onAction,
             series = frame.uiState.series,
@@ -180,7 +180,7 @@ private fun BoxScope.ViewerEpisodeCenterOverlay(
     if (!watching) return
     val navigation = frame.navigation
     ViewerChromeVisibility(
-        visible = frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible,
+        visible = frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible,
         modifier = Modifier.align(Alignment.Center).then(fadesWhileScrubbing),
     ) {
         ViewerEpisodeCenterControls(
@@ -206,7 +206,7 @@ private fun BoxScope.ViewerTopBarOverlay(
     fadesWhileScrubbing: Modifier,
 ) {
     val selection = frame.selection
-    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
+    ViewerChromeVisibility(frame.chromeStage.value >= VIEWER_CHROME_STAGE_TOP_BAR, Modifier.align(Alignment.TopCenter).then(fadesWhileScrubbing)) {
         val (title, subtitle) = frame.uiState.series.topBarTitles(selection.post)
         ViewerChrome(
             source = title,
@@ -247,7 +247,7 @@ private fun BoxScope.ViewerRelatedStripOverlay(
     fadesWhileScrubbing: Modifier,
 ) {
     val selection = frame.selection
-    ViewerChromeVisibility(frame.chromeStage >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 112.dp).then(fadesWhileScrubbing)) {
+    ViewerChromeVisibility(frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.TopEnd).padding(top = 112.dp).then(fadesWhileScrubbing)) {
         ViewerRelatedStrip(
             state = relatedShelf.state, posts = relatedShelf.posts, currentPostId = selection.post.id,
             onSelect = { post ->
