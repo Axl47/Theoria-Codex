@@ -139,6 +139,7 @@
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
 - Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.
 - A turned-off or removed extension no longer holds up other chapter downloads: chapters from other sources keep downloading, and a notification says how many chapters wait for their extension.
+- A series notification opens its series even when the app was last opened from a notification for the same series. It used to only bring the app forward.
 - When chapter downloads fail within one series, the notification opens that series, and names the chapter when only one failed.
 - Pulling down on Following says when followed series couldn't be checked, with Retry, instead of looking the same as finding nothing new.
 - The Series tab no longer loads a source's listing while it shows Following or a search.
