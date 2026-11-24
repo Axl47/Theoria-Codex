@@ -8,7 +8,7 @@ import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
-import com.theoriacodex.sources.common.percentEncode
+import com.theoriacodex.domain.encoding.percentEncode
 
 internal class NhentaiMirror(
     private val httpClient: SourceHttpClient,

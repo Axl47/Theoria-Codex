@@ -3,7 +3,7 @@ package com.theoriacodex.sources.http
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.URLEncoder
+import com.theoriacodex.domain.encoding.percentEncode
 import java.util.TreeMap
 import java.util.concurrent.TimeUnit
 import okhttp3.Dispatcher
@@ -229,11 +229,6 @@ internal fun buildUrl(base: String, query: Map<String, String>): String {
 
 private fun encodeForm(values: Map<String, String>): String {
     return values.entries.joinToString("&") { (key, value) ->
-        "${key.urlEncode()}=${value.urlEncode()}"
+        "${key.percentEncode()}=${value.percentEncode()}"
     }
-}
-
-private fun String.urlEncode(): String {
-    return URLEncoder.encode(this, Charsets.UTF_8.name())
-        .replace("+", "%20")
 }
