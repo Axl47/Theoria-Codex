@@ -69,6 +69,8 @@
 - Extensions that stream by torrent are listed but can't be turned on, and an anime its source splits into seasons says seasons aren't supported yet. Episodes can't be downloaded yet.
 - Following has Sort & filter: show All, Unread, Not started, In progress, Caught up or Completed series, and sort by Most unread, Last updated, Recently read, Recently added or Title. Your choice is kept, a dot on the button shows while a filter hides series, and No matches offers Show all.
 - Statistics count time spent reading series and watching anime as their own categories, Reading and Anime, also in shared stats and comparisons.
+- Sites: every built-in site has a Re-test button, as added sites do. A built-in site's page shows its address with Working and Re-test, so a site that needs no account no longer opens to a blank page.
+- Extensions: with nothing installed and no repo yet, the page offers Add repo. Once you have a repo, Repos leads on to Get extensions.
 
 ### Changed
 
@@ -119,6 +121,7 @@
 - The search bar narrows Following by title as you type; on Browse it searches every source. When nothing you follow matches, Search all sources takes the title to Browse.
 - Series pages now open with a blurred cover backdrop, a Follow button beside Open in browser and Share, tap-to-zoom cover preview, long-press title copy, an expandable About section with genre tags that open that source's genre filter, a full-width Continue reading button, pull-to-refresh, card-styled chapters showing scanlator groups, and a floating top bar that hides as you scroll down and returns as you scroll up.
 - On a series page, the top bar now searches chapters inline, holding a chapter offers per-chapter read/unread, Mark previous as read, and download actions, bulk read/unread changes offer Undo, and the chapter list's filter button remembers sort and filter choices per series with quick-clear pills under the header.
+- Back up profiles opens a sheet holding Include History and statistics and the Back up button. The Backup page itself shows just Back up profiles and Restore backup, and notes that Restore also takes Mihon and Aniyomi backups.
 
 ### Removed
 
@@ -176,6 +179,7 @@
 - In the Followed and Saved searches collections, an open related shelf made the next page load slightly early.
 - Cards in Codex collections and Recents waited for their own images as you scrolled. On unmetered networks they now load ahead, as in other feeds.
 - Undo search, and reopening the app, could leave Search at the top when your saved place was far down the results, because loading stopped after three pages. Search now keeps loading until it reaches the saved place.
+- An extension repo with an oversized index, broken or hostile, can no longer exhaust the app's memory; Repos shows it as "Too large" instead.
 
 ## [1.9.2] - 2026-11-18
 
