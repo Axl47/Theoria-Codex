@@ -209,7 +209,7 @@ class SeriesTabViewModel(
     /** Follows whether the tab shows; see [followShown]. */
     private var shownWatch: Job? = null
     private val mutableState = MutableStateFlow(
-        SeriesTabState(search = searchText?.let { emptyList() }, searchQuery = searchText.orEmpty(), library = library.read()),
+        SeriesTabState(search = searchText?.let { emptyList() }, searchQuery = searchText.orEmpty()),
     )
     val state: StateFlow<SeriesTabState> = mutableState
 
@@ -226,9 +226,13 @@ class SeriesTabViewModel(
 
     init {
         viewModelScope.launch { sourcesChanged.collectLatest { showSources(loadSources()) } }
+        // Nothing shows until the view is chosen, so the saved sort and filter arrive with it.
         viewModelScope.launch {
+            val options = library.read()
             val following = repository.observeFollowed().firstOrNull().orEmpty().isNotEmpty()
-            mutableState.update { it.copy(view = it.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE) }
+            mutableState.update {
+                it.copy(view = it.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE, library = options)
+            }
         }
     }
 

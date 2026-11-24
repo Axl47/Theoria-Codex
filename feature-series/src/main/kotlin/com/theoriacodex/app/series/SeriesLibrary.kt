@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.core.content.edit
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.domain.series.SeriesStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** The Series tab's two views: the followed series, and one source's series to browse. */
 enum class SeriesView(val label: String) {
@@ -75,25 +77,28 @@ internal fun List<FollowedSeries>.arranged(options: LibraryOptions, query: Strin
     }
 }
 
-/** Remembers the Following grid's sort and filter across launches. */
+/** Remembers the Following grid's sort and filter across launches. Reading may touch the disk. */
 interface SeriesLibraryPreferences {
-    fun read(): LibraryOptions
+    suspend fun read(): LibraryOptions
     fun write(options: LibraryOptions)
 }
 
 /** For tests and previews: always the defaults, and nothing kept. */
 object NoOpSeriesLibraryPreferences : SeriesLibraryPreferences {
-    override fun read(): LibraryOptions = LibraryOptions()
+    override suspend fun read(): LibraryOptions = LibraryOptions()
     override fun write(options: LibraryOptions) = Unit
 }
 
 class SharedPreferencesSeriesLibraryPreferences(context: Context) : SeriesLibraryPreferences {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    // Opened by the first read, off the main thread; a write comes after it.
+    private val prefs by lazy { context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
-    override fun read(): LibraryOptions = LibraryOptions(
-        sort = LibrarySort.entries.firstOrNull { it.name == prefs.getString(SORT, null) } ?: LibrarySort.UNREAD,
-        show = LibraryShow.entries.firstOrNull { it.name == prefs.getString(SHOW, null) } ?: LibraryShow.ALL,
-    )
+    override suspend fun read(): LibraryOptions = withContext(Dispatchers.IO) {
+        LibraryOptions(
+            sort = LibrarySort.entries.firstOrNull { it.name == prefs.getString(SORT, null) } ?: LibrarySort.UNREAD,
+            show = LibraryShow.entries.firstOrNull { it.name == prefs.getString(SHOW, null) } ?: LibraryShow.ALL,
+        )
+    }
 
     override fun write(options: LibraryOptions) = prefs.edit {
         putString(SORT, options.sort.name)
