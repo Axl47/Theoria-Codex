@@ -466,6 +466,25 @@ class SearchCoordinatorTest {
         assertFalse(trending.any { it.text == "hitomi" })
     }
 
+    @Test
+    fun `trending refreshed within its window is not fetched again after a restart`() = runTest {
+        val nhentai = TestAdapter(SourceKey.NHENTAI).apply { autocomplete = listOf(TagSuggestion("sky", "tag", 3)) }
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val store = RecordingTagStore()
+        var now = 0L
+        suspend fun launch() = testSearchCoordinator(TestRegistry(listOf(nhentai, pixiv)), tagSuggestionStore = store, clock = { now })
+            .apply { initializeRoute() }
+            .fetchTrending(query(SourceKey.NHENTAI, ""), SearchSourceScope.Temporary(listOf(SourceKey.NHENTAI, SourceKey.PIXIV)))
+
+        launch()
+        now = TRENDING_REFRESH_INTERVAL_MS - 1
+        assertEquals(listOf("sky"), launch().map(TagSuggestion::text))
+        assertEquals(1, nhentai.trendingCalls)
+        now = TRENDING_REFRESH_INTERVAL_MS
+        launch()
+        assertEquals(2, nhentai.trendingCalls)
+    }
+
     private fun coordinator(vararg adapters: TestAdapter): SearchCoordinator = coordinator(
         InMemoryQueryRepository(),
         InMemorySettingsRepository(),

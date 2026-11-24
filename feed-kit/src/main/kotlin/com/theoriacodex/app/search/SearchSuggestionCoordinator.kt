@@ -348,14 +348,16 @@ class SearchSuggestionCoordinator internal constructor(
         force: Boolean,
         cached: List<TagSuggestion>,
     ): Boolean = force || cached.isEmpty() ||
-        lastTrendingRefreshAtBySource[source]?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
+        (lastTrendingRefreshAtBySource[source] ?: tagSuggestionStore.trendingRefreshedAt(source))
+            ?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
 
     private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
         val fetched = runCatchingPreservingCancellation {
             registry.adapterFor(source)?.trendingTags(limit).orEmpty()
         }.getOrDefault(emptyList())
-        lastTrendingRefreshAtBySource[source] = clock()
-        if (fetched.isNotEmpty()) tagSuggestionStore.replaceTrending(source, fetched)
+        val refreshedAt = clock()
+        lastTrendingRefreshAtBySource[source] = refreshedAt
+        if (fetched.isNotEmpty()) tagSuggestionStore.replaceTrending(source, fetched, refreshedAt)
         return fetched
     }
 }

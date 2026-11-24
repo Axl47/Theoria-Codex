@@ -131,6 +131,21 @@ class TagSuggestionStoreTest {
     }
 
     @Test
+    fun `the trending refresh time survives a restart`() = runTest {
+        val storeFile = tempDir("tag-store-trending-refresh-test").resolve("tag_suggestions.json")
+        val initial = FileBackedTagSuggestionStore(storeFile = storeFile)
+        initial.replaceTrending(SourceKey.NHENTAI, listOf(TagSuggestion("sky", "trending", null)), refreshedAtEpochMs = 42L)
+        initial.close()
+
+        val reopened = FileBackedTagSuggestionStore(storeFile = storeFile)
+        reopened.awaitLoaded()
+
+        assertEquals(42L, reopened.trendingRefreshedAt(SourceKey.NHENTAI))
+        assertEquals(null, reopened.trendingRefreshedAt(SourceKey.PIXIV))
+        reopened.close()
+    }
+
+    @Test
     fun `replacing trending membership preserves other cached knowledge`() = runTest {
         val store = FileBackedTagSuggestionStore(
             storeFile = tempDir("tag-store-trending-origin-test").resolve("tag_suggestions.json"),
