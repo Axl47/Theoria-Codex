@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -143,17 +144,7 @@ internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, 
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "header") { SettingsHeader(BROWSE_TITLE, onBack, parents = listOf(EXTENSIONS_TITLE)) }
-            item(key = "search") {
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = query,
-                    onValueChange = { query = it.replace("\n", "") },
-                    placeholder = { Text("Search") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                )
-            }
+            item(key = "search") { BrowseSearchField(query) { query = it } }
             if (listing != null) {
                 item(key = "filters") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -162,17 +153,39 @@ internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, 
                     }
                 }
             }
-            when {
-                rows == null -> item(key = "loading") { LoadingState() }
-                rows.isEmpty() -> item(key = "empty") { EmptyState(if (query.isBlank()) "No extensions" else "No matches") }
-                else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
-                    Card(Modifier.fillMaxWidth()) {
-                        RepoExtensionRow(extension, state, bothKinds && shownKind == null, onInstall = viewModel::install)
-                    }
-                }
-            }
+            browseRowItems(rows, query, state, showKind = bothKinds && shownKind == null, onInstall = viewModel::install)
         }
     }
+}
+
+/** The extensions found, or why there are none yet. */
+private fun LazyListScope.browseRowItems(
+    rows: List<RepoExtension>?,
+    query: String,
+    state: ExtensionsState,
+    showKind: Boolean,
+    onInstall: (RepoExtension) -> Unit,
+) {
+    when {
+        rows == null -> item(key = "loading") { LoadingState() }
+        rows.isEmpty() -> item(key = "empty") { EmptyState(if (query.isBlank()) "No extensions" else "No matches") }
+        else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
+            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall) }
+        }
+    }
+}
+
+@Composable
+private fun BrowseSearchField(query: String, onQueryChange: (String) -> Unit) {
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = query,
+        onValueChange = { onQueryChange(it.replace("\n", "")) },
+        placeholder = { Text("Search") },
+        leadingIcon = { Icon(Icons.Default.Search, null) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+    )
 }
 
 /** Which languages Get extensions lists: the device's, every one, or [Only] one (with those covering every language). */
