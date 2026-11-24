@@ -10,7 +10,7 @@ Stores are collected while the app is still being built, and a rollback to an ol
 
 - `ApplicationDataReadiness` is a lazy, process-lifetime boundary: construction does no work, `start` is non-blocking, concurrent `awaitReady` callers share one attempt, and a failed attempt retries only on explicit `retry`. DataStore repositories themselves stay free of constructor I/O.
 - `JsonDataStore.awaitReady` opens the file. A failure (written by a newer build, or unreadable and impossible to set aside) records `DurableStorePhase.FAILED`, rethrows so the startup gate shows its failure screen, and changes nothing on disk. `data` never fails because the store could not open; collectors wait until a later `awaitReady` (the Retry) succeeds. Every store that can fail must be awaited by the gate.
-- The top-level `schemaVersion` is checked before the typed decode; a newer one throws `UnsupportedStoreSchemaException`, so a payload in a new shape is never reset.
+- The top-level `schemaVersion` is checked before the typed decode; a newer one throws `UnsupportedStoreSchemaException`, so a payload in a new shape is never reset. A store that migrates older files on decode names its oldest readable version (`oldestSchemaVersion`); anything older resets like any other invalid file.
 - An unreadable file is renamed by `setAsideCorruptFile` to `<name>.corrupt-<size>-<sha256>` (rename needs no free space and leaves either name on disk if the process dies), recorded in the recovery registry, then replaced by the default. If it cannot be set aside, the error propagates and the live file keeps its bytes. The name is content-addressed so a later failure never replaces an earlier set-aside file; identical bytes already set aside by an interrupted recovery are accepted, different bytes are refused.
 - The registry re-lists set-aside files from earlier processes on first access, checking the checksum only when the size matches the name; a mismatched copy is left out but never blocks the store.
 - DataStore runs transforms in the caller's context, so `updateDataInBackground` moves them to `Dispatchers.IO`, off the caller's (often main) dispatcher. The caller's cancellation still applies.
@@ -26,7 +26,7 @@ A store that can fail to open must be registered with the startup gate. Changing
 ## Applies to
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/ApplicationDataReadiness.kt`: `ApplicationDataReadiness`
-- `core-data/src/main/kotlin/com/theoriacodex/data/storage/DataStoreStorage.kt`: `JsonDataStoreSerializer`, `JsonDataStore`, `openJsonDataStore`, `openDecodedJsonDataStore`
+- `core-data/src/main/kotlin/com/theoriacodex/data/storage/DataStoreStorage.kt`: `JsonDataStoreSerializer`, `JsonDataStore`, `openJsonDataStore`, `openDecodedJsonDataStore`, `oldestSchemaVersion`
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/DataStoreOperations.kt`: `updateDataInBackground`
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/DataStoreScopes.kt`: `withDataStoreScope`, `newDataStoreScope`, `closeDataStores`
 - `core-data/src/main/kotlin/com/theoriacodex/data/storage/FileStoreRecoveryRegistry.kt`: `FileStoreRecoveryRegistry`, `setAsideCorruptFile`

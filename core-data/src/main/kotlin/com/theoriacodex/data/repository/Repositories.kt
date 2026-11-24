@@ -239,6 +239,7 @@ data class LifetimeStatistics(
     val watchedPostCount: Long = 0L,
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
     val watchedByTag: Map<StatisticsTagKey, Long> = emptyMap(),
+    val watchedTagFloors: Map<SourceKey, Long> = emptyMap(),
     val searchCount: Long = 0L,
     val searchesBySource: Map<SourceKey, Long> = emptyMap(),
     val searchesByTag: Map<SearchedTagKey, Long> = emptyMap(),

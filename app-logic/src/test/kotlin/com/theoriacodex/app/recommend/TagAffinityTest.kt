@@ -167,6 +167,34 @@ class TagAffinityTest {
         assertTrue(tagAffinities(post("tree", "moth"), inputs).single { it.tag == "tree" }.universal)
     }
 
+    @Test
+    fun `a tag dropped from a full source reads at most the source's floor, so its lift on kept posts cannot spike`() {
+        val kept = List(30) { index -> like(listOfNotNull("tree", "moth".takeIf { index < 3 }), "$index") }
+        val exact = statistics(watched = 300, "tree" to 280, "moth" to 3)
+        val dropped = statistics(watched = 300, "tree" to 280)
+            .copy(watchedBySource = mapOf(source to 300L, SourceKey.DANBOORU to 300L), watchedTagFloors = mapOf(source to 4L))
+        val before = tagAffinityInputs(kept, emptyList(), emptyList(), emptyList(), exact)
+        val after = tagAffinityInputs(kept, emptyList(), emptyList(), emptyList(), dropped)
+
+        assertEquals(4.0 / 300, after.watchedShareAtMost(source, "moth")!!, 1e-9)
+        assertEquals(0.0, after.watchedShareAtMost(SourceKey.DANBOORU, "moth")!!, 0.0)
+        assertEquals(280.0 / 300, after.watchedShareAtMost(source, "tree")!!, 1e-9)
+        assertEquals(3.5 / 31 / (4.0 / 300), after.lift(source, "moth")!!, 1e-9)
+        assertTrue(after.lift(source, "moth")!! <= before.lift(source, "moth")!!)
+    }
+
+    @Test
+    fun `a dropped tag kept once stays too rare to judge, so it can still be guessed`() {
+        val kept = List(30) { index -> like(listOfNotNull("tree", "moth".takeIf { index == 0 }), "$index") }
+        val dropped = statistics(watched = 300, "tree" to 280).copy(watchedTagFloors = mapOf(source to 30L))
+        val inputs = tagAffinityInputs(kept, emptyList(), emptyList(), emptyList(), dropped)
+
+        val moth = inputs.affinity(source, "moth")
+
+        assertTrue(moth.informative)
+        assertFalse(moth.proven)
+    }
+
     private fun like(tags: List<String>, id: String = tags.joinToString("-")) = LikedPost("profile", PostId(source, id), 0L, tags)
 
     private fun statistics(watched: Long, vararg tags: Pair<String, Long>) = LifetimeStatistics(

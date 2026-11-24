@@ -109,8 +109,9 @@ class DataStoreFormatTest {
             postUrlCopyCount = 10L,
             codexEntryCounts = mapOf("codex" to 11L),
         )
-        val full = StatisticsDataStoreFile(statistics = statistics)
+        val full = StatisticsDataStoreFile(schemaVersion = 2, statistics = statistics)
         val series = StatisticsDataStoreFile(
+            schemaVersion = 2,
             statistics = StatisticsStoreRecord(
                 history = mapOf(
                     "2026-11-23" to DailyActivity(appOpenCount = 1L, totalForegroundMs = 30L, readingMs = 10L, animeMs = 20L),
@@ -121,7 +122,19 @@ class DataStoreFormatTest {
                 animeMs = 20L,
             ),
         )
-        assertStoredFormat(golden("statistics-full.json") to full, golden("statistics-series.json") to series)
+        val floors = StatisticsDataStoreFile(
+            statistics = StatisticsStoreRecord(
+                watchedPostCount = 40L,
+                watchedBySource = mapOf("GELBOORU" to 40L),
+                watchedByTag = listOf(StatisticsTagCountRecord("GELBOORU", "blush", 9L)),
+                watchedTagFloors = mapOf("GELBOORU" to 4L),
+            ),
+        )
+        assertStoredFormat(
+            golden("statistics-full.json") to full,
+            golden("statistics-series.json") to series,
+            golden("statistics-floors.json") to floors,
+        )
     }
 
     @Test
