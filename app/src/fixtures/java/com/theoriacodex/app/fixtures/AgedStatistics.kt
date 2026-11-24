@@ -39,10 +39,11 @@ object AgedStatistics {
 
     fun statistics(today: LocalDate): LifetimeStatistics {
         val random = Random(SEED)
-        val watched = viewsBySource.map { (source, views) -> watchedTags(source, views, random) }
+        val zipf = Zipf()
+        val watched = viewsBySource.map { (source, views) -> watchedTags(source, views, random, zipf) }
         val history = history(today, random)
         val codices = codices(random)
-        val searches = viewsBySource.keys.associateWith { source -> searchedTags(source, random) }
+        val searches = viewsBySource.keys.associateWith { source -> searchedTags(source, random, zipf) }
         val days = history.values
         return LifetimeStatistics(
             history = history,
@@ -72,15 +73,16 @@ object AgedStatistics {
 
     fun postTags(post: Int): List<String> {
         val random = Random(SEED + post)
+        val zipf = Zipf()
         val ranks = linkedSetOf<Int>()
-        while (ranks.size < TAGS_PER_POST) ranks += zipfRank(random)
+        while (ranks.size < TAGS_PER_POST) ranks += zipf.rank(random)
         return ranks.map(::tagName)
     }
 
     private class WatchedTable(val source: SourceKey, val counts: Map<StatisticsTagKey, Long>, val floor: Long)
 
-    private fun watchedTags(source: SourceKey, views: Long, random: Random): WatchedTable {
-        val floor = expectedCount(FLOOR_RANK, views).roundToLong().coerceAtLeast(1L)
+    private fun watchedTags(source: SourceKey, views: Long, random: Random, zipf: Zipf): WatchedTable {
+        val floor = zipf.expectedCount(FLOOR_RANK, views).roundToLong().coerceAtLeast(1L)
         val used = HashSet<Int>()
         val counts = (1..TAGS_PER_SOURCE).associate { rank ->
             val churned = rank > CHURN_FROM_RANK && random.nextDouble() < CHURN_SHARE
@@ -89,7 +91,7 @@ object AgedStatistics {
             val count = if (churned) {
                 floor + 1L + random.nextInt(CHURN_COUNT_SPREAD)
             } else {
-                val expected = expectedCount(rank, views)
+                val expected = zipf.expectedCount(rank, views)
                 maxOf(floor + 1L, (expected + random.nextGaussian() * StrictMath.sqrt(expected)).roundToLong())
             }
             StatisticsTagKey(source, sourceTagKey(source, tagName(tagRank))) to count
@@ -143,9 +145,9 @@ object AgedStatistics {
         )
     }
 
-    private fun searchedTags(source: SourceKey, random: Random): Map<SearchedTagKey, Long> {
+    private fun searchedTags(source: SourceKey, random: Random, zipf: Zipf): Map<SearchedTagKey, Long> {
         val ranks = linkedSetOf<Int>()
-        while (ranks.size < SEARCHED_TAGS_PER_SOURCE) ranks += zipfRank(random)
+        while (ranks.size < SEARCHED_TAGS_PER_SOURCE) ranks += zipf.rank(random)
         return ranks.withIndex().associate { (order, rank) ->
             SearchedTagKey(source, SearchTerm(tagName(rank))) to (SEARCH_SCALE / (order + 1)).coerceAtLeast(1L) + random.nextInt(3)
         }
@@ -153,27 +155,28 @@ object AgedStatistics {
 
     private fun minutes(count: Int): Long = count * 60_000L
 
-    private fun expectedCount(rank: Int, views: Long): Double =
-        views * (1.0 - StrictMath.pow(1.0 - zipfWeight(rank) / harmonic, TAGS_PER_POST.toDouble()))
-
     private fun zipfWeight(rank: Int): Double = 1.0 / StrictMath.pow(rank.toDouble(), ZIPF_EXPONENT)
 
-    private val cumulative: DoubleArray by lazy {
-        var running = 0.0
-        DoubleArray(VOCABULARY) { index -> running += zipfWeight(index + 1); running }
-    }
-
-    private val harmonic: Double get() = cumulative.last()
-
-    private fun zipfRank(random: Random): Int {
-        val target = random.nextDouble() * harmonic
-        var low = 0
-        var high = VOCABULARY - 1
-        while (low < high) {
-            val middle = (low + high) ushr 1
-            if (cumulative[middle] < target) low = middle + 1 else high = middle
+    private class Zipf {
+        private val cumulative = run {
+            var running = 0.0
+            DoubleArray(VOCABULARY) { index -> running += zipfWeight(index + 1); running }
         }
-        return low + 1
+        private val harmonic = cumulative.last()
+
+        fun expectedCount(rank: Int, views: Long): Double =
+            views * (1.0 - StrictMath.pow(1.0 - zipfWeight(rank) / harmonic, TAGS_PER_POST.toDouble()))
+
+        fun rank(random: Random): Int {
+            val target = random.nextDouble() * harmonic
+            var low = 0
+            var high = VOCABULARY - 1
+            while (low < high) {
+                val middle = (low + high) ushr 1
+                if (cumulative[middle] < target) low = middle + 1 else high = middle
+            }
+            return low + 1
+        }
     }
 
     private fun tagName(rank: Int): String {

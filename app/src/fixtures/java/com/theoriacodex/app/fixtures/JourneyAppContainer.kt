@@ -62,6 +62,8 @@ import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
+import com.theoriacodex.data.repository.READING_POSITION_WRITE_DELAY
+import com.theoriacodex.data.repository.STATISTICS_WRITE_DELAY
 import com.theoriacodex.data.repository.FileBackedGalleryReadingModeRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
@@ -93,6 +95,7 @@ class JourneyAppContainer(
     pageSize: Int = 20,
     httpClient: SourceHttpClient = JourneyNoNetworkHttpClient,
     providerShapedSources: Set<SourceKey> = emptySet(),
+    realWriteTimers: Boolean = false,
 ) : TheoriaAppContainer, AutoCloseable {
     private val appContext = context.applicationContext
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
@@ -111,7 +114,10 @@ class JourneyAppContainer(
     private val storeScope = newDataStoreScope()
     val settings = DataStoreSettingsRepository(storageDirectory, storeScope, profileWriteGuard = profileWriteGuard)
     private val restore = DataStoreUiRestoreRepository(storageDirectory, storeScope)
-    private val statistics = DataStoreStatisticsRepository(storageDirectory, storeScope, writeScope = ownerScope)
+    private val statistics = DataStoreStatisticsRepository(
+        storageDirectory, storeScope, writeScope = ownerScope,
+        writeDelay = if (realWriteTimers) STATISTICS_WRITE_DELAY else FLUSH_ONLY_WRITE_DELAY,
+    )
     private val durations = RoomMediaDurationRepository(database)
     private val accounts = JourneyAccounts(registry.availableSources())
     private val siteProfiles = InMemorySiteProfileRepository()
@@ -143,7 +149,10 @@ class JourneyAppContainer(
         RoomRecentsRepository(database), settings, statistics,
         OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offline),
         restore, durations, MutableStateFlow(emptyList()),
-        readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = ownerScope, writeDelay = FLUSH_ONLY_WRITE_DELAY),
+        readingPositions = FileBackedReadingPositionRepository(
+            storageDirectory, writeScope = ownerScope,
+            writeDelay = if (realWriteTimers) READING_POSITION_WRITE_DELAY else FLUSH_ONLY_WRITE_DELAY,
+        ),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
         forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),

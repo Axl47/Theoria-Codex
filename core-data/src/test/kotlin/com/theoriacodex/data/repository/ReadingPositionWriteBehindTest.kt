@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.FileStateCell
+import com.theoriacodex.data.storage.update
 import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -16,6 +17,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -163,6 +165,17 @@ class ReadingPositionWriteBehindTest {
         flushed.await()
 
         assertEquals(listOf(position(8, 800L)), written.last())
+    }
+
+    @Test
+    fun `updates run off the caller's thread (ADR 0215)`() = runTest {
+        val cell = FileStateCell(0) {}.writeBehind(writeScope, READING_POSITION_WRITE_DELAY)
+        val caller = Thread.currentThread()
+        var applied: Thread? = null
+
+        cell.update { applied = Thread.currentThread(); it + 1 }
+
+        assertNotEquals(caller, applied)
     }
 
     private fun position(page: Int, time: Long) = ReadingPosition(BOOK, RecentPostSection.WATCHED, page, time)

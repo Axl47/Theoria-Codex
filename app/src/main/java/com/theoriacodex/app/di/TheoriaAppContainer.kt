@@ -168,8 +168,11 @@ data class DataDependencies(
     val visualSignatures: VisualSignatureRepository,
 ) {
     suspend fun flushPendingWrites() {
-        readingPositions.flush()
-        statisticsRepository.flush()
+        val failures = listOf(
+            runCatchingPreservingCancellation { readingPositions.flush() },
+            runCatchingPreservingCancellation { statisticsRepository.flush() },
+        ).mapNotNull { it.exceptionOrNull() }
+        failures.firstOrNull()?.let { throw it }
     }
 }
 

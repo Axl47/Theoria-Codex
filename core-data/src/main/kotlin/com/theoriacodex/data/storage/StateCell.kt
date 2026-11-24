@@ -3,6 +3,9 @@ package com.theoriacodex.data.storage
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -60,6 +63,7 @@ private class WriteBehindStateCell<T : Any>(
 ) : StateCell<T> {
     private val mutex = Mutex()
     private val flushing = Mutex()
+    private val queue = Dispatchers.Default.limitedParallelism(1)
     private val state = MutableStateFlow<T?>(null)
     private var revision = 0L
     private var persistedRevision = 0L
@@ -72,7 +76,11 @@ private class WriteBehindStateCell<T : Any>(
 
     override suspend fun value(): T = mutex.withLock { loaded() }
 
-    override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R = mutex.withLock {
+    override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R = withContext(queue + NonCancellable) {
+        mutex.withLock { applying(transform) }
+    }
+
+    private suspend fun <R> applying(transform: (T) -> Pair<T, R>): R {
         val current = loaded()
         val (next, result) = transform(current)
         if (next != current) {
@@ -80,10 +88,12 @@ private class WriteBehindStateCell<T : Any>(
             revision++
             schedule(attempt = 0)
         }
-        result
+        return result
     }
 
-    override suspend fun flush() = flushing.withLock {
+    override suspend fun flush() = withContext(queue) { flushOnce() }
+
+    private suspend fun flushOnce() = flushing.withLock {
         val (latest, latestRevision) = mutex.withLock { state.value to revision }
         if (latest == null || latestRevision == persistedRevision) return@withLock
         durable.update { latest }
@@ -97,7 +107,7 @@ private class WriteBehindStateCell<T : Any>(
     private suspend fun scheduledFlush(attempt: Int) {
         delay(writeDelay)
         mutex.withLock { scheduled = null }
-        val failed = runCatchingPreservingCancellation { flush() }.isFailure
+        val failed = runCatchingPreservingCancellation { flushOnce() }.isFailure
         if (failed && attempt < WRITE_BEHIND_RETRIES) mutex.withLock { schedule(attempt + 1) }
     }
 

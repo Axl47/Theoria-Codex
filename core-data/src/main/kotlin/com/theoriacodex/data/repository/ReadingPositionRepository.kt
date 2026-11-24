@@ -14,8 +14,6 @@ import java.io.File
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -48,7 +46,7 @@ const val READING_POSITIONS_FILE_NAME = "reading_positions.json"
 const val MAX_READING_POSITIONS = 2_000
 
 internal const val READING_POSITION_COALESCE_MS = 5_000L
-internal val READING_POSITION_WRITE_DELAY = 2.seconds
+val READING_POSITION_WRITE_DELAY = 2.seconds
 
 class FileBackedReadingPositionRepository private constructor(repository: ReadingPositionRepository) :
     ReadingPositionRepository by repository {
@@ -113,8 +111,7 @@ internal class CellReadingPositionRepository(
 
     override suspend fun flush() = cell.flush()
 
-    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) =
-        withContext(NonCancellable) { cell.update(transform) }
+    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) = cell.update(transform)
 }
 
 @Serializable

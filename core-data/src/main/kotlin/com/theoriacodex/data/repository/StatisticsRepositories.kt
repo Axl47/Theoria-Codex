@@ -15,6 +15,7 @@ import java.io.File
 import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -374,13 +375,14 @@ internal object StatisticsPolicies {
     }
 }
 
-internal val STATISTICS_WRITE_DELAY = 2.seconds
+val STATISTICS_WRITE_DELAY = 2.seconds
 
 class DataStoreStatisticsRepository private constructor(
     store: JsonDataStore<LifetimeStatistics>,
     clock: Clock,
     writeScope: CoroutineScope?,
-) : StatisticsRepository by CellStatisticsRepository(writeScope?.let { store.writeBehind(it, STATISTICS_WRITE_DELAY) } ?: store, clock),
+    writeDelay: Duration,
+) : StatisticsRepository by CellStatisticsRepository(writeScope?.let { store.writeBehind(it, writeDelay) } ?: store, clock),
     AsynchronousStore by store {
     constructor(
         baseDirectory: File,
@@ -388,6 +390,7 @@ class DataStoreStatisticsRepository private constructor(
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         clock: Clock = Clock.systemDefaultZone(),
         writeScope: CoroutineScope? = null,
+        writeDelay: Duration = STATISTICS_WRITE_DELAY,
     ) : this(
         openDecodedJsonDataStore(
             file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
@@ -404,6 +407,7 @@ class DataStoreStatisticsRepository private constructor(
         ),
         clock,
         writeScope,
+        writeDelay,
     )
 }
 

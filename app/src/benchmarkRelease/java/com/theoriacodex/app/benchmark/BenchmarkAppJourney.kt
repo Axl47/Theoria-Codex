@@ -82,7 +82,7 @@ internal class BenchmarkAppJourney private constructor(
             val transport = BenchmarkByteTransport(mediaUri, context.resources.openRawResource(R.raw.benchmark_motion).use { it.readBytes() })
             val posts = journeyPosts(context, agedStatistics)
             val fixture = JourneyAppContainer(context, storage, mapOf(SourceKey.PIXIV to posts), scope,
-                pageSize = 12, httpClient = transport)
+                pageSize = 12, httpClient = transport, realWriteTimers = true)
             fixture.awaitReady()
             fixture.sources.accounts.savePixivTokens(PixivAuthTokens("offline-fixture", "offline-fixture", Long.MAX_VALUE))
             val ugoira = PixivUgoiraClient(
