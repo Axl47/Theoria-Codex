@@ -11,10 +11,6 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 
 object PostDownloadService {
-    /**
-     * Queues one file with Android's DownloadManager: [selected] media (a Viewer page or a gallery page), or else the
-     * post's own download candidate. Null when there is nothing to download or Android refused the request.
-     */
     internal fun enqueuePostDownloadId(
         context: Context,
         post: Post,
@@ -161,5 +157,4 @@ private fun String.takeUtf8Bytes(limit: Int): String = buildString {
     }
 }
 
-/** Fragment metadata remains local to URI handling and never enters the HTTP request target. */
 fun downloadRequestMarker(marker: String): String = "theoria-download:$marker"

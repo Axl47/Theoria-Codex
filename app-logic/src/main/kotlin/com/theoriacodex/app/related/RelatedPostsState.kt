@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Where a Viewer opened on the related shelf of [seed] starts; related streams are never restored. */
 fun relatedViewerContext(seed: Post, index: Int) = ViewerLaunchContext(
     queryHash = "related:${seed.id.source.id}:${seed.id.sourcePostId}",
     startIndex = index,
@@ -91,7 +90,6 @@ val RelatedPostsUiState.availablePages: List<RelatedPostsPage>
         is RelatedPostsUiState.Failed -> retainedPages
     }
 
-/** Keep the current shelf's seeds visible until its recommendation chain is dismissed. */
 val RelatedPostsUiState.retainedLikedPostIds: Set<PostId>
     get() = buildSet {
         requestOrNull?.let { request ->
@@ -158,10 +156,6 @@ fun RelatedPostsUiState.complete(
     }
 }
 
-/**
- * What a drawer that only grows should show: everything it has shown, then anything newly recommended.
- * Liked seeds leave it, and a cleared shelf empties it.
- */
 fun RelatedPostsUiState.accumulatedPosts(shown: List<Post>): List<Post> {
     if (this == RelatedPostsUiState.Idle) return emptyList()
     val seeds = retainedLikedPostIds
@@ -230,10 +224,6 @@ fun promoteRelatedPost(
 
 const val MAX_RELATED_POSTS: Int = 6
 
-/**
- * Where this shelf sits in a list that can reorder under it, such as Recents: after its seed, else
- * after the first earlier seed of its chain still listed, else after its anchor index. -1 when empty.
- */
 fun RelatedPostsRequest.anchorIndexIn(postIds: List<PostId>): Int {
     if (postIds.isEmpty()) return -1
     postIds.indexOf(seed.id).takeIf { it >= 0 }?.let { return it }

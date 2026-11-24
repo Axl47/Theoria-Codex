@@ -75,7 +75,6 @@ fun StatusRow(
     StatusChips(statuses) { selected = it }
 }
 
-/** Offline, one chip replaces every source a returning network could fix, since none of them is at fault. */
 @Composable
 private fun StatusChips(statuses: List<SourceRunStatus>, onSelect: (SourceKey) -> Unit) {
     val online by LocalNetworkOnline.current.collectAsStateWithLifecycle()

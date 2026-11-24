@@ -71,13 +71,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 
-/** A TalkBack action beside the chip's tap, reaching a state directly instead of through the cycle. */
 data class TagChipAction(val label: String, val run: () -> Unit)
 
-/**
- * One tag in a tag list. Its full name wraps with its neighbors, and its count sits in a fixed slot
- * so counts that arrive late never move the chips around it.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TagPickerChip(
@@ -93,9 +88,7 @@ fun TagPickerChip(
     longPressLabel: String? = null,
     leadingIcon: ImageVector? = null,
     reserveCountSlot: Boolean = true,
-    /** A name-only chip for a row that scrolls or clips: no count, and the name takes its own width up to a cap. */
     compact: Boolean = false,
-    /** Extra state TalkBack reads after the search state, such as "saved". */
     stateSuffix: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -159,7 +152,6 @@ private fun TagChipContent(
         }
         Text(
             label,
-            // A weight collapses to zero width inside a row with unbounded width, like the peek.
             modifier = if (compact) Modifier.widthIn(max = COMPACT_LABEL_MAX_WIDTH) else Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
@@ -173,7 +165,6 @@ private fun TagChipContent(
     }
 }
 
-/** Keeps long tag lists lazy: each chunk is its own list item, so offscreen chips never compose. */
 fun <T> List<T>.tagChipChunks(): List<List<T>> = chunked(TAG_CHIPS_PER_LIST_ITEM)
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -186,7 +177,6 @@ fun TagChipRow(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** A warning shown above the query, for an edit that waits on the user's answer. */
 class TrayConfirmation(
     val message: String,
     val confirmLabel: String,
@@ -195,14 +185,6 @@ class TrayConfirmation(
     val onDismiss: () -> Unit,
 )
 
-/**
- * The query being built, pinned under a tag list: every group must match, a group with several tags
- * is a capsule of alternatives, and excluded tags follow. "+ or" makes a group the target of the
- * next tap. [onSearch] is null where the current screen has no way to reach Search.
- *
- * Folds to one line beside Search, so a short landscape screen keeps room for the tags. It starts folded
- * in landscape and keeps the user's choice while it stays composed.
- */
 @Composable
 fun QueryTray(
     title: String,
@@ -240,7 +222,6 @@ fun QueryTray(
     }
 }
 
-/** The tray's header: a chevron and [content], one toggle that folds or unfolds the query. */
 @Composable
 private fun TrayFoldToggle(collapsed: Boolean, onToggle: () -> Unit, modifier: Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
@@ -259,7 +240,6 @@ private fun TrayFoldToggle(collapsed: Boolean, onToggle: () -> Unit, modifier: M
     }
 }
 
-/** The unfolded query, or [emptyText] while it has no terms. */
 @Composable
 private fun TrayBody(
     emptyText: String,
@@ -282,7 +262,6 @@ private fun TrayEmptyText(text: String, maxLines: Int = Int.MAX_VALUE) {
     )
 }
 
-/** The folded query on one line, fading at the edge; it belongs to the fold toggle, so taps expand the tray. */
 @Composable
 private fun TrayPeek(groups: List<SearchTermGroup>, excludes: List<SearchTerm>, modifier: Modifier) {
     Row(

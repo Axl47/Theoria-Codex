@@ -17,7 +17,6 @@ fun sourceStatusChipText(status: SourceRunStatus): String {
 
 internal const val OFFLINE_STATUS_CHIP = "Offline, retries when you reconnect"
 
-/** The first failed source that a browser check stands in front of, which verifying can fix and retrying cannot. */
 fun List<SourceRunStatus>.challengedSource(issues: Map<SourceKey, HostOutageKind>): SourceKey? =
     firstOrNull { it.state == SourceRunState.FAILED && issues[it.source] == HostOutageKind.CHALLENGE }?.source
 

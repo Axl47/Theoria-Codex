@@ -8,7 +8,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 
-/** Dropdown of mutually exclusive options; the current one carries a check. Selecting also dismisses. */
 @Composable
 fun <T> SingleChoiceMenu(
     expanded: Boolean,

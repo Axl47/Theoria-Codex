@@ -17,7 +17,6 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Real route demand -> coordinator -> acquisition engine -> bounded transport/parser integration. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DurationRouteAcquisitionTest {
     @Test

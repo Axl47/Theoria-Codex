@@ -6,12 +6,10 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 
-/** A source that only an account change can fix, whatever a retry would do. */
 fun SourceRunStatus.requiresAccount(): Boolean =
     state == SourceRunState.FAILED &&
         (failureReason == SourceFailureReason.AUTH_REQUIRED || failureReason == SourceFailureReason.AUTH_EXPIRED)
 
-/** A failure a returning network could fix; waiting for rate limits or sign-ins is a separate matter. */
 fun SourceRunStatus.retriesOnReconnect(): Boolean =
     state == SourceRunState.FAILED && !requiresAccount() && failureReason != SourceFailureReason.RATE_LIMITED
 
@@ -46,6 +44,5 @@ fun buildSourceFailureMessage(statuses: List<SourceRunStatus>): String? {
     return details.joinToString(separator = "\n") + suffix
 }
 
-/** Why a request failed: the sources' errors, else the account sources need, else [fallback]. */
 fun sourceFailureMessage(statuses: List<SourceRunStatus>, fallback: String): String =
     buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses) ?: fallback

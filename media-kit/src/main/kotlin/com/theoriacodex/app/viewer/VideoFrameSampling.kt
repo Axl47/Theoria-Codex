@@ -22,30 +22,19 @@ import okio.Buffer
 import okio.ForwardingSource
 import okio.buffer
 
-/** What sampling a video's or animation's frames gave. */
 sealed interface FrameSample {
-    /** The frames that decoded, in time order; never empty. */
     class Frames(val frames: List<Bitmap>) : FrameSample
 
-    /** The server refused the file (a 4xx answer other than "try later"): its address may have expired. */
     data object Refused : FrameSample
 
-    /** The network failed or the server asked to try later; a later try may work. */
     data object Unreachable : FrameSample
 
-    /** No frame decodes from the file, or none did before the network budget ran out. */
     data object Unreadable : FrameSample
 }
 
-/**
- * The network bytes one post's frame sampling may download, counted as response bodies arrive (whatever reads them,
- * error bodies and skipped prefixes included) and shared by every request for that post, a refreshed address's too.
- * Past [maxBytes], reads fail with [NetworkBudgetSpent].
- */
 class NetworkBudget(internal val maxBytes: Long) {
     private val spent = AtomicLong()
 
-    /** An OkHttp network interceptor that counts each response body against this budget. */
     internal val interceptor = Interceptor { chain ->
         if (spent.get() >= maxBytes) throw NetworkBudgetSpent()
         val response = chain.proceed(chain.request())
@@ -61,14 +50,8 @@ class NetworkBudget(internal val maxBytes: Long) {
     }
 }
 
-/** A post too large to read within its budget: trying again spends the same bytes. */
 internal class NetworkBudgetSpent : UnreadableMedia("The frame sampler's network budget is spent")
 
-/**
- * Up to [count] sync frames of the video [source] reads, spread evenly from 5% to 95% of its length, each scaled to fit
- * [sizePx]. `MediaMetadataRetriever` decodes only the keyframe at each point, and reads only the container's index and
- * those keyframes. Blocking: call it off the main thread. [job] ending stops the reads, so the retriever gives up soon.
- */
 internal fun sampleVideoFrames(source: DataSource, uri: Uri, key: String?, count: Int, sizePx: Int, job: Job): FrameSample {
     val reader = DataSourceMediaReader(source, uri, key, job)
     val frames = try {
@@ -78,14 +61,12 @@ internal fun sampleVideoFrames(source: DataSource, uri: Uri, key: String?, count
             val params = MediaMetadataRetriever.BitmapParams().apply { preferredConfig = Bitmap.Config.ARGB_8888 }
             samplePointsUs(durationMs, count).mapNotNull { timeUs ->
                 if (!job.isActive) return@mapNotNull null
-                // A point that fails to decode leaves the frames other points gave.
                 runCatching {
                     retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, sizePx, sizePx, params)
                 }.getOrNull()
             }
         }
     } catch (_: RuntimeException) {
-        // setDataSource throws when the container cannot be read, including when its bytes could not be.
         emptyList()
     } finally {
         reader.close()
@@ -93,15 +74,6 @@ internal fun sampleVideoFrames(source: DataSource, uri: Uri, key: String?, count
     return frameSample(frames, reader.failure)
 }
 
-/**
- * What [frames] read before [failure] (null when every read succeeded) amount to, for videos and animations alike: the
- * one place that decides whether a failed read is worth trying again.
- * - A spent budget, media whose bytes give no frames ([UnreadableMedia]), or a source that cannot read its own answer
- *   about the post (a parse failure, or one it cannot name), keeps what was read: another try repeats it.
- * - A refusal ([MediaRefused], or a 4xx other than "try later") asks for a fresh address.
- * - Anything else (the network, a "try later", a sign-in or browser check a source wants) may pass on a later run, so
- *   even frames already read wait for it.
- */
 fun frameSample(frames: List<Bitmap>, failure: Throwable?): FrameSample {
     val causes = generateSequence(failure, Throwable::cause)
     val status = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
@@ -116,19 +88,14 @@ fun frameSample(frames: List<Bitmap>, failure: Throwable?): FrameSample {
 private val Throwable.isFinalSourceFailure: Boolean
     get() = this is SourceAdapterException && reason in FINAL_SOURCE_FAILURES
 
-/** Source failures another try repeats: an answer it cannot read, or a failure it cannot name. */
 private val FINAL_SOURCE_FAILURES = setOf(SourceFailureReason.PARSE, SourceFailureReason.UNKNOWN)
 
-/** Whether an HTTP [status] refuses the media at this address for good: a 4xx other than "try later". */
 internal fun refusesMedia(status: Int): Boolean = status in CLIENT_ERRORS && status !in TRY_LATER
 
-/** Media whose bytes give no frames (a damaged or oversized archive, say): downloading it again gives the same answer. */
 internal open class UnreadableMedia(message: String) : IOException(message)
 
-/** A server refused the media at this address ([refusesMedia]); a fresh address may work. */
 internal class MediaRefused(message: String) : IOException(message)
 
-/** [count] points evenly from 5% to 95% of [durationMs], in microseconds; only the first frame when the length is unknown. */
 internal fun samplePointsUs(durationMs: Long?, count: Int): List<Long> {
     if (durationMs == null || durationMs <= 0L || count <= 1) return listOf(0L)
     val first = durationMs * EDGE
@@ -136,14 +103,6 @@ internal fun samplePointsUs(durationMs: Long?, count: Int): List<Long> {
     return List(count) { index -> ((first + step * index) * MICROS_PER_MS).roundToLong() }
 }
 
-/**
- * Serves `MediaMetadataRetriever`'s random reads from a Media3 [DataSource] in windows of at most [WINDOW_BYTES], each
- * fetched by one request and kept in memory, the last [MAX_WINDOWS] of them: the retriever reads the container's index
- * again for every frame, so those reads cost nothing after the first. The first request asks for the whole file, so its
- * answer tells the file's length, but reads only its first window. The first failure is kept in [failure] and fails
- * every later read. The retriever calls in from its own threads, one call at a time, so each call holds the reader's
- * lock to see the last one's state.
- */
 internal class DataSourceMediaReader(
     private val source: DataSource,
     private val uri: Uri,
@@ -155,7 +114,6 @@ internal class DataSourceMediaReader(
         private set
     private var length = C.LENGTH_UNSET.toLong()
 
-    /** Fetched windows by their first byte's position, least recently read first. */
     private val windows = LinkedHashMap<Long, ByteArray>(MAX_WINDOWS + 1, LOAD_FACTOR, true)
 
     init {
@@ -168,15 +126,11 @@ internal class DataSourceMediaReader(
     @Synchronized
     override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
         if (size == 0) return 0
-        // Kept windows too: once the job ends, the retriever gets nothing more to decode.
         if (!job.isActive) return END
         if (length != C.LENGTH_UNSET.toLong() && position >= length) return END
-        // Entries, not get(), while searching: a get() reorders the map mid-iteration.
         val start = windows.entries.firstOrNull { (start, bytes) -> position >= start && position < start + bytes.size }?.key
             ?: position
-        // Reading a kept window marks it recently read.
         val bytes = windows[start] ?: guarded { fetch(position) } ?: return END
-        // A fetch can outlast the job; what it brought is kept but not handed over.
         if (!job.isActive) return END
         val from = (position - start).toInt()
         val count = minOf(size, bytes.size - from)
@@ -190,7 +144,6 @@ internal class DataSourceMediaReader(
         windows.clear()
     }
 
-    /** Fetches the window starting [at], keeps it, and returns its bytes (fewer at the end of the file). */
     private fun fetch(at: Long): ByteArray {
         val requested = if (length == C.LENGTH_UNSET.toLong()) C.LENGTH_UNSET.toLong() else minOf(length - at, WINDOW_BYTES)
         try {
@@ -230,11 +183,8 @@ private const val MICROS_PER_MS = 1_000.0
 private const val LOAD_FACTOR = 0.75f
 private val CLIENT_ERRORS = 400..499
 
-/** Request Timeout and Too Many Requests: the file is there, the server only wants a later try. */
 private val TRY_LATER = setOf(408, 429)
 
-/** One request's bytes: a light rendition's index or keyframe usually fits. */
 private const val WINDOW_BYTES = 256L * 1024L
 
-/** Windows kept: the index (once at each end of a file whose index trails it) and a few keyframes. */
 private const val MAX_WINDOWS = 4

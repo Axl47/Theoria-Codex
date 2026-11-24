@@ -6,18 +6,12 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 
-/**
- * Turns a decoded preview into WD tagger v3's input: centred on a white square, resized to [SIDE] px (bilinear), BGR
- * channel planes (NCHW) scaled to [-1, 1]. Phase 0 measured this phone-side resize against the host's bicubic at about
- * 0.004 cosine. Reuses its buffers, so one instance serves one picture at a time.
- */
 internal class PicturePreprocessor {
     private val square = Bitmap.createBitmap(SIDE, SIDE, Bitmap.Config.ARGB_8888)
     private val canvas = Canvas(square)
     private val pixels = IntArray(SIDE * SIDE)
     private val input = FloatArray(INPUT_SIZE)
 
-    /** The model input for [picture]; the returned array is reused by the next call. */
     fun input(picture: Bitmap): FloatArray {
         val longest = maxOf(picture.width, picture.height).toFloat()
         val scale = SIDE / longest
@@ -37,7 +31,6 @@ internal class PicturePreprocessor {
     }
 }
 
-/** Writes [pixels] (ARGB) into [out] as blue, green, then red planes, each value scaled from 0..255 to [-1, 1]. */
 internal fun argbToBgrPlanes(pixels: IntArray, out: FloatArray) {
     val plane = pixels.size
     require(out.size == 3 * plane) { "expected ${3 * plane} floats, got ${out.size}" }

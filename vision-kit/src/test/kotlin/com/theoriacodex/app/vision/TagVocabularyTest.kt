@@ -11,7 +11,6 @@ import org.junit.Assert.assertThrows
 class TagVocabularyTest {
     private val lazyTag = "don't_say_\"lazy\""
 
-    // Rows are in model output order: four ratings (category 9, 1000 posts in all), then general and character tags.
     private val csv = listOf(
         "tag_id,name,category,count",
         "9999999,general,9,500",
@@ -28,7 +27,6 @@ class TagVocabularyTest {
 
     @Test
     fun `predictions keep general and character tags above the floor, strongest first`() {
-        // Ratings score highest of all and must still be dropped; "lazy" sits under the default floor.
         val scores = floatArrayOf(0.99f, 0.98f, 0.97f, 0.96f, 0.9f, 0.2f, 0.5f, 0.7f)
 
         assertEquals(

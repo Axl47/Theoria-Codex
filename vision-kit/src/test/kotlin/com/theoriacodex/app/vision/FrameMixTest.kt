@@ -20,7 +20,6 @@ class FrameMixTest {
 
     @Test
     fun `each score is the mean of its top third of weighted pictures`() {
-        // Four pictures in all, so the top two count: 0.9 and 0.2 for the first output, 0.8 twice for the second.
         val combined = combineScores(
             listOf(floatArrayOf(0.9f, 0.0f), floatArrayOf(0.1f, 0.8f), floatArrayOf(0.2f, 0.3f)),
             listOf(1, 2, 1),
@@ -62,7 +61,6 @@ class FrameMixTest {
 private const val SIDE = 32
 private const val GREY = 0xFF808080.toInt()
 
-/** Black-and-white pictures whose perceptual hashes differ widely; [scoreOf] tells them apart by three pixels. */
 internal enum class Pattern(val dark: (x: Int, y: Int) -> Boolean) {
     TOP({ _, y -> y < SIDE / 2 }),
     LEFT({ x, _ -> x < SIDE / 2 }),
@@ -78,7 +76,6 @@ internal enum class Pattern(val dark: (x: Int, y: Int) -> Boolean) {
         private const val BLACK = 0xFF000000.toInt()
         private const val WHITE = 0xFFFFFFFF.toInt()
 
-        /** Which pattern [picture] shows. */
         fun of(picture: Bitmap): Pattern {
             val corner = picture.getPixel(0, 0)
             return when {

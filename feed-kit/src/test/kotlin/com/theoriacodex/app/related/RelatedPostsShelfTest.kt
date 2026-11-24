@@ -44,7 +44,6 @@ class RelatedPostsShelfTest {
             MaterialTheme {
                 RelatedPostsShelf(
                     state = state.value,
-                    // Filtered cards keep this navigation test independent of media loading.
                     posts = emptyList(),
                     environment = environment,
                     onOpenPost = { _, _ -> },

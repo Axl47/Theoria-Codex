@@ -9,7 +9,6 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
-/** Shared navigation-owner request lifecycle; routes provide only their current canonical posts. */
 class RelatedPostsRouteController(
     private val scope: CoroutineScope,
     private val loader: RelatedPostsLoading,
@@ -40,10 +39,6 @@ class RelatedPostsRouteController(
         show(post)
     }
 
-    /**
-     * Opens the shelf for [post], as a like does or as "More like this" asks. A post inside the
-     * shelf is first promoted into the feed, so the new shelf chains below it.
-     */
     fun show(post: Post) {
         if (!loader.supports(post.id.source)) return
         val current = currentState()

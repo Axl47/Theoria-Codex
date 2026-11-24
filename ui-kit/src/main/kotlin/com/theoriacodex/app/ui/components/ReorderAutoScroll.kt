@@ -1,9 +1,5 @@
 package com.theoriacodex.app.ui.components
 
-/**
- * How far a list scrolls this frame while a dragged row sits in an edge zone: the speed grows from zero at the zone's
- * inner edge to [maxStep] at the viewport's edge.
- */
 fun reorderAutoScrollStep(
     rowTop: Float,
     rowBottom: Float,

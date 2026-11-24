@@ -28,11 +28,9 @@ internal fun testComment(id: String, hasReplies: Boolean = false) =
 internal fun commentPage(vararg ids: String, total: Int? = null, next: String? = null) =
     CommentPage(ids.map(::testComment), total, next)
 
-/** A loader that answers from [pages] by "parentId/pageToken", recording each request and failing on demand. */
 internal class FakeCommentsLoader(
     private val pages: Map<String, CommentPage> = emptyMap(),
     var supported: Boolean = true,
-    /** Top-level comment ids that have a site anchor, by comment id. */
     private val anchors: Map<String, String> = emptyMap(),
 ) : CommentsLoading {
     val requests = mutableListOf<String>()

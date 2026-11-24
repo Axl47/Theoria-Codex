@@ -111,7 +111,6 @@ class ViewerSavedReturnTest {
                 ViewerReturnColumn(shelves, column) {
                     val gridId = LocalViewerReturnGrid.current
                     origin = gridId
-                    // The top padding stands for a bar drawn over an edge-to-edge list.
                     LazyColumn(state = column, contentPadding = PaddingValues(top = 80.dp),
                         modifier = Modifier.height(500.dp).onGloballyPositioned { viewport = it.boundsInWindow() }) {
                         items(shelves) { shelf ->
@@ -130,7 +129,6 @@ class ViewerSavedReturnTest {
                 }
             }
         }
-        // Shelf 1 starts 30 dp inside the padding: drawn, but under the bar.
         compose.runOnIdle { column.dispatchRawDelta(with(compose.density) { 230.dp.toPx() }) }
         compose.runOnIdle {
             transition.openedFrom(origin, shelfId = shelves[1])

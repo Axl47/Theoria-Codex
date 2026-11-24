@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.domain.model.Post
 
-// Shelf previews share a square frame; titles retain their natural height below it.
 const val POST_SHELF_MEDIA_ASPECT_RATIO = 1f
 val POST_SHELF_CARD_WIDTH = 164.dp
 

@@ -32,7 +32,6 @@ class TriageDeckGestureTest {
         assertEquals(listOf<TriageChoice>(TriageChoice.Like), decided)
     }
 
-    /** Advances one 60 Hz frame per request, so animations run to their end without a UI. */
     private object StepClock : MonotonicFrameClock {
         private var nanos = 0L
         override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {

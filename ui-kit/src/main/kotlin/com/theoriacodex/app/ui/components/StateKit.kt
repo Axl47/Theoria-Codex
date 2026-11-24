@@ -15,13 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/*
- * The state kit: what a screen, sheet or section shows instead of content while loading, when empty, or after a
- * failure. Each centres itself in the width it gets; pass `Modifier.fillMaxSize()` to centre on a whole screen.
- * Feed grids keep their card tiles (FeedEmptyTile, FeedErrorTile).
- */
-
-/** Nothing to show yet. */
 @Composable
 fun LoadingState(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
@@ -29,13 +22,11 @@ fun LoadingState(modifier: Modifier = Modifier) {
     }
 }
 
-/** Nothing here: a bare [label], plus one action (such as Add) when there is an obvious next step. */
 @Composable
 fun EmptyState(label: String, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     StateMessage(label, modifier, actionLabel.takeIf { onAction != null }, onAction)
 }
 
-/** Something failed: what went wrong, and Retry. */
 @Composable
 fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier, retryLabel: String = "Retry") {
     StateMessage(message, modifier, retryLabel, onRetry)

@@ -24,27 +24,14 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** What hashing a post's still preview gave. */
 sealed interface PictureHashResult {
     data class Hashed(val hash: Long) : PictureHashResult
 
-    /** The post has no still preview, or it is too flat to tell apart; asking again gives the same answer. */
     data object Unhashable : PictureHashResult
 
-    /** The preview could not be loaded this time. */
     data object Unavailable : PictureHashResult
 }
 
-/**
- * Gives posts their [Post.pictureHash] from the still preview a card shows first ([postPreviewImageCandidate]), whatever
- * the source, so copies of one picture on different sites can be shown once. Loading goes through the app's image
- * loader with the card's own address, so it also fills the disk cache the card then reads; only a small first-frame
- * bitmap is decoded, off the main thread. Answers are remembered by preview address for the process's life.
- *
- * Hashes started for a listing keep running in [scope] after the listing stopped waiting for them, so the next listing
- * of those posts has them at once. A late hash is not applied to the listing that missed it: a card on screen never
- * collapses or hides because of it.
- */
 class PreviewPictureHasher(
     private val scope: CoroutineScope,
     private val load: suspend (PostMediaCandidate) -> PictureHashResult,
@@ -54,13 +41,8 @@ class PreviewPictureHasher(
     }
     private val flights = ConcurrentHashMap<String, Deferred<PictureHashResult>>()
 
-    /** Hashes with the app's image loader; see [loadWithImageLoader]. */
     constructor(context: Context, scope: CoroutineScope) : this(scope, loadWithImageLoader(context.applicationContext))
 
-    /**
-     * [posts] in order, each with its picture hash when its preview hashed within [budgetMs]. The wait is shared, not
-     * per post: previews download in parallel, so a page waits about as long as its slowest preview, at most [budgetMs].
-     */
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun annotate(posts: List<Post>, budgetMs: Long = LISTING_BUDGET_MS): List<Post> {
         val pending = posts.withIndex().mapNotNull { (index, post) ->
@@ -75,7 +57,6 @@ class PreviewPictureHasher(
         return posts.mapIndexed { index, post -> hashes[index]?.let { post.copy(pictureHash = it) } ?: post }
     }
 
-    /** [post]'s hash, however long its preview takes. */
     suspend fun hash(post: Post): PictureHashResult {
         post.pictureHash?.let { return PictureHashResult.Hashed(it) }
         val candidate = postPreviewImageCandidate(post) ?: return PictureHashResult.Unhashable
@@ -86,7 +67,6 @@ class PreviewPictureHasher(
         val key = normalizeMediaUrl(candidate.source, candidate.url) ?: candidate.url
         synchronized(known) { known[key] }?.let { return CompletableDeferred(it) }
         var started: Deferred<PictureHashResult>? = null
-        // Started only once stored, so its removal never runs inside computeIfAbsent.
         return flights.computeIfAbsent(key) {
             scope.async(start = CoroutineStart.LAZY) {
                 try {
@@ -101,11 +81,9 @@ class PreviewPictureHasher(
     }
 
     companion object {
-        /** How long a listing waits for its previews' hashes before it is shown without the missing ones. */
         const val LISTING_BUDGET_MS = 600L
         private const val REMEMBERED = 8_192
 
-        /** Long edge to decode at; the hash averages the picture down to 32×32, so a little more is plenty. */
         internal const val DECODE_PX = 96
         private const val CONCURRENT_LOADS = 16
 
@@ -123,19 +101,9 @@ class PreviewPictureHasher(
     }
 }
 
-/**
- * [candidate]'s still first frame, decoded to about [sizePx] on its long edge, or null when it could not be loaded. It
- * goes through the app's image loader with the card's own address, so it reads and fills the disk cache cards use, and
- * keeps the bitmap out of the memory cache. Picture hashing and the picture tagger both read previews this way.
- */
 suspend fun loadPreviewStill(context: Context, candidate: PostMediaCandidate, sizePx: Int): Bitmap? =
     loadStill(context, candidate.url, candidate.source, sizePx)
 
-/**
- * The picture hash of the image at [url] (an address or a file) from [source], or null when it could not be loaded or
- * is too flat to tell apart. Loads as [loadPreviewStill] does; when [cachedOnly], only from a file or the disk cache,
- * never asking the network.
- */
 suspend fun pictureHashAt(context: Context, url: String, source: SourceKey, cachedOnly: Boolean = false): Long? =
     loadStill(context, url, source, PreviewPictureHasher.DECODE_PX, cachedOnly)?.let { pictureHashOf(it) }
 
@@ -150,11 +118,9 @@ private suspend fun loadStill(context: Context, url: String, source: SourceKey, 
         context, url, source, crossfade = false, allowHardware = false,
         targetWidthPx = sizePx, targetHeightPx = sizePx,
     ).newBuilder()
-        // A still first frame of any format, never an animation, and no bitmap in the memory cache.
         .decoderFactory(BitmapFactoryDecoder.Factory())
         .memoryCachePolicy(CachePolicy.DISABLED)
         .networkCachePolicy(if (cachedOnly) CachePolicy.DISABLED else CachePolicy.ENABLED)
-        // Coil starts requests on the main thread by default; this one has no view, so it never waits for a busy frame.
         .interceptorDispatcher(Dispatchers.Default)
         .build()
     return ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap

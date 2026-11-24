@@ -7,7 +7,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 
-/** Focuses this field when it first composes, so a dialog opens ready for typing. */
 @Composable
 fun Modifier.focusOnOpen(): Modifier {
     val requester = remember { FocusRequester() }

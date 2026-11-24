@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
-/** Multi-source history matches any recorded participant without changing its replay payload. */
 fun RecentSearchEntry.matchesSource(source: SourceKey?): Boolean =
     source == null || source in sources || (query.mode as? QueryMode.Source)?.source == source
 

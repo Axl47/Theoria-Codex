@@ -18,9 +18,6 @@ enum class TagSuggestionOrigin {
 }
 
 interface TagSuggestionStore {
-    /**
-     * Compatibility lane for callers that only understand portable, general tags.
-     */
     fun get(source: SourceKey, limit: Int): List<TagSuggestion>
     fun getCount(source: SourceKey, tag: String): Int? = get(source, Int.MAX_VALUE)
         .firstOrNull { sourceTagKey(source, it.text) == sourceTagKey(source, tag) }?.count

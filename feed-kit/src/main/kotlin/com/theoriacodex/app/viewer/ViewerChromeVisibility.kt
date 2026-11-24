@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 
-/** Viewer controls fade rather than popping over the media they share the screen with. */
 @Composable
 fun ViewerChromeVisibility(visible: Boolean, modifier: Modifier, content: @Composable () -> Unit) {
     AnimatedVisibility(

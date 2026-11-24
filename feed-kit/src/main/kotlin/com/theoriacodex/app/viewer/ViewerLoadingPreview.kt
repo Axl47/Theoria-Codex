@@ -17,7 +17,6 @@ import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
-/** Post dimensions describe its first page; other gallery pages may have any shape. */
 fun viewerMediaAspectRatio(post: Post, media: ImageRef): Float? {
     if (post.media.indexOf(media) > 0) return null
     val width = post.width?.takeIf { it > 0 } ?: return null
@@ -25,14 +24,9 @@ fun viewerMediaAspectRatio(post: Post, media: ImageRef): Float? {
     return width.toFloat() / height.toFloat()
 }
 
-/** Occupies exactly where fitted media will appear, or the whole parent when its shape is unknown. */
 fun Modifier.viewerFittedMedia(aspectRatio: Float?): Modifier =
     if (aspectRatio == null) fillMaxSize() else aspectRatio(aspectRatio)
 
-/**
- * A cached page-matching preview can paint immediately without competing for network bandwidth.
- * Thumbnails can differ from their media, so it fills the media's own bounds rather than the page's.
- */
 @Composable
 fun ViewerLoadingPreview(post: Post, media: ImageRef, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -53,7 +47,6 @@ fun ViewerLoadingPreview(post: Post, media: ImageRef, modifier: Modifier = Modif
 }
 
 fun viewerLoadingPreviewLocation(post: Post, media: ImageRef): String? {
-    // A gallery's cover must never be presented as a different media page; its own small thumbnail may.
     if (post.media.indexOf(media) > 0) return media.thumbnailUrl ?: media.progressiveUrls.firstOrNull()
     if (isAnimatedImageMediaRef(post.preview) || isVideoMediaRef(post.preview)) return null
     return post.preview.localPath ?: post.preview.url ?: post.preview.progressiveUrls.firstOrNull()

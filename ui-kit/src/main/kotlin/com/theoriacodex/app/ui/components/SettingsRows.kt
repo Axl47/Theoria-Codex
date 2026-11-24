@@ -39,11 +39,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
-/**
- * Header shared by the Settings home, its pages and the pages built like them; [onBack] adds the back arrow. [parents] are the
- * pages above this one, shown dimmed before [title]. The path stays on one line and loses its start
- * first, so the current page is always readable.
- */
 @Composable
 fun SettingsHeader(
     title: String,
@@ -68,7 +63,6 @@ fun SettingsHeader(
     }
 }
 
-/** Centered scrolling column used by every Settings-style page except the lazy Stats list. */
 @Composable
 fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
     val scroll = rememberScrollState()
@@ -85,7 +79,6 @@ fun SettingsPageColumn(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** A small label above a card of related rows; [action] sits at the label's end without making it any taller. */
 @Composable
 fun SettingsGroup(
     title: String?,
@@ -108,13 +101,11 @@ fun SettingsGroup(
     }
 }
 
-/** Keeps a full-size touch target centered in its row while leaving the row's height to its other children. */
 private fun Modifier.claimingNoHeight() = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
     layout(placeable.width, 0) { placeable.place(0, -placeable.height / 2) }
 }
 
-/** Separates rows inside a [SettingsGroup]. */
 @Composable
 fun SettingsRowDivider() {
     HorizontalDivider(color = MaterialTheme.colorScheme.background)
@@ -122,10 +113,6 @@ fun SettingsRowDivider() {
 
 private const val PARENT_PATH_ALPHA = 0.7f
 
-/**
- * A row that shows its current value in [summary], in the error color when [summaryIsError] (a failure that
- * needs attention); without [trailing] it shows a chevron.
- */
 @Composable
 fun SettingsRow(
     title: String,

@@ -6,10 +6,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import com.theoriacodex.domain.model.PostId
 
-/**
- * Hosts a feed the way NavHost does under the Viewer: it leaves composition while the Viewer is open and
- * returns with its saved state, so its cards report fresh bounds to the returning media.
- */
 class ViewerReturnTestFeed {
     private val shown = mutableStateOf(true)
 
@@ -19,7 +15,6 @@ class ViewerReturnTestFeed {
         if (shown.value) holder.SaveableStateProvider("feed", content)
     }
 
-    /** Opens the Viewer over the feed, then closes it onto [returnTo]. */
     fun closeViewerOnto(compose: ComposeTestRule, transition: ViewerReturnTransition, returnTo: PostId) {
         compose.runOnIdle { shown.value = false }
         compose.runOnIdle {

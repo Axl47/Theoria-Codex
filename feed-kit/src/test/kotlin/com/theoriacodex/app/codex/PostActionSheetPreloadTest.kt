@@ -31,7 +31,6 @@ class PostActionSheetPreloadTest {
         runBlocking { repository.ensureCodex("target", "Target") }
         val post = testPost()
         val query = emptySearchQuery()
-        // An unrelated post beside the match keeps the post's tag rare enough in the library to count.
         val library = listOf(
             testPost(sourcePostId = "saved"),
             testPost(sourcePostId = "other", canonicalTags = listOf("bird")),

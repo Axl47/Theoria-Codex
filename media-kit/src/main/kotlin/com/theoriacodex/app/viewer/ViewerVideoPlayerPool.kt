@@ -17,7 +17,6 @@ import androidx.media3.exoplayer.SeekParameters
 
 internal const val VIEWER_PLAYER_IDLE_TIMEOUT_MS = 30_000L
 
-/** Return stops media immediately; decoder/thread release never belongs to a page's disposal. */
 class ViewerVideoPlayerPool(
     private val infrastructure: VideoPlaybackInfrastructure,
     private val handler: Handler = Handler(Looper.getMainLooper()),
@@ -42,11 +41,6 @@ class ViewerVideoPlayerPool(
         }
     }
 
-    /**
-     * A player prepared with [playback]; give it back with [recycle]. [loop] sets its repeat mode for this lease:
-     * players are reused, so the next lease may hand back the same player object, still in whatever mode the previous
-     * caller left, and only this call is sure to run for every lease. Separate audio starts on the request's first track.
-     */
     fun acquire(playback: VideoPlaybackRequest, loop: Boolean = true): VideoPlayerLease {
         checkMainThread()
         infrastructure.onViewerStreamAcquired()
@@ -54,7 +48,6 @@ class ViewerVideoPlayerPool(
         val lease = slots.acquire(request.request)
         val player = lease.resource
         traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
-            // Returned players have no media binding; every lease starts at the requested item.
             player.setMediaSource(request.mediaSourceFactory.createMediaSource(request.mediaItem), true)
             player.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             player.prepare()
@@ -72,7 +65,6 @@ class ViewerVideoPlayerPool(
         checkMainThread()
         if (!slots.isActive(lease.slotLease)) return
         traceMediaSection(MediaTraceSections.VIEWER_PLAYER_RETURN) {
-            // A page can leave mid-drag, after its player's binding let go; the next lease must not start held.
             lease.player.setScrubbingModeEnabled(false)
             lease.player.pause()
             lease.player.stop()
@@ -115,41 +107,18 @@ class ViewerVideoPlayerPool(
     }
 }
 
-/**
- * An instant-seek drag's move to [targetMs]. Scrubbing mode holds playback and shows the keyframe at or before the
- * target ([VIEWER_SCRUBBING]): one seek runs at a time, a newer target replaces any queued one, and a target in the
- * keyframe group already shown costs nothing. [endScrub] ends it.
- */
 fun ExoPlayer.scrubTo(targetMs: Long) {
     if (!isScrubbingModeEnabled) setScrubbingModeEnabled(true)
     seekTo(targetMs)
 }
 
-/** Ends an instant-seek drag's scrubbing mode, so playback resumes; returns whether a drag had begun it. */
 fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> if (scrubbing) setScrubbingModeEnabled(false) }
 
-/**
- * Scrubbing mode for instant-seek drags: Media3's defaults, with each seek snapped to the keyframe at or before its
- * target. A keyframe shows after its own bytes and one decode, where an exact seek first downloads and decodes up to
- * the target; the release's exact seek then reads on from the keyframe the drag fetched.
- *
- * Subtitles are off during the drag too: a side-loaded file is decoded whole after every seek (about 20 ms for an
- * episode's 360 KB of ASS on a desktop JVM, several times that on a phone), and is decoded once more when it ends.
- */
 private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
-    // Fractions of the duration: any distance before the target, none after it.
     .setFractionalSeekTolerance(1.0, 0.0)
     .setDisabledTrackTypes(ScrubbingModeParameters.DEFAULT.disabledTrackTypes + C.TRACK_TYPE_TEXT)
     .build()
 
-/**
- * Plays the first of a request's separate audio tracks once the player has read them, over whichever Media3 would rank
- * higher (more channels, a higher bitrate, the video's own audio), unless an audio track was already chosen. It stops
- * listening once those tracks are known.
- *
- * An override rather than Media3's preferred audio label: separate audio carries no label of its own, and giving its
- * formats one means wrapping each merged child's media period and mapping track selections back to its own groups.
- */
 private class FirstSeparateAudio(private val player: Player) : Player.Listener {
     override fun onTracksChanged(tracks: Tracks) {
         val group = tracks.groups.firstOrNull { player.separateAudioIndex(it) == 0 } ?: return

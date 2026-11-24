@@ -81,7 +81,6 @@ class ForYouInterestsTest {
     }
 }
 
-/** [source]'s history: 100 watched posts and 30 kept, carrying [kept] and [watched] of each tag. */
 class ForYouPictureInterestsTest {
     private val source = SourceKey.GELBOORU
 
@@ -91,14 +90,12 @@ class ForYouPictureInterestsTest {
         val interests = ForYouInterests.generate(
             source, listOf(listOf("tree")), affinity, pictureCandidates = mapOf("cat_ears" to "cat ears", "solo" to "solo"),
         )
-        // Solo is on most Danbooru posts, so it narrows nothing however often it was predicted.
         assertEquals(listOf(listOf("cat_ears")), interests.map { it.tags })
     }
 
     @Test fun `before the source has watched enough, a predicted tag must beat its Danbooru share four times`() {
         val evidence = PictureEvidence(mapOf("cat ears" to 6.0), mapOf("cat ears" to 6), kept = 30, baseRates = mapOf("cat ears" to 0.06))
         val cold = TagAffinityInputs(pictures = evidence)
-        // A kept share of about 0.21 is 3.5 times the base rate: not enough without watched posts to compare with.
         assertFalse(cold.pictureAffinity(source, "cat ears", "cat_ears").proven)
         assertTrue(cold.copy(pictures = evidence.copy(baseRates = mapOf("cat ears" to 0.04))).pictureAffinity(source, "cat ears", "cat_ears").proven)
     }
@@ -114,7 +111,6 @@ class ForYouPictureInterestsTest {
         val evidence = PictureEvidence(
             mapOf("3d" to 12.0, "cat ears" to 12.0), mapOf("3d" to 12, "cat ears" to 12), kept = 30, baseRates = mapOf("3d" to 0.01, "cat ears" to 0.01),
         )
-        // The same evidence proves a tag about what the picture shows.
         assertTrue(TagAffinityInputs(pictures = evidence).pictureAffinity(source, "cat ears", "cat_ears").proven)
         assertFalse(TagAffinityInputs(pictures = evidence).pictureAffinity(source, "3d", "3d").proven)
         val chosen = TagAffinityInputs(interest = mapOf("3d" to EXPLICIT_WEIGHT), explicit = setOf("3d"), pictures = evidence)
@@ -164,7 +160,6 @@ private fun TagAffinityInputs.merge(other: TagAffinityInputs) = copy(
     keptByTag = keptByTag + other.keptByTag, keptBySource = keptBySource + other.keptBySource,
 )
 
-/** What a profile whose only history is these Likes would have. */
 private fun likedOnly(documents: List<List<String>>): TagAffinityInputs {
     val counts = documents.flatMap { tags -> tags.map(::normalizeMatchToken).distinct() }.groupingBy { it }.eachCount()
     return TagAffinityInputs(likedCounts = counts, likes = documents.size, interest = counts.mapValues { it.value.toDouble() })

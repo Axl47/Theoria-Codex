@@ -67,14 +67,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * Application execution service for Search.
- *
- * It owns provider access, durable writes, and bounded service caches. It never owns route jobs,
- * route continuation, queries, results, statuses, loading flags, or an observable UI snapshot.
- * Every provider call returns an immutable value that SearchViewModel admits by request identity.
- */
-@Suppress("LargeClass") // F12 removes route ownership; F15 owns remaining service-size ratchets.
+@Suppress("LargeClass")
 class SearchCoordinator(
     private val registry: SourceAdapterRegistry,
     private val queryRepository: QueryRepository,
@@ -86,27 +79,22 @@ class SearchCoordinator(
     private val firstPageStore: SearchFirstPageStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Runs seen-tag bookkeeping and watches search counts; tests pass their scheduler-backed scope. */
     seenTagScope: CoroutineScope = CoroutineScope(SupervisorJob() + computationDispatcher),
-    /** Shared with the Viewer, so a post both ask for at once is fetched once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
 ) : SearchExecutionService {
     private val seenTags = SeenTagRecorder(statisticsRepository, tagSuggestionStore, computationDispatcher, seenTagScope)
 
-    /** Kept current so local suggestions can rank searched tags without waiting on storage. */
     private val searchCounts: StateFlow<Map<SearchedTagKey, Long>> = statisticsRepository.observeStatistics()
         .map { statistics -> statistics.searchesByTag }
         .distinctUntilChanged()
         .catch { emit(emptyMap()) }
         .stateIn(seenTagScope, SharingStarted.Eagerly, emptyMap())
 
-    /** Every page of results passes here, so tags and file copies are learned once per page. */
     private fun listed(posts: List<Post>) {
         seenTags.record(posts)
         fileMirrors.learn(posts)
     }
-    /** Tag autocomplete and trending tags for the Search composer. */
     val suggestions = SearchSuggestionCoordinator(
         registry = registry,
         tagSuggestionStore = tagSuggestionStore,
@@ -164,23 +152,19 @@ class SearchCoordinator(
         )
     }
 
-    /** The available sources that match only exactly spelled tags, each with its name for the input error. */
     fun exactTagSources(): Map<SourceKey, String> = registry.availableSources()
         .filter { source -> registry.adapterFor(source)?.capabilities?.requiresExactTags == true }
         .associateWith { source -> source.displayName() }
 
-    /** Spells [query]'s tags as [source] lists them when it matches only exact tags; other sources run it as is. */
     private suspend fun prepareExactTags(source: SourceKey, query: Query): Query {
         val adapter = registry.adapterFor(source)?.takeIf { it.capabilities.requiresExactTags } ?: return query
         return queryPreparation.prepareExactTags(adapter, query)
     }
 
-    /** Per-request term caps of the available sources that have one. */
     fun sourceTermLimits(): Map<SourceKey, SearchTermLimit> = registry.availableSources().mapNotNull { source ->
         registry.adapterFor(source)?.capabilities?.searchTermLimit?.let { source to it }
     }.toMap()
 
-    /** The faceted search scopes each available source offers, for those that offer any. */
     fun searchScopesBySource(): Map<SourceKey, List<FacetedSearchScope>> = availableSources
         .associateWith { source -> supportedSearchScopes(QueryMode.Source(source)) }
         .filterValues { it.isNotEmpty() }
@@ -232,7 +216,6 @@ class SearchCoordinator(
         }
     }
 
-    /** The continuation before a search's first page: its sources, weights and no tokens yet. */
     private fun firstPage(query: Query, scope: SearchSourceScope, sources: SearchSources) = SearchContinuation(
         executionKey = searchExecutionKey(query, scope),
         sourceScope = scope,
@@ -288,7 +271,6 @@ class SearchCoordinator(
                 ),
             )
         }
-        // Every route into a single-source search passes here, so this is where its term cap is enforced.
         searchTermLimitNotices(base.query, listOf(mode.source), sourceTermLimits()).firstOrNull()?.let { notice ->
             return SearchExecutionResult.Failure(base.executionKey, base.query, base.sourceScope, emptyList(), notice.message())
         }
@@ -338,7 +320,6 @@ class SearchCoordinator(
             error.message ?: "Could not retry source")
     }
 
-    /** A thrown request failure is the query's one source's failure; Unified reports its sources' failures as statuses. */
     private fun thrownStatuses(error: Throwable, query: Query): List<SourceRunStatus> =
         (query.mode as? QueryMode.Source)?.let { mode -> listOf(sourceFailureStatus(mode.source, error)) }.orEmpty()
 
@@ -387,7 +368,6 @@ class SearchCoordinator(
         }
         listed(result.items)
         val next = continuation.accept(result, pageable)
-        // A source removed since the last page answers nothing; dropping its token lets paging end.
         val gone = pageable - registry.availableSources()
         return SearchPageResult.Success(continuation.executionKey, result.items, statuses,
             next.copy(cursor = next.cursor.copy(pageTokens = next.cursor.pageTokens - gone)))
@@ -401,7 +381,6 @@ class SearchCoordinator(
         return SearchPageResult.Success(continuation.executionKey, page.items, page.statuses, continuation.accept(page, setOf(source)))
     }
 
-    /** One page from a single [source] at the continuation's token for it, as a one-source feed page. */
     private suspend fun fetchSource(
         continuation: SearchContinuation,
         source: SourceKey,
@@ -421,7 +400,6 @@ class SearchCoordinator(
         next: SearchContinuation = this,
     ) = SearchExecutionResult.Success(executionKey, query, sourceScope, posts, statuses, next)
 
-    /** Nothing more to page: every token is spent, so a retry starts its source over. */
     private fun SearchContinuation.ended() = copy(cursor = cursor.copy(pageTokens = emptyMap()))
 
     override suspend fun persistAppliedSearch(
@@ -465,7 +443,6 @@ class SearchCoordinator(
         }
     }
 
-    /** The post count the tag store knows for [tag] on [source]; counts are only ever matched per source. */
     fun tagVideoCount(source: SourceKey, tag: String): Int? =
         tag.trim().takeIf(String::isNotBlank)?.let { tagSuggestionStore.getCount(source, it) }
 
@@ -618,7 +595,6 @@ class SearchCoordinator(
                     status.errorMessage?.contains("PIXIV_UNKNOWN", ignoreCase = true) == true)
         }
 
-    /** Unified answers per-source failures as statuses, so only a Pixiv search throws Pixiv's own error. */
     private fun isPixivUnknownError(error: Throwable, query: Query): Boolean {
         if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
             return query.mode == QueryMode.Source(SourceKey.PIXIV)

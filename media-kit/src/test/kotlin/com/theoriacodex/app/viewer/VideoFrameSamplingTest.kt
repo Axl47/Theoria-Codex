@@ -61,14 +61,12 @@ class VideoFrameSamplingTest {
 
         assertTrue(frameSample(frames, failure = null) is FrameSample.Frames)
         assertEquals(FrameSample.Unreadable, frameSample(emptyList(), failure = null))
-        // A spent budget keeps the frames it bought.
         assertTrue(frameSample(frames, spent) is FrameSample.Frames)
         assertEquals(FrameSample.Unreadable, frameSample(emptyList(), spent))
         assertEquals(FrameSample.Refused, frameSample(emptyList(), status(404)))
         assertEquals(FrameSample.Unreachable, frameSample(emptyList(), status(429)))
         assertEquals(FrameSample.Unreachable, frameSample(emptyList(), status(503)))
         assertEquals(FrameSample.Unreachable, frameSample(frames, IOException("connection reset")))
-        // Ugoira and sources speak through the same classes.
         assertEquals(FrameSample.Refused, frameSample(emptyList(), MediaRefused("gone")))
         assertEquals(FrameSample.Unreadable, frameSample(emptyList(), UnreadableMedia("damaged")))
         val signedOut = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "Pixiv credentials not configured")
@@ -91,10 +89,8 @@ class VideoFrameSamplingTest {
         reader.readAt(20, buffer, 0, 16)
         reader.readAt(400_100, buffer, 0, 16)
 
-        // The first request asks for the whole file to learn its length; a jump asks for one bounded window.
         assertEquals(listOf(0L to C.LENGTH_UNSET.toLong(), 400_000L to 256L * 1024), source.opened)
 
-        // Once its job ends, the reader gives the retriever nothing more, kept windows included.
         job.cancel()
         assertEquals(-1, reader.readAt(10, buffer, 0, 16))
     }
@@ -102,7 +98,6 @@ class VideoFrameSamplingTest {
     private fun status(code: Int) =
         HttpDataSource.InvalidResponseCodeException(code, null, null, emptyMap(), DataSpec(uri), ByteArray(0))
 
-    /** Serves [bytes] and records each request's position and length. */
     private class RecordingSource(bytes: ByteArray) : DataSource {
         private val inner = ByteArrayDataSource(bytes)
         val opened = mutableListOf<Pair<Long, Long>>()

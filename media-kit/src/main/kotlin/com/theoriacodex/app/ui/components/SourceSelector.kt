@@ -50,7 +50,6 @@ import com.theoriacodex.app.source.SourcePresentationGroup
 import com.theoriacodex.app.source.presentation
 import com.theoriacodex.domain.model.SourceKey
 
-/** Shared source dropdown; null selects the route's combined view. */
 @Composable
 fun SourceSelector(
     selectedSource: SourceKey?,
@@ -101,7 +100,6 @@ fun SourceSelector(
     }
 }
 
-/** A single source's mark, or the combined view's mark with how many sources it spans. */
 @Composable
 fun SourceScopeIndicator(source: SourceKey?, combinedSourceCount: Int) {
     if (source != null) {
@@ -120,14 +118,8 @@ fun SourceScopeIndicator(source: SourceKey?, combinedSourceCount: Int) {
     }
 }
 
-/** One more chip after a [SourceIconMenu]'s sources, such as Search's Source mix: [label] names it for TalkBack. */
 class SourceMenuAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
-/**
- * Source choices as floating icon chips. Groups with a folder label (Rule34, the Danbooru sites) fold
- * into one labeled chip that opens their titled submenu. A null option is the combined view;
- * [onLongPress] enables a secondary action per source. [action] closes the menu and runs.
- */
 @Composable
 fun SourceIconMenu(
     expanded: Boolean,
@@ -149,7 +141,6 @@ fun SourceIconMenu(
         tonalElevation = 0.dp,
     ) {
         val health = LocalSourceHealth.current
-        // A down source is retried when picked; a challenged one opens its verification instead.
         val pick: (SourceKey?) -> Unit = { source ->
             if (source != null && health.onPick(source)) onDismiss() else onSelect(source)
         }
@@ -173,7 +164,6 @@ private fun SourceMenuChoices(
     onLongPress: ((SourceKey) -> Unit)?,
     issues: Map<SourceKey, HostOutageKind>,
 ) {
-    // Options arrive in presentation order, so folders follow their first source's position.
     val folders = options.filterNotNull().groupBy { it.presentation().group }.filterKeys { it.folderLabel != null }
     if (openFolder != null) {
         IconButton(onClick = { onOpenFolder(null) }) {
@@ -194,7 +184,6 @@ private fun SourceMenuChoices(
     }
 }
 
-/** [action]'s chip, styled as a folder; none without one. */
 @Composable
 private fun SourceMenuActionChip(action: SourceMenuAction?, onDismiss: () -> Unit) {
     if (action == null) return
@@ -222,7 +211,6 @@ private fun SourceFolderChip(label: String, icon: ImageVector?, selected: Boolea
     }
 }
 
-/** The small red mark on a source that is currently down; folders don't carry it. */
 @Composable
 private fun DownDot(modifier: Modifier = Modifier) {
     Box(
@@ -234,14 +222,12 @@ private fun DownDot(modifier: Modifier = Modifier) {
     )
 }
 
-/** How TalkBack and the titled submenu describe a down source. */
 private fun HostOutageKind.shortLabel(): String = when (this) {
     HostOutageKind.MAINTENANCE -> "down"
     HostOutageKind.CHALLENGE -> "needs browser verification"
     HostOutageKind.UNRESOLVED -> "can't be found"
 }
 
-/** Folders whose name doesn't fit as a letter mark; Custom matches the Sites row in Settings. */
 private val SourcePresentationGroup.folderIcon: ImageVector?
     get() = if (this == SourcePresentationGroup.CUSTOM) Icons.Default.Public else null
 
@@ -294,7 +280,6 @@ private fun SourceMenuOption(
     }
 }
 
-/** Icon chips float as capsules; the submenu's titled rows fill the width and tint only when selected. */
 @Composable
 private fun Modifier.sourceOptionShape(selected: Boolean, showTitle: Boolean): Modifier =
     if (showTitle) {

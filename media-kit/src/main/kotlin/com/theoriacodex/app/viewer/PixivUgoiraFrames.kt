@@ -14,7 +14,6 @@ internal typealias UgoiraFrameDecoder = suspend (
     File, List<UgoiraFrameSpec>, UgoiraSizeBucket, suspend (UgoiraPlayback) -> Unit,
 ) -> UgoiraPlayback
 
-/** Publish immutable frame batches; published bitmaps belong to consumers and must never be recycled here. */
 internal suspend fun decodeUgoiraFrames(
     archive: File,
     specs: List<UgoiraFrameSpec>,
@@ -52,11 +51,6 @@ internal suspend fun decodeUgoiraFrames(
     return UgoiraPlayback(frames.toList(), delays)
 }
 
-/**
- * Display frames decode straight to [Bitmap.Config.HARDWARE], so showing a new frame each tick needs no
- * RenderThread texture upload. Export reads pixels with `getPixels`, so its own decode stays software.
- * A hardware decode that fails (for example when graphics memory is short) falls back to software.
- */
 private fun decodeUgoiraFrame(bytes: ByteArray, sampleSize: Int, sizeBucket: UgoiraSizeBucket): Bitmap? {
     fun decode(config: Bitmap.Config) = BitmapFactory.decodeByteArray(
         bytes, 0, bytes.size,
@@ -83,16 +77,10 @@ internal suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
     }
 }
 
-/**
- * [specs]' frames at [count] points spread evenly through the animation's playing time, each decoded once from [archive]
- * with power-of-two sampling to no less than [sizePx] on its long edge. A frame held across several points is returned
- * once per point, so it keeps its share of the animation. For the picture tagger, which reads a few frames, not playback.
- */
 internal suspend fun sampleUgoiraFrames(archive: File, specs: List<UgoiraFrameSpec>, count: Int, sizePx: Int): List<Bitmap> {
     if (specs.isEmpty() || count <= 0) return emptyList()
     val picked = ugoiraSampleIndices(specs, count)
     return ZipFile(archive).use { zip ->
-        // A frame that is missing or will not decode is skipped; the archive will not change on a later try.
         val decoded = picked.distinct().associateWith { index ->
             val entry = zip.getEntry(specs[index].fileName) ?: return@associateWith null
             val bytes = readUgoiraFrame(zip, entry)
@@ -106,7 +94,6 @@ internal suspend fun sampleUgoiraFrames(archive: File, specs: List<UgoiraFrameSp
     }
 }
 
-/** The frame showing at the middle of each of [count] equal stretches of [specs]' playing time; a frame without a delay counts 1 ms. */
 internal fun ugoiraSampleIndices(specs: List<UgoiraFrameSpec>, count: Int): List<Int> {
     val ends = specs.map { maxOf(it.delayMs, 1).toLong() }.runningReduce(Long::plus)
     val total = ends.last()

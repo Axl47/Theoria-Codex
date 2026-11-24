@@ -5,14 +5,8 @@ import com.theoriacodex.app.media.PerceptualHash
 import com.theoriacodex.domain.model.isSamePicture
 import kotlin.math.sqrt
 
-/** A picture to analyse and how many of a post's pictures it stands for. */
 internal class WeightedPicture(val bitmap: Bitmap, val weight: Int)
 
-/**
- * [pictures] with each near-copy of an earlier one (perceptual hashes within the same-picture distance) folded into it,
- * so a still scene costs one analysis but keeps its share of the post. Pictures too flat to hash (black or solid frames)
- * are dropped, unless all of them are, when the first stands for them all.
- */
 internal fun distinctPictures(pictures: List<Bitmap>): List<WeightedPicture> {
     val kept = mutableListOf<Pair<Long, Int>>()
     val weights = mutableListOf<Int>()
@@ -34,11 +28,6 @@ private fun Bitmap.perceptualHash(): Long? {
     return PerceptualHash.ofArgb(pixels, width, height)
 }
 
-/**
- * One score per output from several pictures' [scores]: each output's mean over the top third of the pictures by that
- * score, counting each picture [weights] times. A tag must hold for about a third of a video to score high, which damps
- * one-frame flashes, and a single picture keeps its own scores, so the calibrated thresholds mean what they did.
- */
 internal fun combineScores(scores: List<FloatArray>, weights: List<Int>): FloatArray {
     require(scores.isNotEmpty() && scores.size == weights.size) { "${scores.size} score sets, ${weights.size} weights" }
     val total = weights.sum()
@@ -58,7 +47,6 @@ internal fun combineScores(scores: List<FloatArray>, weights: List<Int>): FloatA
     }
 }
 
-/** The direction several pictures' [embeddings] share: the weighted mean of each scaled to unit length, at unit length. */
 internal fun combineEmbeddings(embeddings: List<FloatArray>, weights: List<Int>): FloatArray {
     require(embeddings.isNotEmpty() && embeddings.size == weights.size) { "${embeddings.size} embeddings, ${weights.size} weights" }
     val mean = FloatArray(embeddings.first().size)

@@ -3,27 +3,19 @@ package com.theoriacodex.app.media
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Later posts that may be decided before a stuck post is passed. Counting adapts to network speed. */
 const val DEFAULT_DURATION_REVEAL_WINDOW = 8
 
-/** A post whose duration arrived after the frontier passed it, shown just before [beforeIndex]. */
 data class LateDurationArrival(
     val postId: PostId,
     val beforeIndex: Int,
 )
 
-/**
- * Turns out-of-order duration decisions into an append-only presentation, like a CPU retiring
- * out-of-order work in sequence. Posts before [frontier] are revealed, and anything decided after
- * being passed joins the bottom of what is showing, so shown cards never change position.
- */
 data class DurationReveal(
     val frontier: Int = 0,
     val frontierAnchor: PostId? = null,
     val awaiting: Set<PostId> = emptySet(),
     val lateArrivals: List<LateDurationArrival> = emptyList(),
 ) {
-    /** The post list a duration filter may present, in stable order. */
     fun present(posts: List<Post>): List<Post> {
         if (lateArrivals.isEmpty()) return posts.subList(0, frontier)
         val postsById = posts.associateBy(Post::id)
@@ -42,7 +34,6 @@ data class DurationReveal(
     }
 }
 
-/** Advances [reveal] for the current decisions. A replaced post list starts over. */
 fun advanceDurationReveal(
     reveal: DurationReveal,
     posts: List<Post>,
@@ -59,7 +50,6 @@ fun advanceDurationReveal(
             (it.frontier > 0 && posts[it.frontier - 1].id != it.frontierAnchor)
     } ?: DurationReveal()
 
-    // Arrivals join at the old frontier, so they land directly below what is already showing.
     val arrived = current.awaiting.filter { it in knownDurationMsByPostId }
     val lateArrivals = current.lateArrivals + arrived.map { LateDurationArrival(it, current.frontier) }
     val awaiting = LinkedHashSet(current.awaiting).apply { removeAll(arrived.toSet()) }

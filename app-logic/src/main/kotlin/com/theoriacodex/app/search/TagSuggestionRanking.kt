@@ -7,7 +7,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 
-/** Pure ranking policy shared by cached and provider-backed Search suggestions. */
 fun rankTagSuggestions(
     suggestions: List<TagSuggestion>,
     prefix: String,
@@ -20,10 +19,6 @@ fun rankTagSuggestions(
     countOf = TagSuggestion::count,
 )
 
-/**
- * Interleaves one relevance band at a time so providers with incomparable count scales remain
- * discoverable. Each provider still retains its own count and authoritative-order ranking.
- */
 fun rankUnifiedTagSuggestions(
     suggestionsBySource: List<Pair<SourceKey, List<TagSuggestion>>>,
     prefix: String,
@@ -47,7 +42,6 @@ fun rankUnifiedTagSuggestions(
     return accepted.take(limit)
 }
 
-/** Fairly combines already provider-ranked lists, preserving each source's order. */
 fun interleaveTagSuggestions(
     suggestionsBySource: List<Pair<SourceKey, List<TagSuggestion>>>,
     limit: Int,
@@ -65,7 +59,6 @@ fun interleaveTagSuggestions(
     return accepted.take(limit)
 }
 
-/** Same order as [rankTagSuggestions], but matches on the value only and keeps one row per facet and namespace. */
 fun rankFacetedTagSuggestions(
     suggestions: List<FacetedTagSuggestion>,
     prefix: String,
@@ -83,10 +76,6 @@ fun rankFacetedTagSuggestions(
     )
 }
 
-/**
- * Drops items with no match, keeps the first of each [identityOf], then orders by match quality, highest
- * count, and original position. Shared by every suggestion element type.
- */
 private fun <T, K> rankSuggestions(
     suggestions: List<T>,
     limit: Int,
@@ -109,11 +98,6 @@ private fun <T, K> rankSuggestions(
         .map { ranked -> ranked.suggestion }
 }
 
-/**
- * Terms the user searched before on any of [sources] that match [prefix] and that [accepts] allows:
- * closest match first, then most-searched. Spellings of one tag type that normalize alike are one tag,
- * counted by the source that searched it most; the same value as another type stays a separate row.
- */
 fun rankSearchedTags(
     searchCounts: Map<SearchedTagKey, Long>,
     sources: Set<SourceKey>,

@@ -6,10 +6,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The expected strings come from Python's reference, `str(imagehash.phash(Image.fromarray(array, "L")))` with
- * imagehash 4.3.2, on the same 32×32 arrays (a picture already 32×32 is not resized, so the DCT stage is compared).
- */
 class PerceptualHashTest {
     @Test fun `matches imagehash phash on fixed grey arrays`() {
         assertEquals("94294a5569baeb56", hex(PerceptualHash.ofLuma(grey { x, y -> (x * 7 + y * 3) % 256 })))
@@ -24,7 +20,6 @@ class PerceptualHashTest {
 
     @Test fun `pixels averaged down to the grid hash like the grid itself`() {
         val luma = disc()
-        // Each grey level as a 3×3 block of colourless pixels: averaging back to 32×32 restores the grid exactly.
         val pixels = IntArray(96 * 96) { index ->
             val level = luma[(index / 96 / 3) * 32 + (index % 96) / 3].toInt()
             (0xFF shl 24) or (level shl 16) or (level shl 8) or level
@@ -46,7 +41,6 @@ class PerceptualHashTest {
 
     private fun disc() = grey { x, y -> minOf(255, (if ((x - 12) * (x - 12) + (y - 20) * (y - 20) < 64) 230 else 30) + x * 2) }
 
-    /** The C library's LCG, as the Python side generates it. */
     private fun noise(seed: Long): DoubleArray {
         var state = seed
         return DoubleArray(32 * 32) {
@@ -55,7 +49,6 @@ class PerceptualHashTest {
         }
     }
 
-    /** A soft picture defined in relative coordinates, so any size draws the same scene. */
     private fun smooth(width: Int, height: Int) = IntArray(width * height) { index ->
         val x = (index % width).toDouble() / width
         val y = (index / width).toDouble() / height

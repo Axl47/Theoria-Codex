@@ -40,13 +40,10 @@ class TriageDeckTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
-    /** Collects each deck's feed, as its owner's scope does. */
     private val deckScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** Outlives every deck, as the activity's scope does. */
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** Every decision event the decks report, in order. */
     private val events = mutableListOf<TriageDecisionEvent>()
 
     @After fun tearDown() {
@@ -55,13 +52,11 @@ class TriageDeckTest {
         Dispatchers.resetMain()
     }
 
-    /** What the deck's owner hides, for the decks that have such an owner. */
     private val ownerHidden = MutableStateFlow(emptyMap<SourceKey, Set<String>>())
 
     private fun deck(source: TriageFeed = feed, removal: TriageRemoval? = null, query: Query? = null, fromForYou: Boolean = false) =
         TriageDeck(deckScope, source, actions, quickSave, query, fromForYou, writeScope, removal, onDecision = events::add, ownerHidden = ownerHidden)
 
-    /** A deck on a Codex, where left removes through [removal]. */
     private fun removingDeck(removal: TriageRemoval) = deck(removal = removal)
 
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
@@ -187,7 +182,6 @@ class TriageDeckTest {
         val tagged = listOf(testPost(sourcePostId = "a", canonicalTags = listOf("cat")), testPost(sourcePostId = "b", canonicalTags = listOf("cat")), posts[2])
         val deck = deck(FakeFeed(tagged, canLoadMore = false))
         deck.decideCurrent(TriageChoice.Hide("cat"))
-        // The owner learns of the stored hide, and of its removal, some time after the deck.
         ownerHidden.value = mapOf(SourceKey.PIXIV to setOf("cat"))
         deck.undo()
         assertEquals(tagged[0], deck.state.value.current)
@@ -475,7 +469,6 @@ class TriageDeckTest {
         )
     }
 
-    /** Decides for whichever card is current, as a swipe that finishes on its own card does. */
     private fun TriageDeck.decideCurrent(choice: TriageChoice) = decide(choice, checkNotNull(state.value.current).id)
 
     private class FakeFeed(initial: List<Post>, canLoadMore: Boolean) : TriageFeed {
@@ -524,7 +517,6 @@ class TriageDeckTest {
         var hold: CompletableDeferred<Unit>? = null
         var unlikeHold: CompletableDeferred<Unit>? = null
 
-        /** The active profile, and the profile each write went to. */
         var profile = "main"
         val wroteTo = mutableListOf<String>()
         override val hiddenTags: Flow<Set<HiddenTag>> = flowOf(emptySet())

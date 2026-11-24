@@ -18,16 +18,10 @@ import com.theoriacodex.mediakit.R
 import com.theoriacodex.domain.model.PostId
 import java.io.File
 
-/** Width of the frame as displayed, after non-square pixels are stretched to their intended shape. */
 val VideoSize.displayWidth: Int get() = (width * pixelWidthHeightRatio).toInt()
 
-/**
- * Default subtitle lift for shared [PlayerView] instances (feed cards and any non-Viewer player). The Viewer applies
- * its own subtitle style and controls-aware padding when binding its player view.
- */
 private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.15f
 
-/** A surface-only player view for a feed card or Viewer page; it draws the video and any subtitle cues. */
 fun createTexturePlayerView(context: Context): PlayerView {
     val view = LayoutInflater.from(context)
         .inflate(R.layout.player_view_texture, FrameLayout(context), false) as PlayerView
@@ -35,11 +29,6 @@ fun createTexturePlayerView(context: Context): PlayerView {
     return view
 }
 
-/**
- * Trace section names. The feed-preview names cover every main-thread call the app makes into a preview player;
- * scripts/trace_player_frames.py groups them into construction, prepare, surface, and commands and events, so a
- * new preview section belongs in that script's category table too.
- */
 object MediaTraceSections {
     const val PREVIEW_PREPARE = "TheoriaPreviewPrepare"
     const val PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
