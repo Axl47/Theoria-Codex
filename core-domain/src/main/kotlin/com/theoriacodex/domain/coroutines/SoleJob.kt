@@ -6,14 +6,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class SoleJob(private val scope: CoroutineScope) {
+    private val lock = Any()
     private var job: Job? = null
 
-    val isActive: Boolean get() = job?.isActive == true
+    val isActive: Boolean get() = synchronized(lock) { job.busy }
 
     fun launchIfIdle(block: suspend CoroutineScope.() -> Unit) {
-        if (isActive) return
-        val next = scope.launch(start = CoroutineStart.LAZY, block = block)
-        job = next
+        val next = synchronized(lock) {
+            if (job.busy) return
+            scope.launch(start = CoroutineStart.LAZY, block = block).also { job = it }
+        }
         next.start()
     }
+
+    private val Job?.busy: Boolean get() = this != null && !isCompleted && !isCancelled
 }

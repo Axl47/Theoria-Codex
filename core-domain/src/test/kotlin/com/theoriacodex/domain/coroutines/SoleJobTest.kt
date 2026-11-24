@@ -3,6 +3,10 @@ package com.theoriacodex.domain.coroutines
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -32,5 +36,23 @@ class SoleJobTest {
         assertFalse(sole.isActive)
         request()
         assertEquals(2, runs)
+    }
+
+    @Test fun `a cancelled job leaves room for the next launch`() = runTest {
+        val parent = SupervisorJob(coroutineContext.job)
+        val sole = SoleJob(CoroutineScope(coroutineContext + parent + UnconfinedTestDispatcher(testScheduler)))
+        var runs = 0
+        sole.launchIfIdle {
+            runs += 1
+            awaitCancellation()
+        }
+        sole.launchIfIdle { runs += 1 }
+        assertEquals(1, runs)
+
+        parent.cancelChildren()
+        assertFalse(sole.isActive)
+        sole.launchIfIdle { runs += 1 }
+        assertEquals(2, runs)
+        parent.cancel()
     }
 }

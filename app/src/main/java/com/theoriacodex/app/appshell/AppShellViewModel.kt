@@ -162,7 +162,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
         val environment = updateEnvironment ?: return
         val current = state.value.startup
         val remote = current.pendingInstall ?: return
-        if (state.value.appReady || updateJob.isActive) return
+        if (state.value.appReady) return
         launchUpdate {
             if (current.awaitingUnknownSources) {
                 val outcome = environment.updater.retryPendingInstall(remote, ::updaterState)
