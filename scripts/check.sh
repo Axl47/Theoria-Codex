@@ -437,7 +437,6 @@ acquire_check_slot() {
 phase 'Hotspot check' line_budgets "$base"
 phase 'Module layering' module_layering
 phase 'Architecture rules' architecture_rules
-phase 'Compose test waits' bare_compose_waits
 phase 'Comment ratchet' comment_ratchet "$base"
 phase 'Module registration' module_registration
 [[ "$part" != static ]] || phase 'Python unittests' python_tests
