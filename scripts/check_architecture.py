@@ -259,22 +259,37 @@ def off_main_notes_run_where_work_runs() -> list[str]:
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
 ANDROID_NAMESPACE = "{http://schemas.android.com/apk/res/android}"
+TOOLS_NAMESPACE = "{http://schemas.android.com/tools}"
+CLEARTEXT_ADR = "(docs/adr/0048-provider-media-urls.md)"
 
 
 @rule
 def provider_media_never_loads_in_cleartext() -> list[str]:
-    manifest = ElementTree.fromstring(read("app/src/main/AndroidManifest.xml"))
-    application = manifest.find("application")
-    config_name = "" if application is None else application.get(f"{ANDROID_NAMESPACE}networkSecurityConfig", "")
-    if config_name != "@xml/network_security_config":
-        return ["app's manifest must apply @xml/network_security_config (docs/adr/0048-provider-media-urls.md)"]
-    config = ElementTree.fromstring(read("app/src/main/res/xml/network_security_config.xml"))
-    base = config.find("base-config")
     failures = []
-    if base is None or base.get("cleartextTrafficPermitted") != "false":
-        failures.append("network_security_config.xml must refuse cleartext in its base-config (docs/adr/0048-provider-media-urls.md)")
-    for host in sorted(cleartext_hosts(config, "false") - LOOPBACK_HOSTS):
-        failures.append(f"network_security_config.xml allows cleartext to {host}; only loopback may (docs/adr/0048-provider-media-urls.md)")
+    for manifest_path in sorted((ROOT / "app/src").glob("*/AndroidManifest.xml")):
+        name = manifest_path.relative_to(ROOT).as_posix()
+        application = ElementTree.fromstring(manifest_path.read_text(encoding="utf-8")).find("application")
+        if application is None:
+            continue
+        config_name = application.get(f"{ANDROID_NAMESPACE}networkSecurityConfig")
+        if config_name not in (None, "@xml/network_security_config") or (config_name is None and name == "app/src/main/AndroidManifest.xml"):
+            failures.append(f"{name} must apply @xml/network_security_config {CLEARTEXT_ADR}")
+        if application.get(f"{ANDROID_NAMESPACE}usesCleartextTraffic") == "true":
+            failures.append(f"{name} must not set usesCleartextTraffic {CLEARTEXT_ADR}")
+        removed = application.get(f"{TOOLS_NAMESPACE}remove", "")
+        if application.get(f"{TOOLS_NAMESPACE}node") in ("replace", "remove") or "networkSecurityConfig" in removed:
+            failures.append(f"{name} must not drop the application's network security config {CLEARTEXT_ADR}")
+    configs = sorted((ROOT / "app/src").glob("*/res/xml*/network_security_config.xml"))
+    if not configs:
+        failures.append(f"app has no network_security_config.xml {CLEARTEXT_ADR}")
+    for config_path in configs:
+        name = config_path.relative_to(ROOT).as_posix()
+        config = ElementTree.fromstring(config_path.read_text(encoding="utf-8"))
+        base = config.find("base-config")
+        if base is None or base.get("cleartextTrafficPermitted") != "false":
+            failures.append(f"{name} must refuse cleartext in its base-config {CLEARTEXT_ADR}")
+        for host in sorted(cleartext_hosts(config, "false") - LOOPBACK_HOSTS):
+            failures.append(f"{name} allows cleartext to {host}; only loopback may {CLEARTEXT_ADR}")
     return failures
 
 
