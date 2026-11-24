@@ -73,7 +73,7 @@ input=$(jq -nc --arg repo "$(git rev-parse --show-toplevel)" --arg base "<drafte
 t3 workflow start theoria-release --key "vX.Y.Z/$(date +%s)" --input "$input" --json
 ```
 
-- If T3 says workflows are off, ask the user to turn on Settings → Labs → Workflows. If it doesn't know `theoria-release`, link `~/.t3/workflows/theoria-release.ts` to the main checkout's copy of this skill's `theoria-release.ts` and start again.
+- If T3 says workflows are off, ask the user to turn on Settings → Labs → Workflows. If it doesn't know `theoria-release`, link `~/.t3/workflows/theoria-release.ts` to the main checkout's copy of this skill's `theoria-release.ts` and start again. The server reloads the file only when that link is recreated (`ln -sfn`), not when the file changes, so relink after `theoria-release.ts` changes on main.
 - Add `dryRun: true` to rehearse: the run makes and gates the release commit, returns its diff, and pushes nothing.
 
 The workflow writes the release files with `scripts/release_gate.py prepare` (`versionName`, `versionCode`, `release-notes/vX.Y.Z.md`, and `[Unreleased]` moved under a dated `[X.Y.Z]` heading in `CHANGELOG.md`), runs the release gate, and pushes `chore(release): prepare vX.Y.Z` straight to `main` from a worktree of its own, so your checkout stays as it is. It then dispatches Release with `expected-sha` set to that commit, so a PR merged in between can't ship in it. Release signs, builds, and publishes in about 6 minutes, or about 15 when a Main result is still missing and runs inside it. Last, it checks that the prerelease is not a draft, has the tag on the release commit, has the approved notes, and has `theoria-codex-main.apk`.

@@ -2,7 +2,9 @@
 // the version and notes, gets them approved, and starts this with `t3 workflow start theoria-release`.
 // From there it carries the release to the end: release commit, Release workflow, one rerun for runner
 // trouble, and a check of the published prerelease. The T3 server loads it through a link at
-// ~/.t3/workflows/theoria-release.ts. Raise `version` whenever the body changes while a run is unfinished.
+// ~/.t3/workflows/theoria-release.ts. It watches that folder, not the link's target, so an edit here
+// (or a pull) takes effect only once the link is recreated with `ln -sfn`. Raise `version` first when
+// the body changes while a run is unfinished.
 import { execFile } from "node:child_process";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
