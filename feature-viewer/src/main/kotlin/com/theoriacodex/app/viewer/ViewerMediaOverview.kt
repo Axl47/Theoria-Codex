@@ -86,7 +86,7 @@ internal fun ViewerMediaOverviewGrid(
     Box(modifier.background(Color.Black).nestedScroll(quickReturn)) {
         com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
             state = grid, modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
-            contentPadding = PaddingValues(top = if (readingModes != null) 64.dp + OVERVIEW_SWITCH_HEIGHT else 64.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(top = if (readingModes != null) 64.dp + OVERVIEW_SWITCH_HEIGHT else 64.dp, bottom = 24.dp + viewerDockInset()),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(items, key = { it.mediaIndex }) { item ->

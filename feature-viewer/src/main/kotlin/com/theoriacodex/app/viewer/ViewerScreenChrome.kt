@@ -212,7 +212,8 @@ private fun BoxScope.ViewerTopBarOverlay(
             source = title,
             subtitle = subtitle,
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
-            onBack = { controls.requestDismiss() },
+            // Like system Back, the first press leaves the page overview.
+            onBack = { if (frame.mediaOverviewVisible) controls.setOverviewVisible(false) else controls.requestDismiss() },
             trailing = {
                 if (watching) {
                     ViewerEpisodeTopActions(
@@ -225,7 +226,12 @@ private fun BoxScope.ViewerTopBarOverlay(
                     )
                 }
             },
-        ) { ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction) }
+        ) {
+            // The overview's reading-mode switch sits where the trail would.
+            if (!frame.mediaOverviewVisible) {
+                ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction)
+            }
+        }
     }
 }
 
