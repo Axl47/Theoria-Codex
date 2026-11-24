@@ -15,3 +15,8 @@ Opening a post from Recents never counts toward a Codex.
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/statistics/StatisticsProjection.kt`: `CodexStatisticsSummary`, `SavedContentStatistics`, `withLiveUsage`, `statisticsCodexId`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/statistics/StatisticsProjectionTest.kt`: `a Codex summary keeps every recorded post beyond its top five (ADR 0086)`, `only a launch from a Codex carries a Codex id (ADR 0086)`
+- Left to prose: that timer updates never read posts and `withLiveUsage` rebuilds no content, source or tag statistics is wiring in `:app`'s statistics source, which is not guarded.

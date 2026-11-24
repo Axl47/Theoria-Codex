@@ -16,3 +16,9 @@ Repeating offenders stay cheap. Release-build reports are coarser than debug one
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/diagnostics/MainThreadWorkChecker.kt`: `MainThreadWorkChecker`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/diagnostics/ViolationLedger.kt`: `ViolationLedger`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/diagnostics/ViolationLedgerTest.kt`: `each site is reported once and every occurrence is counted (ADR 0073)`, `past the limit it notes the limit once, stops asking for sites and keeps counting (ADR 0073)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/diagnostics/MainThreadWorkCheckerTest.kt`: `off the main thread nothing is counted or reported (ADR 0073)`, `a failing report never reaches the caller and the run is still counted (ADR 0073)`, `each call site is reported once with frames starting at its caller (ADR 0073)`
+- Left to prose: how R8 renames frames and inlines `note` in minified builds is unguarded, because host tests do not run release builds.

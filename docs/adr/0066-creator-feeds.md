@@ -17,3 +17,7 @@ Tab switches are cheap and never leave stale requests. Adding a feed kind needs 
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/creator/state/CreatorStateContract.kt`: `CreatorFeedState`, `CreatorUiState`, `tabs`, `uploads`, `uploadsRefreshing`, `openCreator`, `detailsLoaded`, `selectFeed`, `creatorQueryHash`
+
+## Guarded by
+
+- `ui-kit/src/test/kotlin/com/theoriacodex/app/creator/state/AccountFeedStateTest.kt`: `switching tabs parks the list and restores it without a request (ADR 0066)`, `a feed left mid-load reloads when selected again, a failed one keeps its error (ADR 0066)`, `a creator that is not an account has no tabs and ignores feed selection (ADR 0066)`, `a request outlived by a tab switch is ignored (ADR 0066)`, `Favorites is hidden once the source reports none and unknown counts keep it (ADR 0066)`, `details that hide the selected Favorites tab return to uploads (ADR 0066)`, `follow waits for the uploads list even after switching tabs mid-load (ADR 0066)`, `Follow reads uploads while another feed is selected (ADR 0066)`, `an account opens on its first feed with the uploads key it always had (ADR 0066)`

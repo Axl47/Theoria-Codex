@@ -12,7 +12,7 @@ class VideoQualityPolicyTest {
         VideoVariant("720", 720), VideoVariant("360", 360),
     ))
 
-    @Test fun `network defaults and explicit choices select renditions of one item`() {
+    @Test fun `network defaults and explicit choices select renditions of one item (ADR 0074)`() {
         assertEquals("original", media.withVideoQuality(VideoQuality.AUTO, false).url)
         assertEquals("720", media.withVideoQuality(VideoQuality.AUTO, true).url)
         assertEquals("360", media.withVideoQuality(VideoQuality.DATA_SAVER, false).url)
@@ -21,7 +21,7 @@ class VideoQualityPolicyTest {
         assertEquals(media.videoVariants, media.withVideoQuality(VideoQuality.DATA_SAVER, true).videoVariants)
     }
 
-    @Test fun `feed cards use the smallest sensible stream only on metered networks`() {
+    @Test fun `feed cards use the smallest sensible stream only on metered networks (ADR 0074)`() {
         assertEquals("360", media.feedPreviewLocation(metered = true))
         assertEquals("original", media.feedPreviewLocation(metered = false))
         assertEquals("/saved.mp4", media.copy(localPath = "/saved.mp4").feedPreviewLocation(metered = true))
@@ -38,7 +38,7 @@ class VideoQualityPolicyTest {
         assertEquals(false, blockedAnimationExport(settings.copy(downloadsOverMetered = true, downloadsOverRoaming = true), true, true))
     }
 
-    @Test fun `offline media and unavailable resolution retain usable media`() {
+    @Test fun `offline media and unavailable resolution retain usable media (ADR 0074)`() {
         val local = media.copy(localPath = "/offline/video.mp4")
         assertEquals(local, local.withVideoQuality(VideoQuality.DATA_SAVER, true))
         assertEquals(media, media.withVideoQuality(VideoQuality.AUTO, true, 2160))

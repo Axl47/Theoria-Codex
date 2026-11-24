@@ -24,8 +24,8 @@ class FeedResultsTest {
     )
 
     @Test
-    fun `a later page refreshes shown posts, adds new ones and leaves out copies of shown files`() {
-        val shown = listOf(post(SourceKey.DANBOORU, "1", HASH), post(SourceKey.PIXIV, "2"))
+    fun `a later page refreshes shown posts, adds new ones and leaves out copies of shown files (ADR 0069)`() {
+        val shown = listOf(post(SourceKey.DANBOORU, "1", HASH), post(SourceKey.PIXIV, "2"), post(SourceKey.PIXIV, "3"))
         val incoming = listOf(
             post(SourceKey.GELBOORU, "9", HASH),
             post(SourceKey.PIXIV, "2", title = "fresher"),
@@ -34,7 +34,7 @@ class FeedResultsTest {
 
         val merged = mergeFeedPosts(shown, incoming)
 
-        assertEquals(listOf("1", "2", "8"), merged.map { it.id.sourcePostId })
+        assertEquals(listOf("1", "2", "3", "8"), merged.map { it.id.sourcePostId })
         assertEquals("fresher", merged[1].title)
     }
 

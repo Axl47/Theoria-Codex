@@ -7,6 +7,18 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class DurationDecisionProjectionTest {
+    @Test fun `a settled value stays after the bounded snapshot drops it (ADR 0068)`() {
+        val first = MediaDurationKey(PostId(SourceKey.PIXIV, "first"), "media")
+        val second = MediaDurationKey(PostId(SourceKey.PIXIV, "second"), "media")
+        val known = MediaDurationState.Known(1_000, MediaDurationProvenance.PROVIDER)
+        val observed = setOf(first, second)
+
+        val settled = reconcileDurationDecisions(mapOf(first to known), mapOf(second to known), observed)
+
+        assertEquals(mapOf(first to known, second to known), settled)
+        assertEquals(settled, reconcileDurationDecisions(settled, emptyMap(), observed))
+    }
+
     @Test fun `a settlement inspects bounded incoming keys rather than traversing any size feed`() {
         for (size in listOf(1_000, 10_000, 50_000)) {
             val keys = (0 until size).map { MediaDurationKey(PostId(SourceKey.PIXIV, "$it"), "media") }.toSet()

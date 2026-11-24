@@ -12,14 +12,14 @@ class DurationRevealTest {
     private val known = MediaDurationState.Known(1_000L, MediaDurationProvenance.CONTAINER_PROBE)
 
     @Test
-    fun `later decisions wait behind an undecided post`() {
+    fun `later decisions wait behind an undecided post (ADR 0068)`() {
         val reveal = advance(DurationReveal(), decided = setOf(0, 2, 3))
 
         assertEquals(listOf("0"), reveal.present(posts).ids())
     }
 
     @Test
-    fun `a post stuck behind a full window is passed and joins the bottom when it arrives`() {
+    fun `a post stuck behind a full window is passed and joins the bottom when it arrives (ADR 0068)`() {
         val passed = advance(DurationReveal(), decided = setOf(0, 2, 3), window = 2)
         assertEquals(listOf("0", "1", "2", "3"), passed.present(posts).ids())
 
@@ -31,7 +31,7 @@ class DurationRevealTest {
     }
 
     @Test
-    fun `a failed post that later gains a duration also joins the bottom`() {
+    fun `a failed post that later gains a duration also joins the bottom (ADR 0068)`() {
         val failure = MediaDurationState.RetryableFailure(1L, MediaDurationFailureReason.TIMEOUT)
         val failed = advanceDurationReveal(
             DurationReveal(), posts,
@@ -44,7 +44,7 @@ class DurationRevealTest {
     }
 
     @Test
-    fun `a replaced post list starts over`() {
+    fun `a replaced post list starts over (ADR 0068)`() {
         val reveal = advance(DurationReveal(), decided = posts.indices.toSet())
         val replacement = listOf(video(100), video(101))
 

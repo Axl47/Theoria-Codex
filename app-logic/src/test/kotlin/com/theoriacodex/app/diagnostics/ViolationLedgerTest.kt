@@ -6,7 +6,7 @@ import org.junit.Test
 
 class ViolationLedgerTest {
     @Test
-    fun `each site is reported once and every occurrence is counted`() {
+    fun `each site is reported once and every occurrence is counted (ADR 0073)`() {
         val ledger = ViolationLedger(siteLimit = 5)
 
         val outcomes = listOf("a", "b", "a", "a").map { site -> ledger.record("parse") { site } }
@@ -17,7 +17,7 @@ class ViolationLedgerTest {
     }
 
     @Test
-    fun `past the limit it notes the limit once, stops asking for sites and keeps counting`() {
+    fun `past the limit it notes the limit once, stops asking for sites and keeps counting (ADR 0073)`() {
         val ledger = ViolationLedger(siteLimit = 3)
         var sitesAsked = 0
         fun record(site: String) = ledger.record("parse") { sitesAsked++; site }

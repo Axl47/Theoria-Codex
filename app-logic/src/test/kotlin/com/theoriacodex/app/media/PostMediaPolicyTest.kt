@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -30,6 +31,35 @@ class PostMediaPolicyTest {
         assertFalse(isPixivUgoiraPost(post(SourceKey.GELBOORU, full = ref("file.zip", "image/ugoira"))))
         assertTrue(isAnimatedPost(post(SourceKey.IWARA, full = null)))
         assertFalse(isAnimatedPost(post(SourceKey.HITOMI, full = ref("file.webp", "image/webp"))))
+    }
+
+    @Test
+    fun `a ref with streams is video even when its address and mime name no type (ADR 0074)`() {
+        val master = ImageRef("https://example.test/master", null, null)
+        assertEquals(PostMediaKind.UNKNOWN, mediaKind(master))
+        assertEquals(
+            PostMediaKind.VIDEO,
+            mediaKind(master.copy(streams = listOf(MediaStream("https://example.test/master", "Auto")))),
+        )
+    }
+
+    @Test
+    fun `an Iwara, Rule34Video or Rule34Gen listing post is animated before its media is known (ADR 0074)`() {
+        listOf(SourceKey.IWARA, SourceKey.RULE34VIDEO, SourceKey.RULE34GEN).forEach { source ->
+            assertTrue(source.id, isAnimatedPost(post(source, full = null)))
+        }
+    }
+
+    @Test
+    fun `no other source key makes a still post animated (ADR 0074)`() {
+        val videoOnlySites = setOf(SourceKey.IWARA, SourceKey.RULE34VIDEO, SourceKey.RULE34GEN)
+        val others = SourceKey.builtIns.filterNot { it in videoOnlySites } +
+            requireNotNull(SourceKey.parse("custom_example_org"))
+        assertEquals(9, others.size)
+        others.forEach { source ->
+            assertFalse(source.id, isAnimatedPost(post(source, full = null)))
+            assertFalse(source.id, isAnimatedPost(post(source, full = ref("file.jpg", "image/jpeg"))))
+        }
     }
 
     @Test
