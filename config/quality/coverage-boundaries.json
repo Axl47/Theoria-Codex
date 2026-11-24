@@ -55,6 +55,7 @@
     "*/src/main/**/search/SourceStatusRow.kt",
     "*/src/main/**/settings/SettingsScreen.kt",
     "*/src/main/**/settings/MediaPreferencesSection.kt",
+    "*/src/main/**/settings/PictureTagsEntry.kt",
     "*/src/main/**/viewer/ViewerScreen.kt",
     "*/src/main/**/viewer/ViewerChromeVisibility.kt",
     "*/src/main/**/viewer/ViewerFrameEffects.kt",
