@@ -15,7 +15,13 @@ import com.theoriacodex.data.repository.ProfileRestorePendingException
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.data.repository.BackupPreview
 import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.SeriesImportResult
+import com.theoriacodex.domain.series.ExtensionRepo
+import com.theoriacodex.domain.series.ExtensionRepos
+import com.theoriacodex.domain.series.NewExtensionRepo
+import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
@@ -89,13 +95,22 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
     check(FileBackedSavedSearchRepository(restore.resolve("pins")).observeSavedSearches().first() == pins)
 
     // Mihon-family backups decode through protobuf models, which R8 must keep with their field numbers.
-    val series = withRestoreService(restore, store) { it.importSeries(Base64.getDecoder().decode(MIHON_BACKUP)) }
-    check(series == SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0))
+    val mihon = Base64.getDecoder().decode(MIHON_BACKUP)
+    val repos = AddedRepos()
+    val (preview, series) = withRestoreService(restore, store, repos) { it.preview(mihon) to it.importSeries(mihon) }
+    val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0)
+    check(preview == BackupPreview.Series(counts, newRepos = listOf("https://repo.example"), missingSources = listOf("Source")))
+    check(series == SeriesImportResult(counts, reposAdded = 1) && repos.given == listOf(NewExtensionRepo("https://repo.example", "ab")))
     check(imported.last().series.single().entries.single().read)
 }
 
 /** A restore service over durable stores in [directory], as the app builds one, with [store] for the library. */
-private suspend fun <T> withRestoreService(directory: File, store: ProfileBackupStore, block: suspend (ProfileBackupService) -> T): T =
+private suspend fun <T> withRestoreService(
+    directory: File,
+    store: ProfileBackupStore,
+    extensionRepos: ExtensionRepos? = null,
+    block: suspend (ProfileBackupService) -> T,
+): T =
     withStoreScope { scope ->
         block(
             ProfileBackupService(
@@ -104,9 +119,21 @@ private suspend fun <T> withRestoreService(directory: File, store: ProfileBackup
                 savedSearches = FileBackedSavedSearchRepository(directory.resolve("pins")),
                 readingPositions = FileBackedReadingPositionRepository(directory),
                 journalFile = directory.resolve(RESTORE_JOURNAL),
+                extensionRepos = extensionRepos,
             ),
         )
     }
+
+/** Adds every repo it is given, offline, keeping what it was given. */
+private class AddedRepos : ExtensionRepos {
+    val given = mutableListOf<NewExtensionRepo>()
+    override suspend fun repos() = given.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = emptyMap<String, String>().also { given += repos }
+    override suspend fun remove(url: String) = error("unused")
+    override suspend fun available(refresh: Boolean): RepoListing = error("unused")
+    override suspend fun install(repo: String, packageName: String): String? = error("unused")
+    override suspend fun uninstall(id: String) = error("unused")
+}
 
 private fun acceptanceSearch() = RecentSearchEntry(
     Query(QueryMode.Unified, listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")), emptyList(), SortMode.NEWEST, null, null),
@@ -198,5 +225,5 @@ private const val SHIPPED_PINS =
     """"excludeTerms":[],"includeTermGroups":[[{"value":"a & b","facet":"ARTIST",""" +
     """"sourceNamespace":"artist"}]]},"kind":"MULTI_SEARCH","sources":["GELBOORU","PIXIV"],"sourceTags":{}}}]}"""
 
-/** A Mihon backup following one manga, `/s` on source 7, with its one chapter read. */
-private const val MIHON_BACKUP = "H4sIAAAAAAAC/+MS4WAXYtIvlmIMbmLk4GLRL9Y3VGAEACrdYIsWAAAA"
+/** A Mihon backup following one manga, `/s` on source 7 (named "Source"), with its one chapter read and one repo. */
+private const val MIHON_BACKUP = "H4sIAAAAAAAC/+MS4WAXYtIvlmIMbmLk4GLRL9Y3VGBcxcbFxRacX1qUnCrAfolNiksko6SkoNhKX78otSBfL7UiMbcgJ1WLKTEJAPmDCotAAAAA"

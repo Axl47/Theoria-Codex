@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.ProfileRestoreResult
 import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.SeriesImportResult
 import com.theoriacodex.data.repository.BackupPreview
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -81,6 +82,40 @@ class BackupViewModelTest {
         assertEquals(1, actions.seriesImports)
         assertNull(owner.state.value.preview)
         assertEquals("Imported 212 manga · 1 anime.", owner.effects.first())
+    }
+
+    @Test
+    fun `a Mihon-family import says which of its repos were added and why others were not`() = runTest {
+        val imported = SeriesImportPreview(manga = 3, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        actions.nextPreview = BackupPreview.Series(imported, newRepos = listOf("A", "B", "C"))
+        actions.nextImport = SeriesImportResult(imported, reposAdded = 2, repoProblems = mapOf("https://old.example" to "Now signed with another key"))
+        val owner = owner()
+        owner.import("document")
+        advanceUntilIdle()
+        owner.restore()
+        advanceUntilIdle()
+
+        assertEquals("Imported 3 manga. Added 2 extension repos. Could not add 1 extension repo: Now signed with another key.", owner.effects.first())
+    }
+
+    @Test
+    fun `the import preview names the missing extensions the backup names, and only warns when it names none`() {
+        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        assertNull(BackupPreview.Series(counts).missingNotice())
+        assertEquals("Needs this extension: Comick.", BackupPreview.Series(counts, missingSources = listOf("Comick")).missingNotice())
+        assertEquals(
+            "Needs these extensions: Comick, Gogoanime and 1 other.",
+            BackupPreview.Series(counts, missingSources = listOf("Comick", "Gogoanime"), unnamedMissingSources = 1).missingNotice(),
+        )
+        assertEquals("A series stays unavailable until its extension is on here.", BackupPreview.Series(counts, unnamedMissingSources = 2).missingNotice())
+    }
+
+    @Test
+    fun `the import preview names the repos it adds`() {
+        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        assertNull(BackupPreview.Series(counts).reposNotice())
+        assertEquals("Also adds this extension repo: Keiyoushi.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi")).reposNotice())
+        assertEquals("Also adds these extension repos: Keiyoushi, Kohi den.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi", "Kohi den")).reposNotice())
     }
 
     @Test
@@ -223,7 +258,9 @@ private class FakeBackupActions : BackupActions {
     var nextPreview: BackupPreview = preview
     var seriesImports = 0
 
-    override fun preview(bytes: ByteArray) = nextPreview
+    var nextImport: SeriesImportResult? = null
+
+    override suspend fun preview(bytes: ByteArray) = nextPreview
 
     override suspend fun restore(bytes: ByteArray, applyPreferences: Boolean): ProfileRestoreResult {
         restores++
@@ -234,9 +271,9 @@ private class FakeBackupActions : BackupActions {
         return ProfileRestoreResult(2, 3)
     }
 
-    override suspend fun importSeries(bytes: ByteArray): SeriesImportPreview {
+    override suspend fun importSeries(bytes: ByteArray): SeriesImportResult {
         seriesImports++
-        return (nextPreview as BackupPreview.Series).preview
+        return nextImport ?: SeriesImportResult((nextPreview as BackupPreview.Series).preview)
     }
 }
 

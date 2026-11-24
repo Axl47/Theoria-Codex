@@ -1,6 +1,7 @@
 package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.storedRepoAddress
 import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -33,7 +34,7 @@ class RepoReaderTest {
             "https://repo.example/anime/index.min.json" to legacyIndex,
         ).mapValues { it.value.encodeToByteArray() }
         for (address in listOf("https://repo.example/anime", "https://repo.example/anime/", "https://repo.example/anime/index.min.json", "https://repo.example/anime/repo.json")) {
-            val index = RepoReader.read(RepoReader.storedAddress(address)) { url -> site[url] ?: throw IOException("404 $url") }
+            val index = RepoReader.read(storedRepoAddress(address)) { url -> site[url] ?: throw IOException("404 $url") }
             assertEquals("Yūzōnō", index.name)
             assertEquals(signingKey, index.signingKey)
             val onsen = index.extensions.first()
@@ -44,8 +45,8 @@ class RepoReaderTest {
             assertEquals(listOf(false, true), index.extensions.map { it.torrent })
             assertEquals(listOf("en"), index.extensions[1].languages)
         }
-        assertEquals("https://repo.example/anime", RepoReader.storedAddress(" https://repo.example/anime/index.min.json "))
-        assertEquals("A repo at a site's root", "https://someone.github.io/repo.json", RepoReader.fetchAddress(RepoReader.storedAddress("https://someone.github.io/index.min.json")))
+        assertEquals("https://repo.example/anime", storedRepoAddress(" https://repo.example/anime/index.min.json "))
+        assertEquals("A repo at a site's root", "https://someone.github.io/repo.json", RepoReader.fetchAddress(storedRepoAddress("https://someone.github.io/index.min.json")))
     }
 
     @Test

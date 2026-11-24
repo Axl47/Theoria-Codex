@@ -7,6 +7,9 @@ import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepos
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +44,10 @@ class ProfileBackupService(
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
+    /** Where a Mihon-family import adds its repos; null where no extensions run. */
+    private val extensionRepos: ExtensionRepos? = null,
+    /** The extension sources that are on, so a Mihon-family import can name the ones its series still need. */
+    private val extensionSources: suspend () -> Set<SourceKey> = { emptySet() },
 ) {
     private val mutex = Mutex()
 
@@ -72,22 +79,39 @@ class ProfileBackupService(
         if (includeRecents) statistics?.observeStatistics()?.first() else null
 
     /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
-    fun preview(bytes: ByteArray): BackupPreview =
-        if (isTachiyomiBackup(bytes)) BackupPreview.Series(decodeTachiyomiBackup(bytes, clock()).importPreview())
-        else BackupPreview.Profiles(codec.decode(bytes).preview())
+    suspend fun preview(bytes: ByteArray): BackupPreview {
+        if (!isTachiyomiBackup(bytes)) return BackupPreview.Profiles(codec.decode(bytes).preview())
+        val backup = decodeTachiyomiBackup(bytes, clock())
+        // Details only: a device that cannot answer leaves them out rather than refuse the backup. Sources that cannot be
+        // listed are unavailable in Series too, so they count as missing.
+        val newRepos = extensionRepos?.let { repos ->
+            runCatchingPreservingCancellation { backup.reposNotIn(repos.repos()) }.getOrNull()
+        }.orEmpty()
+        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos)
+    }
 
     /**
      * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
      * on the device is removed, each entry keeps the further progress of the two sides, and importing twice adds
-     * nothing more. One Room transaction holds it all, so it needs no journal. Returns what was imported.
+     * nothing more. One Room transaction holds it all, so it needs no journal. Then adds the repos the backup lists
+     * ([ExtensionRepos.add], which skips those already added and refuses one now signed with another key).
      */
-    suspend fun importSeries(bytes: ByteArray): SeriesImportPreview = withContext(Dispatchers.IO) {
-        mutex.withLock {
+    suspend fun importSeries(bytes: ByteArray): SeriesImportResult = withContext(Dispatchers.IO) {
+        val backup = mutex.withLock {
             check(!journalFile.exists()) { "Finish the pending restore first" }
-            val series = decodeTachiyomiBackup(bytes, clock())
-            store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = series))
-            series.importPreview()
+            decodeTachiyomiBackup(bytes, clock()).also {
+                store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = it.series))
+            }
         }
+        val imported = backup.importPreview()
+        // Outside the lock: each repo is read over the network, and none touches the library. The series are in by now,
+        // so a failure here is reported against the repos alone.
+        val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(imported)
+        runCatchingPreservingCancellation {
+            val new = backup.reposNotIn(repos.repos())
+            val problems = repos.add(backup.repos)
+            SeriesImportResult(imported, reposAdded = new.count { it.url !in problems }, repoProblems = problems)
+        }.getOrElse { SeriesImportResult(imported, repoProblems = backup.repos.associate { it.url to "Import the backup again to retry" }) }
     }
 
     suspend fun restore(

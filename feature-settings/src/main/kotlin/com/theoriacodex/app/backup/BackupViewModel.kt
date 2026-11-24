@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.ProfileRestoreResult
 import com.theoriacodex.data.repository.ProfileRestorePendingException
 import com.theoriacodex.data.repository.BackupPreview
 import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.SeriesImportResult
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.text.NumberFormat
 import kotlinx.coroutines.CoroutineDispatcher
@@ -24,14 +25,14 @@ import kotlinx.coroutines.withContext
 
 interface BackupActions {
     suspend fun export(includeRecents: Boolean): ByteArray
-    fun preview(bytes: ByteArray): BackupPreview
+    suspend fun preview(bytes: ByteArray): BackupPreview
     suspend fun restore(bytes: ByteArray, applyPreferences: Boolean): ProfileRestoreResult
-    suspend fun importSeries(bytes: ByteArray): SeriesImportPreview
+    suspend fun importSeries(bytes: ByteArray): SeriesImportResult
 }
 
 class ProfileBackupActions(private val service: ProfileBackupService) : BackupActions {
     override suspend fun export(includeRecents: Boolean) = service.export(includeRecents)
-    override fun preview(bytes: ByteArray) = service.preview(bytes)
+    override suspend fun preview(bytes: ByteArray) = service.preview(bytes)
     override suspend fun restore(bytes: ByteArray, applyPreferences: Boolean) = service.restore(bytes, applyPreferences)
     override suspend fun importSeries(bytes: ByteArray) = service.importSeries(bytes)
 }
@@ -128,7 +129,7 @@ class BackupViewModel(
                 withContext(ioDispatcher) {
                     when (preview) {
                         is BackupPreview.Profiles -> actions.restore(bytes, applyPreferences).message()
-                        is BackupPreview.Series -> "Imported ${actions.importSeries(bytes).summary()}."
+                        is BackupPreview.Series -> actions.importSeries(bytes).message()
                     }
                 }
             }
@@ -168,6 +169,13 @@ private fun ProfileRestoreResult.message(): String {
     val kept = keptExistingSites.mapNotNull { id -> SourceKey.parse(id)?.displayName() }
     return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
 }
+
+/** "Imported 212 manga. Added 2 extension repos.", with why any of the backup's repos could not be added. */
+private fun SeriesImportResult.message(): String = listOfNotNull(
+    "Imported ${imported.summary()}.",
+    "Added ${countLabel(reposAdded, "extension repo")}.".takeIf { reposAdded > 0 },
+    "Could not add ${countLabel(repoProblems.size, "extension repo")}: ${repoProblems.values.distinct().joinToString()}.".takeIf { repoProblems.isNotEmpty() },
+).joinToString(" ")
 
 /** "212 manga · 1 anime", leaving out a kind the backup does not follow; "series progress" when it follows none. */
 internal fun SeriesImportPreview.summary(): String =

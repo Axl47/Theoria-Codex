@@ -18,6 +18,17 @@ data class ExtensionRepo(
  */
 data class NewExtensionRepo(val url: String, val signingKey: String? = null)
 
+/**
+ * How a repo address is stored as [ExtensionRepo.url], and so what two addresses for one repo share: the folder for a
+ * legacy repo's `index.min.json` or `repo.json`, any other address as given.
+ */
+fun storedRepoAddress(url: String): String {
+    val trimmed = url.trim().trimEnd('/')
+    return LEGACY_REPO_FILES.firstNotNullOfOrNull { file -> trimmed.removeSuffix("/$file").takeIf { it != trimmed } } ?: trimmed
+}
+
+private val LEGACY_REPO_FILES = listOf("index.min.json", "repo.json")
+
 /** An extension a repo offers, and how the device stands with it. */
 data class RepoExtension(
     /** The [ExtensionRepo.url] of the repo offering it. */

@@ -2,6 +2,9 @@
 
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepo
+import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -9,6 +12,7 @@ import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.extensionSeriesStatus
 import com.theoriacodex.domain.series.extensionSourceKey
 import com.theoriacodex.domain.series.seriesKind
+import com.theoriacodex.domain.series.storedRepoAddress
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -23,13 +27,25 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * the same extensions, which name a series and its entries by the same source number and addresses, so each series
  * lands on the extension source that lists it here and keeps its read or watched state.
  *
- * A series comes along when the backup follows it or has progress in it. Categories, trackers, downloads and the
- * apps' settings stay behind, and so does the apps' local source, whose files Theoria cannot read.
+ * A series comes along when the backup follows it or has progress in it, and so do the extension repos the backup
+ * lists, so only the extensions remain to install. Categories, trackers, downloads and the apps' settings stay behind,
+ * and so does the apps' local source, whose files Theoria cannot read.
  */
 internal fun isTachiyomiBackup(bytes: ByteArray): Boolean = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
 
-/** The series of a Mihon-family backup as Theoria stores them, checked as a profile backup's series are. */
-internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): List<BackupSeries> {
+/**
+ * What importing reads from a Mihon-family backup: its [series] as Theoria stores them, the extension repos it lists
+ * with the signing key each had, and its names for those repos (by address given) and for the sources the series are on.
+ */
+internal class TachiyomiImport(
+    val series: List<BackupSeries>,
+    val repos: List<NewExtensionRepo>,
+    val repoNames: Map<String, String>,
+    val sourceNames: Map<SourceKey, String>,
+)
+
+/** [TachiyomiImport] of a Mihon-family backup, its series checked as a profile backup's series are. */
+internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): TachiyomiImport {
     require(isTachiyomiBackup(bytes)) { "This is not a Mihon or Aniyomi backup." }
     val backup = rejectMalformedBackup { ProtoBuf.decodeFromByteArray<TachiyomiBackup>(gunzip(bytes)) }
     val series = (backup.manga.mapNotNull { it.toBackup(SeriesKind.MANGA, now) } + (backup.anime + backup.aniyomiAnime).mapNotNull { it.toBackup(SeriesKind.ANIME, now) })
@@ -37,12 +53,20 @@ internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): List<BackupSeri
         .writable()
     require(series.isNotEmpty()) { "This backup has no series to import." }
     validateBackupSeries(series)
-    return series
+    // Only a repo pinned to a key comes back: an address alone would trust whatever key the repo names now. Older
+    // Aniyomi backups keep installed extensions in field 106, whose package names are no address. A folder address is
+    // how these apps store a repo, and ExtensionRepos.add takes it as it is.
+    val listed = (backup.repos + backup.animeRepos).filter { it.url.trim().startsWith("https://") && it.signingKey.isNotBlank() }
+        .distinctBy { storedRepoAddress(it.url) }
+    val repos = listed.map { NewExtensionRepo(it.url.trim(), it.signingKey.trim()) }
+    val repoNames = listed.filter { it.name.isNotBlank() }.associate { it.url.trim() to it.name.trim() }
+    val names = backup.sources.named(SeriesKind.MANGA) + backup.animeSources.named(SeriesKind.ANIME)
+    return TachiyomiImport(series, repos, repoNames, names)
 }
 
 /** What importing [this] adds, for the preview and the message after it. */
-internal fun List<BackupSeries>.importPreview(): SeriesImportPreview {
-    val (anime, manga) = partition { it.series.series.id.source.seriesKind == SeriesKind.ANIME }
+internal fun TachiyomiImport.importPreview(): SeriesImportPreview {
+    val (anime, manga) = series.partition { it.series.series.id.source.seriesKind == SeriesKind.ANIME }
     return SeriesImportPreview(
         manga = manga.count { it.series.followed },
         anime = anime.count { it.series.followed },
@@ -50,6 +74,27 @@ internal fun List<BackupSeries>.importPreview(): SeriesImportPreview {
         episodesWatched = anime.sumOf { series -> series.entries.count { it.read } },
     )
 }
+
+/** The repos [this] lists that are not among [stored], compared by their stored address. */
+internal fun TachiyomiImport.reposNotIn(stored: List<ExtensionRepo>): List<NewExtensionRepo> {
+    val addresses = stored.mapTo(HashSet()) { it.url }
+    return repos.filter { storedRepoAddress(it.url) !in addresses }
+}
+
+/** The preview of importing [this] on a device where [sourcesOn] are the extension sources that are on and [newRepos] of its repos can be added. */
+internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, newRepos: List<NewExtensionRepo>): BackupPreview.Series {
+    val missing = series.map { it.series.series.id.source }.filterNot { it in sourcesOn }
+        .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+    return BackupPreview.Series(
+        importPreview(),
+        newRepos = newRepos.map { repoNames[it.url] ?: it.url },
+        missingSources = missing.mapNotNull(sourceNames::get).distinct(),
+        unnamedMissingSources = missing.count { it !in sourceNames },
+    )
+}
+
+private fun List<TachiyomiSource>.named(kind: SeriesKind): Map<SourceKey, String> =
+    filter { it.id > 0 && it.name.isNotBlank() }.associate { kind.extensionSourceKey(it.id) to it.name.trim() }
 
 /** Refuses a backup that inflates past what any library holds, rather than filling memory. */
 private fun gunzip(bytes: ByteArray): ByteArray = GZIPInputStream(bytes.inputStream()).use { input ->
@@ -113,14 +158,33 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?):
 
 /**
  * The parts of a Mihon-family backup this import reads; protobuf skips the rest. Mihon and TachiyomiJ2K keep manga in
- * field 1; Anikku keeps anime in field 501, in the same shape, with episodes where chapters are. Aniyomi keeps its
- * anime in field 3, which the others leave unused; no Aniyomi backup has been checked against it yet.
+ * field 1, with their sources' names in 101 and Mihon its repos in 106; Anikku keeps anime in field 501, in the same
+ * shape, with episodes where chapters are, and their sources and repos in 503 and 505. Aniyomi keeps its anime in
+ * field 3, which the others leave unused; no Aniyomi backup has been checked against it yet.
  */
 @Serializable
 private class TachiyomiBackup(
     @ProtoNumber(1) val manga: List<TachiyomiSeries> = emptyList(),
     @ProtoNumber(3) val aniyomiAnime: List<TachiyomiSeries> = emptyList(),
+    @ProtoNumber(101) val sources: List<TachiyomiSource> = emptyList(),
+    @ProtoNumber(106) val repos: List<TachiyomiRepo> = emptyList(),
     @ProtoNumber(501) val anime: List<TachiyomiSeries> = emptyList(),
+    @ProtoNumber(503) val animeSources: List<TachiyomiSource> = emptyList(),
+    @ProtoNumber(505) val animeRepos: List<TachiyomiRepo> = emptyList(),
+)
+
+@Serializable
+private class TachiyomiSource(
+    @ProtoNumber(1) val name: String = "",
+    @ProtoNumber(2) val id: Long = 0,
+)
+
+/** An extension repo: [url] is the folder holding its index, [signingKey] its key's SHA-256 fingerprint. */
+@Serializable
+private class TachiyomiRepo(
+    @ProtoNumber(1) val url: String = "",
+    @ProtoNumber(2) val name: String = "",
+    @ProtoNumber(5) val signingKey: String = "",
 )
 
 @Serializable
