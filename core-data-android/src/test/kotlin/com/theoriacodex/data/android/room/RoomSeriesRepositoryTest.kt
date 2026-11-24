@@ -162,9 +162,38 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
+    fun `a listing that matches no stored chapter is a baseline with nothing new, and dropped chapters keep progress`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.recordProgress(id, "/c/1", position = 3, length = 3)
+
+        // Every address changes, and no chapter carries a number to match it as moved.
+        val relisted = listOf(SeriesEntry("/v2/3", "Chapter 3"), SeriesEntry("/v2/2", "Chapter 2"), SeriesEntry("/v2/1", "Chapter 1"))
+        assertEquals(emptyList<SeriesEntry>(), repository.store(series, relisted))
+        assertEquals(relisted.map { it.address }, repository.entries(id).map { it.entry.address })
+
+        // The old chapter kept its row and progress: listed again, it is neither new nor unread.
+        assertEquals(emptyList<SeriesEntry>(), repository.store(series, relisted + SeriesEntry("/c/1", "Chapter 1")))
+        assertTrue(repository.entries(id).single { it.entry.address == "/c/1" }.read)
+    }
+
+    @Test
+    fun `one address or moved chapter shared with the stored listing lets the chapters beyond it through as new`() = runTest {
+        val first = SeriesEntry("/c/1", "Chapter 1", number = 1f)
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), first))
+
+        val arrived = listOf(SeriesEntry("/v2/4", "Chapter 4"), SeriesEntry("/v2/3", "Chapter 3"))
+        assertEquals(arrived, repository.store(series, arrived + first))
+
+        // Only a moved chapter matches: the rest is still new.
+        val later = listOf(SeriesEntry("/v3/5", "Chapter 5"))
+        assertEquals(later, repository.store(series, later + SeriesEntry("/v3/1", "Chapter 1", number = 1f)))
+    }
+
+    @Test
     fun `another group's release of a number, or one of several, is a new unread chapter`() = runTest {
         val read = SeriesEntry("/c/1-a", "Chapter 1", number = 1f, translatorGroup = "A")
-        repository.store(series, listOf(read, SeriesEntry("/c/0", "Prologue")))
+        val prologue = SeriesEntry("/c/0", "Prologue")
+        repository.store(series, listOf(read, prologue))
         repository.recordProgress(id, "/c/1-a", position = 4, length = 4)
 
         // Group A's release goes; group B's and two of a group that never released it arrive, and an unnumbered one.
@@ -174,8 +203,8 @@ class RoomSeriesRepositoryTest {
             SeriesEntry("/c/1-c2", "Chapter 1 v2", number = 1f, translatorGroup = "C"),
             SeriesEntry("/c/extra", "Extra"),
         )
-        assertEquals(arrived, repository.store(series, arrived))
-        assertEquals(List(4) { false }, repository.entries(id).map { it.read })
+        assertEquals(arrived, repository.store(series, arrived + prologue))
+        assertEquals(List(5) { false }, repository.entries(id).map { it.read })
         assertEquals("/c/1-a", repository.series(id)!!.lastOpenedEntry)
     }
 
