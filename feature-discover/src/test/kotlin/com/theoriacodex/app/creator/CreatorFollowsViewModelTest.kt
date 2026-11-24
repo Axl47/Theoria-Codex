@@ -120,7 +120,7 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `cancelling the automatic check keeps previous durable results and leaves it due`() = runTest {
+    @Test fun `an automatic check cancelled by leaving the app keeps durable results and is not sent again within the interval`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -128,8 +128,10 @@ class CreatorFollowsViewModelTest {
             val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "1", uploadsQuery = "user:1")
             val repository = CreatorFollowsRepository(settings)
             repository.follow(creator, emptyList())
+            var calls = 0
             val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
                 override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    calls++
                     delay(30_000)
                     return Page(emptyList(), null)
                 }
@@ -143,7 +145,9 @@ class CreatorFollowsViewModelTest {
             assertFalse(owner.refreshing.value)
             assertTrue(owner.errors.value.isEmpty())
             assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
-            assertEquals(null, repository.observe().first().single().attemptedAtEpochMs)
+            owner.refreshIfStale(60 * 60 * 1000L)
+            runCurrent()
+            assertEquals(1, calls)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 

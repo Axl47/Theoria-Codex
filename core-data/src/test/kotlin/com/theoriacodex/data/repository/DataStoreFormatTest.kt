@@ -69,7 +69,7 @@ class DataStoreFormatTest {
             feedFabRestoreStates = mapOf("ctx" to feedFilters),
             viewerLaunchContext = ViewerLaunchContextRecord("q", 4, "CODEX", 21, "CODEX"),
             librarySection = "SAVED",
-            savedSearchNewPosts = SavedSearchNewPosts(5L, mapOf("saved" to NewPostMarks(listOf("PIXIV:1"), listOf("PIXIV:2", "PIXIV:1"), 4L))),
+            savedSearchNewPosts = SavedSearchNewPosts(mapOf("saved" to 5L), mapOf("saved" to NewPostMarks(listOf("PIXIV:1"), listOf("PIXIV:2", "PIXIV:1"), 4L))),
         )
         val full = UiRestoreDataStoreFile(state = state)
         assertStoredFormat(golden("ui-restore-full.json") to full)

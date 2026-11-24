@@ -99,8 +99,10 @@ class CreatorFollowsViewModel(
             mutableRefreshing.value = true
             mutableErrors.value = emptyMap()
             try {
-                repository.observe().first().filter { !automatic || it.checkDue(at) }.chunked(WRITE_BATCH_SIZE).forEach { batch ->
-                    val results = batch.mapConcurrent(concurrency = 2) { follow -> follow.membershipId to checkCreator(follow) }
+                val due = { follow: FollowedCreator -> !automatic || follow.checkDue(at) }
+                repository.observe().first().filter(due).chunked(WRITE_BATCH_SIZE).forEach { batch ->
+                    val claimed = repository.claimChecks(batch.mapTo(mutableSetOf()) { it.membershipId }, at, due)
+                    val results = claimed.mapConcurrent(concurrency = 2) { follow -> follow.membershipId to checkCreator(follow) }
                     repository.recordChecks(results.toMap(), at)
                 }
             } catch (error: CancellationException) { throw error }
