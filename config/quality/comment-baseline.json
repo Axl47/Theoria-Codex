@@ -64,7 +64,6 @@
   "app-logic/src/test/kotlin/com/theoriacodex/app/comments/CommentsTestFixtures.kt": 2,
   "app-logic/src/test/kotlin/com/theoriacodex/app/comments/PostCommentsControllerTest.kt": 1,
   "app-logic/src/test/kotlin/com/theoriacodex/app/comments/PostCommentsStateTest.kt": 1,
-  "app-logic/src/test/kotlin/com/theoriacodex/app/logic/AppLogicArchitectureTest.kt": 2,
   "app-logic/src/test/kotlin/com/theoriacodex/app/media/PerceptualHashTest.kt": 4,
   "app-logic/src/test/kotlin/com/theoriacodex/app/recommend/DeckPlannerTest.kt": 1,
   "app-logic/src/test/kotlin/com/theoriacodex/app/recommend/ForYouInterestsTest.kt": 5,
