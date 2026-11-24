@@ -51,8 +51,9 @@ class BackupGoldenTest {
     @Test fun `a backup written now is the document the Gson codec wrote`() {
         val golden = golden("backup-v2.json")
         val written = DurableJson.parseToJsonElement(golden.decodeToString()).jsonObject
-        // Retired before this codec moved to kotlinx (3731d4c9); no build reads it from a backup.
-        val settings = written.getValue("settings").jsonObject - "lastSelectedTabRoute"
+        // Retired settings; no build acts on them from a backup.
+        val settings = written.getValue("settings").jsonObject -
+            setOf("lastSelectedTabRoute", "viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
         // Series time began counting after the golden was written; older builds ignore it.
         val statistics = written.getValue("statistics").jsonObject +
             listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }

@@ -73,7 +73,7 @@ internal suspend fun writeBackups(directory: File, post: Post) {
 internal suspend fun verifyBackups(directory: File, post: Post) {
     val codec = ProfileBackupCodec()
     val written = directory.resolve("backup.json").readText()
-    check(Json.parseToJsonElement(written) == shippedBackupWithSeriesTime()) { "written backup json was $written" }
+    check(Json.parseToJsonElement(written) == shippedBackupAsWrittenNow()) { "written backup json was $written" }
     val expected = codec.decode(codec.encode(acceptanceBackup(post)))
     val decodedWritten = codec.decode(written.toByteArray())
     check(decodedWritten == expected) { "decoded written backup was $decodedWritten" }
@@ -152,11 +152,15 @@ private fun acceptanceSearch() = RecentSearchEntry(
     "acceptance-search", 5L, RecentSearchKind.MULTI_SEARCH, listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
 )
 
-/** [SHIPPED_BACKUP] as this build writes it: series time, which began counting later, is present as zero. */
-private fun shippedBackupWithSeriesTime(): JsonObject {
+/**
+ * [SHIPPED_BACKUP] as this build writes it: series time, which began counting later, is present as zero, and the
+ * retired viewer OCR settings are absent.
+ */
+private fun shippedBackupAsWrittenNow(): JsonObject {
     val shipped = Json.parseToJsonElement(SHIPPED_BACKUP).jsonObject
+    val settings = shipped.getValue("settings").jsonObject - setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
     val statistics = shipped.getValue("statistics").jsonObject + listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }
-    return JsonObject(shipped + ("statistics" to JsonObject(statistics)))
+    return JsonObject(shipped + ("settings" to JsonObject(settings)) + ("statistics" to JsonObject(statistics)))
 }
 
 /** The values behind [SHIPPED_BACKUP]; edit only together with a backup a Gson build wrote. */

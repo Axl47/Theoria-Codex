@@ -36,8 +36,6 @@ class DataStoreFormatTest {
             instantSeek = true,
             viewerAutoRotateVideos = false,
             viewerCommentOrder = "NEWEST",
-            viewerAutomaticTextTranslationEnabled = true,
-            viewerEnabledOcrLanguages = listOf("JAPANESE"),
             scenarioPreset = "EMPTY_RESULTS",
             recommendationProfiles = listOf(RecommendationProfileRecord("profile-main", "Main = 1")),
             activeProfileId = "profile-main",

@@ -70,7 +70,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Likes and creator follows are local actions. Do not add remote bookmarks, favorites, follows, or notification subscriptions.
 - Every visibly presented animated/video card must autoplay simultaneously. Performance improvements must preserve this behavior.
-- Viewer OCR/translation was deliberately retired. Remaining preferences, counters, schemas, and `deploy/libretranslate/` are legacy compatibility artifacts, not unfinished features.
+- Viewer OCR/translation was deliberately retired. Its remaining statistics counters and `deploy/libretranslate/` are legacy compatibility artifacts, not unfinished features.
 
 ## Personal-device Safety
 

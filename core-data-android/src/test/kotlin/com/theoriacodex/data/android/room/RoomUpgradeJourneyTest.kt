@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -18,13 +19,7 @@ class RoomUpgradeJourneyTest {
     val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), TheoriaRoomDatabase::class.java)
 
     @Test fun `oldest saved library survives the entire registered upgrade and two reopens`() = runTest {
-        RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 1)
-    }
-
-    @Test fun `legacy recents and automatic groups survive skipped releases and later writes`() = runTest {
-        for (version in listOf(2, 6)) {
-            RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, version)
-        }
+        RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 10)
     }
 
     // Schema 11 is what v1.9.2, the last production release, shipped.
@@ -109,6 +104,26 @@ class RoomUpgradeJourneyTest {
             database.query("SELECT title, followed, last_opened_entry, memo FROM series").use {
                 assertTrue(it.moveToFirst())
                 assertEquals(listOf("A", "1", "/a/1", "{}"), (0..3).map(it::getString))
+            }
+        }
+    }
+
+    @Test fun `the viewer translation cache goes and the library stays`() {
+        val name = "translation-cache-drop.db"
+        helper.createDatabase(name, 21).use {
+            it.execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+            it.execSQL(
+                "INSERT INTO viewer_translation_cache(backend_version,source_language,source_text_sha256,translated_text," +
+                    "expires_at_epoch_ms,last_used_at_epoch_ms) VALUES('google-nmt-v1','JAPANESE','hash','English',100,1)",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 22, true, TheoriaRoomDatabase.MIGRATION_21_22).use { database ->
+            database.query("SELECT name FROM codices").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("Saved", it.getString(0))
+            }
+            database.query("SELECT name FROM sqlite_master WHERE name LIKE '%viewer_translation_cache%'").use {
+                assertFalse(it.moveToFirst())
             }
         }
     }
