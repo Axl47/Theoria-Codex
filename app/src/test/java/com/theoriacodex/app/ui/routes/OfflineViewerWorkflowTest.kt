@@ -33,6 +33,10 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
+import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.app.media.OfflineMediaCoordinator
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -107,7 +111,7 @@ class OfflineViewerWorkflowTest {
             val job = offline.jobs.first { it["codex:offline"]?.isRunning == false }.getValue("codex:offline")
             assertEquals(4, job.completedPosts)
             assertTrue(job.failedPosts.isEmpty())
-            assertEquals(12, offline.store.snapshot.value.mediaCount)
+            assertEquals(12, offline.store.snapshot.value!!.mediaCount)
             images.forEach { assertTrue(it.delete()) }
             graph.registry.resolveRequests.clear()
             graph.data.cacheRepository.clearThumbnailCache()
@@ -134,6 +138,14 @@ class OfflineViewerWorkflowTest {
             owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(graph.registry.resolveRequests.isEmpty())
+
+            val unscanned = OfflineMediaCoordinator(
+                OfflineMediaStore(directory.resolve("offline-media")), CoroutineScope(Job().apply { cancel() }), { it }, { it.media }, { _, _, _ -> },
+            )
+            assertNull(unscanned.store.snapshot.value)
+            val beforeScan = ViewerRouteWorkflow(graph.data, this, graph.sources, { null }, offlineMedia = unscanned)
+                .preparePostsForLaunch(snapshots, launchContext)
+            assertLocalGallery(beforeScan[1], directory)
 
             graph.shutdown()
             graph = JourneyAppContainer(ApplicationProvider.getApplicationContext(), directory, galleries.groupBy { it.id.source }, this)

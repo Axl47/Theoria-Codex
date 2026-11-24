@@ -13,6 +13,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.theoriacodex.app.ui.AppRoute
+import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.launchViewer
@@ -53,7 +54,8 @@ internal val LocalSeriesGenreSearch = staticCompositionLocalOf { SeriesGenreRequ
 
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
-    val series = shell.container.series ?: return
+    val series = shell.container.series
+    if (series == null) return ReportLaunchContent(TopLevelDestination.Series)
     val viewModel = viewModel {
         SeriesTabViewModel(
             series.repository,
@@ -76,6 +78,8 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
         }
     }
     val settings by shell.data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null)
+    val content by viewModel.content.collectAsStateWithLifecycle()
+    ReportLaunchContent(TopLevelDestination.Series, drawn = content.firstContentDrawn)
     SeriesTabScreen(
         viewModel,
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
@@ -144,3 +148,15 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
         },
     )
 }
+
+private val SeriesTabContent.firstContentDrawn: Boolean
+    get() {
+        val sources = sources
+        val search = search
+        return when {
+            view == SeriesView.FOLLOWING -> following != null
+            sources == null -> false
+            search != null -> search.firstOrNull()?.listing !is SeriesListing.Loading
+            else -> browse?.let { it.listing !is SeriesListing.Loading } ?: sources.isEmpty()
+        }
+    }

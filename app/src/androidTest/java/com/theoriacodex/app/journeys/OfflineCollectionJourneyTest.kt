@@ -49,7 +49,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         longPress(compose.onNodeWithText("Offline collection"))
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
-        waitFor("offline store keeps 2 posts") { offline.store.snapshot.value.postCount == 2 }
+        waitFor("offline store keeps 2 posts") { offline.store.snapshot.value?.postCount == 2 }
         // The Library header's entry opens the offline sheet, whose row reports what is kept.
         activate(compose.onNodeWithContentDescription("Offline and downloads", substring = true))
         waitFor("Library shows 2 posts offline") { compose.onNodeWithText("2 posts offline").isDisplayed() }

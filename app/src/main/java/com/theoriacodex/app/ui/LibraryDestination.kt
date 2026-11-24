@@ -152,6 +152,7 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
     val savedSearches by savedSearchOwner.savedSearches.collectAsStateWithLifecycle()
     val justSavedSearchId by savedSearchOwner.justSavedId.collectAsStateWithLifecycle()
     RecentsDestinationStateBoundary(shell.data, loading = { RecentsLoading(header) }) { state ->
+        ReportLaunchContent(TopLevelDestination.Library)
         val durationOwner = rememberRecentsDurationOwner(shell, state)
         val relatedOwner = viewModel<RecentsRelatedViewModel>(
             key = "recents-related-owner",
@@ -219,6 +220,7 @@ internal fun CodexLibraryDestination(
                 ?: CodexSortMode.NEWEST_SAVED
         },
     ) { state ->
+        ReportLaunchContent(TopLevelDestination.Library)
         CodexListScreen(
             codices = state.visibleCodices,
             itemCounts = state.itemCounts,
