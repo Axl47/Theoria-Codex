@@ -12,7 +12,7 @@ class PostDownloadJobStoreGoldenTest {
     @get:Rule val temporary = TemporaryFolder()
 
     @Test
-    fun `a v3 queue the Gson store wrote restores the same jobs`() = runTest {
+    fun `a v3 queue the Gson store wrote restores the same jobs (ADR 0034)`() = runTest {
         val file = temporary.newFile("queue.json")
         file.writeText(checkNotNull(javaClass.getResource("/golden/download-queue/gson-written.json")).readText())
 
@@ -31,7 +31,7 @@ class PostDownloadJobStoreGoldenTest {
     }
 
     @Test
-    fun `the v3 download queue golden pins every stored key`() {
+    fun `the v3 download queue golden pins every stored key (ADR 0034)`() {
         assertStoredFormat(
             checkNotNull(javaClass.getResource("/golden/download-queue/gson-written.json")).readText() to DownloadQueueFile(
                 3,
