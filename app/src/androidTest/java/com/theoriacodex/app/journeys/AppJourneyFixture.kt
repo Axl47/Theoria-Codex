@@ -303,6 +303,21 @@ abstract class AppJourneyFixture {
         check(UiDevice.getInstance(instrumentation).takeScreenshot(shots.resolve("$name.png"))) { "No screenshot for $name" }
     }
 
+    protected fun pressSystemBack() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val device = UiDevice.getInstance(instrumentation)
+        val app = instrumentation.targetContext.packageName
+        waitFor(
+            "the app's window has input focus for system Back",
+            diagnostics = {
+                "Input focus is on ${device.currentPackageName}, not $app, so system Back cannot reach the app. After a " +
+                    "cold boot this is usually a System UI \"isn't responding\" dialog; CI hides those with " +
+                    "`adb shell settings put global hide_error_dialogs 1`."
+            },
+        ) { device.currentPackageName == app }
+        device.pressBack()
+    }
+
     protected fun waitFor(
         what: String,
         timeoutMillis: Long = 10_000,
