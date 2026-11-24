@@ -19,10 +19,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * query_store.json files older builds wrote must load to the same searches. gson-written.json is the Gson store's
- * own output (HTML-escaped strings); legacy.json is a v1 entry and a damaged v2 entry beside a retired key.
- */
 internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
     @Test
     fun `a Gson-written store loads every saved search`() = runTest {
@@ -58,7 +54,6 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
     @Test
     fun `the goldens hold every stored key`() {
         val queries = mapOf("search" to gsonWrittenSearch, "feed" to emptyQuery())
-        // animated.json, captured from the kotlinx encoder, adds the media key Gson builds never wrote.
         val animated = mapOf("animated" to animatedSearch)
         assertStoredFormat(
             golden("gson-written.json") to QueryStoreFile(queries.mapValues { QueryStorageCodec.encode(it.value) }),

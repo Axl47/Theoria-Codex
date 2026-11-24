@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-/** Shared identity policy used by library navigation and portable backup remapping. */
 object ProfileLibraryIds {
     const val CODEX_PREFIX = "profile_codex"
     const val LIKES_PREFIX = "system_likes_codex"

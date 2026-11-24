@@ -193,7 +193,6 @@ class RoomRecentsRepositoryTest {
             4,
             entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
         )
-        // Swiping back touches no row, so Room does not invalidate every Recents observer.
         assertEquals(0, database.recentsDao().raiseWatchedMediaProgress("PIXIV", "progress", "WATCHED", 50))
     }
 

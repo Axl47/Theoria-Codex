@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-/** Derive All from the same snapshots as the section tabs; never load their payloads a second time. */
 fun mergeRecentActivity(
     watched: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,

@@ -10,13 +10,11 @@ import kotlinx.coroutines.flow.Flow;
 
 @Dao
 public interface SeriesDao {
-    /** Whether a `series_entries` row has progress, as `StoredSeriesEntry.hasProgress` says it. */
     String ENTRY_HAS_PROGRESS = "(series_entries.read = 1 OR series_entries.last_page > 0)";
 
     @Query("SELECT series.*, (SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND series_entries.read = 0 "
             + "AND series_entries.source_order >= 0) AS unread_count, "
-            // An entry without an upload date counts from when it was first seen, so a new one is never passed over.
             + "(SELECT MAX(COALESCE(uploaded_at_epoch_ms, first_seen_at_epoch_ms)) FROM series_entries "
             + "WHERE series_entries.source = series.source AND series_entries.series_address = series.address "
             + "AND series_entries.source_order >= 0) AS last_updated_at_epoch_ms, "
@@ -31,7 +29,6 @@ public interface SeriesDao {
             + "title COLLATE NOCASE ASC, source ASC, address ASC")
     Flow<List<FollowedSeriesRow>> observeFollowed();
 
-    /** Whether any series is followed; it reads only `series`, so progress written to entries never wakes it. */
     @Query("SELECT EXISTS (SELECT 1 FROM series WHERE followed = 1)")
     Flow<Boolean> observeHasFollowed();
 
@@ -41,7 +38,6 @@ public interface SeriesDao {
     @Query("SELECT * FROM series WHERE source = :source AND address = :address LIMIT 1")
     SeriesEntity series(String source, String address);
 
-    // An entry the source stopped listing is kept with a negative `source_order`; only `allEntries` returns those.
     @Query("SELECT * FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0 "
             + "ORDER BY source_order ASC")
     Flow<List<SeriesEntryEntity>> observeEntries(String source, String seriesAddress);
@@ -56,28 +52,20 @@ public interface SeriesDao {
     @Query("SELECT * FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND address = :address LIMIT 1")
     SeriesEntryEntity entry(String source, String seriesAddress, String address);
 
-    /** As [entry], but only while the source lists it, as [entries] returns it. */
     @Query("SELECT * FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND address = :address "
             + "AND source_order >= 0 LIMIT 1")
     SeriesEntryEntity listedEntry(String source, String seriesAddress, String address);
 
-    /**
-     * What a profile backup holds: the series the user follows, chose a reading mode for, opened an entry of, or has
-     * progress in (an entry read or partway through, also one the source no longer lists), as marking chapters read
-     * from the series page gives without opening any.
-     */
     @Query("SELECT * FROM series WHERE followed = 1 OR reading_mode IS NOT NULL OR last_opened_entry IS NOT NULL "
             + "OR EXISTS (SELECT 1 FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND " + ENTRY_HAS_PROGRESS + ") "
             + "ORDER BY source ASC, address ASC")
     List<SeriesEntity> keptSeries();
 
-    /** Returns -1 when the series is already stored. */
     @Insert(onConflict = OnConflictStrategy.IGNORE) long insertSeries(SeriesEntity entity);
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) void insertEntries(List<SeriesEntryEntity> entities);
 
-    /** A restore adds to a stored series without taking anything from it. */
     @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode), "
             + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry), download_new = download_new OR :downloadNew, "
             + "followed_at_epoch_ms = CASE WHEN followed = 1 THEN COALESCE(followed_at_epoch_ms, :followedAt) "
@@ -87,12 +75,6 @@ public interface SeriesDao {
             String source, String address, boolean followed, String readingMode, String lastOpenedEntry, boolean downloadNew,
             Long followedAt, String memo);
 
-    /**
-     * A stored entry takes the further progress of the two: read on either side, and the later page together with the
-     * page count it was recorded against. When that side has no count, as a Mihon backup's pages never do, it takes the
-     * other side's only if it reaches that page, so a page is never shown beyond its count. It keeps the later read time,
-     * and its own memo, else the restored one.
-     */
     @Query("UPDATE series_entries SET read = read OR :read, last_page = MAX(last_page, :lastPage), "
             + "page_count = CASE WHEN :lastPage > last_page "
             + "THEN COALESCE(:pageCount, CASE WHEN page_count >= :lastPage THEN page_count END) "
@@ -104,7 +86,6 @@ public interface SeriesDao {
             String source, String seriesAddress, String address, boolean read, long lastPage, Long pageCount, Long lastReadAt,
             String memo);
 
-    /** Its entries go with it, by the foreign key's cascade. */
     @Query("DELETE FROM series WHERE source = :source AND address = :address")
     void deleteSeries(String source, String address);
 
@@ -117,7 +98,6 @@ public interface SeriesDao {
     @Query("UPDATE series SET last_opened_entry = NULL WHERE source = :source AND address = :address")
     void clearLastOpenedEntry(String source, String address);
 
-    /** An update in place: replacing the row would cascade its entries away. */
     @Upsert void upsertSeries(SeriesEntity entity);
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) void upsertEntries(List<SeriesEntryEntity> entities);

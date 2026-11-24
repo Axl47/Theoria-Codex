@@ -55,13 +55,6 @@ class UnsupportedStoreSchemaException(
     supported: Int,
 ) : IOException("$storeName schema $actual is newer than supported schema $supported")
 
-/**
- * Reads and writes one DataStore JSON file through [DurableJson]. The file's top-level `schemaVersion` (absent means
- * [schemaVersion]) is checked before the typed decode: a newer one throws [UnsupportedStoreSchemaException], so a
- * rollback never replaces data a newer build wrote, whatever shape that data has. Malformed JSON, another schema
- * version, and a failed [validate] surface as [CorruptionException], which [openJsonDataStore]'s corruption handler turns
- * into a reset with the original bytes set aside.
- */
 internal class JsonDataStoreSerializer<T : Any>(
     private val storeName: String,
     private val schemaVersion: Int,
@@ -97,14 +90,6 @@ internal class JsonDataStoreSerializer<T : Any>(
     }
 }
 
-/**
- * One DataStore JSON file and whether it has opened. [awaitReady] opens it: success records [DurableStorePhase.READY],
- * and a file that refuses to open (written by a newer build, or unreadable and impossible to set aside) records
- * [DurableStorePhase.FAILED] with its reason and rethrows, so the startup gate shows its failure screen and nothing
- * on disk changes. [data] never fails because the store could not open: a collector that finds it unopenable waits
- * until a later [awaitReady] (the startup screen's Retry) opens it. Collectors started while the app is being built
- * therefore cannot crash the process, and every store that can fail must be awaited by the startup gate.
- */
 internal class JsonDataStore<T>(
     private val store: DataStore<T>,
     private val canonical: (T) -> T = { it },
@@ -138,10 +123,6 @@ internal class JsonDataStore<T>(
         status.value = DurableStoreStatus(DurableStorePhase.READY)
     }
 
-    /**
-     * Throws, like [awaitReady], when the store cannot open; nothing is written then. An unchanged result keeps the
-     * held value; a changed one is held as the file would read it back ([canonical]), and written when that differs.
-     */
     suspend fun update(transform: suspend (T) -> T): T = store.updateDataInBackground { current ->
         val next = transform(current)
         if (next == current) current else canonical(next)
@@ -156,13 +137,6 @@ internal class JsonDataStore<T>(
     }
 }
 
-/**
- * Opens [file] as a [JsonDataStore] read and written by [JsonDataStoreSerializer]. An unreadable file is set aside by
- * [setAsideCorruptFile], recorded in [recoveries] under [logicalStore], and replaced by [defaultValue]. When it cannot
- * be set aside, the error propagates and the store fails to open rather than overwrite the only copy of the user's
- * data. DataStore then finds no file and starts from [defaultValue]; the replacement file is written by the first
- * update. Files set aside in an earlier process are registered on first access, which keeps construction free of I/O.
- */
 internal fun <T : Any> openJsonDataStore(
     file: File,
     logicalStore: String,
@@ -178,11 +152,6 @@ internal fun <T : Any> openJsonDataStore(
     encode = { it },
 )
 
-/**
- * Like [openJsonDataStore], but the store holds [decode]d values while the file keeps its record [S], so readers never
- * decode. [decode] runs after [validate], once per file read; [encode] runs per write. Updates hold `decode(encode(x))`,
- * what a later read of the file would produce, so memory never shows a value the file cannot carry.
- */
 internal fun <S : Any, T : Any> openDecodedJsonDataStore(
     file: File,
     logicalStore: String,

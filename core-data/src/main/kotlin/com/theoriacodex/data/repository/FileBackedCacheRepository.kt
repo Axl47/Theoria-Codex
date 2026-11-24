@@ -32,13 +32,11 @@ class FileBackedCacheRepository(
 
     override fun observeNamedThumbnailRevisions(): Flow<Long> = namedThumbnailRevision.asStateFlow()
 
-    /** The first emission always follows the startup scan, so observers never see placeholder counts. */
     override fun observeSnapshot(): Flow<CacheSnapshot> = flow {
         mutex.withLock { ensureReconciled() }
         emitAll(snapshotFlow)
     }
 
-    /** One directory scan on first use, off the constructing thread; callers hold [mutex]. */
     private suspend fun ensureReconciled() {
         if (reconciled) return
         snapshotFlow.value = withContext(ioDispatcher) {
@@ -126,11 +124,9 @@ class FileBackedCacheRepository(
         val retained = if (localFile != null) {
             val extension = localFile.extension.takeIf { it.isNotBlank() } ?: "bin"
             index.directory.resolve("$key.$extension").also { output ->
-                // Copy before removing old variants; copying an existing cache file to itself is a no-op.
                 Files.copy(localFile.toPath(), output.toPath(), REPLACE_EXISTING)
             }
         } else {
-            // Ordinary sparse saves retain bytes; a named cover may now represent a different post.
             existing.firstOrNull { file -> retainExistingBytes && file.extension != "url" && hasUsableBytes(file) }
                 ?: index.directory.resolve("$key.url").also { it.writeText(fallbackUrl.orEmpty()) }
         }
@@ -145,7 +141,6 @@ class FileBackedCacheRepository(
     private fun cacheKey(postId: PostId): String = "${postId.source.id}_${postId.sourcePostId}"
 }
 
-/** One first-use scan; writes reconcile only the affected files, including deletion failures. */
 private class CachedMediaDirectory(val directory: File) {
     private val entries = mutableMapOf<String, MutableMap<File, Long>>()
     var count = 0

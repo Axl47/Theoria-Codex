@@ -35,7 +35,6 @@ class ForYouSavedSearchConversionTest {
         assertEquals(listOf(sourceQuery(SourceKey.GELBOORU, listOf("sky")), sourceQuery(SourceKey.PIXIV, listOf("空"))),
             converted.map { it.search.query })
         assertEquals("mix", converted.first().id)
-        // The extra search's ID is stable, so importing the same backup again replaces it rather than duplicating it.
         assertEquals(converted, listOf(mix).withForYouSearchesConverted(sourceName))
     }
 
@@ -68,7 +67,6 @@ class ForYouSavedSearchConversionTest {
         val query = sourceQuery(SourceKey.PIXIV, listOf("forest"))
         val ordinary = SavedSearchEntry("mine", "My forest", RecentSearchEntry(query, QueryHash.from(query), 5), 7)
         val shelf = saved("shelf", "Forest", mapOf(SourceKey.PIXIV to listOf("forest")))
-        // A backup can carry an ordinary search under the ID a For You search also has.
         val sameId = SavedSearchEntry("shelf", "Other", RecentSearchEntry(sourceQuery(SourceKey.PIXIV, listOf("x")), "h", 1), 1)
 
         assertEquals(listOf(ordinary), listOf(shelf, ordinary).withForYouSearchesConverted(sourceName))

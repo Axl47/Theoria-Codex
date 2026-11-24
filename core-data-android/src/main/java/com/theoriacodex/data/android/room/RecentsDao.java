@@ -20,7 +20,6 @@ public interface RecentsDao {
     @Query("SELECT * FROM recent_watched WHERE source = :source AND source_post_id = :postId AND section = :section LIMIT 1")
     RecentWatchedEntity watched(String source, String postId, String section);
     @Insert(onConflict = OnConflictStrategy.REPLACE) void upsertWatched(RecentWatchedEntity entity);
-    /** Raises progress only; a lower or equal page touches no row, so Room observers are not invalidated. */
     @Query("UPDATE recent_watched SET max_viewed_media_number = :viewedMediaNumber WHERE source = :source AND source_post_id = :postId AND section = :section AND max_viewed_media_number < :viewedMediaNumber")
     int raiseWatchedMediaProgress(String source, String postId, String section, int viewedMediaNumber);
     @Query("SELECT COALESCE(MAX(sort_sequence), 0) + 1 FROM recent_watched") long nextWatchedSequence();

@@ -21,23 +21,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * Pins how odd DataStore files (golden/datastore/, hand-built) load: which inputs repair into a
- * loaded value and which reset the store to defaults (original bytes kept as `.corrupt`). The
- * goldens were captured under Gson; never regenerate them to make a change pass.
- *
- * Under Gson a null on a defaulted primitive repaired, a null on a non-null list, map or string
- * reset the store, and a null nested inside a record passed validation and then threw
- * NullPointerException on every read without quarantine. kotlinx.serialization (DurableJson's
- * coerceInputValues) repairs every null on a defaulted field to its default, so all of those now
- * keep the rest of the file. Gson never wrote nulls, so only damaged or hand-edited files differ.
- */
 class DataStoreGoldenTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    // ---- Settings ----
-
-    // Gson skips an explicit null for a primitive field, so the field keeps its Kotlin default.
     @Test fun `settings null on a defaulted boolean repairs to the default`() = runTest {
         val settings = loadSettings("settings-null-primitive")
 
@@ -45,12 +31,10 @@ class DataStoreGoldenTest {
         assertTrue(settings.oldSearchBar)
     }
 
-    // Gson reset the whole store here.
     @Test fun `settings null on a non-null list repairs to the default and keeps the rest`() = runTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), loadSettings("settings-null-list"))
     }
 
-    // The null string is the retired lastSelectedTabRoute, so it is ignored like any retired key.
     @Test fun `settings null on a retired string loads`() = runTest {
         assertTrue(loadSettings("settings-null-string").oldSearchBar)
     }
@@ -69,12 +53,10 @@ class DataStoreGoldenTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), settings)
     }
 
-    // The pre-profile-id key (`activeProfile`: USER_1 or USER_2) is retired, so such a file opens on the first profile.
     @Test fun `settings with only the retired profile key open on the first profile`() = runTest {
         assertEquals("profile-main", loadSettings("settings-retired-profile-key").activeProfileId)
     }
 
-    // Gson accepts "3" for Int, "true" for Boolean and "2.5" for Double.
     @Test fun `settings quoted numbers and booleans are read as their values`() = runTest {
         val settings = loadSettings("settings-quoted-numbers")
 
@@ -82,9 +64,6 @@ class DataStoreGoldenTest {
         assertTrue(settings.runtime.sourceWeights.getValue(SourceKey.PIXIV) > SourceRuntimeSettings().sourceWeights.getValue(SourceKey.PIXIV))
     }
 
-    // ---- UI restore ----
-
-    // Gson reset both stores, losing the valid lastTab.
     @Test fun `ui restore null on a non-null map or string repairs and keeps the rest`() = runTest {
         withUiRestore("ui-restore-null-map") { repository ->
             assertEquals("codex", repository.getLastTab())
@@ -114,14 +93,11 @@ class DataStoreGoldenTest {
         }
     }
 
-    // Gson's latent bug: every read threw NullPointerException and the file was never quarantined.
     @Test fun `ui restore null inside a nested record repairs that field`() = runTest {
         withUiRestore("ui-restore-null-nested-list") { repository ->
             assertEquals(mapOf("ctx" to FeedFabRestoreState(animatedOnly = true)), repository.getFeedFabRestoreStates())
         }
     }
-
-    // ---- Statistics ----
 
     @Test fun `statistics null on a defaulted counter repairs to zero`() = runTest {
         val statistics = loadStatistics("statistics-null-primitive")
@@ -130,7 +106,6 @@ class DataStoreGoldenTest {
         assertEquals(4L, statistics.watchedPostCount)
     }
 
-    // Gson reset the whole store here.
     @Test fun `statistics null on a non-null map repairs and keeps the counters`() = runTest {
         assertEquals(LifetimeStatistics(watchedPostCount = 4L), loadStatistics("statistics-null-map"))
     }
@@ -150,15 +125,12 @@ class DataStoreGoldenTest {
         assertEquals(mapOf(SourceKey.PIXIV to 3L), statistics.watchedBySource)
     }
 
-    // Gson's latent bug: observing threw NullPointerException until the file was repaired by hand.
     @Test fun `statistics null inside a nested record repairs that field`() = runTest {
         val statistics = loadStatistics("statistics-null-nested-map")
 
         assertEquals(mapOf("c" to CodexStatistics(browsingMs = 5L)), statistics.codexStatistics)
         assertEquals(4L, statistics.watchedPostCount)
     }
-
-    // ---- Custom site profiles ----
 
     private val safebooru = "custom_safebooru_org"
 
@@ -170,7 +142,6 @@ class DataStoreGoldenTest {
         assertNull(site.verifiedAtEpochMs)
     }
 
-    // Records without an address or added time, and null entries, are skipped, not fatal, and kept in the file.
     @Test fun `sites missing required values are skipped and kept for a newer app`() = runTest {
         val directory = directoryWith(SITE_PROFILES_FILE_NAME, "sites-missing-required")
 
@@ -198,14 +169,10 @@ class DataStoreGoldenTest {
         assertEquals(1L, site.addedAtEpochMs)
     }
 
-    // Gson's latent bug: observing threw NullPointerException forever. An empty list is the only meaningful default.
     @Test fun `sites null list repairs to no sites`() = runTest {
         assertEquals(emptyList<SiteProfile>(), loadSites("sites-null-list"))
     }
 
-    // ---- Failure type ----
-
-    // DataStore hands CorruptionException to the repository's reset handler; anything else propagates.
     @Test fun `unreadable or unsupported files surface as CorruptionException`() = runTest {
         val settings = JsonDataStoreSerializer(
             "settings", SETTINGS_DATASTORE_SCHEMA_VERSION, SettingsDataStoreFile(), SettingsDataStoreFile.serializer(),
@@ -220,7 +187,6 @@ class DataStoreGoldenTest {
                 kotlinx.coroutines.runBlocking { settings.readFrom(json.byteInputStream()) }
             }
         }
-        // A newer schema is refused before its payload is decoded, so a payload in a new shape is never reset.
         listOf("""{"schemaVersion":4}""", """{"schemaVersion":4,"settings":[]}""").forEach { json ->
             assertThrows(json, UnsupportedStoreSchemaException::class.java) {
                 kotlinx.coroutines.runBlocking { settings.readFrom(json.byteInputStream()) }

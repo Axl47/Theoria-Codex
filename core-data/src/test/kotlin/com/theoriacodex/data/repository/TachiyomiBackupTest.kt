@@ -23,7 +23,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/** Backups are written field by field here, so the field numbers are checked against Mihon's and Anikku's, not ours. */
 class TachiyomiBackupTest {
     @get:Rule val temporary = TemporaryFolder()
 
@@ -48,7 +47,7 @@ class TachiyomiBackupTest {
         assertEquals(300L, a.series.followedAtEpochMs)
         assertEquals(listOf(900L, 800L), a.entries.map { it.lastReadAtEpochMs })
         val (second, first) = a.entries
-        assertEquals(5L, second.position) // Mihon's page index 4 is page 5.
+        assertEquals(5L, second.position)
         assertFalse(second.read)
         assertEquals(500L, second.firstSeenAtEpochMs)
         assertTrue(first.read)
@@ -96,7 +95,6 @@ class TachiyomiBackupTest {
             message(1) { long(1, 1); string(2, "/s"); string(3, "S"); fields() }
         }, now = 0).series.single().series.readingMode
 
-        // Orientation bits above the low three are ignored.
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, mode { long(14, 1); long(103, 0x18 or 2) })
         assertEquals(GalleryReadingMode.LEFT_TO_RIGHT, mode { long(103, 1) })
         assertEquals("Webtoon reads top to bottom", GalleryReadingMode.VERTICAL, mode { long(103, 4) })
@@ -166,7 +164,6 @@ class TachiyomiBackupTest {
             FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"))
         val expected = SeriesImportPreview(manga = 1, anime = 1, chaptersRead = 1, episodesWatched = 0)
 
-        // No extension is on, and the backup names neither source.
         assertEquals(BackupPreview.Series(expected, unnamedMissingSources = 2), service.preview(bytes))
         assertEquals(SeriesImportResult(expected), service.importSeries(bytes))
         val merged = store.merged.single()
@@ -193,13 +190,11 @@ class TachiyomiBackupTest {
             message(505) { string(1, "https://anime.example/repo"); string(2, "Anime"); string(5, "bb22") }
             message(505) { string(1, "https://manga.example/repo/"); string(5, "aa11") }
             message(505) { string(1, "https://more.example/repo"); string(5, "cc33") }
-            // Neither comes back: one names no key, and older Aniyomi backups keep an installed extension here.
             message(505) { string(1, "https://unsigned.example/repo") }
             message(106) { string(1, "eu.kanade.tachiyomi.animeextension.en.example"); string(2, "apk bytes") }
         }
         val repos = RecordingRepos(refuse = "https://anime.example/repo", added = "https://manga.example/repo")
         val directory = temporary.newFolder()
-        // MangaDex is on here; the anime source numbered 3 is missing but the backup gives it no name.
         val service = ProfileBackupService(InMemorySettingsRepository(), RecordingStore(), InMemorySavedSearchRepository(),
             FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
             extensionRepos = repos, extensionSources = { SourceAvailability(on = setOf(SourceKey.parseOrThrow("custom_mihon_1"))) })
@@ -210,7 +205,6 @@ class TachiyomiBackupTest {
         assertEquals(1, preview.unnamedMissingSources)
 
         val result = service.importSeries(bytes)
-        // Records as the backup holds them: its name, else the address, and its key. The manga repo is added already.
         val given = listOf(
             ExtensionRepo("https://manga.example/repo", "Manga", "aa11"),
             ExtensionRepo("https://anime.example/repo", "Anime", "bb22"),
@@ -241,7 +235,6 @@ class TachiyomiBackupTest {
 
         val preview = service.preview(bytes) as BackupPreview.Series
 
-        // Only the source no installed extension offers is missing; the others name what to turn on.
         assertEquals(listOf("Vanished"), preview.missingSources)
         assertEquals(listOf(SourceOff("Comix"), SourceOff("Comix", "es")), preview.turnOn)
     }
@@ -277,7 +270,6 @@ class TachiyomiBackupTest {
 
     @Test
     fun `a corrupt backup reaches the generic message, not the parser's`() {
-        // The backup screen shows an IllegalArgumentException's message, which kotlinx's parse errors are.
         assertThrows(IllegalStateException::class.java) { decodeTachiyomiBackup(backup { long(1, 5) }, 0) }
     }
 }
@@ -288,7 +280,6 @@ private class RecordingStore : ProfileBackupStore {
     override suspend fun merge(library: BackupLibrary): Int = 0.also { merged += library }
 }
 
-/** Holds [added] already and restores each other repo but [refuse], which it refuses as [ExtensionRepos.restore] does a repo with a bad key. */
 internal class RecordingRepos(private val refuse: String, added: String) : ExtensionRepos {
     val given = mutableListOf<ExtensionRepo>()
     private val stored = mutableListOf(ExtensionRepo(added, added, ""))
@@ -312,7 +303,6 @@ private fun backup(block: Proto.() -> Unit): ByteArray {
     return gzipped.toByteArray()
 }
 
-/** Protobuf's wire format, as much of it as these backups use. */
 private class Proto {
     private val out = ByteArrayOutputStream()
 

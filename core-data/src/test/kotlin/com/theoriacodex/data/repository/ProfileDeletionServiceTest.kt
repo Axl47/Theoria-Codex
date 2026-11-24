@@ -106,7 +106,6 @@ class ProfileDeletionServiceTest {
         } finally { directory.deleteRecursively() }
     }
 
-    // The golden is the Gson store's own output.
     @Test fun `the profile removal journal golden pins every stored key`() {
         assertStoredFormat(golden("gson-written.json") to ProfileDeletionJournal(1, "p&<a>='b'"))
     }

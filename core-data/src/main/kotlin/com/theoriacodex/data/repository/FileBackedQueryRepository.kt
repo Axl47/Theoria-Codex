@@ -48,7 +48,6 @@ private fun fileBackedQueries(
     return CellQueryRepository(cell)
 }
 
-/** Applied queries by mode over a [StateCell], shared by the file-backed store and the in-memory default. */
 internal class CellQueryRepository(private val cell: StateCell<Map<String, Query>>) : QueryRepository {
     override fun observeAppliedQuery(modeKey: String): Flow<Query?> = cell.data.map { it[modeKey] }
 

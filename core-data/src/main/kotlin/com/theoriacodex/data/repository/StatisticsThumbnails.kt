@@ -6,7 +6,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Shared ranking for both the screen and the durable thumbnail owner. */
 fun rankedStatisticsPosts(
     posts: Map<String, CodexPostStatistics>,
     value: (CodexPostStatistics) -> Long,
@@ -30,11 +29,9 @@ fun statisticsPostPromotions(statistics: LifetimeStatistics): Set<StatisticsPost
 fun promotedStatisticsPostKeys(statistics: LifetimeStatistics): Set<String> =
     statisticsPostPromotions(statistics).mapTo(linkedSetOf()) { it.postKey }
 
-/** Private files owned solely by the union of all Codex top lists, outside disposable caches. */
 class StatisticsThumbnailStore(private val directory: File) {
     private val mutex = Mutex()
 
-    /** Fetch only explicit promotion/open candidates. A partial or failed fetch never escapes this owner. */
     suspend fun reconcile(
         promoted: Set<String>,
         candidates: Map<String, suspend (File) -> Boolean> = emptyMap(),
@@ -60,7 +57,6 @@ class StatisticsThumbnailStore(private val directory: File) {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            // The next promotion or post-open can retry without affecting statistics recording.
         } finally {
             temporary.delete()
         }

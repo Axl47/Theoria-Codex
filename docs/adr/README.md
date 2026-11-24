@@ -35,3 +35,25 @@ and link the record that replaces it.
 | [0015](0015-series-entry-storage.md) | Series entries are kept, never deleted, when a source stops listing them |
 | [0016](0016-shared-post-storage.md) | Posts are stored once, sparsely and compared by decoded value |
 | [0017](0017-visual-similarity-storage.md) | Visual signatures and For You verdicts are stored with their own lifecycle |
+| [0018](0018-codex-library-transactions.md) | Cross-Codex and Likes operations commit atomically and Undo authority is process-only |
+| [0019](0019-followed-and-saved-new-post-marks.md) | Follows and new-post marks are local, identity-keyed and rate-limited across restarts |
+| [0020](0020-for-you-retired-searches.md) | Saved For You searches are converted to ordinary source searches without displacing existing ones |
+| [0021](0021-local-state-files.md) | Small local state files reject newer schemas, skip unreadable entries and keep lists as raw JSON |
+| [0022](0022-offline-media-store.md) | Offline copies commit through a manifest and survive undecodable data without losing owners |
+| [0023](0023-post-snapshots.md) | Post snapshots drop device-bound data and merging never erases known data |
+| [0024](0024-profile-backup-format.md) | Profile backups are a versioned, strictly validated document written at the lowest version that fits |
+| [0025](0025-profile-backup-restore.md) | Restore merges through a durable intent and only adds to what the device has |
+| [0026](0026-profile-deletion-journal.md) | Profile deletion runs from a fail-closed durable intent and blocks writes to retired profiles |
+| [0027](0027-series-download-queue.md) | Chapter downloads run from a two-lane queue with one worker |
+| [0028](0028-series-storage-and-switching.md) | Series entry lists, progress and source switches are stored conservatively |
+| [0029](0029-source-weights-normalization.md) | Source weights are normalized without drift and new sources get an even share |
+| [0030](0030-statistics-recording.md) | Usage statistics split by local calendar day, merge by maximum and seed tag counts once |
+| [0031](0031-custom-site-profile-storage.md) | User-added site profiles are stored without credentials, skip invalid records, and merge on restore without the site limit |
+| [0032](0032-datastore-open-and-recovery.md) | Stores open through a startup gate, refuse newer schemas, and set unreadable files aside before resetting |
+| [0033](0033-durable-json-configuration.md) | All saved data uses one kotlinx Json configuration that keeps Gson-era behaviour |
+| [0034](0034-golden-files-pin-stored-formats.md) | Golden files are bytes real builds wrote and are never regenerated to pass a change |
+| [0035](0035-repository-state-cells.md) | Repository rules run over a StateCell so in-memory and durable backings share one code path |
+| [0036](0036-settings-persistence-rules.md) | Settings are admitted before persistence and change with their derived source weights in one transaction |
+| [0037](0037-statistics-thumbnail-store.md) | Statistics thumbnails are private files owned by the top lists and fetched only for promoted or opened posts |
+| [0038](0038-stored-record-compatibility.md) | Durable records are separate from domain models and keep decoding every shape this app ever stored |
+| [0039](0039-tachiyomi-backup-import.md) | Mihon-family backups are decoded from their protobuf wire format and import their followed or started series |

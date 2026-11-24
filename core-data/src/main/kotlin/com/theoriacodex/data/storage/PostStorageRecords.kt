@@ -16,16 +16,6 @@ import kotlinx.serialization.Serializable
 
 const val CURRENT_POST_STORAGE_SCHEMA_VERSION: Int = 1
 
-/**
- * Stable local-storage shape for a [Post].
- *
- * Persistence implementations serialize this record rather than the domain model, allowing the
- * domain to evolve without silently changing the durable schema. A null schema version denotes
- * the original pre-versioned JSON shape; unknown explicit versions fail closed in the codec.
- *
- * Room payloads, offline manifests, backups, and the search first-page cache all read and write it with
- * kotlinx.serialization.
- */
 @Serializable
 data class PostStorageRecord(
     @SerialName("source")
@@ -82,17 +72,14 @@ data class PostStorageRecord(
     val durationMs: Long? = null,
     @SerialName("mediaCount")
     val mediaCount: Int? = null,
-    // Written only when set, so records of every other post keep their exact stored form.
     @SerialName("galleryLengthUnknown")
     val galleryLengthUnknown: Boolean? = null,
     @SerialName("taxonomy")
     val taxonomy: List<PostTaxonomyTermStorageRecord?>? = null,
     @SerialName("creatorProfiles")
     val creatorProfiles: List<CreatorProfileStorageRecord?>? = null,
-    // The site's own MD5 of the file. Optional: records written before it existed, and by sites that report none, omit it.
     @SerialName("contentHash")
     val contentHash: String? = null,
-    // Null means the original pre-versioned payload; current writers always set the explicit version in the codec.
     @SerialName("schemaVersion")
     val schemaVersion: Int? = null,
 )
@@ -162,7 +149,6 @@ data class ImageRefStorageRecord(
     val thumbnailUrl: String? = null,
 )
 
-/** Pure conversion boundary shared by every durable Post store. */
 object PostStorageCodec {
     fun encode(post: Post): PostStorageRecord {
         return PostStorageRecord(

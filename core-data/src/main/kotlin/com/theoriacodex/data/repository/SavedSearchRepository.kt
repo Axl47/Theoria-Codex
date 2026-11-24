@@ -27,26 +27,21 @@ data class SavedSearchEntry(
     val savedAtEpochMs: Long,
 )
 
-/** The saved search that stands for [search]: the same query hash and the same stored payload, whatever its name. */
 fun List<SavedSearchEntry>.savedFor(search: RecentSearchEntry): SavedSearchEntry? {
     val payload by lazy { RecentSearchPayloadCodec.encodeJson(search) }
     return firstOrNull { it.search.queryHash == search.queryHash && RecentSearchPayloadCodec.encodeJson(it.search) == payload }
 }
 
-/** Named searches are device-wide, like Recents, and independent of history clearing or pruning. */
 interface SavedSearchRepository {
     fun observeSavedSearches(): Flow<List<SavedSearchEntry>>
     suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry
     suspend fun rename(id: String, name: String)
     suspend fun remove(id: String)
 
-    /** Validates the complete backup before atomically replacing the saved-search library. */
     suspend fun replaceAll(entries: List<SavedSearchEntry>)
 
-    /** Adds imported pins atomically, replacing only matching imported IDs and rejecting overflow. */
     suspend fun merge(entries: List<SavedSearchEntry>)
 
-    /** The library [merge] would store for [entries], unchecked and unsaved, for a restore to test against the limit first. */
     suspend fun merged(entries: List<SavedSearchEntry>): List<SavedSearchEntry>
 }
 
@@ -58,7 +53,6 @@ class FileBackedSavedSearchRepository private constructor(repository: SavedSearc
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         now: () -> Long = System::currentTimeMillis,
         newId: () -> String = { UUID.randomUUID().toString() },
-        /** Names the per-source searches a saved For You mix splits into; see [withForYouSearchesConverted]. */
         sourceName: (SourceKey) -> String = SourceKey::id,
     ) : this(fileBackedSavedSearches(baseDirectory, ioDispatcher, recoveryRegistry, now, newId, sourceName))
 }
@@ -98,7 +92,6 @@ private fun fileBackedSavedSearches(
     }
 }
 
-/** Converts saved For You searches ([withForYouSearchesConverted]) when the library loads and when a backup lands. */
 private class MutableSavedSearchRepository(
     initialEntries: List<SavedSearchEntry>,
     private val now: () -> Long,
@@ -150,10 +143,6 @@ private class MutableSavedSearchRepository(
 
     override suspend fun merged(entries: List<SavedSearchEntry>) = mutex.withLock { mergedWith(entries) }
 
-    /**
-     * Only an incoming ordinary search replaces the local one with its ID. A For You search is converted together
-     * with the existing searches, so what it generates gives way to them and takes only slots that are still free.
-     */
     private fun mergedWith(entries: List<SavedSearchEntry>): List<SavedSearchEntry> {
         val replacedIds = entries.filterNot { it.search.isRetiredForYouSearch }.mapTo(mutableSetOf(), SavedSearchEntry::id)
         return (entries + savedSearches.value.filterNot { it.id in replacedIds }).withForYouSearchesConverted(sourceName)

@@ -17,14 +17,6 @@ sealed interface ApplicationDataState<out T> {
     data class Failed(val cause: Throwable) : ApplicationDataState<Nothing>
 }
 
-/**
- * A process-lifetime lazy boundary for building the complete repository graph away from the main
- * thread. Constructing this type performs no work. [start] is non-blocking, concurrent callers of
- * [awaitReady] share one attempt, and a failed attempt is retried only when [retry] is explicit.
- *
- * This is deliberately generic: the application can create all remaining file-backed repositories
- * inside [initialize], while DataStore repositories themselves remain constructor-I/O-free.
- */
 class ApplicationDataReadiness<T>(
     private val applicationScope: CoroutineScope,
     private val initializationDispatcher: CoroutineDispatcher = Dispatchers.IO,

@@ -2,22 +2,12 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.VideoQuality
 
-/**
- * A setting as the app names it. Settings rows, controls moved next to their content, and the search box's
- * commands all read titles from here, so each label exists once. [keywords] are further words the search
- * box matches besides the title.
- */
 sealed interface SettingDefinition {
     val id: String
     val title: String
     val keywords: List<String>
 }
 
-/**
- * An on/off setting. [read] gets it from [AppSettings] and [write] returns settings with it changed, so any
- * owner can apply it with `settingsRepository.updateSettings { toggle.write(it, checked) }`. [description]
- * is the line under the title, only where the title cannot say what the switch does.
- */
 class SettingToggle(
     override val id: String,
     override val title: String,
@@ -27,7 +17,6 @@ class SettingToggle(
     val write: (AppSettings, Boolean) -> AppSettings,
 ) : SettingDefinition
 
-/** A setting with one of [options]; read and written like [SettingToggle]. Each surface labels the options. */
 class SettingChoice<T>(
     override val id: String,
     override val title: String,
@@ -37,14 +26,12 @@ class SettingChoice<T>(
     val write: (AppSettings, T) -> AppSettings,
 ) : SettingDefinition
 
-/** A place that holds settings (a Settings page, a sheet); the app binds [id] to what opens it. */
 data class SettingDestination(
     override val id: String,
     override val title: String,
     override val keywords: List<String> = emptyList(),
 ) : SettingDefinition
 
-/** Every switch the app's settings offer. */
 object SettingToggles {
     val OldSearchBar = SettingToggle(
         "old-search-bar", "Old Search Bar", listOf("pin search bar"), "Keep the search bar visible while scrolling.",
@@ -84,7 +71,6 @@ object SettingToggles {
         write = { settings, on -> settings.copy(contentFilters = settings.contentFilters.copy(resolveUnknownAnimatedDurations = on)) },
     )
 
-    /** Only in a build with extensions, which alone has chapters to download. */
     val SeriesDeleteAfterReading = SettingToggle(
         "series-delete-after-reading", "Delete after reading", listOf("series", "chapters", "downloads"),
         read = { it.seriesDeleteAfterReading }, write = { settings, on -> settings.copy(seriesDeleteAfterReading = on) },
@@ -96,7 +82,6 @@ object SettingToggles {
     )
 }
 
-/** Every choice the app's settings offer. */
 object SettingChoices {
     val DefaultVideoQuality = SettingChoice(
         "video-quality", "Default video quality", listOf("resolution", "playback"), VideoQuality.entries,
@@ -107,7 +92,6 @@ object SettingChoices {
         read = { it.cache.downloadQuality }, write = { settings, quality -> settings.copy(cache = settings.cache.copy(downloadQuality = quality)) },
     )
 
-    /** Only in a build with extensions, which alone has series to check. */
     val SeriesUpdates = SettingChoice(
         "series-updates", "Check for new chapters", listOf("series", "notifications", "updates"), SeriesUpdateInterval.entries,
         read = { it.seriesUpdateInterval }, write = { settings, interval -> settings.copy(seriesUpdateInterval = interval) },
@@ -116,7 +100,6 @@ object SettingChoices {
     val all: List<SettingChoice<*>> = listOf(DefaultVideoQuality, DownloadQuality, SeriesUpdates)
 }
 
-/** Every place that holds settings, as Settings and the search box name it. */
 object SettingDestinations {
     val Home = SettingDestination("settings", "Settings", listOf("preferences", "options"))
     val Stats = SettingDestination("stats", "Your stats", listOf("stats", "statistics", "usage"))
@@ -126,7 +109,6 @@ object SettingDestinations {
     val SourceMix = SettingDestination("source-mix", "Source mix", listOf("weights", "sources"))
     val Sites = SettingDestination("sites", "Sites", listOf("sources", "accounts", "sign in", "log in"))
 
-    /** Only in a build with extensions. */
     val Extensions = SettingDestination("extensions", "Extensions", listOf("series", "manga", "repositories", "plugins"))
     val Downloads = SettingDestination("downloads", "Downloads", listOf("download", "quality", "metered", "roaming"))
     val Controls = SettingDestination("controls", "Controls", listOf("gestures", "swipes"))
@@ -142,5 +124,4 @@ object SettingDestinations {
     )
 }
 
-/** All definitions; ids are unique across kinds. */
 val ALL_SETTING_DEFINITIONS: List<SettingDefinition> = SettingToggles.all + SettingChoices.all + SettingDestinations.all

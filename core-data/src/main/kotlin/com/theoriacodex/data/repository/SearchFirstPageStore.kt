@@ -20,17 +20,10 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-/**
- * The most recent search's first page, so reopening the app can paint it at once while the search refreshes. It holds
- * one search and is disposable. Unlike saved posts it keeps each post's live listing data: the comment hint, so
- * restored cards still show their comment badges, and the file and picture hashes, so a picture several sites host stays
- * one card when the refresh arrives. A missing, stale or unreadable file only costs that instant paint.
- */
 class SearchFirstPageStore(
     private val file: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    /** The saved posts for [executionKey], or nothing when the file holds another search. */
     suspend fun load(executionKey: String): List<Post> = withContext(ioDispatcher) {
         runCatching {
             if (!file.exists()) return@runCatching emptyList()
@@ -77,7 +70,6 @@ class SearchFirstPageStore(
     private fun Int.toCommentHint() = CommentHint(takeIf { it != SOME_COMMENTS })
 
     companion object {
-        /** Under the app's cache directory, so clearing disposable caches and low storage can reclaim it. */
         const val FILE_NAME = "search_first_page.json"
         private const val MAX_POSTS = 60
         private const val CURRENT_VERSION = 2

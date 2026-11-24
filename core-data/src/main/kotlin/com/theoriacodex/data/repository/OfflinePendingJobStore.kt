@@ -10,9 +10,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Device-only intent; verified completed manifests remain the authority for acquired bytes. */
 class OfflinePendingJobStore(private val file: File, private val store: AtomicJsonFileStore = AtomicJsonFileStore()) {
-    /** An unreadable queue fails so its owner can offer a retry; it is never silently emptied. */
     suspend fun load(): Map<String, List<PostId>> = withContext(Dispatchers.IO) {
         if (!file.exists()) return@withContext emptyMap()
         require(file.length() <= 8L * 1024 * 1024) { "Offline queue is too large" }

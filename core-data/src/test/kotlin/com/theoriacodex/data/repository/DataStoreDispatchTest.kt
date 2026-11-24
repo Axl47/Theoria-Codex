@@ -44,7 +44,6 @@ class DataStoreDispatchTest {
                 }
             }
             callerScheduler.runCurrent()
-            // Freeze the UI after submission. The actor must execute its transform and close independently.
             releaseStorage.countDown()
             withTimeout(5_000) { transformed.await() }
             withTimeout(5_000) { storageJob.cancelAndJoin() }

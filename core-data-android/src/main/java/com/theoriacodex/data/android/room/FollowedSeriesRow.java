@@ -5,10 +5,6 @@ import androidx.annotation.Nullable;
 import androidx.room.ColumnInfo;
 import androidx.room.Embedded;
 
-/**
- * A followed series with how many of its entries are unread, when its newest came out, when one was last read, and
- * whether any was opened.
- */
 public final class FollowedSeriesRow {
     @NonNull @Embedded public final SeriesEntity series;
     @ColumnInfo(name = "unread_count") public final int unreadCount;

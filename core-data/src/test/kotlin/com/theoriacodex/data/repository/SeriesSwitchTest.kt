@@ -65,7 +65,6 @@ class SeriesSwitchTest {
         val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o12"), old, to, new)
 
         val byAddress = changed.associateBy { it.entry.address }
-        // Chapter 1 was unread there and stays unread; 11 was not there, so it is read as one passed over.
         assertEquals(setOf("/n11", "/n200"), changed.filter { it.read }.map { it.entry.address }.toSet())
         val resumed = byAddress.getValue("/n12A")
         assertEquals("Unfinished, capped at the new chapter's page count", 8L to false, resumed.position to resumed.read)
@@ -90,7 +89,6 @@ class SeriesSwitchTest {
         val old = listOf(
             stored(SeriesEntry("/o3", "3", 3f), order = 0, position = 4),
             stored(SeriesEntry("/o2", "2", 2f), order = 1, position = 15),
-            // No longer listed there (a negative order), but its place still counts.
             stored(SeriesEntry("/o1", "1", 1f), order = -1, position = 6),
         )
         val new = listOf(
@@ -133,7 +131,6 @@ class SeriesSwitchTest {
         val old = listOf(
             stored(SeriesEntry("/o5a", "5", 5f, "A"), order = 0, read = true),
             stored(SeriesEntry("/o5b", "5", 5f, "B"), order = 1, position = 4),
-            // Not listed there, so it falls back to the first release in reading order, 5B, which has its own.
             stored(SeriesEntry("/o5d", "5", 5f, "D"), order = 2, read = true, position = 9),
         )
         val new = listOf(

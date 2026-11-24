@@ -119,7 +119,6 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val store = OfflineMediaStore(tempDir("parallel"))
         val post = gallery()
         val secondStarted = CompletableDeferred<Unit>()
-        // The first page finishes only once the second has started, so acquiring one at a time never completes.
         val saved = store.save(post, post.media, "series", parallel = 2) { ref, file ->
             if (ref == post.media.first()) secondStarted.await() else secondStarted.complete(Unit)
             file.writeText(ref.url!!)
@@ -135,7 +134,6 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         val folder = directory.listFiles().orEmpty().single()
         val generation = folder.listFiles().orEmpty().single(File::isDirectory)
-        // Its pages cannot be deleted, so the delete stops after the manifest.
         generation.setWritable(false)
         try {
             OfflineMediaStore(directory).apply { load() }.removeOwner("codex:a")
@@ -359,7 +357,6 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         val restored = requireNotNull(reopened.find(source.id))
         assertEquals(saved, restored)
         assertEquals("neko", restored.taxonomy.single().translation)
-        // The source snapshot keeps the canonical refs, including video variants, and restores them.
         assertEquals(source, reopened.withoutOfflineLocations(restored))
     }
 
@@ -370,7 +367,6 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
         val folder = directory.listFiles().orEmpty().single()
         val oldGeneration = folder.listFiles().orEmpty().single(File::isDirectory)
-        // Only the version changes, so the version check alone must reject an otherwise readable copy.
         editManifest(directory) { root ->
             root["version"] = JsonPrimitive(2)
             root["owners"] = JsonArray(listOf(JsonPrimitive("codex:a"), JsonPrimitive("codex:z")))
@@ -472,7 +468,6 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     fun `a page outside its copy's folder is not a usable copy`() = runTest {
         val outside = tempDir("outside").resolve("page.png").apply { writeText("bytes") }
         for ((name, escape) in listOf<Pair<String, (File) -> String>>(
-            // The page's generation folder, then the copy's folder, then the store's: lands beside the store.
             "dot-dot" to { page -> "${page.parent}/../../../escaped.png" },
             "absolute" to { _ -> outside.absolutePath },
         )) {

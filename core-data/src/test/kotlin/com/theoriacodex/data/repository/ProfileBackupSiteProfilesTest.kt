@@ -74,7 +74,6 @@ class ProfileBackupSiteProfilesTest {
         assertTrue(failure is IllegalArgumentException)
         assertFalse(harness.journal.exists())
         assertEquals(stored, harness.sites.observeProfiles().first())
-        // Sites already on the device add nothing, so they never count against the limit.
         harness.service.restore(codec.encode(emptyBackup().copy(customSources = stored.take(2))))
     }
 

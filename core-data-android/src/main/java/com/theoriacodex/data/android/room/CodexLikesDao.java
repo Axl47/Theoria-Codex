@@ -135,7 +135,6 @@ public interface CodexLikesDao {
     @Query("SELECT * FROM posts ORDER BY source ASC, source_post_id ASC")
     List<PostEntity> posts();
 
-    /** Uses the (source, source_post_id) primary key; stops at the first row. */
     @Query("SELECT EXISTS(SELECT 1 FROM posts WHERE source = :source)")
     boolean hasPosts(String source);
 

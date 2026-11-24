@@ -23,22 +23,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 
-/**
- * Verified recovery for JSON reads and atomic whole-file replacement on an injected IO lane.
- * Store-specific schemas remain owned by callers, as kotlinx [KSerializer]s encoded with [DurableJson].
- * Writes compact JSON; older pretty-printed files still read.
- */
 class AtomicJsonFileStore internal constructor(
     private val ioDispatcher: CoroutineDispatcher,
     private val fileOperations: AtomicFileOperations,
 ) {
     constructor(ioDispatcher: CoroutineDispatcher = Dispatchers.IO) : this(ioDispatcher, DefaultAtomicFileOperations)
 
-    /**
-     * Reads [file], or returns [fallback] when it is missing. Bytes that are not UTF-8, blank, a JSON null, or that
-     * [serializer] rejects with a [SerializationException] are set aside by [setAsideCorruptFile] and reported through
-     * [onRecovery]; any other failure, such as an [IllegalArgumentException] from a record's own checks, propagates.
-     */
     suspend fun <T : Any> read(
         file: File,
         fallback: T,
@@ -77,12 +67,10 @@ class AtomicJsonFileStore internal constructor(
         return fallback
     }
 
-    /** Atomically replaces [file] with [payload] encoded under [DurableJson]. */
     suspend fun <T> write(file: File, payload: T, serializer: KSerializer<T>) {
         writePayload(file, maxBytes = null) { DurableJson.encodeToString(serializer, payload) }
     }
 
-    /** Flush a bounded operational intent, and its new directories, before its caller starts irreversible work. */
     suspend fun <T> writeIntent(file: File, payload: T, serializer: KSerializer<T>, maxBytes: Int) {
         require(maxBytes > 0)
         writePayload(file, maxBytes) { DurableJson.encodeToString(serializer, payload) }

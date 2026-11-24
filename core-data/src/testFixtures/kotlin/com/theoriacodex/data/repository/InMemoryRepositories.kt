@@ -129,7 +129,6 @@ class InMemoryCodexRepository : CodexRepository {
         mutex.withLock { removeCodex(codexId) }
     }
 
-    /** Drops [codexId] and its memberships, then the posts that leaves in no collection, as the durable store does. */
     private fun removeCodex(codexId: String) {
         val removed = itemsByCodex.value[codexId].orEmpty().map(CodexItem::postId)
         codices.value = codices.value.filterNot { it.codexId == codexId }
@@ -137,7 +136,6 @@ class InMemoryCodexRepository : CodexRepository {
         releaseOrphanedPosts(removed)
     }
 
-    /** The durable store keeps a post only while a collection, like or Recents row holds it; this fake models collections. */
     private fun releaseOrphanedPosts(candidates: Collection<PostId>) {
         val held = itemsByCodex.value.values.flatMapTo(mutableSetOf()) { items -> items.map(CodexItem::postId) }
         postsById.value = postsById.value - (candidates.toSet() - held)
@@ -162,7 +160,6 @@ class InMemoryCodexRepository : CodexRepository {
         mutex.withLock {
             val current = codices.value
             if (current.none { it.codexId == snapshot.codex.codexId }) {
-                // A Codex created under this name during the Undo window keeps it; this one gets a free one.
                 val name = CodexLikesPolicy.resolveUniqueCodexName(snapshot.codex.name, current)
                 codices.value = current.toMutableList().apply {
                     add(snapshot.position.coerceAtMost(size), snapshot.codex.copy(name = name))
@@ -505,6 +502,5 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     }
 }
 
-/** The combined Recents activity list the app shows, read once from this repository's watched posts and searches. */
 suspend fun RecentsRepository.activity(): List<RecentActivityEntry> =
     mergeRecentActivity(observeWatchedPosts().first(), observeSearches().first())

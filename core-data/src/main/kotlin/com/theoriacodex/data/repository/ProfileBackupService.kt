@@ -29,11 +29,6 @@ class ProfileRestorePendingException(cause: Exception) : IllegalStateException(
     "Restore paused. Reopen Theoria to finish safely. Your existing profiles are preserved.", cause,
 )
 
-/**
- * Restore merges by the backup's own identities through a durable intent, so repeating one or retrying
- * after a crash adds nothing twice. Startup must finish [recoverPendingRestore] before exposing
- * repository-backed routes. Nothing already on the device is deleted or overwritten.
- */
 class ProfileBackupService(
     private val settings: SettingsRepository,
     private val store: ProfileBackupStore,
@@ -45,9 +40,7 @@ class ProfileBackupService(
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
-    /** Where a backup's repos are added, and read from when making one; null where no extensions run. */
     private val extensionRepos: ExtensionRepos? = null,
-    /** Which extension sources are on, and why an installed extension's are not, so a Mihon-family import can name what its series still need. */
     private val extensionSources: suspend () -> SourceAvailability = { SourceAvailability() },
 ) {
     private val mutex = Mutex()
@@ -76,32 +69,22 @@ class ProfileBackupService(
         }
     }
 
-    /** Usage totals change constantly and share nothing with the library, so they need no stable read. */
     private suspend fun statisticsFor(includeRecents: Boolean): LifetimeStatistics? =
         if (includeRecents) statistics?.observeStatistics()?.first() else null
 
-    /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
     suspend fun preview(bytes: ByteArray): BackupPreview {
         if (!isTachiyomiBackup(bytes)) {
             val backup = codec.decode(bytes)
             return BackupPreview.Profiles(backup.preview(newRepos(backup.extensionRepos)))
         }
         val backup = decodeTachiyomiBackup(bytes, clock())
-        // Sources that cannot be listed are unavailable in Series too, so they count as missing.
         return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(SourceAvailability()), newRepos(backup.repos))
     }
 
-    /** The [listed] repos not added here yet. Details only: a device that cannot answer leaves them out rather than refuse the backup. */
     private suspend fun newRepos(listed: List<ExtensionRepo>): List<ExtensionRepo> = extensionRepos?.let { repos ->
         runCatchingPreservingCancellation { listed.notIn(repos.repos()) }.getOrNull()
     }.orEmpty()
 
-    /**
-     * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
-     * on the device is removed, each entry keeps the further progress of the two sides, and importing twice adds
-     * nothing more. One Room transaction holds it all, so it needs no journal. Then restores the repos the backup lists
-     * ([restoreFromBackup]).
-     */
     suspend fun importSeries(bytes: ByteArray): SeriesImportResult = withContext(Dispatchers.IO) {
         val backup = mutex.withLock {
             check(!journalFile.exists()) { "Finish the pending restore first" }
@@ -110,18 +93,12 @@ class ProfileBackupService(
             }
         }
         val imported = backup.importPreview()
-        // Outside the lock: the repos do not touch the library. The series are in by now, so a failure here is
-        // reported against the repos alone.
         val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(imported)
         val added = runCatchingPreservingCancellation { repos.restoreFromBackup(backup.repos) }
             .getOrElse { BackupReposAdded(problems = backup.repos.associate { it.url to "Import the backup again to retry" }) }
         SeriesImportResult(imported, reposAdded = added.added, repoProblems = added.problems)
     }
 
-    /**
-     * Restores a Theoria backup: its library, settings and sites, and its extension repos ([restoreFromBackup]), all
-     * in [finish], so startup recovery of an interrupted restore stores the repos too.
-     */
     suspend fun restore(
         bytes: ByteArray,
         applyPreferences: Boolean = false,
@@ -157,16 +134,11 @@ class ProfileBackupService(
 
     private suspend fun preflight(imported: ProfileBackup, applyPreferences: Boolean) {
         settings.observeSettings().first().mergeRestoredSettings(imported.settings, applyPreferences)
-        // Counted as the merge would store them: For You pins convert, and some then give way or split.
         require(savedSearches.merged(imported.savedSearches).size <= MAX_SAVED_SEARCHES) {
             "Restore would exceed the $MAX_SAVED_SEARCHES pinned-search limit. Remove some pins first."
         }
     }
 
-    /**
-     * Checked only before the journal exists: [finish] also runs during startup recovery, and a site
-     * added since must never make recovery fail. Merging may therefore exceed the limit slightly.
-     */
     private suspend fun preflightSites(imported: ProfileBackup) {
         val existing = siteProfiles.observeProfiles().first().mapTo(mutableSetOf(), SiteProfile::sourceId)
         val added = imported.customSources.map(SiteProfile::sourceId).filterNot(existing::contains)
@@ -194,7 +166,6 @@ class ProfileBackupService(
             check(imported.settings.recommendationProfiles.all { it.profileId in persistedIds }) {
                 "Restored profiles were not retained"
             }
-            // A profile deleted earlier in this process is back, so it must be usable before a restart.
             imported.settings.recommendationProfiles.forEach { writeGuard?.reinstate(it.profileId) }
             check(journalFile.delete() || !journalFile.exists()) { "Could not finish the restore journal" }
             ProfileRestoreResult(
@@ -217,7 +188,6 @@ class ProfileBackupService(
             put("selectImportedProfile", pending.selectImportedProfile)
             put("backup", codec.encodeDocument(pending.backup))
         }.toString().toByteArray(Charsets.UTF_8)
-        // Never write a journal that readJournal would refuse, or startup recovery could not finish it.
         require(record.size <= MAX_JOURNAL_BYTES) { "Backup exceeds the 32 MiB metadata limit" }
         journalFile.parentFile?.mkdirs()
         val temporary = File.createTempFile("restore-", ".tmp", journalFile.parentFile)
@@ -249,7 +219,6 @@ class ProfileBackupService(
 
 private const val MAX_JOURNAL_BYTES = PROFILE_BACKUP_MAX_BYTES + 4_096L
 
-/** A JSON true; callers have already checked [isBackupBoolean]. */
 private fun JsonElement.isTrue() = jsonPrimitive.boolean
 
 private data class PendingRestore(

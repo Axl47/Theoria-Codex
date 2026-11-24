@@ -17,11 +17,9 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 internal data class SavedSearchSnapshot(val entries: List<SavedSearchEntry>) {
     companion object {
-        /** Checks [entries] from outside the file, such as a backup, and puts each search in its stored form. */
         fun validated(entries: List<SavedSearchEntry>): SavedSearchSnapshot =
             checked(entries.map { entry -> entry.copy(search = RecentSearchPayloadCodec.normalize(entry.search)) })
 
-        /** Checks entries whose searches are already in stored form, as [RecentSearchPayloadCodec.decode] returns. */
         fun checked(entries: List<SavedSearchEntry>): SavedSearchSnapshot {
             require(entries.size <= MAX_SAVED_SEARCHES) { "Too many saved searches." }
             require(entries.map(SavedSearchEntry::id).distinct().size == entries.size) { "Duplicate saved-search IDs." }
@@ -35,7 +33,6 @@ internal data class SavedSearchSnapshot(val entries: List<SavedSearchEntry>) {
     }
 }
 
-/** pinned_searches.json. Each execution is stored in the accepted-search replay format, [RecentSearchPayloadCodec]. */
 @Serializable
 private data class SavedSearchFileRecord(
     @SerialName("schemaVersion") val schemaVersion: Int,
@@ -52,11 +49,6 @@ private data class SavedSearchRecord(
     @SerialName("execution") val execution: JsonElement,
 )
 
-/**
- * Reads and writes [SavedSearchSnapshot] as [SavedSearchFileRecord]. A file from a newer build throws
- * [UnsupportedStoreSchemaException] before its shape is read, so it is refused and left in place. Any invalid pin
- * fails the whole file as a [SerializationException], so the file store quarantines it rather than failing startup.
- */
 internal object SavedSearchSnapshotSerializer : KSerializer<SavedSearchSnapshot> {
     override val descriptor: SerialDescriptor = SavedSearchFileRecord.serializer().descriptor
 

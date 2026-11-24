@@ -127,7 +127,6 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     fun `semantic corruption is quarantined before recovering an empty library`() = runTest {
         val directory = tempDir("pin-corruption")
         val storage = directory.resolve("pinned_searches.json")
-        // Complete pins that fail validation (duplicate IDs), not just a structural decode failure.
         storage.writeText(goldenPinnedSearchesFile().replace("\"pin-multi\"", "\"pin-fyp\""))
         val original = storage.readBytes()
         val recovery = FileStoreRecoveryRegistry()
@@ -172,7 +171,6 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         assertEquals(rewritten, storage.readText())
     }
 
-    // The golden is the Gson store's own output.
     @Test
     fun `the pinned searches golden pins every stored key`() {
         assertStoredFormat(SavedSearchSnapshotSerializer, goldenPinnedSearchesFile() to SavedSearchSnapshot(goldenPins()))
@@ -203,12 +201,10 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     )
 }
 
-/** golden/pinned-searches/gson-written.json, as FileBackedSavedSearchRepository wrote it under Gson. */
 internal fun goldenPinnedSearchesFile(): String = checkNotNull(
     FileBackedSavedSearchRepositoryTest::class.java.classLoader.getResource("golden/pinned-searches/gson-written.json"),
 ).readText()
 
-/** The pins behind the golden file, as it decodes: its For You pin reads as a Unified search with source tags. */
 internal fun goldenPins(): List<SavedSearchEntry> {
     val tricky = "a&b=c<d>'e"
     val query = Query(

@@ -117,7 +117,6 @@ class ReadingPositionRepositoryTest {
         )
     }
 
-    // The golden is the Gson store's own output. Its list stays raw JSON, so each entry is pinned as its own record.
     @Test
     fun `the reading positions golden pins every stored key`() {
         val golden = golden("gson-written.json")

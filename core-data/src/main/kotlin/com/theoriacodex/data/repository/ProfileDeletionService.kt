@@ -20,7 +20,6 @@ class ProfileDeletionPendingException(cause: Exception) : IllegalStateException(
     "Profile removal paused. Retry removal or reopen the app to finish safely.", cause,
 )
 
-/** A small durable intent bridges one atomic Room library deletion and its Settings removal. */
 class ProfileDeletionService(
     private val settings: SettingsRepository,
     private val library: CodexLikesTransactions,
@@ -43,7 +42,6 @@ class ProfileDeletionService(
                     "This profile cannot be removed"
                 }
             }
-            // Once the durable intent is admitted, caller departure cannot skip its finish or guard.
             withContext(NonCancellable) {
                 if (!pending) {
                     fileStore.writeIntent(journalFile, ProfileDeletionJournal(1, profileId), ProfileDeletionJournal.serializer(),
@@ -84,7 +82,6 @@ class ProfileDeletionService(
         }
     }
 
-    /** Critical intent reads fail closed; corruption must never erase a partially completed operation. */
     private fun readPending(): String {
         require(journalFile.length() in 1..4_096L) { "Invalid profile removal journal size" }
         val text = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
@@ -95,7 +92,6 @@ class ProfileDeletionService(
     }
 }
 
-/** pending_profile_deletion.json: both keys are required, so a damaged journal fails instead of guessing. */
 @Serializable
 internal data class ProfileDeletionJournal(
     @SerialName("version")

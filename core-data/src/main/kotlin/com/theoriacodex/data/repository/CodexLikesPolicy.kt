@@ -5,7 +5,6 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.tags.sourceTagKey
 
-/** Canonical storage-independent policy shared by JSON, memory, and database repositories. */
 object CodexLikesPolicy {
     fun resolveUniqueCodexName(
         requestedName: String,
@@ -101,7 +100,6 @@ object CodexLikesPolicy {
         }
     }
 
-    /** Compatibility name retained for repository callers; matching is now AND across OR groups. */
     fun postMatchesAnyAutomaticTag(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean =
         postMatchesAutomaticTagGroups(post, automaticTags)
 
@@ -115,11 +113,6 @@ object CodexLikesPolicy {
         }
     }
 
-    /**
-     * Resolves a complete requested order or returns null when it is partial, duplicated, or
-     * contains an unknown id. Requiring a complete permutation keeps bulk database reorders from
-     * silently moving codices that were not part of the caller's snapshot.
-     */
     fun resolveCompleteCodexOrder(
         currentCodices: List<Codex>,
         codexIdsInOrder: List<String>,

@@ -20,10 +20,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Data keyed by a custom source survives every store, whether or not a profile for it exists:
- * parsing accepts any well-formed custom id, and availability is decided elsewhere.
- */
 class CustomSourceIdentityTest {
     private val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
     private val creator = CreatorProfile(custom, "uploader", "uploader", null, "user:uploader")
