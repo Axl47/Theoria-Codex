@@ -13,7 +13,7 @@ Indexing liked and saved posts runs on a phone: it must not heat it, hold the CP
 - A post whose frames cannot be read keeps its still analysis, and is retried at most a few times, once per run (the job is scheduled at every app start), so a source is not asked every night.
 - Posts failing to be reached one after another point at the network: only the first counts against its post, and after `UNREACHABLE_STREAK` (3) the run stops and asks to run again soon.
 - `settleStills` marks posts that do not play as complete, so a still image never waits for the idle-only job to count as tagged. The posts that play stay awaiting, ahead of the next batch.
-- `writeThrough` stores what the session already analysed for posts kept since (for example a liked For You card), so pictures are never read twice.
+- `writeThrough` stores what the session already analysed for posts kept since (for example a liked For You card), so pictures are never read twice. It wakes when `observeLibraryTotal` changes, which counts the Library only after a write to saved or liked posts, never after Recents' post writes or the backfill's own.
 
 ## Consequences
 
@@ -22,3 +22,4 @@ Indexing is slow by design. Loosening the duty cycle or the unreachable streak t
 ## Applies to
 
 - `vision-kit/src/main/kotlin/com/theoriacodex/app/vision/LibraryVisionBackfill.kt`: `LibraryVisionBackfill`, `drain`, `drainFrames`, `writeThrough`, `settleStills`, `BATCH`, `UNREACHABLE_STREAK`
+- `core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomVisualSignatureRepository.kt`: `observeLibraryTotal`, `observeVisionChanges`, `predictedTags`

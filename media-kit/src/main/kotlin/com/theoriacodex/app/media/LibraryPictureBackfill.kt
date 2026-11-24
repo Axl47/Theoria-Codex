@@ -14,7 +14,7 @@ class LibraryPictureBackfill(
     suspend fun drain() {
         val unavailable = HashSet<PostId>()
         while (true) {
-            val batch = signatures.libraryPostsWithoutSignature(unavailable.size + BATCH).filterNot { it.id in unavailable }
+            val batch = signatures.libraryPostsWithoutSignature(BATCH, skip = unavailable.size).filterNot { it.id in unavailable }
             if (batch.isEmpty()) return
             coroutineScope { batch.map { post -> async { post to hash(post) } }.awaitAll() }.forEach { (post, result) ->
                 when (result) {
