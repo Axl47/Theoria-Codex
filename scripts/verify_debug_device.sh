@@ -64,6 +64,7 @@ if [[ "$owner" == media || "$owner" == all ]]; then
 fi
 current_device="$(selected_device)"
 [[ "$current_device" == "$serial" ]]
+prepare_emulator_dialogs "$serial" "$evidence/closed-error-dialogs.txt"
 test_status=0
 ./gradlew "${connected[@]}" "${test_options[@]}" --continue --no-parallel --console=plain || test_status=$?
 if [[ "$owner" == app || "$owner" == all ]]; then
