@@ -17,7 +17,7 @@ The performance journeys exist to prove that every visibly presented animated ca
 
 ## Consequences
 
-Emulators cannot establish simultaneous autoplay; only a phone can. A new journey step should assert on sampled pixels or the lease receiver, not on player state. Guarded by `AgedStatisticsTest`: the aged file reopens through the store unchanged, every source holds exactly the watched-tag cap, and viewing the journey's first eight posts evicts more than once.
+Emulators cannot establish simultaneous autoplay; only a phone can. A new journey step should assert on sampled pixels or the lease receiver, not on player state. `AgedStatisticsTest` checks that the aged file reopens through the store unchanged, that every source holds exactly the watched-tag cap, and that viewing the journey's first eight posts evicts more than once.
 
 ## Applies to
 
