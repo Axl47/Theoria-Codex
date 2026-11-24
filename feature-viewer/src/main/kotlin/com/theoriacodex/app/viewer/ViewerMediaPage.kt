@@ -55,7 +55,10 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 internal data class ViewerMediaLayout(
-    /** Still images fill the page with no inset: in landscape and while reading a Series chapter. */
+    /**
+     * Whether animated and video media fill the page too; otherwise they sit below a portrait top gap. Still images
+     * always fill the page, so a gallery's pages fill the screen width whatever source it came from.
+     */
     val edgeToEdge: Boolean,
     val pictureInPicture: Boolean,
     val touchExploration: Boolean,
@@ -125,16 +128,16 @@ internal fun ViewerMediaPage(
             translationY = current.panY
         }
     }
-    val mediaPadding = if (layout.edgeToEdge || animated) 0.dp else 16.dp
+    val topGap = if (animated && !layout.edgeToEdge) VIEWER_ANIMATED_TOP_GAP else 0.dp
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
     val transformAspectRatio = if (controls.fillScreen) null else viewerMediaAspectRatio(post, media)
     val overlayAspectRatio = if (controls.fillScreen) null else viewerAspectRatio(post)
     val transformBounds = with(LocalDensity.current) {
-        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), transformAspectRatio)
+        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), transformAspectRatio)
     }
-    Box(Modifier.fillMaxSize().onSizeChanged { pageSize = it }) {
+    Box(Modifier.fillMaxSize().padding(top = topGap).onSizeChanged { pageSize = it }) {
         Box(
-            Modifier.fillMaxSize().padding(mediaPadding)
+            Modifier.fillMaxSize()
                 .viewerReturnMedia(returnProgress, overlayAspectRatio)
                 .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
@@ -183,6 +186,9 @@ private class ViewerMediaInteractions {
 }
 
 private const val VIEWER_HOLD_PLAYBACK_RATE = 2f
+
+/** Space above animated and video media in portrait, clear of the top bar. */
+private val VIEWER_ANIMATED_TOP_GAP = 40.dp
 
 @Composable
 private fun ViewerHoldSpeedLabel(visible: Boolean, modifier: Modifier) {
