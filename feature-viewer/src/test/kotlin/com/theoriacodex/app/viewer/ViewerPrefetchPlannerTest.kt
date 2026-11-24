@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -98,6 +99,21 @@ class ViewerPrefetchPlannerTest {
         assertEquals(listOf(flattened[4], flattened[5], flattened[2], flattened[1], flattened[0]), action.requests.map { it.key })
         assertEquals(listOf(flattened[2]), action.requests.filter { it.decode }.map { it.key })
         assertEquals(listOf(1, 2, 1, 2, 3), action.requests.map { it.distance })
+    }
+
+    @Test
+    fun `vertical reading looks further ahead but keeps videos to the next one`() {
+        val pages = pages(mediaCounts = listOf(9, 1, 1), videoPosts = setOf(2))
+        val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
+
+        val vertical = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null, verticalReading = true)
+        val paged = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null)
+
+        assertEquals((3..8).map(flattened::get) + listOf(flattened[1], flattened[0]), vertical.requests.map { it.key })
+        assertEquals((3..5).map(flattened::get) + listOf(flattened[1], flattened[0]), paged.requests.map { it.key })
+        val atEnd = viewerPrefetchAction(pages, current = flattened[8], swipeTarget = null, verticalReading = true).requests.map { it.key }
+        assertEquals(listOf(flattened[9]), atEnd.take(1))
+        assertFalse(flattened[10] in atEnd)
     }
 
     private fun pages(

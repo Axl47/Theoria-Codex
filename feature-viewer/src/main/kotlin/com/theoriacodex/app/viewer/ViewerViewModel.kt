@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withTimeoutOrNull
@@ -371,8 +372,9 @@ class ViewerViewModel(
 
     /**
      * Current-page work wins; only the immediately adjacent posts (next first, then previous) resolve speculatively,
-     * except while a series is watched: an episode's lookup scrapes third-party sites for links that soon expire, so
-     * only the episode on screen resolves, and the next one once it passed its watched point ([noteWatchedPoint]).
+     * once the session's first media is up ([awaitResolutionTurn]), except while a series is watched: an episode's
+     * lookup scrapes third-party sites for links that soon expire, so only the episode on screen resolves, and the
+     * next one once it passed its watched point ([noteWatchedPoint]).
      */
     private fun reconcileResolutionLookahead() {
         val current = state.value
@@ -412,6 +414,7 @@ class ViewerViewModel(
 
     private fun launchResolution(effect: ViewerEffect.ResolvePost) {
         launchSessionJob(ViewerWorkKey.Resolution(effect.postId)) {
+            awaitResolutionTurn(effect.postId)
             onAction(ViewerAction.ResolutionStarted(effect.session, effect.postId))
             try {
                 val outcome = withTimeoutOrNull(viewerResolutionTimeoutMs(state.value.series)) { Result.success(postResolver.resolve(effect.session, effect.postId)) }
@@ -501,6 +504,16 @@ class ViewerViewModel(
      */
     private suspend fun awaitFirstMediaShown() {
         withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) { firstMediaShown.first { shown -> shown } }
+    }
+
+    /**
+     * A neighbour's lookup waits as a prefetch does ([awaitFirstMediaShown]), so it never competes with the page
+     * opened; it starts at once if its post is, or becomes, the current page.
+     */
+    private suspend fun awaitResolutionTurn(postId: PostId) {
+        fun ready(shown: Boolean, current: ViewerUiState) = shown || current.currentPage?.post?.id == postId
+        if (ready(firstMediaShown.value, mutableState.value)) return
+        withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) { combine(firstMediaShown, mutableState, ::ready).first { it } }
     }
 
     /**
