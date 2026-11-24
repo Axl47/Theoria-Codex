@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.postMediaCount
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.appendedTo
+import com.theoriacodex.app.ui.components.RetainedFrames
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
@@ -93,6 +94,9 @@ internal fun sortCodexPosts(
     durations: Map<PostId, Long> = emptyMap(),
 ): List<Post> = codexPostRefinement(sort, usage, durations)?.let(posts::sortedWith) ?: posts
 
+private val CodexDurationFrames = RetainedFrames<Post, Map<PostId, Long>>()
+private val CodexSortFrames = RetainedFrames<Post, List<Post>?>()
+
 @Composable
 fun rememberCodexPostDurations(
     posts: List<Post>?,
@@ -102,7 +106,7 @@ fun rememberCodexPostDurations(
 ): Map<PostId, Long> {
     if (!sort.usesDuration || posts == null) return emptyMap()
     return rememberComputedOffMain(
-        posts, states, section = FeedTraceSections.KNOWN_DURATIONS, retainKey = "codex-durations:$codexId",
+        posts, states, section = FeedTraceSections.KNOWN_DURATIONS, retainKey = CodexDurationFrames.at("codex-durations:$codexId"),
         extend = { previous -> posts.appendedTo(previous.list)?.let { previous.value + knownMediaDurations(it, states) } },
     ) {
         knownMediaDurations(posts, states)
@@ -119,7 +123,7 @@ fun rememberSortedCodexPosts(
 ): List<Post>? {
     val durations = rememberCodexPostDurations(posts, sort, durationStates, codexId)
     return posts?.let {
-        rememberComputedOffMain(posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = "codex-sort:$codexId") {
+        rememberComputedOffMain(posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = CodexSortFrames.at("codex-sort:$codexId")) {
             usage?.let { sortCodexPosts(posts, sort, it, durations) }
         }
     }

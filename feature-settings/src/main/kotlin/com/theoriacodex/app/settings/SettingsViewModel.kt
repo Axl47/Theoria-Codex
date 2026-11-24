@@ -143,7 +143,6 @@ data class SettingsOwnerDependencies(
     val accounts: SettingsAccountGateway,
     val availableSources: StateFlow<Set<SourceKey>>,
     val recoveredStores: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
-    val showDeveloperScenarios: Boolean = false,
 )
 
 class SettingsViewModel(
@@ -154,7 +153,6 @@ class SettingsViewModel(
     private val mutableState = MutableStateFlow(
         SettingsUiState(
             availableSources = dependencies.availableSources.value.inPresentationOrder(),
-            showDeveloperScenarios = dependencies.showDeveloperScenarios,
         )
     )
     override val state: StateFlow<SettingsUiState> = mutableState.asStateFlow()
@@ -282,9 +280,6 @@ class SettingsViewModel(
             }
             is SettingsAction.SetViewerPlaybackMode -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(playbackMode = action.mode)) }
-            }
-            is SettingsAction.SetScenarioPreset -> launchMutation {
-                dependencies.settingsRepository.setScenarioPreset(action.preset)
             }
             else -> return false
         }

@@ -51,8 +51,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("Dismiss").performClick()
         longPress(compose.onNodeWithTag(card))
         activate(compose.onNodeWithText("Save to Codex"))
-        waitFor("FYP saved collection is offered as a save destination") { compose.onAllNodesWithText("FYP saved").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("FYP saved").performClick()
+        saveToCodex("FYP saved")
         waitFor("collection holds a saved post") { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(collection.codexId).first().map { it.postId } })
         waitFor("For You save count is 1") { io { container.data.statisticsRepository.observeStatistics().first().forYouSaveCount == 1L } }

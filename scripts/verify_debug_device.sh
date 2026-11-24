@@ -64,6 +64,10 @@ if [[ "$owner" == media || "$owner" == all ]]; then
 fi
 current_device="$(selected_device)"
 [[ "$current_device" == "$serial" ]]
+# The CI wrapper already did this through bounded adb calls before its readiness verdict.
+if [[ "${EMULATOR_DIALOGS_PREPARED:-}" != 1 ]]; then
+  prepare_emulator_dialogs "$serial" "$evidence/closed-error-dialogs.txt"
+fi
 test_status=0
 ./gradlew "${connected[@]}" "${test_options[@]}" --continue --no-parallel --console=plain || test_status=$?
 if [[ "$owner" == app || "$owner" == all ]]; then

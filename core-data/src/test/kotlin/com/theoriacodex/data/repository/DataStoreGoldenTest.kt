@@ -50,6 +50,22 @@ class DataStoreGoldenTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), settings)
     }
 
+    @Test fun `settings holding the retired scenario and extension keys load and drop them on the next write`() = runTest {
+        val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, "settings-full")
+        val file = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
+        val retired = listOf("scenarioPreset", "trustedExtensions", "extensionLanguages")
+        retired.forEach { key -> assertTrue("golden lacks $key", file.readText().contains("\"$key\"")) }
+
+        withDataStoreScope { scope ->
+            val repository = DataStoreSettingsRepository(directory, scope)
+            assertTrue(repository.observeSettings().first().oldSearchBar)
+            repository.setInvertMultiImageScrollDirection(false)
+        }
+
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isEmpty())
+        retired.forEach { key -> assertFalse("rewrite kept $key", file.readText().contains("\"$key\"")) }
+    }
+
     @Test fun `settings with only the retired profile key open on the first profile`() = runTest {
         assertEquals("profile-main", loadSettings("settings-retired-profile-key").activeProfileId)
     }

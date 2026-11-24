@@ -1,5 +1,7 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.domain.diagnostics.DiagnosticSink
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import java.util.UUID
@@ -82,6 +84,7 @@ class PostDownloadQueue(
     private val pollIntervalMs: Long = 1_000,
     private val jobStore: PostDownloadJobStore? = null,
     private val startGate: suspend () -> Unit = {},
+    private val diagnostics: DiagnosticSink = DiagnosticSink(Diagnostics::report),
 ) {
     private val mutableBatches = MutableStateFlow<List<PostDownloadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
@@ -212,7 +215,6 @@ class PostDownloadQueue(
         }
     }
 
-    @Suppress("SwallowedException")
     private suspend fun execute(item: PostDownloadItem) {
         var downloadId: Long? = item.downloadId
         try {
@@ -246,6 +248,7 @@ class PostDownloadQueue(
             markFailed(item.id, error.message)
         } catch (error: Exception) {
             markFailed(item.id, "Could not save this post. Try again.")
+            diagnostics.record("downloads", "Saving a post to the device failed", error)
         } finally {
             if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
                 withContext(NonCancellable) { (downloadId ?: currentItem(item.id)?.downloadId)?.let { backend.cancel(it) } }
