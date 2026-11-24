@@ -406,6 +406,11 @@ class SeriesTabViewModelTest {
         val reopened = SeriesTabViewModel(Following(followed), { listOf(manga) }) {}
         advanceUntilIdle()
         assertEquals(SeriesView.FOLLOWING, reopened.state.value.view)
+
+        // After process death the view comes back with the rest of the tab, as a Browse search does.
+        val restored = SeriesTabViewModel(Following(followed), { listOf(manga) }, saved = SavedStateHandle(mapOf("view" to "BROWSE", "search" to "moon"))) {}
+        advanceUntilIdle()
+        assertEquals(SeriesView.BROWSE to "moon", restored.state.value.view to restored.state.value.searchQuery)
         collecting.cancel()
     }
 
@@ -415,11 +420,13 @@ class SeriesTabViewModelTest {
         val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) {}
         advanceUntilIdle()
         viewModel.chooseView(SeriesView.FOLLOWING)
+        viewModel.chooseKind(SeriesKind.MANGA)
         viewModel.filterFollowing("blue")
 
         viewModel.searchAllSources()
         val state = viewModel.state.value
         assertEquals(Triple(SeriesView.BROWSE, "", "blue"), Triple(state.view, state.followingQuery, state.searchQuery))
+        assertEquals("Results of both kinds show", null, state.kind)
     }
 
     @Test

@@ -69,6 +69,8 @@ internal fun FollowingBody(
             ) {
                 when {
                     following == null -> Unit
+                    following.isEmpty() && content.followingQuery.isNotBlank() ->
+                        fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
                     !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
                     following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
                     else -> items(following, key = { it.series.id.toString() }) { item ->
