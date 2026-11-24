@@ -19,8 +19,8 @@ const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
 private const val PROFILE_BACKUP_VERSION = 5
 
-private fun ProfileBackup.version() = when {
-    statistics?.let { StatisticsPolicies.normalize(it).watchedTagFloors.isNotEmpty() } == true -> PROFILE_BACKUP_VERSION
+private fun ProfileBackup.version(statistics: StatisticsStoreRecord?) = when {
+    statistics?.watchedTagFloors != null -> PROFILE_BACKUP_VERSION
     extensionRepos.isNotEmpty() -> 4
     library.series.isNotEmpty() -> 3
     else -> 2
@@ -39,9 +39,10 @@ class ProfileBackupCodec {
     internal fun encodeDocument(written: ProfileBackup): JsonObject {
         val backup = written.copy(library = written.library.copy(series = written.library.series.writable()))
         validate(backup)
+        val statistics = backup.statistics?.let(StatisticsStoreRecord::fromDomain)
         return buildJsonObject {
             put("format", "theoria-profile-backup")
-            put("version", backup.version())
+            put("version", backup.version(statistics))
             put("createdAt", backup.createdAtEpochMs)
             put("settings", DurableJson.encodeToJsonElement(
                 SettingsStoreRecord.serializer(), SettingsStoreRecord.fromDomain(portableSettings(backup.settings)),
@@ -59,11 +60,7 @@ class ProfileBackupCodec {
                 put("mediaNumber", entry.mediaNumber)
                 put("lastViewedAt", entry.lastViewedAt)
             } })
-            backup.statistics?.let {
-                put("statistics", DurableJson.encodeToJsonElement(
-                    StatisticsStoreRecord.serializer(), StatisticsStoreRecord.fromDomain(it),
-                ))
-            }
+            statistics?.let { put("statistics", DurableJson.encodeToJsonElement(StatisticsStoreRecord.serializer(), it)) }
             if (backup.customSources.isNotEmpty()) {
                 put("customSources", backupArray(backup.customSources) {
                     DurableJson.encodeToJsonElement(SiteProfileRecord.serializer(), SiteProfileRecord.fromDomain(it))
