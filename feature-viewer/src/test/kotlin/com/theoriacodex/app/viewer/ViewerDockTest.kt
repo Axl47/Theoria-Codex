@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Application
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.performClick
@@ -58,7 +59,7 @@ class ViewerDockTest {
     @Test
     fun `a focused comment opens the info sheet at the comments, and closing resets it`() {
         val actions = mutableListOf<ViewerAction>()
-        val controls = ViewerControls({ actions += it }, ViewerScreenState(), false, true, false, false)
+        val controls = ViewerControls({ actions += it }, ViewerScreenState(), false, mutableStateOf(true), false, false)
 
         assertEquals(InfoSheetTarget.Top, controls.infoSheetTarget)
         controls.openInfoSheetAtComments()

@@ -70,7 +70,7 @@ internal class ViewerControls(
     private val onAction: (ViewerAction) -> Unit,
     private val screen: ViewerScreenState,
     private val overviewVisible: Boolean,
-    private val chromeVisible: Boolean,
+    private val chromeVisible: State<Boolean>,
     private val opening: Boolean,
     private val returning: Boolean,
 ) {
@@ -111,7 +111,7 @@ internal class ViewerControls(
 
     fun markInteraction() {
         screen.interactionSerial += 1
-        if (!chromeVisible && !opening && !returning) onAction(ViewerAction.ToggleChrome)
+        if (!chromeVisible.value && !opening && !returning) onAction(ViewerAction.ToggleChrome)
     }
 
     fun markPassiveInteraction() {
@@ -119,7 +119,7 @@ internal class ViewerControls(
     }
 
     fun beginScrub() {
-        screen.chromeShownForScrub = !chromeVisible && !opening && !returning
+        screen.chromeShownForScrub = !chromeVisible.value && !opening && !returning
         markInteraction()
     }
 
@@ -162,7 +162,7 @@ internal fun rememberViewerControls(
     onAction: (ViewerAction) -> Unit,
     screen: ViewerScreenState,
     overviewVisible: Boolean,
-    chromeVisible: Boolean,
+    chromeVisible: State<Boolean>,
     opening: Boolean,
     returning: Boolean,
 ): ViewerControls = remember(onAction, screen, overviewVisible, chromeVisible, opening, returning) {
@@ -200,7 +200,7 @@ internal class ViewerFrame(
     val navigation: ViewerPostNavigation,
     val posts: List<Post>,
     val selection: ViewerSelection,
-    val chromeVisible: Boolean,
+    private val chromeVisibleState: State<Boolean>,
     val chromeStage: State<Int>,
     val opening: Boolean,
     val returning: Boolean,
@@ -208,6 +208,8 @@ internal class ViewerFrame(
     val touchExplorationEnabled: Boolean,
     val isLandscape: Boolean,
 ) {
+    val chromeVisible: Boolean get() = chromeVisibleState.value
+
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 
     val watching = uiState.series is ViewerSeries.Watching

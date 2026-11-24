@@ -151,10 +151,11 @@ private fun ViewerLoadedScreen(
     val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
+    val chromeVisibleState = rememberUpdatedState(chromeVisible)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
-    val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisible, opening, returning)
-    val frame = remember(uiState, navigation, posts, selection, chromeVisible, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
-        ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
+    val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisibleState, opening, returning)
+    val frame = remember(uiState.ignoringChromeVisibility(), navigation, posts, selection, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
+        ViewerFrame(uiState, navigation, posts, selection, chromeVisibleState, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     }
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
     val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
@@ -228,6 +229,9 @@ private fun ViewerContentSurface(
         )
     }
 }
+
+private fun ViewerUiState.ignoringChromeVisibility(): ViewerUiState =
+    if (controls.chromeVisible) this else copy(controls = controls.copy(chromeVisible = true))
 
 private fun viewerChromeVisible(
     uiState: ViewerUiState,
