@@ -149,7 +149,7 @@ class CodexLikesPolicyTest {
     }
 
     @Test
-    fun `automatic tag groups require every group while accepting alternatives`() {
+    fun `automatic tag groups require every group while accepting alternatives (ADR 0006)`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "grouped"),
             preview = ImageRef(null, null, null),

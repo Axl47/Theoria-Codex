@@ -105,6 +105,19 @@ class FamilyAdapterTest {
         http.assertExhausted()
     }
 
+    @Test
+    fun `a stored site keeps its stored id whatever its address now derives (ADR 0004)`() {
+        val families = SiteFamilyRegistry.default().families
+
+        val sources = families.map { siteFamily ->
+            val stored = profile(siteFamily.family).copy(sourceId = "custom_old_example")
+            siteFamily.createAdapter(stored, SourceKey.of(stored), SiteRequestContext(http)).sourceKey.id
+        }
+
+        assertEquals(List(families.size) { "custom_old_example" }, sources)
+        assertEquals(true, families.isNotEmpty())
+    }
+
     private fun profile(family: ProtocolFamily, termLimit: Int? = null, credentialsRequired: Boolean = false): SiteProfile {
         val address = (SiteAddress.parse("booru.example") as SiteAddressParse.Valid).address
         return SiteProfile(

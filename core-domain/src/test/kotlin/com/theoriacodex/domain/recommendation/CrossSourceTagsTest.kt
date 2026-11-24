@@ -10,14 +10,15 @@ class CrossSourceTagsTest {
     )
 
     @Test
-    fun `concept keys ignore booru spelling, width and escaping`() {
+    fun `concept keys ignore booru spelling, width and escaping (ADR 0003)`() {
         assertEquals("hatsune miku", crossSourceTagKey("Hatsune_Miku"))
+        assertEquals("hatsune miku", crossSourceTagKey(" Hatsune__ \tMiku "))
         assertEquals("fgo", crossSourceTagKey("ＦＧＯ"))
         assertEquals("jojo's bizarre adventure", crossSourceTagKey("jojo&#039;s_bizarre_adventure"))
     }
 
     @Test
-    fun `pixiv likes teach booru sources through translations`() {
+    fun `pixiv likes teach booru sources through translations (ADR 0003)`() {
         val training = CrossSourceTraining(
             likes = listOf(LikedTagDocument(SourceKey.PIXIV, listOf("初音ミク", "未翻訳", "猫"))),
             dictionary = dictionary,
@@ -52,7 +53,7 @@ class CrossSourceTagsTest {
     }
 
     @Test
-    fun `foreign documents never outnumber native ones beyond the cold-start floor`() {
+    fun `foreign documents never outnumber native ones beyond the cold-start floor (ADR 0003)`() {
         val native = List(30) { LikedTagDocument(SourceKey.DANBOORU, listOf("native_$it")) }
         val foreign = List(40) { LikedTagDocument(SourceKey.GELBOORU, listOf("foreign_$it")) }
         val coldStart = CrossSourceTraining(foreign, PixivTagDictionary.Empty)
@@ -77,7 +78,7 @@ class CrossSourceTagsTest {
     }
 
     @Test
-    fun `custom sites share the booru vocabulary in both directions`() {
+    fun `custom sites share the booru vocabulary in both directions (ADR 0003)`() {
         val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
         val training = CrossSourceTraining(
             likes = listOf(

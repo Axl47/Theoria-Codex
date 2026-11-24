@@ -295,7 +295,8 @@ class RoomCodexLikesRepository(
                     dao.codex(item.codexId) != null &&
                     dao.codexItem(item.codexId, item.postId.source.id, item.postId.sourcePostId) == null
                 ) {
-                    saveItem(item.codexId, post, item.savedAtEpochMs)
+                    if (sharedPosts.restore(post)) rememberPicture(post)
+                    insertItem(item.codexId, post.id, item.savedAtEpochMs)
                 }
             }
         }
@@ -431,8 +432,13 @@ class RoomCodexLikesRepository(
 
     override suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) {
         database.withTransaction {
+            snapshot.likes.forEach { like -> writeGuard.requireProfileWritable(like.profileId) }
             restoreItems(snapshot.items, snapshot.posts)
-            snapshot.likes.forEach { like -> dao.insertLike(like.toEntity()) }
+            val postsById = snapshot.posts.associateBy(Post::id)
+            snapshot.likes.forEach { like ->
+                postsById[like.postId]?.let(sharedPosts::restore)
+                dao.insertLike(like.toEntity())
+            }
         }
     }
 
