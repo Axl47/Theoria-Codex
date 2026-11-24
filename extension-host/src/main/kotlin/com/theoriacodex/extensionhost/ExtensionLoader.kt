@@ -44,8 +44,17 @@ class ExtensionLoader internal constructor(private val context: Context, private
     } catch (error: ExtensionRejectedException) {
         throw error
     } catch (error: Throwable) {
-        val thrown = (error as? InvocationTargetException)?.targetException ?: error
-        if (thrown.endsTheProcess()) throw thrown
+        generateSequence(error, ::wrapped).take(MAX_WRAPPING).firstOrNull { it.endsTheProcess() }?.let { throw it }
         throw ExtensionRejectedException("$className in ${extension.packageName} could not be created: $error", error)
+    }
+
+    private fun wrapped(error: Throwable): Throwable? = when (error) {
+        is InvocationTargetException -> error.targetException
+        is ExceptionInInitializerError -> error.cause
+        else -> null
+    }
+
+    private companion object {
+        const val MAX_WRAPPING = 8
     }
 }

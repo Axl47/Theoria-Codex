@@ -27,6 +27,8 @@ class ExtensionLoaderTest {
             OutOfMemoryFactory::class.java to OutOfMemoryError::class.java,
             InternalErrorFactory::class.java to InternalError::class.java,
             OutOfMemoryConstructor::class.java to OutOfMemoryError::class.java,
+            NestedOutOfMemoryConstructor::class.java to OutOfMemoryError::class.java,
+            OutOfMemoryInitializer::class.java to OutOfMemoryError::class.java,
         ).forEach { (factory, error) ->
             assertEquals(error, assertFailsWith<VirtualMachineError> { create(factory) }.javaClass)
         }
@@ -34,6 +36,7 @@ class ExtensionLoaderTest {
             AssertionFactory::class.java to AssertionError::class.java,
             MissingClassFactory::class.java to NoClassDefFoundError::class.java,
             ThrowableFactory::class.java to Throwable::class.java,
+            FailingInitializer::class.java to ExceptionInInitializerError::class.java,
         ).forEach { (factory, error) ->
             assertEquals(error, assertFailsWith<ExtensionRejectedException> { create(factory) }.cause?.javaClass)
         }
@@ -83,6 +86,28 @@ class ThrowableFactory : SourceFactory {
 class OutOfMemoryConstructor {
     init {
         throw OutOfMemoryError("extension")
+    }
+}
+
+class NestedOutOfMemoryConstructor {
+    init {
+        OutOfMemoryConstructor::class.java.getDeclaredConstructor().newInstance()
+    }
+}
+
+class OutOfMemoryInitializer {
+    companion object {
+        init {
+            OutOfMemoryConstructor::class.java.getDeclaredConstructor().newInstance()
+        }
+    }
+}
+
+class FailingInitializer {
+    companion object {
+        init {
+            error("extension")
+        }
     }
 }
 
