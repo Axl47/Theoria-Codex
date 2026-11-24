@@ -21,10 +21,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -158,7 +162,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `like and system Codex membership toggle and clear atomically`() = runTest {
+    fun `like and system Codex membership toggle and clear atomically (ADR 0016)`() = runTest {
         val repository = repository()
         val post = post("liked")
 
@@ -476,7 +480,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `unsupported and malformed local Post payloads fail explicitly (ADR 0038)`() = runTest {
+    fun `unsupported and malformed local Post payloads fail explicitly (ADR 0016, 0038)`() = runTest {
         val repository = repository()
         database.codexLikesDao().insertPost(
             PostEntity("PIXIV", "unsupported", """{"schemaVersion":99}""")
@@ -500,7 +504,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `database failure rolls back both like and system Codex (ADR 0018)`() = runTest {
+    fun `database failure rolls back both like and system Codex (ADR 0016, 0018)`() = runTest {
         val repository = repository()
         database.openHelper.writableDatabase.execSQL(
             """
@@ -547,7 +551,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `the library rereads its posts when membership changes, not when a saved post's data does`() = runBlocking {
+    fun `the library rereads its posts when membership changes, not when a saved post's data does (ADR 0013)`() = runBlocking {
         val repository = repository()
         val codex = repository.createCodex("Kept")
         repository.addItem(codex.codexId, post("one"))
@@ -564,6 +568,50 @@ class RoomCodexLikesRepositoryTest {
         assertEquals(setOf("one", "two"), after.map { it.id.sourcePostId }.toSet())
         assertEquals("edited", after.first { it.id.sourcePostId == "one" }.title)
         watching.cancel()
+    }
+
+    @Test
+    fun `every sort of a Codex reuses one decoded copy of its posts (ADR 0013)`() = runTest {
+        val repository = repository()
+        val codex = repository.createCodex("Kept")
+        repository.addItem(codex.codexId, post("one"))
+
+        val newest = repository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED).first().single()
+        val oldest = repository.observeCodexPosts(codex.codexId, CodexSortMode.OLDEST_SAVED).first().single()
+
+        assertSame(newest, oldest)
+    }
+
+    @Test
+    fun `a payload under another post's key or without a schema version is refused, not read as a missing post (ADR 0016)`() = runTest {
+        val repository = repository()
+        val payload = LocalPostPayloadCodec.encode(post("b"))
+        database.codexLikesDao().insertPost(PostEntity("PIXIV", "a", payload))
+        database.codexLikesDao().insertPost(PostEntity("PIXIV", "b", JsonObject(Json.parseToJsonElement(payload).jsonObject - "schemaVersion").toString()))
+
+        for (id in listOf("a", "b")) {
+            val failure = runCatching { repository.getPost(PostId(SourceKey.PIXIV, id)) }.exceptionOrNull()
+            assertTrue("$id: $failure", failure is MalformedLocalPostPayloadException)
+        }
+    }
+
+    @Test
+    fun `rows from a retired source are skipped and a like with unreadable tags is still listed (ADR 0016)`() = runTest {
+        val repository = repository()
+        val codex = repository.createCodex("Kept")
+        repository.addItem(codex.codexId, post("kept"))
+        repository.toggleLikeAndSyncSystemCodex("profile-main", "system_likes_codex", "Likes", post("liked"), listOf("tag"))
+        database.openHelper.writableDatabase.run {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('retired_source','1','{}')")
+            execSQL("INSERT INTO codex_items VALUES(?,'retired_source','1',1)", arrayOf(codex.codexId))
+            execSQL("INSERT INTO liked_posts VALUES('profile-main','retired_source','1',1,'[]')")
+            execSQL("UPDATE liked_posts SET tags_json = 'not json' WHERE source_post_id = 'liked'")
+        }
+
+        assertEquals(listOf(post("kept").id), repository.observeCodexItems(codex.codexId).first().map { it.postId })
+        val likes = repository.observeLikes("profile-main").first()
+        assertEquals(listOf(post("liked").id), likes.map { it.postId })
+        assertEquals(emptyList<String>(), likes.single().tags)
     }
 
     private fun repository(): RoomCodexLikesRepository {

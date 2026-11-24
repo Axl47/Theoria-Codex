@@ -23,33 +23,38 @@ class SeriesCheckScheduleTest {
     private fun dated(vararg daysAgo: Long) = daysAgo.map { entry(it) }
 
     @Test
-    fun `fewer than three upload dates give no pace, so the series is checked every run`() {
+    fun `fewer than three upload dates give no pace, so the series is checked every run (ADR 0015)`() {
         assertNull(checkWait(dated(400, 800), now))
         assertNull(checkWait(List(5) { entry(null) }, now))
         assertTrue(isCheckDue(now, 6.hours, now) { List(5) { entry(null) } })
     }
 
     @Test
-    fun `the wait is a fraction of the median gap between the newest uploads, in whatever order the source lists them`() {
+    fun `the wait is a fraction of the median gap between the newest uploads, in whatever order the source lists them (ADR 0015)`() {
         assertEquals(7.days / CHECKS_PER_RELEASE_GAP, checkWait(dated(0, 7, 14, 21, 60), now))
         assertEquals(7.days / CHECKS_PER_RELEASE_GAP, checkWait(dated(60, 21, 14, 7, 0), now))
     }
 
     @Test
-    fun `a series quiet for longer than its usual gap waits by how long it has been quiet, up to the ceiling`() {
+    fun `the median gap, not the shortest or the longest, sets the wait (ADR 0015)`() {
+        assertEquals(7.hours, checkWait(dated(0, 1, 8, 15, 60), now))
+    }
+
+    @Test
+    fun `a series quiet for longer than its usual gap waits by how long it has been quiet, up to the ceiling (ADR 0015)`() {
         assertEquals(32.days / CHECKS_PER_RELEASE_GAP, checkWait(dated(32, 39, 46), now))
         assertEquals(SERIES_CHECK_CEILING, checkWait(dated(700, 707, 714), now))
     }
 
     @Test
-    fun `a chapter a check found counts as a release, whatever date its source gives it`() {
+    fun `a chapter a check found counts as a release, whatever date its source gives it (ADR 0015)`() {
         val quiet = dated(700, 707, 714)
         assertEquals(7.days / CHECKS_PER_RELEASE_GAP, checkWait(quiet + entry(721, firstSeen = now), now))
         assertEquals(7.days / CHECKS_PER_RELEASE_GAP, checkWait(quiet + entry(null, firstSeen = now), now))
     }
 
     @Test
-    fun `a series is skipped only while the next run still falls inside its wait, and is due at once when never checked or the clock went back`() {
+    fun `a series is skipped only while the next run still falls inside its wait, and is due at once when never checked or the clock went back (ADR 0015)`() {
         val weekly = dated(0, 7, 14)
         val runEvery = 6.hours
         val lastSkipped = now - (7.days / CHECKS_PER_RELEASE_GAP - runEvery).inWholeMilliseconds
@@ -61,7 +66,14 @@ class SeriesCheckScheduleTest {
     }
 
     @Test
-    fun `a quiet series is checked by the last run before the ceiling, also after a check by hand between runs`() {
+    fun `a series at the ceiling is due without loading its chapters (ADR 0015)`() {
+        val atCeiling = now - 2.days.inWholeMilliseconds
+
+        assertTrue(isCheckDue(atCeiling, 6.hours, now) { error("A series at the ceiling needs no entries") })
+    }
+
+    @Test
+    fun `a quiet series is checked by the last run before the ceiling, also after a check by hand between runs (ADR 0015)`() {
         val quiet = dated(700, 707, 714)
         val runEvery = 6.hours
         val lastSkipped = now - (SERIES_CHECK_CEILING - runEvery).inWholeMilliseconds

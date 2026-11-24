@@ -37,7 +37,7 @@ class RoomVisualSimilarityStorageTest {
 
     @After fun close() = database.close()
 
-    @Test fun `a profile keeps its newest verdict per post up to the cap, and undo or removal forgets them`() = runTest {
+    @Test fun `a profile keeps its newest verdict per post up to the cap, and undo or removal forgets them (ADR 0017)`() = runTest {
         val guard = ProfileLibraryWriteGuard()
         val verdicts = RoomForYouVerdictRepository(database, guard, limit = 2)
         verdicts.record(verdict("a", "1", ForYouVerdictKind.SKIPPED, at = 1))
@@ -71,7 +71,7 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(setOf(id("2"), id("1")), verdicts.skippedBetween("a", sinceEpochMs = 10, untilEpochMs = 12, limit = 10))
     }
 
-    @Test fun `signatures exist only for stored posts and list the library posts still missing one`() = runTest {
+    @Test fun `signatures exist only for stored posts and list the library posts still missing one (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -87,7 +87,7 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(signatures.observePictureHashes().first().isEmpty())
     }
 
-    @Test fun `a hash written after the tagger keeps its vision, and vision written after a hash keeps the hash`() = runTest {
+    @Test fun `a hash written after the tagger keeps its vision, and vision written after a hash keeps the hash (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -103,7 +103,7 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(signatures.libraryPostsWithoutSignature(limit = 10).isEmpty())
     }
 
-    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried`() = runTest {
+    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -121,7 +121,7 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
     }
 
-    @Test fun `a still analysis awaiting frames is listed until its frames are read or its reads run out`() = runTest {
+    @Test fun `a still analysis awaiting frames is listed until its frames are read or its reads run out (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -149,7 +149,7 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(awaiting().isEmpty())
     }
 
-    @Test fun `ADR 0094 the library total follows saves and likes, and vision writes are announced`() = runTest {
+    @Test fun `the library total follows saves and likes, and vision writes are announced (ADR 0094)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val totals = Channel<Int>(Channel.UNLIMITED)
@@ -189,7 +189,7 @@ class RoomVisualSimilarityStorageTest {
         assertArrayEquals(byteArrayOf(9), database.openHelper.readableDatabase.query("SELECT embedding FROM post_visual_signatures WHERE source_post_id = 'a'").use { it.moveToFirst(); it.getBlob(0) })
     }
 
-    @Test fun `clearing vision keeps hashes and drops rows that held only vision`() = runTest {
+    @Test fun `clearing vision keeps hashes and drops rows that held only vision (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -206,7 +206,7 @@ class RoomVisualSimilarityStorageTest {
         database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM post_visual_signatures").use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
     }
 
-    @Test fun `vision rows follow their post when it is deleted`() = runTest {
+    @Test fun `vision rows follow their post when it is deleted (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -217,6 +217,35 @@ class RoomVisualSimilarityStorageTest {
 
         assertTrue(signatures.predictedTags("m1").isEmpty())
         assertNull(database.openHelper.readableDatabase.query("SELECT 1 FROM post_visual_signatures").use { if (it.moveToFirst()) 1 else null })
+    }
+
+    @Test fun `analyses of posts that do not play stop waiting for frames and count as analysed (ADR 0017)`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        library.addItems(library.ensureCodex("saved", "Saved").codexId, listOf(post("still"), post("clip")))
+        signatures.putVision(listOf(vision("still", "m1", frames = VisionFrames.WANTED), vision("clip", "m1", frames = VisionFrames.WANTED)))
+        assertEquals(VisionProgress(analysed = 0, total = 2), signatures.observeVisionProgress("m1").first())
+
+        signatures.unwantFrames(listOf(id("still")), "m1")
+
+        assertEquals(listOf(id("clip")), signatures.libraryPostsAwaitingFrames("m1", limit = 10).map(Post::id))
+        assertEquals(VisionProgress(analysed = 1, total = 2), signatures.observeVisionProgress("m1").first())
+    }
+
+    @Test fun `frame states are stored as 0 for a still, 1 for frames to read and 2 for frames read (ADR 0017)`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        library.addItems(library.ensureCodex("saved", "Saved").codexId, listOf("none", "wanted", "read", "unwanted").map(::post))
+        signatures.putVision(
+            listOf(vision("none", "m1"), vision("wanted", "m1", frames = VisionFrames.WANTED), vision("read", "m1", frames = VisionFrames.READ),
+                vision("unwanted", "m1", frames = VisionFrames.WANTED)),
+        )
+        signatures.unwantFrames(listOf(id("unwanted")), "m1")
+
+        database.openHelper.readableDatabase.query("SELECT source_post_id, frame_state FROM post_visual_signatures ORDER BY source_post_id").use {
+            val stored = buildMap { while (it.moveToNext()) put(it.getString(0), it.getInt(1)) }
+            assertEquals(mapOf("none" to 0, "read" to 2, "unwanted" to 0, "wanted" to 1), stored)
+        }
     }
 
     private fun tag(name: String, score: Float) = PredictedTag(name, score, PredictedTag.Kind.GENERAL)

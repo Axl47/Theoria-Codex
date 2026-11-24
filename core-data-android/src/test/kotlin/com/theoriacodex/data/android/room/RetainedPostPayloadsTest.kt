@@ -4,15 +4,15 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class RetainedPostPayloadsTest {
-    @Test fun `unrelated invalidations decode zero posts and one changed payload decodes once at every library size`() {
+    @Test fun `unrelated invalidations decode zero posts and one changed payload decodes once at every library size (ADR 0013)`() {
         for (size in listOf(1_000, 10_000, 50_000)) {
             var decoded = 0
             val projection = RetainedPostPayloads { row ->
@@ -33,7 +33,7 @@ class RetainedPostPayloadsTest {
         }
     }
 
-    @Test fun `equal Java string hashes do not grant authority to a different payload`() {
+    @Test fun `equal Java string hashes do not grant authority to a different payload (ADR 0013)`() {
         assertEquals("Aa".hashCode(), "BB".hashCode())
         var decoded = 0
         val projection = RetainedPostPayloads { row ->
@@ -47,7 +47,7 @@ class RetainedPostPayloadsTest {
         assertEquals(2, decoded)
     }
 
-    @Test fun `returning to a recent Codex reuses its posts while oversized projections are not retained`() = runTest {
+    @Test fun `returning to a recent Codex reuses its posts while oversized projections are not retained (ADR 0013)`() = runTest {
         var decoded = 0
         val cache = RetainedPostPayloadCache(decode = { row -> decoded++; testPost(row) }, maxRetainedPosts = 3)
         val small = (0 until 3).map { PostEntity("PIXIV", "s$it", "payload$it") }
@@ -63,6 +63,37 @@ class RetainedPostPayloadsTest {
         assertEquals(3 + 8, decoded)
         flowOf(small).decodePostSnapshots(cache, "codex:small").first()
         assertEquals(3 + 8, decoded)
+    }
+
+    @Test fun `the least recently used projection goes once there are more than maxEntries, and its collector keeps decoding into it (ADR 0013)`() {
+        var decoded = 0
+        val cache = RetainedPostPayloadCache(decode = { row -> decoded++; testPost(row) }, maxEntries = 2)
+        val rows = listOf(PostEntity("PIXIV", "1", "payload"))
+        val a = cache.projection("a").project(rows).also { cache.trim() }
+        val heldB = cache.projection("b")
+        val b = heldB.project(rows).also { cache.trim() }
+        cache.projection("a")
+        cache.projection("c").project(rows).also { cache.trim() }
+        assertEquals(3, decoded)
+
+        assertSame(a.single(), cache.projection("a").project(rows).single())
+        assertSame(b.single(), heldB.project(rows).single())
+        assertEquals(3, decoded)
+        cache.projection("b").project(rows)
+        assertEquals(4, decoded)
+    }
+
+    @Test fun `small projections that together pass the post cap lose the least recently used one (ADR 0013)`() {
+        var decoded = 0
+        val cache = RetainedPostPayloadCache(decode = { row -> decoded++; testPost(row) }, maxRetainedPosts = 3)
+        val rows = (0 until 2).map { PostEntity("PIXIV", "$it", "payload$it") }
+        cache.projection("a").project(rows).also { cache.trim() }
+        val b = cache.projection("b").project(rows).also { cache.trim() }
+        assertEquals(4, decoded)
+
+        assertSame(b.first(), cache.projection("b").project(rows).first())
+        cache.projection("a").project(rows)
+        assertEquals(6, decoded)
     }
 
     private fun testPost(row: PostEntity) = Post(PostId(SourceKey.PIXIV, row.sourcePostId), ImageRef(null, null, null),

@@ -78,7 +78,7 @@ class RoomProfileBackupStoreTest {
         assertTrue(backups.snapshot(false).searches.isEmpty())
     }
 
-    @Test fun `series restore with their progress and add to a stored series without taking from it`() = runTest {
+    @Test fun `series restore with their progress and add to a stored series without taking from it (ADR 0014)`() = runTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
         series.store(
@@ -119,7 +119,41 @@ class RoomProfileBackupStoreTest {
         restoredDatabase.close()
     }
 
-    @Test fun `an unfollowed series with chapters marked read from its page, never opened, makes the round trip`() = runTest {
+    @Test fun `a series kept only for its reading mode or an opened chapter is in the backup (ADR 0014)`() = runTest {
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        fun id(address: String) = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), address)
+        val (mode, opened, glanced) = listOf("/mode", "/opened", "/glanced").map(::id)
+        for (each in listOf(mode, opened, glanced)) series.store(Series(each, each.address), listOf(SeriesEntry("/chapter/1", "Ch.1")))
+        series.setReadingMode(mode, GalleryReadingMode.VERTICAL)
+        series.recordProgress(opened, "/chapter/1", position = 0, length = null)
+
+        assertEquals(listOf(mode, opened), backups.snapshot(includeRecents = false).series.map { it.series.series.id })
+    }
+
+    @Test fun `a snapshot holding a like from an unknown source fails instead of dropping it (ADR 0016)`() = runTest {
+        database.openHelper.writableDatabase.execSQL("INSERT INTO liked_posts VALUES('profile-main','retired_source','1',1,'[]')")
+
+        val failure = runCatching { backups.snapshot(true) }.exceptionOrNull()
+
+        assertTrue(failure.toString(), failure is IllegalArgumentException)
+    }
+
+    @Test fun `restoring a backup never unfollows a series or turns off its new-chapter downloads (ADR 0014)`() = runTest {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        series.store(Series(id, "Title"), listOf(SeriesEntry("/chapter/1", "Ch.1")))
+        series.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        val snapshot = backups.snapshot(includeRecents = false)
+        series.setFollowed(id, true)
+        series.setDownloadNewChapters(id, true)
+
+        backups.merge(snapshot)
+
+        val kept = series.series(id)!!
+        assertEquals(Triple(true, true, 30L), Triple(kept.followed, kept.downloadNewChapters, kept.followedAtEpochMs))
+    }
+
+    @Test fun `an unfollowed series with chapters marked read from its page, never opened, makes the round trip (ADR 0014)`() = runTest {
         val series = RoomSeriesRepository(database, clock = { 30L })
         fun id(address: String) = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), address)
         val chapters = listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1"))
@@ -152,7 +186,7 @@ class RoomProfileBackupStoreTest {
         restoredDatabase.close()
     }
 
-    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks (ADR 0025)`() = runTest {
+    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks (ADR 0014, 0025)`() = runTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
         val title = Series(id, "Title", language = "en")
@@ -220,7 +254,7 @@ class RoomProfileBackupStoreTest {
         assertEquals(listOf(chapter2), device.storeEntries(id, listOf(chapter2, chapter1)))
     }
 
-    @Test fun `replaying an import keeps existing media and history while repairing Likes membership`() = runTest {
+    @Test fun `replaying an import keeps existing media and history while repairing Likes membership (ADR 0014)`() = runTest {
         val post = post("42")
         content.ensureCodex("old", "Existing")
         content.addItem("old", post)
@@ -246,7 +280,7 @@ class RoomProfileBackupStoreTest {
         assertEquals(20L, recents.observeSearches().first().single().searchedAtEpochMs)
     }
 
-    @Test fun `deleting a Codex for Undo restores its place rules and otherwise orphaned posts`() = runTest {
+    @Test fun `deleting a Codex for Undo restores its place rules and otherwise orphaned posts (ADR 0016)`() = runTest {
         content.ensureCodex("a", "First")
         content.ensureCodex("b", "Second")
         content.setAutomaticTag("a", CodexAutomaticTag(SourceKey.PIXIV, "cat"), true)

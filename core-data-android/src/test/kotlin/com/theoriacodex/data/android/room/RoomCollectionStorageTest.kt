@@ -43,7 +43,7 @@ class RoomCollectionStorageTest {
 
     @After fun tearDown() = database.close()
 
-    @Test fun `every sparse collection write preserves previously resolved shared media`() = runTest {
+    @Test fun `every sparse collection write preserves previously resolved shared media (ADR 0016)`() = runTest {
         for (operation in listOf("save", "like", "import", "update")) {
             val rich = post(operation)
             val sparse = rich.copy(
@@ -109,7 +109,7 @@ class RoomCollectionStorageTest {
         assertTrue(repository.observeSavedPostIds(emptySet()).first().isEmpty())
     }
 
-    @Test fun `watched eviction cleans affected identities while preserving other memberships`() = runTest {
+    @Test fun `watched eviction cleans affected identities while preserving other memberships (ADR 0016)`() = runTest {
         val recents = RoomRecentsRepository(database, watchedLimit = 2, clock = { now++ })
         val shared = post("shared")
         val dao = database.codexLikesDao()

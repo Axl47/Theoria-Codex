@@ -10,8 +10,16 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,7 +59,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `whether any series is followed, and one entry while its source lists it`() = runTest {
+    fun `whether any series is followed, and one entry while its source lists it (ADR 0015)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         assertFalse(repository.observeHasFollowed().first())
         repository.setFollowed(id, true)
@@ -96,7 +104,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a new listing keeps progress, follow, mode and shared first pages, adds new entries and hides dropped ones (ADR 0028)`() = runTest {
+    fun `a new listing keeps progress, follow, mode and shared first pages, adds new entries and hides dropped ones (ADR 0015, 0028)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.setFollowed(id, true)
         repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
@@ -122,7 +130,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a listing or details without a description, status or memo keep the stored ones, and entries their memos`() = runTest {
+    fun `a listing or details without a description, status or memo keep the stored ones, and entries their memos (ADR 0015)`() = runTest {
         val detailed = series.copy(description = "A synopsis.", status = SeriesStatus.COMPLETED)
         repository.store(detailed)
         assertEquals(detailed, repository.series(id)!!.series)
@@ -154,7 +162,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a chapter that returns at a new address takes over its number's progress and is not new (ADR 0028)`() = runTest {
+    fun `a chapter that returns at a new address takes over its number's progress and is not new (ADR 0015, 0028)`() = runTest {
         val first = SeriesEntry("/c/1", "Chapter 1", number = 1f)
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), first))
         repository.recordProgress(id, "/c/2", position = 3, length = 5)
@@ -175,7 +183,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a listing that matches no stored chapter is a baseline with nothing new, and dropped chapters keep progress (ADR 0028)`() = runTest {
+    fun `a listing that matches no stored chapter is a baseline with nothing new, and dropped chapters keep progress (ADR 0015, 0028)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.recordProgress(id, "/c/1", position = 3, length = 3)
 
@@ -188,7 +196,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `one address or moved chapter shared with the stored listing lets the chapters beyond it through as new`() = runTest {
+    fun `one address or moved chapter shared with the stored listing lets the chapters beyond it through as new (ADR 0015)`() = runTest {
         val first = SeriesEntry("/c/1", "Chapter 1", number = 1f)
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), first))
 
@@ -200,7 +208,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `another group's release of a number, or one of several, is a new unread chapter (ADR 0028)`() = runTest {
+    fun `another group's release of a number, or one of several, is a new unread chapter (ADR 0015, 0028)`() = runTest {
         val read = SeriesEntry("/c/1-a", "Chapter 1", number = 1f, translatorGroup = "A")
         val prologue = SeriesEntry("/c/0", "Prologue")
         repository.store(series, listOf(read, prologue))
@@ -218,13 +226,26 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a kept address renumbered to a dropped chapter's number keeps that chapter's progress from a new address`() = runTest {
+    fun `a kept address renumbered to a dropped chapter's number keeps that chapter's progress from a new address (ADR 0015)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), SeriesEntry("/c/1", "Chapter 1", number = 1f)))
         repository.recordProgress(id, "/c/1", position = 3, length = 3)
 
         val added = SeriesEntry("/c/1-v2", "Chapter 1", number = 1f)
         assertEquals(listOf(added), repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 1", number = 1f), added)))
         assertEquals(listOf(false, false), repository.entries(id).map { it.read })
+    }
+
+    @Test
+    fun `a release carried by two new or by two dropped chapters moves no progress (ADR 0015)`() = runTest {
+        val prologue = SeriesEntry("/c/0", "Prologue")
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1", number = 1f), prologue))
+        repository.recordProgress(id, "/c/1", position = 4, length = 4)
+
+        val twoNew = listOf(SeriesEntry("/c/1-a", "Chapter 1", number = 1f), SeriesEntry("/c/1-b", "Chapter 1", number = 1f))
+        assertEquals(twoNew, repository.store(series, twoNew + prologue))
+        val third = SeriesEntry("/c/1-c", "Chapter 1", number = 1f)
+        assertEquals(listOf(third), repository.store(series, listOf(third, prologue)))
+        assertEquals(listOf(false, false), listOf(twoNew.first(), third).map { repository.storedEntry(id, it.address)!!.read })
     }
 
     @Test
@@ -239,7 +260,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a followed series' first listing reports only chapters dated after it was followed, less a day`() = runTest {
+    fun `a followed series' first listing reports only chapters dated after it was followed, less a day (ADR 0015)`() = runTest {
         val day = 24 * 60 * 60 * 1_000L
         val fresh = SeriesEntry("/c/3", "Chapter 3", uploadedAtEpochMs = 10 * day)
         val sameDay = SeriesEntry("/c/2", "Chapter 2", uploadedAtEpochMs = 9 * day + 1)
@@ -327,7 +348,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `the Following list says when a series was followed, read, last updated and whether it was started`() = runTest {
+    fun `the Following list says when a series was followed, read, last updated and whether it was started (ADR 0015)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", uploadedAtEpochMs = 50L), SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = 20L)))
         now = 200L
         repository.setFollowed(id, true)
@@ -370,7 +391,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `an entry without an upload date counts as updated when it was first seen`() = runTest {
+    fun `an entry without an upload date counts as updated when it was first seen (ADR 0015)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = 20L)))
         repository.setFollowed(id, true)
         now = 500L
@@ -378,4 +399,87 @@ class RoomSeriesRepositoryTest {
 
         assertEquals(500L, repository.observeFollowed().first().single().lastUpdatedAtEpochMs)
     }
+
+    @Test
+    fun `a write that changes nothing does not wake series observers (ADR 0013)`() = runBlocking {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.setFollowed(id, true)
+        repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        repository.setChaptersShareFirstPage(id)
+        repository.setDownloadNewChapters(id, true)
+        repository.setEntriesRead(id, listOf("/c/2"), read = true)
+        repository.recordProgress(id, "/c/1", position = 2, length = 4)
+        val dao = database.seriesDao()
+        val wakes = Channel<Unit>(Channel.UNLIMITED)
+        val watching = launch(Dispatchers.IO) {
+            merge(dao.observeSeries(id.source.id, id.address).map { }, dao.observeEntries(id.source.id, id.address).map { }).collect(wakes::send)
+        }
+        repeat(2) { withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() } }
+
+        repository.recordProgress(id, "/c/1", position = 2, length = 4)
+        repository.setFollowed(id, true)
+        repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        repository.setChaptersShareFirstPage(id)
+        repository.setDownloadNewChapters(id, true)
+        repository.setEntriesRead(id, listOf("/c/2"), read = true)
+        delay(QUIET_MS)
+        assertTrue(wakes.isEmpty)
+
+        repository.setAllRead(id, read = true)
+        withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() }
+        delay(QUIET_MS)
+        while (wakes.tryReceive().isSuccess) Unit
+        repository.setAllRead(id, read = true)
+        delay(QUIET_MS)
+        assertTrue(wakes.isEmpty)
+        watching.cancel()
+    }
+
+    @Test
+    fun `entry progress does not wake the has-followed query (ADR 0013)`() = runBlocking {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        repository.setFollowed(id, true)
+        repository.recordProgress(id, "/c/1", position = 1, length = 4)
+        val wakes = Channel<Boolean>(Channel.UNLIMITED)
+        val watching = launch(Dispatchers.IO) { database.seriesDao().observeHasFollowed().collect(wakes::send) }
+        assertTrue(withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() })
+
+        repository.recordProgress(id, "/c/1", position = 2, length = 4)
+        repository.recordProgress(id, "/c/1", position = 4, length = 4)
+        delay(QUIET_MS)
+        assertTrue(wakes.isEmpty)
+
+        repository.setFollowed(id, false)
+        assertFalse(withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() })
+        watching.cancel()
+    }
+
+    @Test
+    fun `observing a series that is not stored emits null (ADR 0013)`() = runTest {
+        assertNull(repository.observeSeries(SeriesId(id.source, "/series/missing")).first())
+    }
+
+    @Test
+    fun `a dropped newer chapter no longer counts as the series' last update (ADR 0015)`() = runTest {
+        val older = SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = 20L)
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", uploadedAtEpochMs = 50L), older))
+        repository.setFollowed(id, true)
+        repository.storeEntries(id, listOf(older))
+
+        assertEquals(20L, repository.observeFollowed().first().single().lastUpdatedAtEpochMs)
+    }
+
+    @Test
+    fun `progress on a chapter the source dropped is still recorded (ADR 0015)`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        repository.storeEntries(id, listOf(SeriesEntry("/c/2", "Chapter 2")))
+
+        repository.recordProgress(id, "/c/1", position = 3, length = 4)
+
+        assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
+        assertEquals(3L, repository.storedEntry(id, "/c/1")!!.position)
+    }
 }
+
+private const val UPDATE_TIMEOUT_MS = 5_000L
+private const val QUIET_MS = 500L

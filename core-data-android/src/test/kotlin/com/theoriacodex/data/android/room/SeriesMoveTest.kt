@@ -118,7 +118,7 @@ class SeriesMoveTest {
     }
 
     @Test
-    fun `progress on chapters the old source no longer lists also refuses a series without chapters (ADR 0028)`() = runTest {
+    fun `progress on chapters the old source no longer lists also refuses a series without chapters (ADR 0015, 0028)`() = runTest {
         readOld()
         repository.store(old, listOf(SeriesEntry("/o4", "Chapter 4", 4f)))
 

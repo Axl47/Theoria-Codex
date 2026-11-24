@@ -46,7 +46,7 @@ class SeriesCheckPaceTest {
     private suspend fun backgroundRun(vararg sources: SeriesSource) = repository.checkFollowed(sourcesOn(*sources), RUN_EVERY, now)
 
     @Test
-    fun `a background run skips a quiet series it checked lately, and a refresh by hand checks it anyway`() = runTest {
+    fun `a background run skips a quiet series it checked lately, and a refresh by hand checks it anyway (ADR 0015)`() = runTest {
         val source = PacedSource("custom_mihon_1") { now }
         val quiet = source.add(Pace.quiet(lastDaysAgo = 300), "quiet")
         follow(quiet)
@@ -65,7 +65,7 @@ class SeriesCheckPaceTest {
     }
 
     @Test
-    fun `a listing the series page stores counts as a check, a series stored without its chapters does not`() = runTest {
+    fun `a listing the series page stores counts as a check, a series stored without its chapters does not (ADR 0015)`() = runTest {
         val source = PacedSource("custom_mihon_1") { now }
         val quiet = source.add(Pace.quiet(lastDaysAgo = 300), "quiet")
         follow(quiet)
@@ -78,7 +78,7 @@ class SeriesCheckPaceTest {
     }
 
     @Test
-    fun `a failed or empty listing leaves the series due on the next run`() = runTest {
+    fun `a failed or empty listing leaves the series due on the next run (ADR 0015)`() = runTest {
         val source = PacedSource("custom_mihon_1") { now }
         val quiet = source.add(Pace.quiet(lastDaysAgo = 300), "quiet")
         follow(quiet)
