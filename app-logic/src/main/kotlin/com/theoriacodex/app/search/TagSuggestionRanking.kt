@@ -156,7 +156,7 @@ private val SEARCHED_TERM_ORDER: Comparator<SearchedTag> =
     compareBy<SearchedTag> { it.term.value != it.term.value.lowercase() }
         .thenBy { it.term.value }
         .thenBy { it.term.facet }
-        .thenBy { it.term.sourceNamespace.orEmpty() }
+        .thenBy(nullsFirst()) { it.term.sourceNamespace }
 
 private data class SearchedTag(
     val term: SearchTerm,

@@ -77,6 +77,7 @@ class TagSuggestionRankingTest {
         val spellings = listOf(
             SearchedTagKey(SourceKey.GELBOORU, SearchTerm("Wolf")) to 1L,
             SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf", sourceNamespace = "tag")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf", sourceNamespace = "")) to 1L,
             SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf")) to 1L,
             SearchedTagKey(SourceKey.GELBOORU, SearchTerm("Wolf", sourceNamespace = "tag")) to 1L,
             SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf", SearchFacet.ARTIST, "artist")) to 1L,
