@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
+import com.theoriacodex.data.repository.NewPostMarks
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SavedSearchEntry
@@ -209,6 +210,34 @@ class SavedSearchesCodexViewModelTest {
             assertEquals(3, owner.state.value.posts.size)
             assertEquals(setOf("slow"), owner.state.value.errors.keys)
             assertFalse(owner.state.value.loading)
+        }
+    }
+
+    @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page and pages on below it`() = runTest {
+        var uploads = listOf("old1", "old2", "old3", "old4")
+        val source = adapter(SourceKey.PIXIV) { _, token ->
+            val page = token?.toInt() ?: 0
+            Page(uploads.drop(page * 2).take(2).map { testPost(SourceKey.PIXIV, it) }, "${page + 1}".takeIf { (page + 1) * 2 < uploads.size })
+        }
+        withOwner(listOf(source)) { owner ->
+            val saved = listOf(entry("cats", "cats"))
+            owner.synchronize(saved, AppSettings(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val loadedAt = checkNotNull(owner.state.value.loadedAtEpochMs)
+            val baseline = NewPostMarks().checked(listOf("old1", "old2"), loadedAt - 1)
+            uploads = listOf("new1", "new2", "new3") + uploads
+            assertFalse(owner.state.value.predates(listOf(baseline.checked(listOf("new1", "new2"), loadedAt - 1))))
+            assertFalse(owner.state.value.predates(listOf(baseline.checked(listOf("old1", "old2"), loadedAt + 1))))
+            val found = listOf(baseline.checked(listOf("new1", "new2"), loadedAt + 1))
+
+            owner.synchronize(saved, AppSettings(), setOf(SourceKey.PIXIV))
+            if (owner.state.value.predates(found)) owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("new1", "new2"), owner.state.value.posts.map { it.id.sourcePostId })
+
+            owner.loadMore()
+            advanceUntilIdle()
+            assertEquals(listOf("new1", "new2", "new3", "old1"), owner.state.value.posts.map { it.id.sourcePostId })
         }
     }
 
