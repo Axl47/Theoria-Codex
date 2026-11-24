@@ -170,6 +170,14 @@ public interface CodexLikesDao {
             + "AND source = :source AND source_post_id = :sourcePostId LIMIT 1")
     LikedPostEntity likedPost(String profileId, String source, String sourcePostId);
 
+    @Query("SELECT * FROM liked_posts WHERE (profile_id, source, source_post_id) > (:profileId, :source, :sourcePostId) "
+            + "ORDER BY profile_id ASC, source ASC, source_post_id ASC LIMIT :limit")
+    List<LikedPostEntity> likesAfter(String profileId, String source, String sourcePostId, int limit);
+
+    @Query("UPDATE liked_posts SET tags_json = :tagsJson WHERE profile_id = :profileId "
+            + "AND source = :source AND source_post_id = :sourcePostId")
+    int updateLikeTags(String profileId, String source, String sourcePostId, String tagsJson);
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insertLike(LikedPostEntity entity);
 

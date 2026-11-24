@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
@@ -149,8 +150,9 @@ data class TagAffinity(
 )
 
 /**
- * Builds [TagAffinityInputs] from the profile's Likes, the posts its Library holds ([libraryPosts]: its Codices, the
- * Likes collection among them), its saved tags and searches, and its statistics.
+ * Builds [TagAffinityInputs] from the profile's Likes, each with every tag of its post ([LikeTagBackfill]), the posts
+ * its Library holds ([libraryPosts]: its Codices; Liked posts among them count once, as Likes), its saved tags and
+ * searches, and its statistics.
  */
 fun tagAffinityInputs(
     likes: List<LikedPost>,
@@ -168,7 +170,7 @@ fun tagAffinityInputs(
 private data class KeptTagEvidence(
     val liked: List<LikedTagDocument>,
     val likedCounts: Map<String, Int>,
-    val keptCounts: Map<String, Int>,
+    val keptInterest: Map<String, Double>,
     val saved: Set<String>,
     val keptByTag: Map<SourceKey, Map<String, Int>>,
     val keptBySource: Map<SourceKey, Int>,
@@ -181,20 +183,16 @@ private fun keptTagEvidence(
     savedTags: Collection<String>,
     savedSearches: List<SavedSearchEntry>,
 ): KeptTagEvidence {
-    val stored = libraryPosts.associateBy(Post::id)
-    // The stored copy holds every tag a Like saved before then kept; the Like's own tags fill in what it lacks.
-    val likedPosts = likes.map { like ->
-        like.postId to (stored[like.postId]?.let(::trainingTagsFor).orEmpty() + like.tags).distinctBy(::normalizeMatchToken)
-    }
+    val likedPosts = likes.map { like -> like.postId to like.tags.distinctBy(::normalizeMatchToken) }
     val liked = likedPosts.map { (id, tags) -> LikedTagDocument(id.source, tags) }
     val likedIds = likes.mapTo(HashSet(), LikedPost::postId)
     // A post both Liked and in a Codex is one kept post.
-    val keptPosts = likedPosts + stored.values.filter { it.id !in likedIds }.map { it.id to trainingTagsFor(it) }
+    val keptPosts = likedPosts + libraryPosts.distinctBy(Post::id).filter { it.id !in likedIds }.map { it.id to trainingTagsFor(it) }
     val kept = keptPosts.groupBy({ it.first.source }, { it.second })
     return KeptTagEvidence(
         liked = liked,
         likedCounts = liked.map(LikedTagDocument::tags).tokenCounts(),
-        keptCounts = keptPosts.map { it.second }.tokenCounts(),
+        keptInterest = keptPosts.map { it.second }.tokenCounts().mapValues { it.value.toDouble() },
         saved = (savedTags + savedSearches.flatMap { it.search.query.includeTags }).map(::normalizeMatchToken).toSet(),
         keptByTag = kept.mapValues { (_, tags) -> tags.tokenCounts() },
         keptBySource = kept.mapValues { (_, tags) -> tags.size },
@@ -208,8 +206,10 @@ private fun KeptTagEvidence.withStatistics(statistics: LifetimeStatistics, predi
         .groupBy({ normalizeMatchToken(it.key.term.value) }, { it.value })
         .filterValues { counts -> counts.max() >= MIN_SEARCHES_FOR_INTEREST }.keys
     val explicit = (saved + searchedTwice).filterTo(mutableSetOf(), String::isNotBlank)
-    val interest = (keptCounts.keys + explicit).associateWith { token ->
-        (keptCounts[token] ?: 0) + if (token in explicit) EXPLICIT_WEIGHT else 0.0
+    val interest = if (explicit.isEmpty()) {
+        keptInterest
+    } else {
+        keptInterest.toMutableMap().apply { explicit.forEach { merge(it, EXPLICIT_WEIGHT, Double::plus) } }
     }
     val watchedByTag = statistics.watchedByTag.entries.groupBy({ it.key.source }) { it }
         .mapValues { (_, entries) ->
@@ -252,7 +252,8 @@ class SharedTagAffinity internal constructor(private val byProfile: SharedFlow<P
 /**
  * Builds [SharedTagAffinity] in [scope], from its first reader on, following profile switches. A failed read gives the
  * profile empty inputs and is retried with backoff. [predicted] is the picture tagger's index; only its predictions on
- * kept posts count, so analysing a For You candidate changes nothing here.
+ * kept posts count, so analysing a For You candidate changes nothing here. Nothing is built before [likeTagsReady]
+ * returns, since Likes are read from their own tags ([LikeTagBackfill.ensure]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 fun shareTagAffinityInputs(
@@ -263,6 +264,7 @@ fun shareTagAffinityInputs(
     savedSearches: SavedSearchRepository,
     statistics: StatisticsRepository,
     predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
+    likeTagsReady: suspend () -> Unit = {},
 ): SharedTagAffinity {
     // Only the counters affinity reads, so a write of usage time or any other counter rebuilds nothing.
     val watched = statistics.observeStatistics()
@@ -272,14 +274,18 @@ fun shareTagAffinityInputs(
     val byProfile = settings.observeSettings().map { it.activeProfileId }.distinctUntilChanged().flatMapLatest { profileId ->
         val savedTags = settings.observeSettings()
             .map { it.favoriteTagsByProfile[profileId].orEmpty().flatMap { entry -> entry.tags } }.distinctUntilChanged()
-        // The profile's own Codices and its Likes collection, whose copies hold each Liked post's every tag.
+        // The profile's own Codices. Its Likes collection only repeats its Likes, whose rows hold every tag, so a Like
+        // or Save does not decode the Liked posts' stored copies again.
+        val likesCodex = ProfileLibraryIds.likes(profileId)
         val libraryPosts = codex.observeCodices().map { codices ->
-            codices.mapNotNullTo(mutableSetOf()) { entry -> entry.codexId.takeIf { id -> ProfileLibraryIds.belongsTo(id, profileId) } }
+            codices.mapNotNullTo(mutableSetOf()) { entry ->
+                entry.codexId.takeIf { id -> id != likesCodex && ProfileLibraryIds.belongsTo(id, profileId) }
+            }
         }.distinctUntilChanged().flatMapLatest(codex::observeLibraryPosts)
         val kept = combine(savedTags, likes.observeLikes(profileId), libraryPosts, savedSearches.observeSavedSearches()) {
                 tags, liked, posts, searches ->
             keptTagEvidence(liked, posts, tags, searches)
-        }.distinctUntilChanged()
+        }.onStart { likeTagsReady() }.distinctUntilChanged()
         combine(kept, watched, predicted) { evidence, statistics, index -> profileId to evidence.withStatistics(statistics, index) }
             .retryWhen { _, attempt ->
                 emit(profileId to TagAffinityInputs.Empty)

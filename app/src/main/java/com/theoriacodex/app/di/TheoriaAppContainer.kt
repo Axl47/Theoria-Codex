@@ -29,6 +29,8 @@ import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.PictureEvidence
 import com.theoriacodex.app.recommend.SharedTagAffinity
+import com.theoriacodex.app.recommend.LikeTagBackfill
+import com.theoriacodex.app.recommend.likeTagsWithStored
 import com.theoriacodex.app.recommend.shareTagAffinityInputs
 import com.theoriacodex.app.comments.CommentsLoader
 import com.theoriacodex.app.comments.CommentsLoading
@@ -90,6 +92,7 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomForYouVerdictRepository
+import com.theoriacodex.data.android.room.RoomLikeTagRewriter
 import com.theoriacodex.data.android.room.RoomVisualSignatureRepository
 import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.VisualSignatureRepository
@@ -450,6 +453,7 @@ internal class DefaultTheoriaAppContainer(
         siteProfiles = siteProfiles,
         extensionRepos = series?.repos,
         extensionSources = { extensionHost?.availability() ?: SourceAvailability() },
+        likeTags = ::likeTagsWithStored,
     )
     private val autoBackup = AutoBackupWorkflow(
         store = SharedPreferencesAutoBackupStore(appContext),
@@ -534,9 +538,14 @@ internal class DefaultTheoriaAppContainer(
         startupUpdater = startupUpdater,
     )
 
+    private val likeTagBackfill = appContext.getSharedPreferences("like_tag_backfill", Context.MODE_PRIVATE).let { flags ->
+        LikeTagBackfill(RoomLikeTagRewriter(contentDatabase), isDone = { flags.getBoolean("done", false) }) {
+            flags.edit().putBoolean("done", true).commit()
+        }
+    }
     private val tagAffinity = shareTagAffinityInputs(
         durableStoreScope, settingsRepository, likesRepository, codexRepository, savedSearches, statisticsRepository,
-        predicted = pictures.tagger.library,
+        predicted = pictures.tagger.library, likeTagsReady = likeTagBackfill::ensure,
     )
 
     override val features = FeatureDependencies(

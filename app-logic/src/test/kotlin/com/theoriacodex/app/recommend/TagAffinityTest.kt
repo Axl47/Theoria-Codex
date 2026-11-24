@@ -67,18 +67,20 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a Like learns every tag of the Library's copy of its post, not only the ones it stored`() {
-        // A Like saved before every tag was stored kept the provider's first ones, alphabetically.
+    fun `a Like teaches the tags it holds, and the Library's copy of its post adds nothing more`() {
         val inputs = tagAffinityInputs(listOf(like(listOf("aardvark"), id = "aardvark-zebra")), listOf(post("aardvark", "zebra")),
             emptyList(), emptyList(), LifetimeStatistics())
 
-        assertEquals(listOf("aardvark", "zebra"), inputs.liked.single().tags)
-        // A copy saved after the Like, with fewer tags, keeps the Like's own.
-        val sparse = tagAffinityInputs(listOf(like(listOf("aardvark", "moth"), id = "zebra")), listOf(post("zebra")),
-            emptyList(), emptyList(), LifetimeStatistics())
-        assertEquals(listOf("zebra", "aardvark", "moth"), sparse.liked.single().tags)
-        assertEquals(1, inputs.likedCounts["zebra"])
-        assertEquals(1, inputs.keptByTag[source]?.get("zebra"))
+        assertEquals(listOf("aardvark"), inputs.liked.single().tags)
+        assertEquals(null, inputs.likedCounts["zebra"])
+    }
+
+    @Test
+    fun `filling in a Like from its stored post puts the post's tags first and keeps every tag the Like had`() {
+        // A Like saved before every tag was stored kept the provider's first ones, alphabetically.
+        assertEquals(listOf("aardvark", "zebra"), likeTagsWithStored(post("aardvark", "zebra"), listOf("aardvark")))
+        // A copy saved after the Like, with fewer tags, keeps the Like's own; a respelled tag counts once.
+        assertEquals(listOf("zebra", "aardvark", "moth"), likeTagsWithStored(post("zebra"), listOf("aardvark", "Zebra", "moth")))
     }
 
     @Test

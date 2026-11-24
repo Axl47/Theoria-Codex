@@ -11,6 +11,7 @@ import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class ProfileBackupService(
     private val extensionRepos: ExtensionRepos? = null,
     /** Which extension sources are on, and why an installed extension's are not, so a Mihon-family import can name what its series still need. */
     private val extensionSources: suspend () -> SourceAvailability = { SourceAvailability() },
+    private val likeTags: (stored: Post, tags: List<String>) -> List<String> = { _, tags -> tags },
 ) {
     private val mutex = Mutex()
 
@@ -175,12 +177,17 @@ class ProfileBackupService(
         }
     }
 
+    private fun BackupLibrary.withLikeTags(): BackupLibrary {
+        val stored = posts.associateBy(Post::id)
+        return copy(likes = likes.map { like -> stored[like.postId]?.let { like.copy(tags = likeTags(it, like.tags)) } ?: like })
+    }
+
     private suspend fun finish(pending: PendingRestore): ProfileRestoreResult = withContext(NonCancellable) {
         try {
             val imported = pending.legacyOperationId?.let(pending.backup::forLegacyRestore) ?: pending.backup
             preflight(imported, pending.applyPreferences)
             val existingProfileIds = settings.observeSettings().first().recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
-            val collectionsAdded = store.merge(imported.library)
+            val collectionsAdded = store.merge(imported.library.withLikeTags())
             savedSearches.merge(imported.savedSearches)
             readingPositions.merge(imported.readingPositions)
             val sites = siteProfiles.mergeRestored(imported.customSources)

@@ -82,6 +82,18 @@ class ProfileBackupServiceTest {
         assertEquals(1, pins.observeSavedSearches().first().size)
     }
 
+    @Test fun `a restored Like's tags are filled in from the backup's copy of its post`() = runTest {
+        val directory = temporary.newFolder()
+        val store = FakeBackupStore()
+        val service = ProfileBackupService(InMemorySettingsRepository(), store, InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
+            likeTags = { stored, tags -> (tags + stored.canonicalTags + "filled").distinct() })
+        val backup = backup()
+
+        service.restore(codec.encode(backup))
+        assertEquals(listOf("cat", "filled"), store.library.likes.single().tags)
+    }
+
     @Test fun `a backup carries the extension repos, and one without them stays readable by the previous release`() {
         val repos = listOf(ExtensionRepo("https://a.example/repo", "A", "aa11"), ExtensionRepo("https://b.example/repo", "B", "bb22"))
         val written = backup().copy(extensionRepos = repos)
