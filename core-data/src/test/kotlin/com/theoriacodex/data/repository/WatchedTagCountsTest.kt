@@ -52,6 +52,8 @@ class WatchedTagCountsTest {
         assertEquals(counts(gelbooru, "b" to 10L, "c" to 7L), newFirst.watchedByTag)
         assertEquals(mapOf(gelbooru to 6L), newFirst.watchedTagFloors)
         assertEquals(newFirst, full.recordWatchedTags(gelbooru, linkedSetOf("a", "c"), limit = 2))
+        val two = LifetimeStatistics(watchedByTag = counts(gelbooru, "a" to 1L, "b" to 10L))
+        assertEquals(two.recordWatchedTags(gelbooru, linkedSetOf("d", "e"), limit = 2), two.recordWatchedTags(gelbooru, linkedSetOf("e", "d"), limit = 2))
     }
 
     @Test
@@ -76,9 +78,12 @@ class WatchedTagCountsTest {
 
         val capped = uncapped.capWatchedTags(limit = 3)
 
-        assertEquals(counts(gelbooru, "a" to 9L, "b" to 7L) + counts(SourceKey.PIXIV, "sky" to 1L), capped.watchedByTag)
+        assertEquals(counts(gelbooru, "a" to 9L, "b" to 7L, "c" to 4L) + counts(SourceKey.PIXIV, "sky" to 1L), capped.watchedByTag)
         assertEquals(mapOf(gelbooru to 4L), capped.watchedTagFloors)
         assertEquals(capped, capped.capWatchedTags(limit = 3))
+        val tied = LifetimeStatistics(watchedByTag = counts(gelbooru, "z" to 1L, "y" to 1L, "x" to 1L)).capWatchedTags(limit = 2)
+        assertEquals(counts(gelbooru, "x" to 1L, "y" to 1L), tied.watchedByTag)
+        assertEquals(mapOf(gelbooru to 1L), tied.watchedTagFloors)
     }
 
     @Test
