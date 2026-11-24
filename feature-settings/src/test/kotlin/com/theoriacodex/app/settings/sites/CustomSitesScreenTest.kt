@@ -125,14 +125,24 @@ class CustomSitesScreenTest {
     }
 
     @Test
-    fun `a working built-in source's page offers no browser check`() {
+    fun `a working built-in source's page shows its host, Working and Re-test, and no browser check`() {
         val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = true, needsVerification = false)
-        show(FakeCustomSitesController().apply { builtInSites.value = listOf(iwara) })
+        val controller = FakeCustomSitesController().apply {
+            builtInSites.value = listOf(iwara)
+            onTestBuiltIn = { BuiltInTestResult.DOWN }
+        }
+        show(controller)
+        compose.onNodeWithContentDescription("Re-test Iwara").assertExists()
 
         compose.onNodeWithText("Iwara").performClick()
 
         compose.onNodeWithText("Settings / Sites / Iwara").assertExists()
+        compose.onNodeWithText("www.iwara.tv").assertExists()
+        compose.onNodeWithContentDescription("Working").assertExists()
         compose.onNodeWithText("Verify in browser").assertDoesNotExist()
+
+        compose.onNodeWithContentDescription("Re-test Iwara").performClick()
+        compose.onNodeWithText("Down for maintenance. Try again later.").assertExists()
     }
 
     @Test

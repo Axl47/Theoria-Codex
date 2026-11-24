@@ -491,6 +491,22 @@ class CustomSitesViewModelTest {
         assertEquals("1 of 2 working", owner.state.value.testSummary)
     }
 
+    @Test fun `Re-test on a built-in row runs that source's real test`() = runTest {
+        val iwara = BuiltInSiteSummary(SourceKey.IWARA, "Iwara", "www.iwara.tv", working = false, needsVerification = false)
+        controller.builtInSites.value = listOf(iwara)
+        val gate = CompletableDeferred<BuiltInTestResult>()
+        controller.onTestBuiltIn = { source -> assertEquals(SourceKey.IWARA, source); gate.await() }
+        val owner = owner()
+
+        owner.onAction(CustomSitesAction.Retest(SourceKey.IWARA.id))
+        runCurrent()
+        assertEquals(RetestStatus.Running, owner.state.value.retests[SourceKey.IWARA.id])
+
+        gate.complete(BuiltInTestResult.WORKING)
+        runCurrent()
+        assertEquals(RetestStatus.Done("Working", ok = true), owner.state.value.retests[SourceKey.IWARA.id])
+    }
+
     /** Opens the check for [host] and lets the browser through a page with [userAgent]. */
     private fun TestScope.passCheck(owner: CustomSitesViewModel, host: String, userAgent: String = "WebView/1") {
         owner.onAction(CustomSitesAction.StartVerification(host))
