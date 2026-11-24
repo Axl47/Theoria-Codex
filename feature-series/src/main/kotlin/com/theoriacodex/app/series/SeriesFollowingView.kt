@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -72,14 +73,7 @@ internal fun FollowingBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (failedCheck != null && content.followsAny) {
-                    fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
-                }
-                if (content.missingExtensions > 0) {
-                    fullWidth("following-missing-extensions") {
-                        FailureRow(onOpenExtensions, message = missingExtensionsLine(content.missingExtensions), actionLabel = EXTENSIONS_TITLE)
-                    }
-                }
+                followingNotices(content, failedCheck, onRefresh, onOpenExtensions)
                 when {
                     following == null -> Unit
                     following.isEmpty() && content.followingQuery.isNotBlank() ->
@@ -95,6 +89,17 @@ internal fun FollowingBody(
     }
     if (optionsOpen) {
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
+    }
+}
+
+private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit, onOpenExtensions: () -> Unit) {
+    if (failedCheck != null && content.followsAny) {
+        fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
+    }
+    if (content.missingExtensions > 0) {
+        fullWidth("following-missing-extensions") {
+            FailureRow(onOpenExtensions, message = missingExtensionsLine(content.missingExtensions), actionLabel = EXTENSIONS_TITLE)
+        }
     }
 }
 
