@@ -12,7 +12,7 @@ Status: Accepted
 
 The video rule reads the player, not the reducer's play intent: ExoPlayer pauses on its own for audio-focus loss, when the Viewer pauses outside picture-in-picture, and on errors, and none of those reach the intent. A renderer that is unmounted, such as behind the page overview, stops counting with it. A long buffering stall lets the screen sleep on the system timeout.
 
-Looping clips keep the screen on for as long as they play, unlike GIFs and animated WebP, which never request it.
+A looping clip is a Viewer video whose player repeats it (`REPEAT_MODE_ONE`), which the Viewer sets from `ViewerRendererControls.loopPlayback`: Loop playback mode, outside a slideshow, and never while watching a series, so episodes and their long-form controls never count, whatever the playback mode. The decision reads the media's own playback, not its source. A playing looping clip holds the screen like reading does: while the Viewer is at least started, until 10 minutes pass with no touch, interaction, post change or page change, on the same idle clock and constant as reading (`VIEWER_IDLE_RELEASE_MS`). `CountViewerPlayingVideo` therefore counts looping clips apart from other videos in `ViewerPlayingVideos`. A video that plays once, and any episode, keeps the screen on for as long as it actually plays. GIFs and animated WebP never request it.
 
 The modifier counts requests per Compose owner, unlike `View.keepScreenOn`. During a trail transition two Viewers are composed under the same owner and the incoming one can request at started; a plain view flag would be cleared by the outgoing Viewer's disposal.
 
