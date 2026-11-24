@@ -1,0 +1,5 @@
+name: "Quiet"
+signing_key: "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+extension_list {
+  extensions { name: "Quiet" package_name: "eu.kanade.tachiyomi.extension.all.quiet" resources { apk_url: "https://cdn.example.org/quiet-v1.6.2.apk" } extension_lib: "1.6" version_code: 2 version_name: "1.6.2" }
+}

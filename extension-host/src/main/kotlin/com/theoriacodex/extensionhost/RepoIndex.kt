@@ -73,14 +73,16 @@ internal object RepoReader {
             }
             else -> {
                 // Anime stores number their fields differently from manga ones (field 8 is the torrent flag, not the
-                // sources), and a store says neither, so the anime layout is tried first: a manga store never fits it.
-                val store = try {
+                // sources), and a store says neither. The anime layout is tried first, which a manga store listing
+                // sources fails; one listing none fits it, but names Mihon's interface versions, which have a dot.
+                val anime = try {
                     protoStore(body, AnimeEntry.serializer(), get)
                 } catch (_: SerializationException) {
-                    protoStore(body, MangaEntry.serializer(), get)
+                    null
                 } catch (_: IllegalArgumentException) {
-                    protoStore(body, MangaEntry.serializer(), get)
+                    null
                 }
+                val store = anime?.takeUnless { (_, _, entries) -> entries.any { '.' in it.extensionLib } } ?: protoStore(body, MangaEntry.serializer(), get)
                 RepoIndex(store.first, store.second.lowercase(), store.third.map(ProtoEntry::indexed))
             }
         }
@@ -159,6 +161,8 @@ private class ProtoList<E>(@ProtoNumber(1) val extensions: List<E> = emptyList()
 
 /** One extension in a newer index; fields 1 to 6 are the same for both kinds. */
 private interface ProtoEntry {
+    val extensionLib: String
+
     fun indexed(): IndexedExtension
 }
 
@@ -168,7 +172,7 @@ private class MangaEntry(
     @ProtoNumber(1) val name: String = "",
     @ProtoNumber(2) val packageName: String = "",
     @ProtoNumber(3) val resources: ProtoResources = ProtoResources(),
-    @ProtoNumber(4) val extensionLib: String = "",
+    @ProtoNumber(4) override val extensionLib: String = "",
     @ProtoNumber(5) val versionCode: Long = 0,
     @ProtoNumber(6) val versionName: String = "",
     @ProtoNumber(8) val sources: List<ProtoSource> = emptyList(),
@@ -184,7 +188,7 @@ private class AnimeEntry(
     @ProtoNumber(1) val name: String = "",
     @ProtoNumber(2) val packageName: String = "",
     @ProtoNumber(3) val resources: ProtoResources = ProtoResources(),
-    @ProtoNumber(4) val extensionLib: String = "",
+    @ProtoNumber(4) override val extensionLib: String = "",
     @ProtoNumber(5) val versionCode: Long = 0,
     @ProtoNumber(6) val versionName: String = "",
     @ProtoNumber(8) val torrent: Int = 0,

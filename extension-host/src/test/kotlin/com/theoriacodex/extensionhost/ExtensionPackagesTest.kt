@@ -63,6 +63,19 @@ class ExtensionPackagesTest {
         )
     }
 
+    @Test
+    fun `a private copy stands in for a package of its name, unless the other app updated it past the copy`() {
+        fun extension(name: String, version: Long, signer: String, origin: ExtensionOrigin) =
+            ExtensionPackage(name, name, "1.6.$version", version, signer, java.io.File("/$origin/$name.apk"), origin, MihonKind, listOf(".S"), size = 1, modified = 1)
+        val owned = listOf("same", "newer", "foreign").map { extension(it, 5, "key", ExtensionOrigin.PRIVATE) } + extension("alone", 1, "key", ExtensionOrigin.PRIVATE)
+        val installed = listOf(extension("same", 5, "key", ExtensionOrigin.PACKAGE), extension("newer", 6, "key", ExtensionOrigin.PACKAGE), extension("foreign", 9, "other", ExtensionOrigin.PACKAGE))
+
+        assertEquals(
+            mapOf("same" to ExtensionOrigin.PRIVATE, "foreign" to ExtensionOrigin.PRIVATE, "alone" to ExtensionOrigin.PRIVATE, "newer" to ExtensionOrigin.PACKAGE),
+            standing(owned, installed).associate { it.packageName to it.origin },
+        )
+    }
+
     private fun install(packageName: String, feature: String, label: String, metaData: Bundle, version: String = "1.0") {
         shadowOf(context.packageManager).installPackage(
             PackageInfo().apply {

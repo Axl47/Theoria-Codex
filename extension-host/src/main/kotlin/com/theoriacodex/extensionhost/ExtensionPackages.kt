@@ -7,6 +7,7 @@ import android.os.FileObserver
 import java.io.File
 import java.security.MessageDigest
 import java.util.HexFormat
+import java.util.concurrent.ConcurrentHashMap
 
 /** Where an extension's code is on the device, which decides how it is named and loaded. */
 enum class ExtensionOrigin {
@@ -61,9 +62,9 @@ data class ExtensionPackage(
 /**
  * Finds the extensions on the device that declare the feature of one of [kinds]: the ones this app installed into
  * [private] (each named `<package>.apk`), installed packages, and APK files in the debug [folder]; any other package
- * is no extension. A private copy stands in for an installed package of the same name, which is then not listed:
- * both are the same extension to the user's choices. Seeing other apps' packages needs the `QUERY_ALL_PACKAGES`
- * permission; without it they are not found.
+ * is no extension. A private copy and an installed package of the same name are one extension to the user's choices,
+ * so only one is listed (see [standing]). Seeing other apps' packages needs the `QUERY_ALL_PACKAGES` permission;
+ * without it they are not found.
  */
 class ExtensionPackages(
     private val context: Context,
@@ -71,15 +72,27 @@ class ExtensionPackages(
     private val private: () -> File? = { null },
     private val folder: () -> File? = { null },
 ) {
+    /** Archives as last read, by file: each is parsed again only once its length or write time changes. */
+    private val archives = ConcurrentHashMap<File, Archive>()
+
+    private class Archive(val size: Long, val modified: Long, val origin: ExtensionOrigin, val extension: ExtensionPackage?)
+
     /** Private copies and installed packages by name, then the debug folder's files by file name. */
     fun list(): List<ExtensionPackage> {
-        val owned = apkFiles(private()).mapNotNull { read(it, ExtensionOrigin.PRIVATE) }.filter { it.apk.nameWithoutExtension == it.packageName }
-        val names = owned.mapTo(HashSet(), ExtensionPackage::packageName)
+        val owned = apkFiles(private()).mapNotNull { listed(it, ExtensionOrigin.PRIVATE) }.filter { it.apk.nameWithoutExtension == it.packageName }
         val installed = context.packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(FLAGS)).mapNotNull { info ->
-            info.applicationInfo?.sourceDir?.takeIf { info.packageName !in names }?.let { apk -> extension(info, File(apk), ExtensionOrigin.PACKAGE) }
+            info.applicationInfo?.sourceDir?.let { apk -> extension(info, File(apk), ExtensionOrigin.PACKAGE) }
         }
-        val files = apkFiles(folder()).mapNotNull(::read)
-        return (owned + installed).sortedBy(ExtensionPackage::name) + files
+        val files = apkFiles(folder()).mapNotNull { listed(it, ExtensionOrigin.FILE) }
+        return standing(owned, installed).sortedBy(ExtensionPackage::name) + files
+    }
+
+    /** [read], reusing the last reading of [apk] while its length and write time are unchanged. */
+    private fun listed(apk: File, origin: ExtensionOrigin): ExtensionPackage? {
+        val size = apk.length()
+        val modified = apk.lastModified()
+        archives[apk]?.takeIf { it.size == size && it.modified == modified && it.origin == origin }?.let { return it.extension }
+        return read(apk, origin).also { archives[apk] = Archive(size, modified, origin, it) }
     }
 
     /**
@@ -143,4 +156,17 @@ class ExtensionPackages(
         const val FLAGS = (PackageManager.GET_CONFIGURATIONS or PackageManager.GET_META_DATA or PackageManager.GET_SIGNING_CERTIFICATES).toLong()
         const val FOLDER_CHANGES = FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.MOVED_FROM or FileObserver.DELETE
     }
+}
+
+/**
+ * Of this app's private copies ([owned]) and the [installed] packages, the ones to list. A private copy stands in for
+ * an installed package of the same name, so updating an extension another app installed lists it once, and that app
+ * cannot swap in a copy signed with another key. Only a newer package signed with the same key is listed in its place:
+ * the other app updated it past this app's copy.
+ */
+internal fun standing(owned: List<ExtensionPackage>, installed: List<ExtensionPackage>): List<ExtensionPackage> {
+    val packages = installed.associateBy(ExtensionPackage::packageName)
+    val copies = owned.filterNot { copy -> packages[copy.packageName]?.let { it.signer == copy.signer && it.versionCode > copy.versionCode } == true }
+    val names = copies.mapTo(HashSet(), ExtensionPackage::packageName)
+    return copies + installed.filter { it.packageName !in names }
 }

@@ -11,7 +11,8 @@ class RepoReaderTest {
 
     /**
      * Newer repos' indexes, a manga store and an anime one, built from `repos/store.txt` and `repos/anime.txt` with
-     * `protoc --encode=Store store.proto < store.txt | gzip -9` (and `--encode=AnimeStore` for the anime one).
+     * `protoc --encode=Store store.proto < store.txt | gzip -9` (and `--encode=AnimeStore` for the anime one). `quiet.txt`
+     * is a manga store whose extensions list no sources.
      */
     private val store = resource("store.pb.gz")
     private val animeStore = resource("anime.pb.gz")
@@ -78,6 +79,12 @@ class RepoReaderTest {
             ),
             index.extensions,
         )
+    }
+
+    @Test
+    fun `a manga store whose extensions list no sources is still read as manga`() = runTest {
+        val index = RepoReader.read("https://repo.example/quiet/index.pb") { url -> if (url.endsWith("index.pb")) resource("quiet.pb.gz") else throw IOException("404 $url") }
+        assertEquals(listOf(SeriesKind.MANGA to "1.6"), index.extensions.map { it.kind to it.libVersion })
     }
 
     @Test
