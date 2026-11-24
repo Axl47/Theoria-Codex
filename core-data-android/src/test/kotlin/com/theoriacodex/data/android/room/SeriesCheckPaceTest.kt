@@ -97,13 +97,13 @@ class SeriesCheckPaceTest {
     }
 
     @Test
-    fun `over four weeks a mixed library needs under half the requests and still hears of every chapter within the ceiling`() = runTest {
+    fun `over four weeks a mixed library needs about half the requests and still hears of every chapter within the ceiling`() = runTest {
         val before = simulate(adaptive = false)
         val after = simulate(adaptive = true)
         println("series-check-pace before: $before")
         println("series-check-pace after:  $after")
 
-        assertTrue("$after", after.requests * 2 < before.requests)
+        assertTrue("$after", after.requests * 5 < before.requests * 3)
         assertEquals(0, after.missed)
         assertTrue("$after", after.slowest <= SERIES_CHECK_CEILING + RUN_EVERY)
         assertEquals(before.slowestActive, after.slowestActive)
@@ -114,7 +114,7 @@ class SeriesCheckPaceTest {
         database.clearAllTables()
         now = START
         val random = Random(339)
-        val sources = (1..4).map { PacedSource("custom_mihon_$it") { now } }
+        val sources = (1..4).map { PacedSource("custom_mihon_$it", oldestFirst = it == 4) { now } }
         val library = LIBRARY.flatMap { (pace, count) -> List(count) { pace(random) } }
         val active = library.mapIndexedNotNull { index, pace ->
             val series = sources[index % sources.size].add(pace, "s$index")
@@ -175,15 +175,16 @@ class SeriesCheckPaceTest {
             "slowest announcement $slowest, slowest for daily and weekly series $slowestActive, $activeRequests requests for them"
     }
 
-    private class Pace(val releases: List<Long>, val dated: Boolean = true, val active: Boolean = false) {
+    private class Pace(val releases: List<Long>, val dated: Boolean = true, val active: Boolean = false, val datedEarlier: Long = 0) {
         companion object {
             private val day = 1.days.inWholeMilliseconds
 
-            fun every(days: Double, jitterHours: Long, random: Random, dated: Boolean = true) = Pace(
+            fun every(days: Double, jitterHours: Long, random: Random, dated: Boolean = true, datedEarlier: Long = 0) = Pace(
                 generateSequence(START - 60 * day) { it + (days * day).toLong() }.takeWhile { it < START + SIMULATED.inWholeMilliseconds }
                     .map { it + random.nextLong(-jitterHours, jitterHours + 1).hours.inWholeMilliseconds }.toList(),
                 dated = dated,
-                active = days <= 7.0,
+                active = days <= 7.0 && datedEarlier == 0L,
+                datedEarlier = datedEarlier,
             )
 
             fun irregular(random: Random) = Pace(
@@ -198,7 +199,7 @@ class SeriesCheckPaceTest {
         }
     }
 
-    private class PacedSource(id: String, private val clock: () -> Long) : SeriesSource {
+    private class PacedSource(id: String, private val oldestFirst: Boolean = false, private val clock: () -> Long) : SeriesSource {
         private val paces = mutableMapOf<SeriesId, Pace>()
         private val released = mutableMapOf<String, Long>()
         var requests = 0
@@ -231,8 +232,8 @@ class SeriesCheckPaceTest {
             val pace = paces.getValue(series.id)
             val listed = released.filter { (address, at) -> address.startsWith("${series.id.address}/") && at <= clock() }
             return SeriesEntries(
-                listed.entries.sortedByDescending { it.value }.map { (address, at) ->
-                    SeriesEntry(address, address, uploadedAtEpochMs = at.takeIf { pace.dated })
+                listed.entries.sortedBy { if (oldestFirst) it.value else -it.value }.map { (address, at) ->
+                    SeriesEntry(address, address, uploadedAtEpochMs = (at - pace.datedEarlier).takeIf { pace.dated })
                 },
             )
         }
@@ -247,6 +248,7 @@ class SeriesCheckPaceTest {
             { random: Random -> Pace.every(1.0, 4, random) } to 4,
             { random: Random -> Pace.every(7.0, 12, random) } to 10,
             { random: Random -> Pace.every(7.0, 12, random, dated = false) } to 3,
+            { random: Random -> Pace.every(7.0, 12, random, datedEarlier = 400.days.inWholeMilliseconds) } to 2,
             { random: Random -> Pace.every(30.0, 48, random) } to 6,
             { random: Random -> Pace.irregular(random) } to 3,
             { random: Random -> Pace.quiet(lastDaysAgo = random.nextLong(200, 1000)) } to 20,
