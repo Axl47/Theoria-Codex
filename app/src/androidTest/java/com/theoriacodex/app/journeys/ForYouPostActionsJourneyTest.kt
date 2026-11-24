@@ -16,8 +16,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
@@ -65,7 +63,7 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("Open Journey artist's profile"))
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onNodeWithTag(card).assertIsDisplayed()
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        pressSystemBack()
         compose.onNodeWithTag(card).assertIsDisplayed()
         assertEquals(1L, io { container.data.statisticsRepository.observeStatistics().first().forYouSaveCount })
     }

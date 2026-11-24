@@ -9,8 +9,6 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.data.repository.SettingToggles
 import kotlinx.coroutines.flow.first
 import org.junit.Test
@@ -30,8 +28,7 @@ class SettingFromSearchJourneyTest : AppJourneyFixture() {
         // The composer is its own Dialog window, so system Back (not the Activity's dispatcher) closes it; the
         // first press may only hide the keyboard.
         val composer = compose.onNodeWithTag("Search composer")
-        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        repeat(2) { if (composer.isDisplayed()) device.pressBack().also { compose.waitForIdle() } }
+        repeat(2) { if (composer.isDisplayed()) pressSystemBack().also { compose.waitForIdle() } }
         waitFor("search composer is closed") { !composer.isDisplayed() }
         openSettings()
         activate(compose.onNodeWithText("Controls"))
