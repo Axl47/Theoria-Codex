@@ -32,10 +32,6 @@ module_layering() {
   for build in feature-*/build.gradle.kts *-kit/build.gradle.kts app-logic/build.gradle.kts core-*/build.gradle.kts; do
     [[ -f "$build" ]] || continue
     module="${build%%/*}"
-    if [[ "$module" != core-data-android ]] \
-      && grep -qE '^[[:space:]]*(api|implementation|compileOnly|runtimeOnly)\([[:space:]]*project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?":core-data-android"' "$build"; then
-      echo "$build depends on :core-data-android in main code; only :app may." >&2; failed=1
-    fi
     for name in $(project_dependencies "$build"); do
       if [[ "$name" == feature-* && "$name" != "$module" ]]; then
         echo "$build depends on :$name; only :app may depend on a feature." >&2; failed=1
@@ -49,6 +45,14 @@ module_layering() {
           echo "$build depends on :$name; a kit may only depend on kits before it (${kits[*]})." >&2; failed=1
         fi
       done
+    done
+  done
+  for build in */build.gradle.kts; do
+    module="${build%%/*}"
+    [[ "$module" == app || "$module" == core-data-android ]] && continue
+    for name in $(grep -E '^[[:space:]]*[A-Za-z]+\([[:space:]]*project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?":core-data-android"' "$build" \
+      | sed -E 's/^[[:space:]]*([A-Za-z]+).*/\1/' | grep -v '[Tt]est'); do
+      echo "$build depends on :core-data-android through $name; only :app may in main code." >&2; failed=1
     done
   done
   return "$failed"
