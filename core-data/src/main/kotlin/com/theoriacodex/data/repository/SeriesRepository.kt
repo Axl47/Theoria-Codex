@@ -16,8 +16,6 @@ data class StoredSeries(
     val readingMode: GalleryReadingMode? = null,
     /** The address of the entry opened last. */
     val lastOpenedEntry: String? = null,
-    /** When the source last listed this series' entries. */
-    val lastCheckedAtEpochMs: Long? = null,
     /** Whether chapters the check for new chapters finds are downloaded, while the series is followed. */
     val downloadNewChapters: Boolean = false,
     /**

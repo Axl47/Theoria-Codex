@@ -91,7 +91,7 @@ class RoomSeriesRepository(
         }
 
     /**
-     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones: none when no entries
+     * Writes [stored] with [entries] as its entry list, and returns the new ones: none when no entries
      * were stored before, since nothing was there to compare with. Entries are written only by a listing or an import,
      * so a series imported from a backup counts what its source lists beyond the backup's entries as new. Must run in a
      * transaction.
@@ -118,7 +118,7 @@ class RoomSeriesRepository(
         val dropped = known.values.filter { it.entry.address !in listed && it.sourceOrder != NOT_LISTED }.map { it.copy(sourceOrder = NOT_LISTED) }
         val reopened = moved.entries.firstOrNull { it.value.entry.address == stored.lastOpenedEntry }?.key
         // The series first: its entries refer to its row.
-        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, lastCheckedAtEpochMs = now).toEntity())
+        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
         return if (known.isEmpty()) emptyList() else newEntries
     }
@@ -266,7 +266,6 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     followed = followed,
     readingMode = readingMode?.let { name -> GalleryReadingMode.entries.firstOrNull { it.name == name } },
     lastOpenedEntry = lastOpenedEntry,
-    lastCheckedAtEpochMs = lastCheckedAtEpochMs,
     downloadNewChapters = downloadNew,
     chaptersShareFirstPage = chaptersShareFirstPage,
     followedAtEpochMs = followedAtEpochMs,
@@ -283,7 +282,6 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     followed,
     readingMode?.name,
     lastOpenedEntry,
-    lastCheckedAtEpochMs,
     series.description,
     series.status.takeUnless { it == SeriesStatus.UNKNOWN }?.name,
     downloadNewChapters,

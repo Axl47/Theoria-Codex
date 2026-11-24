@@ -43,7 +43,6 @@ class RoomSeriesRepositoryTest {
         assertEquals(series, stored.series)
         assertFalse(stored.followed)
         assertNull(stored.readingMode)
-        assertEquals(100L, stored.lastCheckedAtEpochMs)
         val entries = repository.entries(id)
         assertEquals(listOf("/c/2", "/c/1"), entries.map { it.entry.address })
         assertEquals(SeriesEntry("/c/2", "Chapter 2", 2f, "Group", 2_000L, """{"id":2}"""), entries.first().entry)

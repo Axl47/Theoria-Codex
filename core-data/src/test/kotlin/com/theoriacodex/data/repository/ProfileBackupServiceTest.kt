@@ -377,7 +377,7 @@ class ProfileBackupServiceTest {
         val series = BackupSeries(
             StoredSeries(
                 Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING, """{"slug":"t"}"""),
-                followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2", lastCheckedAtEpochMs = 9L,
+                followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2",
             ),
             listOf(
                 StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L, """{"id":2}"""), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20),
@@ -391,6 +391,11 @@ class ProfileBackupServiceTest {
         // The cover travels as the plain address the source gave; a series without one is written without the field.
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"coverUrl\":\"https://example.test/cover.jpg\""))
         assertEquals(listOf(series), codec.decode(encoded).library.series)
+        // Older backups carry the retired check time; it is ignored on restore and no longer written.
+        assertFalse(encoded.toString(Charsets.UTF_8).contains("lastCheckedAt"))
+        val withCheckTime = encoded.toString(Charsets.UTF_8).replace(""""followed":true""", """"followed":true,"lastCheckedAt":9""")
+        assertTrue(withCheckTime.contains("lastCheckedAt"))
+        assertEquals(listOf(series), codec.decode(withCheckTime.toByteArray()).library.series)
         // A memo no build writes, an empty object or text that is not one, restores as none.
         val withMemo = encoded.toString(Charsets.UTF_8)
         val emptyMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{}"""")
