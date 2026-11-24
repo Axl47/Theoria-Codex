@@ -80,11 +80,11 @@ internal fun ViewerPostPagerSurface(
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
                     holdScrub = LocalViewerHoldScrub.current,
                     reservedBottomPx = reservedBottom,
-                    verticalScroll = verticalGallery?.scrollGesture,
+                    verticalScroll = verticalGallery?.scrollGesture(pagesPending = frame.uiState.currentPage?.hasPendingGalleryMedia() == true),
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
-                    openNextChapter = chapterPushUp(frame, swipe, config).takeIf { vertical && frame.uiState.series is ViewerSeries.Reading },
+                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && frame.reading },
                 ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
@@ -102,7 +102,7 @@ internal fun ViewerPostPagerSurface(
                         postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
                         qualityHeight, videoPositions, host, config,
                     )
-                    if (frame.navigation.pages[postPage].awaitsChapterPages(frame.uiState.series)) ChapterPagesLoading()
+                    if (frame.reading && frame.navigation.pages[postPage].loadingGalleryMedia()) ChapterPagesLoading()
                 }
             }
         }
@@ -153,13 +153,6 @@ private fun BoxScope.ChapterPagesLoading() {
     CircularProgressIndicator(Modifier.align(Alignment.Center).semantics { contentDescription = "Loading pages" })
 }
 
-private fun chapterPushUp(frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? =
-    if (frame.uiState.currentPage?.awaitsChapterPages(frame.uiState.series) == true) {
-        {}
-    } else {
-        nextPostOpener(frame.navigation.currentIndex, frame, swipe, config)
-    }
-
 internal fun previousPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val previous = frame.navigation.pages.getOrNull(index - 1) ?: return null
     return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index - 1, config.entryMediaIndex(previous, frame.uiState.series, back = true))) }
@@ -187,7 +180,7 @@ private fun ViewerVerticalPostPage(
         postPage, pageState, frame, screen, controls, host,
         dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
         readReturnProgress = readReturnProgress,
-        onOpenNext = nextPostOpener(postPage, frame, swipe, config),
+        onOpenNext = nextPostOpener(postPage, frame, swipe, config).takeUnless { pageState.hasPendingGalleryMedia() },
     )
 }
 

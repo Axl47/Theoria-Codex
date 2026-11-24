@@ -35,21 +35,21 @@ fun interface SourceImages {
 }
 
 internal fun Call.executeFor(caller: Call): Response {
-    if (caller.isCanceled()) throw IOException(CANCELED)
-    caller.addEventListener(object : EventListener() {
-        override fun canceled(call: Call) = cancel()
-    })
-    if (caller.isCanceled()) cancel()
+    caller.onCanceled(::cancel)
     return execute()
 }
 
-internal fun <T> Call.blockingFor(block: suspend () -> T): T = if (isCanceled()) throw IOException(CANCELED) else runBlocking {
-    val work = coroutineContext.job
-    addEventListener(object : EventListener() {
-        override fun canceled(call: Call) = work.cancel()
-    })
-    if (isCanceled()) work.cancel()
+internal fun <T> blockingFor(caller: Call, block: suspend () -> T): T = runBlocking {
+    caller.onCanceled(coroutineContext.job::cancel)
     block()
+}
+
+private fun Call.onCanceled(action: () -> Unit) {
+    if (isCanceled()) throw IOException(CANCELED)
+    addEventListener(object : EventListener() {
+        override fun canceled(call: Call) = action()
+    })
+    if (isCanceled()) throw IOException(CANCELED)
 }
 
 private const val CANCELED = "Canceled"

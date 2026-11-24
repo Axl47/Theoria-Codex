@@ -7,7 +7,8 @@ import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.Collections
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -42,23 +43,25 @@ internal class MihonImages(
             val page = pages[address]
             return (if (page != null) source.imageCall(page) else source.imageCall(url.toString())).executeFor(caller)
         }
-        val page = unresolvedPage(address, data)
+        val page = unresolvedPage(address, data, caller)
         val (call, named) = page.imageCall(caller)
         return fetched(call, caller) { synchronized(page) { if (page.imageUrl == named) page.imageUrl = null } }
     }
 
-    private fun unresolvedPage(address: String, data: String): Page = pages[address] ?: run {
+    private fun unresolvedPage(address: String, data: String, caller: Call): Page = pages[address] ?: run {
         val (index, chapterUrl) = data.split('/', limit = 2).let { it[0].toIntOrNull() to it.getOrNull(1).orEmpty() }
         val chapter = chapter(chapterUrl) ?: SChapter.create().apply {
             url = chapterUrl
             name = ""
         }
-        val listed = runBlocking { listings.share(chapterUrl) { source.getPageList(chapter).onEach { pageAddress(chapter, it) } } }
+        val listed = blockingFor(caller) {
+            withContext(Dispatchers.IO) { listings.share(chapterUrl) { source.getPageList(chapter).onEach { pageAddress(chapter, it) } } }
+        }
         pages[address] ?: listed.firstOrNull { it.index == index } ?: throw IOException("The chapter no longer has this page")
     }
 
     private fun Page.imageCall(caller: Call): Pair<Call, String?> = synchronized(this) {
-        if (imageUrl == null) imageUrl = caller.blockingFor { source.getImageUrl(this@imageCall) }
+        if (imageUrl == null) imageUrl = blockingFor(caller) { source.getImageUrl(this@imageCall) }
         source.imageCall(this) to imageUrl
     }
 

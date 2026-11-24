@@ -180,17 +180,19 @@ class ViewerVerticalGalleryTest {
     @Config(qualifiers = "w411dp-h891dp")
     @Test fun `a push up on a chapter still loading its pages stays on the chapter and shows it loading (ADR 0168)`() {
         val session = ViewerSessionIdentity("loading")
-        val cover = gallery.copy(media = listOf(page))
+        val cover = gallery.copy(media = emptyList(), full = null, galleryLengthUnknown = true)
         state.value = createViewerUiState(
             session, listOf(cover, next), requiresResolution = { it.id == gallery.id }, series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL),
         )
         show(mapOf(gallery.id to GalleryReadingMode.VERTICAL, next.id to GalleryReadingMode.VERTICAL))
         compose.onNodeWithContentDescription("Loading pages").assertIsDisplayed()
+        compose.onNodeWithText("Next").assertDoesNotExist()
 
         compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) }
         compose.waitForIdle()
 
         assertEquals(0, state.value.currentPageIndex)
+        assertEquals(null, state.value.controls.panel)
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
         compose.onNodeWithContentDescription("Loading pages").assertDoesNotExist()
     }
@@ -199,7 +201,7 @@ class ViewerVerticalGalleryTest {
     @Test fun `a push up that began on a loading chapter stays on it when its pages arrive mid-swipe (ADR 0168)`() {
         val session = ViewerSessionIdentity("arriving")
         state.value = createViewerUiState(
-            session, listOf(gallery.copy(media = listOf(page)), next), requiresResolution = { it.id == gallery.id },
+            session, listOf(gallery.copy(media = emptyList(), full = null, galleryLengthUnknown = true), next), requiresResolution = { it.id == gallery.id },
             series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL),
         )
         show(mapOf(gallery.id to GalleryReadingMode.VERTICAL, next.id to GalleryReadingMode.VERTICAL))

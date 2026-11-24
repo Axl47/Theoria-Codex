@@ -2,7 +2,6 @@ package com.theoriacodex.app.viewer
 
 import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerPageState
-import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.domain.model.GalleryReadingMode
 
 internal fun ViewerScreenConfig.readingModeOf(page: ViewerPageState?, series: ViewerSeries?): GalleryReadingMode {
@@ -17,8 +16,3 @@ internal fun ViewerScreenConfig.entryMediaIndex(page: ViewerPageState, series: V
 }
 
 internal fun ViewerPageState.verticalReadingAvailable(): Boolean = media.all { it.kind == ViewerMediaKind.IMAGE }
-
-internal fun ViewerPageState.awaitsChapterPages(series: ViewerSeries?): Boolean =
-    series is ViewerSeries.Reading && resolution.status in CHAPTER_PAGES_PENDING
-
-private val CHAPTER_PAGES_PENDING = setOf(ViewerResolutionStatus.IDLE, ViewerResolutionStatus.REQUESTED, ViewerResolutionStatus.RESOLVING)

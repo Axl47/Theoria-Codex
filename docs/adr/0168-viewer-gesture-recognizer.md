@@ -13,7 +13,7 @@ Levels, navigation, taps, pinches, dismissal and info all start from a single fi
 - Columns: a wide area keeps its outer columns to a thumb's reach (`viewerGestureColumn`). Only seekable media reserves the outer columns for double-tap seeking; zoomed media always double-taps back to fit. Brightness is on the leading column for every media; the trailing column adjusts volume only for media with sound, otherwise it stays for closing and info.
 - Release velocity uses historical touch samples, because frames batch samples and a flick during a busy frame would read as slow. Within `VIEWER_FLICK_WINDOW_MS` (150 ms) the gesture's average speed is a floor (`viewerReleaseVelocity`), since a busy main thread can deliver a flick as little more than its down and up.
 - A lift that arrives already consumed means the system took the touch (the Back gesture does, mid-swipe) and must not read as a flick to another post.
-- An upward gesture that would open info opens the next chapter instead when the series is being read in a vertical gallery and a next chapter exists (`openNextChapter` in `viewerGestureHandler`, from `chapterPushUp`). While the chapter on screen still waits for its pages (`awaitsChapterPages`) the push up does nothing: its only page is the cover, which always fits the screen, so every upward swipe would otherwise land at the end and leave the chapter. A spinner (`ChapterPagesLoading`) shows over a chapter until its pages arrive or fail. A gesture reports to the handler it was pressed with (`viewerGestures`), so a push up begun on a loading chapter stays inert even if the pages arrive before the finger lifts.
+- An upward gesture that would open info opens the next chapter instead when the series is being read in a vertical gallery and a next chapter exists (`openNextChapter` in `viewerGestureHandler`, from `nextPostOpener`). A gallery whose pages are still pending (`hasPendingGalleryMedia`) is never at its end (`scrollGesture(pagesPending)`), so a push up on a chapter that shows only its cover scrolls nothing instead of opening info or the next chapter, and stays a scroll if the pages arrive before the finger lifts; its Next card waits for the pages too. A spinner (`ChapterPagesLoading`) shows over a chapter being read while its pages load (`loadingGalleryMedia`).
 - `swipeTargetFrom`: a vertical gallery scrolls its own pages, so a swipe there always changes post.
 
 ## Consequences
@@ -24,8 +24,9 @@ New gestures must slot into the lock order. Changing the long-press or back-edge
 
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerMediaGestures.kt`: `viewerGestures`, `ViewerGestureTracker`, `ViewerGestureConfig`, `ViewerVerticalScroll`, `viewerGestureColumn`, `doubleTap`, `viewerReleaseVelocity`, `VIEWER_FLICK_WINDOW_MS`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerFrameEffects.kt`: `swipeTargetFrom`
-- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPostPager.kt`: `viewerGestureHandler`, `nextPostOpener`, `chapterPushUp`, `ChapterPagesLoading`
-- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReadingMode.kt`: `awaitsChapterPages`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPostPager.kt`: `viewerGestureHandler`, `nextPostOpener`, `ChapterPagesLoading`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerSwipeNavigation.kt`: `hasPendingGalleryMedia`, `loadingGalleryMedia`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGallery.kt`: `scrollGesture`
 
 ## Guarded by
 

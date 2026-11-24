@@ -334,10 +334,16 @@ class ExtensionImagesTest {
             images.tag(hosted.series.key, "${reader.baseUrl}/p/9", "9//c/1"),
         )
 
+        val app = appClient(images)
         for (address in addresses) {
-            val gone = appClient(images).newCall(Request.Builder().url(address).build()).apply { cancel() }
+            val gone = app.newCall(Request.Builder().url(address).build()).apply { cancel() }
             assertFailsWith<IOException> { gone.execute() }
         }
+        var loads = 0
+        val cold = ExtensionImages(key) { loads += 1 }
+        val coldCover = checkNotNull(cold.address(Series(SeriesId(server.key, "/s"), "Series", coverUrl = "https://covers.test/1.jpg")))
+        assertFailsWith<IOException> { appClient(cold).newCall(Request.Builder().url(coldCover).build()).apply { cancel() }.execute() }
+        assertEquals(0, loads)
 
         assertEquals(emptyList<String>(), reader.listed)
         assertEquals(emptyList<String>(), reader.asked)
