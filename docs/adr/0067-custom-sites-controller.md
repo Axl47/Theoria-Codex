@@ -25,3 +25,7 @@ Removing and re-adding a site restores its library. Cookie sharing is limited to
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/customsites/CustomSitesController.kt`: `CustomSitesController`, `testBuiltIn`, `checkVerification`, `completeVerification`, `retest`, `setSetupHost`, `remove`, `requestSetup`
 - `app/src/main/java/com/theoriacodex/app/di/CustomSitesControllerImpl.kt`: `add`, `retest`, `testBuiltIn`, `checkVerification`, `completeVerification`, `update`, `remove`, `LIVE_SOURCE_WAIT_MS`, `BUILT_IN_TEST_TIMEOUT_MS`
+
+## Guarded by
+
+- Left to prose: every promise here is unguarded, because the work is done by `CustomSitesControllerImpl` and `SiteCookieBridge` in `:app`, whose tests are not linked here; the interface in app-logic declares the operations but decides nothing.

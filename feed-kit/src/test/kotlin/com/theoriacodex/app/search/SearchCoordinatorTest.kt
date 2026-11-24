@@ -147,7 +147,7 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `temporary execution key binds canonical source selection`() = runTest {
+    fun `temporary execution key binds canonical source selection (ADR 0080)`() = runTest {
         val query = unifiedQuery("temporary")
         val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
 

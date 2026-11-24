@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchHistoryTest {
-    @Test fun `settling a different search moves the last one back with the place it was left at`() {
+    @Test fun `settling a different search moves the last one back with the place it was left at (ADR 0081)`() {
         val history = SearchQueryHistory()
             .settled(entry("a"))
             .leaving(SearchScrollState(12, 34))
@@ -19,7 +19,7 @@ class SearchHistoryTest {
         assertEquals(history, history.settled(entry("b", SearchScrollState(5, 6))))
     }
 
-    @Test fun `back and forward restore each place and a new search drops forward steps`() {
+    @Test fun `back and forward restore each place and a new search drops forward steps (ADR 0081)`() {
         val history = SearchQueryHistory().settled(entry("a")).leaving(SearchScrollState(1, 2)).settled(entry("b"))
         val back = checkNotNull(history.stepBack(entry("b", SearchScrollState(7, 8))))
         assertEquals(entry("a", SearchScrollState(1, 2)), back.target)
@@ -37,7 +37,7 @@ class SearchHistoryTest {
         assertEquals(listOf(entry("a", SearchScrollState(1, 2))), branched.back)
     }
 
-    @Test fun `a step back from an unsettled search returns to the settled one and leaves no trace`() {
+    @Test fun `a step back from an unsettled search returns to the settled one and leaves no trace (ADR 0081)`() {
         val history = SearchQueryHistory().settled(entry("a")).leaving(SearchScrollState(9, 1))
         assertTrue(history.canStepBack(entry("live")))
         val step = checkNotNull(history.stepBack(entry("live")))
@@ -46,7 +46,7 @@ class SearchHistoryTest {
         assertNull(history.stepBack(entry("a")))
     }
 
-    @Test fun `history keeps a bounded number of back steps`() {
+    @Test fun `history keeps a bounded number of back steps (ADR 0081)`() {
         var history = SearchQueryHistory()
         repeat(30) { history = history.settled(entry("q$it")) }
         assertEquals(SearchQueryHistory.LIMIT, history.back.size)

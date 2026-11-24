@@ -26,7 +26,7 @@ import org.junit.Test
 
 class SearchStateContractTest {
     @Test
-    fun `restoring keeps the notice that stored source terms were removed`() {
+    fun `restoring keeps the notice that stored source terms were removed (ADR 0079)`() {
         val query = emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm("landscape")))
         val initialization = SearchInitialization(
             query = query,
@@ -174,7 +174,7 @@ class SearchStateContractTest {
     }
 
     @Test
-    fun `opening a result closes an open scroll request and a missing result leaves it open`() {
+    fun `opening a result closes an open scroll request and a missing result leaves it open (ADR 0081)`() {
         val shown = post("shown")
         val pending = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, resetToTop = true)
         val state = SearchUiState(restoration = pending)

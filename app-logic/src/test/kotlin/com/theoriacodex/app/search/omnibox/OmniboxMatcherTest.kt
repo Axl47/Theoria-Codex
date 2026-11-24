@@ -15,7 +15,7 @@ class OmniboxMatcherTest {
         assertEquals(listOf("Night scapes", "Landscapes"), titles(matchOmnibox(entries, " scapes ")))
     }
 
-    @Test fun `keywords find an entry and one letter only matches the start of a word`() {
+    @Test fun `keywords find an entry and one letter only matches the start of a word (ADR 0083)`() {
         val entries = listOf(
             OmniboxEntry.Toggle("Instant Seek", checked = false, keywords = listOf("scrub"), set = {}),
             action(OmniboxKind.COMMAND, "Storage & caching", keywords = listOf("cache")),
@@ -26,7 +26,7 @@ class OmniboxMatcherTest {
         assertEquals(emptyList<OmniboxEntry>(), matchOmnibox(entries, "  "))
     }
 
-    @Test fun `when anything else matches, only the top two tags come before it`() {
+    @Test fun `when anything else matches, only the top two tags come before it (ADR 0083)`() {
         val tags = (1..5).map { "tag $it" }
         val codex = matchOmnibox(listOf(action(OmniboxKind.CODEX, "Tagged")), "tag")
 
@@ -37,7 +37,7 @@ class OmniboxMatcherTest {
         assertEquals(TagsAroundOmnibox(tags, emptyList(), emptyList()), placeOmniboxMatches(tags, emptyList()))
     }
 
-    @Test fun `each kind keeps its best few and equal matches follow the kinds' order`() {
+    @Test fun `each kind keeps its best few and equal matches follow the kinds' order (ADR 0083)`() {
         val entries = listOf(
             action(OmniboxKind.COMMAND, "Blue mode"),
             action(OmniboxKind.CREATOR, "Bluebird"),
