@@ -34,7 +34,7 @@ class CodexEditModeTest {
                 CodexDetailScreen(
                     codexId = "mine",
                     codexName = "Mine", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
-                    availableSources = emptySet(), creatorBrowsingSources = emptySet(),
+                    availableSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
                     onBack = {},
                 )

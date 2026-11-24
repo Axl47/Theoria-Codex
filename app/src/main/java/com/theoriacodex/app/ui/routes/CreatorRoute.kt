@@ -42,8 +42,6 @@ internal data class CreatorRouteCallbacks(
     val onOpenViewer: suspend (CreatorEffect.OpenViewer) -> Unit,
     val onNavigateBack: () -> Unit,
     val onToggleLike: (Post) -> Unit,
-    val onRequestSaveToCodex: (Post) -> Unit,
-    val onSaveToDevice: (Post) -> Unit,
     /** Follows or unfollows; an unfollow offers Undo through the [UndoSlot]. */
     val onToggleFollow: (CreatorProfile, List<Post>, UndoSlot) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit,
@@ -132,8 +130,6 @@ private fun CreatorRouteContent(
         resolvePostById = owner::resolvePost,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
-        onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
-        onSaveToDevice = callbacks.onSaveToDevice,
         onOpenUrl = callbacks.onOpenUrl,
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,

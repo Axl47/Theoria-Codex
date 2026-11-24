@@ -62,8 +62,6 @@ class CreatorRelatedPostsScreenTest {
                         liked.value = true
                     },
                     onAction = {},
-                    onRequestSaveToCodex = {},
-                    onSaveToDevice = {},
                     onOpenUrl = {},
                 )
             }

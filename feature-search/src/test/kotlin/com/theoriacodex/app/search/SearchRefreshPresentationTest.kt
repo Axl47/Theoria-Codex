@@ -44,9 +44,9 @@ class SearchRefreshPresentationTest {
         val actions = mutableListOf<SearchAction>()
         compose.setContent {
             MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
-                SearchScreen(state.value, testRelatedShelf(), emptySet(), actions::add,
+                SearchScreen(state.value, testRelatedShelf(), actions::add,
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
- onRequestSaveToCodex = {}, onSaveToDevice = {})
+ onRequestSaveToCodex = {})
             } }
         }
         val card = compose.onNodeWithTag(searchCardTestTag(post.id))
@@ -69,9 +69,9 @@ class SearchRefreshPresentationTest {
         compose.setContent {
             MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
                 SearchScreen(
-                    state = state.value, related = testRelatedShelf(), creatorBrowsingSources = emptySet(), onAction = {},
+                    state = state.value, related = testRelatedShelf(), onAction = {},
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
- onRequestSaveToCodex = {}, onSaveToDevice = {},
+ onRequestSaveToCodex = {},
                 )
             } }
         }

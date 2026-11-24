@@ -19,7 +19,6 @@ import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
-import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.domain.model.Codex
 
 @Composable
@@ -60,7 +59,6 @@ internal fun SavedSearchesCodexBoundary(
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,
-        creatorBrowsingSources = remember(sources.registry, available) { sources.registry.creatorBrowsingSources().intersect(available) },
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
         savedSearchOwner = owner, savedSearches = entries, loading = feed.loading || reloading,
     ))

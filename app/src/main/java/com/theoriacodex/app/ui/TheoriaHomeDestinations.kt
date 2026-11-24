@@ -97,7 +97,6 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onRequestSaveToCodex = { post ->
                     shell.requestSaveToCodex(post, searchQuery = routes.search.current?.state?.value?.query?.applied)
                 },
-                onSaveToDevice = shell::requestSaveToDevice,
                 onAddFavoriteTag = shell.addFavoriteTags,
                 onRemoveFavoriteTag = shell.removeFavoriteTags,
                 onRenameFavoriteTag = shell.renameFavoriteTags,
@@ -112,7 +111,6 @@ private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationSta
     marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
     settings = state.settings,
     availableSources = state.availableSources,
-    creatorBrowsingSources = state.creatorBrowsingSources,
     favoriteTags = state.favoriteTags,
     resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
 )
@@ -168,7 +166,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
                 onSelectProfile = { id -> shell.owners.settings.onAction(SettingsAction.SetActiveProfile(id)) },
                 onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.FOR_YOU)(post) },
                 onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post, fromForYou = true) },
-                onSaveToDevice = shell::requestSaveToDevice,
                 onGoToSearch = { shell.navigation.showTab(TopLevelDestination.Search) },
             ),
             onOwnerAvailable = shell.routes::publishForYou,
