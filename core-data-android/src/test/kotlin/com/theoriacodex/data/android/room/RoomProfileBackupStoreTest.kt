@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.BackupLibrary
+import com.theoriacodex.data.repository.BackupSeries
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.StoredSeries
+import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
@@ -180,6 +183,20 @@ class RoomProfileBackupStoreTest {
         dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 4L, 10L, null, null)
         assertEquals(5L to 10L, progress())
         deviceDatabase.close()
+    }
+
+    @Test fun `a restored series' first refresh announces what its source listed since the backup`() = runTest {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val title = Series(id, "Title", language = "en")
+        val chapter1 = SeriesEntry("/chapter/1", "Ch.1")
+        val device = RoomSeriesRepository(database, clock = { 40L })
+        // Without a check time, as a Mihon backup's series are.
+        backups.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = listOf(
+            BackupSeries(StoredSeries(title, followed = true), listOf(StoredSeriesEntry(chapter1, 0, firstSeenAtEpochMs = 5L))),
+        )))
+
+        val chapter2 = SeriesEntry("/chapter/2", "Ch.2")
+        assertEquals(listOf(chapter2), device.storeEntries(id, listOf(chapter2, chapter1)))
     }
 
     @Test fun `replaying an import keeps existing media and history while repairing Likes membership`() = runTest {
