@@ -10,10 +10,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
@@ -37,6 +41,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @Composable
@@ -141,16 +146,36 @@ internal fun ViewerFrameEffects(
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
     ViewerUnlockPeekEffect(frame, screen)
-    ViewerKeepScreenOnEffect(frame.keepsScreenAwake)
+    ViewerKeepScreenOnEffect(
+        slideshow = uiState.controls.slideshow,
+        reading = frame.reading,
+        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
+    )
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
 }
 
-/** Keeps the screen on while [awake], released once the Viewer pauses or leaves. */
+/**
+ * Keeps the screen on during a running [slideshow], or while [reading] a chapter until [VIEWER_READING_IDLE_MS] pass
+ * without a change of [activity] (a touch, a control used, or a page change), so a reader who falls asleep lets it
+ * sleep too. [activity] is read in a snapshot flow, so a touch does not recompose the caller. Released once the
+ * Viewer pauses or leaves.
+ */
 @Composable
-private fun ViewerKeepScreenOnEffect(awake: Boolean) {
+internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, activity: () -> Any) {
     val view = LocalView.current
     val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
-    val on = awake && resumed
+    var readingIdle by remember { mutableStateOf(false) }
+    val currentActivity by rememberUpdatedState(activity)
+    LaunchedEffect(reading, resumed) {
+        readingIdle = false
+        if (!reading || !resumed) return@LaunchedEffect
+        snapshotFlow { currentActivity() }.collectLatest {
+            readingIdle = false
+            delay(VIEWER_READING_IDLE_MS)
+            readingIdle = true
+        }
+    }
+    val on = resumed && (slideshow || reading && !readingIdle)
     DisposableEffect(view, on) {
         view.keepScreenOn = on
         onDispose { view.keepScreenOn = false }
@@ -371,3 +396,6 @@ private fun advanceToPendingPost(
 
 private val VIEWER_BACK_DISTANCE = 48.dp
 internal const val VIEWER_UNLOCK_PEEK_MS = 3_000L
+
+/** How long an open chapter keeps the screen on without any interaction or page change. */
+internal const val VIEWER_READING_IDLE_MS = 10 * 60_000L

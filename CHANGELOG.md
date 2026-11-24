@@ -146,7 +146,7 @@
 - The Series tab no longer loads a source's listing while it shows Following or a search.
 - A series page's chapter list stays smoother while chapters download.
 - In the Viewer's page overview, the Back arrow at the top closes the overview instead of the whole Viewer, the trail row no longer covers the reading-mode switch, and the last pages are no longer hidden behind the buttons at the bottom.
-- The screen no longer turns off while you read a manga chapter.
+- The screen no longer turns off while you read a manga chapter. After 10 minutes without a touch or page turn it sleeps as usual; slideshows still keep it on.
 - Start over in a manga chapter's information sheet closes the sheet, as it does for episodes.
 - For You cards a Save brought in say "Like one you saved" instead of "Like one you liked".
 - Settings › Picture tags no longer counts a video or animation as tagged while its frames are still to be read.
