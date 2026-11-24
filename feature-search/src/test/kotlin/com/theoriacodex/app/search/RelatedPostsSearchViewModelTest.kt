@@ -73,7 +73,6 @@ internal class RelatedPostsSearchViewModelTest : SearchViewModelTestFixture() {
             advanceUntilIdle()
             viewModel.related.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
             advanceUntilIdle()
-            // Applying the search left its move to the top open, waiting for the grid to acknowledge it.
             assertNotNull(viewModel.openScrollState())
 
             val effect = async { viewModel.effects.first() }

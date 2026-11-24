@@ -84,7 +84,6 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             owner.onAction(SearchAction.ScrollChanged(3, 18))
             val acknowledged = owner.state.value.restoration
 
-            // The query on screen is not asked for again, so the place in it stays.
             owner.onAction(SearchAction.ApplyDraft)
             owner.onAction(SearchAction.LoadNextPage)
             advanceUntilIdle()

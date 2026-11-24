@@ -25,12 +25,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchTerm
 import kotlinx.coroutines.launch
 
-/**
- * The general tags most of [posts] carry, most common first (ties keep first-seen order). A tag on a single post
- * says nothing about the creator, so only tags on at least two posts count, and [creator]'s own tag (their name
- * where a source tags posts with it) never does. Tags a source types as artist, meta or any other kind are left
- * out; untyped tags count as general. Each keeps a loaded post carrying it for the Trail to fork from.
- */
 internal fun creatorTopTags(creator: CreatorProfile, posts: List<Post>): List<TagCount> {
     val ownTags = listOfNotNull(creator.uploadsQuery, creator.profileId, creator.displayName).mapTo(HashSet(), ::tagIdentity)
     return topTags(posts, CREATOR_TAG_LIMIT, counted = 2..Int.MAX_VALUE, includeTerm = { term ->
@@ -38,10 +32,8 @@ internal fun creatorTopTags(creator: CreatorProfile, posts: List<Post>): List<Ta
     })
 }
 
-/** A tag spelled with spaces or underscores, in any case, as one name. */
 private fun tagIdentity(tag: String): String = tag.trim().lowercase().replace(' ', '_')
 
-/** The creator's common tags across the posts loaded so far; a tap opens a Trail of that tag. */
 @Composable
 internal fun CreatorTagChips(creator: CreatorProfile, posts: List<Post>) {
     val opener = LocalTrailOpener.current

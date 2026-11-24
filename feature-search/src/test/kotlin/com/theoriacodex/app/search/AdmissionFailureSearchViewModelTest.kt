@@ -165,7 +165,6 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
         adapter.failingTags += "offline"
         viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("offline")))
         viewModel.onAction(SearchAction.ApplyDraft)
-        // Not advanceUntilIdle: that would jump past the root timeout and end the gated request.
         runCurrent()
 
         network.value = true

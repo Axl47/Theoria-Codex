@@ -27,10 +27,6 @@ import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.savedFor
 
-/**
- * What History can do with saved searches: [saved] fills the bookmark of the searches it holds, [justSavedId] is
- * the save that committed a moment ago (it shows "Saved · Rename"), and [save] and [rename] change them.
- */
 class RecentSearchSaves(
     val saved: List<SavedSearchEntry>,
     val justSavedId: String?,
@@ -38,7 +34,6 @@ class RecentSearchSaves(
     val rename: (id: String, name: String) -> Unit,
 )
 
-/** [RecentSearchSaves] as History's rows and tiles use it, with the saved search whose name is being edited in its row. */
 internal class RecentSearchSaving(
     private val saves: RecentSearchSaves,
     private val savedByHash: Map<String, List<SavedSearchEntry>>,
@@ -50,13 +45,11 @@ internal class RecentSearchSaving(
 
     fun savedFor(entry: RecentSearchEntry): SavedSearchEntry? = savedByHash[entry.queryHash]?.savedFor(entry)
 
-    /** Saves [entry] under its query's own name, or opens the rename of the saved search it already is: never saves twice. */
     fun bookmark(entry: RecentSearchEntry) {
         val saved = savedFor(entry)
         if (saved == null) saves.save(savedSearchName(entry), entry) else startRename(saved)
     }
 
-    /** Ends the rename of [saved], committing [name] when there is one. */
     fun finishRename(saved: SavedSearchEntry, name: String?) {
         endRename()
         name?.let { saves.rename(saved.id, it) }
@@ -71,17 +64,14 @@ internal fun rememberRecentSearchSaving(saves: RecentSearchSaves?): RecentSearch
     return saves?.let { RecentSearchSaving(it, savedByHash, renamingId, { entry -> renamingId = entry.id }, { renamingId = null }) }
 }
 
-/** The saved search [entry] is, while its name is being edited in its row; null otherwise. */
 internal fun RecentSearchSaving?.renaming(entry: RecentSearchEntry): SavedSearchEntry? =
     this?.savedFor(entry)?.takeIf { it.id == renamingId }
 
-/** The name field that takes the place of [saved]'s query text while it is renamed. */
 @Composable
 internal fun SavedSearchNameField(saved: SavedSearchEntry, saving: RecentSearchSaving, style: TextStyle, modifier: Modifier) {
     InlineNameField(saved.name, style, modifier) { name -> saving.finishRename(saved, name) }
 }
 
-/** An empty bookmark that saves, "Saved · Rename" right after a save committed, or a filled bookmark that renames. */
 @Composable
 internal fun SaveSearchControl(entry: RecentSearchEntry, saving: RecentSearchSaving) {
     val colors = MaterialTheme.colorScheme
@@ -100,10 +90,6 @@ internal fun SaveSearchControl(entry: RecentSearchEntry, saving: RecentSearchSav
     }
 }
 
-/**
- * A search entry's long-press menu: the bookmark's action (save, or rename once saved) and, with [onRemove],
- * Remove from History, which leaves the same Undo placeholder as a swipe.
- */
 @Composable
 internal fun RecentSearchMenu(
     entry: RecentSearchEntry,

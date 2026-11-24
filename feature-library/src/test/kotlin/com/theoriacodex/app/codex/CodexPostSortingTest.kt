@@ -19,7 +19,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class CodexPostSortingTest {
-    // Newest saved first, as the store returns them.
     private val stored = listOf(
         testPost(sourcePostId = "a", authorName = "zed", mediaCount = 3),
         testPost(sourcePostId = "b", authorName = null, mediaCount = 1),
@@ -80,7 +79,6 @@ class CodexPostSortingTest {
     }
 
     @Test fun `length sorts keep the order of the comparator that classified posts on every comparison`() {
-        // Videos by source and by media, stills, known lengths with ties, unresolved animations, shared post dates.
         val random = Random(7)
         val posts = List(240) { index ->
             val video = ImageRef("https://example.com/$index.mp4", null, "video/mp4")
@@ -92,7 +90,6 @@ class CodexPostSortingTest {
         }.shuffled(random)
         val durations = posts.filter { isAnimatedPost(it) && random.nextInt(3) > 0 }
             .associate { it.id to 1_000L * random.nextInt(1, 20) }
-        // The previous comparator, kept as the reference order.
         fun reference(sort: CodexSortMode): Comparator<Post> {
             val groups = compareBy<Post> { post ->
                 when {

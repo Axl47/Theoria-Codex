@@ -28,7 +28,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** The Library tab's sections, in segment order. Their names are what the UI-restore store keeps. */
 enum class LibrarySection(val label: String) {
     Codices("Codices"),
     Saved("Saved"),
@@ -36,18 +35,12 @@ enum class LibrarySection(val label: String) {
     ;
 
     companion object {
-        /** The section a stored name refers to, or null for anything unknown. */
         fun named(name: String?): LibrarySection? = entries.firstOrNull { it.name == name }
     }
 }
 
-/**
- * The top of a Library section: each section screen calls it with its own [actions] (the slot's
- * argument), so the header stays one row whichever section is showing.
- */
 typealias LibrarySectionHeader = @Composable (actions: @Composable RowScope.() -> Unit) -> Unit
 
-/** A section shown outside the Library: just its actions, at the end of the row. */
 val BareSectionHeader: LibrarySectionHeader = { actions ->
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -57,11 +50,6 @@ val BareSectionHeader: LibrarySectionHeader = { actions ->
     )
 }
 
-/**
- * Library's title row (title, the active section's [actions], the offline and downloads entry
- * [transfers], the Settings gear) above the section switcher. A section in [marked] carries a dot while
- * another section is showing.
- */
 @Composable
 fun LibraryHeader(
     section: LibrarySection,
@@ -93,7 +81,6 @@ fun LibraryHeader(
                     modifier = Modifier.testTag(librarySectionTag(entry)).semantics {
                         if (dot) stateDescription = "New"
                     },
-                    // No checkmark, so segments keep their width when the selection changes.
                     icon = {},
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -106,7 +93,6 @@ fun LibraryHeader(
     }
 }
 
-/** The small mark for "something arrived since you last looked". */
 @Composable
 fun NewDot(modifier: Modifier = Modifier) {
     Box(modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))

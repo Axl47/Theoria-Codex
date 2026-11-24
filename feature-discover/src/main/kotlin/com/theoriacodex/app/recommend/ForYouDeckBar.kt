@@ -40,10 +40,6 @@ import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.domain.model.SortMode
 
-/**
- * For You's bar: the profile, the source, Refresh for a fresh Mix (on the Mix only), Undo for the deck's last swipe, the
- * deck and grid toggle, and filters.
- */
 @Composable
 internal fun ForYouBar(
     state: ForYouDeckUiState,
@@ -98,7 +94,6 @@ internal fun ForYouBar(
     }
 }
 
-/** Opens the filters; a dot marks it while Sort or Animated only is off its default. */
 @Composable
 private fun FiltersButton(active: Boolean, onClick: () -> Unit) {
     IconButton(onClick, Modifier.testTag(FOR_YOU_FILTERS_TAG)) {
@@ -108,7 +103,6 @@ private fun FiltersButton(active: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Sort and the media filter, which start a fresh Mix, and the way to the profile's hidden tags. */
 @Composable
 internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeckCallbacks, onDismiss: () -> Unit) {
     val hiddenTags = LocalHiddenTagsOpener.current
@@ -121,7 +115,6 @@ internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeck
         FilterSection("Show") {
             FilterChoiceChip("Animated only", config.animatedOnly) { callbacks.onAnimatedOnlyChange(!config.animatedOnly) }
         }
-        // Not a filter: it opens the list of the profile's hidden tags.
         Row(
             Modifier
                 .fillMaxWidth()

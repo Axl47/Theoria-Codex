@@ -17,12 +17,10 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.theoriacodex.app.ui.components.SettingsRow
 
-/** Sites can't verify a third-party app, so Android only sends their links here once the user allows it. */
 @Composable
 fun OpenLinksRow() {
     val context = LocalContext.current
     var summary by remember { mutableStateOf(context.openLinksSummary()) }
-    // The choice is made in system settings, so re-read it each time the user comes back.
     LifecycleResumeEffect(context) {
         summary = context.openLinksSummary()
         onPauseOrDispose {}
@@ -37,7 +35,6 @@ fun OpenLinksRow() {
 private fun Context.openLinksSummary(): String {
     val state = getSystemService(DomainVerificationManager::class.java)?.getDomainVerificationUserState(packageName)
     val hosts = state?.hostToStateMap.orEmpty()
-    // Per-site choices survive Android's overall switch, but it overrides them while off.
     val allowed = if (state?.isLinkHandlingAllowed == true) hosts.values.count { it != DomainVerificationUserState.DOMAIN_STATE_NONE } else 0
     return openLinksSummary(allowed, hosts.size)
 }

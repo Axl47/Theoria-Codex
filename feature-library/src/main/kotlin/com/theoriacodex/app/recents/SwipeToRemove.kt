@@ -36,13 +36,6 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * Lets [content] be swiped left to remove it. Only a leftward horizontal drag is claimed: rightward and
- * vertical drags pass through, so the tab pager and the list keep working from the row. Past
- * [REMOVE_FRACTION] of the width, or after a fast fling, the content slides out and [onRemove] runs.
- * TalkBack gets the same action as a custom action named [label], on the modifier [content] receives: [content]
- * applies it to its clickable node, the one TalkBack focuses.
- */
 @Composable
 internal fun SwipeToRemove(
     label: String,
@@ -72,7 +65,6 @@ internal fun SwipeToRemove(
                         if (finished && (offset.value < -width * REMOVE_FRACTION || flung)) {
                             offset.animateTo(-width)
                             remove()
-                            // The row normally leaves with its entry; if removal failed it slides back.
                             delay(RETURN_DELAY_MS)
                         }
                         offset.animateTo(0f)
@@ -85,14 +77,9 @@ internal fun SwipeToRemove(
     }
 }
 
-/** TalkBack's custom action [label] running [onRemove], for the clickable node of a removable entry. */
 internal fun Modifier.removeAction(label: String, onRemove: () -> Unit): Modifier =
     semantics { customActions = listOf(CustomAccessibilityAction(label) { onRemove(); true }) }
 
-/**
- * Waits for a drag past touch slop and claims it only when it heads left more than up or down; returns
- * the pointer to follow, or null when the gesture belongs to someone else.
- */
 private suspend fun AwaitPointerEventScope.awaitLeftSwipeStart(): PointerId? {
     val down = awaitFirstDown(requireUnconsumed = false)
     var travel = Offset.Zero

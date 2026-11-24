@@ -88,7 +88,6 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
     fun `reopening paints the cached first page and swaps it when fresh results arrive`() = runTest(mainDispatcherRule.dispatcher) {
         val refresh = CompletableDeferred<Unit>()
         val owner = reopenedSearch(refresh)
-        // Not restore(): advancing until idle would run the held request into its timeout.
         owner.onAction(SearchAction.Restore)
         runCurrent()
 
@@ -105,7 +104,6 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
     fun `someone who scrolled the cached page keeps it and gets fresh posts below`() = runTest(mainDispatcherRule.dispatcher) {
         val refresh = CompletableDeferred<Unit>()
         val owner = reopenedSearch(refresh)
-        // Not restore(): advancing until idle would run the held request into its timeout.
         owner.onAction(SearchAction.Restore)
         runCurrent()
 
@@ -116,7 +114,6 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         assertEquals(listOf("cached", "fast-result"), resultIds(owner))
     }
 
-    /** A search that already ran once, reopened with a remembered first page and a network answer held by [refresh]. */
     private suspend fun kotlinx.coroutines.test.TestScope.reopenedSearch(refresh: CompletableDeferred<Unit>): SearchViewModel {
         val queries = InMemoryQueryRepository()
         val firstRun = viewModel(ViewModelSearchAdapter(), queryRepository = queries)
@@ -184,7 +181,6 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("different")))
         owner.onAction(SearchAction.ApplyDraft)
         runCurrent()
-        // A newer search keeps the results on screen too, but it is not a refresh of them.
         assertTrue(owner.state.value.retainsResultsWhileRefreshing)
         assertFalse(owner.state.value.refreshingAppliedSearch)
         assertTrue(owner.state.value.replacingResults)

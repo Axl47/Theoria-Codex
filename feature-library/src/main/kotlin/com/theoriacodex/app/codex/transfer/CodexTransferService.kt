@@ -25,7 +25,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
 import com.theoriacodex.domain.model.Post
 
-/** A finished file waiting to be handed to the system share sheet. */
 data class ExportDocument(
     val title: String,
     val fileName: String,
@@ -47,7 +46,6 @@ sealed interface CodexImportResult {
         val codexId: String,
         val imported: Int,
         val skipped: Int,
-        /** Hosts of custom sites in the file that aren't usable here, so the user can set them up. */
         val missingSiteHosts: List<String> = emptyList(),
     ) : CodexImportResult
 }
@@ -59,10 +57,6 @@ sealed interface CodexSaveResult {
     data class Failure(val message: String) : CodexSaveResult
 }
 
-/**
- * Platform-free Codex JSON transfer; ContentResolver/FileProvider remain shell effects. [keepOffline]
- * hears every committed save, so a Codex kept offline also keeps the posts saved into it.
- */
 class CodexTransferService constructor(
     private val codexRepository: CodexRepository,
     private val transactions: CodexLikesTransactions,
@@ -110,7 +104,6 @@ class CodexTransferService constructor(
         onProgress(CodexImportProgress(0, entries.size))
         val completed = java.util.concurrent.atomic.AtomicInteger()
         val resolvedPosts = withTimeoutOrNull(120_000L) {
-            // A fixed-size batch bounds both live requests and coroutine allocation; awaitAll keeps input order.
             entries.chunked(4).flatMap { batch ->
                 coroutineScope {
                     batch.map { (entry, postId) -> async {
@@ -147,7 +140,6 @@ class CodexTransferService constructor(
         )
     }
 
-    /** Reorders the selected profile's slots while preserving other profiles in one transaction. */
     suspend fun reorderVisibleCodices(visibleIds: List<String>) = withContext(workerDispatcher) {
         if (visibleIds.isEmpty()) return@withContext
         val selected = visibleIds.toSet()
@@ -159,7 +151,6 @@ class CodexTransferService constructor(
         Unit
     }
 
-    /** Commit the selection atomically; optional cache failures cannot truncate durable saves. */
     suspend fun save(codexId: String, posts: List<Post>, cacheFullImage: Boolean): CodexSaveResult =
         withContext(workerDispatcher) {
             val uniquePosts = posts.map(canonicalizePost).distinctBy(Post::id)

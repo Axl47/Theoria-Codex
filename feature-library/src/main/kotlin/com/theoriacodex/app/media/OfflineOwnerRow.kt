@@ -30,11 +30,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.seriesIdOfOfflineOwner
 
-/**
- * One offline owner in the Library's sheet: name, what is kept, its job's progress and any message about
- * it. Cancel or Retry sits on the row; removal is on the row's own menu. The details open the Codex or series.
- * [marked] highlights the Codex the sheet was opened for.
- */
 @Composable
 internal fun OfflineOwnerRow(owner: OfflineStorageOwner, enabled: Boolean, marked: Boolean, actions: OfflineRowActions) {
     val background = if (marked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
@@ -93,12 +88,10 @@ private fun OfflineOwnerMenu(owner: OfflineStorageOwner, enabled: Boolean, actio
     }
 }
 
-/** Opens the Codex or series [owner] keeps offline; null for an owner with no page. */
 private fun offlineOwnerOpener(owner: String, actions: OfflineRowActions): (() -> Unit)? =
     codexIdOfOfflineOwner(owner)?.let { id -> { actions.openCodex(id) } }
         ?: seriesIdOfOfflineOwner(owner)?.let { id -> { actions.openSeries(id) } }
 
-/** What the row says is kept: posts (a series' chapters) available, or the running job's progress. */
 internal fun offlineOwnerStatus(owner: OfflineStorageOwner): String {
     val job = owner.job
     val unit = if (seriesIdOfOfflineOwner(owner.id) != null) "chapter" else "post"

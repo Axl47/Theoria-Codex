@@ -35,8 +35,6 @@ class PixivPkceController constructor(
             codeChallenge = session.codeVerifier.sha256Base64Url(),
             state = session.state,
         ).toUri()
-        // Never launch the browser until the exact callback state and verifier are durably
-        // encrypted. A later controller instance can then finish the same one-shot session.
         sessionStore.writeVerified(session)
         authorizationUri
     }
@@ -58,9 +56,6 @@ class PixivPkceController constructor(
                     authorizationError = uri.getQueryParameter("error"),
                     nowEpochMs = clock(),
                     sessionLifetimeMs = sessionLifetimeMs,
-                    // Pixiv's browser flow returns state on its HTTPS callback, but the final
-                    // native-app handoff can contain only the short-lived code. PKCE
-                    // still binds that code to this exact persisted authorization attempt.
                     allowMissingCallbackState = uri.callbackKind() == PixivCallbackKind.PROVIDER_NATIVE,
                 )
 
@@ -69,11 +64,6 @@ class PixivPkceController constructor(
                     codeVerifier = session.codeVerifier,
                     redirectUri = redirectUri,
                 )
-                // Cancellation is retryable until this check returns. Beyond it, credential
-                // persistence and one-shot session consumption form the terminal callback commit:
-                // ambient cancellation must not report an indeterminate failure after either
-                // durable write. A CancellationException thrown by the persistence boundary itself
-                // still escapes unchanged and leaves the session available for a retry.
                 currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
                     credentialsProvider.savePixivTokens(tokens)

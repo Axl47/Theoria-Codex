@@ -40,10 +40,8 @@ import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 
-/** The pages above anything opened from the Sites list. */
 internal val SITES_PATH = SETTINGS_PATH + SettingDestinations.Sites.title
 
-/** Settings → Sites: built-in and user-added sites, or the page or add/edit form while one is open. */
 @Composable
 fun CustomSitesScreen(
     state: CustomSitesUiState,
@@ -51,7 +49,6 @@ fun CustomSitesScreen(
     onAction: (CustomSitesAction) -> Unit,
     onBack: () -> Unit,
 ) {
-    // Leaving Sites completes a removal still offered for Undo.
     SurfaceLeaveEffect { onAction(CustomSitesAction.CommitRemovals) }
     BackHandler(enabled = state.form != null) { onAction(CustomSitesAction.CloseForm) }
     BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
@@ -100,7 +97,6 @@ private fun SitesListPage(
     }
 }
 
-/** The added sites; a removed one leaves its Undo in its row until the removal commits. */
 @Composable
 private fun AddedSitesGroup(state: CustomSitesUiState, testAll: (@Composable () -> Unit)?, onAction: (CustomSitesAction) -> Unit) {
     SettingsGroup("Added", action = testAll) {
@@ -129,13 +125,8 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, working: Boo
     }
 }
 
-/** The row's way to the key field of [sourceId]; [hasKey] when one is saved, so the button says to check it. */
 internal data class KeyAction(val sourceId: String, val hasKey: Boolean)
 
-/**
- * Why a row's last test failed, with the ways to fix it: a browser check for a challenge, and the key field
- * through [keyAction] when the site refused the keys or an account could get past the challenge.
- */
 @Composable
 internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (CustomSitesAction) -> Unit, keyAction: KeyAction? = null) {
     if (retest !is RetestStatus.Done || retest.ok) return
@@ -153,7 +144,6 @@ internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (Custo
     }
 }
 
-/** A site row's end: the spinner while [retest] runs, else the Working mark when [working], and Re-test. */
 @Composable
 internal fun RetestTrailing(label: String, retest: RetestStatus?, working: Boolean, onRetest: () -> Unit) {
     if (retest == RetestStatus.Running) {
@@ -166,7 +156,6 @@ internal fun RetestTrailing(label: String, retest: RetestStatus?, working: Boole
     }
 }
 
-/** A row's "being tested right now" spinner, sized like the button it stands in for. */
 @Composable
 internal fun RowSpinner(description: String) {
     CircularProgressIndicator(
@@ -175,7 +164,6 @@ internal fun RowSpinner(description: String) {
     )
 }
 
-/** The status line that says which site Test all is on, then how it went. */
 @Composable
 private fun TestAllStatus(progress: SitesTestProgress?, summary: String?) {
     when {
@@ -184,7 +172,6 @@ private fun TestAllStatus(progress: SitesTestProgress?, summary: String?) {
     }
 }
 
-/** A site's "proven to work this session" mark; TalkBack reads it as "Working" when it appears. */
 @Composable
 internal fun WorkingMark() {
     Icon(

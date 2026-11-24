@@ -48,7 +48,6 @@ data class BackupUiState(
     val busy: Boolean get() = operation != null
 }
 
-/** Activity-owned jobs and selected bytes survive UI recreation without reopening the document. */
 class BackupViewModel(
     private val actions: BackupActions,
     private val documents: BackupDocuments,
@@ -64,7 +63,6 @@ class BackupViewModel(
         if (!state.value.busy) mutableState.update { it.copy(applyPreferences = apply) }
     }
 
-    /** Whether the next manual backup carries Recents, reading positions and statistics. */
     fun includeRecents(include: Boolean) {
         if (!state.value.busy) mutableState.update { it.copy(includeRecents = include) }
     }
@@ -75,7 +73,6 @@ class BackupViewModel(
         mutableState.update { it.copy(preview = null, applyPreferences = false) }
     }
 
-    /** Writes a backup to [document] (null when picking was cancelled), with Recents and statistics if chosen. */
     fun export(document: String?) {
         if (document == null || state.value.busy) return
         val includeRecents = state.value.includeRecents
@@ -174,22 +171,18 @@ private fun ProfileRestoreResult.message(): String {
     ).joinToString(" ")
 }
 
-/** "Added 2 extension repos. Could not add 1 extension repo: Now signed with another key." Either half is left out when it has nothing to say. */
 private fun repoSentences(added: Int, problems: Map<String, String>): String? = listOfNotNull(
     "Added ${countLabel(added, "extension repo")}.".takeIf { added > 0 },
     "Could not add ${countLabel(problems.size, "extension repo")}: ${problems.values.distinct().joinToString()}.".takeIf { problems.isNotEmpty() },
 ).joinToString(" ").takeIf { it.isNotEmpty() }
 
-/** "Imported 212 manga. Added 2 extension repos.", with why any of the backup's repos could not be added. */
 private fun SeriesImportResult.message(): String =
     listOfNotNull("Imported ${imported.summary()}.", repoSentences(reposAdded, repoProblems)).joinToString(" ")
 
-/** "212 manga · 1 anime", leaving out a kind the backup does not follow; "series progress" when it follows none. */
 internal fun SeriesImportPreview.summary(): String =
     listOfNotNull(countLabel(manga, "manga", "manga").takeIf { manga > 0 }, countLabel(anime, "anime", "anime").takeIf { anime > 0 })
         .joinToString(" · ").ifEmpty { "series progress" }
 
-/** "1 profile", "2 profiles", "1,204 chapters": [count] with [noun] or [plural]; used by the restore previews and their messages. */
 internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "${NumberFormat.getIntegerInstance().format(count)} ${if (count == 1) noun else plural}"
 
 private fun Throwable.backupMessage(fallback: String): String =

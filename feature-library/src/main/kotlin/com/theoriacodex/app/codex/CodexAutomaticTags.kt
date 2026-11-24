@@ -124,7 +124,6 @@ internal fun representedAutomaticTagSources(
     .map { presentation -> presentation.source }
     .filter { source -> tagOptionsBySource[source].orEmpty().isNotEmpty() }
 
-/** Source tabs include sources with saved rules even after their posts leave the Codex. */
 internal fun automaticTagSourceTabs(
     automaticTags: List<CodexAutomaticTag>,
     tagOptionsBySource: Map<SourceKey, List<CodexSearchTagOption>>,
@@ -135,11 +134,9 @@ internal fun automaticTagSourceTabs(
         .filter { source -> source in ruleSources || tagOptionsBySource[source].orEmpty().isNotEmpty() }
 }
 
-/** The group a new requirement would occupy; indexes are never reused while a group exists. */
 internal fun nextAutomaticTagGroupIndex(groups: List<CodexAutomaticTagGroup>): Int =
     (groups.maxOfOrNull(CodexAutomaticTagGroup::groupIndex) ?: -1) + 1
 
-/** The picker stays open for a source without rules, otherwise only while a group is being edited. */
 internal fun automaticTagAddTarget(
     requestedGroupIndex: Int?,
     groups: List<CodexAutomaticTagGroup>,
@@ -156,7 +153,6 @@ internal fun filterAutomaticTagRows(
     }
 }
 
-/** Dedicated editor for the rules that route newly liked posts into [codexName]. */
 @Composable
 internal fun CodexAutoSaveSheet(
     codexName: String,
@@ -249,7 +245,6 @@ private fun AutoSaveSourceTabs(
     CodexSourceTabs(sources, selected, ruleCounts, "tag", onSelect)
 }
 
-/** One tab per source, each showing how many of [noun] it holds. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CodexSourceTabs(
@@ -386,7 +381,6 @@ private fun AutoSaveTagPicker(
     }
 }
 
-/** A bounded lazy list, since a large Codex can offer thousands of tags inside this scrolling sheet. */
 @Composable
 private fun AutoSaveTagList(
     rows: List<List<CodexAutomaticTagRow>>,

@@ -61,7 +61,6 @@ class AccountCoordinatorTest {
     }
 }
 
-/** Treats creators whose uploads query starts with `user:` as accounts. */
 private class FakeAccountAdapter : SourceAdapter, CreatorPostsSourceAdapter, AccountProfileSourceAdapter {
     val accountRequests = mutableListOf<Pair<AccountFeed, String?>>()
 

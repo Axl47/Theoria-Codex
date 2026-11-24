@@ -17,12 +17,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * The non-secret status exposed to the app shell.
- *
- * Storage failures are intentionally split by the action a user or caller can take. None of
- * these states contains exception text because provider credentials can occur in nested causes.
- */
 sealed interface CredentialStoreRecoveryState {
     data object Loading : CredentialStoreRecoveryState
 
@@ -39,10 +33,6 @@ class CredentialStoreUnavailableException : IllegalStateException(
     "Source credentials are unavailable in the current recovery state",
 )
 
-/**
- * A deliberately redacted, whole-store snapshot. Equality verifies committed envelope writes;
- * [toString] never exposes tokens, user IDs, or API keys.
- */
 class SourceCredentialSnapshot(
     val pixivAccessToken: String? = null,
     val pixivRefreshToken: String? = null,
@@ -51,7 +41,6 @@ class SourceCredentialSnapshot(
     val gelbooruApiKey: String? = null,
     val rule34XxxUserId: String? = null,
     val rule34XxxApiKey: String? = null,
-    /** Keys of user-added sites by source id; written only when non-empty (plan D7). */
     val customSites: Map<String, SiteCredentials> = emptyMap(),
 ) {
     fun pixivTokens(): PixivAuthTokens? {
@@ -61,7 +50,6 @@ class SourceCredentialSnapshot(
         return PixivAuthTokens(accessToken, refreshToken, expiresAt)
     }
 
-    /** The keys in [source]'s slot; null when either half is blank or [source] has no slot. */
     fun userApiKey(source: SourceKey): UserApiKey? {
         val (userId, apiKey) = when (source) {
             SourceKey.GELBOORU -> gelbooruUserId to gelbooruApiKey
@@ -160,7 +148,6 @@ sealed interface CredentialStoreWriteResult {
 internal interface CredentialEnvelopeStore {
     suspend fun read(): CredentialEnvelopeReadResult
 
-    /** Writes atomically and verifies a decrypting read-back before reporting success. */
     suspend fun writeVerified(snapshot: SourceCredentialSnapshot): CredentialStoreWriteResult
 
     suspend fun reset(): Boolean
@@ -220,8 +207,6 @@ internal class VersionedSourceCredentialsStore(
             if (mutableRecoveryState.value != CredentialStoreRecoveryState.ReconnectRequired) {
                 return@withLock false
             }
-            // A reset may partially succeed or be cancelled. Never keep serving a cached snapshot
-            // after the user has authorized destructive recovery.
             loadedSnapshot = null
             if (envelopeStore.reset()) {
                 loadedSnapshot = SourceCredentialSnapshot()

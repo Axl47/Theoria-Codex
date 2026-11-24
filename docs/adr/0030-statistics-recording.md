@@ -18,6 +18,7 @@ Statistics are local and must survive DST changes, long gaps and restoring the s
 - Series time fields (`readingMs`, `animeMs`) are absent from stores and backups written before series time counted, and read as zero.
 - A history key that is not an ISO date fails validation like any other bad field, so the store resets.
 - A facet added by a later build is skipped rather than failing the whole store.
+- `AppUsageTracker` is the process-lifetime owner of monotonic foreground timing and mutually exclusive route-category timing (`StatisticsUsageCategory`): at most one category counts at a time, and screens such as Settings count as foreground time with no category.
 
 ## Consequences
 
@@ -28,3 +29,4 @@ Counters are monotonic; there is no way to subtract on restore.
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/DailyStatistics.kt`: `splitDailyUsage`, `DailyActivity`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt`: `StatisticsRepository.mergeRestored`, `seedSearchedTags`, `LifetimeStatistics`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/StatisticsRepositories.kt`: `StatisticsTypedTagCountRecord`, `StatisticsStoreRecord`, `seedSearchedTags`, `parseHistoryDay`, `searchedTerms`
+- `feature-settings/src/main/kotlin/com/theoriacodex/app/statistics/AppUsageTracker.kt`: `AppUsageTracker`, `StatisticsUsageCategory`

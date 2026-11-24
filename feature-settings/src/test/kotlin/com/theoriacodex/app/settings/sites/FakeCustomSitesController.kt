@@ -24,7 +24,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** Scriptable [CustomSitesController] that records every call; successful adds and removals update [sites]. */
 internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = emptyList()) : CustomSitesController {
     data class ProbeCall(val input: String, val credentials: SiteCredentials?, val headers: SiteHeaders)
 
@@ -66,11 +65,9 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     val edits = mutableListOf<Pair<String, CustomSiteEdit>>()
     val removals = mutableListOf<String>()
 
-    /** Source and agent of every [checkVerification] and [completeVerification] call. */
     val checks = mutableListOf<Pair<SourceKey, String>>()
     val completions = mutableListOf<Pair<SourceKey, String>>()
 
-    /** Every [setSetupHost] value, in order. */
     val setupHosts = mutableListOf<String?>()
 
     override suspend fun probe(input: String, credentials: SiteCredentials?, headers: SiteHeaders): SiteProbeResult =
@@ -114,7 +111,6 @@ internal class FakeCustomSitesController(initial: List<CustomSiteSummary> = empt
     }
 }
 
-/** The app's check page as [controller]'s sites see it: each source's check runs through [controller]. */
 internal fun siteChecks(controller: CustomSitesController, scope: CoroutineScope? = null, io: CoroutineDispatcher = Dispatchers.Unconfined) =
     SiteChecks(
         NoCookies,

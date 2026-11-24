@@ -32,16 +32,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 
-/**
- * Owner of Settings → Sites (plan C9). Turns [CustomSitesController] results into form stages and
- * plain messages; it never persists anything itself. Removing a site never touches library data.
- * A removal is held back for Undo ([DeferredRemovals]) and commits in [removalScope], which must outlive this
- * owner so leaving Settings, or clearing this owner, still completes it. Edit page changes are written there too,
- * one at a time ([SiteLiveEdits]), including one still waiting when this owner is cleared.
- */
 class CustomSitesViewModel(
     private val controller: CustomSitesController,
-    /** The app's browser check page, which this opens for a site. */
     private val checks: SiteChecks,
     coroutineScope: CoroutineScope? = null,
     removalScope: CoroutineScope? = null,
@@ -60,7 +52,6 @@ class CustomSitesViewModel(
     )
     val state: StateFlow<CustomSitesUiState> = mutableState.asStateFlow()
 
-    /** The add form's probe or save; closing the form cancels it. */
     private var formJob: Job? = null
 
     private var testAllJob: Job? = null
@@ -141,14 +132,8 @@ class CustomSitesViewModel(
         }
     }
 
-    /** The check page this screen opened, whose callbacks write here. */
     private var ownCheck: OpenSiteCheck? = null
 
-    /**
-     * Opens the app's browser check for [host]: a stored or built-in site's, or else the Add form's, whose site keeps
-     * the browser's cookies until the check is dismissed, the address changes or the form closes or saves. A pass fills
-     * the Add form, or updates the site's row.
-     */
     private fun startVerification(host: String) {
         val source = state.value.sites.firstOrNull { it.host == host }?.let { SourceKey.parse(it.sourceId) }
             ?: state.value.builtInSites.firstOrNull { it.host == host }?.source
@@ -172,19 +157,15 @@ class CustomSitesViewModel(
         ownCheck = checks.opened
     }
 
-    /** A stored or built-in site passed its check: its row shows its live status, and an open Edit form takes the agent. */
     private fun verified(sourceId: String, userAgent: String) = mutableState.update { current ->
         current.copy(
             retests = current.retests - sourceId,
-            // The open Edit form's agent field follows, or a later Save would revert the saved agent.
             form = (current.form as? SiteForm.Edit)?.takeIf { it.sourceId == sourceId }
                 ?.let { it.copy(fields = it.fields.copy(userAgent = userAgent)) } ?: current.form,
         )
     }
 
-    /** The Add form's site passed its check with [userAgent]; [probe] is what the check found. */
     private fun SiteForm.Add.verified(userAgent: String, probe: SiteProbeResult?): SiteForm.Add =
-        // A site that made the app prove itself may limit visitors without an account, so offer the key now.
         copy(fields = fields.copy(userAgent = userAgent), showCredentials = true).applyProbe(probe)
 
     private suspend fun probeAddTarget(userAgent: String): SiteProbeResult? {
@@ -195,7 +176,6 @@ class CustomSitesViewModel(
     }
 
     override fun onCleared() {
-        // The check page outlives this screen, but its callbacks write to this one, so it closes with it.
         if (ownCheck != null && checks.opened === ownCheck) checks.close()
         liveEdits.close()
         removals.commitAll()
@@ -204,7 +184,6 @@ class CustomSitesViewModel(
 
     private fun openForm(form: SiteForm) {
         liveEdits.flush()
-        // An Add form's site stops sharing the browser's cookies once the form gives way.
         controller.setSetupHost(null)
         formJob?.cancel()
         mutableState.update { it.copy(form = form, notice = null) }
@@ -229,7 +208,6 @@ class CustomSitesViewModel(
 
     private fun closeForm() {
         liveEdits.flush()
-        // An Add form's site stops sharing the browser's cookies once the form gives way.
         controller.setSetupHost(null)
         formJob?.cancel()
         mutableState.update { it.copy(form = null) }
@@ -238,12 +216,10 @@ class CustomSitesViewModel(
     private fun setAddress(value: String) {
         val form = state.value.form as? SiteForm.Add ?: return
         if (form.stage.busy) return
-        // A different address is a different site, which neither the waiting link nor the old one's cookies belong to.
         controller.setSetupHost(null)
         updateAdd { copy(address = value, stage = AddStage.Address(), linkAfterSetup = null) }
     }
 
-    /** Which field edits invalidate a finished probe, so a draft always matches what was checked. */
     private enum class ProbeReset { NEVER, ALWAYS, IF_CONFIRMING }
 
     private fun setFields(reset: ProbeReset, transform: SiteFields.() -> SiteFields) {
@@ -260,12 +236,10 @@ class CustomSitesViewModel(
         }
     }
 
-    /** Changes a field; on the Edit page the change is saved after [wait] (typing restarts the wait). */
     private fun editField(field: LiveField, reset: ProbeReset, wait: Duration, transform: SiteFields.() -> SiteFields) {
         setFields(reset, transform)
         val form = state.value.form as? SiteForm.Edit ?: return
         if (form.saving) return
-        // An invalid field waits unsaved (see SiteLiveEdits), so say why.
         val error = when {
             form.fields.label.isBlank() -> mutationMessage(CustomSiteMutation.InvalidLabel(SiteProfile.MAX_LABEL_LENGTH))
             form.fields.headers() is FormInput.Invalid -> HEADER_ERROR_MESSAGE
@@ -276,7 +250,6 @@ class CustomSitesViewModel(
         liveEdits.schedule(form.sourceId, field, fields, wait)
     }
 
-    /** Saves a live edit; a failure shows on the Edit page, or above the list once the page has closed. True once saved. */
     private suspend fun saveLive(sourceId: String, edit: CustomSiteEdit): Boolean {
         val result = runCatchingPreservingCancellation { controller.update(sourceId, edit) }.getOrNull()
         val message = if (result == null) UNEXPECTED_FAILURE_MESSAGE else mutationMessage(result)
@@ -291,7 +264,6 @@ class CustomSitesViewModel(
         return result == CustomSiteMutation.Success
     }
 
-    /** A pasted snippet (`user_id=…&api_key=…` or `login=…&api_key=…`) in either field fills both. */
     private fun setCredentialField(value: String, assign: SiteFields.(String) -> SiteFields) {
         val snippet = parseCredentialSnippet(value)
         setFields(ProbeReset.IF_CONFIRMING) {
@@ -379,12 +351,10 @@ class CustomSitesViewModel(
         }
     }
 
-    /** Declining a reconnect adds nothing and returns to the confirm form. */
     private fun dismissReconnect() = updateAdd {
         (stage as? AddStage.Reconnect)?.let { copy(stage = AddStage.Confirm(it.probe)) } ?: this
     }
 
-    /** Saves the API key section: new keys (checked right after) or clearing the saved ones. */
     private fun saveEdit() {
         val form = state.value.form as? SiteForm.Edit ?: return
         if (form.saving) return
@@ -412,12 +382,10 @@ class CustomSitesViewModel(
                     )
                 }
             }
-            // New keys aren't checked on save, so check them right away and show the answer on the row.
             if (result == CustomSiteMutation.Success && edit.credentials is CredentialEdit.Replace) retest(form.sourceId)
         }
     }
 
-    /** Tests one site's row again, a built-in source's (by its [SourceKey.id]) or an added site's. */
     private fun retest(sourceId: String) {
         if (state.value.retests[sourceId] == RetestStatus.Running) return
         val builtIn = state.value.builtInSites.firstOrNull { it.source.id == sourceId }
@@ -435,7 +403,6 @@ class CustomSitesViewModel(
         }
     }
 
-    /** Tests every site in list order, one at a time, naming each on the status line as it goes. */
     private fun testAll() {
         if (testAllJob?.isActive == true) return
         val builtIns = state.value.builtInSites
@@ -453,7 +420,6 @@ class CustomSitesViewModel(
         }
     }
 
-    /** Runs one site's [test] under the status line; true when it left the site's row marked as passed. */
     private suspend fun testing(sourceId: String, progress: SitesTestProgress, test: suspend () -> Unit): Boolean {
         mutableState.update {
             it.copy(testProgress = progress, testSummary = null, retests = it.retests + (sourceId to RetestStatus.Running))
@@ -468,10 +434,6 @@ class CustomSitesViewModel(
         mutableState.update { it.copy(retests = it.retests + (site.source.id to status)) }
     }
 
-    /**
-     * Hides the site at once with Undo in its row; the site and its keys are removed only when the Undo times out
-     * or Sites is left, so Undo never has to write secrets back from memory.
-     */
     private fun remove(sourceId: String) {
         val site = state.value.sites.firstOrNull { it.sourceId == sourceId } ?: return
         if ((state.value.form as? SiteForm.Edit)?.sourceId == sourceId) closeForm()
@@ -479,7 +441,6 @@ class CustomSitesViewModel(
         removals.remove(sourceId, "Removed ${site.label}")
     }
 
-    /** Removes the site; a failure shows its message and leaves Retry in the row. */
     private suspend fun commitRemoval(sourceId: String): Boolean {
         val result = runCatchingPreservingCancellation { controller.remove(sourceId) }.getOrNull()
         val failure = if (result == null) UNEXPECTED_FAILURE_MESSAGE else mutationMessage(result)
@@ -496,17 +457,14 @@ class CustomSitesViewModel(
     }
 }
 
-/** True while the add flow waits on the controller or the user's reconnect answer. */
 internal val AddStage.busy: Boolean
     get() = this is AddStage.Probing || this is AddStage.Saving || this is AddStage.Reconnect
 
-/** A parsed form value, or the message explaining why it can't be used. */
 private sealed interface FormInput<out T> {
     data class Ok<T>(val value: T) : FormInput<T>
     data class Invalid(val message: String) : FormInput<Nothing>
 }
 
-/** Both fields blank means no keys; one blank is a mistake worth pointing out. */
 private fun SiteFields.credentials(): FormInput<SiteCredentials?> {
     val user = user.trim()
     val apiKey = apiKey.trim()
@@ -517,7 +475,6 @@ private fun SiteFields.credentials(): FormInput<SiteCredentials?> {
     }
 }
 
-/** Blank fields use the defaults; [SiteHeaders] rejects multi-line or oversized values. */
 private fun SiteFields.headers(): FormInput<SiteHeaders> = runCatching {
     SiteHeaders(userAgent = userAgent.trim().ifEmpty { null }, referer = referer.trim().ifEmpty { null })
 }.fold(onSuccess = { FormInput.Ok(it) }, onFailure = { FormInput.Invalid(HEADER_ERROR_MESSAGE) })

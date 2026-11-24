@@ -62,7 +62,6 @@ class AndroidAutoBackupFolder(private val resolver: ContentResolver, tree: Uri) 
     }
 }
 
-/** Keeps the system's grant to the picked folder across restarts and returns its display name. */
 fun ContentResolver.adoptAutoBackupFolder(tree: Uri): String? {
     takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
     val document = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))

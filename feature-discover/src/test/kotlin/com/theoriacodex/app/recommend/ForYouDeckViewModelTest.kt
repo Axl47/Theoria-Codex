@@ -38,7 +38,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The For You owner over fakes that answer at once, so each call settles before it returns. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouDeckViewModelTest {
     private val engine = FakeForYouEngine(listOf("a", "b", "c"))
@@ -50,7 +49,6 @@ class ForYouDeckViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
-    /** Outlives every owner, as the activity's scope does. */
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     @After fun tearDown() {
@@ -66,7 +64,6 @@ class ForYouDeckViewModelTest {
     private val ForYouDeckViewModel.posts get() = top.feed.value.posts
     private val ForYouDeckViewModel.current get() = checkNotNull(top.deck.state.value.current)
 
-    /** Decides the top level's current card and returns it. */
     private fun ForYouDeckViewModel.decide(choice: TriageChoice): Post = current.also { top.deck.decide(choice, it.id) }
 
     private fun ForYouDeckViewModel.skip(count: Int) = repeat(count) { decide(TriageChoice.Skip) }
@@ -87,7 +84,6 @@ class ForYouDeckViewModelTest {
         assertEquals(4, owner.posts.size)
         owner.skip(1)
         assertEquals(listOf("a", "b", "c", "a", "b", "c", "a", "b"), owner.posts.lanes())
-        // Lanes a and b each gave three of their eight posts; c gave two and still holds enough.
         assertEquals(listOf("a:0", "b:0", "c:0", "a:1", "b:1"), engine.requests)
     }
 
@@ -115,7 +111,6 @@ class ForYouDeckViewModelTest {
         val fresh = listOf(testPost(DECK_SOURCE, "s-1"), testPost(DECK_SOURCE, "s-2"), testPost(DECK_SOURCE, "s-3"))
         val owner = owner()
         val liked = owner.current
-        // The liked post itself and one the Mix already dealt are not new to the user.
         trails.similar = listOf(liked, owner.posts[2]) + fresh
         owner.decide(TriageChoice.Like)
         assertEquals(4, owner.posts.size)
@@ -154,7 +149,6 @@ class ForYouDeckViewModelTest {
     @Test fun `a run of skips lowers its lane and writes nothing`() {
         engine.tags = listOf("a", "b")
         val owner = owner()
-        // Lane a is skipped three times in a row while lane b is liked.
         repeat(3) {
             owner.decide(TriageChoice.Skip)
             owner.decide(TriageChoice.Like)
@@ -197,7 +191,6 @@ class ForYouDeckViewModelTest {
 
     @Test fun `a copy of a kept post on another site is not dealt, nor a second copy of a dealt one`() {
         val kept = testPost(SourceKey.PIXIV, "kept")
-        // b-0-0 is a repost of the kept post; c-0-0 is the same picture as a-0-0.
         val copies = mapOf("b-0-0" to setOf(kept.id), "c-0-0" to setOf(testPost(DECK_SOURCE, "a-0-0").id))
         val owner = owner(deckEnvironment(kept = setOf(kept.id))) { post -> copies[post.id.sourcePostId].orEmpty() + post.id }
 
@@ -231,10 +224,8 @@ class ForYouDeckViewModelTest {
         assertEquals(listOf("a", "c", "a"), owner.posts.lanes())
         owner.skip(5)
         assertFalse("b" in owner.posts.lanes())
-        // The lanes kept their place: nothing was asked for again.
         assertEquals(1, engine.builds)
 
-        // Undo of the hide brings the lane back.
         owner.synchronize(deckEnvironment())
         assertEquals(listOf("a", "b", "c"), owner.state.value.chips.map(ForYouChip::label))
         owner.skip(4)
@@ -261,14 +252,12 @@ class ForYouDeckViewModelTest {
         val level = owner.top
         val hid = owner.decide(TriageChoice.Hide("b"))
         assertEquals(listOf(DECK_SOURCE to "b"), actions.hidden)
-        // The hide reaches the owner through the profile's settings.
         owner.synchronize(deckEnvironment(hiding("b")))
 
         assertSame(level, owner.top)
         assertNull(owner.state.value.only)
         assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
         assertEquals(setOf("a", "c"), owner.posts.lanes().toSet())
-        // The deck moved on to a card the hidden tag does not hide.
         assertTrue(owner.current in owner.posts)
 
         level.deck.undo()
@@ -374,7 +363,6 @@ class ForYouDeckViewModelTest {
         assertEquals(trail, owner.posts)
         assertEquals(owner.top.id, owner.viewerFeed.queryHash)
         assertEquals(listOf("sea"), owner.top.query?.includeTags)
-        // Chips belong to the Mix; a trail keeps the one it was forked from.
         owner.selectChip(laneId("b"))
         assertEquals(2, owner.levels.value.size)
 
@@ -383,7 +371,6 @@ class ForYouDeckViewModelTest {
         assertSame(mix, owner.levels.value.single())
         assertSame(card, owner.current)
         assertEquals(mix.id, owner.viewerFeed.queryHash)
-        // The post the trail's skip decided is never dealt by the Mix.
         owner.skip(7)
         assertTrue(owner.posts.size >= 12)
         assertFalse(trail[0] in owner.posts)
@@ -399,7 +386,6 @@ class ForYouDeckViewModelTest {
         assertEquals(fresh, owner.posts)
 
         val liked = owner.decide(TriageChoice.Like)
-        // The like reaches the owner as a kept post; the trail still holds its card for Undo.
         owner.synchronize(deckEnvironment(kept = setOf(keptBefore.id, liked.id)))
         assertEquals(fresh, owner.posts)
         owner.top.deck.undo()

@@ -121,7 +121,6 @@ class RecentsClearWorkflowTest {
             val repository = InMemoryRecentsRepository(clock = { now++ })
             repository.recordSearch(recentQuery().copy(mode = QueryMode.Unified), "unified")
             val shown = repository.observeSearches().first()
-            // The UI snapshot predates this entry; Undo must still capture its exact removal.
             repository.recordSearch(recentQuery(), "new-manual")
             val original = repository.observeSearches().first()
             RecentsClearWorkflow(repository).clear(RecentsClearTarget.SEARCHES, emptyList(), emptyList(), shown) { _, _ ->

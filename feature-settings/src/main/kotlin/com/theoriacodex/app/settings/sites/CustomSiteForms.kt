@@ -39,7 +39,6 @@ import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 
-/** Add flow: address → probe → keys if asked → confirm name and opt-in → save. */
 @Composable
 internal fun AddSitePage(form: SiteForm.Add, onAction: (CustomSitesAction) -> Unit) {
     val stage = form.stage
@@ -119,10 +118,6 @@ private fun ConfirmSection(
     }
 }
 
-/**
- * Edit flow: name, opt-in and headers apply as they change; keys (replace or remove) have their own Save
- * because new keys are checked once saved. Never changes the address or family.
- */
 @Composable
 internal fun EditSitePage(
     form: SiteForm.Edit,
@@ -146,7 +141,6 @@ internal fun EditSitePage(
                 IncludeSwitch(form.fields.includeInUnifiedAndForYou, editable, onAction)
             }
         }
-        // A site that works needs no browser check; any later outage clears Working and brings the check back.
         if (!working) {
             SettingsGroup("Browser check") {
                 SettingsRow(
@@ -154,7 +148,6 @@ internal fun EditSitePage(
                     enabled = editable,
                     onClick = { onAction(CustomSitesAction.StartVerification(site.host)) },
                 )
-                // Why the last check failed; a pass hides this group once the page closes itself.
                 (retest as? RetestStatus.Done)?.takeUnless { it.ok }?.let {
                     AnnouncedText(it.message, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), error = true)
                 }
@@ -162,7 +155,6 @@ internal fun EditSitePage(
         }
         SettingsGroup(null) {
             FormColumn {
-                // Opens by itself when the site can't work without keys, or the person was sent here to enter them.
                 ExpandableSection("API key", initiallyExpanded = form.expandKeys || site.availability == CustomSiteAvailability.NEEDS_CREDENTIALS) {
                     EditCredentials(form, site.family, editable, onAction)
                 }
@@ -207,7 +199,6 @@ private fun EditCredentials(
     }
 }
 
-/** User and masked API key. The user field is named the way [family] names it. */
 @Composable
 private fun CredentialFields(
     fields: SiteFields,
@@ -250,7 +241,6 @@ private fun LabelField(label: String, enabled: Boolean, onAction: (CustomSitesAc
     )
 }
 
-/** The single opt-in shared by Unified search and For You (plan D4); new sites start off. */
 @Composable
 private fun IncludeSwitch(checked: Boolean, enabled: Boolean, onAction: (CustomSitesAction) -> Unit) {
     SwitchRow("Include in Unified and For You", checked, enabled = enabled, contentPadding = PaddingValues(vertical = 4.dp)) {
@@ -258,10 +248,8 @@ private fun IncludeSwitch(checked: Boolean, enabled: Boolean, onAction: (CustomS
     }
 }
 
-/** Collapsed User-Agent and Referer overrides; blank fields use the defaults, which the placeholders say. */
 @Composable
 private fun AdvancedHeaders(fields: SiteFields, enabled: Boolean, onAction: (CustomSitesAction) -> Unit) {
-    // Read once: a value typed while open must not fold the section away under the person typing.
     val startExpanded = rememberSaveable { fields.userAgent.isNotEmpty() || fields.referer.isNotEmpty() }
     ExpandableSection("Advanced", initiallyExpanded = startExpanded) {
         OutlinedTextField(
@@ -291,7 +279,6 @@ private fun FormColumn(content: @Composable () -> Unit) {
     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
 }
 
-/** A spinner with its words, so progress is announced and never conveyed by motion alone. */
 @Composable
 internal fun Progress(text: String) {
     Row(

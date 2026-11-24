@@ -12,7 +12,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Shared mechanics for the independently versioned credential and one-shot PKCE envelopes. */
 class AndroidKeystoreAesGcm(
     private val alias: String,
     private val additionalAuthenticatedData: ByteArray,

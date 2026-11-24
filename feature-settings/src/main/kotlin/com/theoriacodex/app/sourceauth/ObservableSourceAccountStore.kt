@@ -11,24 +11,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * The recoverable credential boundary used by the application container.
- *
- * Keeping recovery on the interface lets the app shell respond to encrypted-store failures
- * without depending on the Android storage implementation.
- */
 interface RecoverableSourceCredentialsStore : SourceCredentialsProvider {
     val recoveryState: StateFlow<CredentialStoreRecoveryState>
 
     suspend fun resetAfterReconnectRequired(): Boolean
 }
 
-/**
- * Stable account capability state for the lifetime of the application.
- *
- * Credential changes update [availableSources] instead of rebuilding the source registry and
- * every route coordinator that depends on it.
- */
 interface SourceAccountStore : RecoverableSourceCredentialsStore {
     val availableSources: StateFlow<Set<SourceKey>>
 

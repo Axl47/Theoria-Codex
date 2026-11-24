@@ -11,7 +11,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
-/** Activity-owned save jobs survive sheet dismissal and configuration changes. */
 class CodexSaveViewModel(
     transfer: CodexTransferService,
     codices: CodexRepository,

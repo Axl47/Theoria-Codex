@@ -77,7 +77,6 @@ import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 
-// Validated against the Theoria surface with the dataviz palette checks (lightness, CVD, contrast).
 internal val BrowsingColor = Color(0xFF5A99DD)
 internal val WatchingColor = Color(0xFFCC689C)
 private val CodexColor = Color(0xFFA58C3A)
@@ -91,7 +90,6 @@ private enum class PostSourceView(val label: String) { WATCHED("Watched"), SAVED
 private enum class TagView(val label: String) { WATCHED("Watched"), SAVED("Saved") }
 private enum class CodexPostView(val label: String) { OPENED("Opened"), VIDEOS("Videos"), IMAGES("Images") }
 
-/** Lifetime totals and daily trends. A selected Codex replaces the list until Back. */
 @Composable
 fun StatsScreen(statistics: StatisticsSummary, onOpenPost: (PostId) -> Unit, onBack: () -> Unit) {
     var selectedCodexId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -104,7 +102,6 @@ fun StatsScreen(statistics: StatisticsSummary, onOpenPost: (PostId) -> Unit, onB
     }
 }
 
-/** A source lookup can take a moment; one post opens at a time so a second tap cannot stack Viewers. */
 @Composable
 fun rememberPostOpener(openPost: suspend (PostId) -> Unit): (PostId) -> Unit {
     val scope = rememberCoroutineScope()
@@ -158,7 +155,6 @@ private fun TimeSection(statistics: StatisticsSummary) {
     Box(Modifier.padding(top = 8.dp)) { TrendCard(statistics) }
 }
 
-/** All time spent in the app and how it divides; the share preview shows the same card. */
 @Composable
 internal fun OverallTimeCard(caption: String, overall: StatsShareOverall) {
     val categorized = overall.browsingMs + overall.watchingMs + overall.codexMs + overall.readingMs + overall.animeMs
@@ -173,7 +169,6 @@ internal fun OverallTimeCard(caption: String, overall: StatsShareOverall) {
                 TimeSegment("In Codices", overall.codexMs, CodexColor),
                 TimeSegment("Reading", overall.readingMs, ReadingColor),
                 TimeSegment("Anime", overall.animeMs, AnimeColor),
-                // Foreground time also counts screens without a category, such as Settings.
                 TimeSegment("Other", (overall.timeInAppMs - categorized).coerceAtLeast(0L), OtherColor),
             ),
         )
@@ -317,17 +312,12 @@ private fun CodexStatsDetail(codex: CodexStatisticsSummary, onOpenPost: (PostId)
     }
 }
 
-/** Promoted posts carry a local thumbnail; posts without one yet stay label-only. */
 @Composable
 private fun TopPostRow(row: CodexPostStatistic, duration: Boolean, onOpen: (PostId) -> Unit) {
     val amount = if (duration) formatStatsDuration(row.value) else row.value.toString()
     StatsPostRow(row.key, row.label, "${row.percentage}% · $amount", row.percentage, row.thumbnail?.let(::File), onOpen = onOpen)
 }
 
-/**
- * One ranked post: thumbnail, label and share bar, which open it in the Viewer. [trailing] sits outside that target,
- * so it can hold its own control. [reserveThumbnail] keeps labels aligned in a list where thumbnails arrive later.
- */
 @Composable
 internal fun StatsPostRow(
     postKey: String,
@@ -354,7 +344,6 @@ internal fun StatsPostRow(
     }
 }
 
-/** A post's square preview; an empty placeholder while [thumbnail] is still loading or unavailable. */
 @Composable
 internal fun StatsPostThumbnail(postKey: String, thumbnail: Any?) {
     AsyncImage(
@@ -365,10 +354,6 @@ internal fun StatsPostThumbnail(postKey: String, thumbnail: Any?) {
     )
 }
 
-/**
- * Stats keeps thumbnails only for ranked posts, so any other post falls back to [loadPost]: the saved copy, or the
- * post looked up on its site. The result is an image model for [StatsPostThumbnail].
- */
 @Composable
 internal fun rememberStatsPostThumbnail(key: String, retainedPath: String?, loadPost: suspend (PostId) -> Post?): Any? {
     val context = LocalContext.current

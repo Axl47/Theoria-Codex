@@ -18,19 +18,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** What foreground time counts as; at most one at a time, and none for screens such as Settings. */
 enum class StatisticsUsageCategory {
     BROWSING,
-    /** Watching posts in the Viewer. */
     WATCHING,
     CODEX,
-    /** Reading a series' chapters in the Viewer. */
     READING,
-    /** Watching a series' episodes in the Viewer. */
     ANIME,
 }
 
-/** Process-lifetime owner for monotonic foreground and mutually exclusive route-category timing. */
 class AppUsageTracker constructor(
     private val repository: StatisticsRepository,
     private val scope: CoroutineScope,

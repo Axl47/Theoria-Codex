@@ -14,6 +14,7 @@ Installed copies of stores, backups, journals and manifests must keep loading un
 - Source identity goldens were captured while `SourceKey` was an enum; opening identity to custom sites must leave built-in output byte-identical. On mismatch the actual output is written to `build/golden-actual/`.
 - Odd DataStore files are pinned for which inputs repair and which reset the store (original bytes kept as `.corrupt`). Under Gson a null on a defaulted primitive repaired, a null on a non-null list, map or string reset the store, and a null nested in a record threw on every read without quarantine; `coerceInputValues` now repairs all of them to the default.
 - Media-kit goldens: `PostDownloadJobStoreGoldenTest` pins the v3 download queue (`gson-written.json` is the Gson store's own output) so queues older builds wrote restore the same jobs, including an interrupted transfer returning queued with its native download id and origin label `Codex · A=B`. `PixivUgoiraDiskCacheGoldenTest` pins the ugoira sidecar the Gson writer stored, HTML-sensitive file name included, so it decodes the same.
+- `tag_suggestions.json` has three goldens in `feature-search/src/test/resources/golden/tag-suggestions`: `gson-written.json` is the Gson store's own output (HTML-escaped strings); `legacy.json` is a sparse file with a quoted count, a null source list, an unknown source and a retired key; `full.json` was captured from the kotlinx store and sets every key, because the Gson store never wrote a source namespace.
 
 ## Consequences
 
@@ -31,3 +32,4 @@ A failing golden means compatibility broke, not that the golden is wrong.
 - `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadGoldenTest.kt`: `RecentSearchPayloadGoldenTest`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `PostDownloadJobStoreGoldenTest`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/PixivUgoiraDiskCacheGoldenTest.kt`: `PixivUgoiraDiskCacheGoldenTest`
+- `feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreGoldenTest.kt`: `TagSuggestionStoreGoldenTest`

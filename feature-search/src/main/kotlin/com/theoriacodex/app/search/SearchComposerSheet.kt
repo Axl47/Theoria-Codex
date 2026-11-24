@@ -30,25 +30,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 
-/** The most of the window the composer takes, so the results it edits stay in view above it. */
 private const val SHEET_MAX_FRACTION = 0.62f
 
-/**
- * Room always left above the composer, even with the keyboard up, measured from the window's top: the status bar
- * and the search bar take about half, so the rest keeps a row of results in view while tags are added.
- */
 private val RESULTS_PEEK = 200.dp
 
-/** On short windows the sheet takes up to this much before results get any room. */
 private val SHEET_MIN_HEIGHT = 360.dp
 
 private val PROGRESS_HEIGHT = 2.dp
 
-/**
- * The composer's window. It stays a Dialog, so it owns the keyboard and system Back, but it is laid out as an
- * undimmed sheet along the bottom edge: the results above keep updating as the query changes. A tap above the
- * sheet closes it. [replacing] shows a slim progress line along its top edge while newer results are on the way.
- */
 @Composable
 internal fun SearchComposerSheet(
     replacing: Boolean,
@@ -88,7 +77,6 @@ internal fun SearchComposerSheet(
     }
 }
 
-/** Dialogs dim what is behind them; the composer's results must stay readable. */
 @Composable
 private fun UndimmedDialogWindow() {
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window

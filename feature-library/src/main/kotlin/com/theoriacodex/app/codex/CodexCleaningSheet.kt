@@ -34,11 +34,6 @@ import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.PostId
 
-/**
- * The opened collection is the target; comparison collections are read-only inputs. [matches] holds, per
- * comparison, the target's posts it also holds; empty until known, when rows show no counts. [onReview], when
- * given, walks through those posts in the triage deck instead of removing them all.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CodexCleaningSheet(
@@ -93,10 +88,6 @@ internal fun CodexCleaningSheet(
     }
 }
 
-/**
- * Cleaning's buttons for the [selected] comparisons, which would remove [removing] posts (null until known): Review,
- * or Cancel where there is no review, and Remove. The sheet dismisses itself, so Review takes Cancel's place.
- */
 @Composable
 private fun CleaningActions(
     selected: Set<String>,
@@ -117,11 +108,6 @@ private fun CleaningActions(
     }
 }
 
-/**
- * Review for cleaning Codex [codexId]: closes the sheet with [onOpen] and opens the triage deck on the posts the
- * chosen comparisons also hold, where left removes. Null for no Codex (Likes, whose removal would unlike) or when the
- * app provides no deck.
- */
 @Composable
 internal fun rememberCleaningReview(codexId: String?, onOpen: () -> Unit): ((Set<String>) -> Unit)? {
     val triage = LocalTriageOpener.current
@@ -135,14 +121,9 @@ internal fun rememberCleaningReview(codexId: String?, onOpen: () -> Unit): ((Set
     }
 }
 
-/** The Codices [target] can be cleaned against: every other real Codex. */
 internal fun codexCleaningComparisons(target: Codex, codices: List<Codex>): List<Codex> =
     codices.filter { it.codexId != target.codexId && !isVirtualCodex(it.codexId) }
 
-/**
- * How many posts cleaning against [selected] removes: a post held by several of them counts once. Null when
- * nothing is selected or a selected Codex's matches are not known yet.
- */
 internal fun codexCleaningRemovalCount(selected: Set<String>, matches: Map<String, Set<PostId>>): Int? {
     if (selected.isEmpty() || !matches.keys.containsAll(selected)) return null
     return selected.flatMapTo(hashSetOf()) { matches.getValue(it) }.size

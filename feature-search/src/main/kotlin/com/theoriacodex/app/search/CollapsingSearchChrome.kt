@@ -21,10 +21,6 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SearchBarMinHeight
 import com.theoriacodex.app.ui.components.SearchBarShape
 
-/**
- * One-line summary of the search on screen, shown above results; tapping it opens the [SearchComposer], and
- * swiping it sideways steps through [history].
- */
 @Composable
 internal fun SearchSummaryBar(
     summary: String?,

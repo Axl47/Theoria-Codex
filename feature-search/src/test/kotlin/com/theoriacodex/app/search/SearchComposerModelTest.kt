@@ -223,7 +223,6 @@ class SearchComposerModelTest {
         assertEquals(listOf("shibari"), texts("sh", FacetedSearchScope(SearchFacet.TAG, "tag")))
         assertEquals(listOf("shibari"), texts("tag:sh", FacetedSearchScope(SearchFacet.ARTIST, "artist")))
         assertEquals(emptyList<String>(), texts("sh", FacetedSearchScope(SearchFacet.GROUP, "group")))
-        // nhentai has no female tags, so the prefix finds nothing to suggest.
         assertEquals(emptyList<String>(), texts("female:so"))
         assertEquals(listOf("shindol", "shibari", "sole female"), texts("s"))
     }
@@ -249,7 +248,6 @@ class SearchComposerModelTest {
             listOf(SearchAction.AddIncludeAlternative(2, nhentaiArtist)),
             historyRows("sh", searched, target = ComposerAddTarget.Alternative(2, artists)).map { it.add },
         )
-        // A plain general tag joins a `tag:` group in the group's spelling.
         assertEquals(
             listOf(SearchAction.AddIncludeAlternative(1, SearchTerm("shibari", SearchFacet.TAG, "tag"))),
             historyRows("sh", searched, target = ComposerAddTarget.Alternative(1, tags)).map { it.add },

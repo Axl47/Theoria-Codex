@@ -32,17 +32,12 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.InlineNameField
 import com.theoriacodex.domain.model.Post
 
-/** What Codex detail's own header can do beyond selection; null entries hide their control. */
 class CodexHeaderActions(
-    /** Commits a new name typed into the title. */
     val onRename: ((String) -> Unit)?,
-    /** Opens the Codex's action list, the same one its Library tile opens. */
     val onOpenActions: (() -> Unit)?,
-    /** Re-runs making this Codex available offline, for the offline ring. */
     val onTopUpOffline: (() -> Unit)?,
 )
 
-/** The standard header, for collections whose membership the user can edit. */
 @Composable
 internal fun CodexEditableHeader(
     codexId: String,
@@ -88,10 +83,6 @@ internal fun CodexEditableHeader(
     }
 }
 
-/**
- * Back, the Codex's name and post count, and [actions]. With [onRename], tapping the name turns it into a text
- * field in place: keyboard Done or leaving the field commits a changed name, Back or an empty name leaves it as it was.
- */
 @Composable
 private fun CodexTitleBar(
     codexName: String,
@@ -177,7 +168,6 @@ internal fun codexItemSummary(
     return if (filtersActive) "$visibleCount of $totalCount posts" else codexPostCount(totalCount)
 }
 
-/** "1 post", "3 posts": the one word the Codex screens use for what they hold. */
 fun codexPostCount(count: Int): String = "$count ${countNoun(count, "post")}"
 
 internal fun codexSelectedPostActionDescription(

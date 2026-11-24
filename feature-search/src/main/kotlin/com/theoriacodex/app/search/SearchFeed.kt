@@ -23,7 +23,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
-/** What the results grid shows after visibility filters, known durations, and related posts apply. */
 class SearchFeed(
     val animatedFilterActive: Boolean,
     val animatedDurationRange: AnimatedDurationRange,
@@ -50,7 +49,6 @@ fun rememberSearchFeed(
     val durationMinBucket = animationRestoreState.durationMinBucket
     val durationMaxBucket = animationRestoreState.durationMaxBucket
     val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
-    // The results on screen answer the applied query, so its media decides the phone filter, as its date range does.
     val animatedFilterActive = state.query.applied.hidesStillsOnPhone
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
@@ -78,7 +76,6 @@ fun rememberSearchFeed(
     }
 }
 
-/** Restores and persists the grid position, then returns the demand that loads further pages. */
 @Composable
 fun rememberSearchScrollAndPaging(
     state: SearchUiState,

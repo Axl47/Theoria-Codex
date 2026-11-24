@@ -25,10 +25,6 @@ internal fun buildEmptySearchMessage(
     return if (canLoadMore && message != null) "$message More pages are available." else message
 }
 
-/**
- * The results grid's footer. Filters that hide every loaded post leave no grid, so the empty state above speaks
- * instead. A failed source counts as a failure: unified paging drops it, which would otherwise read as the end.
- */
 internal fun searchFooterMessage(state: SearchUiState, resolvingDurations: Boolean, hasVisibleResults: Boolean): String? =
     pagedFeedFooterMessage(
         resolvingDurations = resolvingDurations,

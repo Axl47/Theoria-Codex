@@ -169,7 +169,6 @@ private fun SaveToCodexSheetContent(
 ) {
     var searchText by rememberSaveable { mutableStateOf("") }
     var sortByRelevance by rememberSaveable { mutableStateOf(true) }
-    // Likes is filled by liking, so it is never a save target here.
     val likesId = selectedProfile?.profileId?.let(::likesCodexIdForProfile)
     val pickableCodices = remember(selectedCodices, likesId) { selectedCodices.filterNot { it.codexId == likesId } }
     val rootCodices = remember(pickableCodices, librarySort, codexItemCounts, libraryUsage) {
@@ -180,7 +179,6 @@ private fun SaveToCodexSheetContent(
         rootCodices, profileId, searchText, sortByRelevance, relevanceScores, lastSavedAt, containingCodexIds,
     ) {
         val query = searchText.trim()
-        // Ranked like the one-tap suggestions; the library sort alone otherwise.
         val ranked = if (sortByRelevance) {
             rankSaveTargets(rootCodices, profileId, containingCodexIds, relevanceScores, lastSavedAt = lastSavedAt)
         } else {
@@ -215,10 +213,6 @@ private fun SaveToCodexSheetContent(
     SaveToCodexSheetLayout(landscape, onDismiss, controls, list, actions)
 }
 
-/**
- * Stacks the controls, list and actions in portrait. Landscape is short, so the controls and actions take a side
- * column and the list keeps the full height.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaveToCodexSheetLayout(

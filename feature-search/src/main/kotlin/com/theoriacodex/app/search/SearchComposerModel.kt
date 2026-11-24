@@ -25,51 +25,34 @@ import com.theoriacodex.domain.tags.sourceTagKey
 
 private const val MAX_SAVED_SUGGESTIONS = 5
 
-/**
- * Where the composer's next tag goes. The query itself shows a chosen [Alternative] group, so only
- * required versus excluded remains as a setting.
- */
 internal sealed interface ComposerAddTarget {
     data object Required : ComposerAddTarget
     data object Excluded : ComposerAddTarget
 
-    /** An existing required group, keeping its draft index because group actions address that index. */
     data class Alternative(val index: Int, val group: SearchTermGroup) : ComposerAddTarget
 }
 
-/** Autocomplete rows for the target, and how many matches its group's tag type ruled out. */
 internal data class ComposerSuggestions(
     val rows: List<ComposerSuggestion>,
     val hiddenCount: Int,
-    /** Codices, creators, searches and commands the typed text also reaches, shown below the tags. */
     val omnibox: List<OmniboxEntry> = emptyList(),
 ) {
     val isVisible: Boolean get() = rows.isNotEmpty() || hiddenCount > 0 || omnibox.isNotEmpty()
 }
 
-/** One autocomplete row, carrying the term it stands for and the action that adds it to the current target. */
 internal data class ComposerSuggestion(
     val text: String,
     val meta: String,
     val add: SearchAction,
     val term: SearchTerm,
     val saved: Boolean = false,
-    /** The user searched this tag before; such rows lead the provider's. */
     val searched: Boolean = false,
 )
 
-/**
- * While a group is the target, a saved tag not yet in the query is only usable if the group would
- * take it. A saved group cannot join another group, so it waits until no group is the target.
- */
 internal fun FavoriteTagEntry.canTap(draft: Query, targetIndex: Int): Boolean = targetIndex < 0 ||
     state(draft) != TagChipState.NONE ||
     terms.singleOrNull()?.let { SearchDraftReducer.postTermForGroup(draft, source, targetIndex, it) } != null
 
-/**
- * The edits one tap makes. A tag follows the same add, exclude, clear cycle as tags in post info;
- * a group is added, then removed.
- */
 internal fun FavoriteTagEntry.tapActions(draft: Query, targetIndex: Int): List<SearchAction> {
     val term = terms.singleOrNull() ?: return when (val index = groupIndexIn(draft)) {
         -1 -> listOf(SearchAction.AddSavedTagGroup(terms))
@@ -85,17 +68,13 @@ internal fun FavoriteTagEntry.tapActions(draft: Query, targetIndex: Int): List<S
     }
 }
 
-/** What tapping a saved group's chip does: a group is only ever added or removed. */
 internal fun savedGroupTapLabel(label: String, state: TagChipState): String =
     if (state == TagChipState.NONE) "Include $label in Search" else "Remove $label from Search"
 
-/** Saved searches as the composer sees them, and how to run, save and manage them. */
 internal class ComposerSavedSearches(
     val entries: List<SavedSearchEntry> = emptyList(),
-    /** The search on screen, to highlight its saved entry; null before any search. */
     private val currentQueryHash: String? = null,
     val onOpen: (SavedSearchEntry) -> Unit = {},
-    /** Saves the search on screen under a name; null when there is nothing to save. */
     val onSaveCurrent: ((String) -> Unit)? = null,
     val suggestedName: String = "",
     val onManage: () -> Unit = {},
@@ -105,29 +84,18 @@ internal class ComposerSavedSearches(
     fun isCurrent(entry: SavedSearchEntry): Boolean = currentQueryHash != null && entry.search.queryHash == currentQueryHash
 }
 
-/** Saved tags as the composer's tag menus see them, and how to change them. */
 internal class ComposerSavedTags(
-    /** The user's saved tags. */
     val entries: List<FavoriteTagEntry>,
-    /** Where a new save goes; null when the composer has no source to save under. */
     val saveSource: SourceKey? = null,
-    /** Saves tags under a source; a group may carry a name. */
     val onSave: (SourceKey, List<String>, String?) -> Unit = { _, _, _ -> },
     val onRemove: (SourceKey, List<String>) -> Unit = { _, _ -> },
-    /** Names a saved "or" group; a blank name shows it by its alternatives. */
     val onRename: (SourceKey, List<String>, String) -> Unit = { _, _, _ -> },
 ) {
-    /** The saved entry that is exactly [terms], whichever source it was saved under. */
     fun entryFor(terms: List<SearchTerm>): FavoriteTagEntry? = entries.firstOrNull { it.matches(terms) }
 
-    /** Only general tags can be saved, so a typed tag, or a group of them, offers no save. */
     fun canSave(terms: List<SearchTerm>): Boolean = terms.isNotEmpty() && terms.all(SearchTerm::isGeneralTag)
 }
 
-/**
- * Applies the add target to autocomplete results. A group's alternatives must share its tag type, so
- * an [ComposerAddTarget.Alternative] only offers suggestions the draft reducer would accept.
- */
 internal fun composerSuggestions(
     target: ComposerAddTarget,
     faceted: List<FacetedTagSuggestion>,
@@ -158,11 +126,6 @@ internal fun composerSuggestions(
     return ComposerSuggestions(rows, hiddenCount = 0)
 }
 
-/**
- * Every autocomplete row for the target: saved tags, then searched tags, then the provider's. Saved and
- * searched rows are only those of the tag type the input is aimed at (see [typedInputScope]); All shows
- * every type, and a prefix the source cannot search shows none.
- */
 internal fun composerSuggestions(
     target: ComposerAddTarget,
     state: SearchUiState,
@@ -176,10 +139,6 @@ internal fun composerSuggestions(
         .withSavedTags(target, state.suggestions.input, savedTags.filter { it.terms.all(inScope) }, draft)
 }
 
-/**
- * Adds [term] to [this] target; an alternative group gives it the group's spelling of their shared type. A saved
- * tag names the source it was saved [savedFrom], which already validated it, so it joins a group directly.
- */
 private fun ComposerAddTarget.add(term: SearchTerm, savedFrom: SourceKey? = null): SearchAction = when (this) {
     is ComposerAddTarget.Alternative -> savedFrom?.let { SearchAction.AddSavedTagAlternative(it, index, term) }
         ?: SearchAction.AddIncludeAlternative(index, group.terms.first().copy(value = term.value))
@@ -187,20 +146,12 @@ private fun ComposerAddTarget.add(term: SearchTerm, savedFrom: SourceKey? = null
     ComposerAddTarget.Required -> SearchAction.AddIncludeTerm(term)
 }
 
-/** An alternative group only takes terms of its own tag type; other targets take any term. */
 private fun ComposerAddTarget.takes(term: SearchTerm): Boolean =
     this !is ComposerAddTarget.Alternative || group.terms.first().tagType == term.tagType
 
-/** The same tag for suggestions: one tag type and values that normalize alike. */
 private fun SearchTerm.isSameTagAs(other: SearchTerm): Boolean =
     tagType == other.tagType && normalizeMatchToken(value) == normalizeMatchToken(other.value)
 
-/**
- * Puts terms the user searched before ahead of the provider's rows, in the order given. A searched term
- * the provider also returned keeps that row, so its count stays. A typed term shows its type, as the
- * provider's faceted rows do, and is added with its facet and namespace. Terms already in the draft or
- * of another type than the target group are left out.
- */
 internal fun ComposerSuggestions.withSearchedTags(
     target: ComposerAddTarget,
     searchedTags: List<SearchTerm>,
@@ -218,12 +169,6 @@ internal fun ComposerSuggestions.withSearchedTags(
     return copy(rows = searchedRows + (rows - merged.mapNotNull { it.second }.toSet()))
 }
 
-/**
- * Puts saved tags matching the typed text ahead of the provider's rows. The text is normalized like the
- * searched-tag prefix, so a leading `-` or scope prefix such as `tag:` is ignored. A saved tag the provider also
- * returned keeps that row, so its count stays. Tags already in the draft or unable to join the target
- * group are left out, and at most [MAX_SAVED_SUGGESTIONS] appear so provider results stay in view.
- */
 internal fun ComposerSuggestions.withSavedTags(
     target: ComposerAddTarget,
     input: String,
@@ -233,7 +178,6 @@ internal fun ComposerSuggestions.withSavedTags(
     val typed = parseScopedInput(input).value
     if (typed.isBlank()) return this
     val targetIndex = (target as? ComposerAddTarget.Alternative)?.index ?: -1
-    // Suggestions complete one tag, so saved groups stay in the saved row.
     val matches = savedTags
         .filter { tag ->
             tag.tags.size == 1 &&
@@ -253,14 +197,12 @@ internal fun ComposerSuggestions.withSavedTags(
 private fun ComposerSuggestion.isGeneralFormOf(tag: FavoriteTagEntry): Boolean =
     term.isGeneralTag && sourceTagKey(tag.source, term.value) == sourceTagKey(tag.source, tag.tags.single())
 
-/** Explains matches hidden from an alternative group, naming the type that group accepts. */
 internal fun composerHiddenSuggestionsNote(hiddenCount: Int, group: SearchTermGroup): String {
     val anchor = group.terms.first()
     val type = searchScopeLabel(FacetedSearchScope(anchor.facet, anchor.sourceNamespace))
     return "$hiddenCount ${if (hiddenCount == 1) "match" else "matches"} hidden: this group only takes $type."
 }
 
-/** Applies the add target to typed text, or returns null when the input cannot be committed. */
 internal fun composerTypedAction(target: ComposerAddTarget, input: String): SearchAction? {
     val typed = trimTagSeparators(input).takeIf(String::isNotBlank) ?: return null
     return when (target) {
@@ -271,30 +213,22 @@ internal fun composerTypedAction(target: ComposerAddTarget, input: String): Sear
     }
 }
 
-/** Commas and semicolons around typed text come from a paste or a habit and are never part of the tag. */
 internal fun trimTagSeparators(input: String): String {
     fun String.stripped() = trim { it.isWhitespace() || it == ',' || it == ';' }
     val trimmed = input.stripped()
     return if (trimmed.startsWith('-')) "-" + trimmed.drop(1).stripped() else trimmed
 }
 
-/** The part of the draft the composer edits, and the source scope those tags belong to. */
 internal data class ComposerTerms(
     val groups: List<SearchTermGroup>,
     val excluded: List<SearchTerm>,
     val sourceScope: SearchSourceScope,
 )
 
-/**
- * A removal that can still be undone. Undo restores [before], so it only stands while the draft is
- * [before] (the removal has not landed yet) or [after]; any other edit would be overwritten, and
- * tags restored into another source could be ones it cannot search.
- */
 internal data class ComposerRemovalUndo(val message: String, val before: ComposerTerms, val after: ComposerTerms) {
     fun stillApplies(current: ComposerTerms): Boolean = current == before || current == after
 }
 
-/** Builds the undo for removing [removed] from the required groups, or the excluded list when [excluded]. */
 internal fun composerRemovalUndo(before: ComposerTerms, removed: List<SearchTerm>, excluded: Boolean): ComposerRemovalUndo {
     val after = if (excluded) {
         before.copy(excluded = before.excluded - removed.toSet())

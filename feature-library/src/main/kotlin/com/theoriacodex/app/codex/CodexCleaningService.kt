@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Keeps membership comparison and snapshot decoding off the UI thread. */
 class CodexCleaningService(
     private val transactions: CodexLikesTransactions,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,

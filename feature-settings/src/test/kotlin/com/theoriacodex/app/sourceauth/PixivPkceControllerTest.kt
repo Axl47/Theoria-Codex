@@ -27,7 +27,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** URI/controller orchestration belongs on the host; encrypted Android stores have device tests. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class PixivPkceControllerTest {
@@ -209,7 +208,6 @@ class PixivPkceControllerTest {
 
         val first = async { firstController.handleAuthorizationCallback(callback(state)) }
         exchangeStarted.await()
-        // Start the competing callback while the original exchange is still suspended.
         val second = async(start = CoroutineStart.UNDISPATCHED) {
             secondController.handleAuthorizationCallback(callback(state))
         }
@@ -332,7 +330,6 @@ class PixivPkceControllerTest {
         }
     }
 
-    // Host debug stack recovery may clone ordinary exceptions; this sentinel tests exact propagation.
     @OptIn(ExperimentalCoroutinesApi::class)
     private class CallbackCancellation(message: String) :
         CancellationException(message), CopyableThrowable<CallbackCancellation> {

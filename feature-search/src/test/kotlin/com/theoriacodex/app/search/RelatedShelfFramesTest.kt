@@ -34,11 +34,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * What Search's related shelf shows after every frame, with the length filter on (plan
- * `.docs/exec/shared-feed-presenter.html`). Background work runs only when [background] is drained; removing the feed
- * from composition stands in for opening the Viewer, as navigating to its destination does.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class RelatedShelfFramesTest {
@@ -46,7 +41,6 @@ class RelatedShelfFramesTest {
 
     private val background = SteppedDispatcher()
 
-    // Animated posts with no length in their metadata, so the length filter waits for [durations].
     private val feedPosts = List(4) { testPost(SourceKey.RULE34VIDEO, "v$it") }
     private val shelfPosts = List(6) { testPost(SourceKey.RULE34VIDEO, "s$it") }
     private val state = SearchUiState(
@@ -59,9 +53,7 @@ class RelatedShelfFramesTest {
     private val durationStates by derivedStateOf { mediaDurationStates(feedPosts + shelfPosts, durations) }
     private var feedShown by mutableStateOf(true)
 
-    /** The shelf posts shown in the last applied composition (null while the Viewer covers the feed). */
     private var shelf: List<String>? = null
-    /** The same shelf filtered whole, from the inputs of that composition. */
     private var wholePass: List<String>? = null
 
     @Test fun `returning from the Viewer shows the shelf as it left on the first frame`() {
@@ -136,7 +128,7 @@ class RelatedShelfFramesTest {
     private fun ids(range: IntRange) = range.map { "s$it" }
 
     private companion object {
-        const val SHORT_MS = 4_000L // inside the 0-10 s range
+        const val SHORT_MS = 4_000L
         const val LONG_MS = 30_000L
     }
 }

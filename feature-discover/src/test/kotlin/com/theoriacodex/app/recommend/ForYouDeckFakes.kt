@@ -41,16 +41,10 @@ import com.theoriacodex.domain.vision.PredictedTagIndex
 
 internal val DECK_SOURCE = SourceKey.GELBOORU
 
-/** A lane whose posts are tagged richly in the fake tagger's [VOCABULARY]. */
 internal const val RICH = "rich"
 
-/** The words [FakePictureTags] knows, as many as a richly tagged post needs. */
 internal val VOCABULARY = List(10) { "word $it" }
 
-/**
- * The post lane [tag] gives at [index] of [page]: `sea-0-3`, tagged with the lane's tag and drawn by "artist". The
- * [RICH] lane's posts also carry every [VOCABULARY] tag, so a picture check leaves them to their own tags.
- */
 internal fun lanePost(tag: String, page: Int, index: Int): Post = testPost(
     source = DECK_SOURCE,
     sourcePostId = "$tag-$page-$index",
@@ -58,7 +52,6 @@ internal fun lanePost(tag: String, page: Int, index: Int): Post = testPost(
     creatorProfile = CreatorProfile(DECK_SOURCE, "artist", uploadsQuery = "user:artist"),
 )
 
-/** The lane each post came from, read back from its id; `s` for the posts of [FakeTrails]. */
 internal fun List<Post>.lanes(): List<String> = map { it.id.sourcePostId.substringBefore('-') }
 
 internal fun laneId(tag: String): String = ForYouLane(DECK_SOURCE, listOf(tag), FeedCursor(Query.newest(DECK_SOURCE))).id
@@ -67,27 +60,20 @@ internal fun hiding(vararg tags: String): AppSettings = AppSettings().let { sett
     settings.copy(forYouBlacklistByProfile = mapOf(settings.activeProfileId to tags.map { ForYouBlacklistEntry(DECK_SOURCE, listOf(it)) }))
 }
 
-/**
- * One single-tag lane per entry of [tags] the profile does not hide, each [pages] pages of [pageSize] posts, answered at
- * once unless the lane is on [hold].
- */
 internal class FakeForYouEngine(var tags: List<String>, private val pages: Int = 4, private val pageSize: Int = PAGE) : ForYouRouteEngine {
     var sources = listOf(DECK_SOURCE)
     val failing = mutableSetOf<String>()
     var failLanes = false
     private val held = mutableMapOf<String, CompletableDeferred<Unit>>()
 
-    /** While set, a lane plan waits for it. */
     var planGate: CompletableDeferred<Unit>? = null
 
-    /** Makes the pages of [tags]' lanes wait for [release]. */
     fun hold(vararg tags: String) = tags.forEach { held[it] = CompletableDeferred() }
 
     fun release(tag: String) {
         held.remove(tag)?.complete(Unit)
     }
 
-    /** Every page asked for, as `tag:page`. */
     val requests = mutableListOf<String>()
     var builds = 0
 
@@ -126,10 +112,6 @@ internal class FakeForYouEngine(var tags: List<String>, private val pages: Int =
     }
 }
 
-/**
- * The app's trails: [similar] and [creator] answer a like or a fork, [tag] a tag fork; an absent one cannot open.
- * While [gate] is set, a request waits for it. [pager], when set, feeds the trail instead of one whole page.
- */
 internal class FakeTrails(
     var similar: List<Post>? = null,
     var creator: List<Post>? = null,
@@ -197,7 +179,6 @@ internal object NoRelatedPosts : RelatedPostsLoading {
     override suspend fun load(seed: PostId): List<Post> = emptyList()
 }
 
-/** The owner's wiring over the fakes; everything runs in [scope], inline on an unconfined main dispatcher. */
 internal fun deckWiring(
     scope: CoroutineScope,
     trails: FakeTrails = FakeTrails(),
@@ -212,11 +193,6 @@ internal fun deckWiring(
     copiesOf = copiesOf, clock = clock, pictures = pictures,
 )
 
-/**
- * A picture tagger that predicts [predicted] for a post (nothing for the rest) and answers at once, or once [release]d
- * while [held]. Posts in [unseen] fail to load and, while [blind], the model will not load. [asked] lists every post it
- * tagged, in order. Its vocabulary is [VOCABULARY].
- */
 internal class FakePictureTags(ready: Boolean = true, private val predicted: Map<String, List<PredictedTag>> = emptyMap()) : PictureTags {
     override val ready = MutableStateFlow(ready)
     override val library = MutableStateFlow(PredictedTagIndex(baseRates = VOCABULARY.associateWith { 0.01 }))
@@ -241,7 +217,6 @@ internal class FakePictureTags(ready: Boolean = true, private val predicted: Map
     override fun known(id: PostId): List<PredictedTag>? = seen[id]
 }
 
-/** A confident general prediction of [tag]. */
 internal fun seen(tag: String) = listOf(PredictedTag(tag, 0.9f, PredictedTag.Kind.GENERAL))
 
 internal fun deckEnvironment(

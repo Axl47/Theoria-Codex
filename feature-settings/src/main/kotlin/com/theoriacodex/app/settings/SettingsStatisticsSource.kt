@@ -55,7 +55,6 @@ class SettingsStatisticsSource(
             .flowOn(computationDispatcher)
     }
 
-    /** Saved, Followed and Saved Searches are app-wide, so every profile's list includes them. */
     private fun withSystemCodices(codices: List<Codex>): List<Codex> = (codices + listOf(
         Codex(com.theoriacodex.app.codex.SAVED_CODEX_ID, "Saved", 0L),
         Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0L),

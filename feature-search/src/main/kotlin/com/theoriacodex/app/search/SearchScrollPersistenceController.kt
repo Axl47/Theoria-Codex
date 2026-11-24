@@ -30,11 +30,6 @@ internal fun SearchCoordinator.scrollPersistence(
     )
 }
 
-/**
- * Navigation-owner closeable for debounced scroll writes. Its scheduler is independent from
- * viewModelScope so ViewModel teardown can cancel route work first and still drain the final
- * pending position through the durable repository after the owner is gone.
- */
 internal class SearchScrollPersistenceController(
     private val dispatcher: CoroutineDispatcher,
     private val debounceMillis: Long,
@@ -60,10 +55,6 @@ internal class SearchScrollPersistenceController(
         }
     }
 
-    /**
-     * Finish admitted writes before resetting. Hold the commit lock on the persistence dispatcher,
-     * because synchronous UI teardown may need that same lock for its final flush.
-     */
     suspend fun reset(queryHash: String, writeReset: suspend () -> Unit) = withContext(dispatcher) {
         val previous = synchronized(lock) {
             if (latest?.queryHash != queryHash) null else {
@@ -79,13 +70,6 @@ internal class SearchScrollPersistenceController(
         }
     }
 
-    /**
-     * Called by ViewModel.clear() on the main thread, so it never waits on storage. The final pending
-     * position is written on this controller's own scheduler, which outlives the owner and cancels
-     * itself once that write is acknowledged; a debounced write already in flight is not repeated.
-     * Only a process death during that one write can lose the position, and the teardown paths that
-     * kill the process skip ViewModel.clear() altogether.
-     */
     override fun close() {
         val pending = synchronized(lock) {
             if (closed) return

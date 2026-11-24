@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.ui.components.SettingsGroup
 
-/** The account line for a built-in source's row in Sites; null for sources without accounts. */
 fun builtInAccountSummary(source: SourceKey, accounts: SettingsAccountUiState): String? = when (source) {
     SourceKey.PIXIV -> accounts.pixivStatusLabel
     SourceKey.GELBOORU -> accounts.gelbooruStatusLabel
@@ -25,7 +24,6 @@ fun builtInAccountSummary(source: SourceKey, accounts: SettingsAccountUiState): 
     else -> null
 }
 
-/** The account controls on a built-in source's page in Sites; nothing for sources without accounts. */
 @Composable
 fun BuiltInAccountControls(source: SourceKey, accounts: SettingsAccountUiState, onAction: (SettingsAction) -> Unit) {
     when (source) {
@@ -76,7 +74,6 @@ private fun PixivAccountControls(accounts: SettingsAccountUiState, onAction: (Se
     }
 }
 
-/** The collapsed "API key" item; it opens by itself only while no key is saved. */
 @Composable
 private fun ApiKeySection(configured: Boolean, content: @Composable () -> Unit) {
     SettingsGroup(null) {
@@ -86,7 +83,6 @@ private fun ApiKeySection(configured: Boolean, content: @Composable () -> Unit) 
     }
 }
 
-/** Configured API-key accounts stay compact until their credentials are disconnected. */
 @Composable
 internal fun CredentialAccountControls(
     statusLabel: String,

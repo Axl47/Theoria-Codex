@@ -69,7 +69,6 @@ class TagSuggestionStoreSemanticsTest {
             assertEquals(emptyList<FacetedTagSuggestion>(), store.getFaceted(SourceKey.GELBOORU, limit, all))
             assertEquals(emptyList<FacetedTagSuggestion>(), store.findFaceted(SourceKey.GELBOORU, "alpha", limit, all))
         }
-        // A source nothing was ever stored for reads as empty.
         assertEquals(emptyList<TagSuggestion>(), store.get(SourceKey.PIXIV, 5) + store.find(SourceKey.PIXIV, "alpha", 5) + store.getTrending(SourceKey.PIXIV, 5))
         assertEquals(emptyList<FacetedTagSuggestion>(), store.getFaceted(SourceKey.PIXIV, 5, all) + store.findFaceted(SourceKey.PIXIV, "alpha", 5, all))
         assertEquals(emptyList<TagSuggestion>(), store.find(SourceKey.GELBOORU, "  ", 5))
@@ -91,7 +90,6 @@ class TagSuggestionStoreSemanticsTest {
 
         assertEquals(listOf("Blue_Sky"), store.find(SourceKey.PIXIV, "BLUE sky", 10).map { it.text })
         assertEquals(listOf("初音ミク"), store.find(SourceKey.PIXIV, "hatsune", 10).map { it.text })
-        // The faceted search matches the label only, not the translation.
         assertEquals(emptyList<String>(), store.findFaceted(SourceKey.PIXIV, "hatsune", 10, FacetedSearchScope()).map { it.text })
         assertEquals(2, store.findFaceted(SourceKey.PIXIV, "blue sky", 10, FacetedSearchScope()).size)
         store.close()
@@ -104,7 +102,6 @@ class TagSuggestionStoreSemanticsTest {
         store.put(SourceKey.NHENTAI, tags.map { (text, type) -> TagSuggestion(text, type, null) })
         store.put(SourceKey.NHENTAI, listOf(TagSuggestion("hot artist", "artist", null)), TagSuggestionOrigin.TRENDING)
 
-        // "Dup" (tag) and "dup" (female) are distinct entries, but get() lists each spelling once.
         assertEquals(listOf("Dup", "hot"), store.get(SourceKey.NHENTAI, 10).map { it.text })
         assertEquals(listOf("hot"), store.getTrending(SourceKey.NHENTAI, 10).map { it.text })
         store.close()
@@ -132,7 +129,6 @@ class TagSuggestionStoreSemanticsTest {
         assertEquals(listOf("x8" to "female", "x9" to "male", "x10" to "tag", "x11" to null), scoped(SearchFacet.TAG))
         assertEquals(listOf("x9" to "male"), scoped(SearchFacet.TAG, "male"))
         assertEquals(emptyList<Pair<String, String?>>(), scoped(SearchFacet.ARTIST, "group"))
-        // Other sources have no namespaces: their type is just metadata.
         assertEquals(listOf("plain" to null), store.getFaceted(SourceKey.GELBOORU, 5, FacetedSearchScope(SearchFacet.TAG)).map { it.text to it.sourceNamespace })
         assertEquals(emptyList<FacetedTagSuggestion>(), store.getFaceted(SourceKey.GELBOORU, 5, FacetedSearchScope(SearchFacet.ARTIST)))
         store.close()
@@ -164,11 +160,9 @@ class TagSuggestionStoreSemanticsTest {
                 store.get(SourceKey.GELBOORU, 100).single { it.text == name }.type
             })
         }
-        // Equal ranks keep the incoming spelling.
         store.put(SourceKey.GELBOORU, listOf(TagSuggestion("tie", "custom", null)))
         store.put(SourceKey.GELBOORU, listOf(TagSuggestion("tie", "pixiv_tags_page", null)))
         assertEquals("pixiv_tags_page", store.get(SourceKey.GELBOORU, 100).single { it.text == "tie" }.type)
-        // An unlisted type outranks "seed" but not "tag".
         store.put(SourceKey.GELBOORU, listOf(TagSuggestion("odd", "seed", null), TagSuggestion("odd2", "tag", null)))
         store.put(SourceKey.GELBOORU, listOf(TagSuggestion("odd", "custom", null), TagSuggestion("odd2", "custom", null)))
 
@@ -336,7 +330,6 @@ class TagSuggestionStoreSemanticsTest {
             { FileBackedTagSuggestionStore(file, persistenceDebounceMs = -1L) }).forEach { create ->
             assertTrue(runCatching { create() }.exceptionOrNull() is IllegalArgumentException)
         }
-        // The smallest allowed budget and a zero debounce are valid.
         FileBackedTagSuggestionStore(file, maxEntriesPerSource = 1, maxTotalUtf8Bytes = 256, persistenceDebounceMs = 0L).close()
     }
 

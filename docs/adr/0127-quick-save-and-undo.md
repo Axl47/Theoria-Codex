@@ -14,6 +14,8 @@ Saves start from several surfaces (Viewer, feed grids, lift drops, the triage de
 - Surfaces confirm in place from the record their own save returned; nothing here shows a snackbar.
 - `SAVED_CODEX_ID` is a presentation container only; its children keep their own storage identities.
 - `PostMutationViewModel` keeps captured destinations and commit callbacks across Activity recreation without a second membership state, and retains the post through shelf setup because membership can emit before `toggle` returns.
+- `QuickSaveViewModel` (activity-owned) runs saves in its own scope so they finish when the surface that started them closes. `saveToNew` creates the Codex as part of the save; a failed save leaves no Codex behind that it created (`deleteCodexIfEmpty`), and the record carries the stored name, which a clash with an existing Codex may have suffixed.
+- `undoQuickSave` runs in the view model's scope, so the removal finishes even if the caller is cancelled.
 
 ## Consequences
 
@@ -26,3 +28,4 @@ A save can always be undone precisely, at the cost of carrying a record per save
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/codex/SavedCodexId.kt`: `SAVED_CODEX_ID`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/lift/LiftOverlay.kt`: `saveFailure`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/post/PostMutationViewModel.kt`: `PostMutationViewModel`
+- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/QuickSaveViewModel.kt`: `QuickSaveViewModel`, `saveToNew`, `undoQuickSave`

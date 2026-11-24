@@ -18,7 +18,6 @@ import kotlin.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SiteLiveEditsTest {
-    /** The sites list never catches up with a write here, as when it lags behind one. */
     private val saved = site()
     private val other = site(sourceId = "custom_gelbooru_com", label = "Gelbooru", host = "gelbooru.com")
     private val sites = mutableMapOf(saved.sourceId to saved, other.sourceId to other)

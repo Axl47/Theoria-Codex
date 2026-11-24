@@ -18,13 +18,8 @@ enum class RecentsClearTarget(
     ALL("All history cleared", "all history"),
 }
 
-/** Where History draws its offers. */
 val RecentsUndoAnchor = UndoAnchor("history")
 
-/**
- * Clears a part of History, then offers Undo (and Retry after a failure) through [clear]'s
- * `showActionableFeedback`, which returns true when the user took the action.
- */
 class RecentsClearWorkflow(
     private val repository: RecentsRepository,
 ) {

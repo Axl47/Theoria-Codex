@@ -31,7 +31,6 @@ fun sortLiveCodexPosts(
     durations: Map<PostId, Long> = emptyMap(),
 ): List<Post> = posts.sortedWith(liveCodexOrder(sort, usage, durations))
 
-/** Live posts were never saved, so their post date stands in for save time. */
 private fun liveCodexOrder(sort: CodexSortMode, usage: Map<String, CodexUsage>, durations: Map<PostId, Long>): Comparator<Post> {
     val date: Comparator<Post> = if (sort == CodexSortMode.OLDEST_SAVED) {
         compareBy { it.createdAtEpochMs }
@@ -71,7 +70,6 @@ fun rememberNewPostsReload(owner: LiveCodexFeedOwner, feed: LiveCodexFeedState, 
 interface LiveCodexFeedOwner {
     val state: StateFlow<LiveCodexFeedState>
     val relatedState: StateFlow<RelatedPostsUiState>
-    /** The feed's related shelf, anchored in the order the grid shows ([sortLiveCodexPosts]). */
     val related: RelatedPostsRouteController
     fun refresh()
     fun loadMore()
@@ -85,10 +83,6 @@ internal interface LiveCodexBranch {
     val error: String?
 }
 
-/**
- * Shared virtual-collection scheduling: stable branch order, bounded overlap and stale-result rejection.
- * Also owns the collection's related shelf, which a reset or re-sort clears because its anchor moves.
- */
 internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private val scope: CoroutineScope,
     private val fetch: suspend (B, Boolean) -> B,
@@ -109,7 +103,6 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var coverDurations = emptyMap<PostId, Long>()
     private val mutableRelated = MutableStateFlow<RelatedPostsUiState>(RelatedPostsUiState.Idle)
     val relatedState = mutableRelated.asStateFlow()
-    // Live collections never promote shelf posts: their posts come only from their branches.
     val related = RelatedPostsRouteController(
         scope = scope,
         loader = relatedPostsLoader,
@@ -118,7 +111,6 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         updateState = { mutableRelated.value = it },
     )
 
-    /** Newly resolved [durations] refine the order quietly; only a new sort or usage clears the related shelf. */
     fun updateCoverSort(
         sort: CodexSortMode,
         usage: Map<String, CodexUsage> = emptyMap(),

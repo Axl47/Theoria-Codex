@@ -41,10 +41,6 @@ import com.theoriacodex.app.codex.CodexCoverImage
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
 
-/**
- * The composer's non-tag matches, after its leading tag suggestions: picking an [OmniboxEntry.Action] closes the
- * composer ([onLeave]) and runs it; a [OmniboxEntry.Toggle] switches in place.
- */
 internal fun LazyListScope.omniboxRows(entries: List<OmniboxEntry>, afterTags: Boolean, onLeave: () -> Unit) {
     if (entries.isEmpty()) return
     if (afterTags) item { HorizontalDivider() }
@@ -82,7 +78,6 @@ private fun OmniboxRow(entry: OmniboxEntry, action: Modifier, content: @Composab
         val (icon, label) = omniboxKindIcon(entry.kind)
         val kindIcon = @Composable { Icon(icon, label, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant) }
         val cover = (entry as? OmniboxEntry.Action)?.cover
-        // Icons sit in a cover-wide slot so every row's text starts at the same edge.
         if (cover == null) Box(Modifier.width(COVER_SIZE), contentAlignment = Alignment.Center) { kindIcon() }
         else OmniboxCover(cover, label, kindIcon)
         content()
@@ -91,7 +86,6 @@ private fun OmniboxRow(entry: OmniboxEntry, action: Modifier, content: @Composab
 
 private val COVER_SIZE = 40.dp
 
-/** A thumbnail the size of two text lines, showing the kind's icon until (or unless) a cover loads. */
 @Composable
 private fun OmniboxCover(candidates: List<CodexCoverCandidate>, label: String, fallback: @Composable () -> Unit) {
     Box(
@@ -115,7 +109,6 @@ private fun RowScope.OmniboxText(title: String, detail: String?) {
     }
 }
 
-/** Each kind's icon and what TalkBack calls it, so rows of different kinds read apart. */
 private fun omniboxKindIcon(kind: OmniboxKind): Pair<ImageVector, String> = when (kind) {
     OmniboxKind.CODEX -> Icons.Default.CollectionsBookmark to "Codex"
     OmniboxKind.SERIES -> Icons.AutoMirrored.Filled.MenuBook to "Series"

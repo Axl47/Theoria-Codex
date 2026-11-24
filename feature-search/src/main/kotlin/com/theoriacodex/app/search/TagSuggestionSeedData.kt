@@ -10,12 +10,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 
-/** Starter suggestions from the bundled `tag_store.json`; an unreadable asset yields none rather than failing. */
 fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSuggestion>> =
     runCatching { context.assets.open("tag_store.json").bufferedReader().use { it.readText() } }
         .getOrNull()?.let(::parseSeedTagSuggestions).orEmpty()
 
-/** Decodes a `tag_store.json` body; a malformed source list or entry skips only itself. */
 fun parseSeedTagSuggestions(body: String): Map<SourceKey, List<TagSuggestion>> {
     val seed = runCatching { DurableJson.decodeFromString(TagSeedFile.serializer(), body) }.getOrNull() ?: return emptyMap()
     return seed.sources.mapNotNull { (sourceName, entries) ->
@@ -30,7 +28,6 @@ fun parseSeedTagSuggestions(body: String): Map<SourceKey, List<TagSuggestion>> {
 
 @Serializable
 private class TagSeedFile(
-    /** Each source's list, and each entry in it, decodes on its own, so one malformed value skips only itself. */
     @SerialName("sources")
     val sources: Map<String, JsonElement> = emptyMap(),
 )

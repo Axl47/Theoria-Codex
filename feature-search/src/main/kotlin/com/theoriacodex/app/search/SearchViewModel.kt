@@ -61,15 +61,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
-/**
- * Navigation-scoped owner for Search.
- *
- * The coordinator remains the provider/domain engine. This owner is the only boundary that
- * schedules route work, publishes render state, persists compact reconstruction input, and emits
- * one-shot navigation/message effects. The application container may create this ViewModel but
- * must not retain it.
- */
-@Suppress("LargeClass") // One route authority is intentional; F15 owns hotspot-size ratchets.
+@Suppress("LargeClass")
 class SearchViewModel(
     private val coordinator: SearchCoordinator,
     savedStateHandle: SavedStateHandle,
@@ -122,12 +114,9 @@ class SearchViewModel(
     private var activeRequestJob: Job? = null
     private var restorationJob: Job? = null
     private var pendingRootSearch: (() -> Unit)? = null
-    /** A draft edit made over Search waits to run until Search is shown again. */
     private var draftStaged = false
-    /** A first search was cancelled before it answered; its replacement stays scheduled across edits until one runs. */
     private var firstSearchSuperseded = false
     private var latestEnvironmentSettings: AppSettings? = null
-    /** The source settings the state was last reconciled with; null until Search has restored. */
     private var runtime: SourceRuntimeSettings? = null
     private val suggestionRefresh =
         SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
@@ -182,7 +171,6 @@ class SearchViewModel(
             SearchAction.RedoSearch -> stepHistory(back = false)
 
             SearchAction.ApplyDraft -> {
-                // Live search may already run, or show, this exact draft: asking again only settles it.
                 if (mutableState.value.showsDraft) settlement.settle() else applyDraft()
                 clearSuggestionState()
             }
@@ -210,7 +198,6 @@ class SearchViewModel(
                 requestRouteEntryScrollRestoration()
                 if (draftStaged) {
                     draftStaged = false
-                    // Staged before Search first opened, the edit runs on the restored draft, not the blank one.
                     runAfterRestoration(::scheduleLiveSearch)
                 }
                 resumeSearchIfNeeded()
@@ -250,7 +237,6 @@ class SearchViewModel(
         }
     }
 
-    /** Steps back or forward through settled searches, returning to each one's place. */
     private fun stepHistory(back: Boolean) {
         clearSuggestionState()
         val current = mutableState.value
@@ -265,7 +251,6 @@ class SearchViewModel(
         mutateDraft { SearchDraftReducer.edit(it, action, System.currentTimeMillis()) }
     }
 
-    /** Edits the draft from over Search without running it behind that screen; [SearchAction.Resume] runs it. */
     private fun stageDraftEdit(edit: SearchAction.DraftEdit) {
         liveSearch.cancel()
         mutableState.value = SearchDraftReducer.edit(mutableState.value, edit, System.currentTimeMillis())
@@ -273,17 +258,12 @@ class SearchViewModel(
         draftStaged = true
     }
 
-    /**
-     * Switches the draft to [mode]'s last search. Once a search is on screen, waiting or running, that search also
-     * runs live, so the source, terms, filters, and results always describe the same search.
-     */
     private fun selectMode(mode: QueryMode) {
         suggestionRefresh.cancelAutocomplete()
         val current = SearchDraftReducer.selectMode(mutableState.value, mode).state
         mutableState.value = current
         persistDraftQuery()
         suggestionRefresh.refreshTrending()
-        // Before any search has been asked for, picking a source only prepares the draft.
         if (current.hasCommittedSearch) scheduleLiveSearch()
     }
 
@@ -299,30 +279,26 @@ class SearchViewModel(
         if (reduction.state.hasCommittedSearch) scheduleLiveSearch()
     }
 
-    /** The root request in flight asks for exactly the draft. */
     private val SearchUiState.runsDraft: Boolean
         get() = execution.request?.takeUnless { it.isPage }?.let { request ->
             execution.submittedQuery == query.draft && request.sourceScope == query.draftSourceScope
         } == true
 
-    /** The draft is running, or its results are on screen, and nothing typed is waiting to join it. */
     private val SearchUiState.showsDraft: Boolean
         get() = suggestions.input.isBlank() && (
             runsDraft ||
                 execution.request?.isPage != false && content.hasExecutedSearch && !hasPendingChanges && content.error == null
         )
 
-    /** A search is on screen, waiting out its live pause or running, so a source change must reschedule it. */
     private val SearchUiState.hasCommittedSearch: Boolean
         get() = content.hasExecutedSearch || execution.liveSearchWaiting || execution.request?.isPage == false
 
-    /** Runs the draft. A typed number not yet added as a tag is added first, so a lone nhentai ID opens its gallery. */
     private fun applyDraft() {
         val pending = mutableState.value.suggestions.input.trim()
         if (pending.isNotEmpty() && pending.all(Char::isDigit) && SearchDraftReducer.canCommitInput(mutableState.value, pending)) {
             val draftBefore = mutableState.value.query.draft
             commitTagInput(pending)
-            if (mutableState.value.query.draft == draftBefore) return // opened as a gallery
+            if (mutableState.value.query.draft == draftBefore) return
         }
         runDraft(liveKind())
     }
@@ -330,19 +306,12 @@ class SearchViewModel(
     private fun liveKind() =
         if (mutableState.value.content.hasExecutedSearch) SearchRequestKind.REPLACE else SearchRequestKind.INITIAL
 
-    /**
-     * The draft changed: the request in flight is now out of date, and the draft runs after a short pause unless it
-     * is back to the search on screen. An empty draft is runnable like any other, so it replaces a cancelled first search.
-     */
     private fun scheduleLiveSearch() {
         val current = mutableState.value
         val request = current.execution.request
         val runsDraft = current.runsDraft
         val cancelsRequest = request != null && !request.isPage && !runsDraft
         if (cancelsRequest) cancelActiveRequest()
-        // Before any search has run, the applied search is only a placeholder, so a draft equal to it still
-        // needs its own run when the first search it superseded is cancelled, including by an earlier edit
-        // whose replacement is still waiting; otherwise nothing would answer.
         val supersedesFirstSearch = !current.content.hasExecutedSearch && (cancelsRequest || firstSearchSuperseded)
         if ((current.hasPendingChanges || supersedesFirstSearch) && !runsDraft) {
             firstSearchSuperseded = supersedesFirstSearch
@@ -369,10 +338,6 @@ class SearchViewModel(
         runDraft()
     }
 
-    /**
-     * Runs a search requested from outside Search, such as from Recents or a Codex. Before Search has
-     * restored, it waits (latest request wins), because restoration would replace its draft and request.
-     */
     private fun runAfterRestoration(search: () -> Unit) {
         if (mutableState.value.restoration is SearchRestorationUiState.Restored) {
             search()
@@ -386,7 +351,6 @@ class SearchViewModel(
         if (restoreDraft(query, sourceScope)) runDraft()
     }
 
-    /** Makes [query] in [sourceScope] the draft; false, with a message, when it can no longer run here. */
     private fun restoreDraft(query: Query, sourceScope: SearchSourceScope): Boolean {
         val reduction = SearchDraftReducer.restoreDraft(mutableState.value, query)
         if (!reduction.accepted) {
@@ -425,7 +389,6 @@ class SearchViewModel(
                 liveSearchBinding = false,
             )
         )
-        // Like opening a result, this takes over the grid: a pending restore must not jump it on return.
         mutableState.value.restoration.openScrollRequestId?.let { requestId ->
             reduce(SearchStateChange.ScrollRestorationApplied(requestId))
         }
@@ -443,11 +406,6 @@ class SearchViewModel(
         if (weightsChanged) scheduleMixedSearch()
     }
 
-    /**
-     * The source mix changed under the search on screen: it runs again after the live-query pause, a newer change
-     * restarting the wait and the request in flight dropped, so a slider drag ends in one search. Before any search
-     * has run, the mix only prepares the next one.
-     */
     private fun scheduleMixedSearch() {
         val current = mutableState.value
         if (!current.hasCommittedSearch) return
@@ -491,10 +449,6 @@ class SearchViewModel(
         scheduleLiveSearch()
     }
 
-    /**
-     * Adds a typed tag to the draft. A bare number that would be the draft's only tag is an nhentai
-     * gallery ID: it opens the Viewer instead, and the draft stays as it was.
-     */
     private fun commitTagInput(input: String) {
         val reduction = SearchDraftReducer.commitInput(mutableState.value, input)
         if (!reduction.accepted) {
@@ -532,7 +486,6 @@ class SearchViewModel(
         rerunApplied(paintCachedFirstPage = true)
     }
 
-    /** Runs the draft as the new search. Its first results make it the applied search; see [SearchSettlement]. */
     private fun runDraft(
         kind: SearchRequestKind = SearchRequestKind.REPLACE,
         acceptance: SearchAcceptance = SearchAcceptance.Settled,
@@ -541,7 +494,6 @@ class SearchViewModel(
         launchRootSearch(kind, query.draft, query.draftSourceScope, acceptance)
     }
 
-    /** Runs the applied search again. It is already the accepted one, so nothing about it is persisted anew. */
     private fun rerunApplied(
         relatedResetReason: String = "root search (${SearchRequestKind.RETRY})",
         paintCachedFirstPage: Boolean = false,
@@ -584,10 +536,6 @@ class SearchViewModel(
         }
     }
 
-    /**
-     * Runs [block] as the job of [request]. However it ends, the reducer hears of it, and ignores the
-     * news when a newer request has since taken over.
-     */
     private fun launchRequest(request: SearchRequest, failureMessage: String, block: suspend CoroutineScope.() -> Unit) {
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
@@ -627,14 +575,12 @@ class SearchViewModel(
             if (acceptance != null) settlement.answered(result)
         }
 
-    /** Puts one root request's results on screen; persisting it and resetting the scroll target happen only once. */
     private inner class RootResultPublisher(
         private val request: SearchRequest,
         acceptance: SearchAcceptance?,
     ) {
         private var pendingAcceptance = acceptance
 
-        /** Applies [change], which shows [result]. False when this request no longer owns the screen. */
         suspend fun publish(result: SearchExecutionResult, change: SearchStateChange): Boolean {
             val acceptance = pendingAcceptance
             if (acceptance != null) scrollPersistence.reset(result.executionKey) {
@@ -655,7 +601,6 @@ class SearchViewModel(
         }
     }
 
-    /** A new search's first results are on screen: note the place left behind, then move to its own place. */
     private fun showAcceptedSearch(previous: SearchUiState, acceptance: SearchAcceptance) {
         settlement.shown(previous, session.savedScroll ?: SearchScrollState(0, 0))
         val restoredPlace = (acceptance as? SearchAcceptance.Step)?.scrollState
@@ -684,7 +629,6 @@ class SearchViewModel(
         launchPage(source)
     }
 
-    /** Loads the next page of the results on screen, or with [retrySource] asks that one source again. */
     private fun launchPage(retrySource: SourceKey? = null) {
         val current = mutableState.value
         val continuation = current.execution.continuation
@@ -777,7 +721,6 @@ class SearchViewModel(
         if (!mutableState.value.restoration.allowsScrollPersistence) return
         val scroll = SearchScrollState(action.firstVisibleItemIndex.coerceAtLeast(0), action.firstVisibleItemOffsetPx.coerceAtLeast(0))
         session.saveScroll(scroll)
-        // Scrolling the results of a finished search means the user has taken it: it settles.
         if ((scroll.firstVisibleItemIndex > 0 || scroll.firstVisibleItemOffsetPx > 0) && !mutableState.value.loading) settlement.settle()
         val query = mutableState.value.query
         if (query.appliedSourceScope is SearchSourceScope.Temporary) return
@@ -795,7 +738,6 @@ class SearchViewModel(
     private fun updateSuggestionInput(input: String) {
         mutableState.value = mutableState.value.withSuggestionInput(input)
     }
-    /** What a search in [scope] runs on under the current source settings. */
     private fun sourcesFor(scope: SearchSourceScope): SearchSources = SearchSources.of(
         runtime ?: SourceRuntimeSettings(), scope, coordinator.availableSources.toSet(),
     )
@@ -832,15 +774,11 @@ class SearchViewModel(
         effectChannel.close()
     }
 
-    /** How a new search is treated once its first results are on screen. */
     private sealed interface SearchAcceptance {
-        /** Follows a draft edit; it is remembered only once it settles. */
         data object Live : SearchAcceptance
 
-        /** Asked for outright, so it settles at once. */
         data object Settled : SearchAcceptance
 
-        /** A step through history, back to [scrollState], the place it was left at. */
         data class Step(val scrollState: SearchScrollState) : SearchAcceptance
     }
 
