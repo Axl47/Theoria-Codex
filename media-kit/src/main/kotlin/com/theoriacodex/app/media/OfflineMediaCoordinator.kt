@@ -121,8 +121,11 @@ class OfflineMediaCoordinator(
             synchronized(lock) { requests[owner] = (requests[owner].orEmpty() + posts).distinctBy(Post::id) }
             return
         }
-        if (job?.isRunning != true && owner !in store.snapshot.value.postsByOwner) return
-        enqueueOffline(owner, posts, start = true)
+        val scanned = store.snapshot.value
+        when {
+            job?.isRunning == true || scanned != null && owner in scanned.postsByOwner -> enqueueOffline(owner, posts, start = true)
+            scanned == null -> scope.launch { store.load(); keepOffline(owner, posts) }
+        }
     }
 
     /**

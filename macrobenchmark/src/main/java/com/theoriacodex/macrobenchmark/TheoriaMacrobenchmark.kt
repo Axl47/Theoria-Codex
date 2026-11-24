@@ -48,6 +48,7 @@ private const val INTERACTION_ITERATIONS = 5
 private const val SEARCH_SCROLL_STEPS = 3
 private const val VIEWER_PAGE_COUNT = 6
 private const val UI_TIMEOUT_MS = 15_000L
+private const val FULLY_DRAWN_TIMEOUT_MS = 75_000L
 private const val POLL_INTERVAL_MS = 50L
 private const val TRACE_PREVIEW_PREPARE = "TheoriaPreviewPrepare"
 private const val TRACE_PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
@@ -73,27 +74,24 @@ class TheoriaMacrobenchmark {
     val benchmarkRule = MacrobenchmarkRule()
 
     @Test
-    fun coldStartup() = benchmarkRule.measureRepeated(
-        packageName = TARGET_PACKAGE,
-        metrics = listOf(StartupTimingMetric()),
-        compilationMode = COMPILATION_MODE,
-        startupMode = StartupMode.COLD,
-        iterations = STARTUP_ITERATIONS,
-        setupBlock = { pressHome() },
-    ) {
-        startActivityAndWait()
-    }
+    fun coldStartup() = measureStartup(StartupMode.COLD)
 
     @Test
-    fun warmStartup() = benchmarkRule.measureRepeated(
+    fun warmStartup() = measureStartup(StartupMode.WARM)
+
+    private fun measureStartup(mode: StartupMode) = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
         metrics = listOf(StartupTimingMetric()),
         compilationMode = COMPILATION_MODE,
-        startupMode = StartupMode.WARM,
+        startupMode = mode,
         iterations = STARTUP_ITERATIONS,
-        setupBlock = { pressHome() },
+        setupBlock = {
+            pressHome()
+            device.executeShellCommand("logcat -c")
+        },
     ) {
         startActivityAndWait()
+        device.awaitFullyDrawn()
     }
 
     @Test
@@ -314,6 +312,15 @@ private fun sendDurationStartSignal() {
         ComponentName(TARGET_PACKAGE, DURATION_START_RECEIVER),
     )
     InstrumentationRegistry.getInstrumentation().context.sendBroadcast(signal)
+}
+
+private fun UiDevice.awaitFullyDrawn() {
+    val deadline = SystemClock.uptimeMillis() + FULLY_DRAWN_TIMEOUT_MS
+    while (SystemClock.uptimeMillis() < deadline) {
+        if ("Fully drawn $TARGET_PACKAGE/" in executeShellCommand("logcat -d -s ActivityTaskManager")) return
+        SystemClock.sleep(POLL_INTERVAL_MS)
+    }
+    error("$TARGET_PACKAGE did not report fully drawn within $FULLY_DRAWN_TIMEOUT_MS ms")
 }
 
 private fun UiDevice.requireObject(resourceId: String, label: String): UiObject2 {

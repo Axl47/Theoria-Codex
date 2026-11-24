@@ -23,6 +23,7 @@ import java.lang.reflect.Proxy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -33,6 +34,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -66,12 +68,12 @@ class OfflineStorageViewModelTest {
             assertEquals("Removed First", hidden.pendingRemovals["codex:a"]?.label)
             owner.actOnRemoval("codex:a")
             owner.state.first { it.owners.size == 2 }
-            assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
+            assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value!!.postsByOwner.keys)
 
             owner.removeDeferred("codex:a", UndoLifetime.UntilLeft)
             owner.commitRemovals()
             owner.state.first { it.hiddenOwners.isEmpty() && it.owners.map(OfflineStorageOwner::id) == listOf("codex:b") }
-            assertEquals(setOf("codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
+            assertEquals(setOf("codex:b"), coordinator.store.snapshot.value!!.postsByOwner.keys)
             assertNotNull(coordinator.find(post.id))
 
             owner.removeAll()
@@ -157,8 +159,29 @@ class OfflineStorageViewModelTest {
             assertTrue(!completed.isOpen)
             // The ring stays running until the preparation is cleared, a moment after its job reports done.
             // Waited for without failing, so a ring that never settles is reported with the state it stuck in.
-            withTimeoutOrNull(5_000) { owner.state.first { it.codexStates["a"] == CodexOfflineState(fraction = 1f) } }
-            assertEquals(CodexOfflineState(fraction = 1f), owner.state.value.codexStates["a"])
+            withTimeoutOrNull(5_000) { owner.state.first { it.codexStates?.get("a") == CodexOfflineState(fraction = 1f) } }
+            assertEquals(CodexOfflineState(fraction = 1f), owner.state.value.codexStates?.get("a"))
+        }
+    }
+
+    @Test fun `before the copies are read the sheet refreshes and no Codex reads as kept or not kept offline`() = runBlocking {
+        withTimeout(10_000) {
+            codices.ensureCodex("a", "First")
+            val directory = temporary.newFolder()
+            val post = post()
+            OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("media"); null }
+            val coordinator = OfflineMediaCoordinator(
+                OfflineMediaStore(directory), CoroutineScope(Job().apply { cancel() }), { it }, { it.media }, { _, _, _ -> },
+            )
+            val owner = owner(coordinator)
+
+            val unread = owner.state.first { it.refreshing }
+            assertNull(unread.codexStates)
+            assertTrue(unread.owners.isEmpty())
+
+            coordinator.store.load()
+            val read = owner.state.first { it.codexStates?.containsKey("a") == true }
+            assertFalse(read.refreshing)
         }
     }
 
@@ -171,12 +194,12 @@ class OfflineStorageViewModelTest {
             val coordinator = coordinator()
             coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media"); null }
             val owner = owner(coordinator)
-            owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) }
+            owner.state.first { it.codexStates?.get("a") == CodexOfflineState(1f) }
 
             codices.addItems("a", listOf(added))
-            owner.state.first { it.codexStates["a"] == CodexOfflineState(0.5f) }
+            owner.state.first { it.codexStates?.get("a") == CodexOfflineState(0.5f) }
             codices.removeItems("a", setOf(kept.id))
-            owner.state.first { it.codexStates["a"] == CodexOfflineState(0f) }
+            owner.state.first { it.codexStates?.get("a") == CodexOfflineState(0f) }
         }
     }
 
@@ -188,20 +211,20 @@ class OfflineStorageViewModelTest {
             val coordinator = coordinator()
             coordinator.store.save(kept, kept.media, "codex:a") { _, file -> file.writeText("media"); null }
             val owner = owner(coordinator)
-            owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) }
+            owner.state.first { it.codexStates?.get("a") == CodexOfflineState(1f) }
 
             owner.removeDeferred(codexOfflineOwner("a"), UndoLifetime.UntilLeft)
-            val pending = owner.state.first { "a" !in it.codexStates }
+            val pending = owner.state.first { it.codexStates?.contains("a") == false }
             assertEquals(PendingRemoval.Status.Waiting, pending.codexRemovals["a"]?.status)
             owner.actOnRemoval(codexOfflineOwner("a"))
-            owner.state.first { it.codexStates["a"] == CodexOfflineState(1f) && it.codexRemovals.isEmpty() }
+            owner.state.first { it.codexStates?.get("a") == CodexOfflineState(1f) && it.codexRemovals.isEmpty() }
 
             owner.removeDeferred(codexOfflineOwner("a"), UndoLifetime.UntilLeft)
             owner.state.first { "a" in it.codexRemovals }
-            assertEquals(setOf("codex:a"), coordinator.store.snapshot.value.postsByOwner.keys)
+            assertEquals(setOf("codex:a"), coordinator.store.snapshot.value!!.postsByOwner.keys)
             owner.commitRemovals()
             val committed = owner.state.first { it.codexRemovals.isEmpty() && it.offline.postCount == 0 }
-            assertNull(committed.codexStates["a"])
+            assertNull(committed.codexStates?.get("a"))
         }
     }
 
@@ -224,7 +247,7 @@ class OfflineStorageViewModelTest {
             owner.actOnRemoval(OFFLINE_ALL_REMOVAL)
             val restored = owner.state.first { it.owners.size == 2 }
             assertTrue(restored.pendingRemovals.isEmpty())
-            assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value.postsByOwner.keys)
+            assertEquals(setOf("codex:a", "codex:b"), coordinator.store.snapshot.value!!.postsByOwner.keys)
         }
     }
 

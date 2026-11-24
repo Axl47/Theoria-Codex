@@ -77,6 +77,7 @@
 
 ### Changed
 
+- The app opens sooner when you have many downloaded chapters or offline copies: "Preparing your library…" no longer waits while every download is checked. For a moment after opening, the Offline sheet shows its progress bar until that check finishes.
 - Opening a post in the Viewer loads its first page before looking up the posts next to it, so the first page appears sooner on a slow connection.
 - For You learns from every tag of the posts you like, not only the first 20 in the site's order. On Gelbooru and Danbooru, whose tags come alphabetically, interests further down the alphabet now shape your Mix too, including for posts you liked before this update. A post you both liked and saved counts once.
 - For You plans a Mix faster when you have liked many posts.
