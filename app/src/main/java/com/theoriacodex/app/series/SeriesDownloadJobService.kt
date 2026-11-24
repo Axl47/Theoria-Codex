@@ -135,7 +135,8 @@ class SeriesDownloadJobService : JobService() {
         if (automatic && getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) return true
         val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().series?.downloads ?: return false
         val result = downloads.drain(automatic) { showProgress(params, it) }
-        if (result.failed > 0) notifyDownloadsFailed(this, result.failed)
+        if (result.failed.isNotEmpty()) notifyDownloadsFailed(this, result.failed)
+        showDownloadsWaiting(this, automatic, result.waiting)
         return result.retry
     }
 

@@ -69,7 +69,7 @@ class SeriesDownloadsTest {
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
         assertEquals(listOf("schedule user"), harness.scheduled)
 
-        assertEquals(DrainResult(downloaded = 3, failed = 0), harness.downloads.drain(automatic = false))
+        assertEquals(DrainResult(downloaded = 3), harness.downloads.drain(automatic = false))
         assertEquals(listOf("/c1", "/c1", "/c2", "/c2", "/c3", "/c3"), harness.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
         assertEquals(setOf("/c1", "/c2", "/c3"), harness.downloads.downloaded(id))
         assertEquals(emptyMap<String, ChapterDownload>() + chapters.associate { it.entry.address to ChapterDownload.OnDevice }, harness.downloads.states(id).first())
@@ -102,7 +102,7 @@ class SeriesDownloadsTest {
         harness.store.save(post, pages, "codex:x") { _, file -> file.writeBytes(PAGE); null }
         harness.downloads.download(id, listOf("/c1"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(automatic = false))
+        assertEquals(DrainResult(downloaded = 1), harness.downloads.drain(automatic = false))
         assertEquals(emptyList<String>(), harness.fetched)
         assertEquals(setOf("/c1"), harness.downloads.downloaded(id))
     }
@@ -118,12 +118,12 @@ class SeriesDownloadsTest {
         assertEquals(ChapterDownload.Queued(0f), harness.downloads.states(id).first()["/c1"])
         harness.downloads.delete(id, "/c1")
 
-        assertEquals(DrainResult(downloaded = 1, failed = 0), drain.await())
+        assertEquals(DrainResult(downloaded = 1), drain.await())
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
         assertFalse(root().walk().any { it.name.startsWith(".pending-") })
     }
 
-    @Test fun `a page is tried a bounded number of times and a failure that may pass keeps the chapter and stops the lane`() = runTest {
+    @Test fun `a page is tried a bounded number of times and a failure that may pass keeps the chapter and holds its source`() = runTest {
         val harness = Harness(this)
         val attempts = mutableMapOf<String, Int>()
         harness.onFetch = { url ->
@@ -133,7 +133,7 @@ class SeriesDownloadsTest {
         }
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 0, retry = true), harness.downloads.drain(automatic = false))
+        assertEquals(DrainResult(downloaded = 1, retry = true), harness.downloads.drain(automatic = false))
         assertEquals(SeriesDownloads.PAGE_ATTEMPTS, attempts["$PAGES/c1/1"])
         assertEquals(SeriesDownloads.PAGE_ATTEMPTS, attempts["$PAGES/c2/1"])
         assertEquals(
@@ -143,13 +143,29 @@ class SeriesDownloadsTest {
         assertFalse(root().walk().any { it.name.startsWith(".pending-") })
     }
 
+    @Test fun `a source that is off holds only its own chapters, which the drain reports as waiting`() = runTest {
+        val elsewhere = SeriesId(SourceKey.parseOrThrow("custom_mihon_8"), "/title/2")
+        val harness = Harness(this, others = listOf(StoredSeries(Series(elsewhere, "Other"))))
+        harness.off = setOf(source)
+        harness.downloads.download(id, listOf("/c1"))
+        harness.downloads.download(elsewhere, listOf("/c2"))
+
+        val result = harness.downloads.drain(automatic = false)
+
+        assertEquals(DrainResult(downloaded = 1, retry = true, waiting = listOf(ChapterName(id, "Title", "Ch. 1"))), result)
+        assertEquals(mapOf("/c1" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
+        assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(elsewhere).first())
+    }
+
     @Test fun `an unavailable chapter leaves the queue and the lane goes on`() = runTest {
         val harness = Harness(this)
         harness.onFetch = { url -> if ("/c1/" in url) throw ChapterUnavailable("Gone") }
         // Chapter 9 is not one the source lists.
         harness.downloads.download(id, listOf("/c1", "/c9", "/c2"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 2), harness.downloads.drain(automatic = false))
+        // The chapter the source does not list is named as nothing.
+        val failed = listOf(ChapterName(id, "Title", "Ch. 1"), ChapterName(id, "Title", ""))
+        assertEquals(DrainResult(downloaded = 1, failed = failed), harness.downloads.drain(automatic = false))
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
     }
 
@@ -164,7 +180,7 @@ class SeriesDownloadsTest {
         }
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 2), harness.downloads.drain(automatic = false))
+        assertEquals(2, harness.downloads.drain(automatic = false).failed.size)
         assertEquals(mapOf("/c3" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
     }
 
@@ -175,7 +191,7 @@ class SeriesDownloadsTest {
         }
         harness.downloads.download(id, listOf("/c1", "/c2"))
 
-        assertEquals(DrainResult(downloaded = 1, failed = 1), harness.downloads.drain(automatic = false))
+        assertEquals(1, harness.downloads.drain(automatic = false).failed.size)
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
         assertTrue(harness.fetched.none { "video.test" in it })
     }
@@ -198,7 +214,7 @@ class SeriesDownloadsTest {
         val restarted = Harness(this)
         restarted.downloads.resume()
         assertEquals(listOf("ensure user"), restarted.scheduled)
-        assertEquals(DrainResult(downloaded = 1, failed = 0), restarted.downloads.drain(automatic = false))
+        assertEquals(DrainResult(downloaded = 1), restarted.downloads.drain(automatic = false))
     }
 
     @Test fun `a chapter fetched while every offline copy is removed is not kept, and stays queued unless cancelled first`() = runTest {
@@ -211,13 +227,13 @@ class SeriesDownloadsTest {
 
         harness.store.clear()
         held.complete(Unit)
-        assertEquals(DrainResult(downloaded = 0, failed = 0, retry = true), drain.await())
+        assertEquals(DrainResult(downloaded = 0, retry = true), drain.await())
         assertEquals(mapOf("/c1" to ChapterDownload.Queued(null), "/c2" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
 
         harness.downloads.cancelAll()
         harness.store.clear()
         assertEquals(emptyMap<String, ChapterDownload>(), harness.downloads.states(id).first())
-        assertEquals(DrainResult(downloaded = 0, failed = 0), harness.downloads.drain(automatic = false))
+        assertEquals(DrainResult(downloaded = 0), harness.downloads.drain(automatic = false))
     }
 
     @Test fun `each lane has its own job, and a running one never holds back the other`() = runTest {
@@ -233,9 +249,9 @@ class SeriesDownloadsTest {
         assertEquals(listOf("schedule user", "schedule automatic"), harness.scheduled)
         held.complete(Unit)
         // The user's job leaves it to that one.
-        assertEquals(DrainResult(downloaded = 1, failed = 0), user.await())
+        assertEquals(DrainResult(downloaded = 1), user.await())
         assertEquals(mapOf("/c1" to ChapterDownload.OnDevice, "/c2" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
-        assertEquals(DrainResult(downloaded = 1, failed = 0), harness.downloads.drain(automatic = true))
+        assertEquals(DrainResult(downloaded = 1), harness.downloads.drain(automatic = true))
     }
 
     @Test fun `lanes are scheduled again when the sources change, and the user's lane, draining too, when the network settings do`() = runTest {
@@ -297,7 +313,7 @@ class SeriesDownloadsTest {
         assertEquals(emptyList<String>(), harness.scheduled)
 
         held.complete(Unit)
-        assertEquals(DrainResult(downloaded = 2, failed = 0), replacing.await())
+        assertEquals(DrainResult(downloaded = 2), replacing.await())
         assertFalse(root().walk().any { it.name.startsWith(".pending-") })
     }
 
@@ -357,18 +373,22 @@ class SeriesDownloadsTest {
         scope: TestScope,
         stored: StoredSeries = StoredSeries(Series(id, "Title")),
         entries: List<StoredSeriesEntry> = chapters,
+        others: List<StoredSeries> = emptyList(),
         deleteAfterReading: Boolean = false,
     ) {
         val scheduled = mutableListOf<String>()
         val fetched = mutableListOf<String>()
         var onFetch: suspend (String) -> Unit = {}
         var mediaOf: (SeriesEntry) -> EntryMedia = { EntryMedia.Pages(twoPages(it)) }
+
+        /** Sources that are off; every other source is on. */
+        var off: Set<SourceKey> = emptySet()
         val store = scope.store()
         val downloads = SeriesDownloads(
             store = store,
             queueFile = folder.root.resolve("queue.json"),
-            repository = Stored(stored, entries),
-            source = { key -> FakeSource(source) { mediaOf(it) }.takeIf { it.key == key } },
+            repository = Stored(listOf(stored) + others, entries),
+            source = { key -> FakeSource(key) { mediaOf(it) }.takeIf { key !in off } },
             covers = { series -> series.coverUrl?.let { "$it#loadable" } },
             fetch = { url, file ->
                 onFetch(url)
@@ -410,8 +430,8 @@ class SeriesDownloadsTest {
     }
 
     /** A repository that only answers what is stored; downloads need nothing else. */
-    private class Stored(private val stored: StoredSeries, private val entries: List<StoredSeriesEntry>) : SeriesRepository {
-        override suspend fun series(id: SeriesId) = stored.takeIf { it.series.id == id }
+    private class Stored(private val stored: List<StoredSeries>, private val entries: List<StoredSeriesEntry>) : SeriesRepository {
+        override suspend fun series(id: SeriesId) = stored.firstOrNull { it.series.id == id }
         override suspend fun entries(id: SeriesId) = entries
         override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
         override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
