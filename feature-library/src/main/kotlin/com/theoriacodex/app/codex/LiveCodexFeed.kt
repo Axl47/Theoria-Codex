@@ -134,6 +134,17 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         load(branches.keys.toList(), retry = false, cacheInitialCover = true)
     }
 
+    fun reload(initial: List<B>) {
+        val previous = LinkedHashMap(branches)
+        job?.cancel()
+        related.clear("live codex reloaded")
+        generation++
+        loadedAt = System.currentTimeMillis()
+        branches.clear()
+        initial.associateByTo(branches) { it.id }
+        load(branches.keys.toList(), retry = false, kept = previous)
+    }
+
     fun loadMore() {
         if (!state.value.loading) load(branches.values.filter { it.canLoadMore }.map { it.id }, retry = false)
     }
@@ -142,7 +153,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         if (!state.value.loading) load(branches.values.filter { it.error != null }.map { it.id }, retry = true)
     }
 
-    private fun load(ids: List<String>, retry: Boolean, cacheInitialCover: Boolean = false) {
+    private fun load(ids: List<String>, retry: Boolean, cacheInitialCover: Boolean = false, kept: Map<String, B>? = null) {
         if (ids.isEmpty()) return
         val admitted = ++generation
         mutableState.value = state.value.copy(loading = true, generation = generation)
@@ -153,9 +164,19 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
                     val result = fetch(branch, retry)
                     if (generation == admitted) {
                         branches[id] = result
-                        publish(loading = true)
-                        cacheFirstPost(admitted, cacheInitialCover)
+                        if (kept == null) {
+                            publish(loading = true)
+                            cacheFirstPost(admitted, cacheInitialCover)
+                        }
                     }
+                }
+                if (kept != null && generation == admitted) {
+                    if (branches.values.all { it.posts.isEmpty() && it.error != null }) {
+                        branches.clear()
+                        branches.putAll(kept)
+                    }
+                    publish(loading = false)
+                    cacheFirstPost(admitted, root = true)
                 }
             } finally {
                 if (generation == admitted) {

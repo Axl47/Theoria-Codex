@@ -213,9 +213,11 @@ class SavedSearchesCodexViewModelTest {
         }
     }
 
-    @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page and pages on below it`() = runTest {
+    @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page, keeping old pages if that fails`() = runTest {
         var uploads = listOf("old1", "old2", "old3", "old4")
+        var offline = false
         val source = adapter(SourceKey.PIXIV) { _, token ->
+            check(!offline) { "offline" }
             val page = token?.toInt() ?: 0
             Page(uploads.drop(page * 2).take(2).map { testPost(SourceKey.PIXIV, it) }, "${page + 1}".takeIf { (page + 1) * 2 < uploads.size })
         }
@@ -231,7 +233,16 @@ class SavedSearchesCodexViewModelTest {
             val found = listOf(baseline.checked(listOf("new1", "new2"), loadedAt + 1))
 
             owner.synchronize(saved, AppSettings(), setOf(SourceKey.PIXIV))
-            if (owner.state.value.predates(found)) owner.refresh()
+            assertTrue(owner.state.value.predates(found))
+            offline = true
+            owner.refresh()
+            assertEquals(listOf("old1", "old2"), owner.state.value.posts.map { it.id.sourcePostId })
+            advanceUntilIdle()
+            assertEquals(listOf("old1", "old2"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertTrue(owner.state.value.errors.isEmpty())
+
+            offline = false
+            owner.refresh()
             advanceUntilIdle()
             assertEquals(listOf("new1", "new2"), owner.state.value.posts.map { it.id.sourcePostId })
 

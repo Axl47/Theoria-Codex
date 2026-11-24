@@ -57,10 +57,10 @@ class FollowedCodexViewModel(
         if (identity == follows.map { it.membershipId to it.creator } && available == availableSources) return
         follows = selected
         availableSources = available
-        refresh()
+        feed.reset(follows.map(::CreatorBranch))
     }
 
-    override fun refresh() = feed.reset(follows.map(::CreatorBranch))
+    override fun refresh() = feed.reload(follows.map(::CreatorBranch))
     override fun loadMore() = feed.loadMore()
     override fun retry() = feed.retry()
 
