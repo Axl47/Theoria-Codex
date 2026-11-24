@@ -2,11 +2,11 @@ package com.theoriacodex.app.vision
 
 import com.theoriacodex.domain.vision.PredictedTag
 import java.io.StringReader
-import org.junit.Test
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Test
 
 class TagVocabularyTest {
     private val lazyTag = "don't_say_\"lazy\""
@@ -26,7 +26,7 @@ class TagVocabularyTest {
     private fun vocabulary(text: String = csv) = TagVocabulary.read(StringReader(text))
 
     @Test
-    fun `predictions keep general and character tags above the floor, strongest first`() {
+    fun `predictions keep general and character tags above the floor, strongest first (ADR 0101)`() {
         val scores = floatArrayOf(0.99f, 0.98f, 0.97f, 0.96f, 0.9f, 0.2f, 0.5f, 0.7f)
 
         assertEquals(
@@ -48,13 +48,13 @@ class TagVocabularyTest {
     }
 
     @Test
-    fun `quoted names keep their commas and doubled quotes`() {
+    fun `quoted names keep their commas and doubled quotes (ADR 0101)`() {
         assertNotNull(vocabulary().baseRate(lazyTag))
         assertNotNull(vocabulary().baseRate("hello, world"))
     }
 
     @Test
-    fun `base rate is the count over the four ratings' counts and excludes the rating tags themselves`() {
+    fun `base rate is the count over the four ratings' counts and excludes the rating tags themselves (ADR 0101)`() {
         val words = vocabulary()
 
         assertEquals(0.6, words.baseRate("solo")!!, 1e-9)
@@ -66,7 +66,7 @@ class TagVocabularyTest {
     }
 
     @Test
-    fun `a malformed file is rejected`() {
+    fun `a malformed file is rejected (ADR 0101)`() {
         val header = "tag_id,name,category,count\n"
 
         assertThrows(IllegalStateException::class.java) { vocabulary(header + "1,solo,7,10") }
@@ -76,7 +76,7 @@ class TagVocabularyTest {
     }
 
     @Test
-    fun `scores must match the vocabulary's size`() {
+    fun `scores must match the vocabulary's size (ADR 0101)`() {
         assertThrows(IllegalArgumentException::class.java) { vocabulary().predictions(FloatArray(7)) }
     }
 }

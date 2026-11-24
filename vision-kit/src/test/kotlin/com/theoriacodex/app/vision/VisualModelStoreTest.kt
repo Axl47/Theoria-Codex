@@ -76,7 +76,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `download verifies both files, moves them into place and ends Ready`() {
+    fun `download verifies both files, moves them into place and ends Ready (ADR 0101)`() {
         val store = storeOver(serving())
         assertEquals(ModelState.Absent, store.states.value)
 
@@ -89,7 +89,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `bytes that are not the pinned ones fail as a mismatch and leave no file behind`() {
+    fun `bytes that are not the pinned ones fail as a mismatch and leave no file behind (ADR 0101)`() {
         val tampered = modelBytes.copyOf().also { it[100] = (it[100] + 1).toByte() }
         val store = storeOver(serving(model = tampered))
 
@@ -101,7 +101,17 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a file longer than pinned fails as a mismatch`() {
+    fun `a download that fails on its second file leaves neither file behind (ADR 0101)`() {
+        val store = storeOver(client { name -> if (name == spec.model.name) ok(modelBytes) else ok("tag_id".toByteArray()) })
+
+        store.download()
+
+        assertEquals(ModelState.Failed(mismatch = true), store.awaitSettled())
+        assertFalse(store.modelFile.parentFile!!.exists())
+    }
+
+    @Test
+    fun `a file longer than pinned fails as a mismatch (ADR 0101)`() {
         val store = storeOver(serving(model = modelBytes + 1))
 
         store.download()
@@ -111,7 +121,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `an HTTP error fails without calling the bytes a mismatch`() {
+    fun `an HTTP error fails without calling the bytes a mismatch (ADR 0101)`() {
         val store = storeOver(client { Response.Builder().code(500).message("Server Error").body(ByteArray(0).toResponseBody()) })
 
         store.download()
@@ -121,7 +131,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a failed download can be started again`() {
+    fun `a failed download can be started again (ADR 0101)`() {
         var healthy = false
         val store = storeOver(
             client { name ->
@@ -139,7 +149,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a store over a folder holding both verified-size files starts Ready`() {
+    fun `a store over a folder holding both verified-size files starts Ready (ADR 0101)`() {
         val first = storeOver(serving())
         first.modelFile.parentFile!!.mkdirs()
         first.modelFile.writeBytes(modelBytes)
@@ -149,16 +159,37 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a folder holding only one file starts Absent`() {
+    fun `a folder holding only one file starts Absent and is cleared (ADR 0101)`() {
         val first = storeOver(serving())
         first.modelFile.parentFile!!.mkdirs()
         first.modelFile.writeBytes(modelBytes)
 
         assertEquals(ModelState.Absent, storeOver(serving()).states.value)
+        assertFalse(first.modelFile.parentFile!!.exists())
     }
 
     @Test
-    fun `delete after a download removes the folder and reports it`() = runBlocking {
+    fun `a file cut short by an interrupted download does not start Ready (ADR 0101)`() {
+        val first = storeOver(serving())
+        first.modelFile.parentFile!!.mkdirs()
+        first.modelFile.writeBytes(modelBytes.copyOf(1_000))
+        first.vocabularyFile.writeBytes(vocabularyBytes)
+
+        assertEquals(ModelState.Absent, storeOver(serving()).states.value)
+    }
+
+    @Test
+    fun `files of the pinned sizes start Ready without being hashed again (ADR 0101)`() {
+        val first = storeOver(serving())
+        first.modelFile.parentFile!!.mkdirs()
+        first.modelFile.writeBytes(ByteArray(modelBytes.size))
+        first.vocabularyFile.writeBytes(ByteArray(vocabularyBytes.size))
+
+        assertEquals(ModelState.Ready, storeOver(serving()).states.value)
+    }
+
+    @Test
+    fun `delete after a download removes the folder and reports it (ADR 0101)`() = runBlocking {
         val store = storeOver(serving())
         store.download()
         store.awaitSettled()
@@ -171,7 +202,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `delete during a download stops it and nothing is left or restored`() = runBlocking {
+    fun `delete during a download stops it and nothing is left or restored (ADR 0101)`() = runBlocking {
         val reading = CountDownLatch(1)
         val slowModel = object : InputStream() {
             private val chunk = ByteArray(1024)

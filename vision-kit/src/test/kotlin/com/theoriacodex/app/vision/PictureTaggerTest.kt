@@ -53,7 +53,7 @@ class PictureTaggerTest {
     }
 
     @Test
-    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005)`() = runBlocking {
+    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005, 0097)`() = runBlocking {
         val spec = VisualModelSpec.wdVitTaggerV3("https://models.test/")
         val store = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
         val tagger = PictureTagger(

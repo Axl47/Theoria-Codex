@@ -1,16 +1,18 @@
 package com.theoriacodex.app.vision
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.abs
 import kotlin.random.Random
-import org.junit.Test
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class PictureEmbeddingTest {
     @Test
-    fun `round trip stays within one step of the largest magnitude and size is dimensions plus the scale`() {
+    fun `round trip stays within one step of the largest magnitude and size is dimensions plus the scale (ADR 0096)`() {
         val random = Random(7)
         val values = FloatArray(768) { random.nextFloat() * 2f - 1f }
         values[10] = -1.5f
@@ -24,6 +26,13 @@ class PictureEmbeddingTest {
         val tolerance = 1.5f / 127f
         values.indices.forEach { assertTrue("dimension $it", abs(values[it] - decoded[it]) <= tolerance) }
         assertEquals(-1.5f, decoded[10], 1e-5f)
+    }
+
+    @Test
+    fun `encoding is one scaled byte per dimension, then the scale as a little-endian float (ADR 0096)`() {
+        val scale = ByteBuffer.allocate(Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putFloat(1.27f / 127f).array()
+
+        assertArrayEquals(byteArrayOf(127, -50, 0) + scale, PictureEmbedding.encode(floatArrayOf(1.27f, -0.5f, 0f)))
     }
 
     @Test

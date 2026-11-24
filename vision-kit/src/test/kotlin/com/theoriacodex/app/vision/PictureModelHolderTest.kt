@@ -2,7 +2,6 @@ package com.theoriacodex.app.vision
 
 import android.graphics.Bitmap
 import java.util.concurrent.atomic.AtomicInteger
-import org.junit.Test
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -13,6 +12,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PictureModelHolderTest {
@@ -34,7 +34,7 @@ class PictureModelHolderTest {
         PictureModelHolder(CoroutineScope(StandardTestDispatcher(testScheduler)), idleMs = IDLE, open = counting::open)
 
     @Test
-    fun `loads once for consecutive uses and closes after the idle delay`() = runTest {
+    fun `loads once for consecutive uses and closes after the idle delay (ADR 0096)`() = runTest {
         val counting = Counting()
         val holder = holder(counting)
 
@@ -51,7 +51,7 @@ class PictureModelHolderTest {
     }
 
     @Test
-    fun `a use before the delay ends restarts it`() = runTest {
+    fun `a use before the delay ends restarts it (ADR 0096)`() = runTest {
         val counting = Counting()
         val holder = holder(counting)
 
@@ -68,7 +68,7 @@ class PictureModelHolderTest {
     }
 
     @Test
-    fun `reopens after the idle close`() = runTest {
+    fun `reopens after the idle close (ADR 0096)`() = runTest {
         val counting = Counting()
         val holder = holder(counting)
 
@@ -82,7 +82,7 @@ class PictureModelHolderTest {
     }
 
     @Test
-    fun `release closes at once and the next use loads again`() = runTest {
+    fun `release closes at once and the next use loads again (ADR 0096)`() = runTest {
         val counting = Counting()
         val holder = holder(counting)
 
@@ -99,7 +99,7 @@ class PictureModelHolderTest {
     }
 
     @Test
-    fun `concurrent uses run one at a time on one model`() = runTest {
+    fun `concurrent uses run one at a time on one model (ADR 0096, 0097)`() = runTest {
         val counting = Counting()
         val holder = holder(counting)
         val running = AtomicInteger()
