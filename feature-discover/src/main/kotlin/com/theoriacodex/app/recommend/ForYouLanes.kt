@@ -5,8 +5,6 @@ import com.theoriacodex.app.search.TagCountCoordinator
 import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
-import com.theoriacodex.data.repository.LikedPost
-import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.mapConcurrent
@@ -20,7 +18,6 @@ import com.theoriacodex.domain.recommendation.CrossSourceTraining
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -33,7 +30,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal class ForYouLanesLoader(
     private val registry: SourceAdapterRegistry,
     private val store: TagSuggestionStore,
-    private val likes: LikesRepository,
     private val tagAffinity: suspend (profileId: String) -> TagAffinityInputs,
     private val computation: CoroutineDispatcher,
     private val random: () -> Random?,
@@ -45,7 +41,7 @@ internal class ForYouLanesLoader(
             .inPresentationOrder()
         val profile = request.settings.activeProfileId
         val blocked = request.settings.forYouBlacklistByProfile[profile].orEmpty()
-        val interests = interestSeeds(sources, profile, likes.observeLikes(profile).first(), blocked)
+        val interests = interestSeeds(sources, profile, blocked)
         val seeds = interests.ifEmpty { trendingSeeds(sources, blocked) }
         seeds.inTurnBySource().take(LANE_LIMIT).map { (source, tags) -> lane(source, tags, request) }
     }
@@ -54,12 +50,11 @@ internal class ForYouLanesLoader(
     private suspend fun interestSeeds(
         sources: List<SourceKey>,
         profile: String,
-        liked: List<LikedPost>,
         blocked: List<ForYouBlacklistEntry>,
     ): List<LaneSeed> {
         val affinity = tagAffinity(profile)
-        if (liked.isEmpty() && affinity.keptBySource.isEmpty() && affinity.explicit.isEmpty()) return emptyList()
-        val training = crossSourceTraining(liked, store)
+        if (affinity.liked.isEmpty() && affinity.keptBySource.isEmpty() && affinity.explicit.isEmpty()) return emptyList()
+        val training = crossSourceTraining(affinity.liked, store)
         return sources.mapConcurrent { source ->
             availableInterests(source, training, affinity).map { LaneSeed(source, it.tags) }
         }.flatten().filterNot { blocked.hidesSeed(it.source, it.tags) }
@@ -68,6 +63,7 @@ internal class ForYouLanesLoader(
     /**
      * [source]'s interests, picked again without any tag the source reports no posts for, since its lane would stay
      * empty. Counts are asked only for the picked tags; after [AVAILABILITY_ROUNDS] picks, interests with such tags drop.
+     * The candidates are weighed once, before the rounds.
      */
     private suspend fun availableInterests(source: SourceKey, training: CrossSourceTraining, affinity: TagAffinityInputs): List<ForYouInterest> {
         val documents = training.documentsFor(source)
@@ -77,11 +73,10 @@ internal class ForYouLanesLoader(
         val pictured = affinity.pictures.candidates.mapNotNull { token ->
             training.translate(token.replace(' ', '_'), SourceKey.DANBOORU, source)?.let { it to token }
         }.toMap()
+        val picker = ForYouInterests.prepare(source, documents, affinity, translate, pictured)
         var unavailable = emptySet<String>()
         for (round in 1..AVAILABILITY_ROUNDS) {
-            val interests = ForYouInterests.generate(
-                source, documents, affinity, translate, unavailable, random(), pictureCandidates = pictured,
-            )
+            val interests = picker.pick(unavailable, random())
             val providerCounts = counts.fetch(source, interests.flatMap { it.tags })
             val missing = interests.flatMap { it.tags }.filterTo(mutableSetOf()) { providerCounts[it] == 0 }
             if (missing.isEmpty() || round == AVAILABILITY_ROUNDS) return interests.filter { it.tags.none(missing::contains) }

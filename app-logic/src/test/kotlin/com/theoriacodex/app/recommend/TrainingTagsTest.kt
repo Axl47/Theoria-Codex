@@ -36,8 +36,26 @@ class TrainingTagsTest {
             ),
         )
 
-        assertEquals(listOf("general", "x-ray"), recommendationTagsFor(post))
         assertEquals(listOf("general", "x-ray"), trainingTagsFor(post))
+    }
+
+    @Test
+    fun `a Like keeps every tag, however far down the provider's alphabetical list`() {
+        val tags = (1..60).map { "tag_%02d".format(it) }
+        val post = Post(
+            id = PostId(SourceKey.GELBOORU, "7"),
+            preview = ImageRef(url = "https://example.com/7.jpg", localPath = null, mime = "image/jpeg"),
+            full = null,
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = tags,
+            rawTags = tags,
+            authorName = null,
+            createdAtEpochMs = null,
+        )
+
+        assertEquals(tags, trainingTagsFor(post))
     }
 
     @Test
@@ -59,7 +77,6 @@ class TrainingTagsTest {
             ),
         )
 
-        assertEquals(listOf("猫"), recommendationTagsFor(post))
         assertEquals(listOf("猫"), trainingTagsFor(post))
     }
 

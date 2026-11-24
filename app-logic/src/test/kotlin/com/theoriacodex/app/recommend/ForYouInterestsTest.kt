@@ -24,6 +24,12 @@ class ForYouInterestsTest {
         assertEquals(4, generated.size)
     }
 
+    @Test fun `a tag far down a Like's alphabetical list still leads`() {
+        val documents = List(3) { like -> (1..50).map { "filler_${like}_$it" } + "zorro" }
+        val interests = ForYouInterests.generate(SourceKey.GELBOORU, documents, likedOnly(documents))
+        assertEquals(listOf("zorro"), interests.first().tags)
+    }
+
     @Test fun `separate interests stay together rather than creating unrelated pairs`() {
         val documents = List(4) { listOf("common", "night", "city") } +
             List(4) { listOf("common", "forest", "watercolor") }
