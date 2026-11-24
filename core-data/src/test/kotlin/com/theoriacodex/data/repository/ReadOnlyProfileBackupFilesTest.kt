@@ -14,7 +14,7 @@ import org.junit.rules.TemporaryFolder
 class ReadOnlyProfileBackupFilesTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `read-only snapshot preserves settings bytes and detects later atomic replacements`() = runTest {
+    @Test fun `read-only snapshot preserves settings bytes and detects later atomic replacements (ADR 0025)`() = runTest {
         val directory = temporary.newFolder()
         val file = File(directory, DATASTORE_SETTINGS_FILE_NAME)
         val original = settingsFile(AppSettings()).toByteArray()
@@ -28,7 +28,7 @@ class ReadOnlyProfileBackupFilesTest {
         assertTrue(runCatching { snapshot.requireUnchanged() }.isFailure)
     }
 
-    @Test fun `files a Gson build wrote decode without being rewritten`() = runTest {
+    @Test fun `files a Gson build wrote decode without being rewritten (ADR 0025)`() = runTest {
         val directory = temporary.newFolder()
         File(directory, DATASTORE_SETTINGS_FILE_NAME).writeText(golden("datastore/settings-retired-keys.json"))
         val pins = File(directory, "pinned_searches.json").apply { writeText(goldenPinnedSearchesFile()) }
@@ -60,7 +60,7 @@ class ReadOnlyProfileBackupFilesTest {
         assertTrue(directory.listFiles()!!.isEmpty())
     }
 
-    @Test fun `corrupt future and pending stores fail without quarantine or recovery writes`() = runTest {
+    @Test fun `corrupt future and pending stores fail without quarantine or recovery writes (ADR 0025)`() = runTest {
         listOf("{broken", "{\"schemaVersion\":99}").forEach { document ->
             val directory = temporary.newFolder()
             File(directory, DATASTORE_SETTINGS_FILE_NAME).writeText(document)

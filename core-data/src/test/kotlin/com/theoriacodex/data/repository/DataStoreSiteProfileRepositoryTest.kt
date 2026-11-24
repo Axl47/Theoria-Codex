@@ -48,7 +48,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `mutations follow the shared list rules`() = runBlocking {
+    fun `mutations follow the shared list rules (ADR 0035)`() = runBlocking {
         withRepository(temporary.newFolder()) { repository ->
             val site = profile("booru.example")
             repository.add(site)
@@ -65,7 +65,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `the site limit applies to adds but never to restores`() = runBlocking {
+    fun `the site limit applies to adds but never to restores (ADR 0031)`() = runBlocking {
         withRepository(temporary.newFolder()) { repository ->
             val full = (1..SiteProfile.MAX_CUSTOM_SITES).map { profile("site$it.example") }
             full.forEach { assertEquals(SiteProfileAddResult.Added, repository.add(it)) }
@@ -77,10 +77,12 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `unreadable records are skipped but written back untouched`() = runBlocking {
+    fun `unreadable records are skipped and written back field for field, without keys this version does not know (ADR 0021, 0031)`() = runBlocking {
         val directory = temporary.newFolder()
-        val unreadable = """{"sourceId":"custom_future_example","baseUrl":"https://future.example","label":"","family":"X","addedAt":1}"""
-        directory.resolve(SITE_PROFILES_FILE_NAME).writeText("""{"schemaVersion":1,"sites":[$unreadable,null]}""")
+        val unreadable = """{"sourceId":"custom_future_example","baseUrl":"https://future.example","label":"","family":"X",""" +
+            """"searchTermLimit":3,"userAgent":"agent","referer":"https://future.example/","credentialsRequired":true,""" +
+            """"addedAt":1,"verifiedAt":2,"iconUrl":"https://future.example/icon.png""""
+        directory.resolve(SITE_PROFILES_FILE_NAME).writeText("""{"schemaVersion":1,"sites":[$unreadable,"future":1},null]}""")
 
         withRepository(directory) { repository ->
             assertEquals(emptyList<SiteProfile>(), repository.observeProfiles().first())
@@ -88,14 +90,12 @@ class DataStoreSiteProfileRepositoryTest {
         }
 
         val sites = Json.parseToJsonElement(directory.resolve(SITE_PROFILES_FILE_NAME).readText()).jsonObject.getValue("sites").jsonArray
-        assertEquals(
-            listOf("custom_booru_example", "custom_future_example"),
-            sites.map { it.jsonObject.getValue("sourceId").jsonPrimitive.content },
-        )
+        assertEquals(listOf("custom_booru_example", "custom_future_example"), sites.map { it.jsonObject.getValue("sourceId").jsonPrimitive.content })
+        assertEquals(Json.parseToJsonElement("$unreadable}"), sites[1])
     }
 
     @Test
-    fun `a newer schema is refused rather than overwritten`() = runBlocking {
+    fun `a newer schema is refused rather than overwritten (ADR 0021)`() = runBlocking {
         val directory = temporary.newFolder()
         val newer = """{"schemaVersion":2,"sites":[]}"""
         directory.resolve(SITE_PROFILES_FILE_NAME).writeText(newer)
@@ -109,7 +109,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `an unreadable file is set aside and reported, also after a restart`() = runBlocking {
+    fun `an unreadable file is set aside and reported, also after a restart (ADR 0021)`() = runBlocking {
         val directory = temporary.newFolder()
         directory.resolve(SITE_PROFILES_FILE_NAME).writeText("{broken")
         val firstProcess = FileStoreRecoveryRegistry()

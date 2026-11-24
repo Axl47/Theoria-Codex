@@ -1,7 +1,9 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.QueryStorageCodec
+import com.theoriacodex.data.storage.QueryStorageRecord
 import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.MediaFilter
@@ -16,6 +18,7 @@ import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +67,14 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
     @Test
     fun `an animated search loads back animated`() = runTest {
         assertEquals(animatedSearch, repositoryWith(golden("animated.json")).observeAppliedQuery("animated").first())
+    }
+
+    @Test
+    fun `a search without a media filter is stored without a media key (ADR 0038)`() {
+        fun stored(query: Query) = DurableJson.encodeToString(QueryStorageRecord.serializer(), QueryStorageCodec.encode(query))
+
+        assertFalse(stored(animatedSearch.copy(media = MediaFilter.ANY)).contains("\"media\""))
+        assertTrue(stored(animatedSearch).contains("\"media\":\"ANIMATED\""))
     }
 
     private val animatedSearch = Query(

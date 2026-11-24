@@ -27,7 +27,7 @@ class TachiyomiBackupTest {
     @get:Rule val temporary = TemporaryFolder()
 
     @Test
-    fun `manga keep their source, follow and progress, in Theoria's units`() {
+    fun `manga keep their source, follow and progress, in Theoria's units (ADR 0039)`() {
         val series = decodeTachiyomiBackup(backup {
             message(1) {
                 long(1, 42); string(2, "/series/a"); string(3, "A"); string(5, "Author"); string(7, "Action"); long(8, 1); long(13, 300)
@@ -58,7 +58,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `extension memos come along, and an empty or broken one is none`() {
+    fun `extension memos come along, and an empty or broken one is none (ADR 0039)`() {
         val series = decodeTachiyomiBackup(backup {
             message(1) {
                 long(1, 1); string(2, "/m"); string(3, "M"); string(112, """{"slug":"m-1"}""")
@@ -74,7 +74,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `TachiyomiJ2K's pages left marks a chapter opened on its first page and gives its page count`() {
+    fun `TachiyomiJ2K's pages left marks a chapter opened on its first page and gives its page count (ADR 0039)`() {
         val entries = decodeTachiyomiBackup(backup {
             message(1) {
                 long(1, 1); string(2, "/j"); string(3, "J")
@@ -90,7 +90,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `a manga's reading mode comes from Mihon's reader flags, else the older viewer field`() {
+    fun `a manga's reading mode comes from Mihon's reader flags, else the older viewer field (ADR 0039)`() {
         fun mode(fields: Proto.() -> Unit) = decodeTachiyomiBackup(backup {
             message(1) { long(1, 1); string(2, "/s"); string(3, "S"); fields() }
         }, now = 0).series.single().series.readingMode
@@ -105,7 +105,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `anime come from Anikku's field with their watched position and duration`() {
+    fun `anime come from Anikku's field with their watched position and duration (ADR 0039)`() {
         val series = decodeTachiyomiBackup(backup {
             message(501) {
                 long(1, 9); string(2, "/watch/x"); string(3, "X")
@@ -120,14 +120,14 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `Aniyomi's anime come from its own field`() {
+    fun `Aniyomi's anime come from its own field (ADR 0039)`() {
         val series = decodeTachiyomiBackup(backup { message(3) { long(1, 9); string(2, "/watch/y"); string(3, "Y") } }, now = 0).series
 
         assertEquals("custom_aniyomi_9", series.single().series.series.id.source.id)
     }
 
     @Test
-    fun `series neither followed nor started, and the local source's, are left behind`() {
+    fun `series neither followed nor started, and the local source's, are left behind (ADR 0039)`() {
         val series = decodeTachiyomiBackup(backup {
             message(1) { long(1, 1); string(2, "/untouched"); string(3, "U"); bool(100, false); message(16) { string(1, "/u/1") } }
             message(1) { long(1, 1); string(2, "/started"); string(3, "S"); bool(100, false); message(16) { string(1, "/s/1"); bool(4, true) } }
@@ -140,7 +140,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `an unfollowed series with progress but no history continues from its furthest entry`() {
+    fun `an unfollowed series with progress but no history continues from its furthest entry (ADR 0039)`() {
         val series = decodeTachiyomiBackup(backup {
             message(1) {
                 long(1, 1); string(2, "/s"); string(3, "S"); bool(100, false)
@@ -176,7 +176,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `importing adds the repos Mihon and Anikku list and the preview names the sources still missing`() = runTest {
+    fun `importing adds the repos Mihon and Anikku list and the preview names the sources still missing (ADR 0039)`() = runTest {
         val bytes = backup {
             message(1) { long(1, 1); string(2, "/m"); string(3, "M") }
             message(1) { long(1, 2); string(2, "/n"); string(3, "N") }
@@ -216,7 +216,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `the preview tells a source no extension offers from an extension, or a language, that is off`() = runTest {
+    fun `the preview tells a source no extension offers from an extension, or a language, that is off (ADR 0039)`() = runTest {
         val bytes = backup {
             message(1) { long(1, 1); string(2, "/on"); string(3, "On") }
             message(1) { long(1, 2); string(2, "/ext"); string(3, "Ext") }
@@ -240,7 +240,7 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `repos that cannot be read leave the series import standing`() = runTest {
+    fun `repos that cannot be read leave the series import standing (ADR 0025)`() = runTest {
         val bytes = backup {
             message(1) { long(1, 1); string(2, "/m"); string(3, "M") }
             message(106) { string(1, "https://manga.example/repo"); string(5, "aa11") }
@@ -262,14 +262,55 @@ class TachiyomiBackupTest {
     }
 
     @Test
-    fun `a file that is not a Mihon-family backup, or holds no series, is refused`() {
+    fun `only repos pinned to a signing key and served over https come along (ADR 0039)`() {
+        val bytes = backup {
+            message(1) { long(1, 1); string(2, "/m"); string(3, "M") }
+            message(106) { string(1, "https://signed.example/repo"); string(2, "Signed"); string(5, "aa11") }
+            message(106) { string(1, "http://plain.example/repo"); string(2, "Plain"); string(5, "bb22") }
+            message(106) { string(1, "https://unsigned.example/repo"); string(2, "Unsigned") }
+            message(106) { string(1, "https://blank.example/repo"); string(2, "Blank"); string(5, "   ") }
+        }
+
+        assertEquals(listOf(ExtensionRepo("https://signed.example/repo", "Signed", "aa11")), decodeTachiyomiBackup(bytes, 0).repos)
+    }
+
+    @Test
+    fun `a backup that inflates past 64 MiB is refused as too large before the rest is read, and one at the limit imports (ADR 0039)`() {
+        fun inflatingTo(size: Int): ByteArray {
+            val series = Proto().apply { message(1) { long(1, 1); string(2, "/m"); string(3, "M") } }.bytes()
+            val padding = size - series.size - 2 - 4
+            val unknownField = byteArrayOf(0xBA.toByte(), 0x3E)
+            val length = ByteArray(4) { i -> ((padding ushr (7 * i)) and 0x7f or if (i < 3) 0x80 else 0).toByte() }
+            val gzipped = ByteArrayOutputStream()
+            GZIPOutputStream(gzipped).use { gzip ->
+                gzip.write(series + unknownField + length)
+                val zeros = ByteArray(1 shl 16)
+                var left = padding
+                while (left > 0) {
+                    gzip.write(zeros, 0, minOf(left, zeros.size))
+                    left -= zeros.size
+                }
+            }
+            return gzipped.toByteArray()
+        }
+        val limit = 64 * 1024 * 1024
+
+        assertEquals(1, decodeTachiyomiBackup(inflatingTo(limit), 0).series.size)
+        assertEquals("This backup is too large to import.", runCatching { decodeTachiyomiBackup(inflatingTo(limit + 1), 0) }.exceptionOrNull()?.message)
+        val brokenTail = byteArrayOf(0x1f, 0x8b.toByte(), 8, 0, 0, 0, 0, 0, 0, 0xff.toByte()) + ByteArray(64) { 0xff.toByte() }
+        val overThenBroken = inflatingTo(limit + (1 shl 20)) + brokenTail
+        assertEquals("This backup is too large to import.", runCatching { decodeTachiyomiBackup(overThenBroken, 0) }.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `a file that is not a Mihon-family backup, or holds no series, is refused (ADR 0039)`() {
         assertThrows(IllegalArgumentException::class.java) { decodeTachiyomiBackup("{}".toByteArray(), 0) }
         assertThrows(IllegalArgumentException::class.java) { decodeTachiyomiBackup(backup { message(101) { string(1, "Source") } }, 0) }
         assertThrows(IllegalArgumentException::class.java) { decodeTachiyomiBackup(backup { message(1) { long(1, 0) } }, 0) }
     }
 
     @Test
-    fun `a corrupt backup reaches the generic message, not the parser's`() {
+    fun `a corrupt backup reaches the generic message, not the parser's (ADR 0039)`() {
         assertThrows(IllegalStateException::class.java) { decodeTachiyomiBackup(backup { long(1, 5) }, 0) }
     }
 }

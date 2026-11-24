@@ -22,7 +22,7 @@ class WatchedTagCountsTest {
     private val gelbooru = SourceKey.GELBOORU
 
     @Test
-    fun `a new tag at a full source evicts the lowest count and starts one above it`() {
+    fun `a new tag at a full source evicts the lowest count and starts one above it (ADR 0030)`() {
         val full = LifetimeStatistics(watchedByTag = counts(gelbooru, "a" to 5L, "b" to 3L, "c" to 7L))
 
         val next = full.recordWatchedTags(gelbooru, setOf("d"), limit = 3)
@@ -32,7 +32,7 @@ class WatchedTagCountsTest {
     }
 
     @Test
-    fun `tied lowest counts leave together and a tag seen again counts on from its estimate`() {
+    fun `tied lowest counts leave together and a tag seen again counts on from its estimate (ADR 0030)`() {
         val full = LifetimeStatistics(watchedByTag = counts(gelbooru, "a" to 2L, "b" to 2L, "c" to 9L))
 
         val evicted = full.recordWatchedTags(gelbooru, setOf("d"), limit = 3)
@@ -44,7 +44,7 @@ class WatchedTagCountsTest {
     }
 
     @Test
-    fun `a view counts the tags already held before adding new ones, whatever their order`() {
+    fun `a view counts the tags already held before adding new ones, whatever their order (ADR 0030)`() {
         val full = LifetimeStatistics(watchedByTag = counts(gelbooru, "a" to 5L, "b" to 10L))
 
         val newFirst = full.recordWatchedTags(gelbooru, linkedSetOf("c", "a"), limit = 2)
@@ -71,7 +71,7 @@ class WatchedTagCountsTest {
     }
 
     @Test
-    fun `an uncapped table keeps its top counts and floors at the largest count that did not fit`() {
+    fun `an uncapped table keeps its top counts and floors at the largest count that did not fit (ADR 0030)`() {
         val uncapped = LifetimeStatistics(
             watchedByTag = counts(gelbooru, "a" to 9L, "b" to 7L, "c" to 4L, "d" to 4L, "e" to 1L) + counts(SourceKey.PIXIV, "sky" to 1L),
         )
@@ -87,7 +87,7 @@ class WatchedTagCountsTest {
     }
 
     @Test
-    fun `restoring a backup reads absent tags at each side's floor and changes nothing the second time`() {
+    fun `restoring a backup reads absent tags at each side's floor and changes nothing the second time (ADR 0030)`() {
         val current = LifetimeStatistics(
             watchedByTag = counts(gelbooru, "a" to 12L, "b" to 3L),
             watchedTagFloors = mapOf(gelbooru to 2L),
@@ -105,7 +105,7 @@ class WatchedTagCountsTest {
     }
 
     @Test
-    fun `a version 2 file with an uncapped map loads capped and is written back as version 3 with its floor`() = runTest {
+    fun `a version 2 file with an uncapped map loads capped and is written back as version 3 with its floor (ADR 0030)`() = runTest {
         val directory = tempFolder.newFolder("statistics-v2")
         val tags = (1..WATCHED_TAGS_PER_SOURCE + 1).map { StatisticsTagCountRecord("GELBOORU", "tag$it", it.toLong()) }
         val v2 = StatisticsDataStoreFile(

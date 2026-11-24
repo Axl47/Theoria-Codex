@@ -13,7 +13,7 @@ import org.junit.Test
 class CreatorFollowsRepositoryTest {
     private val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "42", uploadsQuery = "user:42")
 
-    @Test fun `identity ignores display changes and remains source scoped`() = runTest {
+    @Test fun `identity ignores display changes and remains source scoped (ADR 0019)`() = runTest {
         val settings = InMemorySettingsRepository()
         val repository = CreatorFollowsRepository(settings)
         repository.follow(creator, emptyList())
@@ -42,7 +42,20 @@ class CreatorFollowsRepositoryTest {
         assertTrue(repository.observe().first().isEmpty())
     }
 
-    @Test fun `restore puts the removed record back in place unless the creator was followed again`() = runTest {
+    @Test fun `following marks the posts it was shown as seen, so only later posts count as new (ADR 0019)`() = runTest {
+        val repository = CreatorFollowsRepository(InMemorySettingsRepository())
+        fun post(id: String, source: String = "PIXIV") = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
+            com.theoriacodex.data.storage.PostStorageRecord(source = source, sourcePostId = id)))
+
+        repository.follow(creator, listOf(post("shown"), post("elsewhere", source = "GELBOORU"), post("also shown")))
+        val follow = repository.observe().first().single()
+        repository.recordChecks(mapOf(follow.membershipId to listOf(post("later"), post("shown"), post("also shown"))), 42L)
+
+        assertEquals(listOf("shown", "also shown"), follow.latestPostIds)
+        assertEquals(1, repository.observe().first().single().newPostCount)
+    }
+
+    @Test fun `restore puts the removed record back in place unless the creator was followed again (ADR 0019)`() = runTest {
         val repository = CreatorFollowsRepository(InMemorySettingsRepository())
         val other = creator.copy(profileId = "7", uploadsQuery = "user:7")
         repository.follow(creator, emptyList())
@@ -61,6 +74,19 @@ class CreatorFollowsRepositoryTest {
         val refollowed = repository.observe().first().last()
         repository.restore(removed)
         assertEquals(listOf(before[1], refollowed), repository.observe().first())
+    }
+
+    @Test fun `the follow list stops at 200 and an undo into a full list does nothing (ADR 0019)`() = runTest {
+        val repository = CreatorFollowsRepository(InMemorySettingsRepository())
+        fun numbered(i: Int) = creator.copy(profileId = "$i", uploadsQuery = "user:$i")
+        repeat(200) { repository.follow(numbered(it), emptyList()) }
+        assertTrue(runCatching { repository.follow(numbered(200), emptyList()) }.isFailure)
+        assertEquals(200, repository.observe().first().size)
+        val removed = requireNotNull(repository.unfollow(numbered(0)))
+        repository.follow(numbered(200), emptyList())
+        val refilled = repository.observe().first()
+        repository.restore(removed)
+        assertEquals(refilled, repository.observe().first())
     }
 
     @Test fun `follow records round trip and old settings decode empty`() {

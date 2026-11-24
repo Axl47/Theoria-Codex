@@ -9,7 +9,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -23,7 +25,7 @@ import org.junit.rules.TemporaryFolder
 class ThumbnailStatisticsRepositoryTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `a post seen before the first snapshot keeps retained thumbnails`() = runTest {
+    @Test fun `a post seen before the first snapshot keeps retained thumbnails (ADR 0037)`() = runTest {
         val delegate = InMemoryStatisticsRepository()
         delegate.recordCodexPostOpen("codex", "PIXIV:42", "Post")
         val store = StatisticsThumbnailStore(temporary.newFolder())
@@ -36,7 +38,7 @@ class ThumbnailStatisticsRepositoryTest {
         assertTrue(repository.observeStatistics().first().thumbnails.containsKey("PIXIV:42"))
     }
 
-    @Test fun `fetch failure never blocks recording and only promotion or available post retries`() = runTest {
+    @Test fun `fetch failure never blocks recording and only promotion or available post retries (ADR 0037)`() = runTest {
         val delegate = InMemoryStatisticsRepository()
         var requests = 0
         var offline = true
@@ -72,7 +74,56 @@ class ThumbnailStatisticsRepositoryTest {
         assertEquals(3, requests)
     }
 
-    @Test fun `statistics updates outside Codex rankings skip the thumbnail directory pass`() = runTest {
+    @Test fun `a fetch that hangs is abandoned after 15 seconds and the next available post retries (ADR 0037)`() = runTest {
+        val delegate = InMemoryStatisticsRepository()
+        var requests = 0
+        var hang = true
+        val repository = ThumbnailStatisticsRepository(delegate, backgroundScope,
+            StatisticsThumbnailStore(temporary.newFolder())) { _, file ->
+            requests++
+            if (hang) awaitCancellation()
+            file.writeText("image")
+            true
+        }
+        runCurrent()
+        val post = post("42")
+        repository.recordPostAvailable(post)
+        repository.recordCodexPostOpen("codex", "PIXIV:42", "Post")
+        runCurrent()
+        hang = false
+        repository.recordPostAvailable(post)
+
+        advanceTimeBy(14_999)
+        runCurrent()
+        assertEquals(1, requests)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(2, requests)
+        assertTrue(repository.observeStatistics().first().thumbnails.containsKey("PIXIV:42"))
+    }
+
+    @Test fun `each fetch in a pass gets its own 15 seconds (ADR 0037)`() = runTest {
+        val delegate = InMemoryStatisticsRepository()
+        val started = mutableListOf<Long>()
+        val repository = ThumbnailStatisticsRepository(delegate, backgroundScope,
+            StatisticsThumbnailStore(temporary.newFolder())) { _, _ ->
+            started += testScheduler.currentTime
+            awaitCancellation()
+        }
+        runCurrent()
+        listOf("42", "43").forEach { repository.recordPostAvailable(post(it)) }
+        runCurrent()
+        listOf("42", "43").forEach { repository.recordCodexPostOpen("codex", "PIXIV:$it", "Post") }
+        runCurrent()
+        val first = started.single()
+
+        advanceTimeBy(30_001)
+        runCurrent()
+
+        assertEquals(listOf(first, first + 15_000), started)
+    }
+
+    @Test fun `statistics updates outside Codex rankings skip the thumbnail directory pass (ADR 0037)`() = runTest {
         val delegate = InMemoryStatisticsRepository()
         val directory = temporary.newFolder()
         val repository = ThumbnailStatisticsRepository(delegate, backgroundScope,

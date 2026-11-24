@@ -22,7 +22,7 @@ class DataStoreDispatchTest {
     @get:Rule val temporary = TemporaryFolder()
 
     @Test
-    fun `storage transaction and shutdown do not need the caller dispatcher to keep running`() = runBlocking {
+    fun `storage transaction and shutdown do not need the caller dispatcher to keep running (ADR 0032)`() = runBlocking {
         val storageDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
         val storageScope = CoroutineScope(SupervisorJob() + storageDispatcher)
         val repository = DataStoreSettingsRepository(temporary.newFolder(), storageScope)
