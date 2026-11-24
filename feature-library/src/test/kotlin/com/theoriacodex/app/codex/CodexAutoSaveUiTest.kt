@@ -52,7 +52,6 @@ class CodexAutoSaveUiTest {
         compose.onNodeWithText("Add another requirement").performClick()
         compose.onNodeWithText("Filter tags").assertIsDisplayed()
         compose.onNodeWithText("sunset").performClick()
-        // The picker stays on the new group, so the next tag is an alternative within it.
         compose.onNodeWithText("forest").performClick()
         compose.runOnIdle {
             assertEquals(

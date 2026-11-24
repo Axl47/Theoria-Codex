@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Keeps Search's tag suggestions current: local matches first, then the providers, with newer typing replacing older requests. */
 internal class SearchSuggestionRefresher(
     private val scope: CoroutineScope,
     private val state: MutableStateFlow<SearchUiState>,
@@ -69,7 +68,6 @@ internal class SearchSuggestionRefresher(
         autocompleteJob = null
     }
 
-    /** Refreshes the draft's sources' trending tags in the tag store, where source autocomplete finds them. */
     fun refreshTrending() {
         trendingJob?.cancel(CancellationException("Trending refresh superseded"))
         val query = state.value.query

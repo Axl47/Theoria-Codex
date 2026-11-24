@@ -35,7 +35,6 @@ class CodexDragSelectTest {
     @Test fun `painting selects or clears the range from the first post and keeps other selections`() {
         val selection = CodexEditSelection(active = true, selectedPostIds = setOf(ids[5]))
         assertEquals(setOf(ids[1], ids[2], ids[3], ids[5]), selection.painted(setOf(ids[5]), ids, 1, 3, selecting = true).selectedPostIds)
-        // Reversing direction paints the other way from the same anchor.
         assertEquals(setOf(ids[0], ids[1], ids[5]), selection.painted(setOf(ids[5]), ids, 1, 0, selecting = true).selectedPostIds)
         val all = ids.toSet()
         assertEquals(setOf(ids[0], ids[4], ids[5]), selection.painted(all, ids, 3, 1, selecting = false).selectedPostIds)

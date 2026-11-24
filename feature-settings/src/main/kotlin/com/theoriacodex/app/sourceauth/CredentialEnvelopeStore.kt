@@ -29,8 +29,6 @@ class AndroidCredentialEnvelopeStore(
     private val allowAtomicRecovery: Boolean = true,
 ) : CredentialEnvelopeStore {
     private val appContext = context.applicationContext
-    // Context.noBackupFilesDir may create directories. Defer it until a suspending operation so
-    // constructing the application graph performs no storage I/O.
     private val envelopeFile: File by lazy {
         val directory = if (allowAtomicRecovery) appContext.noBackupFilesDir else
             File(appContext.applicationInfo.dataDir, "no_backup")
@@ -95,13 +93,10 @@ class AndroidCredentialEnvelopeStore(
     }
 
     private suspend fun readEnvelopeBytes(): ByteArray? {
-        // AtomicFile.openRead may rename .bak or remove .new. A developer export must
-        // neither repair those artifacts nor create the no-backup directory while reading.
         if (!allowAtomicRecovery && (File(envelopeFile.path + ".bak").exists() ||
                 File(envelopeFile.path + ".new").exists())) {
             throw IOException("Credential envelope has an unfinished atomic write")
         }
-        // An interrupted ordinary read may recover only the committed .bak file.
         if (!envelopeFile.hasCommittedAtomicData()) return null
         if (!allowAtomicRecovery) return envelopeFile.inputStream().use {
             readBoundedDocument(it, MAX_CREDENTIAL_ENVELOPE_BYTES)
@@ -162,13 +157,11 @@ class AndroidCredentialEnvelopeStore(
             atomicFile.delete()
             !envelopeFile.hasAtomicArtifacts()
         }.getOrDefault(false)
-        // Always attempt both halves; each operation is idempotent on a later retry.
         val removedKey = crypto.deleteKey()
         return removedEnvelope && removedKey
     }
 }
 
-/** The on-disk envelope around the encrypted payload. Old Gson-written envelopes decode unchanged. */
 @Serializable
 data class CredentialEnvelopeRecord(
     @SerialName("formatVersion")
@@ -181,7 +174,6 @@ data class CredentialEnvelopeRecord(
     val ciphertext: String? = null,
 )
 
-/** The decrypted payload. A data class for equality in golden tests; [toString] stays redacted. */
 @Serializable
 data class CredentialPayloadRecord(
     @SerialName("schemaVersion")
@@ -200,7 +192,6 @@ data class CredentialPayloadRecord(
     val rule34XxxUserId: String? = null,
     @SerialName("rule34XxxApiKey")
     val rule34XxxApiKey: String? = null,
-    /** Additive in payload schema 1 (plan D7); absent when no custom site has keys. */
     @SerialName("customSites")
     val customSites: Map<String, CustomSiteCredentialRecord?>? = null,
 ) {
@@ -224,7 +215,6 @@ data class CredentialPayloadRecord(
         gelbooruApiKey = gelbooruApiKey,
         rule34XxxUserId = rule34XxxUserId,
         rule34XxxApiKey = rule34XxxApiKey,
-        // An entry that is not a valid custom id with both values is dropped, never fatal.
         customSites = customSites.orEmpty().mapNotNull { (sourceId, record) ->
             val user = record?.user?.takeIf(String::isNotBlank)
             val apiKey = record?.apiKey?.takeIf(String::isNotBlank)
@@ -245,7 +235,6 @@ data class CustomSiteCredentialRecord(
     override fun toString(): String = "CustomSiteCredentialRecord([REDACTED])"
 }
 
-/** A lost key or a corrupt envelope asks to reconnect; any other failure, such as IO or the keystore, may pass. */
 private fun Throwable.toCredentialReadFailure(): CredentialEnvelopeReadResult {
     val causes = generateSequence(this) { error -> error.cause }
     val unrecoverable = causes.any { error ->
@@ -266,11 +255,6 @@ private fun String.decodeCredentialBase64(): ByteArray = try {
     throw CredentialEnvelopeCorruptException(error)
 }
 
-/**
- * Parses and decodes stored credential JSON. kotlinx quotes part of its input in parse errors, and here the input can
- * be a decrypted payload, so a failure is replaced by a corrupt-envelope error that carries neither its message nor
- * its cause. A corrupt envelope or payload therefore asks for reconnection.
- */
 private fun ByteArray.parseCredential(): JsonElement = try {
     DurableJson.parseToJsonElement(toString(Charsets.UTF_8))
 } catch (_: SerializationException) {
@@ -283,11 +267,6 @@ private inline fun <reified T> JsonElement.decodeCredential(): T = try {
     throw CredentialEnvelopeCorruptException()
 }
 
-/**
- * The first stored version that is newer than this build supports, read before the typed decode so a newer build's
- * format reports [CredentialEnvelopeReadResult.UnsupportedVersion] whatever its shape. Checked in order, and a later
- * version only counts once every earlier one matches, as the typed checks do.
- */
 private fun newerCredentialVersion(vararg versions: Pair<Int?, Int>): Int? {
     for ((stored, supported) in versions) {
         if (stored != null && stored > supported) return stored
@@ -296,7 +275,6 @@ private fun newerCredentialVersion(vararg versions: Pair<Int?, Int>): Int? {
     return null
 }
 
-/** A stored envelope that can never decode. Its message and cause stay empty when they could quote secrets. */
 private class CredentialEnvelopeCorruptException(cause: Throwable? = null) : Exception(cause)
 
 private const val CREDENTIAL_FORMAT_VERSION = 1

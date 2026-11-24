@@ -4,11 +4,6 @@ import com.theoriacodex.domain.source.SiteCredentials
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-/**
- * Reads a pasted credentials snippet: a full URL or a bare `a=b&c=d` string, as account pages show
- * them. The user is `user_id` (Gelbooru family) or `login` (Danbooru family); the key is `api_key`.
- * Null unless both are present, so callers treat anything else as a plain typed value.
- */
 fun parseCredentialSnippet(raw: String): SiteCredentials? {
     val query = raw.trim().let { if ('?' in it) it.substringAfter('?') else it }.substringBefore('#')
     val values = query.split('&').mapNotNull { segment ->

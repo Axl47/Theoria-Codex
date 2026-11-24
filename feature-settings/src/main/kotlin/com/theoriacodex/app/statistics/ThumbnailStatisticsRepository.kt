@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Application-owned thumbnail work; observing Stats only reads the resulting local paths. */
 class ThumbnailStatisticsRepository(
     private val delegate: StatisticsRepository,
     scope: CoroutineScope,
@@ -40,12 +39,10 @@ class ThumbnailStatisticsRepository(
             var promotions = emptySet<StatisticsPostPromotion>()
             var promoted = emptySet<String>()
             var reconciled = false
-            // Only metadata for recently available posts is needed; no provider lookup is ever performed.
             val available = linkedMapOf<String, Post>()
             for (event in events) {
                 val retry = when (event) {
                     is ThumbnailEvent.Snapshot -> {
-                        // Most snapshots change only counters outside Codex post rankings.
                         if (reconciled && event.statistics.codexStatistics == codexStatistics) continue
                         codexStatistics = event.statistics.codexStatistics
                         val next = statisticsPostPromotions(event.statistics)
@@ -65,8 +62,6 @@ class ThumbnailStatisticsRepository(
                         setOf(key).intersect(promoted)
                     }
                 }
-                // A post outside the top lists needs no disk work, and promotions may not be known yet:
-                // reconciling before the first snapshot would delete every retained thumbnail.
                 if (event is ThumbnailEvent.Available && retry.isEmpty()) continue
                 runCatchingPreservingCancellation {
                     thumbnails.value = store.reconcile(promoted, retry.mapNotNull { key ->
@@ -94,7 +89,6 @@ private sealed interface ThumbnailEvent {
     data class Available(val post: Post) : ThumbnailEvent
 }
 
-/** Coil uses its existing memory/disk cache before networking and supplies the usual source headers. */
 suspend fun fetchStatisticsThumbnail(context: Context, post: Post, destination: File): Boolean {
     val local = post.preview.localPath?.let(::File)?.takeIf(File::isFile)
     if (local != null) {

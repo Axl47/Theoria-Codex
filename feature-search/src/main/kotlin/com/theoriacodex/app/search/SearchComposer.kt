@@ -86,23 +86,12 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 
-/** How far the query can grow while suggestions share the screen with it and the keyboard. */
 private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
 
-/** The most of a short screen the query may take, so suggestions always stay reachable. */
 private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
 
-/** Long saved tags ellipsize here, so one cannot fill the row by itself. */
 private val SAVED_TAG_MAX_WIDTH = 240.dp
 
-/**
- * Search editor in a sheet over the results: the query reads as one expression at the top, tags are
- * edited where they sit, and new tags are typed just above the keyboard. Every committed edit runs
- * live, so the results above follow the query. The keyboard's action adds what was typed and keeps
- * the sheet open for the next tag; on an empty field it runs the draft at once and closes the sheet
- * ([onApply]). After the top tag suggestions, typed text also
- * reaches the app's [omnibox] entries: Codices, creators, searches and commands.
- */
 @Composable
 internal fun SearchComposer(
     state: SearchUiState,
@@ -160,7 +149,6 @@ private fun SearchComposerContent(
         else -> ComposerAddTarget.Required
     }
     val omniboxMatches = remember(omnibox, input) { matchOmnibox(omnibox, input) }
-    // Adding an alternative to a group only takes tags.
     val suggestions = composerSuggestions(target, state, savedTags.entries)
         .copy(omnibox = omniboxMatches.takeUnless { target is ComposerAddTarget.Alternative }.orEmpty())
     val liveSelection = selection?.takeIf { selected ->
@@ -176,7 +164,6 @@ private fun SearchComposerContent(
     fun commitTyped() = commitComposerInput(
         target, input, state.suggestions.canCommitInput, focus::clear, onAction,
     )
-    // A typed tag is only added, so a gallery ID that opens instead never applies the draft behind it.
     fun submitTyped() = if (composerTypedAction(target, input) == null) onApply() else commitTyped()
     fun addAlternativeTo(term: SearchTerm) {
         excludeNext = false
@@ -217,7 +204,6 @@ private fun SearchComposerContent(
     )
 }
 
-/** Offers Undo for the latest removal, and retracts the offer once restoring would overwrite another edit. */
 @Composable
 private fun ComposerRemovalUndoEffect(
     undo: ComposerRemovalUndo?,
@@ -293,7 +279,6 @@ private fun ComposerEditorBody(
             val compactMaxHeight = minOf(COMPACT_QUERY_MAX_HEIGHT, maxHeight * COMPACT_QUERY_MAX_FRACTION)
             Column(Modifier.fillMaxSize()) {
                 if (suggestions.isVisible) {
-                    // The query stays on screen while suggestions take the room it gives up.
                     query(compact = true, Modifier.fillMaxWidth().heightIn(max = compactMaxHeight))
                     HorizontalDivider()
                     ComposerSuggestionList(suggestions, target, onAction, onDismiss, Modifier.weight(1f).fillMaxWidth())
@@ -326,7 +311,6 @@ private fun ComposerEditorBody(
     }
 }
 
-/** Close and the source sit at the top; less frequent actions wait in the overflow menu. */
 @Composable
 private fun ComposerTopBar(
     canUndo: Boolean,
@@ -393,7 +377,6 @@ private fun ComposerField(
             onValueChange = onValueChange,
             shape = RoundedCornerShape(28.dp),
             singleLine = true,
-            // A source's tag cap shows here as tags are added.
             isError = validationMessage != null || limitNotices.any(SearchTermLimitNotice::blocksSearch),
             supportingText = (validationMessage ?: limitNotices.takeIf { it.isNotEmpty() }
                 ?.joinToString(" ") { it.message() })?.let { message -> { Text(message) } },
@@ -423,7 +406,6 @@ private fun ComposerField(
     }
 }
 
-/** Says beside the field how the next tag joins the query, and switches required/excluded or ends "or". */
 @Composable
 private fun ComposerTargetButton(target: ComposerAddTarget, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -560,7 +542,6 @@ private fun ComposerSuggestionRow(suggestion: ComposerSuggestion, onAction: (Sea
     }
 }
 
-/** The query plus, when it is not sharing the screen with suggestions, what else can start a search. */
 @Composable
 private fun ComposerTagList(
     state: SearchUiState,
@@ -593,11 +574,6 @@ private fun ComposerTagList(
     }
 }
 
-/**
- * Saved searches and saved tags, split by a divider because they act differently: a saved search
- * replaces the search and runs it, while a saved tag adds to the search being built. Each part has
- * its own Manage, and searches can be saved from here.
- */
 @Composable
 private fun ComposerSavedSection(
     savedSearches: ComposerSavedSearches,
@@ -650,7 +626,6 @@ private fun ComposerSavedSection(
     SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
-/** A part's title with its buttons at the end. */
 @Composable
 private fun SavedPartHeader(title: String, actions: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -659,12 +634,10 @@ private fun SavedPartHeader(title: String, actions: @Composable () -> Unit) {
     }
 }
 
-/** One tap reruns a saved search, replacing the current draft. */
 @Composable
 private fun SavedSearchChips(savedSearches: ComposerSavedSearches) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(savedSearches.entries, key = SavedSearchEntry::id) { entry ->
-            // The search on screen is highlighted, so a tap that just ran it shows which one it was.
             FilterChip(
                 selected = savedSearches.isCurrent(entry),
                 onClick = { savedSearches.onOpen(entry) },
@@ -675,10 +648,6 @@ private fun SavedSearchChips(savedSearches: ComposerSavedSearches) {
     }
 }
 
-/**
- * Saved tags work like tags in post info: taps add, exclude, then clear, and the chip shows which
- * applies. A saved "or" group is added as one group, and its next tap removes it.
- */
 @Composable
 private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetIndex: Int, onAction: (SearchAction) -> Unit) {
     var menuFor by remember { mutableStateOf<FavoriteTagEntry?>(null) }
@@ -697,7 +666,6 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
                     onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
                     leadingIcon = Icons.Default.Star,
                     reserveCountSlot = false,
-                    // A scrolling row offers unbounded width, which would leave the chip's label none.
                     modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
                     onLongPress = { menuFor = tag },
                     longPressLabel = "Edit ${tag.label}",
@@ -720,7 +688,6 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
     }
 }
 
-/** Names a saved "or" group; a blank name shows the group as its alternatives. */
 @Composable
 internal fun OrGroupNameDialog(entry: FavoriteTagEntry, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     NameEntryDialog(
@@ -733,7 +700,6 @@ internal fun OrGroupNameDialog(entry: FavoriteTagEntry, onDismiss: () -> Unit, o
     )
 }
 
-/** A held saved tag's menu: Rename for "or" groups, and Remove. */
 @Composable
 private fun SavedTagMenu(expanded: Boolean, canRename: Boolean, onDismiss: () -> Unit, onRename: () -> Unit, onRemove: () -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {

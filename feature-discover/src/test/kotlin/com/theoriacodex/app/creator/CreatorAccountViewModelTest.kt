@@ -96,7 +96,6 @@ class CreatorAccountViewModelTest {
     }
 }
 
-/** A source whose account has uploads and favorites; each feed returns one post named after it. */
 private class AccountEngine : CreatorRouteEngine {
     var feeds = listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES)
     var detailsGate: CompletableDeferred<Unit>? = null

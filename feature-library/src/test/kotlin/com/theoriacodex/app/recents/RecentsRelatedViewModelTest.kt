@@ -37,7 +37,6 @@ class RecentsRelatedViewModelTest {
             assertEquals(1, loaded.request.anchorCanonicalIndex)
             assertEquals(related, loaded.posts)
 
-            // The same view with a newly watched post keeps the shelf.
             owner.showing("WATCHED:null", listOf(testPost(sourcePostId = "new"), first, liked))
             assertEquals(loaded, owner.state.value)
 

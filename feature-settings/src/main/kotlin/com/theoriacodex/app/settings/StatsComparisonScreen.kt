@@ -38,7 +38,6 @@ import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private enum class ComparedPostView(val label: String) { BOTH("Both"), THEIRS("Theirs"), YOURS("Yours") }
 
-/** Read-only: the other person's numbers live only as long as this screen, and never join your statistics. */
 @Composable
 fun StatsComparisonScreen(
     codices: List<CodexStatisticsSummary>,
@@ -52,9 +51,7 @@ fun StatsComparisonScreen(
     val comparison = remember(codices, theirs) { compareStats(buildStatsShare(codices), theirs) }
     val theirName = theirs.name ?: "Them"
     var view by rememberSaveable { mutableStateOf(ComparedPostView.BOTH) }
-    // Every Codex summary carries the same retained Stats thumbnails.
     val thumbnails = remember(codices) { codices.firstOrNull { it.thumbnails.isNotEmpty() }?.thumbnails.orEmpty() }
-    // Switching tabs shows the same posts again, so each is looked up on its site at most once per visit.
     val loadPost = remember(previewPost) { memoizedPostLoader(previewPost) }
     SettingsPageColumn {
         SettingsHeader("You vs $theirName", onBack, SETTINGS_PATH)
@@ -95,7 +92,6 @@ private fun memoizedPostLoader(load: suspend (PostId) -> Post?): suspend (PostId
     return { id -> if (id in loaded) loaded[id] else load(id).also { loaded[id] = it } }
 }
 
-/** Files from before overall stats existed, or with them left out, compare Codex activity only. */
 @Composable
 private fun ComparedOverall(yours: StatsShareOverall, theirs: StatsShareOverall?, theirName: String) {
     StatsCard {
@@ -145,7 +141,6 @@ private fun ComparedBar(owner: String, value: String, fraction: Float, color: an
     )
 }
 
-/** Their file can name a site that isn't set up here; those rows say so instead of failing when tapped. */
 @Composable
 private fun ComparedPostRow(
     post: ComparedPost,

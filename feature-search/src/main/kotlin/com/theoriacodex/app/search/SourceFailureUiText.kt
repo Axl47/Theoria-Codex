@@ -14,17 +14,14 @@ internal fun visibleSourceStatusChipStatuses(
     }
 }
 
-/** Failed [sources] that share an outage [kind], which a multi-source search reports above its results. */
 data class SourceOutageNotice(val kind: HostOutageKind, val sources: List<SourceKey>) {
     val message: String
         get() = "${sources.joinToString(", ") { it.displayName() }}: ${kind.userMessage}"
 
-    /** Verification happens one site at a time, so a challenge is always a notice of its own. */
     val verifiableSource: SourceKey?
         get() = sources.singleOrNull()?.takeIf { kind == HostOutageKind.CHALLENGE }
 }
 
-/** Sources that failed because their host is [issues]-listed as down; other failures have only their chips. */
 internal fun sourceOutageNotices(
     statuses: List<SourceRunStatus>,
     issues: Map<SourceKey, HostOutageKind>,
@@ -38,10 +35,8 @@ internal fun sourceOutageNotices(
         }
 }
 
-/** The first added site that refused this identity, whose API key field can fix it. */
 internal fun List<SourceRunStatus>.siteNeedingKey(): SourceKey? =
     firstOrNull { it.requiresAccount() && it.source.isCustom }?.source
 
-/** A failed search on an added site: the site's own words, then what to do about them. */
 internal fun siteKeyFailureMessage(providerMessage: String, statuses: List<SourceRunStatus>): String =
     listOfNotNull(providerMessage.takeIf(String::isNotBlank), buildSourceAuthErrorMessage(statuses)).joinToString("\n")

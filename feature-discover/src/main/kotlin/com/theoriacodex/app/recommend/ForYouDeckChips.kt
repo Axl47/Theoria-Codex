@@ -30,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** "Mix" and one chip per interest; a chip narrows the Mix to its lane. A single interest has nothing to narrow, so it draws no chips. */
 @Composable
 internal fun ForYouChips(chips: List<ForYouChip>, only: String?, onSelect: (laneId: String?) -> Unit) {
     if (chips.size < 2) return
@@ -55,10 +54,6 @@ private fun InterestChip(label: String, selected: Boolean, onClick: () -> Unit) 
     )
 }
 
-/**
- * The trail so far, "Mix › tag › Similar": a crumb returns to its level. A tag trail offers Save search ([onSaveSearch]),
- * and shows a filled bookmark instead once its search is [saved].
- */
 @Composable
 internal fun ForYouCrumbs(levels: List<ForYouLevel>, onCrumb: (depth: Int) -> Unit, saved: Boolean, onSaveSearch: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {

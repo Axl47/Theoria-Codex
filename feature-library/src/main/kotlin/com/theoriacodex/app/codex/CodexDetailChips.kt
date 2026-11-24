@@ -41,7 +41,6 @@ import com.theoriacodex.app.ui.navigation.rememberTriageAction
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
 
-/** Codex detail's sort, the sorts it offers, and the transient tag filter, for [CodexDetailChipRow]. */
 internal class CodexDetailChips(
     val sortMode: CodexSortMode,
     val sortModes: List<CodexSortMode>,
@@ -50,10 +49,6 @@ internal class CodexDetailChips(
     val onTriage: (() -> Unit)?,
 )
 
-/**
- * Codex detail's tag filter: the Codex's [tags] (most common first; [known] once computed), the match keys of the
- * [selected] ones, which the grid keeps posts carrying all of, and the tag [sheet] that chooses any of them.
- */
 internal class CodexTagFilter(
     val tags: List<TagCount>,
     val selected: List<String>,
@@ -62,20 +57,11 @@ internal class CodexTagFilter(
     val onSheetChange: (CodexTagSheet?) -> Unit,
     val known: Boolean = true,
 ) {
-    /** The chosen tags as spelled on screen, in the order chosen. */
     val selectedTags: List<String> get() = selected.mapNotNull { key -> tags.firstOrNull { it.key == key }?.tag }
 
-    /** Adds the tag of [key] to the filter, or takes it out when it is in. */
     fun toggle(key: String) = onSelectedChange(if (key in selected) selected - key else selected + key)
 }
 
-/**
- * Codex [codexId]'s tag filter over [posts], whose tags are computed off the main thread. Once they are known for the
- * loaded Codex ([settled]), chosen tags it no longer offers are dropped. The chosen tags are transient, a quick look
- * inside this Codex, so neither a saved filter nor part of the restore record; they and the open sheet survive
- * recreation. [sheetRequested] (from outside the screen, such as a Library tile's menu) opens the sheet and is then
- * reported handled through [onSheetRequestHandled].
- */
 @Composable
 internal fun rememberCodexTagFilter(
     codexId: String,
@@ -104,12 +90,6 @@ private val TagKeysSaver = Saver<MutableState<List<String>>, ArrayList<String>>(
     restore = { mutableStateOf(it) },
 )
 
-/**
- * The Triage chip's action for Codex [codexId], where a left swipe removes the post from it. Likes keeps the plain
- * deck, where left skips: removing there would unlike, which reads wrong beside right meaning like. Null without
- * posts in the grid, and for the virtual Codices ([real] false), which the deck cannot open. The deck is seeded with
- * what the grid shows ([seed]).
- */
 @Composable
 internal fun rememberCodexTriageAction(codexId: String, real: Boolean, seed: TriageSeed): (() -> Unit)? {
     val mode = if (codexId.startsWith(LIKES_CODEX_ID_PREFIX)) TriageMode.Browse else TriageMode.RemoveFromCodex()
@@ -117,15 +97,9 @@ internal fun rememberCodexTriageAction(codexId: String, real: Boolean, seed: Tri
     return rememberTriageAction(request.source, request.feedKey.takeIf { real }, seed, request.mode)
 }
 
-/** The sorts a collection offers: length sorts mean nothing without animations, unless one is already chosen. */
 internal fun codexSortModes(hasAnimatedPosts: Boolean, current: CodexSortMode): List<CodexSortMode> =
     CodexSortMode.entries.filter { hasAnimatedPosts || !it.usesDuration || it == current }
 
-/**
- * The row under Codex detail's header: the tag filter, the sort as a chip with a menu, Triage, then the Codex's most
- * common tags as shortcuts. The first chip opens the tag sheet and shows and clears the filter; a shortcut adds its
- * tag to the filter at once, and tapping it again takes it out.
- */
 @Composable
 internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Modifier) {
     val filter = chips.tagFilter
@@ -156,7 +130,6 @@ internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Mo
     }
 }
 
-/** "Tags" until tags are chosen, then the chosen tags followed by a full-size button that clears them. */
 @Composable
 private fun CodexTagFilterChip(selectedTags: List<String>, onOpen: () -> Unit, onClear: () -> Unit) {
     val active = selectedTags.isNotEmpty()

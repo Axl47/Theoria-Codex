@@ -28,10 +28,6 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Recents' related shelf. The tab on screen reports its posts through [showing]; switching tab or
- * source closes the shelf. Recents posts come from history, so shelf posts are never promoted into it.
- */
 class RecentsRelatedViewModel(loader: RelatedPostsLoading) : ViewModel() {
     private val mutableState = MutableStateFlow<RelatedPostsUiState>(RelatedPostsUiState.Idle)
     val state = mutableState.asStateFlow()
@@ -45,7 +41,6 @@ class RecentsRelatedViewModel(loader: RelatedPostsLoading) : ViewModel() {
         updateState = { mutableState.value = it },
     )
 
-    /** The posts the current view shows, in order; [key] names that view. */
     fun showing(key: String, posts: List<Post>) {
         if (shownKey != null && key != shownKey) related.clear("recents view changed")
         shownKey = key
@@ -57,16 +52,11 @@ class RecentsRelatedViewModel(loader: RelatedPostsLoading) : ViewModel() {
     }
 }
 
-/** The shelf a Recents view inserts below its anchor post, and the request that places it. */
 internal class RecentsRelatedSlot(
     val request: RelatedPostsRequest,
     val content: @Composable () -> Unit,
 )
 
-/**
- * Reports the posts the selected Recents view shows to the shelf's owner, and builds the shelf slot
- * that view inserts while a shelf is open.
- */
 @Composable
 internal fun rememberRecentsRelated(
     binding: RelatedShelfBinding?,
@@ -91,7 +81,6 @@ internal fun rememberRecentsRelated(
     return rememberRecentsRelatedSlot("recents:$key", binding, shownPosts, cards, onLongPress)
 }
 
-/** Builds the slot for [binding] while it has a request; the shelf's cards share the Recents tiles' behavior. */
 @Composable
 private fun rememberRecentsRelatedSlot(
     retainKey: String,
@@ -133,10 +122,8 @@ private fun rememberRecentsRelatedSlot(
     }
 }
 
-/** The posts a Recents section shows, in order, as the shelf's owner anchors them. */
 internal fun recentsShownPosts(entries: List<RecentPostEntry>): List<Post> = entries.map(RecentPostEntry::post).distinctBy(Post::id)
 
-/** Inserts the shelf after the grid row of its anchor post. */
 internal fun List<RecentsGridRow>.withRelatedShelf(request: RelatedPostsRequest?, posts: List<RecentPostEntry>): List<RecentsGridRow> {
     val anchor = request?.anchorIndexIn(posts.map { it.post.id }) ?: return this
     val row = indexOfFirst { it is RecentsGridRow.Post && it.index == anchor }
@@ -144,7 +131,6 @@ internal fun List<RecentsGridRow>.withRelatedShelf(request: RelatedPostsRequest?
     return toMutableList().apply { add(row + 1, RecentsGridRow.RelatedShelf) }
 }
 
-/** Inserts the shelf after the timeline row holding its anchor post. */
 internal fun List<RecentsTimelineItem>.withRelatedShelf(request: RelatedPostsRequest?): List<RecentsTimelineItem> {
     request ?: return this
     val postIds: List<PostId> = filterIsInstance<RecentsTimelineItem.Posts>().flatMap { row -> row.entries.map { it.post.id } }.distinct()

@@ -30,11 +30,6 @@ import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.domain.model.Codex
 
-/**
- * The Library's Codex tiles. A Codex waiting to be deleted keeps its cell, drawn as its Undo, until the Library is
- * left. Under Manual sort a long-press drag reorders the tiles in place ([CodexGridReorderState]); releasing a tile
- * where it was lifted opens its menu.
- */
 @Composable
 internal fun CodexGrid(
     presentation: CodexListPresentation,

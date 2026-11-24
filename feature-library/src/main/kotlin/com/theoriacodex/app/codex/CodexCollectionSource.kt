@@ -27,14 +27,12 @@ data class CodexActionOptions(
     val tags: Map<SourceKey, List<CodexSearchTagOption>> = emptyMap(),
 )
 
-/** Summary queries decode bounded covers; full tag projections exist only while choosing post actions or a save target. */
 class CodexCollectionSource(
     private val repository: CodexRepository,
     private val storageDirectory: File,
     private val cacheRepository: CacheRepository,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    /** Hold menus preload save relevance; full membership scoring stays off Main. */
     fun observeSaveRelevance(
         codexIds: Set<String>, posts: List<Post>, searchQuery: Query? = null,
     ): Flow<Map<String, Double>> {
@@ -44,10 +42,6 @@ class CodexCollectionSource(
         return observeSavedLibrary(codexIds).map { relevance.scoreEach(SavedLibrary(it)) }.flowOn(Dispatchers.Default)
     }
 
-    /**
-     * Every Codex's saved posts, keyed by Codex ID. Payloads are decoded once per library change, even for
-     * posts saved in several Codices; per-Codex membership comes from ID-only queries.
-     */
     fun observeSavedLibrary(codexIds: Set<String>): Flow<Map<String, List<Post>>> {
         if (codexIds.isEmpty()) return flowOf(emptyMap())
         val memberships = combine(codexIds.sorted().map { id ->
@@ -62,7 +56,6 @@ class CodexCollectionSource(
         }.flowOn(Dispatchers.Default)
     }
 
-    /** A completed save target contains the entire incoming selection, matched by source and post ID. */
     fun observeContainingCodexIds(codexIds: Set<String>, posts: List<Post>): Flow<Set<String>> {
         if (codexIds.isEmpty() || posts.isEmpty()) return flowOf(emptySet())
         val incomingIds = posts.mapTo(linkedSetOf(), Post::id)
@@ -76,8 +69,6 @@ class CodexCollectionSource(
 
     fun observe(codexIds: Set<String>): Flow<CodexCollectionPresentation> =
         combine(repository.observeCodexSummaries(codexIds), cacheRepository.observeNamedThumbnailRevisions()) { summaries, revision ->
-            // One listing per update serves every cover. The cache exposes no revision for post thumbnails,
-            // so the folder is still listed whenever summaries change.
             val thumbnails = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList()
             CodexCollectionPresentation(
                 itemCounts = summaries.associate { it.codexId to it.itemCount },
@@ -95,7 +86,6 @@ class CodexCollectionSource(
             CodexActionOptions(sources.associate { it.source to codexSearchTagOptions(posts, it.source) })
         }.flowOn(Dispatchers.Default)
 
-    /** For each Codex in [comparisonIds], the posts of [targetId] it also holds: what cleaning against it removes. */
     fun observeCleaningMatches(targetId: String, comparisonIds: List<String>): Flow<Map<String, Set<PostId>>> {
         if (comparisonIds.isEmpty()) return flowOf(emptyMap())
         return combine((listOf(targetId) + comparisonIds).map(repository::observeCodexItems)) { lists ->
@@ -104,16 +94,11 @@ class CodexCollectionSource(
     }
 }
 
-/** The posts of [target] each comparison Codex in [comparisons] also holds. */
 internal fun codexCleaningMatches(target: List<CodexItem>, comparisons: Map<String, List<CodexItem>>): Map<String, Set<PostId>> {
     val targetIds = target.mapTo(hashSetOf(), CodexItem::postId)
     return comparisons.mapValues { (_, items) -> items.mapTo(hashSetOf(), CodexItem::postId).apply { retainAll(targetIds) } }
 }
 
-/**
- * The posts of [target] that any of [comparisons] also holds, in [target]'s order: what cleaning against them would
- * remove, which the triage deck walks through one at a time.
- */
 fun codexCleaningReviewPosts(target: List<Post>, comparisons: List<List<CodexItem>>): List<Post> {
     val held = comparisons.flatMapTo(hashSetOf()) { items -> items.map(CodexItem::postId) }
     return target.filter { it.id in held }

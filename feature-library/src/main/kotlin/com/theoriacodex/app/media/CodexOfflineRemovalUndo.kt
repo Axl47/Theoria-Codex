@@ -10,14 +10,8 @@ import com.theoriacodex.app.ui.undo.DeferredRemovalPill
 import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
 
-/** Offline-copy removals still held back, by Codex id; provided with [LocalCodexOfflineStates]. */
 val LocalCodexOfflineRemovals = compositionLocalOf<Map<String, PendingRemoval>> { emptyMap() }
 
-/**
- * The Undo of each pending offline-copy removal as a pill, for [codexId] only on its detail screen or for every
- * Codex in the Library. Leaving the surface that places it commits every pending removal; a rotation does not.
- * A removal already committing shows nothing: its Codex stays listed, so there is no place to hold.
- */
 @Composable
 fun CodexOfflineRemovalUndo(modifier: Modifier = Modifier, codexId: String? = null) {
     val controls = LocalCodexOfflineControls.current

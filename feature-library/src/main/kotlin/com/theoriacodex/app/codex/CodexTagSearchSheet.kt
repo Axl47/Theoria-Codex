@@ -54,11 +54,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 
-/**
- * Builds a site search from the tags in a Codex, starting from the tags of a Codex tag filter ([seedKeys], match
- * keys) on the source that has the most of them. Its query stays local until Search, which then replaces the
- * current search. Tags belong to one source's vocabulary, so changing source starts over.
- */
 @Composable
 internal fun CodexTagSearchSheet(
     codexName: String,
@@ -234,7 +229,6 @@ private fun DrawControl(amount: Int, enabled: Boolean, onAmount: (Int) -> Unit, 
     }
 }
 
-/** Options under their type's heading, most identifying types first and most common tags first. */
 internal fun codexTermSections(
     options: List<CodexSearchTermOption>,
     normalizedFilter: String,
@@ -245,12 +239,10 @@ internal fun codexTermSections(
     .sortedWith(compareBy({ postTagFacetOrder.indexOf(it.key.first) }, { it.key.second.orEmpty() }))
     .map { (type, members) -> searchScopeLabel(FacetedSearchScope(type.first, type.second)) to members }
 
-/** For each of [keys] (tag match keys) this source has, its most common term, in the order of [keys]. */
 internal fun CodexSearchTerms.seededTerms(keys: List<String>): List<SearchTerm> = keys.mapNotNull { key ->
     options.firstOrNull { normalizeMatchToken(it.term.value) == key }?.term
 }
 
-/** Of [sources], the one whose [terms] have the most of [keys], the first on a tie; null when none has any. */
 internal fun seededSource(sources: List<SourceKey>, terms: Map<SourceKey, CodexSearchTerms>, keys: List<String>): SourceKey? =
     sources.map { it to terms[it]?.seededTerms(keys).orEmpty().size }
         .filter { (_, count) -> count > 0 }

@@ -1,10 +1,5 @@
 package com.theoriacodex.app.codex
 
-/**
- * [order] with [dragged] moved into [target]'s place, the tiles between shifting one place toward where [dragged]
- * was. [fixed] tiles (a deleted Codex's Undo cell) keep their places and are skipped over. Unchanged when either
- * key is fixed or absent. Used by the Library grid's drag reordering.
- */
 internal fun moveTile(order: List<String>, dragged: String, target: String, fixed: Set<String>): List<String> {
     if (dragged == target || dragged in fixed || target in fixed) return order
     val movable = order.filterNot { it in fixed }
@@ -15,10 +10,6 @@ internal fun moveTile(order: List<String>, dragged: String, target: String, fixe
     return order.map { if (it in fixed) it else moved.next() }
 }
 
-/**
- * [order] with [key] moved [step] movable places (negative is earlier), for the accessibility moves; null when it
- * cannot move that far.
- */
 internal fun stepTile(order: List<String>, key: String, step: Int, fixed: Set<String>): List<String>? {
     val movable = order.filterNot { it in fixed }
     val from = movable.indexOf(key)

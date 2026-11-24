@@ -135,8 +135,6 @@ class VersionedSourceCredentialsStoreTest {
         assertFalse(populatedSnapshot().toString().contains("access"))
         assertEquals(CredentialStoreRecoveryState.TemporarilyUnavailable, store.recoveryState.value)
 
-        // The failed write invalidates the cache. A later read proves the authoritative store
-        // again rather than serving a potentially stale snapshot indefinitely.
         assertNull(store.getPixivTokens())
         assertEquals(CredentialStoreRecoveryState.Ready, store.recoveryState.value)
     }

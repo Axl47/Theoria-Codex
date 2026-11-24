@@ -27,10 +27,6 @@ internal val CodexLibrarySort.usesItemCounts: Boolean
 val CodexLibrarySort.usesUsage: Boolean
     get() = this == CodexLibrarySort.MOST_WATCHED || this == CodexLibrarySort.MOST_OPENED
 
-/**
- * Usage per Codex id, emitting only when a figure changes because other statistics are written often.
- * A statistics failure degrades to no usage, leaving manual order, and never affects the Library.
- */
 fun StatisticsRepository.observeCodexLibraryUsage(): Flow<Map<String, CodexUsage>> =
     observeStatistics()
         .map { statistics ->
@@ -44,11 +40,6 @@ fun StatisticsRepository.observeCodexLibraryUsage(): Flow<Map<String, CodexUsage
         .distinctUntilChanged()
         .catch { emit(emptyMap()) }
 
-/**
- * Orders [codices], given in manual order, for the Library and Add to Codex. Automatic sorts pin
- * Likes first because it presents as the full-width Saved tile. Usage sorts break ties on the other
- * usage figure; remaining ties keep their manual order.
- */
 internal fun sortCodicesForLibrary(
     codices: List<Codex>,
     sort: CodexLibrarySort,

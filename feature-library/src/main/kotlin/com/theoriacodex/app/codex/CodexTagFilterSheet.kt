@@ -35,10 +35,6 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Filters a Codex by any of its tags: typing narrows the list, and each tag chosen narrows the grid behind the sheet
- * at once to the posts carrying every chosen tag. [onSearchSites] takes the chosen tags to a site search instead.
- */
 @Composable
 internal fun CodexTagFilterSheet(filter: CodexTagFilter, onSearchSites: (() -> Unit)?, onDismiss: () -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
@@ -94,14 +90,8 @@ private fun CodexTagFilterList(tags: List<TagCount>, filter: CodexTagFilter, emp
     }
 }
 
-/** Which of Codex detail's tag sheets shows. */
 internal enum class CodexTagSheet { Filter, SearchSites }
 
-/**
- * Shows [filter]'s open sheet: [CodexTagFilterSheet], or the site search it leads to, seeded with the chosen tags,
- * whose per-source tags are built off the main thread as it opens. Without [onSearch] there is no site search. Held
- * back until the tags are known, so the sheet never claims a Codex has none while they load.
- */
 @Composable
 internal fun CodexTagSheets(
     filter: CodexTagFilter,

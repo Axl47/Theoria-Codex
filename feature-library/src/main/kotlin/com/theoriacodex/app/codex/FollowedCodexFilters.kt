@@ -62,7 +62,6 @@ fun FollowedCodexFilters(
         }
     }
     if (options.isEmpty()) Text("No matching authors")
-    // The sheet owns vertical scrolling; author rows must not create a nested scroll surface.
     FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = 2,
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { follow ->

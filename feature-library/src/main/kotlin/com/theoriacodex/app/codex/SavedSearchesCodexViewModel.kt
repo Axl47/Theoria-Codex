@@ -16,7 +16,6 @@ import com.theoriacodex.domain.model.SourceKey
 
 fun isVirtualCodex(id: String) = id == FOLLOWED_CODEX_ID || id == SAVED_SEARCHES_CODEX_ID
 
-/** A query collection owns live continuations, never durable Codex memberships. */
 class SavedSearchesCodexViewModel(
     private val loader: SavedSearchFeedLoader,
     cache: CacheRepository,

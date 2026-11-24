@@ -111,7 +111,6 @@ class SavedSearchesCodexViewModelTest {
     }
 
     @Test fun `an Animated only saved search hides stills a source could not leave out, on every page`() = runTest {
-        // TestAdapter has no animated term, so the source answers with mixed media.
         val source = adapter(SourceKey.PIXIV) { _, token ->
             val page = token ?: "first"
             Page(

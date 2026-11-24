@@ -19,18 +19,12 @@ import kotlin.random.Random
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
-/**
- * The For You deck's engine: builds a Mix's lanes and loads their pages. Every page, whichever lane or source it is
- * for, teaches the file mirror index and records its posts as available, as Search's pages do.
- */
 class ForYouCoordinator(
     private val registry: SourceAdapterRegistry,
     private val statisticsRepository: StatisticsRepository,
-    /** A profile's tag affinity, which ranks each source's interests; see [SharedTagAffinity.forProfile]. */
     tagAffinity: suspend (profileId: String) -> TagAffinityInputs,
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
     random: () -> Random? = { Random.Default },

@@ -40,7 +40,6 @@ import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import com.theoriacodex.domain.model.Post
 
-/** The level's posts as the deck or the grid, or what to say when it has none. */
 @Composable
 internal fun ForYouBody(
     owner: ForYouDeckViewModel,
@@ -57,7 +56,6 @@ internal fun ForYouBody(
     }
     when {
         feed.posts.isEmpty() && feed.pageFailed && !feed.loadingMore -> Column(Modifier.padding(16.dp)) {
-            // The tile words a lost connection itself.
             FeedFailureTile(state.failure?.takeIf { level.fork == null } ?: LOAD_FAILED, onRetry = level::retryPage)
         }
         config.grid -> ForYouGrid(level, feed, config, related, callbacks, onLongPress, end)
@@ -75,8 +73,6 @@ private fun ForYouDeck(
     end: @Composable () -> Unit,
 ) {
     val newCodex = LocalNewCodexOpener.current
-    // The picker and the Create Codex dialog hand the chosen Codex back to the deck, which saves it, so the card moves
-    // on and Undo covers it like any other save.
     val deckCallbacks = remember(level, callbacks, newCodex) {
         val save = { post: Post -> { codex: ChosenCodex -> level.deck.decide(TriageChoice.Save(codex), post.id) } }
         TriageDeckCallbacks(
@@ -92,7 +88,6 @@ private fun ForYouDeck(
         query = level.query,
         support = config.support,
         callbacks = deckCallbacks,
-        // The screen's own bar sits above the deck and the grid alike.
         showTopBar = false,
         cardFooter = { post -> ForYouCardFooter(owner, level, post, feedShare, config.creatorBrowsingSources) },
         endContent = end,
@@ -109,12 +104,10 @@ private fun ForYouGrid(
     onLongPress: (Post) -> Unit,
     end: @Composable () -> Unit,
 ) {
-    // Every level keeps its own grid place while the Viewer or a deeper trail covers it, and a new one starts at the top.
     val retainKey = level.id
     val gridState = rememberRetainedFeedGridState(retainKey)
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, config.durations.onEnvironmentChanged)
-    // The owner already applied For You's filters, so the grid hides nothing itself.
     val view = rememberFeedView(retainKey, feed.posts, NO_FILTERS, config.durations, related.state)
     val demand = rememberFeedPageDemand(
         input = FeedPageDemandInput(
@@ -134,7 +127,6 @@ private fun ForYouGrid(
     )
     when {
         view.related.projection.entries.isNotEmpty() -> Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-            // A later page that failed, above the posts as on a creator's page. The Mix says it in its status row.
             if (feed.pageFailed && level.fork != null) {
                 Box(Modifier.padding(bottom = 8.dp)) { FeedFailureTile(LOAD_FAILED, onRetry = level::retryPage) }
             }
@@ -166,10 +158,6 @@ private fun ForYouGrid(
     }
 }
 
-/**
- * What a level with nothing left says. [mix] is the Mix's state, or null on a trail; [empty] is whether the level
- * never had a post to show.
- */
 @Composable
 private fun ForYouEnd(
     mix: ForYouMixState?,

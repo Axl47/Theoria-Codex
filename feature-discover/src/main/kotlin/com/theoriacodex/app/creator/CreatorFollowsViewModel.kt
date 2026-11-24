@@ -45,14 +45,12 @@ class CreatorFollowsViewModel(
     val errors = mutableErrors.asStateFlow()
     private val mutableUnfollowed = MutableStateFlow<RemovedFollow?>(null)
 
-    /** The follow whose Undo is live, so the followed-creators sheet keeps its row's place. */
     val unfollowed = mutableUnfollowed.asStateFlow()
     private val messageChannel = Channel<String>(Channel.BUFFERED)
     val messages = messageChannel.receiveAsFlow()
     private var refreshJob: Job? = null
     private var refreshIsAutomatic = false
 
-    /** The creator page's Follow button: follows, or unfollows with Undo drawn in the button's place. */
     fun toggle(creator: CreatorProfile, posts: List<Post>, undo: UndoSlot) {
         viewModelScope.launch {
             runCatchingExceptionsPreservingCancellation {
@@ -63,7 +61,6 @@ class CreatorFollowsViewModel(
         }
     }
 
-    /** The followed-creators sheet's unfollow, with Undo drawn in the row it vacated. */
     fun unfollow(creator: CreatorProfile, undo: UndoSlot) {
         viewModelScope.launch {
             runCatchingExceptionsPreservingCancellation {
@@ -72,7 +69,6 @@ class CreatorFollowsViewModel(
         }
     }
 
-    /** Unfollows at once; Undo restores the same record, so nothing the creator posted meanwhile counts as seen. */
     private suspend fun unfollowWithUndo(creator: CreatorProfile, undo: UndoSlot, anchor: UndoAnchor) {
         val removed = repository.unfollow(creator) ?: return
         mutableUnfollowed.value = removed
@@ -85,14 +81,8 @@ class CreatorFollowsViewModel(
         undo.offer(viewModelScope, offer)
     }
 
-    /** Stops the app-open check when the app leaves the foreground; a refresh the user started carries on. */
     fun cancelAutomaticRefresh() { if (refreshIsAutomatic) refreshJob?.cancel() }
 
-    /**
-     * The app-open check: refreshes the follows whose own last check or failed attempt, which are saved
-     * with them, is older than the check interval. A failing source waits for the next interval instead
-     * of retrying, restarts included, and follows a cancelled run never reached stay due.
-     */
     suspend fun refreshIfStale(nowEpochMs: Long) {
         if (repository.observe().first().none { it.checkDue(nowEpochMs) }) return
         startRefresh(automatic = true, at = nowEpochMs)
@@ -105,8 +95,6 @@ class CreatorFollowsViewModel(
         if (running != null && (automatic || !refreshIsAutomatic)) return
         refreshIsAutomatic = automatic
         refreshJob = viewModelScope.launch {
-            // A refresh the user asks for during the automatic check replaces it, so it covers every follow
-            // rather than only the stale ones the automatic run was limited to; the checks it already recorded stay.
             running?.cancelAndJoin()
             mutableRefreshing.value = true
             mutableErrors.value = emptyMap()
@@ -121,7 +109,6 @@ class CreatorFollowsViewModel(
         }
     }
 
-    /** [follow]'s newest posts, or null after recording why the check failed. */
     private suspend fun checkCreator(follow: FollowedCreator): List<Post>? = runCatchingExceptionsPreservingCancellation {
         val adapter = registry.adapterFor(follow.creator.source) as? CreatorPostsSourceAdapter
             ?: error("Source unavailable; check source accounts")
@@ -135,7 +122,6 @@ class CreatorFollowsViewModel(
     private fun FollowedCreator.checkDue(nowEpochMs: Long) = newPostsCheckDue(listOf(checkedAtEpochMs, attemptedAtEpochMs), nowEpochMs)
 
     companion object {
-        /** Creators checked per settings write, so a large list neither rewrites settings per creator nor loses its progress when cancelled. */
         private const val WRITE_BATCH_SIZE = 25
 
         fun factory(settings: SettingsRepository, registry: SourceAdapterRegistry) = viewModelFactory {

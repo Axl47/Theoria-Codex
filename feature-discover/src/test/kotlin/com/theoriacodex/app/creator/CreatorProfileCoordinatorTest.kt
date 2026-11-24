@@ -239,7 +239,6 @@ class CreatorProfileCoordinatorTest {
         )
     }
 
-    /** Provider calls stay on the test's dispatcher, so virtual time drives them. */
     private fun engine(registry: SourceAdapterRegistry) = CreatorProfileCoordinator(registry, providerContext = EmptyCoroutineContext)
 
     private fun singleAdapterRegistry(adapter: SourceAdapter): SourceAdapterRegistry {

@@ -37,21 +37,14 @@ import com.theoriacodex.domain.model.SearchTermGroup
 
 internal data class SelectedTerm(val term: SearchTerm, val excluded: Boolean)
 
-/** What a [ComposerQuery] needs from the composer that owns its selection and add target. */
 internal class ComposerQueryActions(
     val savedTags: ComposerSavedTags,
     val onSelect: (SelectedTerm?) -> Unit,
     val onAddAlternative: (SearchTerm) -> Unit,
-    /** Edits the draft and closes the tag's menu. */
     val onEdit: (SearchAction) -> Unit,
-    /** Removes tags in a way the user can undo. */
     val onRemove: (SearchAction, removed: List<SearchTerm>, excluded: Boolean) -> Unit,
 )
 
-/**
- * The query as one readable expression: every group must match, in draft order, and a group with
- * several tags is a capsule of alternatives. Excluded tags follow. Tapping a tag opens its actions.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ComposerQuery(
@@ -97,7 +90,6 @@ internal fun ComposerQuery(
     }
 }
 
-/** A group of alternatives. As the add target it is highlighted and shows where the next tag lands. */
 @Composable
 private fun ComposerAlternativesCapsule(
     index: Int,
@@ -109,7 +101,6 @@ private fun ComposerAlternativesCapsule(
     val requester = remember { BringIntoViewRequester() }
     var naming by remember { mutableStateOf(false) }
     LaunchedEffect(isTarget) { if (isTarget) requester.bringIntoView() }
-    // The tag's menu closes once Save is chosen, so the group asks for its name here.
     if (naming) SaveGroupNameDialog(group.terms, actions.savedTags) { naming = false }
     TagGroupCard(
         active = isTarget,
@@ -170,10 +161,6 @@ private fun ComposerRequiredTerm(
     }
 }
 
-/**
- * Saves [terms] as one saved tag, or as a saved "or" group when there are several, or offers to
- * remove the entry already saved for exactly them. Typed tags cannot be saved, so they show nothing.
- */
 @Composable
 private fun ComposerSaveItem(
     terms: List<SearchTerm>,
@@ -207,7 +194,6 @@ private fun ComposerRemoveItem(label: String, onClick: () -> Unit) {
     DropdownMenuItem(text = { Text(label, color = MaterialTheme.colorScheme.error) }, onClick = onClick)
 }
 
-/** One tag. Its type is a quiet prefix, and its actions open beside it while it is selected. */
 @Composable
 private fun ComposerTermChip(
     term: SearchTerm,
@@ -264,10 +250,8 @@ internal fun ComposerSectionTitle(title: String, modifier: Modifier = Modifier) 
     )
 }
 
-/** Saves [group] as one "or" group once the user names it or leaves the name blank. */
 @Composable
 private fun SaveGroupNameDialog(group: List<SearchTerm>, savedTags: ComposerSavedTags, onClose: () -> Unit) {
-    // The menu only offers saving while there is a source to save under.
     val source = savedTags.saveSource ?: return
     NameEntryDialog(
         title = "Save “or” group",

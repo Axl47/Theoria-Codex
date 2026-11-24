@@ -44,16 +44,10 @@ private val AVATAR_SIZE = 48.dp
 internal val COMPACT_AVATAR_SIZE = 32.dp
 private const val BIO_COLLAPSED_LINES = 3
 
-/** The header's muted lines: [stats] always (it opens with the source), [secondary] only when the source offers its facts. */
 internal data class AccountHeaderText(val stats: String, val secondary: String?) {
-    /** Both lines joined, for the single-line landscape bar. */
     val line: String get() = listOfNotNull(stats, secondary).joinToString(" · ")
 }
 
-/**
- * Builds the header lines from whatever [details] holds. A favorites count of 0 is left out: sites
- * report 0 for private favorites, which would read as "no favorites".
- */
 internal fun accountHeaderText(
     source: SourceKey,
     details: AccountDetails?,
@@ -79,10 +73,8 @@ internal val AccountFeed.label: String
         AccountFeed.FAVORITES -> "Favorites"
     }
 
-/** The account's bio, or null when it has none worth showing. */
 internal val AccountDetails?.shownBio: String? get() = this?.bio?.trim()?.takeIf(String::isNotEmpty)
 
-/** Avatar, facts and Follow for an account, with the bio under them. Facts fill in as [details] arrives. */
 @Composable
 internal fun AccountHeader(
     creator: CreatorProfile,
@@ -119,7 +111,6 @@ internal fun AccountHeader(
     }
 }
 
-/** The bio, clipped to three lines until tapped; stays open across a Viewer round trip, closes for a new bio. */
 @Composable
 internal fun AccountBio(bio: String) {
     var expanded by rememberSaveable(bio) { mutableStateOf(false) }
@@ -132,7 +123,6 @@ internal fun AccountBio(bio: String) {
     )
 }
 
-/** The account's picture, requested with the source's media headers; a circle with the name's initial when there is none. */
 @Composable
 internal fun AccountAvatar(creator: CreatorProfile, url: String?, size: Dp) {
     Box(
@@ -151,7 +141,6 @@ internal fun AccountAvatar(creator: CreatorProfile, url: String?, size: Dp) {
     }
 }
 
-/** Tabs for an account's feeds; nothing when there is only one. */
 @Composable
 internal fun AccountFeedTabs(tabs: List<AccountFeed>, selected: AccountFeed, onSelect: (AccountFeed) -> Unit) {
     if (tabs.size < 2) return
@@ -162,7 +151,6 @@ internal fun AccountFeedTabs(tabs: List<AccountFeed>, selected: AccountFeed, onS
     }
 }
 
-/** The landscape bar's compact feed switcher; nothing when there is only one feed. */
 @Composable
 internal fun AccountFeedSegments(tabs: List<AccountFeed>, selected: AccountFeed, onSelect: (AccountFeed) -> Unit) {
     if (tabs.size < 2) return
@@ -172,7 +160,6 @@ internal fun AccountFeedSegments(tabs: List<AccountFeed>, selected: AccountFeed,
                 selected = feed == selected,
                 onClick = { onSelect(feed) },
                 shape = SegmentedButtonDefaults.itemShape(index, tabs.size),
-                // No checkmark, so the switcher keeps its width when the selection changes.
                 icon = {},
                 label = { Text(feed.label, maxLines = 1) },
             )

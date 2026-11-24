@@ -40,7 +40,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-// The composer is a sheet over the results; a tall window gives its saved rows room without scrolling.
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, qualifiers = "w400dp-h900dp")
 class SearchComposerUiTest {
@@ -108,7 +107,6 @@ class SearchComposerUiTest {
         assertTrue("The scrolling row must leave the label room", label.right > label.left)
         compose.onNodeWithText("blue_hair").performClick()
         compose.runOnIdle { assertEquals(SearchAction.AddIncludeTerm(SearchTerm("blue_hair")), actions.last()) }
-        // Already excluded in the fixture's draft, so the chip shows it and its tap clears it.
         compose.onNode(hasStateDescription("Excluded")).performClick()
         compose.runOnIdle { assertEquals(SearchAction.RemoveExcludeTerm(sketch), actions.last()) }
         compose.onNodeWithText("Manage").performClick()
@@ -132,7 +130,6 @@ class SearchComposerUiTest {
         compose.runOnIdle { assertEquals(SearchAction.AddSavedTagGroup(group.terms), actions.last()) }
     }
 
-    // The default window: on the tall one, Robolectric never idles once the name dialog takes text.
     @Config(qualifiers = "w320dp-h470dp")
     @Test fun `saving an or group asks for an optional name and the chip shows it`() {
         var saved: Triple<SourceKey, List<String>, String?>? = null
@@ -191,7 +188,6 @@ class SearchComposerUiTest {
         )
         compose.onNodeWithText("Landscapes").assertDoesNotExist()
         compose.onNodeWithText("12 posts").assertIsDisplayed()
-        // A Codex with no loadable cover keeps its kind icon inside the thumbnail.
         compose.onNodeWithContentDescription("Codex").assertIsDisplayed()
         val tag = compose.onNodeWithText("insect").getUnclippedBoundsInRoot().top
         assertTrue(tag < compose.onNodeWithText("Insects").getUnclippedBoundsInRoot().top)

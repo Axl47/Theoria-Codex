@@ -49,11 +49,6 @@ import com.theoriacodex.app.search.rememberPostWatchEntry
 import com.theoriacodex.app.search.relativeTimeLabel
 import com.theoriacodex.app.ui.undo.UndoRow
 
-/**
- * What History's rows and tiles can do to their own entry: save a search in place ([saving]), open a search's
- * long-press menu ([onSearchMenu]), or be removed ([onRemoveSearch], [onRemovePost]). [removedSearch] keeps its
- * row or tile in place to show the Undo offer.
- */
 internal class RecentsRowActions(
     val saving: RecentSearchSaving?,
     val removedSearch: RecentSearchEntry?,
@@ -62,7 +57,6 @@ internal class RecentsRowActions(
     val onSearchMenu: ((RecentSearchEntry) -> Unit)?,
 )
 
-/** The body under the header, for whichever section is selected. */
 @Composable
 internal fun RecentsTab(
     filter: RecentsFilter,
@@ -155,7 +149,6 @@ private fun WatchedGrid(
     val rows = remember(watchedPosts, now, related?.request) {
         recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
     }
-    // Headings and the shelf hold a null so Viewer return still finds each post by its grid position.
     val posts = remember(rows) { rows.map { (it as? RecentsGridRow.Post)?.entry?.post } }
     val shelfIds = remember(rows, related?.request) {
         rows.map { row -> related?.request?.seed?.id?.takeIf { row == RecentsGridRow.RelatedShelf }?.let(ViewerReturnShelfId::Related) }
@@ -196,7 +189,6 @@ private fun RecentsDayHeading(label: String) {
     )
 }
 
-/** A real feed card, so animated posts in Recents autoplay like everywhere else. */
 @Composable
 private fun RecentPostCard(
     entry: RecentPostEntry,
@@ -250,7 +242,6 @@ private fun SearchHistoryList(
             days.forEach { (day, entries) ->
                 item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
                 itemsIndexed(entries, key = { _, entry -> "${entry.kind}:${entry.queryHash}" }) { index, entry ->
-                    // Dividers start under the text, past the source mark.
                     if (index > 0) HorizontalDivider(Modifier.padding(start = 48.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     if (entry == removed) {
                         UndoRow(recentSearchRemovalAnchor(entry), Modifier.padding(vertical = 4.dp))
@@ -268,11 +259,6 @@ private fun SearchHistoryList(
     }
 }
 
-/**
- * The All view: each day's searches as a row of tiles above a shelf of its posts. Both rows scroll sideways, so
- * their entries are removed from the post menu or by TalkBack rather than by a swipe; a removed search keeps its
- * tile's place for the Undo offer.
- */
 @Composable
 private fun ActivityList(
     visible: VisibleRecents,
@@ -300,7 +286,6 @@ private fun ActivityList(
         itemsIndexed(
             timeline,
             key = { index, item -> timelineKey(index, item) },
-            // Headings, post rows, search rows, and the shelf only reuse compositions of their own kind.
             contentType = { _, item -> item.javaClass },
         ) { _, item ->
             when (item) {
@@ -329,7 +314,6 @@ private fun ActivityList(
     }
 }
 
-/** One day's posts as a horizontal shelf, newest first. */
 @Composable
 private fun RecentPostsRow(
     entries: List<RecentPostEntry>,
@@ -341,9 +325,6 @@ private fun RecentPostsRow(
 ) {
     val row = rememberLazyListState()
     val postIds = remember(entries) { entries.map { it.post.id } }
-    // Rows are newest first, but a list keeps its place by key, so a post viewed since would
-    // land off-screen to the left. Show the newest whenever it changes, but not on a return
-    // (from another Library section) that finds the same newest post.
     val lead = postIds.firstOrNull()?.let { "${it.source.id}:${it.sourcePostId}" }
     var shownLead by rememberSaveable { mutableStateOf(lead) }
     LaunchedEffect(lead) {
@@ -354,7 +335,6 @@ private fun RecentPostsRow(
     ViewerReturnShelf(ViewerReturnShelfId.RecentsTimeline, postIds, row) {
         LazyRow(
             state = row,
-            // The same square frame as other shelves keeps every card in a row the same height.
             modifier = Modifier.height(POST_SHELF_CARD_WIDTH / POST_SHELF_MEDIA_ASPECT_RATIO),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -373,7 +353,6 @@ private fun RecentPostsRow(
     }
 }
 
-/** Whether a Viewer return lands on this row: the related shelf by its seed, otherwise the row holding the post. */
 private fun RecentsTimelineItem.holdsReturn(request: ViewerReturnRequest, shelfSeed: PostId?): Boolean = when (this) {
     RecentsTimelineItem.RelatedShelf -> shelfSeed != null && request.shelfId == ViewerReturnShelfId.Related(shelfSeed)
     is RecentsTimelineItem.Posts -> request.shelfId !is ViewerReturnShelfId.Related && entries.any { it.post.id == request.postId }
@@ -406,28 +385,18 @@ private fun openRecentPost(
     }
 }
 
-/**
- * Swipe-left removal for one History entry, or just [content] when it cannot be removed here. [content] applies the
- * modifier it receives to its clickable node, which carries the removal for TalkBack.
- */
 @Composable
 private fun RemovableEntry(onRemove: (() -> Unit)?, content: @Composable (Modifier) -> Unit) {
     if (onRemove == null) content(Modifier) else SwipeToRemove(REMOVE_FROM_HISTORY, onRemove, content = content)
 }
 
-/** TalkBack's removal alone, for an entry in a sideways-scrolling row, where a swipe would fight the row's scroll. */
 private fun historyRemoval(onRemove: (() -> Unit)?): Modifier =
     onRemove?.let { Modifier.removeAction(REMOVE_FROM_HISTORY, it) } ?: Modifier
 
-/**
- * [removed] back in its time order while its row shows the Undo offer, unless it is already restored. Callers pass
- * null when the current filters would not show it.
- */
 internal fun List<RecentSearchEntry>.withRemovedInPlace(removed: RecentSearchEntry?): List<RecentSearchEntry> =
     if (removed == null || any { it.queryHash == removed.queryHash }) this
     else (this + removed).sortedByDescending { it.searchedAtEpochMs }
 
-/** The All view's activity with [removed] back in its time order, as [withRemovedInPlace] does for search lists. */
 @JvmName("activityWithRemovedInPlace")
 internal fun List<RecentActivityEntry>.withRemovedInPlace(removed: RecentSearchEntry?): List<RecentActivityEntry> =
     if (removed == null || any { it is RecentActivityEntry.Search && it.entry.queryHash == removed.queryHash }) this

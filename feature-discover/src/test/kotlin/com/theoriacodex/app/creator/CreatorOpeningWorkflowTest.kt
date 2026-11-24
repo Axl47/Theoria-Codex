@@ -59,7 +59,6 @@ class CreatorOpeningWorkflowTest {
 
     @Test fun `creator links retain native identities and Gelbooru author query`() = runTest {
         for (source in listOf(SourceKey.PIXIV, SourceKey.HITOMI, SourceKey.GELBOORU)) {
-            // The Gelbooru lookup runs on a background dispatcher, so the workflow's timeout must run in real time.
             val opened = withContext(Dispatchers.Default) { workflow(source, { null }).fromDeepLink(link(source), setOf(source)) }
             assertEquals("owner", opened?.profileId)
             assertEquals(when (source) {

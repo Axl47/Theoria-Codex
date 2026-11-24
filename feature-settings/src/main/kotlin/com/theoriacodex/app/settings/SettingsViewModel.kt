@@ -142,7 +142,6 @@ data class SettingsOwnerDependencies(
     val showDeveloperScenarios: Boolean = false,
 )
 
-/** Activity-retained owner for Settings rendering, mutations, recovery, and durable expansion state. */
 class SettingsViewModel(
     private val dependencies: SettingsOwnerDependencies,
     coroutineScope: CoroutineScope? = null,
@@ -161,10 +160,6 @@ class SettingsViewModel(
     private var observedLikesProfileId: String? = null
     private val accountRefreshRunning = AtomicBoolean(false)
 
-    /**
-     * Library and usage statistics for the Settings surfaces that show them. Collected only while a screen
-     * subscribes, because the projection re-reads every saved post whenever the library changes.
-     */
     val statistics: StateFlow<StatisticsSummary> = SettingsStatisticsSource(
         statisticsRepository = dependencies.statisticsRepository,
         codexRepository = dependencies.codexRepository,
@@ -498,7 +493,6 @@ class SettingsViewModel(
         val snapshot = try {
             dependencies.accounts.loadSnapshot()
         } catch (expected: CredentialStoreUnavailableException) {
-            // The store reports why it is unavailable through recoveryState, which is what the UI shows.
             applyRecoveryState(dependencies.accounts.recoveryState.value)
             return
         }

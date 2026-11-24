@@ -50,7 +50,7 @@ class SearchScrollResetTest {
                 }
             }
             withTimeout(5_000) { enteredReset.await() }
-            reset.cancel() // ViewModel teardown cancels route work before closing the flush owner.
+            reset.cancel()
             closing = uiExecutor.submit { closeStarted.complete(Unit); controller.close() }
             withTimeout(5_000) { closeStarted.await() }
             releaseReset.complete(Unit)

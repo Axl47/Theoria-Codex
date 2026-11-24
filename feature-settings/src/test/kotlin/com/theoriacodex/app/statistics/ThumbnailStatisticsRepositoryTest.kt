@@ -79,7 +79,6 @@ class ThumbnailStatisticsRepositoryTest {
             StatisticsThumbnailStore(directory)) { _, _ -> false }
         repository.recordCodexPostOpen("codex", "PIXIV:42", "Post")
         runCurrent()
-        // Only a reconcile pass would delete this unowned file.
         val marker = directory.resolve("unowned").apply { writeText("x") }
 
         repository.recordWatchedPost(SourceKey.PIXIV, setOf("tag"))

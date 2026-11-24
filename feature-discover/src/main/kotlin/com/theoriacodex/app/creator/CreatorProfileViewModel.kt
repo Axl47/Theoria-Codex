@@ -49,7 +49,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
-/** Navigation-scoped owner for Creator identity, requests, paging, and navigation effects. */
 class CreatorProfileViewModel(
     private val engine: CreatorRouteEngine,
     private val savedStateHandle: SavedStateHandle,
@@ -75,7 +74,6 @@ class CreatorProfileViewModel(
     private var seenJob: Job? = null
     private val mutableSeenAtOpen = MutableStateFlow<CreatorSeenSnapshot?>(null)
 
-    /** What the creator's follow had seen when this page opened, for the "new since last visit" divider; null when not followed. */
     val seenAtOpen: StateFlow<CreatorSeenSnapshot?> = mutableSeenAtOpen.asStateFlow()
 
     private val mutableState = MutableStateFlow(CreatorUiState())
@@ -115,10 +113,6 @@ class CreatorProfileViewModel(
         ownerScope.launch { reconnections.collect { retryAfterReconnect() } }
     }
 
-    /**
-     * Reports a reconnect once any request begun offline, which may still be failing, has settled, so its outcome gets
-     * the retry too (see [CreatorAction.Reconnected]).
-     */
     private suspend fun retryAfterReconnect() {
         mutableState.first { !it.isRefreshing && !it.isPaging }
         onAction(CreatorAction.Reconnected)
@@ -128,7 +122,6 @@ class CreatorProfileViewModel(
         if (action is CreatorAction.OpenCreator) openCreator(action) else reduceAction(action)
     }
 
-    /** Asks the source whether [action]'s creator is an account, then loads the header details beside the first feed. */
     private fun openCreator(action: CreatorAction.OpenCreator) {
         val opened = if (action.feeds.isEmpty()) action.copy(feeds = engine.accountFeeds(action.creator)) else action
         detailsJob?.cancel(CancellationException("Creator replaced"))
@@ -137,7 +130,6 @@ class CreatorProfileViewModel(
         if (opened.feeds.isNotEmpty()) launchDetails(opened.creator)
     }
 
-    /** Reads the follow's seen ids before this page's first accepted visit adds to them (see [recordAcceptedVisit]). */
     private fun snapshotSeen(creator: CreatorProfile) {
         seenJob?.cancel(CancellationException("Creator replaced"))
         mutableSeenAtOpen.value = null
@@ -147,7 +139,6 @@ class CreatorProfileViewModel(
         }
     }
 
-    /** A failed or empty details request leaves the header bare; the page never waits on it. */
     private fun launchDetails(creator: CreatorProfile) {
         detailsJob = ownerScope.launch {
             val details = runCatchingPreservingCancellation { engine.accountDetails(creator) }.getOrNull() ?: return@launch
@@ -170,7 +161,6 @@ class CreatorProfileViewModel(
         transition.effect?.let(::handleEffect)
     }
 
-    /** Only loss of this creator's capability invalidates its active request. */
     fun onSourceAvailabilityChanged() {
         val current = mutableState.value
         val creator = current.creator ?: return
@@ -220,7 +210,6 @@ class CreatorProfileViewModel(
         }
     }
 
-    /** Only a fresh uploads list is a visit; accepted bookkeeping outlives the completed request, but not the route owner. */
     private fun recordAcceptedVisit(effect: CreatorEffect.LoadPage) {
         if (effect.request.kind != CreatorRequestKind.REFRESH || effect.feed != AccountFeed.UPLOADS) return
         val posts = mutableState.value.results

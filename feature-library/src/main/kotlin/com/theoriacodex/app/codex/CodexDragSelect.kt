@@ -43,12 +43,10 @@ internal fun CodexEditSelection.painted(
     return copy(selectedPostIds = if (selecting) base + range else base - range.toSet())
 }
 
-/** One long-press drag: the first post decides whether the whole range is selected or cleared. */
 private class CodexPaint(val base: Set<PostId>, val anchor: Int, val selecting: Boolean) {
     var current = anchor
 }
 
-/** Turns pointer positions over the grid into a painted selection range. */
 private class CodexDragPainter(
     private val grid: LazyStaggeredGridState,
     posts: State<List<PostId>>,
@@ -93,7 +91,6 @@ private class CodexDragPainter(
         pointer = null
     }
 
-    /** Scrolls when the finger nears an edge, then selects whatever slid under it. */
     suspend fun autoScroll(edgeZone: Float, maxStep: Float) {
         val position = pointer ?: return
         val layout = grid.layoutInfo
@@ -109,7 +106,6 @@ private class CodexDragPainter(
 private val PAINT_EDGE_ZONE = 72.dp
 private val PAINT_MAX_SCROLL_PER_FRAME = 14.dp
 
-/** While [selection] is active, long-press and drag across the grid to select a range, scrolling at its edges. */
 @Composable
 internal fun Modifier.codexDragSelect(
     grid: LazyStaggeredGridState,

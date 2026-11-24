@@ -8,7 +8,6 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 
 val LocalSavedCodexSessionOwner = staticCompositionLocalOf<ViewModelStoreOwner?> { null }
 
-/** Retains live Saved feeds across navigation, including their pagination and retry state. */
 @Composable
 fun SavedCodexSession(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalSavedCodexSessionOwner provides checkNotNull(LocalViewModelStoreOwner.current)) {

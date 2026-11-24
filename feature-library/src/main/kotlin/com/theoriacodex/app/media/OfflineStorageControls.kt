@@ -18,10 +18,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.ErrorState
 
-/**
- * Settings' Storage sheet: what media takes on this device, and clearing the disposable cache. Offline
- * copies themselves are managed in the Library's offline sheet.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StorageSheet(
@@ -63,7 +59,6 @@ private fun StorageBreakdown(state: OfflineStorageUiState, onRefresh: () -> Unit
     }
 }
 
-/** One line for the Settings row: offline copies and cache. */
 @Composable
 fun OfflineStorageSummary(state: OfflineStorageUiState) {
     val context = LocalContext.current
@@ -71,7 +66,6 @@ fun OfflineStorageSummary(state: OfflineStorageUiState) {
     Text("Offline ${size(state.offline.bytes)} · Cache ${size(state.disposable?.totalBytes ?: 0L)}")
 }
 
-/** Managed offline copies and cache; exported downloads live outside the app's storage. */
 fun OfflineStorageUiState.totalBytes(): Long =
     offline.bytes + (disposable?.totalBytes ?: 0L)
 

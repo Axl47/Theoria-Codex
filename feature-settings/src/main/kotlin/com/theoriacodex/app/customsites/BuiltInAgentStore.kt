@@ -2,10 +2,6 @@ package com.theoriacodex.app.customsites
 
 import android.content.Context
 
-/**
- * Which built-in sites have passed a browser check, by host, with the browser's User-Agent. A saved custom
- * site keeps its agent in its profile; built-in sites have no profile, and clearance survives restarts.
- */
 interface BuiltInAgentStore {
     fun read(): Map<String, String>
 

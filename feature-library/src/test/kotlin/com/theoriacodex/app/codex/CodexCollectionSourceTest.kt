@@ -65,7 +65,6 @@ class CodexCollectionSourceTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("target", "Target")
         val posts = (1..12).map { testPost(sourcePostId = "$it").copy(canonicalTags = listOf("cat")) }
-        // The unmatched post keeps "cat" off part of the library, so it still counts as a match.
         repository.addItems("target", posts + testPost(sourcePostId = "unmatched").copy(canonicalTags = listOf("dog")))
         val source = CodexCollectionSource(repository, folder.root, InMemoryCacheRepository())
         val tagScore = source.observeSaveRelevance(setOf("target"), listOf(posts.first())).first().getValue("target")

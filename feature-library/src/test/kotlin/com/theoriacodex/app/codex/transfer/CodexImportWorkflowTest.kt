@@ -94,7 +94,6 @@ class CodexImportWorkflowTest {
         runCurrent()
         release.complete(Unit)
         advanceUntilIdle()
-        // The UI attaches only after completion and still receives the typed result once.
         assertEquals(CodexImportResult.Success("profile-1", 8, 0), owner.effects.first())
         assertEquals(1, targets)
         assertEquals(2, reads)

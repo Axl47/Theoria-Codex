@@ -42,7 +42,6 @@ private val SectionSetSaver = listSaver<Set<DiagnosticSection>, String>(
     { names -> DiagnosticSection.entries.filterTo(linkedSetOf()) { it.name in names } },
 )
 
-/** Lets someone read a redacted report and choose its parts before anything leaves the device. */
 @Composable
 fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit) {
     var sections by rememberSaveable(stateSaver = SectionSetSaver) { mutableStateOf(DiagnosticSection.entries.toSet()) }
@@ -57,7 +56,6 @@ fun DiagnosticsPage(entry: SettingsDiagnosticsEntry, onBack: () -> Unit) {
     val built by produceState<BuiltReport?>(null, sections, generation) {
         value = BuiltReport(sections, generation, entry.build(sections))
     }
-    // A rebuild keeps showing its previous value, so only text built for the current choices may be used.
     val report = built?.takeIf { it.sections == sections && it.generation == generation }?.text
     SettingsPageColumn {
         SettingsHeader(SettingDestinations.Diagnostics.title, onBack, SETTINGS_PATH)

@@ -14,10 +14,8 @@ data class PixivPkceSession(
 interface PixivPkceSessionStore {
     suspend fun read(): PixivPkceSession?
 
-    /** Atomically replaces any older authorization attempt and verifies the committed value. */
     suspend fun writeVerified(session: PixivPkceSession)
 
-    /** Removes only the exact session that reached a successful terminal credential save. */
     suspend fun consume(session: PixivPkceSession): Boolean
 
     suspend fun reset(): Boolean

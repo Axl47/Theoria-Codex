@@ -149,6 +149,34 @@ and link the record that replaces it.
 | [0129](0129-triage-deck-ordered-writes.md) | Triage decisions move the card at once and their writes run in order after the deck closes |
 | [0130](0130-viewer-animated-playback.md) | Animated media share one clock, one timeline and a hold-to-scrub gesture without recomposing per frame |
 | [0131](0131-viewer-return-scrolling.md) | Returning from the Viewer moves the feed as little as possible and keeps the originating post in place |
+| [0132](0132-creator-page-seen-marks-and-account-header.md) | The creator page marks new posts from a seen-ids snapshot taken before the visit, and never waits on account details |
+| [0133](0133-for-you-lanes-and-deals.md) | A Mix is a few lanes taken in turn across sources, topped up before they run dry and dealt in short, owed batches |
+| [0134](0134-for-you-mix-owner-and-levels.md) | The For You owner keeps a stack of levels on one thread, rebuilds the Mix for deck inputs and only prunes it for hidden-tag changes |
+| [0135](0135-for-you-picture-vetting.md) | For You vets pictures before dealing only while hidden tags could catch them, and never passes an unchecked post |
+| [0136](0136-search-and-discover-test-timing.md) | Search and Discover tests step virtual time by hand so timeouts, undo offers and idling do not fire early |
+| [0137](0137-search-composer-sheet-and-bar-gestures.md) | The composer is an undimmed bottom sheet that leaves results in view, and the collapsed bar steps through history by swipe |
+| [0138](0138-search-composer-tag-editing.md) | The composer adds tags to the target it shows, keeps groups to one tag type and offers Undo only while it is safe |
+| [0139](0139-search-live-run-and-settlement.md) | Search runs live after a pause, and a search is remembered only once the user settles it |
+| [0140](0140-search-results-notices-and-recovery.md) | Search results report failures once, retry what a returning network or a passed browser check fixes, and apply filters on screen |
+| [0141](0141-tag-suggestion-store.md) | The tag suggestion store seeds from a bundled asset, bounds its size, and survives damaged files and failed writes |
+| [0142](0142-codex-collection-source-reads.md) | Codex collection reads decode covers and payloads once and keep full tag projections off the browsing path |
+| [0143](0143-codex-detail-filtering-and-selection.md) | Codex detail's tag filter is transient, its triage action depends on the collection, and drag-select only runs without a related shelf |
+| [0144](0144-codex-library-commands.md) | Codex library commands run serially in a retained owner, with Undo offered in the app's undo slot |
+| [0145](0145-codex-library-sorting-and-reorder.md) | Codex Library and detail sorts are stable, wait for their inputs, and reorder by long-press drag on the grid |
+| [0146](0146-codex-save-targets.md) | Save-to-Codex surfaces share one save path, exclude Likes, and rank like the one-tap suggestions |
+| [0147](0147-codex-share-and-transfer.md) | Codex share files are bounded on import, never carry device paths, and are exported into per-share folders |
+| [0148](0148-custom-sites-settings-flow.md) | Settings → Sites writes edits live, defers removals for Undo, and ties browser checks to the form that opened them |
+| [0149](0149-library-offline-and-download-removals.md) | Offline copies and downloads are removed as deferred destruction, and a Codex's offline ring counts only current posts |
+| [0150](0150-library-section-persistence.md) | The Library's selected section is app-wide, persisted by name |
+| [0151](0151-likes-codex-sync-writes.md) | Like writes are serialized and treat every site's copy of a file as one like |
+| [0152](0152-live-saved-collections.md) | Followed and saved-search collections are live, read-only feeds whose new-post marks move only when the results are actually shown |
+| [0153](0153-pixiv-pkce-login.md) | Pixiv login persists its one-shot PKCE session before the browser opens and commits the callback uncancellably |
+| [0154](0154-recents-history-behavior.md) | History removals keep their place for Undo, its related shelf never joins History, and swipes are left-only |
+| [0155](0155-settings-backup.md) | Daily backup runs when the app leaves the foreground and never deletes files it did not name |
+| [0156](0156-settings-owner-and-pages.md) | Settings state lives in an activity-retained owner, with statistics collected only while shown |
+| [0157](0157-site-cookie-bridge.md) | Browser cookies and site keys reach requests only for the hosts the user set up or verified |
+| [0158](0158-source-credential-storage.md) | Source credentials are encrypted in one envelope, never leak into errors or logs, and are cleared only on the user's request |
+| [0159](0159-stats-sharing.md) | Shared Stats files hold only what was left in, are validated on import, and are compared without being stored |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
 | [0209](0209-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |

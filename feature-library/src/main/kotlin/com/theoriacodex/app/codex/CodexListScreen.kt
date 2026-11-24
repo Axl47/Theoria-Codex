@@ -54,14 +54,12 @@ internal fun CodexListContent(
     ) {
         header { CodexListHeaderActions(presentation, state, actions) }
         UndoLeaveEffect(CodexUndoAnchors.LIBRARY_SCOPE)
-        // A deleted Codex's Undo lives until the Library is left; leaving deletes it.
         SurfaceLeaveEffect(onLeave = actions.leaveLibrary)
 
         CodexGrid(presentation, state, actions)
     }
 }
 
-/** Import, Sort and Create, placed in the Library header while Codices shows. */
 @Composable
 private fun CodexListHeaderActions(
     presentation: CodexListPresentation,
@@ -124,7 +122,6 @@ private fun CodexAutoSaveOverlay(
     actions: CodexListActions,
 ) {
     val target = state.autoSaveTarget ?: return
-    // Rule edits arrive through the live list, so the sheet must not render the tapped snapshot.
     val codex = presentation.codices.firstOrNull { it.codexId == target.codexId } ?: target
     CodexAutoSaveSheet(
         codexName = codex.name,
@@ -164,7 +161,6 @@ private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions
     }
 }
 
-/** Only clearing Likes is confirmed: it also unlikes every post. Deleting a Codex acts at once and offers Undo. */
 @Composable
 private fun CodexDeleteConfirmation(
     state: CodexListUiState,
@@ -185,7 +181,6 @@ private fun CodexDeleteConfirmation(
     )
 }
 
-/** Long-press and overflow menu; rule editing lives in [CodexAutoSaveSheet]. */
 @Composable
 private fun CodexActionSheet(
     codex: Codex,
@@ -196,7 +191,6 @@ private fun CodexActionSheet(
     val isLikesCodex = codex.codexId == presentation.likesCodexId
     ActionMenuSheet(onDismiss = { state.actionTarget = null }) {
         CodexActionHeader(codex, presentation)
-        // Likes already receives every liked post, so it has no rules to configure.
         if (!isLikesCodex) {
             ActionMenuFollowUpRow(Icons.Default.AutoAwesome, "Auto-save") {
                 state.autoSaveTarget = codex

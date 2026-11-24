@@ -88,10 +88,6 @@ fun CodexListScreen(
     CodexListOverlays(presentation, state, actions)
 }
 
-/**
- * Codices waiting to be deleted ([pending], by id), each tile's Undo or Retry ([act]), and what commits them when
- * the Library is left ([commit]); see [CodexCommandViewModel.pendingDeletes].
- */
 class CodexListDeletes(
     val pending: Map<String, PendingRemoval> = emptyMap(),
     val act: (String) -> Unit = {},

@@ -35,8 +35,6 @@ fun resolveNamedCodexCoverCandidates(
 ): List<CodexCoverCandidate> {
     val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
     val prefix = "${name}_"
-    // Named covers are files `<name>_<source id>.<ext>`; source ids never contain '.'. Built-ins are
-    // always checked; custom sources are found in the listing.
     val customSources = thumbnailFiles.asSequence()
         .filter { file -> file.name.startsWith(prefix) }
         .mapNotNull { file -> SourceKey.parse(file.name.removePrefix(prefix).substringBefore('.')) }

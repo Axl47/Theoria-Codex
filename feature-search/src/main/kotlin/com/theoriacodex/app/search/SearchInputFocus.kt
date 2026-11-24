@@ -11,7 +11,6 @@ internal class SearchInputFocus(private val dismiss: (Boolean) -> Unit) {
     }
 }
 
-/** Clear the Compose focus and keyboard together when leaving or submitting Search. */
 @Composable
 internal fun rememberSearchInputFocus(): SearchInputFocus {
     val manager = LocalFocusManager.current

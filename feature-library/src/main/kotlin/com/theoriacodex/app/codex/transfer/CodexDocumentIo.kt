@@ -13,7 +13,6 @@ import kotlinx.coroutines.withContext
 private const val MAX_RETAINED_EXPORTS = 16
 private const val EXPORT_RETENTION_MS = 24L * 60 * 60 * 1000
 
-/** Document providers and exported files can block independently of repository suspension. */
 suspend fun readBoundedTextDocument(maxBytes: Int, open: () -> InputStream?): String? = withContext(Dispatchers.IO) {
     open()?.use { input ->
         com.theoriacodex.data.repository.decodeDocumentUtf8(
@@ -22,7 +21,6 @@ suspend fun readBoundedTextDocument(maxBytes: Int, open: () -> InputStream?): St
     }
 }
 
-/** Saves a copy in the public Downloads/TheoriaCodex folder; Android renames it if that name is taken. */
 suspend fun saveExportToDownloads(resolver: ContentResolver, document: ExportDocument, mimeType: String): Unit = withContext(Dispatchers.IO) {
     val values = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, document.fileName)
@@ -42,10 +40,6 @@ suspend fun saveExportToDownloads(resolver: ContentResolver, document: ExportDoc
     }
 }
 
-/**
- * Gives each share its own folder. A receiver's read grant covers the file, so reusing a path would let an
- * earlier recipient read whatever was shared next. Old shares are removed once no receiver should still need them.
- */
 suspend fun writeExportDocument(
     directory: File,
     document: ExportDocument,

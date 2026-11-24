@@ -10,7 +10,6 @@ import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 
-/** A built-in source in the Sites list, with its last test's result and Re-test; opens its page. */
 @Composable
 internal fun BuiltInSiteRow(
     site: BuiltInSiteSummary,
@@ -29,15 +28,10 @@ internal fun BuiltInSiteRow(
     }
 }
 
-/**
- * A built-in source's page: its host with Working and Re-test, its browser check while it isn't Working, and its
- * account when it has one. The host row keeps the page useful for a working site that has no account.
- */
 @Composable
 internal fun BuiltInSitePage(site: BuiltInSiteSummary, retest: RetestStatus?, accounts: BuiltInAccounts, onAction: (CustomSitesAction) -> Unit) {
     SettingsPageColumn {
         SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseBuiltIn) }, parents = SITES_PATH)
-        // A failed test's browser check is the group below, so the row shows only why it failed.
         val failure = (retest as? RetestStatus.Done)?.takeUnless { it.ok }?.message
         SettingsGroup(null) {
             SettingsRow(
@@ -47,7 +41,6 @@ internal fun BuiltInSitePage(site: BuiltInSiteSummary, retest: RetestStatus?, ac
                 trailing = { RetestTrailing(site.label, retest, site.working) { onAction(CustomSitesAction.Retest(site.source.id)) } },
             )
         }
-        // A site that works needs no browser check; any later outage clears Working and brings the check back.
         if (!site.working) {
             SettingsGroup("Browser check") {
                 SettingsRow(

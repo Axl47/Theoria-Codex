@@ -5,8 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class StatsShareGoldenTest {
-    // The goldens are what the Gson exporter wrote for [shared], HTML-escaped strings included, with and without the
-    // optional name and overall totals.
     @Test
     fun `files older builds exported import exactly like current exports`() {
         assertEquals(shared, parseStatsShare(golden("gson-export.json")))
@@ -14,7 +12,6 @@ class StatsShareGoldenTest {
         assertEquals(shared, parseStatsShare(encodeStatsShare(shared)))
     }
 
-    // export-series.json is what this build writes once series time counts; the Gson export predates it.
     @Test
     fun `the exports hold every stored key`() {
         val series = StatsShareFile(

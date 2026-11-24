@@ -24,13 +24,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/**
- * What the Library header shows about offline and download work: whether any job runs, how many posts
- * are still to save, and whether the sheet has anything at all.
- */
 data class LibraryTransfersStatus(val active: Boolean, val remaining: Int, val hasContent: Boolean)
 
-/** Sums running offline jobs (posts not yet settled) and active downloads. */
 fun libraryTransfersStatus(offline: OfflineStorageUiState, batches: List<PostDownloadBatch>): LibraryTransfersStatus {
     val runningJobs = offline.owners.mapNotNull { owner -> owner.job?.takeIf { it.isRunning } }
     val offlineLeft = runningJobs.sumOf { (it.totalPosts - it.completedPosts - it.failedPosts.size).coerceAtLeast(0) }
@@ -42,10 +37,6 @@ fun libraryTransfersStatus(offline: OfflineStorageUiState, batches: List<PostDow
     )
 }
 
-/**
- * The Library header's way into the offline and downloads sheet: a progress pill while work runs, a
- * plain button once something is kept or downloaded, and nothing before that.
- */
 @Composable
 fun LibraryTransfersButton(status: LibraryTransfersStatus, onClick: () -> Unit) {
     when {
@@ -53,7 +44,6 @@ fun LibraryTransfersButton(status: LibraryTransfersStatus, onClick: () -> Unit) 
             onClick = onClick,
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.secondaryContainer,
-            // Read as one button: the label with what is left, instead of the pill's own "3 left" text.
             modifier = Modifier.heightIn(min = 36.dp).clearAndSetSemantics {
                 contentDescription = transfersDescription(status.remaining)
                 role = Role.Button

@@ -39,11 +39,9 @@ class CodexCommandHostTest {
         val undo = UndoSlot()
         val deleted = mutableListOf<String>()
         try {
-            // No SnackbarHost timer: passive feedback remains pending until a newer notice replaces it.
             compose.setContent { ProvideUndoSlot(undo) { CodexCommandHost(owner, snackbar, deleted::add) } }
             compose.runOnIdle { owner.rename("saved", "Renamed") }
             compose.waitUntilSettled(5_000) { owner.feedback.value.isEmpty() && runBlocking { repository.observeCodex("saved").first() }?.name == "Renamed" }
-            // The new name shows where it was typed, so a successful rename gives no notice.
             assertEquals(null, snackbar.currentSnackbarData)
             compose.runOnIdle { owner.remove("saved", original, listOf(post)) }
             compose.waitUntilSettled(5_000) { undo.offer.value != null }

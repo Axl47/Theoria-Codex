@@ -17,7 +17,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The Mix with the picture tagger ready: lane posts are dealt only once their pictures are tagged. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouDeckVettingTest {
     private val engine = FakeForYouEngine(listOf("a", "b", "c"))
@@ -46,7 +45,6 @@ class ForYouDeckVettingTest {
         assertEquals(4, owner.posts.size)
         assertFalse("b-0-0" in owner.ids)
         assertTrue("a-0-1" in owner.ids)
-        // Every dealt card was tagged first.
         assertTrue(pictures.asked.containsAll(owner.ids))
     }
 

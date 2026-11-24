@@ -16,33 +16,24 @@ private const val MAX_POSTS_PER_CODEX = 64
 private const val MAX_NAME_CHARS = 120
 private const val MAX_LABEL_CHARS = 300
 private const val MAX_POST_KEY_CHARS = 256
-// Large enough for any real total. Totals across MAX_CODICES stay in range, and merged posts are capped again as they add up.
 private const val MAX_STAT_VALUE = 1_000_000_000_000_000L
 private const val MAX_COMPARED_POSTS = 20
 
-/**
- * The shared-file format, written with kotlinx.serialization and held to files older Gson builds wrote by
- * StatsShareGoldenTest. Holds only what the person left in; Codex ids and profile details never enter it.
- */
 @Serializable
 data class StatsShareFile(
-    // Null defaults: a file that omits these must fail validation, so they never default to the current format.
     @SerialName("format") val format: String? = null,
     @SerialName("version") val version: Int? = null,
     @SerialName("name") val name: String? = null,
     @SerialName("codices") val codices: List<StatsShareCodex?>? = null,
-    /** App-wide totals, absent when the person left them out or the file predates them. */
     @SerialName("overall") val overall: StatsShareOverall? = null,
 )
 
-/** The Stats page's app-wide numbers, which count everything and not only time inside Codices. */
 @Serializable
 data class StatsShareOverall(
     @SerialName("timeInAppMs") val timeInAppMs: Long = 0L,
     @SerialName("browsingMs") val browsingMs: Long = 0L,
     @SerialName("watchingMs") val watchingMs: Long = 0L,
     @SerialName("codexMs") val codexMs: Long = 0L,
-    // Absent from files exported before series time counted, which read as zero.
     @SerialName("readingMs") val readingMs: Long = 0L,
     @SerialName("animeMs") val animeMs: Long = 0L,
     @SerialName("appOpens") val appOpens: Long = 0L,
@@ -70,7 +61,6 @@ data class StatsSharePost(
     @SerialName("imageMs") val imageMs: Long = 0L,
 )
 
-/** What the person chose to leave out. A post left out of one Codex is left out everywhere it appears. */
 internal data class StatsShareSelection(
     val excludedCodexIds: Set<String> = emptySet(),
     val excludedPostKeys: Set<String> = emptySet(),
@@ -89,24 +79,17 @@ fun StatisticsSummary.shareOverall() = StatsShareOverall(
     searches = searchCount,
 )
 
-/** Every profile's Codices once each; the app-wide Codices appear under all of them. */
 fun allProfileCodices(profiles: List<ProfileStatistics>): List<CodexStatisticsSummary> =
     profiles.flatMap { it.codices }.distinctBy { it.codexId }
 
-/** Codices that only unchecked profiles hold. One shown under several profiles stays in while any is included. */
 internal fun codexIdsOutsideProfiles(profiles: List<ProfileStatistics>, included: Set<String>): Set<String> {
     val reachable = profiles.filter { it.profileId in included }.flatMapTo(hashSetOf()) { profile -> profile.codices.map { it.codexId } }
     return allProfileCodices(profiles).mapTo(hashSetOf()) { it.codexId } - reachable
 }
 
-/** Codices with nothing to compare stay out of the file and the preview. */
 internal val CodexStatisticsSummary.hasShareableActivity: Boolean
     get() = entries > 0L || browsingMs > 0L || watchingMs > 0L || posts.isNotEmpty()
 
-/**
- * One Codex as it would be shared. Removing a post also removes its opens and viewing time, and the next-ranked
- * posts move up, so nothing in the file reveals that anything was left out.
- */
 internal fun shareCodex(codex: CodexStatisticsSummary, excludedPostKeys: Set<String>): StatsShareCodex {
     val (removed, kept) = codex.posts.entries.partition { it.key in excludedPostKeys }
     val keptPosts = kept.associate { it.toPair() }
@@ -139,8 +122,7 @@ internal fun buildStatsShare(
 
 fun encodeStatsShare(file: StatsShareFile): String = DurableJson.encodeToString(StatsShareFile.serializer(), file)
 
-/** Reads a file from someone else: anything malformed is rejected or dropped, and what remains is safe to display. */
-@Suppress("ImplicitDefaultLocale") // Detekt mistakes the file's format id, file.format, for String.format.
+@Suppress("ImplicitDefaultLocale")
 fun parseStatsShare(raw: String): StatsShareFile? {
     val file = runCatching {
         require(raw.toByteArray(Charsets.UTF_8).size <= STATS_SHARE_MAX_BYTES)
@@ -217,7 +199,6 @@ internal data class StatsComparison(
     val theirTopPosts: List<ComparedPost>,
 )
 
-/** Codices pair up by name because their ids are private to each person's library. */
 internal fun compareStats(yours: StatsShareFile, theirs: StatsShareFile): StatsComparison {
     val yourCodices = yours.codices.orEmpty().filterNotNull()
     val theirCodices = theirs.codices.orEmpty().filterNotNull()
@@ -249,7 +230,6 @@ internal fun compareStats(yours: StatsShareFile, theirs: StatsShareFile): StatsC
 
 private data class MergedPost(val label: String, val opens: Long, val viewingMs: Long)
 
-/** A post saved in several Codices counts once, with its activity added together. */
 private fun mergedPosts(codices: List<StatsShareCodex>): Map<String, MergedPost> {
     val merged = linkedMapOf<String, MergedPost>()
     codices.flatMap { it.posts.orEmpty().filterNotNull() }.forEach { post ->

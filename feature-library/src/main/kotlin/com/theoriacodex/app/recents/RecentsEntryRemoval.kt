@@ -15,16 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Where the offer for a removed search is drawn: the row it vacated. */
 fun recentSearchRemovalAnchor(entry: RecentSearchEntry) = RecentsUndoAnchor.copy(key = "search:${entry.queryHash}")
 
-/**
- * Removes one History entry the user swiped away at once, then offers Undo, which restores that exact
- * entry (time, origin and progress included). A removed search stays in the list as [removedSearch] so its
- * row can draw the offer in place; a removed post tile offers Undo in History's pill, since the grid closes
- * the gap. Offers and their restores run in [scope], which should outlive History (the undo slot's scope). It is
- * a ViewModel so the placeholder survives a recreation, as the slot's offer does.
- */
 class RecentsEntryRemoval(
     private val repository: RecentsRepository,
     private val undo: UndoSlot,
@@ -32,7 +24,6 @@ class RecentsEntryRemoval(
 ) : ViewModel() {
     private val removed = MutableStateFlow<RecentSearchEntry?>(null)
 
-    /** The search whose row currently shows the offer, or null. */
     val removedSearch: StateFlow<RecentSearchEntry?> = removed.asStateFlow()
 
     fun removeSearch(entry: RecentSearchEntry) = remove(
