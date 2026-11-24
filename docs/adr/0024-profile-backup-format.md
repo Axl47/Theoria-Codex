@@ -8,7 +8,7 @@ A backup is read by older and newer app builds, and by the restore journal. Olde
 
 ## Decision
 
-- Version 2 added `customSources`, 3 `library.series` and 4 `extensionRepos`. A backup is written as version 4 when it has repos, otherwise 3 when it has series, otherwise 2 (the lowest version written, whether or not it has `customSources`). An app refuses a version it does not know, so one that would drop newer data never restores it silently; this build reads versions 1 to 4.
+- Version 2 added `customSources`, 3 `library.series`, 4 `extensionRepos` and 5 `statistics.watchedTagFloors`. A backup is written as version 5 when its statistics hold a watched-tag floor, otherwise 4 when it has repos, otherwise 3 when it has series, otherwise 2 (the lowest version written, whether or not it has `customSources`). An app refuses a version it does not know, so one that would drop newer data never restores it silently; this build reads versions 1 to 5. An older build would read a capped watched table without its floors as tags never watched.
 - The frame is a JSON tree checked field by field; settings, statistics, posts and sites are their storage records through `DurableJson`, which writes the keys, omitted nulls and present defaults older builds read. A null `queryHash` is still written as an explicit null.
 - Readers match what the Gson tree accepted (`isBackupNumber`, `isBackupBoolean`, `backupObject`) so a malformed field fails with the same message; kotlinx's `IllegalArgumentException` text is shown verbatim, other failures keep the generic message.
 - Lists are bounded by sanity limits (256 repos, 256 sites, 10,000 series, 20,000 entries per series).

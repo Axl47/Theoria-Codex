@@ -21,7 +21,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 const val DATASTORE_STATISTICS_FILE_NAME = "statistics_store_v1.json"
-internal const val STATISTICS_DATASTORE_SCHEMA_VERSION = 2
+internal const val STATISTICS_DATASTORE_SCHEMA_VERSION = 3
+private const val OLDEST_STATISTICS_DATASTORE_SCHEMA_VERSION = 2
 
 @Serializable
 internal data class StatisticsTagCountRecord(
@@ -53,6 +54,7 @@ internal data class StatisticsStoreRecord(
     @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
     @SerialName("watchedBySource") val watchedBySource: Map<String, Long> = emptyMap(),
     @SerialName("watchedByTag") val watchedByTag: List<StatisticsTagCountRecord> = emptyList(),
+    @SerialName("watchedTagFloors") val watchedTagFloors: Map<String, Long>? = null,
     @SerialName("searchCount") val searchCount: Long = 0L,
     @SerialName("searchesBySource") val searchesBySource: Map<String, Long> = emptyMap(),
     @SerialName("searchesByTag") val searchesByTag: List<StatisticsTagCountRecord> = emptyList(),
@@ -79,6 +81,7 @@ internal data class StatisticsStoreRecord(
                 watchedPostCount = watchedPostCount,
                 watchedBySource = watchedBySource.decodeSourceCounts(),
                 watchedByTag = watchedByTag.decodeTagCounts(),
+                watchedTagFloors = watchedTagFloors.orEmpty().decodeSourceCounts(),
                 searchCount = searchCount,
                 searchesBySource = searchesBySource.decodeSourceCounts(),
                 searchesByTag = decodeSearchedTagCounts(searchesByTag, searchesByTypedTag),
@@ -109,7 +112,7 @@ internal data class StatisticsStoreRecord(
                 postUrlCopyCount,
             ).all { value -> value >= 0L }
         ) { "Statistics totals must be non-negative" }
-        require(watchedBySource.values.all { value -> value >= 0L }) {
+        require(watchedBySource.values.all { value -> value >= 0L } && watchedTagFloors.orEmpty().values.all { value -> value >= 0L }) {
             "Watched source counts must be non-negative"
         }
         require(searchesBySource.values.all { value -> value >= 0L }) {
@@ -143,6 +146,7 @@ internal data class StatisticsStoreRecord(
                 watchedPostCount = normalized.watchedPostCount,
                 watchedBySource = normalized.watchedBySource.encodeSourceCounts(),
                 watchedByTag = normalized.watchedByTag.encodeTagCounts(),
+                watchedTagFloors = normalized.watchedTagFloors.encodeSourceCounts().takeIf(Map<String, Long>::isNotEmpty),
                 searchCount = normalized.searchCount,
                 searchesBySource = normalized.searchesBySource.encodeSourceCounts(),
                 searchesByTag = normalized.searchesByTag.filterKeys { it.term.isPortableGeneralTag }
@@ -218,6 +222,7 @@ internal object StatisticsPolicies {
         watchedPostCount = maxOf(current.watchedPostCount, imported.watchedPostCount),
         watchedBySource = current.watchedBySource.mergeWith(imported.watchedBySource, ::maxOf),
         watchedByTag = current.watchedByTag.mergeWith(imported.watchedByTag, ::maxOf),
+        watchedTagFloors = current.watchedTagFloors.mergeWith(imported.watchedTagFloors, ::maxOf),
         searchCount = maxOf(current.searchCount, imported.searchCount),
         searchesBySource = current.searchesBySource.mergeWith(imported.searchesBySource, ::maxOf),
         searchesByTag = current.searchesByTag.mergeWith(imported.searchesByTag, ::maxOf),
@@ -259,7 +264,7 @@ internal object StatisticsPolicies {
                 val normalizedCount = count.coerceAtLeast(0L).takeIf { it > 0L } ?: return@mapNotNull null
                 normalizedId to normalizedCount
             }.toMap(),
-        )
+        ).capWatchedTags()
     }
 
     fun addCodexUsage(current: LifetimeStatistics, target: CodexUsageTarget, durationMs: Long): LifetimeStatistics {
@@ -317,8 +322,7 @@ internal object StatisticsPolicies {
             history = current.history.updateDay(date) { it.copy(watchedPostCount = it.watchedPostCount.saturatingAdd(1L)) },
             watchedPostCount = current.watchedPostCount.saturatingAdd(1L),
             watchedBySource = current.watchedBySource.increment(source),
-            watchedByTag = current.watchedByTag.incrementTags(setOf(source), tags),
-        )
+        ).recordWatchedTags(source, tags)
     }
 
     fun recordSearch(
@@ -382,6 +386,7 @@ class DataStoreStatisticsRepository private constructor(
             file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
             logicalStore = "Statistics",
             schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
+            oldestSchemaVersion = OLDEST_STATISTICS_DATASTORE_SCHEMA_VERSION,
             defaultValue = StatisticsDataStoreFile(),
             serializer = StatisticsDataStoreFile.serializer(),
             scope = scope,
@@ -478,19 +483,6 @@ private fun Map<SourceKey, Long>.normalizeCounts(): Map<SourceKey, Long> {
 
 private fun <K> Map<K, Long>.increment(key: K): Map<K, Long> {
     return toMutableMap().apply { this[key] = (this[key] ?: 0L).saturatingAdd(1L) }
-}
-
-private fun Map<StatisticsTagKey, Long>.incrementTags(sources: Set<SourceKey>, tags: Set<String>): Map<StatisticsTagKey, Long> {
-    val normalizedTags = tags.mapNotNullTo(linkedSetOf()) { tag -> tag.trim().takeIf(String::isNotBlank) }
-    if (normalizedTags.isEmpty() || sources.isEmpty()) return this
-    return toMutableMap().apply {
-        sources.forEach { source ->
-            normalizedTags.forEach { tag ->
-                val key = StatisticsTagKey(source, tag)
-                this[key] = (this[key] ?: 0L).saturatingAdd(1L)
-            }
-        }
-    }
 }
 
 fun Query.searchedTerms(): Set<SearchTerm> = portableTermsForUnified().includeTerms.toSet()

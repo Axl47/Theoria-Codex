@@ -45,21 +45,30 @@ data class TagAffinityInputs(
     val explicit: Set<String> = emptySet(),
     val watchedByTag: Map<SourceKey, Map<String, Long>> = emptyMap(),
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
+    val watchedTagFloors: Map<SourceKey, Long> = emptyMap(),
     val keptByTag: Map<SourceKey, Map<String, Int>> = emptyMap(),
     val keptBySource: Map<SourceKey, Int> = emptyMap(),
     val pictures: PictureEvidence = PictureEvidence(),
 ) {
-    fun watchedShare(source: SourceKey, token: String): Double? {
-        val watched = watchedBySource[source] ?: 0L
-        if (watched < MIN_WATCHED_FOR_SHARE) return null
-        return (watchedByTag[source]?.get(token) ?: 0L).toDouble() / watched
-    }
+    fun watchedShare(source: SourceKey, token: String): Double? = share(source, watchedAtLeast(source, token))
+
+    fun watchedShareAtMost(source: SourceKey, token: String): Double? = share(source, watchedAtMost(source, token))
 
     fun lift(source: SourceKey, token: String): Double? {
         if (!hasHistory(source)) return null
         val keptShare = ((keptByTag[source]?.get(token) ?: 0) + LIFT_PSEUDO_COUNT) / ((keptBySource[source] ?: 0) + 1.0)
-        val watchedShare = maxOf((watchedByTag[source]?.get(token) ?: 0L).toDouble(), LIFT_PSEUDO_COUNT) / (watchedBySource[source] ?: 0L)
+        val watchedShare = maxOf(watchedAtMost(source, token).toDouble(), LIFT_PSEUDO_COUNT) / (watchedBySource[source] ?: 0L)
         return keptShare / watchedShare
+    }
+
+    private fun watchedAtMost(source: SourceKey, token: String): Long = watchedByTag[source]?.get(token) ?: watchedTagFloors[source] ?: 0L
+
+    private fun watchedAtLeast(source: SourceKey, token: String): Long =
+        ((watchedByTag[source]?.get(token) ?: 0L) - (watchedTagFloors[source] ?: 0L)).coerceAtLeast(0L)
+
+    private fun share(source: SourceKey, count: Long): Double? {
+        val watched = watchedBySource[source] ?: 0L
+        return if (watched < MIN_WATCHED_FOR_SHARE) null else count.toDouble() / watched
     }
 
     fun hasHistory(source: SourceKey): Boolean =
@@ -164,8 +173,8 @@ private fun KeptTagEvidence.withStatistics(statistics: LifetimeStatistics, predi
             entries.groupingBy { normalizeMatchToken(it.key.tag) }.fold(0L) { total, entry -> total + entry.value }
         }
     return TagAffinityInputs(
-        liked, likedCounts, liked.size, interest, explicit, watchedByTag, statistics.watchedBySource, keptByTag, keptBySource,
-        PictureEvidence.of(keptIds, predicted),
+        liked, likedCounts, liked.size, interest, explicit, watchedByTag, statistics.watchedBySource, statistics.watchedTagFloors,
+        keptByTag, keptBySource, PictureEvidence.of(keptIds, predicted),
     )
 }
 
@@ -198,7 +207,12 @@ fun shareTagAffinityInputs(
     predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
 ): SharedTagAffinity {
     val watched = statistics.observeStatistics()
-        .map { LifetimeStatistics(watchedBySource = it.watchedBySource, watchedByTag = it.watchedByTag, searchesByTag = it.searchesByTag) }
+        .map {
+            LifetimeStatistics(
+                watchedBySource = it.watchedBySource, watchedByTag = it.watchedByTag, watchedTagFloors = it.watchedTagFloors,
+                searchesByTag = it.searchesByTag,
+            )
+        }
         .distinctUntilChanged()
     val byProfile = settings.observeSettings().map { it.activeProfileId }.distinctUntilChanged().flatMapLatest { profileId ->
         val savedTags = settings.observeSettings()
@@ -257,11 +271,13 @@ fun TagAffinityInputs.affinity(source: SourceKey, tag: String, feedShare: Map<St
 fun TagAffinityInputs.pictureAffinity(source: SourceKey, booruToken: String, sourceToken: String): TagAffinity {
     val kept = pictures.keptByTag[booruToken] ?: 0.0
     val posts = pictures.postsByTag[booruToken] ?: 0
-    val watched = watchedShare(source, normalizeMatchToken(sourceToken))
+    val token = normalizeMatchToken(sourceToken)
+    val watched = watchedShare(source, token)
+    val watchedAtMost = watchedShareAtMost(source, token) ?: 0.0
     val baseRate = pictures.baseRates[booruToken] ?: 0.0
     val universal = maxOf(watched ?: 0.0, baseRate) >= UNIVERSAL_WATCHED_SHARE || posts > UNIVERSAL_LIKED_SHARE * pictures.kept
     val floor = LIFT_PSEUDO_COUNT / maxOf(watchedBySource[source] ?: 0L, MIN_WATCHED_FOR_SHARE)
-    val lift = (kept + LIFT_PSEUDO_COUNT) / (pictures.kept + 1.0) / maxOf(watched ?: 0.0, baseRate, floor)
+    val lift = (kept + LIFT_PSEUDO_COUNT) / (pictures.kept + 1.0) / maxOf(watchedAtMost, baseRate, floor)
     val proven = !universal && !isImageTextTag(booruToken) && !isFileTag(booruToken) && pictures.kept >= MIN_KEPT_FOR_LIFT && posts >= MIN_KEPT_FOR_TAG &&
         lift >= if (watched != null) MIN_INFORMATIVE_LIFT else COLD_PICTURE_LIFT
     return TagAffinity(sourceToken, interest = kept, score = ln(lift) * ln(1.0 + kept), universal, informative = proven, proven = proven)

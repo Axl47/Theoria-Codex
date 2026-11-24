@@ -61,6 +61,7 @@ internal class JsonDataStoreSerializer<T : Any>(
     override val defaultValue: T,
     private val serializer: KSerializer<T>,
     private val validate: (T) -> Unit = {},
+    private val oldestSchemaVersion: Int = schemaVersion,
 ) : Serializer<T> {
     override suspend fun readFrom(input: InputStream): T {
         val json = input.readBytes().decodeToString()
@@ -73,7 +74,7 @@ internal class JsonDataStoreSerializer<T : Any>(
             if (stored > schemaVersion) {
                 throw UnsupportedStoreSchemaException(storeName, stored, schemaVersion)
             }
-            require(stored == schemaVersion) { "Unsupported $storeName schema $stored" }
+            require(stored >= oldestSchemaVersion) { "Unsupported $storeName schema $stored" }
             return DurableJson.decodeFromJsonElement(serializer, tree).also(validate)
         } catch (malformed: SerializationException) {
             throw CorruptionException("$storeName contains malformed JSON", malformed)
@@ -159,8 +160,9 @@ internal fun <S : Any, T : Any> openDecodedJsonDataStore(
     validate: (S) -> Unit = {},
     decode: (S) -> T,
     encode: (T) -> S,
+    oldestSchemaVersion: Int = schemaVersion,
 ): JsonDataStore<T> {
-    val fileSerializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate)
+    val fileSerializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate, oldestSchemaVersion)
     val decodedDefault = decode(defaultValue)
     return JsonDataStore(
         DataStoreFactory.create(

@@ -14,5 +14,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit)
+    testImplementation(testFixtures(project(":core-data")))
     testImplementation(libs.kotlinx.coroutines.test)
 }
