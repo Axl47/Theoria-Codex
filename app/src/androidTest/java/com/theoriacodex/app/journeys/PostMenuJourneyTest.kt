@@ -1,11 +1,18 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.library.LibrarySection
@@ -16,6 +23,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PostMenuJourneyTest : AppJourneyFixture() {
@@ -50,6 +58,18 @@ class PostMenuJourneyTest : AppJourneyFixture() {
         longPress(card)
         assertSharedRows("Unlike")
         back()
+        val laterCard = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[LATER_CARD].id)
+        val creatorGrid = hasScrollToNodeAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
+        val feedCard = SemanticsMatcher("is a feed card") { node ->
+            node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("search_card_") == true
+        }
+        compose.onNode(creatorGrid and hasAnyDescendant(feedCard), useUnmergedTree = true)
+            .performScrollToNode(hasTestTag(laterCard))
+        waitFor("the first card scrolled away") { !card.isDisplayed() }
+        longPress(compose.onNodeWithTag(laterCard))
+        activate(compose.onNodeWithContentDescription(CREATOR_LINK))
+        compose.waitForIdle()
+        assertTrue("the creator page keeps its scroll", compose.onNodeWithTag(laterCard).isDisplayed() && !card.isDisplayed())
         back()
 
         library(LibrarySection.Saved)
@@ -80,5 +100,6 @@ class PostMenuJourneyTest : AppJourneyFixture() {
     private companion object {
         const val RECENT_SEARCH = "journey:post-menu"
         const val CREATOR_LINK = "Open Journey artist's profile"
+        const val LATER_CARD = 16
     }
 }
