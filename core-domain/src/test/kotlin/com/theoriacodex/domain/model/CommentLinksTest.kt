@@ -6,7 +6,7 @@ import org.junit.Test
 
 class CommentLinksTest {
     @Test
-    fun `top-level comments use the native anchor and replies use Theoria's fragment`() {
+    fun `top-level comments use the native anchor and replies use Theoria's fragment (ADR 0001)`() {
         val page = "https://gelbooru.com/index.php?page=post&s=view&id=9#old"
         assertEquals("https://gelbooru.com/index.php?page=post&s=view&id=9#c42", commentLink(page, CommentTarget("42"), "c42"))
         assertEquals(

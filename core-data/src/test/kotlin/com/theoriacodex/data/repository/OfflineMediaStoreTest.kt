@@ -450,6 +450,22 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
+    fun `a numeric owner never keeps a folder alive (ADR 0022)`() = runTest {
+        val directory = tempDir("numeric-owner")
+        val post = gallery()
+        OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
+        val folder = directory.listFiles().orEmpty().single()
+        editManifest(directory) { root ->
+            root["version"] = JsonPrimitive(2)
+            root["owners"] = JsonArray(listOf(JsonPrimitive("codex:a"), JsonPrimitive(7)))
+        }
+
+        OfflineMediaStore(directory).apply { load() }.removeOwner("codex:a")
+
+        assertFalse(folder.exists())
+    }
+
+    @Test
     fun `a copy with no recoverable owner stays when collections are removed`() = runTest {
         val directory = tempDir("ownerless")
         val post = gallery()

@@ -24,3 +24,7 @@ Removing a legacy field needs a migration of stored queries and a new hash versi
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/model/Query.kt`: `Query.minScore`, `includeTerms`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/model/Post.kt`: `withInferredGalleryLength`
 - `core-domain/src/test/kotlin/com/theoriacodex/domain/query/QueryHashTest.kt`: stored-hash test
+
+## Guarded by
+
+- `core-domain/src/main/kotlin/com/theoriacodex/domain/model/SourceKey.kt`: `@JvmInline value class SourceKey private constructor(val id: String) : Comparable<SourceKey>`

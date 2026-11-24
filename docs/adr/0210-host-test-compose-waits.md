@@ -22,3 +22,7 @@ New host tests are correct by default when they use the helper, and the check na
 
 - `ui-kit/src/testFixtures/kotlin/com/theoriacodex/app/testing/ComposeWaitTestSupport.kt`: `waitUntilSettled`, `waitUntilWithoutIdling`
 - `scripts/check_architecture.py`: `host_tests_wait_settled`, `NON_IDLING_WAIT_FILES`
+
+## Guarded by
+
+- `scripts/tests/test_check_architecture.py`: `test_flags_every_spelling_of_a_bare_wait_adr_0210`

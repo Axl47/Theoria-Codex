@@ -20,3 +20,7 @@ Adding a source with comment anchors means extending `parseCommentTarget` and th
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/model/CommentLinks.kt`: `commentLink`, `parseCommentTarget`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/model/Comments.kt`: `CommentHint`
+
+## Guarded by
+
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/model/CommentLinksTest.kt`: `top-level comments use the native anchor and replies use Theoria's fragment (ADR 0001)`
