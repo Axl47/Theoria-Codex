@@ -2,6 +2,7 @@ package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.series.ExtensionChoiceStore
+import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.NewExtensionRepo
@@ -17,9 +18,12 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -111,9 +115,8 @@ class ExtensionCatalog(
     override suspend fun uninstall(id: String) = installing.withLock {
         withContext(Dispatchers.IO) {
             val extension = packages().firstOrNull { it.id == id && it.origin == ExtensionOrigin.PRIVATE } ?: return@withContext
-            extension.apk.delete()
-            choices.update { it.copy(trusted = it.trusted - extension.identity) }
-            onChanged()
+            if (!extension.apk.delete()) return@withContext
+            withContext(NonCancellable) { commit { it.copy(trusted = it.trusted - extension.identity) } }
         }
     }
 
@@ -137,14 +140,23 @@ class ExtensionCatalog(
                 else -> apk.unsupported
             }
             if (problem != null) return problem
-            // Replaced in one step: code already loaded from the old file runs on from its own locked copy.
-            Files.move(download.toPath(), File(folder, "$packageName.apk").toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-            if (before == null) choices.update { it.copy(trusted = it.trusted + (packageName to repo.signingKey)) }
-            onChanged()
+            currentCoroutineContext().ensureActive()
+            // Once the file is in place, its trust and the registry follow even if the caller is gone.
+            withContext(NonCancellable) {
+                // Replaced in one step: code already loaded from the old file runs on from its own locked copy.
+                Files.move(download.toPath(), File(folder, "$packageName.apk").toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                commit { if (before == null) it.copy(trusted = it.trusted + (packageName to repo.signingKey)) else it }
+            }
             return null
         } finally {
             download.delete()
         }
+    }
+
+    /** Stores [change] to the user's choices for a change to [folder], then has the registry list it. */
+    private suspend fun commit(change: (ExtensionChoices) -> ExtensionChoices) {
+        choices.update(change)
+        onChanged()
     }
 
     /** [repo]'s index, read again when [refresh] or not yet read; refused when the repo names another key than it did. */
