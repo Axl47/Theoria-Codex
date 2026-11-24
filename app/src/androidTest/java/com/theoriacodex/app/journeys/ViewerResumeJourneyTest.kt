@@ -35,17 +35,27 @@ class ViewerResumeJourneyTest : AppJourneyFixture() {
         }
         launch()
         showGallery()
-        val scrubber = compose.onNodeWithTag("viewer-page-scrubber")
-        waitFor("the Viewer shows its page scrubber") { scrubber.isDisplayed() }
-        scrubber.performSemanticsAction(SemanticsActions.SetProgress) { it(RESUME_PAGE - 1f) }
-        waitFor("the Viewer shows page $RESUME_PAGE") { pageShown() }
+        turnTo(RESUME_PAGE)
 
         scenario.moveToState(Lifecycle.State.CREATED)
-        assertTrue("page $RESUME_PAGE reached disk after the app stopped", pageOnDisk())
+        assertTrue("page $RESUME_PAGE reached disk after the app stopped", pageOnDisk(RESUME_PAGE))
 
         coldGraphRelaunch()
         showGallery()
-        waitFor("the reopened gallery resumes on page $RESUME_PAGE") { pageShown() }
+        waitFor("the reopened gallery resumes on page $RESUME_PAGE") { pageShown(RESUME_PAGE) }
+
+        turnTo(RESUME_PAGE + 1)
+        waitFor("page ${RESUME_PAGE + 1} is recorded") { recorded(RESUME_PAGE + 1) }
+        pressSystemBack()
+        waitFor("the Viewer closed") { !compose.onNodeWithTag("viewer-page-scrubber").isDisplayed() && compose.onNodeWithTag(searchCardTestTag(galleryPost().id)).isDisplayed() }
+        assertTrue("page ${RESUME_PAGE + 1} reached disk after leaving the Viewer", pageOnDisk(RESUME_PAGE + 1))
+    }
+
+    private fun turnTo(page: Int) {
+        val scrubber = compose.onNodeWithTag("viewer-page-scrubber")
+        waitFor("the Viewer shows its page scrubber") { scrubber.isDisplayed() }
+        scrubber.performSemanticsAction(SemanticsActions.SetProgress) { it(page - 1f) }
+        waitFor("the Viewer shows page $page") { pageShown(page) }
     }
 
     private fun showGallery() {
@@ -57,13 +67,16 @@ class ViewerResumeJourneyTest : AppJourneyFixture() {
         activate(card)
     }
 
-    private fun pageShown() = compose.onNodeWithContentDescription("Page $RESUME_PAGE of $PAGES").isDisplayed()
+    private fun pageShown(page: Int) = compose.onNodeWithContentDescription("Page $page of $PAGES").isDisplayed()
 
-    private fun pageOnDisk(): Boolean {
+    private fun recorded(page: Int) =
+        io { container.data.readingPositions.snapshot() }.any { it.postId == galleryPost().id && it.mediaNumber == page }
+
+    private fun pageOnDisk(page: Int): Boolean {
         val deadline = System.currentTimeMillis() + DISK_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             val stored = io { FileBackedReadingPositionRepository(container.data.storageDirectory).snapshot() }
-            if (stored.any { it.postId == galleryPost().id && it.mediaNumber == RESUME_PAGE }) return true
+            if (stored.any { it.postId == galleryPost().id && it.mediaNumber == page }) return true
             Thread.sleep(POLL_MS)
         }
         return false

@@ -330,7 +330,7 @@ internal class TheoriaShell(
     val navController get() = navigation.navController
 
     fun flushPendingWrites() {
-        container.applicationScope.launch { runCatching { data.flushPendingWrites() } }
+        container.applicationScope.launch { runCatchingPreservingCancellation { data.flushPendingWrites() } }
     }
     val savedSearches by savedSearches
     val pendingLikePostIds by pendingLikePostIds

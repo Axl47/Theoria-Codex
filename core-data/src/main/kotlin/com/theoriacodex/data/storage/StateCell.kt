@@ -1,5 +1,6 @@
 package com.theoriacodex.data.storage
 
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -72,7 +73,7 @@ private class WriteBehindStateCell<T : Any>(
         val (next, result) = transform(current)
         if (next != current) {
             state.value = next
-            if (scheduled == null) scheduled = scope.launch { scheduledFlush() }
+            if (scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush() }
         }
         result
     }
@@ -85,7 +86,7 @@ private class WriteBehindStateCell<T : Any>(
     private suspend fun scheduledFlush() {
         delay(writeDelay)
         mutex.withLock { scheduled = null }
-        runCatching { flush() }
+        runCatchingPreservingCancellation { flush() }
     }
 
     private suspend fun loaded(): T = state.value ?: durable.value().also { state.value = it }

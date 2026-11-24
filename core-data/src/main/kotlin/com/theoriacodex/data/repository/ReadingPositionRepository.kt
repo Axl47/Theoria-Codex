@@ -11,6 +11,7 @@ import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +57,8 @@ class FileBackedReadingPositionRepository private constructor(repository: Readin
         store: AtomicJsonFileStore = AtomicJsonFileStore(),
         entryLimit: Int = MAX_READING_POSITIONS,
         writeScope: CoroutineScope? = null,
-    ) : this(fileBackedReadingPositions(baseDirectory.resolve(READING_POSITIONS_FILE_NAME), store, entryLimit, writeScope))
+        writeDelay: Duration = READING_POSITION_WRITE_DELAY,
+    ) : this(fileBackedReadingPositions(baseDirectory.resolve(READING_POSITIONS_FILE_NAME), store, entryLimit, writeScope, writeDelay))
 }
 
 private fun fileBackedReadingPositions(
@@ -64,13 +66,14 @@ private fun fileBackedReadingPositions(
     store: AtomicJsonFileStore,
     entryLimit: Int,
     writeScope: CoroutineScope?,
+    writeDelay: Duration,
 ): ReadingPositionRepository {
     require(entryLimit > 0)
     val cell = FileStateCell(
         load = { decodeReadingPositions(store.read(file, ReadingPositionsFile(), ReadingPositionsFile.serializer()), entryLimit) },
         write = { positions -> store.write(file, encodeReadingPositions(positions), ReadingPositionsFile.serializer()) },
     )
-    return CellReadingPositionRepository(writeScope?.let { cell.writeBehind(it, READING_POSITION_WRITE_DELAY) } ?: cell, entryLimit)
+    return CellReadingPositionRepository(writeScope?.let { cell.writeBehind(it, writeDelay) } ?: cell, entryLimit)
 }
 
 internal class CellReadingPositionRepository(

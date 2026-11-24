@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -119,7 +120,10 @@ fun SearchResultCard(
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
     val cardDensity = LocalDensity.current
-    val pendingReturn = viewerReturn?.takeIf { it.request == ViewerReturnRequest(viewerReturnGrid, post.id, viewerReturnShelf) }
+    val returnTarget by remember(viewerReturn, viewerReturnGrid, post.id, viewerReturnShelf) {
+        derivedStateOf { viewerReturn?.takeIf { it.request == ViewerReturnRequest(viewerReturnGrid, post.id, viewerReturnShelf) } }
+    }
+    val pendingReturn = returnTarget
     val mediaTracking = Modifier
         .onPlaced { coordinates -> mediaGeometry.coordinates = coordinates }
         .onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport?.bounds) { visible -> visibility.inFeed = visible }

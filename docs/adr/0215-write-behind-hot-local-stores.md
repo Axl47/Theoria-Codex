@@ -10,8 +10,8 @@ The Viewer records a reading position on every page turn. Written through, each 
 
 - A hot store wraps its durable cell with `writeBehind`. Reads and observers see the newest value immediately; the durable write runs once, `READING_POSITION_WRITE_DELAY` after the first unsaved change. The timer does not restart on later changes, so continuous page turning still saves every few seconds and a crash loses at most that window.
 - One write runs at a time and each writes the newest value at the moment it starts, so writes never reorder and the newest value is never dropped. A change made while a write runs schedules another write.
-- Pending writes flush on process `ON_STOP` (a swipe from recents follows it), when the Viewer closes, and before restore's `replace` and `merge` return, so a cleared restore journal never outlives unsaved positions. Backup reads the repository, not the file, so it sees unsaved positions.
-- Reading positions are one device-wide file, so switching or deleting a profile leaves them alone. Callers without a write scope (developer copy, acceptance checks) stay write-through; developer copy reads the file while production is in the background, after its `ON_STOP` flush.
+- Pending writes flush when the activity stops (at once, so a quick swipe from recents still finds them saved) and again on process `ON_STOP`, when the Viewer closes, and before restore's `replace` and `merge` return, so a cleared restore journal never outlives unsaved positions. Backup reads the repository, not the file, so it sees unsaved positions.
+- Reading positions are one device-wide file, so switching or deleting a profile leaves them alone. Callers without a write scope (developer copy, acceptance checks) stay write-through; developer copy reads the file while production is in the background, after its stop flush; a flush that lands mid-copy only fails `requireUnchanged`, and the copy is retried.
 
 ## Consequences
 
