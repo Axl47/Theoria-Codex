@@ -78,6 +78,7 @@
 - Opening a post in the Viewer loads its first page before looking up the posts next to it, so the first page appears sooner on a slow connection.
 - For You learns from every tag of the posts you like, not only the first 20 in the site's order. On Gelbooru and Danbooru, whose tags come alphabetically, interests further down the alphabet now shape your Mix too, including for posts you liked before this update. A post you both liked and saved counts once.
 - For You plans a Mix faster when you have liked many posts.
+- Still images in the Viewer fill the screen's width in portrait, without the gap at the top or the border around each image: manga chapters, galleries and single pictures alike. Videos and animations keep their place below the top bar.
 - Viewer subtitles now render as outlined white text with no dark box behind them (unless Android's system caption style is turned on) and sit closer to the bottom of the picture when controls are hidden, moving clear of the timeline when controls appear.
 - Episode playback in the Viewer now shows the series and episode on two lines at the top left, puts Subtitles, Audio, Servers and More (with Start over) at the top right, centers Previous, Play/Pause and Next over the picture, and places Lock, Rotate, Speed, Picture-in-picture and landscape Fit/Fill cleanly above the timeline. Server, subtitle, audio and speed pickers now open as spacious bottom sheets.
 - Locking an episode hides controls and blocks accidental taps, swipes, pinches and Back; tapping or pressing Back reveals only the lock icon to unlock, and lock stays active across automatic moves to the next episode.
@@ -141,7 +142,6 @@
 - The Series tab no longer loads a source's listing while it shows Following or a search.
 - A series page's chapter list stays smoother while chapters download.
 - In the Viewer's page overview, the Back arrow at the top closes the overview instead of the whole Viewer, the trail row no longer covers the reading-mode switch, and the last pages are no longer hidden behind the buttons at the bottom.
-- Manga chapters read page by page fill the screen's width, without the gap at the top and the border around each page.
 - The screen no longer turns off while you read a manga chapter.
 - Start over in a manga chapter's information sheet closes the sheet, as it does for episodes.
 - For You cards a Save brought in say "Like one you saved" instead of "Like one you liked".

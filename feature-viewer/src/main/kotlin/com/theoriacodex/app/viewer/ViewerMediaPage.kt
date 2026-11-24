@@ -41,12 +41,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.media.awaitsVideoStream
+import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -55,7 +58,10 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 internal data class ViewerMediaLayout(
-    /** Still images fill the page with no inset: in landscape and while reading a Series chapter. */
+    /**
+     * Whether animated and video media fill the page too; otherwise they sit below a portrait top gap. Still images
+     * always fill the page, so a gallery's pages fill the screen width whatever source it came from.
+     */
     val edgeToEdge: Boolean,
     val pictureInPicture: Boolean,
     val touchExploration: Boolean,
@@ -125,16 +131,16 @@ internal fun ViewerMediaPage(
             translationY = current.panY
         }
     }
-    val mediaPadding = if (layout.edgeToEdge || animated) 0.dp else 16.dp
+    val topGap = viewerMediaTopGap(post, mediaIndex, animated, layout)
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
     val transformAspectRatio = if (controls.fillScreen) null else viewerMediaAspectRatio(post, media)
     val overlayAspectRatio = if (controls.fillScreen) null else viewerAspectRatio(post)
     val transformBounds = with(LocalDensity.current) {
-        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), mediaPadding.toPx(), transformAspectRatio)
+        viewerTransformBounds(pageSize.width.toFloat(), pageSize.height.toFloat(), transformAspectRatio)
     }
-    Box(Modifier.fillMaxSize().onSizeChanged { pageSize = it }) {
+    Box(Modifier.fillMaxSize().padding(top = topGap).onSizeChanged { pageSize = it }) {
         Box(
-            Modifier.fillMaxSize().padding(mediaPadding)
+            Modifier.fillMaxSize()
                 .viewerReturnMedia(returnProgress, overlayAspectRatio)
                 .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
@@ -183,6 +189,22 @@ private class ViewerMediaInteractions {
 }
 
 private const val VIEWER_HOLD_PLAYBACK_RATE = 2f
+
+/**
+ * Space above animated and video media in portrait, clear of the top bar; stills fill the page. A video still resolving
+ * shows its poster as a still, and keeps the gap so it doesn't shift when the stream arrives.
+ */
+private fun viewerMediaTopGap(post: Post, mediaIndex: Int, animated: Boolean, layout: ViewerMediaLayout): Dp {
+    val playsMotion = animated || (mediaIndex == 0 && post.awaitsMotion)
+    return if (playsMotion && !layout.edgeToEdge) 40.dp else 0.dp
+}
+
+/**
+ * A post whose moving media resolves only after it opens, so its first page shows a still poster until then: a listing
+ * that gave just a preview and a running time, or one from a source that only serves video.
+ */
+internal val Post.awaitsMotion: Boolean
+    get() = awaitsVideoStream || (full == null && media.isEmpty() && isAnimatedPost(this))
 
 @Composable
 private fun ViewerHoldSpeedLabel(visible: Boolean, modifier: Modifier) {
