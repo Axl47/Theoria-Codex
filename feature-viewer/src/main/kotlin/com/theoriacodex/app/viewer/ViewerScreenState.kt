@@ -195,6 +195,26 @@ internal fun rememberViewerSelection(uiState: ViewerUiState, page: ViewerPageSta
     }
 }
 
+@Composable
+internal fun rememberViewerFrame(
+    uiState: ViewerUiState,
+    navigation: ViewerPostNavigation,
+    posts: List<Post>,
+    selection: ViewerSelection,
+    chromeVisible: State<Boolean>,
+    chromeStage: State<Int>,
+    opening: Boolean,
+    returning: Boolean,
+    inPictureInPicture: Boolean,
+    touchExplorationEnabled: Boolean,
+    isLandscape: Boolean,
+): ViewerFrame = remember(uiState.ignoringChromeVisibility(), navigation, posts, selection, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
+    ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
+}
+
+private fun ViewerUiState.ignoringChromeVisibility(): ViewerUiState =
+    if (controls.chromeVisible) this else copy(controls = controls.copy(chromeVisible = true))
+
 internal class ViewerFrame(
     val uiState: ViewerUiState,
     val navigation: ViewerPostNavigation,

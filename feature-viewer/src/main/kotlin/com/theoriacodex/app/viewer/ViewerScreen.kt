@@ -154,9 +154,7 @@ private fun ViewerLoadedScreen(
     val chromeVisibleState = rememberUpdatedState(chromeVisible)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
     val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisibleState, opening, returning)
-    val frame = remember(uiState.ignoringChromeVisibility(), navigation, posts, selection, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
-        ViewerFrame(uiState, navigation, posts, selection, chromeVisibleState, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
-    }
+    val frame = rememberViewerFrame(uiState, navigation, posts, selection, chromeVisibleState, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
     val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
@@ -229,9 +227,6 @@ private fun ViewerContentSurface(
         )
     }
 }
-
-private fun ViewerUiState.ignoringChromeVisibility(): ViewerUiState =
-    if (controls.chromeVisible) this else copy(controls = controls.copy(chromeVisible = true))
 
 private fun viewerChromeVisible(
     uiState: ViewerUiState,
