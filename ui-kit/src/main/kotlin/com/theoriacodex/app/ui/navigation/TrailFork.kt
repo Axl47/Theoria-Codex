@@ -36,10 +36,9 @@ fun trailForks(
     similarSupported: Boolean,
     tags: List<String>,
     covered: Collection<String>,
-    maxTags: Int = MAX_TAG_FORKS,
 ): List<TrailFork> {
     val searched = covered.mapTo(mutableSetOf(), ::normalizeMatchToken)
-    val fresh = tags.asSequence().filter { normalizeMatchToken(it) !in searched }.distinctBy(::normalizeMatchToken).take(maxTags)
+    val fresh = tags.asSequence().filter { normalizeMatchToken(it) !in searched }.distinctBy(::normalizeMatchToken).take(MAX_TAG_FORKS)
     return listOfNotNull(creator?.let(TrailFork::Creator), TrailFork.Similar.takeIf { similarSupported }) + fresh.map(TrailFork::Tag)
 }
 

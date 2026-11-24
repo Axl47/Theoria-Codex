@@ -21,9 +21,9 @@ class TrailForkTest {
 
     @Test
     fun `leaves out what the post cannot fork and caps the tags`() {
-        val forks = trailForks(null, similarSupported = false, listOf("a", "b", "a", "c"), covered = emptyList(), maxTags = 2)
+        val forks = trailForks(null, similarSupported = false, listOf("a", "b", "a", "c", "d", "e", "f"), covered = emptyList())
 
-        assertEquals(listOf(TrailFork.Tag("a"), TrailFork.Tag("b")), forks)
+        assertEquals(listOf("a", "b", "c", "d", "e").map(TrailFork::Tag), forks)
     }
 
     @Test
