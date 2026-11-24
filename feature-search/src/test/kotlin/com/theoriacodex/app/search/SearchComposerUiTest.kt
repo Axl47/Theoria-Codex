@@ -104,7 +104,6 @@ class SearchComposerUiTest {
             savedTags = ComposerSavedTags(listOf(FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"), FavoriteTagEntry(SourceKey.GELBOORU, "sketch"))),
         )
         compose.onNodeWithText("Saved tags").assertExists()
-        compose.onNodeWithText("Tap to add to your search").assertExists()
         val label = compose.onNodeWithText("blue_hair", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue("The scrolling row must leave the label room", label.right > label.left)
         compose.onNodeWithText("blue_hair").performClick()

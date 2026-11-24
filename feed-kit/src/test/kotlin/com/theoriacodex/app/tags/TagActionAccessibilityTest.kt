@@ -61,7 +61,7 @@ class TagActionAccessibilityTest {
             FavoriteTagActionGrid(SourceKey.PIXIV, listOf("portrait", "second", "third").map { FavoriteTagEntry(SourceKey.PIXIV, it) },
                 onAddTag = {}, onRemoveTag = { removed += it.tags })
         } } }
-        compose.onNodeWithContentDescription("Remove portrait from favorites")
+        compose.onNodeWithContentDescription("Remove portrait from saved tags")
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         assertEquals(listOf("portrait"), removed)
     }
