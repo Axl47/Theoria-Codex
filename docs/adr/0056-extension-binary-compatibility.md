@@ -44,5 +44,5 @@ Adding API surface means copying only what binaries call. A missing class or mem
 - `extension-host/src/main/kotlin/uy/kohesive/injekt/api/InjektApi.kt`: `InjektScope`, `TypeReference`, `FullTypeReference`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ChapterRecognition.kt`: `ChapterRecognition`
 - `extension-host/src/main/kotlin/eu/kanade/tachiyomi/source/model/`: `SManga`, `SChapter`, `Filter`
-- `extension-host/src/main/kotlin/eu/kanade/tachiyomi/network/`: `Requests.kt`, `OkHttpExtensions.kt`
+- `extension-host/src/main/kotlin/eu/kanade/tachiyomi/network/Requests.kt`, `OkHttpExtensions.kt`
 - `extension-host/src/main/kotlin/eu/kanade/tachiyomi/util/JsoupExtensions.kt`

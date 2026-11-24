@@ -16,4 +16,4 @@ What this makes easier and harder, and what would have to change to revisit it.
 
 ## Applies to
 
-- `module/src/main/kotlin/.../File.kt`: `Symbol`
+- `module/src/main/kotlin/.../File.kt`: `Symbol`, `Owner.member`

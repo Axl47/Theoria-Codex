@@ -24,7 +24,8 @@ New filter types must be drawn through `filterItems` and expose their own access
 ## Applies to
 
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SourceLabel.kt`: `label`
-- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `failureLine`, `firstPage`, `withPage`
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `failureLine`
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/PagedListing.kt`: `PagedListing`, `firstPage`, `withPage`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SourceLoadFailure.kt`: `SourceLoadFailure`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesFilterSheet.kt`: `SeriesFilterSheet`, `filterItems`, `TriStateRow`, `SortRows`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesBrowseView.kt`: `SourcePickerSheet`
