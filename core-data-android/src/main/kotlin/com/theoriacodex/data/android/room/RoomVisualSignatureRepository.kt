@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.PredictedTagCodec
 import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
+import com.theoriacodex.data.repository.PICTURE_HASH_RETRY_MS
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
@@ -41,8 +42,18 @@ class RoomVisualSignatureRepository(
         }
     }
 
+    override suspend fun failHashes(postIds: Collection<PostId>) {
+        if (postIds.isEmpty()) return
+        val now = clock()
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                postIds.forEach { postId -> dao.failHash(postId.source.id, postId.sourcePostId, now) }
+            }
+        }
+    }
+
     override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = withContext(Dispatchers.IO) {
-        dao.libraryPostsWithoutSignature(limit, skip).decoded()
+        dao.libraryPostsWithoutSignature(limit, skip, clock() - PICTURE_HASH_RETRY_MS).decoded()
     }
 
     override suspend fun putVision(entries: List<PictureVision>) {

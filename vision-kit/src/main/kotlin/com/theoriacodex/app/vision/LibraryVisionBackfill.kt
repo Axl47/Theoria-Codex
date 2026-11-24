@@ -12,13 +12,17 @@ class LibraryVisionBackfill(
     private val tagger: PictureTagger,
     private val signatures: VisualSignatureRepository,
     private val hot: () -> Boolean,
+    private val reachable: (Post) -> Boolean = { true },
 ) {
     suspend fun drain(): Boolean {
         val unreachable = HashSet<PostId>()
         while (tagger.ready.value) {
             if (hot()) return true
-            val batch = signatures.libraryPostsWithoutVision(tagger.modelId, unreachable.size + BATCH).filterNot { it.id in unreachable }
-            if (batch.isEmpty()) return unreachable.isNotEmpty()
+            val listed = signatures.libraryPostsWithoutVision(tagger.modelId, unreachable.size + BATCH).filterNot { it.id in unreachable }
+            val (batch, heldOff) = listed.partition(reachable)
+            heldOff.mapTo(unreachable) { it.id }
+            if (listed.isEmpty()) return unreachable.isNotEmpty()
+            if (batch.isEmpty()) continue
             val started = TimeSource.Monotonic.markNow()
             val results = batch.associateWith { post -> tagger.analyze(post, remember = false) }
             if (PictureResult.Unavailable in results.values) return tagger.ready.value

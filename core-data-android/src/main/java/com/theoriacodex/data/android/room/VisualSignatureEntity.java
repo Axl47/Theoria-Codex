@@ -27,6 +27,7 @@ public final class VisualSignatureEntity {
     @Nullable @ColumnInfo(name = "predicted_tags") private final String predictedTags;
     @ColumnInfo(name = "frame_state", defaultValue = "0") private final int frameState;
     @ColumnInfo(name = "frame_attempts", defaultValue = "0") private final int frameAttempts;
+    @Nullable @ColumnInfo(name = "phash_failed_at_epoch_ms") private final Long phashFailedAtEpochMs;
 
     public VisualSignatureEntity(
             @NonNull String source,
@@ -38,7 +39,8 @@ public final class VisualSignatureEntity {
             @Nullable byte[] embedding,
             @Nullable String predictedTags,
             int frameState,
-            int frameAttempts
+            int frameAttempts,
+            @Nullable Long phashFailedAtEpochMs
     ) {
         this.source = source;
         this.sourcePostId = sourcePostId;
@@ -50,6 +52,7 @@ public final class VisualSignatureEntity {
         this.predictedTags = predictedTags;
         this.frameState = frameState;
         this.frameAttempts = frameAttempts;
+        this.phashFailedAtEpochMs = phashFailedAtEpochMs;
     }
 
     @NonNull public String getSource() { return source; }
@@ -62,4 +65,5 @@ public final class VisualSignatureEntity {
     @Nullable public String getPredictedTags() { return predictedTags; }
     public int getFrameState() { return frameState; }
     public int getFrameAttempts() { return frameAttempts; }
+    @Nullable public Long getPhashFailedAtEpochMs() { return phashFailedAtEpochMs; }
 }

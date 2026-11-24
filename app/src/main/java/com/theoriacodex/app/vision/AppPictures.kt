@@ -50,6 +50,7 @@ fun appPictures(
     ugoira: PixivUgoiraClient,
     offlineCopy: suspend (PostId) -> Post?,
     resolvePost: suspend (PostId) -> Post?,
+    reachable: (Post) -> Boolean,
     scope: CoroutineScope,
 ): AppPictures {
     val app = context.applicationContext
@@ -59,7 +60,7 @@ fun appPictures(
     ) { tagger.forget() }
     tagger = PictureTagger(model, signatures, AppPictureSource(app, ugoira, offlineCopy, resolvePost), scope)
     val power = app.getSystemService(PowerManager::class.java)
-    val tags = LibraryVisionBackfill(tagger, signatures, hot = { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE })
+    val tags = LibraryVisionBackfill(tagger, signatures, hot = { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE }, reachable)
     return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id), signatures.observeLibraryTotal())
 }
 

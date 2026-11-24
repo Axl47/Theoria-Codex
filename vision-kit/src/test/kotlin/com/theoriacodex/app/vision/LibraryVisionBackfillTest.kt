@@ -58,6 +58,7 @@ class LibraryVisionBackfillTest {
         var tagReads = 0
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
         override suspend fun putHashes(hashes: Map<PostId, Long?>) = Unit
+        override suspend fun failHashes(postIds: Collection<PostId>) = Unit
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) {
             for (entry in entries) {
@@ -145,6 +146,21 @@ class LibraryVisionBackfillTest {
         assertTrue(backfill(tagger, library).drain())
 
         assertEquals(older.map(Post::id), library.stored.map(PictureVision::postId))
+    }
+
+    @Test
+    fun `posts on a host that is holding requests off are not loaded, and a later run tries them again`() = runBlocking {
+        val held = List(40) { post("held-$it") }
+        val open = List(3) { post("open-$it") }
+        val library = Library(held + open)
+        val loaded = mutableListOf<String>()
+        val pictures = Pictures(still = { loaded += it.id.sourcePostId; Pattern.TOP.bitmap() })
+        val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+
+        assertTrue(LibraryVisionBackfill(tagger, library, hot = { false }) { !it.id.sourcePostId.startsWith("held") }.drain())
+
+        assertEquals(open.map { it.id.sourcePostId }, loaded)
+        assertEquals(open.map(Post::id), library.stored.map(PictureVision::postId))
     }
 
     @Test

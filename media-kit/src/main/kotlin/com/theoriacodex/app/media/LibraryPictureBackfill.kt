@@ -9,22 +9,29 @@ import kotlinx.coroutines.coroutineScope
 
 class LibraryPictureBackfill(
     private val signatures: VisualSignatureRepository,
+    private val reachable: (Post) -> Boolean = { true },
     private val hash: suspend (Post) -> PictureHashResult,
 ) {
     suspend fun drain() {
-        val unavailable = HashSet<PostId>()
+        val held = HashSet<PostId>()
+        val tried = HashSet<PostId>()
         while (true) {
-            val batch = signatures.libraryPostsWithoutSignature(BATCH, skip = unavailable.size).filterNot { it.id in unavailable }
-            if (batch.isEmpty()) return
+            val batch = signatures.libraryPostsWithoutSignature(BATCH, skip = held.size).filterNot { it.id in held }
+            if (batch.isEmpty() || batch.any { it.id in tried }) return
+            val (ready, unreachable) = batch.partition(reachable)
+            unreachable.mapTo(held) { it.id }
+            ready.mapTo(tried) { it.id }
             val hashes = HashMap<PostId, Long?>()
-            coroutineScope { batch.map { post -> async { post to hash(post) } }.awaitAll() }.forEach { (post, result) ->
+            val failed = ArrayList<PostId>()
+            coroutineScope { ready.map { post -> async { post to hash(post) } }.awaitAll() }.forEach { (post, result) ->
                 when (result) {
                     is PictureHashResult.Hashed -> hashes[post.id] = result.hash
                     PictureHashResult.Unhashable -> hashes[post.id] = null
-                    PictureHashResult.Unavailable -> unavailable += post.id
+                    PictureHashResult.Unavailable -> failed += post.id
                 }
             }
             signatures.putHashes(hashes)
+            signatures.failHashes(failed)
         }
     }
 
