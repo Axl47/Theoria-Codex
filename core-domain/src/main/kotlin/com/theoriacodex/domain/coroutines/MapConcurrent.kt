@@ -6,7 +6,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** Runs independent requests with a bounded fan-out and preserves input order in the result. */
 suspend fun <T, R> Iterable<T>.mapConcurrent(
     concurrency: Int = 3,
     transform: suspend (T) -> R,

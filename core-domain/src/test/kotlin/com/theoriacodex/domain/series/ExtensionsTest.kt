@@ -29,7 +29,6 @@ class ExtensionsTest {
 
         assertTrue(choices.trusts("a", "key-1"))
         assertFalse(choices.trusts("a", "key-2"))
-        // The same key on another extension was never turned on.
         assertFalse(choices.trusts("b", "key-1"))
         assertFalse(choices.trusts("a", null))
         assertFalse(choices.trusts("unsigned", ""))

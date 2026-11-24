@@ -6,16 +6,11 @@ import com.theoriacodex.domain.tags.sourceTagKey
 import java.text.Normalizer
 import java.util.Locale
 
-/** One Like's training tags, spelled in its own source's vocabulary. */
 data class LikedTagDocument(
     val source: SourceKey,
     val tags: List<String>,
 )
 
-/**
- * Source-neutral spelling used only to compare tags across sources. It follows Danbooru's own
- * Pixiv-tag normalization: NFKC, lowercase, and `_` or whitespace runs collapsed to one space.
- */
 fun crossSourceTagKey(tag: String): String =
     Normalizer.normalize(decodeHtmlEntities(tag), Normalizer.Form.NFKC)
         .lowercase(Locale.ROOT)
@@ -23,10 +18,6 @@ fun crossSourceTagKey(tag: String): String =
         .replace(CROSS_SOURCE_WHITESPACE_REGEX, " ")
         .trim()
 
-/**
- * Native Pixiv tags and their English translations, as concept keys. Built from the tag
- * suggestion store, which learns pairs from Pixiv search results, autocomplete and trending.
- */
 class PixivTagDictionary private constructor(
     private val keyByNative: Map<String, String>,
     private val nativeByKey: Map<String, String>,
@@ -40,7 +31,6 @@ class PixivTagDictionary private constructor(
     companion object {
         val Empty = PixivTagDictionary(emptyMap(), emptyMap())
 
-        /** [pairs] are (native, translation), best first: a concept keeps its first native tag. */
         fun from(pairs: Iterable<Pair<String, String>>): PixivTagDictionary {
             val keyByNative = mutableMapOf<String, String>()
             val nativeByKey = mutableMapOf<String, String>()
@@ -56,16 +46,6 @@ class PixivTagDictionary private constructor(
     }
 }
 
-/**
- * Training documents for For You when Likes on one tag-compatible source should teach the
- * others. A target source trains on its own Likes first, then on other sources' Likes translated
- * into its vocabulary: booru tags map by concept key, and Pixiv maps through [dictionary].
- * Tags that cannot be mapped are dropped. Foreign documents are capped at
- * `max(native, FOREIGN_DOCUMENT_FLOOR)`, so they bridge a cold start but never outweigh what the
- * user liked on the target itself.
- *
- * [likes] should be ordered most recent first; each document is translated at most once.
- */
 class CrossSourceTraining(
     likes: List<LikedTagDocument>,
     private val dictionary: PixivTagDictionary,
@@ -84,14 +64,12 @@ class CrossSourceTraining(
         return native + foreign
     }
 
-    /** [tag], spelled in [from]'s vocabulary, spelled in [to]'s; null when it cannot be mapped. */
     fun translate(tag: String, from: SourceKey, to: SourceKey): String? {
         if (from == to) return tag
         if (!to.sharesBooruVocabulary || !canMap(from, to)) return null
         return conceptKey(tag, from)?.let { spell(it, to) }
     }
 
-    /** A tag saved without a source (a saved tag or search) in [into]'s spelling when the Pixiv dictionary knows it. */
     fun spellSaved(tag: String, into: SourceKey): String? =
         translate(tag, from = if (into == SourceKey.PIXIV) SourceKey.DANBOORU else SourceKey.PIXIV, to = into)
 
@@ -115,11 +93,6 @@ private val SHARED_VOCABULARY_BUILT_INS = setOf(
     SourceKey.PIXIV, SourceKey.DANBOORU, SourceKey.AIBOORU, SourceKey.GELBOORU, SourceKey.RULE34XXX,
 )
 
-/**
- * Sources whose tags share one English vocabulary, directly or through Pixiv translations. Custom
- * sites join by default, betting on Danbooru-style tags. Nothing persists this, so the rule can
- * change (or become a per-site setting) without migrating data.
- */
 val SourceKey.sharesBooruVocabulary: Boolean
     get() = isCustom || this in SHARED_VOCABULARY_BUILT_INS
 

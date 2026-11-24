@@ -4,12 +4,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * The spelling Pixiv search receives for one tag. Booru-style (ASCII) tokens such as
- * `saber_(fate)` become `saber`, because Pixiv neither joins words with underscores nor uses
- * booru qualifiers. Native Pixiv tags such as `ラム(リゼロ)` pass through unchanged, because
- * their parentheses are part of the tag.
- */
 fun pixivSearchToken(raw: String): String {
     val token = raw.trim().removePrefix("-").replace(PIXIV_WHITESPACE_REGEX, " ").trim()
     if (!token.all { it.code < ASCII_LIMIT }) return token
@@ -20,12 +14,6 @@ fun pixivSearchToken(raw: String): String {
     return normalized
 }
 
-/**
- * Upgrades a Pixiv post stored before taxonomy terms carried translations. The adapter always
- * wrote each translation directly after its native tag in `canonicalTags`, so that order
- * recovers the pairs: native terms gain their translation, and standalone translation terms
- * (which used to render as separate chips) are dropped. Other posts are returned unchanged.
- */
 fun Post.withRecoveredPixivTranslations(): Post {
     if (id.source != SourceKey.PIXIV || taxonomy.any { it.translation != null }) return this
     val native = rawTags.mapTo(linkedSetOf()) { it.trim() }.apply { remove("") }

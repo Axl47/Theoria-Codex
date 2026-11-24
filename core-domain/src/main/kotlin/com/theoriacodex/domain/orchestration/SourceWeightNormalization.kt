@@ -2,15 +2,6 @@ package com.theoriacodex.domain.orchestration
 
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * The single serving-time contract for source priority weights.
- *
- * Explicit zero is meaningful and remains zero. Missing entries receive [missingWeight].
- * Negative and non-finite values fail closed to zero. When at least one positive weight
- * remains, positive values are scaled to [NORMALIZED_TOTAL] without overflowing their sum. A
- * degenerate all-zero input falls back to equal shares so every non-empty result still satisfies
- * the total-weight invariant and the merge scheduler cannot be starved.
- */
 object SourceWeightNormalization {
     const val NORMALIZED_TOTAL: Double = 1.0
 
@@ -36,7 +27,6 @@ object SourceWeightNormalization {
             return distinctSources.associateWith { equalShare }
         }
 
-        // Scaling by the largest value first avoids an infinite sum for very large finite inputs.
         val scaled = sanitized.mapValues { (_, weight) -> weight / largestWeight }
         val scaledTotal = scaled.values.sum()
         if (!scaledTotal.isFinite() || scaledTotal <= 0.0) return sanitized.mapValues { 0.0 }
