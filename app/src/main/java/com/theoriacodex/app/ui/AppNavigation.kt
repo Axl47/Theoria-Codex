@@ -36,10 +36,11 @@ internal object AppRoute {
     /** Every extension on the device: which are on, their languages and their settings. */
     const val Extensions = "extensions"
 
-    /** One series' page, named by its [SeriesId]. */
-    const val Series = "series?source={source}&address={address}"
+    /** One series' page, named by its [SeriesId]; with an entry address, the page opens that entry in the Viewer once. */
+    const val Series = "series?source={source}&address={address}&entry={entry}"
 
-    fun series(id: SeriesId): String = "series?source=${id.source.id}&address=${Uri.encode(id.address)}"
+    fun series(id: SeriesId, entry: String? = null): String =
+        "series?source=${id.source.id}&address=${Uri.encode(id.address)}" + entry?.let { "&entry=${Uri.encode(it)}" }.orEmpty()
 
     /** The triage deck over one feed, named by a [TriageRequest]; [triageArguments] reads it back. */
     const val Triage = "triage/{source}?feedKey={feedKey}&removes={removes}&alsoIn={alsoIn}"
