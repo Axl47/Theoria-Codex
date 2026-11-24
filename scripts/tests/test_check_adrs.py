@@ -61,11 +61,17 @@ class CheckTest(RepositoryTest):
         self.assertEqual([], self.problems())
 
     def test_names_new_path_of_moved_file_and_flags_deleted_file(self) -> None:
-        self.record("0001-a.md", "- `core/src/a/Old.kt`: `SearchModel`")
-        self.record("0002-b.md", "- `core/src/a/Dead.kt`")
-        problems = self.problems({"core/src/a/Old.kt": "core/src/a/Search.kt"}, {"core/src/a/Dead.kt"})
-        self.assertIn("`core/src/a/Old.kt` moved to `core/src/a/Search.kt`", problems[0])
-        self.assertIn("`core/src/a/Dead.kt` was deleted", problems[1])
+        self.record("0001-a.md", "- `core/src/a/Search.kt`, `Old.kt`: `SearchModel`")
+        self.record("0002-b.md", "- `gradlew`")
+        problems = self.problems({"core/src/a/Old.kt": "core/src/a/Find.kt"}, {"gradlew"})
+        self.assertEqual("  It moved to `core/src/a/Find.kt` in this change; point the record there.", problems[0].splitlines()[1])
+        self.assertIn("`gradlew` does not exist", problems[1])
+        self.assertIn("It was deleted in this change", problems[1])
+
+    def test_directory_stands_for_every_file_under_it(self) -> None:
+        self.record("0001-a.md", "- `core/src/`: `SearchModel`, `otherValue`\n- `core/src/b/`: `SearchModel`")
+        self.assertEqual(["docs/adr/0001-a.md: `SearchModel` is not in `core/src/b/`. "
+                          "Rename it here or move it to the file that now holds it."], self.problems())
 
     def test_reports_duplicate_numbers_with_the_numbering_rule(self) -> None:
         self.record("0007-a.md", "- `core/src/a/Search.kt`")

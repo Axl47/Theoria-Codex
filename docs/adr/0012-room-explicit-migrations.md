@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Context
 
-The library database holds the user's likes, Codex collections and series progress, and has gone through many schema versions. Installed users must reach the latest schema from any earlier one without losing data, and a database that cannot open must be reported rather than silently reset.
+The library database holds the user's likes, Codex collections and series progress, and has gone through many schema versions. Installed users must reach the latest schema from any schema still in the support window without losing data, and a database that cannot open must be reported rather than silently reset.
 
 ## Decision
 

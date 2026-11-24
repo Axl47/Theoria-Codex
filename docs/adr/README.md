@@ -29,6 +29,6 @@ decisions behind a file, search for its name: `grep -l 'SearchViewModel.kt' docs
 CI). It fails when a record's `Applies to` names a path that does not exist, a backticked symbol that does
 not appear in the files on its line, or a number another record already uses. Superseded records are skipped.
 Each `Applies to` line reads `` `path`[, `path`]: `symbol`, `symbol` ``; a path without its module directory
-resolves against the previous path on the line, and prose around the backticked names is ignored. When a
+resolves against the previous path on the line, a directory stands for every file under it, and prose around the backticked names is ignored. When a
 change moves or deletes a file, the check names every record that still points at the old path; update those
 records in the same change.
