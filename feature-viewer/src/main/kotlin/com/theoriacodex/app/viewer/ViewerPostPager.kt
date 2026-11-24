@@ -80,7 +80,7 @@ internal fun ViewerPostPagerSurface(
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
                     holdScrub = LocalViewerHoldScrub.current,
                     reservedBottomPx = reservedBottom,
-                    verticalScroll = verticalGallery?.scrollGesture(pagesPending = frame.uiState.currentPage?.hasPendingGalleryMedia() == true),
+                    verticalScroll = verticalGallery?.scrollGesture(pagesPending = frame.reading && frame.uiState.currentPage?.loadingGalleryMedia() == true),
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
@@ -180,7 +180,7 @@ private fun ViewerVerticalPostPage(
         postPage, pageState, frame, screen, controls, host,
         dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
         readReturnProgress = readReturnProgress,
-        onOpenNext = nextPostOpener(postPage, frame, swipe, config).takeUnless { pageState.hasPendingGalleryMedia() },
+        onOpenNext = nextPostOpener(postPage, frame, swipe, config).takeUnless { frame.reading && pageState.loadingGalleryMedia() },
     )
 }
 

@@ -360,12 +360,18 @@ class ExtensionImagesTest {
         val data = address.toHttpUrl().fragment!!.substringAfter('/')
         reader.hangImages = true
         val loading = caller.newCall(Request.Builder().url(url).build())
-        val fetch = Executors.newSingleThreadExecutor().submit<Result<Response>> { runCatching { pages.fetch(address, url, data, loading) } }
-        check(reader.imageStarted.await(5, TimeUnit.SECONDS))
+        val fetching = Executors.newSingleThreadExecutor()
+        try {
+            val fetch = fetching.submit<Result<Response>> { runCatching { pages.fetch(address, url, data, loading) } }
+            check(reader.imageStarted.await(5, TimeUnit.SECONDS))
 
-        loading.cancel()
+            loading.cancel()
 
-        assertTrue(fetch.get(5, TimeUnit.SECONDS).isFailure)
+            assertTrue(fetch.get(5, TimeUnit.SECONDS).isFailure)
+        } finally {
+            loading.cancel()
+            fetching.shutdownNow()
+        }
         reader.hangImages = false
         pages.fetch(address, url, data, caller.newCall(Request.Builder().url(url).build())).close()
         assertEquals(listOf("/p/1"), reader.asked)

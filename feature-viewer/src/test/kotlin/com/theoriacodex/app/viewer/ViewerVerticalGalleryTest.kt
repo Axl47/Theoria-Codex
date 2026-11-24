@@ -198,6 +198,26 @@ class ViewerVerticalGalleryTest {
     }
 
     @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a chapter whose pages failed offers Next again, and a loading one still closes on a pull down (ADR 0168)`() {
+        val session = ViewerSessionIdentity("failing")
+        state.value = createViewerUiState(
+            session, listOf(gallery.copy(media = emptyList(), full = null, galleryLengthUnknown = true), next),
+            requiresResolution = { it.id == gallery.id }, series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL),
+        )
+        show(mapOf(gallery.id to GalleryReadingMode.VERTICAL, next.id to GalleryReadingMode.VERTICAL))
+
+        compose.onRoot().performTouchInput { swipeDown(startY = centerY - height / 4f, endY = centerY + height / 4f) }
+        compose.waitForIdle()
+        assertTrue(actions.any { it is ViewerAction.PrepareDismiss })
+
+        compose.runOnIdle {
+            state.value = reduceViewerState(state.value, ViewerAction.ResolutionFailed(session, gallery.id, "offline", recoverable = true)).state
+        }
+        compose.onNodeWithText("Next").assertExists()
+        compose.onNodeWithContentDescription("Loading pages").assertDoesNotExist()
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
     @Test fun `a push up that began on a loading chapter stays on it when its pages arrive mid-swipe (ADR 0168)`() {
         val session = ViewerSessionIdentity("arriving")
         state.value = createViewerUiState(
