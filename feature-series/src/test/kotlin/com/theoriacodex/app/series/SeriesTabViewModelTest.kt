@@ -357,7 +357,7 @@ class SeriesTabViewModelTest {
     }
 
     @Test
-    fun theKindFilterShowsOnlyWithBothKindsAndNarrowsTheShelfSourcesAndSearch() = runTest {
+    fun theKindFilterShowsOnlyWithBothKindsAndNarrowsFollowingAndSearchButNotBrowse() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val manga = Answering("custom_mihon_7")
         val anime = Answering("custom_aniyomi_7")
@@ -380,40 +380,55 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
         val content = viewModel.content.value
         assertFalse(content.marked)
-        assertEquals(listOf(anime.key), content.followed.map { it.series.id.source })
-        assertEquals(listOf(anime.key), content.sources?.map { it.key })
-        assertEquals("The browsed manga source gives way", anime.key, content.browse?.key)
+        assertEquals(listOf(anime.key), content.following?.map { it.series.id.source })
+        assertEquals("Browse groups every source by kind instead", listOf(manga.key, anime.key), content.sources?.map { it.key })
+        assertEquals(manga.key, content.browse?.key)
         assertEquals(listOf(anime.key), content.search?.map { it.key })
+        assertEquals(EntryWords.EPISODES, content.words)
         collecting.cancel()
     }
 
     @Test
-    fun aSourceOfTheNarrowedKindThatComesOnIsBrowsed() = runTest {
+    fun theTabOpensOnFollowingOnlyWithSomethingFollowedAndKeepsTheViewAfterwards() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val manga = Answering("custom_mihon_7")
-        val anime = Answering("custom_aniyomi_7")
-        // A followed anime whose extension is off: both kinds exist, with only a manga source to browse.
-        val followed = MutableStateFlow(
-            listOf(
-                FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0),
-                FollowedSeries(Series(SeriesId(anime.key, "/a"), "A"), unreadCount = 0),
-            ),
-        )
-        var offered = listOf<SeriesSource>(manga)
-        val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(Following(followed), { offered }, changed) {}
+        val followed = MutableStateFlow(emptyList<FollowedSeries>())
+        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }) {}
         val collecting = launch { viewModel.content.collect {} }
         advanceUntilIdle()
-        viewModel.chooseKind(SeriesKind.ANIME)
-        advanceUntilIdle()
-        assertNull("No anime source is on yet", viewModel.content.value.browse)
+        assertEquals(SeriesView.BROWSE, viewModel.content.value.view)
 
-        offered = listOf(manga, anime)
-        changed.value = 1
+        // Following a series from Browse leaves the tab on Browse.
+        followed.value = listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0))
         advanceUntilIdle()
+        assertEquals(SeriesView.BROWSE, viewModel.content.value.view)
 
-        assertEquals(anime.key, viewModel.content.value.browse?.key)
+        val reopened = SeriesTabViewModel(Following(followed), { listOf(manga) }) {}
+        advanceUntilIdle()
+        assertEquals(SeriesView.FOLLOWING, reopened.state.value.view)
         collecting.cancel()
+    }
+
+    @Test
+    fun followingOptionsAreRememberedAndShowAllClearsEveryFilter() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val kept = object : SeriesLibraryPreferences {
+            var options = LibraryOptions(sort = LibrarySort.TITLE)
+            override fun read() = options
+            override fun write(options: LibraryOptions) { this.options = options }
+        }
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }, library = kept) {}
+        assertEquals(LibrarySort.TITLE, viewModel.state.value.library.sort)
+
+        viewModel.chooseLibrary(LibraryOptions(LibrarySort.TITLE, LibraryShow.NOT_STARTED))
+        viewModel.chooseKind(SeriesKind.ANIME)
+        viewModel.filterFollowing("saga")
+        assertEquals(LibraryShow.NOT_STARTED, kept.options.show)
+
+        viewModel.showAllFollowing()
+        val state = viewModel.state.value
+        assertEquals(LibraryOptions(LibrarySort.TITLE, LibraryShow.ALL), kept.options)
+        assertEquals(Triple(null, "", LibraryShow.ALL), Triple(state.kind, state.followingQuery, state.library.show))
     }
 
     @Test

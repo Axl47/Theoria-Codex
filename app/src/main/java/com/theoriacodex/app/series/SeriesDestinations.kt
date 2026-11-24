@@ -51,7 +51,13 @@ internal val LocalSeriesGenreSearch = staticCompositionLocalOf { SeriesGenreRequ
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
     val viewModel = viewModel {
-        SeriesTabViewModel(series.repository, series.sources, series.extensions.revision, createSavedStateHandle()) { series.checkFollowed() }
+        SeriesTabViewModel(
+            series.repository,
+            series.sources,
+            series.extensions.revision,
+            createSavedStateHandle(),
+            SharedPreferencesSeriesLibraryPreferences(shell.appContext),
+        ) { series.checkFollowed() }
     }
     val pager = shell.navigation.pagerState
     LaunchedEffect(viewModel, pager) {
