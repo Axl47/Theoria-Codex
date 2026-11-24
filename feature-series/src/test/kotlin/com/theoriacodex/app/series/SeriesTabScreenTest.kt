@@ -2,7 +2,10 @@ package com.theoriacodex.app.series
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -10,9 +13,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
@@ -29,6 +29,8 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -62,11 +64,11 @@ class SeriesTabScreenTest {
         compose.onNodeWithText(languageName("en")).assertIsDisplayed()
         compose.onNodeWithText(languageName("es-419")).assertIsDisplayed()
 
-        // Tapping a source header opens its dedicated search with the query and floating browse controls.
+        // Tapping a source header opens its dedicated search with the query and the listing's controls.
         compose.onNodeWithText(languageName("en")).performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithTag(BROWSE_CONTROLS_BAR_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(LISTING_CONTROLS_TAG).assertIsDisplayed()
         compose.onNodeWithText("reincarnation").assertIsDisplayed()
 
         // Navigating back returns to the global search results.
@@ -76,29 +78,54 @@ class SeriesTabScreenTest {
     }
 
     @Test
-    fun browseControlsHideOnDownwardScrollAndReturnOnUpwardScroll() {
-        val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 30))
+    fun followingOpensFirstAndNarrowsByTitleAndFilter() {
+        val source = SourceKey.parseOrThrow("custom_mihon_1")
+        val followed = listOf(
+            FollowedSeries(Series(SeriesId(source, "/alpha"), "Alpha Saga"), unreadCount = 2, started = true),
+            FollowedSeries(Series(SeriesId(source, "/beta"), "Beta Tale"), unreadCount = 5),
+        )
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) {}
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.waitForIdle()
+
+        compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING)).assertIsSelected()
+        compose.onNodeWithText("Alpha Saga").assertIsDisplayed()
+        compose.onNodeWithTag(SERIES_SEARCH_INPUT_TAG).performTextInput("beta")
+        compose.waitForIdle()
+        compose.onNodeWithText("Alpha Saga").assertDoesNotExist()
+        compose.onNodeWithText("Beta Tale").assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("Clear").performClick()
+        compose.onNodeWithContentDescription(SORT_AND_FILTER).performClick()
+        compose.onNodeWithText("Not started").performClick()
+        compose.waitForIdle()
+        assertEquals(LibraryShow.NOT_STARTED, viewModel.content.value.library.show)
+        assertEquals(listOf("Beta Tale"), viewModel.content.value.following?.map { it.series.title })
+    }
+
+    @Test
+    fun browsePicksItsSourceAndListingFromOneHeader() {
+        val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3), FakeSeriesSource("custom_aniyomi_2", "Moon Reel", "en", count = 3))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
-        compose.setContent {
-            MaterialTheme {
-                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {})
-            }
-        }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
 
-        compose.onNodeWithTag(BROWSE_CONTROLS_BAR_TAG).assertIsDisplayed()
-        compose.onNodeWithTag(SERIES_SEARCH_BAR_TAG).assertIsDisplayed()
-
-        // Swiping up scrolls down through the grid: floating controls hide and search bar collapses.
-        compose.onNodeWithText("Popular 5").performTouchInput { swipeUp(startY = 600f, endY = 100f) }
+        // Nothing followed: the tab opens on Browse.
+        compose.onNodeWithTag(seriesViewTag(SeriesView.BROWSE)).assertIsSelected()
+        compose.onNodeWithTag(BROWSED_SOURCE_TAG).assert(hasText("Ink Harbor", substring = true))
+        compose.onNodeWithText("Latest").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag(BROWSE_CONTROLS_BAR_TAG).assertDoesNotExist()
-        compose.onNodeWithTag("collapsed-search-strip").assertIsDisplayed()
+        compose.onNodeWithText("Latest 1").assertIsDisplayed()
 
-        // Swiping down scrolls back toward the top: floating browse controls return.
-        compose.onNodeWithText("Popular 11").performTouchInput { swipeDown(startY = 200f, endY = 700f) }
+        compose.onNodeWithTag(BROWSED_SOURCE_TAG).performClick()
+        compose.onNodeWithText("Anime").assertIsDisplayed()
+        compose.onNodeWithText("Moon Reel").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag(BROWSE_CONTROLS_BAR_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(BROWSED_SOURCE_TAG).assert(hasText("Moon Reel", substring = true))
+
+        compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Nothing followed").assertIsDisplayed()
     }
 
     @Test
@@ -140,8 +167,10 @@ private class FakeSeriesSource(
     )
 }
 
-private object EmptySeriesRepository : SeriesRepository {
-    override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
+private val EmptySeriesRepository = StubSeriesRepository()
+
+private class StubSeriesRepository(private val followed: List<FollowedSeries> = emptyList()) : SeriesRepository {
+    override fun observeFollowed(): Flow<List<FollowedSeries>> = flowOf(followed)
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
     override suspend fun series(id: SeriesId): StoredSeries? = null

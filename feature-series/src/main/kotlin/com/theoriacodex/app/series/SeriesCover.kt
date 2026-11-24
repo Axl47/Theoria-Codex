@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -118,9 +119,11 @@ internal fun SeriesCard(
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 6.dp),
+            // Hyphenated, so a word wider than the card breaks at a syllable rather than at any letter.
             style = MaterialTheme.typography.labelMedium.copy(
                 color = Color.White,
                 shadow = TextOverMediaShadow,
+                hyphens = Hyphens.Auto,
             ),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
