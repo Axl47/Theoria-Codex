@@ -63,7 +63,6 @@ import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
-import com.theoriacodex.data.repository.STATISTICS_WRITE_DELAY
 import com.theoriacodex.data.repository.FileBackedGalleryReadingModeRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
@@ -100,9 +99,7 @@ class JourneyAppContainer(
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     override val applicationScope: CoroutineScope get() = ownerScope
-    private val writeBehind = if (realWriteTimers) WriteBehind(ownerScope) else WriteBehind.flushOnly(ownerScope)
-    private val statisticsWriteBehind =
-        if (realWriteTimers) WriteBehind(ownerScope, STATISTICS_WRITE_DELAY) else WriteBehind.flushOnly(ownerScope)
+    private val writeBehind = WriteBehind(ownerScope, timed = realWriteTimers)
     private val fileMirrors = FileMirrorIndex()
     private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors, budgetMs = 10_000)
     val registry = JourneySourceRegistry(
@@ -117,7 +114,7 @@ class JourneyAppContainer(
     val settings = DataStoreSettingsRepository(storageDirectory, storeScope, profileWriteGuard = profileWriteGuard)
     private val restore = DataStoreUiRestoreRepository(storageDirectory, storeScope)
     private val statistics = DataStoreStatisticsRepository(
-        storageDirectory, storeScope, writeBehind = statisticsWriteBehind,
+        storageDirectory, storeScope, writeBehind = writeBehind,
     )
     private val durations = RoomMediaDurationRepository(database)
     private val accounts = JourneyAccounts(registry.availableSources())
@@ -157,6 +154,7 @@ class JourneyAppContainer(
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
         forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),
         visualSignatures = RoomVisualSignatureRepository(database),
+        writeBehind = writeBehind,
         fileMirrors = fileMirrors,
     )
     override val sources = SourceDependencies(
