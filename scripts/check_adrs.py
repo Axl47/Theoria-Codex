@@ -300,7 +300,7 @@ def source_guard_problems(record: Record, bullet: Bullet, files: list[pathlib.Pa
         if tags(symbol):
             problems.append(f"{record.name}: guard `{symbol}` is a tagged test name in a file that is not a test source set; name the test's file.")
         elif any(character.isspace() for character in symbol):
-            if not any(pinned(symbol, text, file.suffix == ".py") for file, text in zip(files, texts)):
+            if not any(pinned(symbol, text) for text in texts):
                 problems.append(f"{record.name}: `{symbol}` is not in {where}; {SIGNATURE_CHANGED}")
         elif missing_words(symbol, "\n".join(texts)):
             problems.append(f"{record.name}: guard `{symbol}` is not in {where}. Restore it, or point the record at its new name.")
@@ -319,34 +319,33 @@ def tokens(text: str) -> list[str]:
     return kept[::-1]
 
 
-def pinned(pin: str, text: str, python: bool) -> bool:
+def pinned(pin: str, text: str) -> bool:
     """Whether source text [pin] appears in [text] token for token, whatever its line breaks.
 
-    The match must start a line, so a modifier or annotation added on that line fails, and end before `{ = ( )`
-    (and `:` in Python), or at the end of its line or the file when the next line does not start with `:`. So an
+    The match must start a line, so a modifier or annotation added on that line fails, and end before `{ = ( )`,
+    or at the end of its line or the file when the next line does not start with `:`. So an
     added nullability, type argument, qualifier, return type or supertype fails, and a parameter that another
     follows is pinned with its comma.
     """
     want = [token for token in tokens(pin) if token != "\n"]
     found = tokens(text)
     words = [index for index, token in enumerate(found) if token != "\n"]
-    ends = PIN_END | {":"} if python else PIN_END
     for start in range(len(words) - len(want) + 1):
         first = words[start]
         if found[first] != want[0] or (first > 0 and found[first - 1] != "\n"):
             continue
         run = words[start:start + len(want)]
-        if [found[index] for index in run] == want and pin_ends(found, run[-1] + 1, ends):
+        if [found[index] for index in run] == want and pin_ends(found, run[-1] + 1):
             return True
     return False
 
 
-def pin_ends(found: list[str], after: int, ends: set[str]) -> bool:
+def pin_ends(found: list[str], after: int) -> bool:
     """Whether a pinned run may end before token [after] of [found]."""
     following = found[after] if after < len(found) else "\n"
     if following == "\n":
         return next((token for token in found[after:] if token != "\n"), "") != ":"
-    return following in ends
+    return following in PIN_END
 
 
 def guarded_by(record: Record, root: pathlib.Path, moved: dict[str, str], deleted: set[str]) -> tuple[list[str], list[tuple[str, str]]]:
@@ -360,7 +359,7 @@ def guarded_by(record: Record, root: pathlib.Path, moved: dict[str, str], delete
     for line in lines:
         bullet = parse_bullet(line)
         if bullet.paths and not bullet.symbols:
-            problems.append(f"{record.name}: \"Guarded by\" line `- {line}` names no guard. Name the test, source text or rule after the colon.")
+            problems.append(f"{record.name}: \"Guarded by\" line `- {line}` names no guard. Name the test or the source text after the colon.")
         elif not bullet.paths and not line.startswith(PROSE):
             problems.append(f"{record.name}: \"Guarded by\" line `- {line}` names no backticked path. Name the guard's file, or start the line with \"{PROSE}\".")
         elif not bullet.paths and not line.removeprefix(PROSE).strip():

@@ -26,6 +26,7 @@ class BareComposeWaitTest(unittest.TestCase):
             tests.mkdir(parents=True)
             (tests / "BareTest.kt").write_text("\n".join(spellings) + "\n", encoding="utf-8")
             (tests / "SettledTest.kt").write_text("compose.waitUntilSettled { ready }\n", encoding="utf-8")
+            self.assertIn(check_architecture.host_tests_wait_settled, check_architecture.RULES)
             with mock.patch.object(check_architecture, "ROOT", root):
                 self.assertEqual(
                     [f"feature/src/test/kotlin/BareTest.kt:{number} uses a bare waitUntil; use waitUntilSettled (docs/adr/0210-host-test-compose-waits.md)"
@@ -55,6 +56,7 @@ class DeliveryPlanTest(unittest.TestCase):
                 "private fun ImageRef.hasLighterRenditions() = true\n",
                 encoding="utf-8",
             )
+            self.assertIn(check_architecture.delivery_plans_ignore_source_names, check_architecture.RULES)
             with mock.patch.object(check_architecture, "ROOT", root):
                 self.assertEqual(
                     ["PostMedia.kt's delivery plans must decide from the media, not from SourceKey"],

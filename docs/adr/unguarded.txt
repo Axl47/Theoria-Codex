@@ -5,7 +5,6 @@
 0006-post-identity-and-dedup.md
 0007-series-sources-and-extensions.md
 0008-source-adapter-contracts.md
-0009-stored-data-compatibility.md
 0010-tag-and-text-normalization.md
 0011-unified-search-orchestration.md
 0012-room-explicit-migrations.md

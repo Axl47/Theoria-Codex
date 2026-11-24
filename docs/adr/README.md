@@ -36,12 +36,15 @@ Detekt rule. Each record lists its guards under `Guarded by`, after `Applies to`
 - a test: its file and exact name. The name ends with the record's tag so the failing test names the record at
   the moment someone is tempted to edit it: a backticked Kotlin name ends `` `... (ADR 0022)` ``, and a plain
   identifier (Java, camelCase Kotlin, Python) ends `_adr_0022` (several: `(ADR 0008, 0022)`, `_adr_0008_adr_0022`).
-- a signature: its file and the declaration as source text from the start of its line, written on one line
-  (line breaks in the code are ignored), such as `` `suspend fun post(id: String): Post?` ``. A pin covers what it
-  spells out: to pin an annotation or an initializer, include it, and pin a parameter that another follows
-  with its comma.
-- a policy rule: two lines, the rule's tagged unit test in `scripts/tests/test_check_architecture.py`, which feeds
-  it a violation, and its registered declaration as source text, `` `@rule def rule_name() -> list[str]` ``.
+- a declaration, for what only the declaration can show (visibility, a private constructor, `sealed`, a value
+  class, an interface method without a default): its file and the declaration as source text from the start of
+  its line, written on one line (line breaks in the code are ignored), such as
+  `` `@JvmInline value class SourceKey private constructor(val id: String) : Comparable<SourceKey>` ``. A pin
+  covers what it spells out: to pin an annotation or an initializer, include it, and pin a parameter that
+  another follows with its comma. When a test can express the promise (a nullable value has a meaning, a call
+  returns empty instead of throwing), write the test instead: it survives reformatting and unrelated parameters.
+- a policy rule: its tagged unit test in `scripts/tests/test_check_architecture.py`, which asserts the rule is
+  registered and feeds it a violation.
 - `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour. Any
   other line must name a backticked path and a guard.
 

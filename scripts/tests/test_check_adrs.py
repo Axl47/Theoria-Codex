@@ -186,21 +186,17 @@ class GuardedByTest(RepositoryTest):
         self.assertEqual([], check_adrs.tags("keeps owners (ADR 0008) when idle"))
 
     def test_pinned_source_text_matches_whole_tokens_from_the_start_of_a_line(self) -> None:
-        def pinned(pin: str, text: str) -> bool:
-            return check_adrs.pinned(pin, text, python=False)
-
+        pinned = check_adrs.pinned
         self.assertFalse(pinned("fun post(): Post", "fun post(): Post?\n"))
         self.assertFalse(pinned("fun posts(): List<Post>", "fun posts(): List<Post>?\n"))
         self.assertFalse(pinned("internal class Foo", "internal class FooImpl\n"))
         self.assertFalse(pinned("fun x()", "    private fun x() = Unit\n"))
         self.assertFalse(pinned("fun f()", "fun f(): Int = 1\n"))
         self.assertTrue(pinned("suspend fun post(id: String): Post?", "    suspend fun post(\n        id: String,\n    ): Post? {\n"))
-        self.assertTrue(check_adrs.pinned("@rule def run() -> list[str]", "@rule\ndef run() -> list[str]:\n", python=True))
+        self.assertTrue(pinned("@JvmInline value class Key private constructor(val id: String)", "@JvmInline\nvalue class Key private constructor(val id: String) {\n"))
 
     def test_pinned_source_text_fails_when_a_type_follows_on_the_next_line_or_after_a_comma(self) -> None:
-        def pinned(pin: str, text: str) -> bool:
-            return check_adrs.pinned(pin, text, python=False)
-
+        pinned = check_adrs.pinned
         self.assertFalse(pinned("fun post(id: String)", "fun post(id: String)\n    : Post? = null\n"))
         self.assertFalse(pinned("class Foo : Bar", "class Foo : Bar, Extra {\n"))
         self.assertFalse(pinned("class Foo : Bar", "class Foo : Bar,\n    Extra {\n"))
