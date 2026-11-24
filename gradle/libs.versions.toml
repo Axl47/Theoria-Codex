@@ -38,7 +38,7 @@ roborazzi = "1.79.0"
 baselineProfile = "1.5.0"
 benchmark = "1.5.0"
 profileInstaller = "1.4.1"
-uiAutomator = "2.4.0"
+uiAutomator = "2.4.1"
 kover = "0.9.11"
 detekt = "2.0.0-alpha.6"
 # On-device picture tagger runtime; CPU only (the phone's GPU gives wrong WD-ViT outputs at fp16).
