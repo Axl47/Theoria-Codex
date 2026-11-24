@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PredictedTag
+import com.theoriacodex.domain.vision.PredictedTagIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,7 +53,7 @@ class PictureTaggerTest {
     }
 
     @Test
-    fun `while the model is absent the tagger answers Unavailable and knows nothing`() = runBlocking {
+    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005)`() = runBlocking {
         val spec = VisualModelSpec.wdVitTaggerV3("https://models.test/")
         val store = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
         val tagger = PictureTagger(
@@ -77,5 +78,6 @@ class PictureTaggerTest {
         assertNull(tagger.remembered(post.id))
         assertEquals(PictureLook.Blind, tagger.look(post))
         assertNull(tagger.known(post.id))
+        assertEquals(PredictedTagIndex.Empty, tagger.library.value)
     }
 }

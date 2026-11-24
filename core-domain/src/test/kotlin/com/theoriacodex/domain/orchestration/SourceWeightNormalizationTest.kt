@@ -7,7 +7,7 @@ import org.junit.Test
 
 class SourceWeightNormalizationTest {
     @Test
-    fun `normalizes positive weights while preserving explicit zero`() {
+    fun `normalizes positive weights while preserving explicit zero (ADR 0011)`() {
         val normalized = SourceWeightNormalization.normalize(
             sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.HITOMI),
             weightsBySource = mapOf(
@@ -24,7 +24,7 @@ class SourceWeightNormalizationTest {
     }
 
     @Test
-    fun `missing values use the declared fallback without replacing explicit zero`() {
+    fun `missing values use the declared fallback without replacing explicit zero (ADR 0011)`() {
         val normalized = SourceWeightNormalization.normalize(
             sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
             weightsBySource = mapOf(SourceKey.PIXIV to 0.0),
@@ -36,7 +36,7 @@ class SourceWeightNormalizationTest {
     }
 
     @Test
-    fun `invalid weights fail closed and finite positives still total one`() {
+    fun `invalid weights fail closed and finite positives still total one (ADR 0011)`() {
         val normalized = SourceWeightNormalization.normalize(
             sources = SourceKey.builtIns,
             weightsBySource = mapOf(
@@ -57,7 +57,7 @@ class SourceWeightNormalizationTest {
     }
 
     @Test
-    fun `all zero input falls back to equal shares`() {
+    fun `all zero input falls back to equal shares (ADR 0011)`() {
         val normalized = SourceWeightNormalization.normalize(
             sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
             weightsBySource = mapOf(

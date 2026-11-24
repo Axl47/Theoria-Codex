@@ -25,7 +25,7 @@ class FavoriteTagEntryRecordTest {
     }
 
     @Test
-    fun `stored favorite tags keep their spelling`() {
+    fun `stored favorite tags keep their spelling, which recommendation normalization would change (ADR 0003)`() {
         val booru = FavoriteTagEntryRecord.fromDomain(
             FavoriteTagEntry(SourceKey.GELBOORU, listOf(" Blue  Hair ", "Jojo&#039;s Bizarre_Adventure")),
         )
@@ -33,5 +33,6 @@ class FavoriteTagEntryRecordTest {
 
         assertEquals(listOf("blue_hair", "jojo's_bizarre_adventure"), booru.tags)
         assertEquals("Full_Color", spaced.tag)
+        assertEquals(FavoriteTagEntry(SourceKey.PIXIV, "Ｂｌｕｅ_Hair"), FavoriteTagEntryRecord(source = "PIXIV", tag = " Ｂｌｕｅ_Hair ").toDomainOrNull())
     }
 }

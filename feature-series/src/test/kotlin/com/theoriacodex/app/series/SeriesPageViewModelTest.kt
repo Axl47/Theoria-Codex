@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.sourceFailureDetail
 import com.theoriacodex.data.repository.ChapterDownload
 import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.EntryProgressRestore
@@ -10,6 +11,8 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
@@ -267,7 +270,7 @@ class SeriesPageViewModelTest {
     }
 
     @Test
-    fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWordsWithoutRetry() = runTest {
+    fun `a source that cannot list the entries says why in its own words without retry (ADR 0007)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
         val source = Seasons(id.source)
@@ -277,6 +280,25 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals(RefreshFailure(Seasons.MESSAGE, retryable = false), viewModel.state.value.failure)
         collecting.cancel()
+    }
+
+    @Test
+    fun `any other failure's own text is never shown (ADR 0007)`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
+        val errors = listOf(IllegalStateException("socket closed by 10.0.0.2")) +
+            SourceFailureReason.entries.map { reason -> SourceAdapterException(reason, "socket closed by 10.0.0.2") }
+
+        val shown = errors.map { error ->
+            val source = Seasons(id.source, error)
+            val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
+            val collecting = launch { viewModel.state.collect {} }
+            advanceUntilIdle()
+            collecting.cancel()
+            checkNotNull(viewModel.state.value.failure).message
+        }
+
+        assertEquals(listOf(sourceFailureDetail(null)) + SourceFailureReason.entries.map { sourceFailureDetail(it) }, shown)
     }
 
     @Test
@@ -312,13 +334,16 @@ class SeriesPageViewModelTest {
     )
 }
 
-private class Seasons(override val key: SourceKey) : SeriesSource {
+private class Seasons(
+    override val key: SourceKey,
+    private val failure: Throwable = UnsupportedEntriesException(MESSAGE),
+) : SeriesSource {
     override val name = "Fake"
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = throw UnsupportedEntriesException(MESSAGE)
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = throw failure
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(emptyList())
 
     companion object {

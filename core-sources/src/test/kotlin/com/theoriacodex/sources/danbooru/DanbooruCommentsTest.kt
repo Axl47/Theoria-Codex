@@ -101,7 +101,7 @@ class DanbooruCommentsTest {
     }
 
     @Test
-    fun `listing hints follow last_commented_at`() = runTest {
+    fun `listing hints follow last_commented_at (ADR 0001)`() = runTest {
         fun hint(json: String) = JsonParser.parseString(json).asJsonObject.danbooruCommentHint()
         assertEquals(CommentHint.Some, hint("""{"last_commented_at":"2026-01-02T03:04:05.000-05:00"}"""))
         assertEquals(CommentHint.None, hint("""{"last_commented_at":null}"""))

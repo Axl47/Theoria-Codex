@@ -11,7 +11,7 @@ import org.junit.Test
 
 class SourceKeyTest {
     @Test
-    fun `built-in ids keep their historical names and round trip`() {
+    fun `built-in ids keep their historical names and round trip (ADR 0009)`() {
         val historicalNames = listOf(
             "PIXIV", "GELBOORU", "AIBOORU", "DANBOORU", "NHENTAI", "HITOMI", "IWARA",
             "RULE34XXX", "RULE34PAHEAL", "RULE34VIDEO", "RULE34GEN",
@@ -26,7 +26,7 @@ class SourceKeyTest {
     }
 
     @Test
-    fun `built-ins match exactly while custom ids normalize`() {
+    fun `built-ins match exactly while custom ids normalize (ADR 0009)`() {
         assertNull(SourceKey.parse("pixiv"))
         assertEquals(SourceKey.PIXIV, SourceKey.parse(" PIXIV "))
 
@@ -44,7 +44,7 @@ class SourceKeyTest {
     }
 
     @Test
-    fun `natural order is the old enum order followed by custom ids`() {
+    fun `natural order is the old enum order followed by custom ids (ADR 0009)`() {
         val customB = requireNotNull(SourceKey.parse("custom_b_example"))
         val customA = requireNotNull(SourceKey.parse("custom_a_example"))
 
@@ -54,7 +54,7 @@ class SourceKeyTest {
     }
 
     @Test
-    fun `a stored profile's id is its source identity`() {
+    fun `a stored profile's id is its source identity (ADR 0009)`() {
         val address = (SiteAddress.parse("safebooru.org") as SiteAddressParse.Valid).address
         val profile = SiteProfile("custom_safebooru_org", address, "Safebooru", "GELBOORU_02", addedAtEpochMs = 1L)
 

@@ -6,7 +6,7 @@ import com.theoriacodex.app.post.OTHER
 import com.theoriacodex.app.post.filePost
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.RecommendationProfile
