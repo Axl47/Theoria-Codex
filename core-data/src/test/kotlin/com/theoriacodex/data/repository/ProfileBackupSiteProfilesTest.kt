@@ -43,7 +43,7 @@ class ProfileBackupSiteProfilesTest {
     }
 
     @Test
-    fun `version 1 backups still decode and versions past 5 are refused`() {
+    fun `version 1 backups still decode and versions past 5 are refused (ADR 0024)`() {
         val v2 = codec.encode(emptyBackup()).toString(Charsets.UTF_8)
 
         assertEquals(emptyList<SiteProfile>(), codec.decode(v2.replace("\"version\":2", "\"version\":1").toByteArray()).customSources)
@@ -64,7 +64,17 @@ class ProfileBackupSiteProfilesTest {
     }
 
     @Test
-    fun `a restore that would pass the site limit fails before any journal is written`() = runTest {
+    fun `a null site entry rejects the whole backup (ADR 0031)`() {
+        val json = codec.encode(emptyBackup().copy(customSources = listOf(site("safebooru.org")))).toString(Charsets.UTF_8)
+        val record = Json.parseToJsonElement(json).jsonObject.getValue("customSources").jsonArray.single().toString()
+        val withNull = json.replace("\"customSources\":[$record]", "\"customSources\":[$record,null]")
+
+        assertTrue(withNull != json)
+        assertEquals("Invalid backup record: customSources", runCatching { codec.decode(withNull.toByteArray()) }.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `a restore that would pass the site limit fails before any journal is written (ADR 0025)`() = runTest {
         val stored = (1 until SiteProfile.MAX_CUSTOM_SITES).map { site("site$it.example") }
         val harness = service(InMemorySiteProfileRepository(stored))
         val bytes = codec.encode(emptyBackup().copy(customSources = listOf(site("new-a.example"), site("new-b.example"))))
@@ -78,7 +88,7 @@ class ProfileBackupSiteProfilesTest {
     }
 
     @Test
-    fun `journal recovery finishes even if sites filled the device after preflight`() = runTest {
+    fun `journal recovery finishes even if sites filled the device after preflight (ADR 0025, 0031)`() = runTest {
         val sites = InMemorySiteProfileRepository()
         val failingOnce = object : ProfileBackupStore {
             var fail = true
@@ -105,7 +115,7 @@ class ProfileBackupSiteProfilesTest {
     }
 
     @Test
-    fun `a conflicting site keeps the device profile and is reported`() = runTest {
+    fun `a conflicting site keeps the device profile and is reported (ADR 0031)`() = runTest {
         val local = site("safebooru.org", family = "GELBOORU_02")
         val harness = service(InMemorySiteProfileRepository(listOf(local)))
 

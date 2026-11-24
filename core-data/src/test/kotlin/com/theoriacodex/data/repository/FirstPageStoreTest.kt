@@ -35,7 +35,7 @@ class FirstPageStoreTest {
     private fun file() = File(temporary.root, FirstPageStore.SEARCH_FILE_NAME)
 
     @Test
-    fun `a saved page comes back for its own search only`() = runTest {
+    fun `a saved page comes back for its own search only (ADR 0021)`() = runTest {
         val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
 
         store.save("key-a", listOf(post("1"), post("2")))
@@ -45,7 +45,7 @@ class FirstPageStoreTest {
     }
 
     @Test
-    fun `comment hints survive a restore, including a listing that gave none`() = runTest {
+    fun `comment hints survive a restore, including a listing that gave none (ADR 0021)`() = runTest {
         val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
         val hints = listOf(CommentHint(3), CommentHint.Some, CommentHint.None, null)
 
@@ -55,7 +55,7 @@ class FirstPageStoreTest {
     }
 
     @Test
-    fun `file and picture hashes survive a restore`() = runTest {
+    fun `file and picture hashes survive a restore (ADR 0021)`() = runTest {
         val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
         val hashes = listOf("0123456789abcdef0123456789abcdef", null)
         val pictures = listOf(null, -0x7FF0_0000_0000_0001L)
@@ -91,7 +91,7 @@ class FirstPageStoreTest {
     }
 
     @Test
-    fun `an unreadable file only costs the instant paint`() = runTest {
+    fun `an unreadable file only costs the instant paint (ADR 0021)`() = runTest {
         file().writeText("{not json")
 
         assertTrue(FirstPageStore(file(), StandardTestDispatcher(testScheduler)).load("key-a").isEmpty())

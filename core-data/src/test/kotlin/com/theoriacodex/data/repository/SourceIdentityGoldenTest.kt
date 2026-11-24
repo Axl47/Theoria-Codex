@@ -20,17 +20,17 @@ import org.junit.Test
 
 class SourceIdentityGoldenTest {
     @Test
-    fun `default settings file keeps its persisted bytes`() {
+    fun `default settings file keeps its persisted bytes (ADR 0034)`() {
         assertGolden("settings-default.json", encodeSettingsFile(AppSettings()))
     }
 
     @Test
-    fun `multi-source settings file keeps its persisted bytes`() {
+    fun `multi-source settings file keeps its persisted bytes (ADR 0034)`() {
         assertGolden("settings-multi-source.json", encodeSettingsFile(multiSourceSettings()))
     }
 
     @Test
-    fun `multi-source backup keeps its encoded bytes`() {
+    fun `multi-source backup keeps its encoded bytes (ADR 0034)`() {
         assertGolden("backup-multi-source.json", ProfileBackupCodec().encode(multiSourceBackup()).toString(Charsets.UTF_8))
     }
 

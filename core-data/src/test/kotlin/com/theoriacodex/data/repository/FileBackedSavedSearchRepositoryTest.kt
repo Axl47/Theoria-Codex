@@ -84,7 +84,17 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `a backup's For You pin is imported as source searches`() = runTest {
+    fun `an incoming ordinary search replaces the local one with its ID (ADR 0020, 0025)`() = runTest {
+        val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-replace"))
+        val local = repository.save("Mine", execution())
+
+        repository.merge(listOf(local.copy(name = "From the backup", search = execution().copy(queryHash = "imported"))))
+
+        assertEquals(listOf("From the backup" to "imported"), repository.observeSavedSearches().first().map { it.name to it.search.queryHash })
+    }
+
+    @Test
+    fun `a backup's For You pin is imported as source searches (ADR 0020)`() = runTest {
         val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-for-you"), sourceName = { it.id.lowercase() })
 
         repository.merge(goldenPins())
@@ -94,7 +104,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `a backup's For You pin never replaces the local search with its ID`() = runTest {
+    fun `a backup's For You pin never replaces the local search with its ID (ADR 0020)`() = runTest {
         val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-for-you-id"), sourceName = { it.id.lowercase() })
         val forYouPin = goldenPins().first { it.search.isRetiredForYouSearch }
         val local = SavedSearchEntry(forYouPin.id, "Mine", execution(), 1)
@@ -124,7 +134,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `semantic corruption is quarantined before recovering an empty library`() = runTest {
+    fun `semantic corruption is quarantined before recovering an empty library (ADR 0038)`() = runTest {
         val directory = tempDir("pin-corruption")
         val storage = directory.resolve("pinned_searches.json")
         storage.writeText(goldenPinnedSearchesFile().replace("\"pin-multi\"", "\"pin-fyp\""))
@@ -139,7 +149,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `a file from a newer build is refused and left in place`() = runTest {
+    fun `a file from a newer build is refused and left in place (ADR 0038)`() = runTest {
         val directory = tempDir("pin-newer")
         val storage = directory.resolve("pinned_searches.json")
         val newer = """{"schemaVersion":2,"searches":{"shape":"unknown to this build"}}"""
@@ -155,7 +165,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `a file the Gson store wrote loads with its For You pin as source searches, rewritten once`() = runTest {
+    fun `a file the Gson store wrote loads with its For You pin as source searches, rewritten once (ADR 0020)`() = runTest {
         val directory = tempDir("pin-golden")
         val storage = directory.resolve("pinned_searches.json")
         storage.writeText(goldenPinnedSearchesFile())

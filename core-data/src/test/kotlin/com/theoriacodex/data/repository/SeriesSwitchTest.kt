@@ -15,14 +15,24 @@ class SeriesSwitchTest {
     private val to = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_2"), "/b"), "Series"))
 
     @Test
-    fun `progress does not move between a manga and an anime`() {
+    fun `a switch carries the per-series settings and the earlier followed time, never the shared-first-page flag (ADR 0028)`() {
+        val old = from.copy(followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/1",
+            downloadNewChapters = true, chaptersShareFirstPage = true, followedAtEpochMs = 5L, checkedAtEpochMs = 9L)
+        val target = to.copy(followed = true, followedAtEpochMs = 7L)
+
+        assertEquals(target.copy(readingMode = GalleryReadingMode.VERTICAL, downloadNewChapters = true, followedAtEpochMs = 5L),
+            target.withSettingsOf(old))
+    }
+
+    @Test
+    fun `progress does not move between a manga and an anime (ADR 0028)`() {
         val anime = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_2"), "/b"), "Series"))
 
         assertThrows(IllegalArgumentException::class.java) { carryProgress(from, emptyList(), anime, emptyList()) }
     }
 
     @Test
-    fun `a number matches the same translator group, else the first in reading order`() {
+    fun `a number matches the same translator group, else the first in reading order (ADR 0028)`() {
         val first = SeriesEntry("/1-x", "Ch. 1", 1f, "X")
         val ours = SeriesEntry("/1-a", "Ch. 1", 1f, "Group A")
         val candidates = listOf(first, ours, SeriesEntry("/2", "Ch. 2", 2f))
@@ -33,7 +43,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `a name matches where either lacks a number, when no other entry on either side has it`() {
+    fun `a name matches where either lacks a number, when no other entry on either side has it (ADR 0028)`() {
         val extra = SeriesEntry("/extra", "Extra: Side Story!")
         val numbered = SeriesEntry("/5", "Oneshot", 5f)
         val half = SeriesEntry("/10.5", "Chapter 10.5")
@@ -51,7 +61,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `below the chapter the user is in, only chapters the old source lacks are filled in as read`() {
+    fun `below the chapter the user is in, only chapters the old source lacks are filled in as read (ADR 0028)`() {
         val old = listOf(
             stored(SeriesEntry("/o200", "200", 200f), order = 0, read = true),
             stored(SeriesEntry("/o12", "12", 12f, "A"), order = 1, position = 12),
@@ -72,7 +82,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `a finished chapter stays finished, and without one opened only chapters read there are read`() {
+    fun `a finished chapter stays finished, and without one opened only chapters read there are read (ADR 0028)`() {
         val old = listOf(stored(SeriesEntry("/o3", "3", 3f), order = 0, read = true, position = 9), stored(SeriesEntry("/o1", "1", 1f), order = 1))
         val new = listOf(3f, 2f, 1f).mapIndexed { order, number -> stored(SeriesEntry("/n$number", "$number", number), order) }
 
@@ -85,7 +95,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `every chapter partway through keeps its place, the further one winning, capped at its page count`() {
+    fun `every chapter partway through keeps its place, the further one winning, capped at its page count (ADR 0028)`() {
         val old = listOf(
             stored(SeriesEntry("/o3", "3", 3f), order = 0, position = 4),
             stored(SeriesEntry("/o2", "2", 2f), order = 1, position = 15),
@@ -105,7 +115,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `an episode keeps its own watched state and place, and one the old source lacks stays unwatched`() {
+    fun `an episode keeps its own watched state and place, and one the old source lacks stays unwatched (ADR 0028)`() {
         val watching = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/a"), "Series"), lastOpenedEntry = "/o5")
         val switched = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_2"), "/b"), "Series"))
         val old = listOf(
@@ -127,7 +137,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `each release of a chapter keeps its own read state, and another group's release takes the chapter's`() {
+    fun `each release of a chapter keeps its own read state, and another group's release takes the chapter's (ADR 0028)`() {
         val old = listOf(
             stored(SeriesEntry("/o5a", "5", 5f, "A"), order = 0, read = true),
             stored(SeriesEntry("/o5b", "5", 5f, "B"), order = 1, position = 4),
@@ -160,7 +170,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `a series already read further keeps its own progress`() {
+    fun `a series already read further keeps its own progress (ADR 0028)`() {
         val old = listOf(stored(SeriesEntry("/o1", "1", 1f), order = 0, position = 3))
         val new = listOf(
             stored(SeriesEntry("/n2", "2", 2f), order = 0, read = true, position = 9, length = 9),
@@ -174,7 +184,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `each read time goes to the chapter it matches, also with no chapter opened last`() {
+    fun `each read time goes to the chapter it matches, also with no chapter opened last (ADR 0028)`() {
         val old = listOf(
             stored(SeriesEntry("/o2", "2", 2f), order = 0).copy(lastReadAtEpochMs = 20L),
             stored(SeriesEntry("/o1", "1", 1f), order = 1).copy(lastReadAtEpochMs = 10L),

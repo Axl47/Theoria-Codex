@@ -39,7 +39,7 @@ class ApplicationDataReadinessTest {
     }
 
     @Test
-    fun `construction is lazy and concurrent awaiters share one initialization`() = runTest {
+    fun `construction is lazy and concurrent awaiters share one initialization (ADR 0032)`() = runTest {
         val calls = AtomicInteger()
         val release = CompletableDeferred<Unit>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -66,7 +66,7 @@ class ApplicationDataReadinessTest {
     }
 
     @Test
-    fun `failure is sticky until explicit retry and retry publishes the recovered value`() = runTest {
+    fun `failure is sticky until explicit retry and retry publishes the recovered value (ADR 0032)`() = runTest {
         val calls = AtomicInteger()
         val expected = IllegalStateException("first attempt failed")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -95,7 +95,7 @@ class ApplicationDataReadinessTest {
     }
 
     @Test
-    fun `cancelling one waiter does not cancel process initialization`() = runTest {
+    fun `cancelling one waiter does not cancel process initialization (ADR 0032)`() = runTest {
         val release = CompletableDeferred<Unit>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val readiness = ApplicationDataReadiness(

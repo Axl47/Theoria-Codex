@@ -7,14 +7,14 @@ import org.junit.Test
 
 class FavoriteTagEntryRecordTest {
     @Test
-    fun `a record written before or groups reads as one saved tag`() {
+    fun `a record written before or groups reads as one saved tag (ADR 0038)`() {
         val record = FavoriteTagEntryRecord(source = "GELBOORU", tag = "Blue Hair")
 
         assertEquals(FavoriteTagEntry(SourceKey.GELBOORU, "blue_hair"), record.toDomainOrNull())
     }
 
     @Test
-    fun `a saved group keeps its first tag readable by older builds and round trips`() {
+    fun `a saved group keeps its first tag readable by older builds and round trips (ADR 0038)`() {
         val group = FavoriteTagEntry(SourceKey.GELBOORU, listOf("blue_hair", "red_hair"), "Hair colors")
 
         val record = FavoriteTagEntryRecord.fromDomain(group)

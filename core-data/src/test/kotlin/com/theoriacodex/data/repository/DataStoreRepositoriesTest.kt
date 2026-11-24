@@ -6,7 +6,9 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.sha256
+import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.ViewerPlaybackMode
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -57,7 +59,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `constructors perform no file reads or writes`() = runTest {
+    fun `constructors perform no file reads or writes (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("constructor-no-io")
         val scope = newDataStoreScope()
 
@@ -70,7 +72,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `source weight memory survives repository reconstruction`() = runTest {
+    fun `source weight memory survives repository reconstruction (ADR 0036)`() = runTest {
         val directory = tempFolder.newFolder("weight-memory")
         val firstScope = newDataStoreScope()
         val first = DataStoreSettingsRepository(directory, firstScope)
@@ -116,6 +118,22 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `settings values this build does not know fall back without resetting the file (ADR 0038)`() = runTest {
+        val directory = tempFolder.newFolder("settings-unknown-values")
+        directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
+            """{"schemaVersion":3,"settings":{"invertMultiImageScrollDirection":true,""" +
+                """"viewerPlaybackMode":"FUTURE_MODE","viewerCommentOrder":"FUTURE_ORDER"}}""",
+        )
+        val scope = newDataStoreScope()
+        val settings = DataStoreSettingsRepository(directory, scope).observeSettings().first()
+
+        assertTrue(settings.viewer.invertMultiImageScrollDirection)
+        assertEquals(ViewerPlaybackMode.LOOP to CommentOrder.OLDEST, settings.viewer.playbackMode to settings.viewer.commentOrder)
+        assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isEmpty())
+        scope.closeDataStores()
+    }
+
+    @Test
     fun `retired legacy files and import proofs are ignored without resetting either store`() = runTest {
         val directory = tempFolder.newFolder("retired-legacy-imports")
         val proofs = """[{"sourceFileName":"settings_store.json","sourceSchemaVersion":2,""" +
@@ -152,7 +170,7 @@ class DataStoreRepositoriesTest {
         scope.closeDataStores()
     }
     @Test
-    fun `minimal pre-catalog settings gain every later source and retain legacy defaults`() = runTest {
+    fun `minimal pre-catalog settings gain every later source and retain legacy defaults (ADR 0029)`() = runTest {
         val directory = tempFolder.newFolder("settings-pre-catalog")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
             """{"schemaVersion":3,"settings":{"enabledSources":["PIXIV"],"cacheFullImageOnSave":true}}"""
@@ -172,7 +190,7 @@ class DataStoreRepositoriesTest {
         scope.closeDataStores()
     }
     @Test
-    fun `settings corruption is backed up and resets to defaults`() = runTest {
+    fun `settings corruption is backed up and resets to defaults (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("settings-corruption")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("{broken")
         val scope = newDataStoreScope()
@@ -185,7 +203,7 @@ class DataStoreRepositoriesTest {
         scope.closeDataStores()
     }
     @Test
-    fun `a second corruption keeps the first set-aside file`() = runTest {
+    fun `a second corruption keeps the first set-aside file (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("settings-corrupted-twice")
         val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         listOf("{first broken", "{second broken").forEach { broken ->
@@ -202,7 +220,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings that cannot be set aside fail to open instead of resetting`() = runTest {
+    fun `settings that cannot be set aside fail to open instead of resetting (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("settings-set-aside-fails")
         val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         val broken = "{broken".encodeToByteArray()
@@ -219,7 +237,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `newer settings schema fails closed without corruption replacement`() = runTest {
+    fun `newer settings schema fails closed without corruption replacement (ADR 0032, 0033)`() = runTest {
         val directory = tempFolder.newFolder("settings-future-schema")
         val destination = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         val future = """{"schemaVersion":99,"settings":{},"legacyImports":[]}"""
@@ -236,7 +254,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `concurrent settings mutations are serialized without lost profile state`() = runTest {
+    fun `concurrent settings mutations are serialized without lost profile state (ADR 0035)`() = runTest {
         val directory = tempFolder.newFolder("settings-concurrency")
         val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
@@ -256,7 +274,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings persistence policy bounds growing profile-owned collections`() {
+    fun `settings persistence policy bounds growing profile-owned collections (ADR 0036)`() {
         val profileId = "profile-0"
         val normalized = normalizeDataStoreSettings(
             AppSettings(
@@ -349,7 +367,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `newer ui schema fails closed without corruption replacement`() = runTest {
+    fun `newer ui schema fails closed without corruption replacement (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("ui-future-schema")
         val destination = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
         val future = """{"schemaVersion":99,"state":{},"legacyImports":[]}"""

@@ -31,7 +31,25 @@ class RecentSearchPayloadCodecTest {
     }
 
     @Test
-    fun `a retired For You payload reads as Unified with tags for every source it searched`() {
+    fun `normalize gives the entry storing would keep, sources once and tags only for searched sources (ADR 0038)`() {
+        val entry = RecentSearchEntry(
+            query = query(QueryMode.Unified),
+            queryHash = "hash",
+            searchedAtEpochMs = 1L,
+            kind = RecentSearchKind.MULTI_SEARCH,
+            sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV, SourceKey.PIXIV),
+            sourceTags = mapOf(SourceKey.PIXIV to listOf("night"), SourceKey.DANBOORU to listOf("stray")),
+        )
+
+        val normalized = RecentSearchPayloadCodec.normalize(entry)
+
+        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), normalized.sources)
+        assertEquals(mapOf(SourceKey.PIXIV to listOf("night")), normalized.sourceTags)
+        assertEquals(normalized, RecentSearchPayloadCodec.normalize(normalized))
+    }
+
+    @Test
+    fun `a retired For You payload reads as Unified with tags for every source it searched (ADR 0038)`() {
         val stored = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified",""" +
             """"includeTags":["night"],"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["GELBOORU","PIXIV"],""" +
             """"sourceTags":{"PIXIV":["night"]}}"""

@@ -48,7 +48,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `mutations follow the shared list rules`() = runBlocking {
+    fun `mutations follow the shared list rules (ADR 0035)`() = runBlocking {
         withRepository(temporary.newFolder()) { repository ->
             val site = profile("booru.example")
             repository.add(site)
@@ -65,7 +65,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `the site limit applies to adds but never to restores`() = runBlocking {
+    fun `the site limit applies to adds but never to restores (ADR 0031)`() = runBlocking {
         withRepository(temporary.newFolder()) { repository ->
             val full = (1..SiteProfile.MAX_CUSTOM_SITES).map { profile("site$it.example") }
             full.forEach { assertEquals(SiteProfileAddResult.Added, repository.add(it)) }
@@ -77,7 +77,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `unreadable records are skipped but written back untouched`() = runBlocking {
+    fun `unreadable records are skipped but written back untouched (ADR 0021, 0031)`() = runBlocking {
         val directory = temporary.newFolder()
         val unreadable = """{"sourceId":"custom_future_example","baseUrl":"https://future.example","label":"","family":"X","addedAt":1}"""
         directory.resolve(SITE_PROFILES_FILE_NAME).writeText("""{"schemaVersion":1,"sites":[$unreadable,null]}""")
@@ -95,7 +95,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `a newer schema is refused rather than overwritten`() = runBlocking {
+    fun `a newer schema is refused rather than overwritten (ADR 0021)`() = runBlocking {
         val directory = temporary.newFolder()
         val newer = """{"schemaVersion":2,"sites":[]}"""
         directory.resolve(SITE_PROFILES_FILE_NAME).writeText(newer)
@@ -109,7 +109,7 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `an unreadable file is set aside and reported, also after a restart`() = runBlocking {
+    fun `an unreadable file is set aside and reported, also after a restart (ADR 0021)`() = runBlocking {
         val directory = temporary.newFolder()
         directory.resolve(SITE_PROFILES_FILE_NAME).writeText("{broken")
         val firstProcess = FileStoreRecoveryRegistry()

@@ -44,7 +44,7 @@ class OfflinePendingJobStoreTest {
     }
 
     @Test
-    fun `saved requests reload and an unreadable queue fails instead of dropping work`() = runTest {
+    fun `saved requests reload and an unreadable queue fails instead of dropping work (ADR 0022)`() = runTest {
         val file = temporary.root.resolve("queue.json")
         val requests = mapOf("codex:x" to listOf(PostId(SourceKey.PIXIV, "7"), PostId(SourceKey.PIXIV, "7")))
         val store = OfflinePendingJobStore(file)

@@ -41,7 +41,7 @@ class GalleryReadingModeRepositoryTest {
     }
 
     @Test
-    fun `unreadable and extension-source entries are skipped and a newer schema fails without touching the file`() = runTest {
+    fun `unreadable and extension-source entries are skipped and a newer schema fails without touching the file (ADR 0021)`() = runTest {
         val directory = temporary.newFolder()
         val file = directory.resolve(GALLERY_READING_MODES_FILE_NAME)
         file.writeText(

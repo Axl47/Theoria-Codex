@@ -30,7 +30,7 @@ class SourceWeightSettingsTest {
     }
 
     @Test
-    fun `group weights survive normalization without changing other source configurations`() {
+    fun `group weights survive normalization without changing other source configurations (ADR 0036)`() {
         val group = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         val original = SourceWeightSettings.normalize(SourceRuntimeSettings())
         val updated = SourceWeightSettings.normalize(SourceWeightSettings.updateWeights(
@@ -44,7 +44,7 @@ class SourceWeightSettingsTest {
     }
 
     @Test
-    fun `editing active configuration updates active weights too`() {
+    fun `editing active configuration updates active weights too (ADR 0036)`() {
         val group = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         val updated = SourceWeightSettings.normalize(SourceWeightSettings.updateWeights(
             SourceRuntimeSettings(enabledSources = group),
@@ -55,7 +55,7 @@ class SourceWeightSettingsTest {
     }
 
     @Test
-    fun `a newly opted-in custom source gets an even share instead of dominating`() {
+    fun `a newly opted-in custom source gets an even share instead of dominating (ADR 0029)`() {
         val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
         val existing = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5)
 
@@ -65,5 +65,30 @@ class SourceWeightSettingsTest {
             assertEquals(1.0 / 3.0, weights.getValue(source), 1e-9)
         }
         assertEquals(listOf(SourceKey.PIXIV, SourceKey.GELBOORU, custom), weights.keys.toList())
+    }
+
+    @Test
+    fun `weights already normalized pass through bit for bit (ADR 0029)`() {
+        val weights = mapOf(SourceKey.PIXIV to 0.3, SourceKey.GELBOORU to 0.3, SourceKey.IWARA to 0.4)
+
+        assertEquals(weights, RepositoryPolicies.normalizeSourceWeights(weights.keys, weights))
+    }
+
+    @Test
+    fun `several largest weights normalize to finite shares summing to one (ADR 0029)`() {
+        val weights = mapOf(SourceKey.PIXIV to Double.MAX_VALUE, SourceKey.GELBOORU to Double.MAX_VALUE, SourceKey.IWARA to 0.0)
+
+        assertEquals(mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5, SourceKey.IWARA to 0.0),
+            RepositoryPolicies.normalizeSourceWeights(weights.keys, weights))
+    }
+
+    @Test
+    fun `a missing weight whose mean overflows falls back to even shares (ADR 0029)`() {
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+        val weights = mapOf(SourceKey.PIXIV to Double.MAX_VALUE, SourceKey.GELBOORU to Double.MAX_VALUE)
+
+        val normalized = RepositoryPolicies.normalizeSourceWeights(weights.keys + custom, weights)
+
+        assertEquals(listOf(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0), normalized.values.toList())
     }
 }
