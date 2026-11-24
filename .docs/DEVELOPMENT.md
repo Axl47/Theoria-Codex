@@ -149,7 +149,6 @@ From the project root, run the deterministic test lane. `scripts/check.sh` holds
 scripts/check.sh --part tests   # unit tests of every module, coverage, changed-line coverage
 scripts/check.sh --part lint    # Android lint of every Android module
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
 ./gradlew :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin
 ```
 
