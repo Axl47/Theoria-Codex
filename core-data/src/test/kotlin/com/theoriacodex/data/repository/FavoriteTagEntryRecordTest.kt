@@ -23,4 +23,15 @@ class FavoriteTagEntryRecordTest {
         assertEquals(group, record.toDomainOrNull())
         assertNull(FavoriteTagEntryRecord.fromDomain(FavoriteTagEntry(SourceKey.PIXIV, "cat")).tags)
     }
+
+    @Test
+    fun `stored favorite tags keep their spelling`() {
+        val booru = FavoriteTagEntryRecord.fromDomain(
+            FavoriteTagEntry(SourceKey.GELBOORU, listOf(" Blue  Hair ", "Jojo&#039;s Bizarre_Adventure")),
+        )
+        val spaced = FavoriteTagEntryRecord.fromDomain(FavoriteTagEntry(SourceKey.HITOMI, " Full_Color "))
+
+        assertEquals(listOf("blue_hair", "jojo's_bizarre_adventure"), booru.tags)
+        assertEquals("Full_Color", spaced.tag)
+    }
 }

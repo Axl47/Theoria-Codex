@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionChoices
+import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -288,7 +289,7 @@ internal data class FavoriteTagEntryRecord(
 
     companion object {
         fun fromDomain(entry: FavoriteTagEntry): FavoriteTagEntryRecord {
-            val normalized = entry.tags.map { tag -> RepositoryPolicies.normalizeFavoriteTag(entry.source, tag) }
+            val normalized = entry.tags.map { tag -> normalizeFavoriteTagForStorage(entry.source, tag) }
             return FavoriteTagEntryRecord(
                 source = entry.source.id,
                 tag = normalized.first(),
