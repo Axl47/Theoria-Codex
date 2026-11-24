@@ -20,8 +20,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.recommend.FOR_YOU_CHIPS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMBS_TAG
@@ -97,7 +95,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         assertTrue(compose.onAllNodesWithTag(FOR_YOU_CHIPS_TAG).fetchSemanticsNodes().isEmpty())
         saveScreenshot("deck-tag-trail")
 
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        pressSystemBack()
         waitFor("trail crumbs are gone after Back") { compose.onAllNodesWithTag(FOR_YOU_CRUMBS_TAG).fetchSemanticsNodes().isEmpty() }
         assertEquals(card, currentCard())
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertIsDisplayed()

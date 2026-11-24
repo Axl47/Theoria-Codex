@@ -20,8 +20,6 @@ import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.SearchScrollState
@@ -99,7 +97,6 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithText("Add an alternative"))
         addSearchTag("green")
-        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         // Touch mode is reported if the composer fails to collapse after the keyboard submits.
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
@@ -141,7 +138,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         scenario.recreate()
         compose.onNodeWithContentDescription(requireNotNull(posts.getValue(SourceKey.PIXIV)[22].title)).assertIsDisplayed()
-        device.pressBack()
+        pressSystemBack()
         waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(before, cardOffsetInViewport(cardTag), 2f)

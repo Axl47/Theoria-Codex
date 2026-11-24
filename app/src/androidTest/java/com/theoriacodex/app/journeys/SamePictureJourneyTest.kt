@@ -8,8 +8,6 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.domain.model.Post
@@ -52,7 +50,7 @@ class SamePictureJourneyTest : AppJourneyFixture() {
         waitFor("search result for ${other.source} shows the other copy", timeoutMillis = 15_000) { shows(other) }
         activate(compose.onNodeWithContentDescription("Filter and sort"))
         activate(compose.onNodeWithText("Hide saved"))
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        pressSystemBack()
         waitFor("other copy is hidden after Hide saved") { !shows(other) }
         waitFor("${other.source} journey-1 copy is shown", timeoutMillis = 5_000) { shows(PostId(other.source, "journey-1")) }
     }
