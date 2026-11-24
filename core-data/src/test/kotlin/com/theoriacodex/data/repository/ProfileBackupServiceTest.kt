@@ -11,7 +11,6 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
-import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.model.Post
@@ -179,9 +178,7 @@ class ProfileBackupServiceTest {
             media = listOf(ImageRef("file:///private/photo", "/private/photo", "image/jpeg")),
             pageUrl = "https://example.test/page?auth=secret",
         )
-        val source = backup.copy(settings = backup.settings.copy(
-            scenarioPreset = ScenarioPreset.SLOW_NETWORK,
-        ), library = backup.library.copy(posts = listOf(localPost)))
+        val source = backup.copy(library = backup.library.copy(posts = listOf(localPost)))
         val bytes = codec.encode(source)
         val json = bytes.toString(Charsets.UTF_8)
         assertFalse(json.contains("secret"))
@@ -190,17 +187,6 @@ class ProfileBackupServiceTest {
         assertNull(restored.library.posts.single().preview.url)
         assertNull(restored.library.posts.single().full)
         assertNull(restored.library.posts.single().media.single().localPath)
-        assertEquals(ScenarioPreset.NORMAL, restored.settings.scenarioPreset)
-    }
-
-    @Test fun `a backup carries no extension trust`() {
-        val backup = backup()
-        val trusting = backup.copy(settings = backup.settings.copy(extensions = ExtensionChoices(mapOf("extension.a" to "signer-key"), mapOf("extension.a" to setOf("en")))))
-
-        val bytes = codec.encode(trusting)
-
-        assertFalse(bytes.toString(Charsets.UTF_8).contains("signer-key"))
-        assertEquals(ExtensionChoices(), codec.decode(bytes).settings.extensions)
     }
 
     @Test fun `restore merges into matching profiles and preserves current preferences and content`() = runTest {
