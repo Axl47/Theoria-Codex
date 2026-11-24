@@ -55,7 +55,8 @@ class FindCommentsTest(unittest.TestCase):
         self.assertEqual(texts(source, kotlin=False), ["/* outer /* inner */"])
 
     def test_tool_directives_are_not_counted(self) -> None:
-        source = "//noinspection AndroidLintSdCardPath\n// @formatter:off\n// prose\n/* @formatter:on\nTODO */\n"
+        source = "// Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE.\n"
+        source += "//noinspection AndroidLintSdCardPath\n// @formatter:off\n// prose\n/* @formatter:on\nTODO */\n"
         path = write_source(self, source)
         self.assertEqual([c.text for c in check_comments.counted_comments(path)], ["// prose", "/* @formatter:on\nTODO */"])
 
