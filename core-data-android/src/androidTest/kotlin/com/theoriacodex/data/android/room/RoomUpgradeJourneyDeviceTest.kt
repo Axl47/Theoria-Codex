@@ -14,7 +14,7 @@ class RoomUpgradeJourneyDeviceTest {
     val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), TheoriaRoomDatabase::class.java)
 
     @Test fun persistedUpgradePreservesLibraryHistoryAndSubsequentWrites() = runBlocking {
-        for (version in listOf(1, 2, 6)) {
+        for (version in listOf(1, 2, 6, 11)) {
             RoomUpgradeScenario.verify(InstrumentationRegistry.getInstrumentation().targetContext, helper, version)
         }
     }

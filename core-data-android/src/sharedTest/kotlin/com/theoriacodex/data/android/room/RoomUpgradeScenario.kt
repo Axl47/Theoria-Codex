@@ -207,8 +207,8 @@ object RoomUpgradeScenario {
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihon_example_org','1',?)", arrayOf(payload("named-site")))
         database.execSQL("INSERT INTO codex_items VALUES('saved','custom_mihon_7','L3M',5)")
         database.execSQL("INSERT INTO liked_posts VALUES('a','custom_mihon_7','L3M',5,'[]')")
-        // Proof rows the retired importers wrote; the v11 migration drops their tables.
-        database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
+        // Proof rows the retired importers wrote; the v11 migration drops their tables, so v1.9.2's schema 11 has neither.
+        if (version < 11) database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
         if (version >= 2) {
             val sectionColumn = if (version >= 3) ",section" else ""
             val progressColumn = if (version >= 6) ",max_viewed_media_number" else ""
@@ -231,11 +231,13 @@ object RoomUpgradeScenario {
                 database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section) " +
                     "VALUES('PIXIV','other',34,3,'SEARCH','for_you:seed','FYP')")
             }
-            database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
+            if (version < 11) database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
         }
         if (version >= 4) {
+            // Version 7 added rule groups, with no default: every tag of a one-group rule is in group 0.
+            val (groupColumn, groupValue) = if (version >= 7) ",group_index" to ",0" else "" to ""
             for (tag in listOf("sky", "cloud")) {
-                database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display) VALUES('saved','PIXIV',?,?)", arrayOf(tag, tag))
+                database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display$groupColumn) VALUES('saved','PIXIV',?,?$groupValue)", arrayOf(tag, tag))
             }
         }
     }
