@@ -87,4 +87,4 @@ and link the record that replaces it.
 | [0066](0066-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
-| [0209](0209-startup-offline-catalog-and-full-display.md) | Startup does not wait for the offline catalog, and the launch reports full display from the restored tab |
+| [0211](0211-startup-offline-catalog-and-full-display.md) | Startup does not wait for the offline catalog, and the launch reports full display from the restored tab |
