@@ -214,7 +214,7 @@ class RoomSeriesRepository(
             val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction false
             val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
             // All stored entries count, also ones the old source no longer lists: their progress goes with the series.
-            if (entries.isEmpty() && oldEntries.any { it.read || it.position > 0 }) throw NoChaptersToMoveToException()
+            if (entries.isEmpty() && oldEntries.any(StoredSeriesEntry::hasProgress)) throw NoChaptersToMoveToException()
             write(to, entries)
             val target = dao.series(to.id.source.id, to.id.address).toStored()
             val (moved, changed) = carryProgress(old, oldEntries, target, dao.entries(to.id.source.id, to.id.address).map(SeriesEntryEntity::toStored))

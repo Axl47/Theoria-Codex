@@ -175,7 +175,7 @@ internal fun BackupSeries.withinEntryLimit(): BackupSeries {
     if (entries.size <= MAX_BACKUP_SERIES_ENTRIES) return this
     fun tier(entry: StoredSeriesEntry) = when {
         entry.entry.address == series.lastOpenedEntry -> 0
-        entry.read || entry.position > 0 -> 1
+        entry.hasProgress -> 1
         entry.sourceOrder >= 0 -> 2
         else -> 3
     }

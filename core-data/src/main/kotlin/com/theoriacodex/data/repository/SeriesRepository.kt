@@ -47,7 +47,13 @@ data class StoredSeriesEntry(
     val length: Long? = null,
     /** When the user last opened it or moved through it; null before that was kept. Marking it read does not count. */
     val lastReadAtEpochMs: Long? = null,
-)
+) {
+    /**
+     * Whether the user did anything with it: read it, or got past its start. What keeps a series in a backup and makes
+     * a switch of source refuse a series without chapters; `SeriesDao.ENTRY_HAS_PROGRESS` is the same rule in SQL.
+     */
+    val hasProgress: Boolean get() = read || position > 0
+}
 
 /**
  * A followed series as the Following list shows it. [lastUpdatedAtEpochMs] is when its newest listed entry came out,
@@ -212,8 +218,8 @@ fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).c
 /**
  * The playback position, in milliseconds, an episode starts at: where the user left it, watched or not, unless
  * [episodeStartsOver] there. Watching [ANIME_FINISHED_PERCENT] still marks it watched and moves Continue on, but one
- * left at 20:30 of 24:00 reopens there. Without a known duration, as after a switch of source, the Viewer applies
- * [episodeStartsOver] once the duration is known.
+ * left at 20:30 of 24:00 reopens there. Without a known duration, as after a switch of source, it resumes where it was
+ * left.
  */
 fun StoredSeriesEntry.resumePositionMs(): Long {
     val length = length ?: return position
@@ -223,7 +229,8 @@ fun StoredSeriesEntry.resumePositionMs(): Long {
 /**
  * Whether an episode [lengthMs] long, left at [positionMs], starts over rather than resuming: the position is in its
  * tail, the last [RESUME_TAIL_MS] or last 10% of it, whichever is shorter. For a 24-minute episode that is its ending
- * and next-episode preview, where it was as good as played out. The Viewer applies the same rule within a session.
+ * and next-episode preview, where it was as good as played out. Within a session the Viewer keeps its own, narrower
+ * rule, so an episode the user swipes back to resumes there.
  */
 fun episodeStartsOver(positionMs: Long, lengthMs: Long): Boolean =
     lengthMs > 0 && positionMs >= lengthMs - minOf(RESUME_TAIL_MS, lengthMs / 10)

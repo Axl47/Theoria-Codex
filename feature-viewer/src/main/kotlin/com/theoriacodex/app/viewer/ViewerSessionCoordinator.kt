@@ -47,9 +47,9 @@ sealed interface ViewerSeries {
 
     /**
      * Episodes, each one long video. [startPositionsMs] holds where the user stopped in each episode that has saved
-     * progress, in milliseconds: it starts there, and any other episode at its start. A position in the episode's tail
-     * ([com.theoriacodex.data.repository.episodeStartsOver]) counts as played out, so that episode starts over rather
-     * than ending at once. The positions seed the Viewer's video positions ([rememberViewerVideoPositions]);
+     * progress, in milliseconds: it starts there, and any other episode at its start. A position within
+     * [VIEWER_EPISODE_END_MARGIN_MS] of the episode's end counts as watched to the end, so that episode starts over
+     * rather than ending at once. The positions seed the Viewer's video positions ([rememberViewerVideoPositions]);
      * where the user gets to goes back through [ViewerScreenHost.onPlaybackProgress].
      */
     data class Watching(
