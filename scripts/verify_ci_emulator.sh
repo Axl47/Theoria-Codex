@@ -3,6 +3,7 @@
 set -euo pipefail
 readonly repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo"
+source scripts/device_validation_common.sh
 readonly owner="${1:-}"
 [[ "$owner" == debug || "$owner" == acceptance ]] || { echo 'Expected debug or acceptance.' >&2; exit 2; }
 [[ "${GITHUB_ACTIONS:-}" == true ]] || { echo 'CI emulator wrapper requires GitHub Actions.' >&2; exit 2; }
@@ -73,18 +74,6 @@ avd_api="$(sed -n 's/^target=android-//p' "$evidence/avd.ini" | tr -d '\r')"
   exit 2
 }
 
-# Error dialogs already on screen ("Application Not Responding: <process>", "Application Error: ...").
-# Closing one force-stops the frozen process, which Android restarts.
-error_dialogs_closed() {
-  local windows
-  windows="$(ready_adb shell dumpsys window windows)" || return 1
-  grep -qE 'Application (Not Responding|Error):' <<< "$windows" || return 0
-  printf '%s\n' "$windows" | grep -E 'Application (Not Responding|Error):' >> "$evidence/closed-error-dialogs.txt"
-  ready_adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null || return 1
-  windows="$(ready_adb shell dumpsys window windows)" || return 1
-  ! grep -qE 'Application (Not Responding|Error):' <<< "$windows"
-}
-
 # A boot-completed property alone does not prove package/activity services or shared storage work.
 ready=false
 readonly readiness_deadline=$((SECONDS + readiness_timeout))
@@ -99,7 +88,7 @@ while (( SECONDS < readiness_deadline )); do
      [[ "$(ready_adb shell am get-started-user-state 0 2>/dev/null | tr -d '\r')" == RUNNING_UNLOCKED ]] &&
      ready_adb shell pm path android > "$evidence/package-service.txt" 2>&1 &&
      ready_adb shell df -k /data /sdcard > "$evidence/storage-before.txt" 2>&1 &&
-     error_dialogs_closed; then
+     error_dialogs_closed "$evidence/closed-error-dialogs.txt" ready_adb; then
     ready=true
     break
   fi
@@ -116,6 +105,7 @@ if (( sdk_level >= 37 )); then
 fi
 
 test_status=0
+export EMULATOR_DIALOGS_PREPARED=1
 if [[ "$owner" == debug ]]; then
   scripts/verify_debug_device.sh all || test_status=$?
 else
