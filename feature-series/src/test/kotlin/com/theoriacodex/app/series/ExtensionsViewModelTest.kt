@@ -101,6 +101,23 @@ class ExtensionsViewModelTest {
     }
 
     @Test
+    fun `a listing that replaces a slow first check still checks the repos`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repos = Repos()
+        val update = offered("b", RepoExtension.Status.UPDATE).copy(repo = "https://other.example")
+        repos.offered = listOf(offered("a"), update)
+        repos.cached = listOf(offered("a"), update.copy(status = RepoExtension.Status.INSTALLED))
+        repos.refreshDelay = 1_000
+        val viewModel = ExtensionsViewModel(OnDevice(emptyList()), repos)
+        runCurrent()
+
+        viewModel.removeRepo("https://repo.example")
+        advanceUntilIdle()
+
+        assertEquals(listOf(update), viewModel.state.value.updates)
+    }
+
+    @Test
     fun `browsing shows the device's languages and every-language extensions until a search looks through all`() {
         val extensions = listOf(offered("pt", languages = listOf("pt-BR")), offered("all", languages = listOf("all")), offered("ja", languages = listOf("ja")), offered("En2", languages = listOf("en")))
         assertEquals(listOf("all", "En2", "pt"), browseRows(extensions, "", listOf("en-US", "pt-PT")).map { it.name })
@@ -112,12 +129,14 @@ class ExtensionsViewModelTest {
 
     /**
      * A repo that offers [offered], refuses to install what [refusing] names, and adds only `https://repo.example`. A
-     * refreshed listing takes [refreshDelay] and holds what was offered when it was asked for.
+     * refreshed listing takes [refreshDelay] and holds what was offered when it was asked for; one not refreshed holds
+     * [cached] when set, as a repo read earlier in the process would.
      */
     private class Repos : ExtensionRepos {
         var offered = emptyList<RepoExtension>()
         var refusing = emptyMap<String, String>()
         var refreshDelay = 0L
+        var cached: List<RepoExtension>? = null
         val installed = mutableListOf<String>()
         private val added = mutableListOf<ExtensionRepo>()
 
@@ -132,10 +151,11 @@ class ExtensionsViewModelTest {
         override suspend fun remove(url: String) {
             added.removeAll { it.url == url }
             offered = offered.filterNot { it.repo == url }
+            cached = cached?.filterNot { it.repo == url }
         }
 
         override suspend fun available(refresh: Boolean): RepoListing {
-            val now = offered
+            val now = cached?.takeUnless { refresh } ?: offered
             if (refresh) delay(refreshDelay)
             return RepoListing(now)
         }
