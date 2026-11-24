@@ -44,6 +44,17 @@ class WatchedTagCountsTest {
     }
 
     @Test
+    fun `a view counts the tags already held before adding new ones, whatever their order`() {
+        val full = LifetimeStatistics(watchedByTag = counts(gelbooru, "a" to 5L, "b" to 10L))
+
+        val newFirst = full.recordWatchedTags(gelbooru, linkedSetOf("c", "a"), limit = 2)
+
+        assertEquals(counts(gelbooru, "b" to 10L, "c" to 7L), newFirst.watchedByTag)
+        assertEquals(mapOf(gelbooru to 6L), newFirst.watchedTagFloors)
+        assertEquals(newFirst, full.recordWatchedTags(gelbooru, linkedSetOf("a", "c"), limit = 2))
+    }
+
+    @Test
     fun `eviction at one source leaves every other source's counts and floor alone`() {
         val pixiv = counts(SourceKey.PIXIV, "sky" to 3L, "sea" to 2L)
         val statistics = LifetimeStatistics(
