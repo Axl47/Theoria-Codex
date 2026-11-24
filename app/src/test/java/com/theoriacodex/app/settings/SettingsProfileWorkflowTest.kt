@@ -29,7 +29,7 @@ class SettingsProfileWorkflowTest {
             ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)))
 
     @Test
-    fun `switching and removing a profile flush pending writes (ADR 0215)`() = runTest {
+    fun `creating, switching and removing a profile flush pending writes first (ADR 0215)`() = runTest {
         val settings = InMemorySettingsRepository()
         var flushes = 0
         val mutations = object : SettingsProfileMutations {
@@ -50,6 +50,10 @@ class SettingsProfileWorkflowTest {
         owner.onAction(SettingsAction.ConfirmRemoveProfile)
         runCurrent()
         assertEquals(2, flushes)
+
+        owner.onAction(SettingsAction.AddProfile("Sketching"))
+        runCurrent()
+        assertEquals(3, flushes)
     }
 
     @Test

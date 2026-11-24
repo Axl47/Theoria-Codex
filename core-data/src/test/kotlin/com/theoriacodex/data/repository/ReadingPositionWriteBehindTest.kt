@@ -6,6 +6,8 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -137,10 +139,30 @@ class ReadingPositionWriteBehindTest {
         repository.record(position(3, 300L))
 
         writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds * 2 + 1)
+        assertEquals(listOf(3), writes)
+
         repository.flush()
         writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds * 4)
-
         assertEquals(listOf(3), writes)
+    }
+
+    @Test
+    fun `a page recorded while the store is still loading survives the Viewer closing (ADR 0215)`() = runTest {
+        val loaded = CompletableDeferred<Unit>()
+        val written = mutableListOf<List<ReadingPosition>>()
+        val repository = CellReadingPositionRepository(
+            FileStateCell<List<ReadingPosition>>(load = { loaded.await(); emptyList() }, write = { written += it })
+                .writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
+        )
+        val viewerScope = CoroutineScope(Job())
+        viewerScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.record(position(8, 800L)) }
+        viewerScope.cancel()
+        val flushed = async(Dispatchers.Default) { repository.flush() }
+
+        loaded.complete(Unit)
+        flushed.await()
+
+        assertEquals(listOf(position(8, 800L)), written.last())
     }
 
     private fun position(page: Int, time: Long) = ReadingPosition(BOOK, RecentPostSection.WATCHED, page, time)

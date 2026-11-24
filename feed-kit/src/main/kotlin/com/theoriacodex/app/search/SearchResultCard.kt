@@ -157,9 +157,7 @@ fun SearchResultCard(
 private fun mediaVisibilityTracking(viewport: FeedViewport?, visibility: SearchCardVisibility): Modifier {
     val inWindow = Modifier.onVisibilityChanged(minFractionVisible = 0f) { visible -> visibility.inWindow = visible }
     if (viewport == null) return inWindow
-    return Modifier
-        .onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport.bounds) { visible -> visibility.inFeed = visible }
-        .then(inWindow)
+    return inWindow.onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport.bounds) { visible -> visibility.inFeed = visible }
 }
 
 @Composable
@@ -186,15 +184,17 @@ private fun rememberViewerReturnTracking(
 }
 
 @Stable
-private class SearchCardVisibility(insideFeed: Boolean) {
-    var inFeed by mutableStateOf(insideFeed)
+private class SearchCardVisibility {
+    var hasFeedViewport = false
+    var inFeed by mutableStateOf(false)
     var inWindow by mutableStateOf(false)
-    val visible: Boolean get() = inFeed && inWindow
+    val visible: Boolean get() = (inFeed || !hasFeedViewport) && inWindow
 }
 
 @Composable
 private fun rememberMediaVisibility(postId: PostId, hasFeedViewport: Boolean, onViewportChanged: (Boolean) -> Unit): SearchCardVisibility {
-    val visibility = remember(hasFeedViewport) { SearchCardVisibility(insideFeed = !hasFeedViewport) }
+    val visibility = remember { SearchCardVisibility() }
+    visibility.hasFeedViewport = hasFeedViewport
     val visible = visibility.visible
     DisposableEffect(postId, visible) {
         if (!visible) return@DisposableEffect onDispose {}

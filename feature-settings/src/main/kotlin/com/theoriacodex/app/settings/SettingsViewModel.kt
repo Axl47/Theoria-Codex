@@ -236,8 +236,8 @@ class SettingsViewModel(
             }
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
+                savePendingWrites()
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
-                dependencies.profileMutations.flushPendingWrites()
             }
             is SettingsAction.AddProfile -> addProfile(action.name)
             is SettingsAction.RenameProfile -> launchMutation {
@@ -351,7 +351,14 @@ class SettingsViewModel(
     private fun addProfile(requestedName: String) {
         val name = requestedName.trim()
         if (name.isBlank()) return
-        launchMutation { dependencies.settingsRepository.addRecommendationProfile(name) }
+        launchMutation {
+            savePendingWrites()
+            dependencies.settingsRepository.addRecommendationProfile(name)
+        }
+    }
+
+    private suspend fun savePendingWrites() {
+        runCatchingPreservingCancellation { dependencies.profileMutations.flushPendingWrites() }
     }
 
     private fun removeRequestedProfile() {
@@ -361,9 +368,9 @@ class SettingsViewModel(
             val canRemove = state.value.settings.recommendationProfiles.size > 1 &&
                 state.value.settings.recommendationProfiles.any { it.profileId == profileId }
             if (!canRemove) return@launchMutation
+            savePendingWrites()
             val removed = runCatchingPreservingCancellation {
                 dependencies.profileMutations.removeProfile(profileId)
-                dependencies.profileMutations.flushPendingWrites()
             }
             if (removed.isFailure) {
                 effectChannel.send(SettingsEffect.ShowMessage("Could not remove profile. Please try again."))

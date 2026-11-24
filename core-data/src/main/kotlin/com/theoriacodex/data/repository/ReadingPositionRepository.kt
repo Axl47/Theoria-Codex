@@ -14,6 +14,8 @@ import java.io.File
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -111,7 +113,8 @@ internal class CellReadingPositionRepository(
 
     override suspend fun flush() = cell.flush()
 
-    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) = cell.update(transform)
+    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) =
+        withContext(NonCancellable) { cell.update(transform) }
 }
 
 @Serializable
