@@ -26,7 +26,11 @@ SOURCE_SUFFIXES = (".kt", ".java")
 # - `@formatter:off` / `@formatter:on`: IDE formatter fences around hand-aligned code.
 # Detekt suppressions are `@Suppress` annotations, not comments. No source has a licence header, and
 # generated code lives under build/, which git does not track, so neither needs an exception.
-ALLOWED_DIRECTIVE = re.compile(r"^(//|/\*)\s*(noinspection\s|@formatter:(on|off)\b)")
+ALLOWED_DIRECTIVE = re.compile(
+    r"//\s*noinspection\s+\w[\w ,]*"
+    r"|//\s*@formatter:(on|off)"
+    r"|/\*\s*@formatter:(on|off)\s*\*/"
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,9 @@ class _Lexer:
                 self.string(raw=False)
             elif char == "'":
                 self.char_literal()
+            elif self.kotlin and char == "`":
+                end = source.find("`", self.index + 1)
+                self.index = len(source) if end == -1 else end + 1
             elif until_brace and char == "{":
                 depth += 1
                 self.index += 1
@@ -98,7 +105,11 @@ class _Lexer:
 
     def string(self, raw: bool) -> None:
         source = self.source
+        escapes = not raw or not self.kotlin
         while self.index < len(source):
+            if escapes and source[self.index] == "\\":
+                self.index += 2
+                continue
             if raw and self.peek('"""'):
                 self.index += 3
                 while self.peek('"'):
@@ -108,9 +119,7 @@ class _Lexer:
             if not raw and char == '"':
                 self.index += 1
                 return
-            if not raw and char == "\\":
-                self.index += 2
-            elif self.kotlin and self.peek("${"):
+            if self.kotlin and self.peek("${"):
                 self.index += 2
                 self.code(until_brace=True)
             else:
@@ -133,7 +142,7 @@ def find_comments(source: str, kotlin: bool = True) -> list[Comment]:
 
 def counted_comments(path: pathlib.Path) -> list[Comment]:
     comments = find_comments(path.read_text(encoding="utf-8"), kotlin=path.suffix == ".kt")
-    return [comment for comment in comments if not ALLOWED_DIRECTIVE.match(comment.text)]
+    return [comment for comment in comments if not ALLOWED_DIRECTIVE.fullmatch(comment.text.strip())]
 
 
 def source_files() -> list[pathlib.Path]:
@@ -155,12 +164,24 @@ def read_baseline() -> dict[str, int]:
     return json.loads(BASELINE.read_text(encoding="utf-8"))
 
 
+def baseline_at(revision: str) -> dict[str, int] | None:
+    """The baseline as committed at [revision], or None before the ratchet existed there."""
+    shown = subprocess.run(["git", "show", f"{revision}:{BASELINE}"], capture_output=True, text=True)
+    return json.loads(shown.stdout) if shown.returncode == 0 else None
+
+
 def write_baseline(counts: dict[str, int]) -> None:
     BASELINE.write_text(json.dumps(dict(sorted(counts.items())), indent=2) + "\n", encoding="utf-8")
 
 
-def check(baseline: dict[str, int], counts: dict[str, int]) -> list[str]:
-    problems = []
+def check(
+    baseline: dict[str, int], counts: dict[str, int], base: dict[str, int] | None = None
+) -> list[str]:
+    problems = [
+        f"{path}: baseline raised to {allowed} from {base.get(path, 0)}. The baseline may only shrink."
+        for path, allowed in sorted(baseline.items())
+        if base is not None and allowed > base.get(path, 0)
+    ]
     for path in sorted(set(baseline) | set(counts)):
         allowed, found = baseline.get(path, 0), counts.get(path, 0)
         if found > allowed:
@@ -172,7 +193,7 @@ def check(baseline: dict[str, int], counts: dict[str, int]) -> list[str]:
             )
         elif found < allowed:
             problems.append(
-                f"{path}: {found} comments, baseline allows {allowed}. Lower it: scripts/check_comments.py --update"
+                f"{path}: {found} comments, baseline allows {allowed}. Lower it: python3 scripts/check_comments.py --update"
             )
     return problems
 
@@ -180,13 +201,14 @@ def check(baseline: dict[str, int], counts: dict[str, int]) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--update", action="store_true", help="lower baseline entries to the current counts")
+    parser.add_argument("--base", help="revision whose baseline this one may not exceed")
     args = parser.parse_args()
     counts = current_counts()
     baseline = read_baseline()
     if args.update:
         baseline = {path: min(count, allowed) for path, allowed in baseline.items() if (count := counts.get(path, 0))}
         write_baseline(baseline)
-    problems = check(baseline, counts)
+    problems = check(baseline, counts, baseline_at(args.base) if args.base else None)
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0

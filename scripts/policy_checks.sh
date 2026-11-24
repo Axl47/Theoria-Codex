@@ -14,8 +14,9 @@ line_budgets() {
 }
 
 # Kotlin and Java comments may only shrink; see config/quality/comment-baseline.json and docs/adr/.
+# Usage: comment_ratchet [<base>]
 comment_ratchet() {
-  python3 scripts/check_comments.py
+  python3 scripts/check_comments.py ${1:+--base "$1"}
 }
 
 # Project names a build file depends on, in either spelling: project(":x") or project(path = ":x").
