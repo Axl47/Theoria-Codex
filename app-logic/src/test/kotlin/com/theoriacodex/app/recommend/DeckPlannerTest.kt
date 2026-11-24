@@ -46,7 +46,7 @@ class DeckPlannerTest {
 
     @Test fun `injected cards come first and undo drops the ones its post asked for`() {
         val liked = id("a1")
-        val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(liked)), DeckCard(post("s2"), DeckOrigin.Similar(id("other")))))
+        val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(liked, saved = false)), DeckCard(post("s2"), DeckOrigin.Similar(id("other"), saved = false))))
 
         assertEquals(listOf("s1", "s2", "a2"), nextBatch(listOf(lane(a, "a2")), injected, emptySet(), 3).cards.map { it.post.id.sourcePostId })
         assertEquals(listOf("s2"), injected.undone(before = DeckSteering(), post = liked).pending.map { it.post.id.sourcePostId })
