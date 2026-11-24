@@ -151,6 +151,7 @@ private fun CodexDetailEntry(
                 onOpenViewer = shell::openCodexViewer,
                 onOpenCodexActions = shell.overlays::openCollectionActions,
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
+                postMenu = shell.savedPostMenu(),
                 onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
             )
             // Offline copies removed from a shelf's Codex menu here; leaving this screen commits them.
