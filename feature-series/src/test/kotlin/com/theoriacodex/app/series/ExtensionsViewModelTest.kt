@@ -124,6 +124,17 @@ class ExtensionsViewModelTest {
         assertEquals(listOf("ja"), browseRows(extensions, " J", listOf("en-US")).map { it.name })
     }
 
+    @Test
+    fun `browsing narrows to a chosen language, every language, or one kind`() {
+        val manga = offered("es manga", languages = listOf("es")).copy(kind = SeriesKind.MANGA)
+        val extensions = listOf(offered("es", languages = listOf("es")), offered("all", languages = listOf("all")), offered("ja", languages = listOf("ja")), manga)
+        val english = listOf("en-US")
+        assertEquals(listOf("all", "es", "es manga"), browseRows(extensions, "", english, LanguageFilter.Only("es")).map { it.name })
+        assertEquals(listOf("es manga"), browseRows(extensions, "man", english, LanguageFilter.Only("es")).map { it.name })
+        assertEquals(listOf("all", "es", "ja"), browseRows(extensions, "", english, LanguageFilter.Every, SeriesKind.ANIME).map { it.name })
+        assertEquals(listOf("es", "ja"), offeredLanguages(extensions).sortedBy { it })
+    }
+
     private fun offered(name: String, status: RepoExtension.Status = RepoExtension.Status.AVAILABLE, languages: List<String> = listOf("en")) =
         RepoExtension("https://repo.example", name, name, languages, "1.0", SeriesKind.ANIME, status)
 
