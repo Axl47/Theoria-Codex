@@ -14,9 +14,7 @@ import java.io.File
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -111,10 +109,9 @@ internal class CellReadingPositionRepository(
         flush()
     }
 
-    override suspend fun flush() = withContext(Dispatchers.Default) { cell.flush() }
+    override suspend fun flush() = cell.flush()
 
-    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) =
-        withContext(Dispatchers.Default) { cell.update(transform) }
+    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) = cell.update(transform)
 }
 
 @Serializable

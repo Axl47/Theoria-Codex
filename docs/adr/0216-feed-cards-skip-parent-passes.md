@@ -22,7 +22,7 @@ A card's media reports visibility through two `Modifier.onVisibilityChanged` che
 
 A new feed screen that builds card parameters inline will pass review but re-run every card on each pass; copy the remembered pattern and add a case to the recomposition tests, which count card bodies with `countCompositions`.
 
-A scrolling container of cards that is neither `AdaptivePostGrid` nor `ViewerReturnColumn` must wrap its content in `ProvideFeedViewport`, or media its own clip hides but the window still contains counts as visible. Clips other than the feed viewport and the window are not consulted: on a wide layout, mid-swipe, a card passing under the navigation rail still counts as visible. Consulting every ancestor clip is the per-frame bounds walk this replaced. Horizontal shelf rows provide no viewport of their own: their cards are checked against the enclosing column and the window, and a row only places items that overlap it, so its own clip hides no placed card entirely.
+A scrolling container of cards that is neither `AdaptivePostGrid` nor `ViewerReturnColumn` must wrap its content in `ProvideFeedViewport`, or media its own clip hides but the window still contains counts as visible. A card outside any feed viewport, such as a Triage card, checks only the window. Clips other than the feed viewport and the window are not consulted: on a wide layout, mid-swipe, a card passing under the navigation rail still counts as visible. Consulting every ancestor clip is the per-frame bounds walk this replaced. Horizontal shelf rows provide no viewport of their own: their cards are checked against the enclosing column and the window, and a row only places items that overlap it, so its own clip hides no placed card entirely.
 
 ## Applies to
 

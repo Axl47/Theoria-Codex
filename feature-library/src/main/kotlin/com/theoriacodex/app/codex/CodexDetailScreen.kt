@@ -246,9 +246,10 @@ private fun CodexDetailBody(
             pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike,
         )
         val currentSelection by rememberUpdatedState(editSelection)
+        val currentVisiblePosts by rememberUpdatedState(feed.visiblePosts)
         CodexDetailGrid(
             feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
-            { index -> onOpenViewer(feed.visiblePosts, index) },
+            { index -> onOpenViewer(currentVisiblePosts, index) },
             { postId -> onEditSelectionChange(currentSelection.toggle(postId)) },
             onEditSelectionChange, onOpenPostActions, emptyMessage, related,
         )

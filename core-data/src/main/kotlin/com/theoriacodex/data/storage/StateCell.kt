@@ -48,6 +48,8 @@ internal fun <S, T> StateCell<S>.focus(get: (S) -> T, put: (S, T) -> S): StateCe
     }
 }
 
+internal const val WRITE_BEHIND_RETRIES = 3
+
 internal fun <T : Any> StateCell<T>.writeBehind(scope: CoroutineScope, delay: Duration): StateCell<T> =
     WriteBehindStateCell(this, scope, delay)
 
@@ -59,6 +61,8 @@ private class WriteBehindStateCell<T : Any>(
     private val mutex = Mutex()
     private val flushing = Mutex()
     private val state = MutableStateFlow<T?>(null)
+    private var revision = 0L
+    private var persistedRevision = 0L
     private var scheduled: Job? = null
 
     override val data: Flow<T> = flow {
@@ -73,20 +77,28 @@ private class WriteBehindStateCell<T : Any>(
         val (next, result) = transform(current)
         if (next != current) {
             state.value = next
-            if (scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush() }
+            revision++
+            schedule(attempt = 0)
         }
         result
     }
 
     override suspend fun flush() = flushing.withLock {
-        val latest = state.value ?: return@withLock
+        val (latest, latestRevision) = mutex.withLock { state.value to revision }
+        if (latest == null || latestRevision == persistedRevision) return@withLock
         durable.update { latest }
+        mutex.withLock { persistedRevision = maxOf(persistedRevision, latestRevision) }
     }
 
-    private suspend fun scheduledFlush() {
+    private fun schedule(attempt: Int) {
+        if (scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush(attempt) }
+    }
+
+    private suspend fun scheduledFlush(attempt: Int) {
         delay(writeDelay)
         mutex.withLock { scheduled = null }
-        runCatchingPreservingCancellation { flush() }
+        val failed = runCatchingPreservingCancellation { flush() }.isFailure
+        if (failed && attempt < WRITE_BEHIND_RETRIES) mutex.withLock { schedule(attempt + 1) }
     }
 
     private suspend fun loaded(): T = state.value ?: durable.value().also { state.value = it }

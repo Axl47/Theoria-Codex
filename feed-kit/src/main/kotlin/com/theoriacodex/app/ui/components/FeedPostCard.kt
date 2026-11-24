@@ -49,12 +49,16 @@ fun rememberFeedCardEnvironment(
     val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
         remember<suspend (PostId) -> Post?> { { postId -> latestResolve.value?.invoke(postId) } }
     }
+    val latestToggleLike = rememberUpdatedState(onToggleLike)
+    val toggleLike: ((Post) -> Unit)? = if (onToggleLike == null) null else {
+        remember { { post -> latestToggleLike.value?.invoke(post) } }
+    }
     val durationStateForPost = durations.stateForPost
     val onViewportChanged = durations.onPostVisibilityChanged
     val onDurationKnown = durations.onAuthoritativeDurationKnown
-    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver) {
+    return remember(pixivUgoiraClient, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver) {
         FeedCardEnvironment(
-            pixivUgoiraClient, liked, known, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver,
+            pixivUgoiraClient, liked, known, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver,
         )
     }
 }

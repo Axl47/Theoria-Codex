@@ -113,7 +113,7 @@ fun SearchResultCard(
     val viewerReturnShelf = LocalViewerReturnShelf.current
     val mediaGeometry = remember { SearchCardMediaGeometry() }
     val viewport = LocalFeedViewport.current
-    val visibility = rememberMediaVisibility(post.id, onViewportChanged)
+    val visibility = rememberMediaVisibility(post.id, hasFeedViewport = viewport != null, onViewportChanged)
     val lifecycleStarted by viewport?.lifecycleStarted ?: rememberLifecycleStarted()
     val playbackActive = visibility.visible && lifecycleStarted
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
@@ -126,7 +126,13 @@ fun SearchResultCard(
     val pendingReturn = returnTarget
     val mediaTracking = Modifier
         .onPlaced { coordinates -> mediaGeometry.coordinates = coordinates }
-        .onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport?.bounds) { visible -> visibility.inFeed = visible }
+        .then(
+            if (viewport == null) {
+                Modifier
+            } else {
+                Modifier.onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport.bounds) { visible -> visibility.inFeed = visible }
+            },
+        )
         .onVisibilityChanged(minFractionVisible = 0f) { visible -> visibility.inWindow = visible }
         .then(
             if (pendingReturn == null) {
@@ -168,15 +174,15 @@ fun SearchResultCard(
 }
 
 @Stable
-private class SearchCardVisibility {
-    var inFeed by mutableStateOf(false)
+private class SearchCardVisibility(insideFeed: Boolean) {
+    var inFeed by mutableStateOf(insideFeed)
     var inWindow by mutableStateOf(false)
     val visible: Boolean get() = inFeed && inWindow
 }
 
 @Composable
-private fun rememberMediaVisibility(postId: PostId, onViewportChanged: (Boolean) -> Unit): SearchCardVisibility {
-    val visibility = remember { SearchCardVisibility() }
+private fun rememberMediaVisibility(postId: PostId, hasFeedViewport: Boolean, onViewportChanged: (Boolean) -> Unit): SearchCardVisibility {
+    val visibility = remember(hasFeedViewport) { SearchCardVisibility(insideFeed = !hasFeedViewport) }
     val visible = visibility.visible
     DisposableEffect(postId, visible) {
         if (!visible) return@DisposableEffect onDispose {}

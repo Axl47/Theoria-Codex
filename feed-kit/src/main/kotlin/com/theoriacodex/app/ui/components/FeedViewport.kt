@@ -33,7 +33,7 @@ internal fun rememberLifecycleStarted(): State<Boolean> {
 }
 
 @Composable
-internal fun ProvideFeedViewport(content: @Composable () -> Unit) {
+fun ProvideFeedViewport(content: @Composable () -> Unit) {
     val viewport = rememberFeedViewport()
     Box(Modifier.layoutBounds(viewport.bounds), propagateMinConstraints = true) {
         CompositionLocalProvider(LocalFeedViewport provides viewport, content = content)

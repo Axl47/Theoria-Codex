@@ -45,7 +45,6 @@ class ViewerResumeJourneyTest : AppJourneyFixture() {
         waitFor("the reopened gallery resumes on page $RESUME_PAGE") { pageShown(RESUME_PAGE) }
 
         turnTo(RESUME_PAGE + 1)
-        waitFor("page ${RESUME_PAGE + 1} is recorded") { recorded(RESUME_PAGE + 1) }
         pressSystemBack()
         waitFor("the Viewer closed") { !compose.onNodeWithTag("viewer-page-scrubber").isDisplayed() && compose.onNodeWithTag(searchCardTestTag(galleryPost().id)).isDisplayed() }
         assertTrue("page ${RESUME_PAGE + 1} reached disk after leaving the Viewer", pageOnDisk(RESUME_PAGE + 1))
@@ -56,6 +55,7 @@ class ViewerResumeJourneyTest : AppJourneyFixture() {
         waitFor("the Viewer shows its page scrubber") { scrubber.isDisplayed() }
         scrubber.performSemanticsAction(SemanticsActions.SetProgress) { it(page - 1f) }
         waitFor("the Viewer shows page $page") { pageShown(page) }
+        waitFor("page $page is recorded") { recorded(page) }
     }
 
     private fun showGallery() {

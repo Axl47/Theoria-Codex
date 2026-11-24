@@ -5,9 +5,11 @@ import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.runTest
@@ -103,6 +105,42 @@ class ReadingPositionWriteBehindTest {
         repository.merge(listOf(position(5, 500L)))
 
         assertEquals(listOf(position(5, 500L)), FileBackedReadingPositionRepository(directory).snapshot())
+    }
+
+    @Test
+    fun `a page recorded just before the Viewer closes is in the stop flush (ADR 0215)`() = runTest {
+        val directory = temporary.newFolder()
+        val repository = FileBackedReadingPositionRepository(directory, writeScope = writeScope)
+        repository.snapshot()
+        val viewerScope = CoroutineScope(Job())
+        viewerScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.record(position(8, 800L)) }
+        viewerScope.cancel()
+
+        repository.flush()
+
+        assertEquals(listOf(position(8, 800L)), FileBackedReadingPositionRepository(directory).snapshot())
+    }
+
+    @Test
+    fun `a failed write is retried without another page turn and a clean flush writes nothing (ADR 0215)`() = runTest {
+        val writes = mutableListOf<Int>()
+        var failNext = true
+        val repository = CellReadingPositionRepository(
+            FileStateCell(emptyList<ReadingPosition>()) { positions ->
+                if (failNext) {
+                    failNext = false
+                    throw java.io.IOException("disk busy")
+                }
+                writes += positions.single().mediaNumber
+            }.writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
+        )
+        repository.record(position(3, 300L))
+
+        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds * 2 + 1)
+        repository.flush()
+        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds * 4)
+
+        assertEquals(listOf(3), writes)
     }
 
     private fun position(page: Int, time: Long) = ReadingPosition(BOOK, RecentPostSection.WATCHED, page, time)

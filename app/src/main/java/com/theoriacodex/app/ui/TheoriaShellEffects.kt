@@ -60,14 +60,14 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { shell.flushPendingWrites() }
     val appUsageTracker = shell.features.appUsageTracker
     val autoBackup = shell.workflows.autoBackup
-    DisposableEffect(appUsageTracker, autoBackup) {
+    DisposableEffect(shell, appUsageTracker, autoBackup) {
         val processLifecycle = ProcessLifecycleOwner.get().lifecycle
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> appUsageTracker.onForeground()
                 Lifecycle.Event.ON_STOP -> {
-                    shell.flushPendingWrites()
                     appUsageTracker.onBackground()
+                    shell.flushPendingWrites()
                     autoBackup?.onAppBackgrounded()
                 }
                 else -> Unit

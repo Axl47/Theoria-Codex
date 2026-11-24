@@ -123,7 +123,7 @@ class ForYouDeckScreenTest {
                     )
                     val cards = rememberFeedCardEnvironment(null, liked, emptyMap(), FeedDurations.NONE, {})
                     val config = ForYouScreenConfig(
-                        sort, animated, grid, liked, setOf(DECK_SOURCE), FeedDurations.NONE,
+                        sort, animated, grid, setOf(DECK_SOURCE), FeedDurations.NONE,
                         TriageCardSupport(cards, resolvePostById = { null }, recoverPostMedia = { _, _ -> null }),
                         isSearchSaved = { it in savedSearches },
                     )

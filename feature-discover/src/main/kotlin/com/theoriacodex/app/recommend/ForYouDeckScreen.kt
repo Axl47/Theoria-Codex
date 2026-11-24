@@ -34,7 +34,6 @@ class ForYouScreenConfig(
     val sortMode: SortMode,
     val animatedOnly: Boolean,
     val grid: Boolean,
-    val likedPostIds: Set<PostId>,
     val creatorBrowsingSources: Set<SourceKey>,
     val durations: FeedDurations,
     val support: TriageCardSupport,

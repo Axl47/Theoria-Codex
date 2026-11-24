@@ -104,7 +104,7 @@ internal fun ForYouRoute(
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
     val durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations)
-    val liked = remember(config.marks) { config.marks.liked + config.marks.pendingLikes }
+    val liked = remember(config.marks.liked, config.marks.pendingLikes) { config.marks.liked + config.marks.pendingLikes }
     val environment = rememberFeedCardEnvironment(
         services.pixivUgoiraClient, liked, emptyMap(), durations, callbacks.onToggleLike, owner::resolvePost,
     )
@@ -116,8 +116,8 @@ internal fun ForYouRoute(
     }
     val animatedOnly = fabRestoreState.animatedOnly
     val grid = fabRestoreState.grid
-    val screenConfig = remember(sortMode, animatedOnly, grid, liked, config.creatorBrowsingSources, durations, support, config.isSearchSaved) {
-        ForYouScreenConfig(sortMode, animatedOnly, grid, liked, config.creatorBrowsingSources, durations, support, config.isSearchSaved)
+    val screenConfig = remember(sortMode, animatedOnly, grid, config.creatorBrowsingSources, durations, support, config.isSearchSaved) {
+        ForYouScreenConfig(sortMode, animatedOnly, grid, config.creatorBrowsingSources, durations, support, config.isSearchSaved)
     }
     ForYouDeckScreen(
         owner = owner,

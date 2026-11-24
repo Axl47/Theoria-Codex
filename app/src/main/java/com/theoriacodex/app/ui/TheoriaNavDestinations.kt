@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -295,17 +296,11 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val tagActions = remember(shell) { viewerTagSearchActions(shell) }
     val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell, tagActions).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
-    val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer, shell) {
+    val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer) {
         var published: ViewerViewModel? = null
-        { owner ->
-            if (owner != null) {
-                routes.viewer.publish(owner.also { published = it })
-            } else {
-                published?.let(routes.viewer::withdraw)
-                shell.flushPendingWrites()
-            }
-        }
+        { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
     }
+    DisposableEffect(shell) { onDispose { shell.flushPendingWrites() } }
     val forSeries = rememberSeriesViewerConfig(shell)
     ViewerDestinationStateBoundary(
         data = shell.data,

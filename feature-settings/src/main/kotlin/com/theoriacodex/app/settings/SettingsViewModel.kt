@@ -119,11 +119,15 @@ class DefaultSettingsAccountGateway(
 interface SettingsProfileMutations {
     suspend fun removeProfile(profileId: String)
     fun isRemoving(profileId: String): Boolean = false
+    suspend fun flushPendingWrites() = Unit
 }
 
-class DefaultSettingsProfileMutations(private val service: com.theoriacodex.data.repository.ProfileDeletionService) :
-    SettingsProfileMutations {
+class DefaultSettingsProfileMutations(
+    private val service: com.theoriacodex.data.repository.ProfileDeletionService,
+    private val flush: suspend () -> Unit = {},
+) : SettingsProfileMutations {
     override suspend fun removeProfile(profileId: String) = service.removeProfile(profileId)
+    override suspend fun flushPendingWrites() = flush()
     override fun isRemoving(profileId: String): Boolean = service.isRemoving(profileId)
 }
 
@@ -233,6 +237,7 @@ class SettingsViewModel(
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
+                dependencies.profileMutations.flushPendingWrites()
             }
             is SettingsAction.AddProfile -> addProfile(action.name)
             is SettingsAction.RenameProfile -> launchMutation {
@@ -358,6 +363,7 @@ class SettingsViewModel(
             if (!canRemove) return@launchMutation
             val removed = runCatchingPreservingCancellation {
                 dependencies.profileMutations.removeProfile(profileId)
+                dependencies.profileMutations.flushPendingWrites()
             }
             if (removed.isFailure) {
                 effectChannel.send(SettingsEffect.ShowMessage("Could not remove profile. Please try again."))
