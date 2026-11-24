@@ -37,7 +37,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `metadata past the media data is read directly from its box offset`() = runTest {
+    fun `metadata past the media data is read directly from its box offset (ADR 0104)`() = runTest {
         val media = mp4WithTailDuration(durationMs = 8_000)
         val http = FakeHttpClient(media)
         val result = probe(http).probe(post("tail"))
@@ -53,7 +53,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `metadata in the first bytes needs only the small window`() = runTest {
+    fun `metadata in the first bytes needs only the small window (ADR 0104)`() = runTest {
         val http = FakeHttpClient(mp4File(durationMs = 5_000) + ByteArray(4_096))
         val probe = BoundedMediaDurationProbe(
             http, clock = { 100L }, byteWindowLimit = 1_024, initialWindowBytes = 64,
@@ -67,7 +67,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `metadata the small window cannot reach falls back to the full window`() = runTest {
+    fun `metadata the small window cannot reach falls back to the full window (ADR 0104)`() = runTest {
         val moov = box("moov", box("free", ByteArray(200)) + box("mvhd", movieHeader(7_000)))
         val http = FakeHttpClient(box("ftyp", byteArrayOf()) + moov + ByteArray(4_096))
         val probe = BoundedMediaDurationProbe(
@@ -105,7 +105,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `gelbooru answering 404 reads as throttling while other sources stay a transport failure`() = runTest {
+    fun `gelbooru answering 404 reads as throttling while other sources stay a transport failure (ADR 0104)`() = runTest {
         val notFound = StatusHttpClient(404)
 
         assertEquals(

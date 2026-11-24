@@ -97,6 +97,23 @@ class MediaDurationAcquisitionEngineTest {
     }
 
     @Test
+    fun `time spent waiting for the pacer does not count against the lookup timeout (ADR 0104)`() = runTest {
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
+            probeDuration = { known(3_000L) },
+            clock = { 100L },
+            operationTimeoutMs = 10L,
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = DurationRequestPacer(clock = { testScheduler.currentTime }, startIntervalMs = { 1_000L }),
+        )
+
+        assertEquals(known(3_000L), engine.acquire(post("first")))
+        assertEquals(known(3_000L), engine.acquire(post("second")))
+        assertEquals(1_000L, testScheduler.currentTime)
+    }
+
+    @Test
     fun `media that needs no lookup settles without work`() {
         val gif = post("gif").let { base ->
             val ref = ImageRef(url = "https://example.test/gif.gif", localPath = null, mime = "image/gif")
@@ -163,7 +180,7 @@ class MediaDurationAcquisitionEngineTest {
     }
 
     @Test
-    fun `overall timeout cancels probe and becomes a bounded retry`() = runTest {
+    fun `overall timeout cancels probe and becomes a bounded retry (ADR 0104)`() = runTest {
         var cancelled = false
         val engine = engine(
             hasProvider = { false },
@@ -183,6 +200,7 @@ class MediaDurationAcquisitionEngineTest {
             engine.acquire(post("timeout")),
         )
         assertEquals(true, cancelled)
+        assertEquals(10L, testScheduler.currentTime)
     }
 
     private fun engine(

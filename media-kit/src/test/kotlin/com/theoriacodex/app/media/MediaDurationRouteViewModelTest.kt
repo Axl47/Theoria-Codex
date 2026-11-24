@@ -45,7 +45,7 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
-    fun `nearby posts resolve with background resolution off and others stay idle`() = runTest {
+    fun `nearby posts resolve with background resolution off and others stay idle (ADR 0104)`() = runTest {
         val requested = mutableListOf<String>()
         val coordinator = coordinator { post ->
             requested += post.id.sourcePostId
@@ -66,7 +66,7 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
-    fun `active filter resolves loaded posts without rewriting them`() = runTest {
+    fun `active filter resolves loaded posts without rewriting them (ADR 0104)`() = runTest {
         val requested = mutableListOf<String>()
         val coordinator = coordinator { post ->
             requested += post.id.sourcePostId
@@ -173,7 +173,7 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
-    fun `a feed-supplied duration answers from the post without lookup or storage`() = runTest {
+    fun `a feed-supplied duration answers from the post without lookup or storage (ADR 0104)`() = runTest {
         var acquisitions = 0
         val coordinator = coordinator {
             acquisitions += 1

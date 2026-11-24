@@ -11,7 +11,7 @@ import org.junit.Test
 
 class DurationRequestPacerTest {
     @Test
-    fun `a source starts one lookup per interval`() = runTest {
+    fun `a source starts one lookup per interval (ADR 0104)`() = runTest {
         val pacer = DurationRequestPacer({ testScheduler.currentTime }, { 500L }, 15_000L)
         val starts = mutableListOf<Long>()
 
@@ -22,7 +22,7 @@ class DurationRequestPacerTest {
     }
 
     @Test
-    fun `lookups already waiting honour a cooldown that starts later`() = runTest {
+    fun `lookups already waiting honour a cooldown that starts later (ADR 0104)`() = runTest {
         val pacer = DurationRequestPacer({ testScheduler.currentTime }, { 500L }, 15_000L)
         val starts = mutableListOf<Long>()
 
@@ -36,12 +36,34 @@ class DurationRequestPacerTest {
     }
 
     @Test
-    fun `a cooldown on one source leaves the others running`() = runTest {
+    fun `a cooldown on one source leaves the others running (ADR 0104)`() = runTest {
         val pacer = DurationRequestPacer({ testScheduler.currentTime }, { 0L }, 15_000L)
 
         pacer.onThrottled(SourceKey.GELBOORU)
         pacer.awaitTurn(SourceKey.HITOMI)
 
         assertEquals(0L, testScheduler.currentTime)
+    }
+
+    @Test
+    fun `pixiv and custom sites space lookups half a second apart like gelbooru while CDN sources do not wait (ADR 0104)`() = runTest {
+        val pacer = DurationRequestPacer({ testScheduler.currentTime })
+        val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
+        val starts = mutableMapOf<SourceKey, MutableList<Long>>()
+
+        listOf(SourceKey.PIXIV, SourceKey.GELBOORU, custom, SourceKey.DANBOORU).forEach { source ->
+            repeat(2) { launch { pacer.awaitTurn(source); starts.getOrPut(source) { mutableListOf() } += testScheduler.currentTime } }
+        }
+        advanceUntilIdle()
+
+        assertEquals(
+            mapOf(
+                SourceKey.PIXIV to listOf(0L, 500L),
+                SourceKey.GELBOORU to listOf(0L, 500L),
+                custom to listOf(0L, 500L),
+                SourceKey.DANBOORU to listOf(0L, 0L),
+            ),
+            starts,
+        )
     }
 }

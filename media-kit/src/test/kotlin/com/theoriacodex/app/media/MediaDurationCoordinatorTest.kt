@@ -3,10 +3,13 @@ package com.theoriacodex.app.media
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.data.repository.InMemoryMediaDurationRepository
 import com.theoriacodex.data.repository.MediaDurationRepository
+import com.theoriacodex.data.repository.StoredMediaDurationKey
 import com.theoriacodex.data.repository.StoredMediaDurationState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -144,16 +147,22 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `same fingerprint shares one job and one remaining consumer keeps it alive`() = runTest {
+    fun `same fingerprint shares one job and one remaining consumer keeps it alive (ADR 0104)`() = runTest {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<MediaDurationState>()
         var acquisitions = 0
+        var cancelled = false
         val coordinator = coordinator(
             scope = this,
             acquirer = MediaDurationAcquirer {
                 acquisitions += 1
                 started.complete(Unit)
-                finish.await()
+                try {
+                    finish.await()
+                } catch (cancellation: CancellationException) {
+                    cancelled = true
+                    throw cancellation
+                }
             },
         )
         val post = post("shared")
@@ -165,17 +174,18 @@ class MediaDurationCoordinatorTest {
         started.await()
         coordinator.submit(post, demand("creator", key, DurationDemandPriority.NEAR_VIEWPORT))
         coordinator.releaseIdentity("search")
-        assertEquals(1, acquisitions)
-        assertFalse(finish.isCancelled)
+        runCurrent()
 
         finish.complete(known(9_000L))
         runCurrent()
         assertEquals(known(9_000L), coordinator.states.value[key])
+        assertEquals(1, acquisitions)
+        assertFalse(cancelled)
         coordinator.close()
     }
 
     @Test
-    fun `last consumer release cancels active work and removes pending state`() = runTest {
+    fun `last consumer release cancels active work and removes pending state (ADR 0104)`() = runTest {
         val started = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
         val coordinator = coordinator(
@@ -241,7 +251,7 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `terminal state and player publication do not restart acquisition`() = runTest {
+    fun `terminal state and player publication do not restart acquisition (ADR 0104)`() = runTest {
         var acquisitions = 0
         val traces = RecordingTraceRecorder()
         val coordinator = coordinator(
@@ -330,7 +340,7 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `an answer that needs no work never queues`() = runTest {
+    fun `an answer that needs no work never queues (ADR 0104)`() = runTest {
         var acquisitions = 0
         val unsupported = MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
         val coordinator = coordinator(
@@ -449,7 +459,7 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `stored no-media verdict is re-derived after a source gains a resolver`() = runTest {
+    fun `stored no-media verdict is re-derived after a source gains a resolver (ADR 0104)`() = runTest {
         val repository = InMemoryMediaDurationRepository()
         val post = post("ugoira")
         val key = key(post)
@@ -470,16 +480,90 @@ class MediaDurationCoordinatorTest {
         coordinator.close()
     }
 
+    @Test
+    fun `a failed lookup is not retried by new demand until the retry time (ADR 0104)`() = runTest {
+        var now = 0L
+        var acquisitions = 0
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                acquisitions += 1
+                if (acquisitions == 1) throw IOException("offline") else known(4_000L)
+            },
+            clock = { now },
+        )
+        val post = post("retry")
+        val key = key(post)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+
+        now = 5L * 60L * 1_000L - 1
+        coordinator.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+        assertEquals(1, acquisitions)
+
+        now += 1
+        coordinator.submit(post, demand("viewer", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+        assertEquals(2, acquisitions)
+        assertEquals(known(4_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
+    @Test
+    fun `a duration that cannot be stored is still published (ADR 0104)`() = runTest {
+        val refusing = object : MediaDurationRepository {
+            override suspend fun get(key: StoredMediaDurationKey): StoredMediaDurationState? = null
+            override suspend fun put(key: StoredMediaDurationKey, state: StoredMediaDurationState) =
+                throw IOException("disk full")
+        }
+        val coordinator = coordinator(scope = this, acquirer = MediaDurationAcquirer { known(7_000L) }, durationRepository = refusing)
+        val post = post("unstored")
+        val key = key(post)
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
+
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+
+        assertEquals(known(7_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
+    @Test
+    fun `pixiv lookups run two at a time while another source is not held to two (ADR 0104)`() = runTest {
+        val started = mutableListOf<SourceKey>()
+        val coordinator = MediaDurationCoordinator(
+            acquirer = MediaDurationAcquirer { post ->
+                started += post.id.source
+                awaitCancellation()
+            },
+            parentScope = this,
+            maxConcurrentWork = 8,
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+        )
+        coordinator.updateEnvironment("environment", lifecycleStarted = true, scrollIdle = true)
+        val posts = (1..3).map { post("pixiv-$it").copy(id = PostId(SourceKey.PIXIV, "pixiv-$it")) } + (1..3).map { post("hitomi-$it") }
+
+        posts.forEach { post -> coordinator.submit(post, demand("search", key(post), DurationDemandPriority.VISIBLE)) }
+        runCurrent()
+
+        assertEquals(mapOf(SourceKey.PIXIV to 2, SourceKey.HITOMI to 3), started.groupingBy { it }.eachCount())
+        coordinator.close()
+    }
+
     private fun coordinator(
         scope: CoroutineScope,
         acquirer: MediaDurationAcquirer,
         durationRepository: MediaDurationRepository? = null,
         traceRecorder: MediaDurationTraceRecorder = NoOpMediaDurationTraceRecorder,
+        clock: () -> Long = System::currentTimeMillis,
     ): MediaDurationCoordinator {
         return MediaDurationCoordinator(
             acquirer = acquirer,
             durationRepository = durationRepository,
             parentScope = scope,
+            clock = clock,
             maxConcurrentWork = 1,
             traceRecorder = traceRecorder,
         )
