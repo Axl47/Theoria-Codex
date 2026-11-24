@@ -16,6 +16,8 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.Buffer
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,14 +46,18 @@ class ExtensionCatalogTest {
     private val system = mutableListOf<ExtensionPackage>()
     private var changes = 0
 
-    private val catalog = ExtensionCatalog(
-        choices = store,
-        client = OkHttpClient.Builder().addInterceptor { chain ->
+    private val catalog = catalog()
+
+    private fun catalog(
+        client: OkHttpClient = OkHttpClient.Builder().addInterceptor { chain ->
             val url = chain.request().url.toString()
             val body = site[url]
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
                 .body(Buffer().write(body ?: ByteArray(0)).asResponseBody("application/octet-stream".toMediaType(), contentLength = -1)).build()
         }.build(),
+    ) = ExtensionCatalog(
+        choices = store,
+        client = client,
         kinds = listOf(MihonKind, AniyomiKind),
         packages = {
             val private = folder.listFiles { file -> file.extension == "apk" }.orEmpty().mapNotNull { read(it, ExtensionOrigin.PRIVATE) }
@@ -94,9 +100,14 @@ class ExtensionCatalogTest {
 
         catalog.remove(repoUrl)
         catalog.remove("https://other.example/manga")
-        val refused = catalog.add(listOf(NewExtensionRepo(repoUrl, signingKey = otherKey), NewExtensionRepo("http://repo.example/anime"), NewExtensionRepo("https://gone.example")))
-        assertEquals(setOf(repoUrl, "http://repo.example/anime", "https://gone.example"), refused.keys)
+        site["https://nokey.example/anime/repo.json"] = """{"meta":{"name":"Keyless","website":"w","signingKeyFingerprint":"abc"}}""".encodeToByteArray()
+        site["https://nokey.example/anime/index.min.json"] = "[]".encodeToByteArray()
+        val refused = catalog.add(
+            listOf(NewExtensionRepo(repoUrl, signingKey = otherKey), NewExtensionRepo("http://repo.example/anime"), NewExtensionRepo("https://gone.example"), NewExtensionRepo("https://nokey.example/anime")),
+        )
+        assertEquals(setOf(repoUrl, "http://repo.example/anime", "https://gone.example", "https://nokey.example/anime"), refused.keys)
         assertEquals("Now signed with another key", refused[repoUrl])
+        assertEquals("Names no signing key", refused["https://nokey.example/anime"])
         assertEquals("Answered 404", refused["https://gone.example"])
         assertEquals(emptyList<ExtensionRepo>(), catalog.repos())
     }
@@ -164,29 +175,55 @@ class ExtensionCatalogTest {
         val changed = catalog.available(refresh = true)
         assertEquals(emptyList<Any>(), changed.extensions)
         assertTrue(changed.problems.getValue(repoUrl).startsWith("Now signed with another key"))
+        val restarted = catalog().available()
+        assertEquals(emptyList<Any>(), restarted.extensions)
+        assertTrue(restarted.problems.getValue(repoUrl).startsWith("Now signed with another key"))
     }
 
     @Test
     fun `torrent extensions and ones of an interface the host does not run are not offered (ADR 0063)`() = runTest {
         serve(Triple("kept", 1, "16"), Triple("torrent", 1, "16"), Triple("unsupported", 1, "15"))
         site["$repoUrl/index.min.json"] = site.getValue("$repoUrl/index.min.json").decodeToString()
-            .replace("\"pkg\":\"torrent\"", "\"pkg\":\"torrent\",\"torrent\":1").encodeToByteArray()
+            .replace("\"pkg\":\"torrent\"", "\"pkg\":\"torrent\",\"torrent\":1")
+            .replace("]", """,{"name":"Tachiyomi: Manga at 16","pkg":"manga16","apk":"m.apk","lang":"en","code":1,"version":"16.1"},""" +
+                """{"name":"Aniyomi: Anime at 1.6","pkg":"anime16","apk":"a.apk","lang":"en","code":1,"version":"1.6.4"}]""")
+            .encodeToByteArray()
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
 
         assertEquals(listOf("kept"), catalog.available().extensions.map { it.packageName })
     }
 
     @Test
-    fun `a repo whose index is too large, as fetched or once gunzipped, is refused without reading it all (ADR 0063)`() = runTest {
-        site["https://huge.example/repo.json"] = ByteArray(MAX_INDEX_BYTES.toInt() + 1) { ' '.code.toByte() }
-        assertEquals(mapOf("https://huge.example" to "Too large"), catalog.add(listOf(NewExtensionRepo("https://huge.example"))))
+    fun `a repo whose index is over 8 MiB, as declared, as sent or once gunzipped, is refused without reading it all (ADR 0063)`() = runTest {
+        val limit = 8 * 1024 * 1024
+        var body = ByteArray(0)
+        var declared = -1L
+        var read = 0L
+        val sizing = catalog(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                read = 0
+                val counted = object : ForwardingSource(Buffer().write(body)) {
+                    override fun read(sink: Buffer, byteCount: Long): Long = super.read(sink, byteCount).also { if (it > 0) read += it }
+                }
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("")
+                    .body(counted.buffer().asResponseBody("application/json".toMediaType(), declared)).build()
+            }.build(),
+        )
+        suspend fun problem(sent: ByteArray, declaredLength: Long = -1): String? {
+            body = sent
+            declared = declaredLength
+            return sizing.add(listOf(NewExtensionRepo("https://huge.example")))["https://huge.example"]
+        }
+        fun gzipped(size: Int) = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(ByteArray(size) { ' '.code.toByte() }) } }.toByteArray()
 
-        serve()
-        catalog.add(listOf(NewExtensionRepo(repoUrl)))
-        site["$repoUrl/index.min.json"] = ByteArrayOutputStream().also { out ->
-            GZIPOutputStream(out).use { it.write(ByteArray(MAX_INDEX_BYTES.toInt() + 1)) }
-        }.toByteArray()
-        assertEquals(mapOf(repoUrl to "Too large"), catalog.available(refresh = true).problems)
+        assertTrue(problem(ByteArray(limit) { ' '.code.toByte() }) != "Too large")
+        assertEquals("Too large", problem(ByteArray(limit + 1) { ' '.code.toByte() }))
+        assertEquals("Too large", problem(ByteArray(3 * limit) { ' '.code.toByte() }))
+        assertTrue(read < 2L * limit)
+        assertEquals("Too large", problem("{}".encodeToByteArray(), declaredLength = limit + 1L))
+        assertEquals(0L, read)
+        assertTrue(problem(gzipped(limit)) != "Too large")
+        assertEquals("Too large", problem(gzipped(limit + 1)))
     }
 
     @Test
@@ -208,6 +245,7 @@ class ExtensionCatalogTest {
         catalog.uninstall(File(folder, "new.apk").path)
         assertFalse(File(folder, "new.apk").exists())
         assertEquals(emptyMap<String, String>(), store.choices.trusted)
+        assertEquals(3, changes)
     }
 
     @Test

@@ -49,7 +49,7 @@ class ExtensionPackagesTest {
 
     @Test
     fun `anime extensions of interface 14 and 16 are accepted, and any other version, an unreadable one or a torrent one is refused (ADR 0055, 0056)`() {
-        listOf("a" to "14.64", "b" to "16.8", "c" to "17.1", "d" to "13.9", "da" to "beta").forEach { (name, version) ->
+        listOf("a" to "14.64", "b" to "16.8", "c" to "17.1", "d" to "13.9", "da" to "beta", "db" to "15.2").forEach { (name, version) ->
             install("app.$name", AniyomiKind.feature, "Aniyomi: $name", Bundle().apply { putString(AniyomiKind.sourceClassesKey, ".Source") }, version)
         }
         install("app.e", AniyomiKind.feature, "Aniyomi: e", Bundle().apply {
@@ -58,7 +58,7 @@ class ExtensionPackagesTest {
         }, version = "16.1")
 
         assertEquals(
-            listOf(null, null, "Needs extension API 17", "Needs extension API 13", "Unknown extension API", "Streams by torrent"),
+            listOf(null, null, "Needs extension API 17", "Needs extension API 13", "Unknown extension API", "Needs extension API 15", "Streams by torrent"),
             packages.list().map { it.unsupported },
         )
     }

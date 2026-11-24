@@ -117,6 +117,8 @@ class HttpSourceTest {
         assertEquals(2_499_283_573_021_220_255L, anime.id)
         assertEquals(490_041_738_643_955_318L, TestSource(name = "Alpha").id)
         assertEquals(490_041_738_643_955_318L, TestSource(name = "ALPHA").id)
+        assertEquals(2_126_524_715_004_219_874L, TestSource(name = "MangaDex", versionId = 2).id)
+        assertEquals(2_655_149_515_337_070_132L, TestSource(name = "MangaDex", lang = "pt-BR").id)
     }
 
     @Test
@@ -163,7 +165,7 @@ class HttpSourceTest {
         it.url = ""
     }
 
-    private class TestSource(override val lang: String = "en", override val name: String = "Test") : HttpSource() {
+    private class TestSource(override val lang: String = "en", override val name: String = "Test", override val versionId: Int = 1) : HttpSource() {
         override val baseUrl = "https://example.test"
         override val supportsLatest = true
 

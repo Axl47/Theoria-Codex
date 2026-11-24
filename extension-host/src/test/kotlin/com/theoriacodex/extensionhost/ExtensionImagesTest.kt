@@ -54,6 +54,7 @@ class ExtensionImagesTest {
 
         assertTrue(address.startsWith("https://covers.test/1.jpg#mihon=custom_mihon_1."))
         assertEquals("source-token https://covers.test/1.jpg", fetch(address))
+        assertEquals("https://cdn.test/", source.sent.last().header("Referer"))
     }
 
     @Test
@@ -140,6 +141,7 @@ class ExtensionImagesTest {
     @Test
     fun `an untagged address passes down the chain unchanged (ADR 0059)`() {
         assertEquals("app https://other.test/a.jpg", fetch("https://other.test/a.jpg"))
+        assertEquals("app https://other.test/a.jpg#theirs", fetch("https://other.test/a.jpg#theirs"))
     }
 
     @Test
@@ -257,9 +259,11 @@ class ExtensionImagesTest {
     fun `a chapter's pages beyond the newest 8192 are forgotten oldest first and listed again when asked (ADR 0059)`() = runTest {
         listOf(8_192 to 1, 8_193 to 2).forEach { (count, listings) ->
             val reader = PagePerImageSource(pages = List(count) { "p$it" })
-            val first = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).first().url!!
+            val pages = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
 
-            assertEquals("image https://img.test/p0-0.jpg", fetch(first))
+            assertEquals("image https://img.test/p${count - 1}-${count - 1}.jpg", fetch(pages.last()))
+            assertEquals(1, reader.listed.size)
+            assertEquals("image https://img.test/p0-0.jpg", fetch(pages.first()))
             assertEquals(listings, reader.listed.size)
         }
     }
@@ -392,12 +396,15 @@ class ExtensionImagesTest {
             .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header(TOKEN_HEADER, "source-token").build()) }
             .addInterceptor(
                 answering { request ->
+                    sent += request
                     cannedResponse(request, body = "${request.header(TOKEN_HEADER)} ${request.header(PAGE_HEADER) ?: request.url}")
                 },
             )
             .build()
 
-        override fun headersBuilder() = Headers.Builder()
+        val sent = mutableListOf<Request>()
+
+        override fun headersBuilder() = Headers.Builder().add("Referer", "https://cdn.test/")
 
         var failure: Throwable? = null
 

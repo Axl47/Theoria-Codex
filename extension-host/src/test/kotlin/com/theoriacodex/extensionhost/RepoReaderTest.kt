@@ -74,6 +74,16 @@ class RepoReaderTest {
             ),
             index.extensions,
         )
+        val plain = RepoReader.read("https://repo.example/plain/index.pb") { url -> if (url.endsWith("index.pb")) resource("anime-plain.pb.gz") else throw IOException("404 $url") }
+        assertEquals(listOf(SeriesKind.ANIME to listOf("all")), plain.extensions.map { it.kind to it.languages })
+    }
+
+    @Test
+    fun `a legacy repo naming a newer index that cannot be read fails instead of reading the stub list (ADR 0063)`() = runTest {
+        val repo = """{"index_v2":"https://repo.example/anime/index.pb","meta":{"name":"Stub","website":"w","signingKeyFingerprint":"$signingKey"}}"""
+        val site = mapOf("https://repo.example/anime/repo.json" to repo, "https://repo.example/anime/index.min.json" to legacyIndex).mapValues { it.value.encodeToByteArray() }
+
+        assertFailsWith<IOException> { RepoReader.read("https://repo.example/anime") { url -> site[url] ?: throw IOException("404 $url") } }
     }
 
     @Test

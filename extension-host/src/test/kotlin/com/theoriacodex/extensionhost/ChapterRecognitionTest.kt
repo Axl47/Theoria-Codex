@@ -30,6 +30,7 @@ class ChapterRecognitionTest {
     @Test
     fun `a series titled with a number leaves chapter numbers whole (ADR 0064)`() {
         assertEquals(186f, ChapterRecognition.parseChapterNumber("86", "Chapter 186"))
+        assertEquals(860f, ChapterRecognition.parseChapterNumber("86", "Chapter 860"))
         assertEquals(86f, ChapterRecognition.parseChapterNumber("86", "Chapter 86"))
         assertEquals(12f, ChapterRecognition.parseChapterNumber("86", "86 Chapter 12"))
     }
