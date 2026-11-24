@@ -7,6 +7,7 @@ import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.SeriesStatus
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -179,6 +180,28 @@ class TachiyomiBackupTest {
         assertEquals(given, repos.given)
         assertEquals(1, result.reposAdded)
         assertEquals(mapOf("https://anime.example/repo" to "Now signed with another key"), result.repoProblems)
+    }
+
+    @Test
+    fun `repos that cannot be read leave the series import standing`() = runTest {
+        val bytes = backup {
+            message(1) { long(1, 1); string(2, "/m"); string(3, "M") }
+            message(106) { string(1, "https://manga.example/repo"); string(5, "aa11") }
+        }
+        val failing = object : ExtensionRepos by RecordingRepos(refuse = "", added = "") {
+            override suspend fun repos(): List<ExtensionRepo> = throw IOException("choices unreadable")
+        }
+        val store = RecordingStore()
+        val directory = temporary.newFolder()
+        val service = ProfileBackupService(InMemorySettingsRepository(), store, InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
+            extensionRepos = failing, extensionSources = { throw IOException("extensions unreadable") })
+        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
+
+        assertEquals(BackupPreview.Series(counts, unnamedMissingSources = 1), service.preview(bytes))
+        val result = service.importSeries(bytes)
+        assertEquals(1, store.merged.single().series.size)
+        assertEquals(SeriesImportResult(counts, repoProblems = mapOf("https://manga.example/repo" to "Import the backup again to retry")), result)
     }
 
     @Test

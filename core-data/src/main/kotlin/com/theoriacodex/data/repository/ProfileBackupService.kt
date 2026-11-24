@@ -9,7 +9,7 @@ import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepos
-import com.theoriacodex.domain.series.storedRepoAddress
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -79,10 +79,16 @@ class ProfileBackupService(
         if (includeRecents) statistics?.observeStatistics()?.first() else null
 
     /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
-    suspend fun preview(bytes: ByteArray): BackupPreview =
-        if (isTachiyomiBackup(bytes)) {
-            decodeTachiyomiBackup(bytes, clock()).preview(extensionSources(), extensionRepos?.repos()?.mapTo(HashSet()) { it.url })
-        } else BackupPreview.Profiles(codec.decode(bytes).preview())
+    suspend fun preview(bytes: ByteArray): BackupPreview {
+        if (!isTachiyomiBackup(bytes)) return BackupPreview.Profiles(codec.decode(bytes).preview())
+        val backup = decodeTachiyomiBackup(bytes, clock())
+        // Details only: a device that cannot answer leaves them out rather than refuse the backup. Sources that cannot be
+        // listed are unavailable in Series too, so they count as missing.
+        val newRepos = extensionRepos?.let { repos ->
+            runCatchingPreservingCancellation { backup.reposNotIn(repos.repos()).size }.getOrNull()
+        } ?: 0
+        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos)
+    }
 
     /**
      * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
@@ -97,12 +103,15 @@ class ProfileBackupService(
                 store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = it.series))
             }
         }
-        // Outside the lock: each repo is read over the network, and none touches the library.
-        val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(backup.importPreview())
-        val before = repos.repos().mapTo(HashSet()) { it.url }
-        val problems = repos.add(backup.repos)
-        val added = backup.repos.count { storedRepoAddress(it.url) !in before && it.url !in problems }
-        SeriesImportResult(backup.importPreview(), reposAdded = added, repoProblems = problems)
+        val imported = backup.importPreview()
+        // Outside the lock: each repo is read over the network, and none touches the library. The series are in by now,
+        // so a failure here is reported against the repos alone.
+        val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(imported)
+        runCatchingPreservingCancellation {
+            val new = backup.reposNotIn(repos.repos())
+            val problems = repos.add(backup.repos)
+            SeriesImportResult(imported, reposAdded = new.count { it.url !in problems }, repoProblems = problems)
+        }.getOrElse { SeriesImportResult(imported, repoProblems = backup.repos.associate { it.url to "Import the backup again to retry" }) }
     }
 
     suspend fun restore(

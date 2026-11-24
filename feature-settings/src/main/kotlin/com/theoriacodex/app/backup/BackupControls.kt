@@ -188,16 +188,13 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
     )
 }
 
-/**
- * "Unavailable until these extensions are on: Comick, Gogoanime and 1 other", naming what the backup names; null when
- * nothing is missing.
- */
+/** "Needs these extensions: Comick, Gogoanime and 1 other.", naming what the backup names; null when nothing is missing. */
 internal fun BackupPreview.Series.missingNotice(): String? {
     val named = missingSources
     if (named.isEmpty()) return "A series stays unavailable until its extension is on here.".takeIf { unnamedMissingSources > 0 }
     val others = if (unnamedMissingSources > 0) " and ${countLabel(unnamedMissingSources, "other")}" else ""
-    val subject = if (named.size + unnamedMissingSources == 1) "this extension is" else "these extensions are"
-    return "Unavailable until $subject on: ${named.joinToString()}$others"
+    val subject = if (named.size + unnamedMissingSources == 1) "this extension" else "these extensions"
+    return "Needs $subject: ${named.joinToString()}$others."
 }
 
 @Composable

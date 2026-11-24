@@ -102,9 +102,9 @@ class BackupViewModelTest {
     fun `the import preview names the missing extensions the backup names, and only warns when it names none`() {
         val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
         assertNull(BackupPreview.Series(counts).missingNotice())
-        assertEquals("Unavailable until this extension is on: Comick", BackupPreview.Series(counts, missingSources = listOf("Comick")).missingNotice())
+        assertEquals("Needs this extension: Comick.", BackupPreview.Series(counts, missingSources = listOf("Comick")).missingNotice())
         assertEquals(
-            "Unavailable until these extensions are on: Comick, Gogoanime and 1 other",
+            "Needs these extensions: Comick, Gogoanime and 1 other.",
             BackupPreview.Series(counts, missingSources = listOf("Comick", "Gogoanime"), unnamedMissingSources = 1).missingNotice(),
         )
         assertEquals("A series stays unavailable until its extension is on here.", BackupPreview.Series(counts, unnamedMissingSources = 2).missingNotice())

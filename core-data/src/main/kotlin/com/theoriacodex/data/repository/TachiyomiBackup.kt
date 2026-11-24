@@ -3,6 +3,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -70,16 +71,19 @@ internal fun TachiyomiImport.importPreview(): SeriesImportPreview {
     )
 }
 
-/**
- * The preview of importing [this] on a device where [sourcesOn] are the extension sources that are on and [storedRepos]
- * the addresses of the repos already added, or null where no repos can be added.
- */
-internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, storedRepos: Set<String>?): BackupPreview.Series {
+/** The repos [this] lists that are not among [stored], compared by their stored address. */
+internal fun TachiyomiImport.reposNotIn(stored: List<ExtensionRepo>): List<NewExtensionRepo> {
+    val addresses = stored.mapTo(HashSet()) { it.url }
+    return repos.filter { storedRepoAddress(it.url) !in addresses }
+}
+
+/** The preview of importing [this] on a device where [sourcesOn] are the extension sources that are on and [newRepos] of its repos can be added. */
+internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, newRepos: Int): BackupPreview.Series {
     val missing = series.map { it.series.series.id.source }.filterNot { it in sourcesOn }
         .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
     return BackupPreview.Series(
         importPreview(),
-        newRepos = storedRepos?.let { stored -> repos.count { storedRepoAddress(it.url) !in stored } } ?: 0,
+        newRepos = newRepos,
         missingSources = missing.mapNotNull(sourceNames::get).distinct(),
         unnamedMissingSources = missing.count { it !in sourceNames },
     )
