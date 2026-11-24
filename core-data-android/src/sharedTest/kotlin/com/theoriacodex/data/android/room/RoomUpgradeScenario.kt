@@ -21,6 +21,9 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -32,6 +35,7 @@ import org.junit.Assert.assertTrue
 /** Same persisted upgrade journey runs on Robolectric and Android SQLite through the production factory. */
 object RoomUpgradeScenario {
     private const val PICTURE_HASH = 0x5E5E_0000_FFFFL
+    private val seriesId = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
     suspend fun verify(context: Context, helper: MigrationTestHelper, startingVersion: Int) = withContext<Unit>(Dispatchers.IO) {
         val name = "upgrade-journey-v$startingVersion.db"
         context.deleteDatabase(name)
@@ -72,6 +76,11 @@ object RoomUpgradeScenario {
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
                 RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
                 RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
+                RoomSeriesRepository(database, clock = { 100L }).run {
+                    store(Series(seriesId, "Title"), listOf(SeriesEntry("/c/2", "Ch.2"), SeriesEntry("/c/1", "Ch.1")))
+                    setFollowed(seriesId, true)
+                    recordProgress(seriesId, "/c/1", position = 4, length = 9)
+                }
                 assertEquals(21, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
@@ -104,6 +113,9 @@ object RoomUpgradeScenario {
                 assertTrue(translations.getAll(setOf(translationKey.copy(backendVersion = "google-nmt-v2"))).isEmpty())
                 assertEquals(listOf(ForYouVerdictKind.SKIPPED), RoomForYouVerdictRepository(database).verdicts("a").map { it.kind })
                 assertEquals(mapOf(shared.id to PICTURE_HASH), RoomVisualSignatureRepository(database).observePictureHashes().first())
+                val series = RoomSeriesRepository(database)
+                assertEquals("/c/1" to true, series.series(seriesId)?.let { it.lastOpenedEntry to it.followed })
+                assertEquals(4L to 9L, series.entries(seriesId).single { it.entry.address == "/c/1" }.let { it.position to it.length })
 
                 // Subsequent writes still honor membership isolation and actual foreign-key cascades.
                 assertFalse(collections.toggleLikeAndSyncSystemCodex("a", "likes-a", "Likes A", shared, emptyList()).nowLiked)
@@ -207,8 +219,8 @@ object RoomUpgradeScenario {
         database.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('custom_mihon_example_org','1',?)", arrayOf(payload("named-site")))
         database.execSQL("INSERT INTO codex_items VALUES('saved','custom_mihon_7','L3M',5)")
         database.execSQL("INSERT INTO liked_posts VALUES('a','custom_mihon_7','L3M',5,'[]')")
-        // Proof rows the retired importers wrote; the v11 migration drops their tables.
-        database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
+        // Proof rows the retired importers wrote; the v11 migration drops their tables, so v1.9.2's schema 11 has neither.
+        if (version < 11) database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
         if (version >= 2) {
             val sectionColumn = if (version >= 3) ",section" else ""
             val progressColumn = if (version >= 6) ",max_viewed_media_number" else ""
@@ -231,11 +243,13 @@ object RoomUpgradeScenario {
                 database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section) " +
                     "VALUES('PIXIV','other',34,3,'SEARCH','for_you:seed','FYP')")
             }
-            database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
+            if (version < 11) database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
         }
         if (version >= 4) {
+            // Version 7 added rule groups, with no default: every tag of a one-group rule is in group 0.
+            val (groupColumn, groupValue) = if (version >= 7) ",group_index" to ",0" else "" to ""
             for (tag in listOf("sky", "cloud")) {
-                database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display) VALUES('saved','PIXIV',?,?)", arrayOf(tag, tag))
+                database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display$groupColumn) VALUES('saved','PIXIV',?,?$groupValue)", arrayOf(tag, tag))
             }
         }
     }

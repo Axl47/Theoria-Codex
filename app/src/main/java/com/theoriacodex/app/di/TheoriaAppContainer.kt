@@ -686,7 +686,7 @@ internal class DefaultTheoriaAppContainer(
                         .onFailure { Diagnostics.report("series", "Waiting download notices stopped following the queue", it) }
                 }
                 durableStoreScope.launch {
-                    keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
+                    keepSeriesUpdatesScheduled(appContext, series.repository.observeHasFollowed(), settingsRepository.observeSettings())
                 }
             }
         }

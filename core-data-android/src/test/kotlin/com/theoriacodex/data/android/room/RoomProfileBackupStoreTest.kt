@@ -30,6 +30,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -120,6 +121,41 @@ class RoomProfileBackupStoreTest {
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
         assertEquals("""{"slug":"t1"}""", kept.series.memo)
         assertEquals("""{"id":"device"}""", restored.entries(id).single { it.entry.address == "/chapter/1" }.entry.memo)
+        restoredDatabase.close()
+    }
+
+    @Test fun `an unfollowed series with chapters marked read from its page, never opened, makes the round trip`() = runTest {
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        fun id(address: String) = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), address)
+        val chapters = listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1"))
+        val (single, bulk, dropped, glanced) = listOf("/single", "/bulk", "/dropped", "/glanced").map(::id)
+        val partway = id("/partway")
+        for (each in listOf(single, bulk, dropped, glanced, partway)) series.store(Series(each, each.address), chapters)
+        series.setEntriesRead(single, listOf("/chapter/1"), true)
+        series.setAllRead(bulk, true)
+        // Read, then no longer listed by its source: the read mark is all the series has.
+        series.setEntriesRead(dropped, listOf("/chapter/1"), true)
+        series.storeEntries(dropped, listOf(SeriesEntry("/chapter/2", "Ch.2")))
+        // Partway through one chapter; marking the one opened last unread forgets it, leaving only that place.
+        series.recordProgress(partway, "/chapter/2", position = 3, length = 20)
+        series.recordProgress(partway, "/chapter/1", position = 5, length = 18)
+        series.setEntriesRead(partway, listOf("/chapter/1"), false)
+        for (each in listOf(single, partway)) assertNull(series.series(each)?.lastOpenedEntry)
+
+        val snapshot = backups.snapshot(includeRecents = false)
+        assertEquals(listOf(bulk, dropped, partway, single), snapshot.series.map { it.series.series.id })
+
+        val restoredDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
+            TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
+        val restored = RoomSeriesRepository(restoredDatabase)
+        RoomProfileBackupStore(restoredDatabase).merge(snapshot)
+        for (each in listOf(single, bulk, partway)) assertEquals(series.entries(each), restored.entries(each))
+        val dao = restoredDatabase.seriesDao()
+        assertEquals(
+            dao.allEntries(dropped.source.id, dropped.address).map { it.address to it.read }.toSet(),
+            database.seriesDao().allEntries(dropped.source.id, dropped.address).map { it.address to it.read }.toSet(),
+        )
+        assertTrue(dao.allEntries(dropped.source.id, dropped.address).single { it.address == "/chapter/1" }.read)
         restoredDatabase.close()
     }
 

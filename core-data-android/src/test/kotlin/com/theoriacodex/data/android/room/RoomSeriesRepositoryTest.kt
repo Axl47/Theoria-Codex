@@ -51,6 +51,21 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
+    fun `whether any series is followed, and one entry while its source lists it`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+        assertFalse(repository.observeHasFollowed().first())
+        repository.setFollowed(id, true)
+        assertTrue(repository.observeHasFollowed().first())
+        repository.setFollowed(id, false)
+        assertFalse(repository.observeHasFollowed().first())
+
+        assertEquals("Chapter 1", repository.listedEntry(id, "/c/1")?.entry?.name)
+        assertNull(repository.listedEntry(id, "/c/9"))
+        repository.storeEntries(id, listOf(SeriesEntry("/c/2", "Chapter 2")))
+        assertNull("Dropped by its source", repository.listedEntry(id, "/c/1"))
+    }
+
+    @Test
     fun `progress marks the entry opened last, and an entry read at its last page`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
 

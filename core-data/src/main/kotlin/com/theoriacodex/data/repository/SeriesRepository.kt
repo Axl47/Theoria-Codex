@@ -7,6 +7,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** A series as stored: what its source said, and what the user did with it. */
 data class StoredSeries(
@@ -45,7 +47,13 @@ data class StoredSeriesEntry(
     val length: Long? = null,
     /** When the user last opened it or moved through it; null before that was kept. Marking it read does not count. */
     val lastReadAtEpochMs: Long? = null,
-)
+) {
+    /**
+     * Whether the user did anything with it: read it, or got past its start. What keeps a series in a backup and makes
+     * a switch of source refuse a series without chapters; `SeriesDao.ENTRY_HAS_PROGRESS` is the same rule in SQL.
+     */
+    val hasProgress: Boolean get() = read || position > 0
+}
 
 /**
  * A followed series as the Following list shows it. [lastUpdatedAtEpochMs] is when its newest listed entry came out,
@@ -81,6 +89,9 @@ interface SeriesRepository {
     /** Series with unread chapters first (most unread first), then by title. */
     fun observeFollowed(): Flow<List<FollowedSeries>>
 
+    /** Whether any series is followed. Cheaper than [observeFollowed] where only that matters. */
+    fun observeHasFollowed(): Flow<Boolean> = observeFollowed().map { it.isNotEmpty() }.distinctUntilChanged()
+
     fun observeSeries(id: SeriesId): Flow<StoredSeries?>
 
     /** In the source's order, newest first. */
@@ -89,6 +100,9 @@ interface SeriesRepository {
     suspend fun series(id: SeriesId): StoredSeries?
 
     suspend fun entries(id: SeriesId): List<StoredSeriesEntry>
+
+    /** The entry of [id] at [address], as [entries] has it: null when the source does not list it, or it is not stored. */
+    suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? = entries(id).firstOrNull { it.entry.address == address }
 
     /**
      * Stores what the source says about [series], keeping what the user did with it, and the stored description,
@@ -202,11 +216,24 @@ fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): Store
 fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).coerceAtLeast(0).toInt()
 
 /**
- * The playback position, in milliseconds, an episode starts at: where the user left it, while that is short of the
- * point that counts as watching it ([ANIME_FINISHED_PERCENT]), else 0. A watched episode left partway through a rewatch
- * resumes too.
+ * The playback position, in milliseconds, an episode starts at: where the user left it, watched or not, unless
+ * [episodeStartsOver] there. Watching [ANIME_FINISHED_PERCENT] still marks it watched and moves Continue on, but one
+ * left at 20:30 of 24:00 reopens there. Without a known duration, as after a switch of source, it resumes where it was
+ * left.
  */
 fun StoredSeriesEntry.resumePositionMs(): Long {
-    val length = length ?: return if (read) 0 else position
-    return if (position * 100 < length * ANIME_FINISHED_PERCENT) position else 0
+    val length = length ?: return position
+    return if (episodeStartsOver(position, length)) 0 else position
 }
+
+/**
+ * Whether an episode [lengthMs] long, left at [positionMs], starts over rather than resuming: the position is in its
+ * tail, the last [RESUME_TAIL_MS] or last 10% of it, whichever is shorter. For a 24-minute episode that is its ending
+ * and next-episode preview, where it was as good as played out. Within a session the Viewer keeps its own, narrower
+ * rule, so an episode the user swipes back to resumes there.
+ */
+fun episodeStartsOver(positionMs: Long, lengthMs: Long): Boolean =
+    lengthMs > 0 && positionMs >= lengthMs - minOf(RESUME_TAIL_MS, lengthMs / 10)
+
+/** The longest tail of an episode in which a saved position counts as having played it out; see [episodeStartsOver]. */
+const val RESUME_TAIL_MS = 120_000L

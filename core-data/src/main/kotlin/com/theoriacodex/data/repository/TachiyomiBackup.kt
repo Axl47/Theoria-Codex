@@ -2,6 +2,7 @@
 
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.Series
@@ -110,9 +111,9 @@ private fun gunzip(bytes: ByteArray): ByteArray = GZIPInputStream(bytes.inputStr
  * source no extension has (the local source is number 0). Positions convert to [StoredSeriesEntry]'s units: Mihon keeps
  * the last page's index from 0, so page 0 is untouched; Aniyomi keeps milliseconds, though its fields say seconds.
  *
- * The entry opened last is the one history read last, else the furthest one with progress. A series therefore keeps
- * one whenever it has progress, which is also what keeps an unfollowed series in Theoria's own backups. Each entry's
- * read time is its history's, and a followed series counts as followed from when the app added it, else from [now].
+ * The entry opened last is the one history read last, else the furthest one with progress, so Continue resumes there.
+ * Each entry's read time is its history's, and a followed series counts as followed from when the app added it, else
+ * from [now]. A manga keeps the reading mode the user chose for it there, by [mihonReadingMode].
  */
 private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries? {
     if (source <= 0) return null
@@ -120,7 +121,7 @@ private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries?
     val stored = entries.filter { it.url.isNotBlank() }.distinctBy { it.url }.map { it.toStored(kind, now, readAt[it.url]) }
     val addresses = stored.mapTo(HashSet()) { it.entry.address }
     val lastOpened = history.filter { it.url in addresses }.maxByOrNull { it.lastRead }?.url
-        ?: stored.filter { it.read || it.position > 0 }.minByOrNull { it.sourceOrder }?.entry?.address
+        ?: stored.filter(StoredSeriesEntry::hasProgress).minByOrNull { it.sourceOrder }?.entry?.address
     if (!favorite && lastOpened == null) return null
     val series = Series(
         id = SeriesId(kind.extensionSourceKey(source), url),
@@ -133,7 +134,23 @@ private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries?
         memo = storedMemo(memo),
     )
     val followedAt = if (favorite) dateAdded.takeIf { it > 0 } ?: now else null
-    return BackupSeries(StoredSeries(series, followed = favorite, lastOpenedEntry = lastOpened, followedAtEpochMs = followedAt), stored)
+    val readingMode = if (kind == SeriesKind.MANGA) mihonReadingMode(viewerFlags ?: viewer) else null
+    return BackupSeries(
+        StoredSeries(series, followed = favorite, readingMode = readingMode, lastOpenedEntry = lastOpened, followedAtEpochMs = followedAt),
+        stored,
+    )
+}
+
+/**
+ * The reading mode in a Mihon-family manga's reader [flags]: their low three bits, as Mihon's `ReadingMode` numbers
+ * them. Its vertical pager, webtoon and continuous vertical modes all read top to bottom here; 0 follows the app's
+ * default, and so does any value Theoria has no mode for.
+ */
+private fun mihonReadingMode(flags: Int): GalleryReadingMode? = when (flags and 0x7) {
+    1 -> GalleryReadingMode.LEFT_TO_RIGHT
+    2 -> GalleryReadingMode.RIGHT_TO_LEFT
+    3, 4, 5 -> GalleryReadingMode.VERTICAL
+    else -> null
 }
 
 private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?): StoredSeriesEntry {
@@ -199,9 +216,13 @@ private class TachiyomiSeries(
     @ProtoNumber(8) val status: Int = 0,
     @ProtoNumber(9) val thumbnailUrl: String? = null,
     @ProtoNumber(13) val dateAdded: Long = 0,
+    /** The reading mode alone, as older backups kept it; Mihon still writes it beside [viewerFlags]. */
+    @ProtoNumber(14) val viewer: Int = 0,
     @ProtoNumber(16) val entries: List<TachiyomiEntry> = emptyList(),
     /** Mihon writes it only when false, so a series without it is in the library. */
     @ProtoNumber(100) val favorite: Boolean = true,
+    /** The reader settings chosen for the series: its reading mode, and its orientation in bits Theoria has no use for. */
+    @ProtoNumber(103) val viewerFlags: Int? = null,
     @ProtoNumber(104) val history: List<TachiyomiHistory> = emptyList(),
     /**
      * What the extension keeps with the series, as JSON text: bytes from Mihon and Aniyomi, a string from TachiyomiJ2K

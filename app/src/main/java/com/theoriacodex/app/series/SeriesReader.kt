@@ -104,7 +104,7 @@ internal class SeriesReader(private val series: SeriesDependencies) {
     suspend fun resolve(queryHash: String?, postId: PostId): Post? {
         val id = checkNotNull(seriesIdOf(queryHash)) { "Not a series session" }
         val stored = checkNotNull(series.repository.series(id)) { "The series is not stored" }
-        val entry = checkNotNull(series.repository.entries(id).firstOrNull { it.entry.address == postId.sourcePostId }) {
+        val entry = checkNotNull(series.repository.listedEntry(id, postId.sourcePostId)) {
             "This entry is no longer listed"
         }
         // A downloaded chapter's pages are its files. Its cover is tagged as in a session, so only the Viewer's

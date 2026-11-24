@@ -50,6 +50,8 @@ class RoomSeriesRepository(
         }
         .distinctUntilChanged().flowOn(Dispatchers.Default)
 
+    override fun observeHasFollowed(): Flow<Boolean> = dao.observeHasFollowed().distinctUntilChanged()
+
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = dao.observeSeries(id.source.id, id.address)
         // Room emits null while no row matches, whatever the Java signature says.
         .map<SeriesEntity?, StoredSeries?> { it?.toStored() }
@@ -64,6 +66,9 @@ class RoomSeriesRepository(
 
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> =
         withContext(Dispatchers.IO) { dao.entries(id.source.id, id.address) }.map(SeriesEntryEntity::toStored)
+
+    override suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? =
+        withContext(Dispatchers.IO) { dao.listedEntry(id.source.id, id.address, address) }?.toStored()
 
     override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> =
         database.withTransaction { write(series, entries) }
@@ -209,7 +214,7 @@ class RoomSeriesRepository(
             val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction false
             val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
             // All stored entries count, also ones the old source no longer lists: their progress goes with the series.
-            if (entries.isEmpty() && oldEntries.any { it.read || it.position > 0 }) throw NoChaptersToMoveToException()
+            if (entries.isEmpty() && oldEntries.any(StoredSeriesEntry::hasProgress)) throw NoChaptersToMoveToException()
             write(to, entries)
             val target = dao.series(to.id.source.id, to.id.address).toStored()
             val (moved, changed) = carryProgress(old, oldEntries, target, dao.entries(to.id.source.id, to.id.address).map(SeriesEntryEntity::toStored))
