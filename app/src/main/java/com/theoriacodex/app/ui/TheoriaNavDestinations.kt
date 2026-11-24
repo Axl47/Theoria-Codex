@@ -470,7 +470,7 @@ private fun viewerEffectCallbacks(shell: TheoriaShell, tagActions: PostTagSearch
     },
     onLoadMore = shell.viewerRouteWorkflow::loadMore,
     onDismiss = {
-        shell.features.search.setViewerLaunchContext(null)
+        shell.scope.launch { shell.features.search.setViewerLaunchContext(null) }
         shell.navController.popBackStack()
     },
     onRestorationUnavailable = {

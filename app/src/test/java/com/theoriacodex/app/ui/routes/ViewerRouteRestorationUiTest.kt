@@ -2,7 +2,17 @@ package com.theoriacodex.app.ui.routes
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import android.os.Looper
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerReturnTransition
+import org.robolectric.Shadows.shadowOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -48,15 +58,37 @@ class ViewerRouteRestorationUiTest {
     )
     private val session = ViewerSession(listOf(post), ViewerLaunchContext("exit", 0, ViewerStreamSource.SEARCH, 0))
 
-    @Test fun `dismiss retains outgoing media without restoration UI during suspended navigation`() {
-        val dismiss = CompletableDeferred<Unit>()
+    @Test fun `dismiss retains outgoing media without restoration UI until navigation removes the Viewer`() {
         var dismissed = false
-        withRoute(onDismiss = { dismissed = true; dismiss.await() }) {
+        withRoute(onDismiss = { dismissed = true }) {
             compose.onNodeWithContentDescription("Back").performClick()
             compose.waitUntil { dismissed }
             assertExitingPresentation()
-            compose.runOnIdle { dismiss.complete(Unit) }
-            assertExitingPresentation()
+        }
+    }
+
+    @Test fun `two quick Backs close the Viewer, then the screen behind once the Viewer leaves`() {
+        val transition = ViewerReturnTransition()
+        val shown = mutableStateOf(true)
+        var dispatcher: OnBackPressedDispatcher? = null
+        var backsBehind = 0
+        withRoute(wrap = { route ->
+            dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            BackHandler { backsBehind++ }
+            CompositionLocalProvider(LocalViewerReturnTransition provides transition) { if (shown.value) route() }
+        }) {
+            compose.waitForIdle()
+            compose.runOnUiThread { dispatcher!!.onBackPressed() }
+            compose.mainClock.advanceTimeByFrame()
+            compose.runOnUiThread { dispatcher!!.onBackPressed() }
+            compose.waitForIdle()
+            assertEquals(0, backsBehind)
+            assertEquals(post.id, transition.request?.postId)
+
+            shown.value = false
+            compose.waitForIdle()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(1, backsBehind)
         }
     }
 
@@ -209,10 +241,11 @@ class ViewerRouteRestorationUiTest {
         liveOwner: ViewerViewModel? = null,
         onRecoverMedia: suspend () -> com.theoriacodex.domain.model.Post? = { null },
         restore: suspend () -> ViewerSession? = { error("A live handoff or exit must not restore") },
-        onDismiss: suspend () -> Unit = {},
+        onDismiss: () -> Unit = {},
         onOwner: (ViewerViewModel?) -> Unit = {},
         onGoToSearch: () -> Unit = {},
         onRemoveFromCodex: (String, com.theoriacodex.domain.model.Post) -> Unit = { _, _ -> },
+        wrap: @Composable (route: @Composable () -> Unit) -> Unit = { route -> route() },
         verify: () -> Unit,
     ) {
         val retention = ViewerSessionRetentionViewModel()
@@ -229,6 +262,7 @@ class ViewerRouteRestorationUiTest {
                     })[ViewerViewModel::class.java]
                 }
                 MaterialTheme {
+                    wrap {
                     ViewerRoute(
                         dependencies = ViewerRouteDependencies(
                             retention, ViewerPostResolver { _, _ -> post },
@@ -249,6 +283,7 @@ class ViewerRouteRestorationUiTest {
                         ),
                         onOwnerChanged = onOwner,
                     )
+                    }
                 }
             }
             verify()
