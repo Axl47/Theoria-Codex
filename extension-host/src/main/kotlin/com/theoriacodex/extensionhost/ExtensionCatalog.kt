@@ -11,6 +11,8 @@ import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.awaitSuccess
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
@@ -62,20 +64,23 @@ class ExtensionCatalog(
         for (new in repos) {
             val url = RepoReader.storedAddress(new.url)
             if (repos().any { it.url == url }) continue
-            runCatchingPreservingCancellation {
-                if (!url.startsWith("https://")) throw RepoProblem("Not an https address")
-                val index = RepoReader.read(url, ::get)
-                if (!index.signingKey.matches(FINGERPRINT)) throw RepoProblem("Names no signing key")
-                if (new.signingKey != null && !new.signingKey.equals(index.signingKey, ignoreCase = true)) throw RepoProblem("Now signed with another key")
-                choices.update { current ->
-                    // Two addresses of one repo, such as its folder and its newer index, are the same repo.
-                    if (current.repos.any { it.url == url || it.signingKey == index.signingKey }) current
-                    else current.copy(repos = current.repos + ExtensionRepo(url, index.name.ifBlank { url }, index.signingKey))
-                }
-                indexes[url] = index
-            }.onFailure { problems[new.url] = describe(it) }
+            runCatchingPreservingCancellation { addOne(url, new.signingKey) }.onFailure { problems[new.url] = describe(it) }
         }
         return problems
+    }
+
+    /** Reads the repo at [url] and keeps it with the key it names, which must be [knownKey] when a backup knew one. */
+    private suspend fun addOne(url: String, knownKey: String?) {
+        if (!url.startsWith("https://")) throw RepoProblem("Not an https address")
+        val index = RepoReader.read(url, ::get)
+        if (!index.signingKey.matches(FINGERPRINT)) throw RepoProblem("Names no signing key")
+        if (knownKey != null && !knownKey.equals(index.signingKey, ignoreCase = true)) throw RepoProblem("Now signed with another key")
+        choices.update { current ->
+            // Two addresses of one repo, such as its folder and its newer index, are the same repo.
+            if (current.repos.any { it.url == url || it.signingKey == index.signingKey }) current
+            else current.copy(repos = current.repos + ExtensionRepo(url, index.name.ifBlank { url }, index.signingKey))
+        }
+        indexes[url] = index
     }
 
     override suspend fun remove(url: String) {
@@ -159,15 +164,23 @@ class ExtensionCatalog(
 
     private suspend fun get(url: String): ByteArray = client.newCall(request(url)).awaitSuccess().use { it.body.bytes() }
 
+    /** Writes [url]'s body to [file], stopping once it passes [MAX_APK_BYTES]. */
     private suspend fun download(url: String, file: File) {
         client.newCall(request(url)).awaitSuccess().use { response ->
             if (response.body.contentLength() > MAX_APK_BYTES) throw RepoProblem("Too large")
-            file.outputStream().use { output ->
-                response.body.byteStream().use { input ->
-                    val copied = input.copyTo(output)
-                    if (copied > MAX_APK_BYTES) throw RepoProblem("Too large")
-                }
-            }
+            response.body.byteStream().use { input -> file.outputStream().use { output -> copyAtMost(input, output) } }
+        }
+    }
+
+    private fun copyAtMost(input: InputStream, output: OutputStream) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var copied = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) return
+            copied += read
+            if (copied > MAX_APK_BYTES) throw RepoProblem("Too large")
+            output.write(buffer, 0, read)
         }
     }
 
