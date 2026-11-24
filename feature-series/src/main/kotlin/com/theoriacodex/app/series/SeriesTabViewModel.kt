@@ -221,7 +221,8 @@ class SeriesTabViewModel(
         mutableState,
         repository.observeFollowed().map<List<FollowedSeries>, List<FollowedSeries>?> { it }.onStart { emit(null) },
     ) { state, followed ->
-        state.content(followed)
+        // Held back until the view is chosen, when the saved sort and filter have arrived.
+        state.content(followed.takeIf { state.view != null })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(null))
 
     init {

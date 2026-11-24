@@ -1,12 +1,6 @@
 package com.theoriacodex.app.series
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,7 +26,6 @@ import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.CollapsingSearchChrome
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
-import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 
@@ -59,26 +52,24 @@ internal fun DedicatedSourceSearchView(
     var query by rememberSaveable(dedicated.source.key.id) { mutableStateOf((dedicated.kind as? BrowseKind.Filtered)?.text.orEmpty()) }
     var searchBarDismissed by rememberSaveable(dedicated.source.key.id) { mutableStateOf(false) }
     var focusRequest by remember { mutableIntStateOf(0) }
-    var chromeVisible by remember(dedicated.source.key.id) { mutableStateOf(true) }
 
     LaunchedEffect(dedicated.kind) {
         query = (dedicated.kind as? BrowseKind.Filtered)?.text.orEmpty()
-        chromeVisible = true
     }
-    SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true }, onAtTop = { chromeVisible = true })
+    SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true }, onAtTop = {})
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
-        searchBarDismissed = false
-        chromeVisible = true
         grid.animateScrollToItem(0)
+        // After the scroll, which collapses the bar as any scroll does.
+        searchBarDismissed = false
     }
     BackHandler(onBack = onBack)
 
     Column(modifier.fillMaxSize()) {
-        DedicatedSourceHeader(dedicated.source, visible = chromeVisible || !searchBarDismissed, onBack = onBack)
+        DedicatedSourceHeader(dedicated.source, onBack = onBack)
         CollapsingSearchChrome(
             expanded = !searchBarDismissed,
             legacy = oldSearchBar,
-            onExpand = { searchBarDismissed = false; chromeVisible = true; focusRequest++ },
+            onExpand = { searchBarDismissed = false; focusRequest++ },
             trailingControl = {},
             horizontalPadding = 16.dp,
             contentHorizontalPadding = 0.dp,
@@ -101,19 +92,13 @@ internal fun DedicatedSourceSearchView(
 }
 
 @Composable
-private fun DedicatedSourceHeader(source: SeriesSourceListing, visible: Boolean, onBack: () -> Unit) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = expandVertically(tween(TheoriaMotion.MEDIUM_MS)) + fadeIn(tween(TheoriaMotion.SHORT_MS)),
-        exit = shrinkVertically(tween(TheoriaMotion.MEDIUM_MS)) + fadeOut(tween(TheoriaMotion.SHORT_MS)),
-    ) {
-        SecondaryScreenAppBar(
-            title = source.sourceName,
-            onBack = onBack,
-            subtitle = source.languageSubtitle,
-            modifier = Modifier.testTag(DEDICATED_HEADER_TAG),
-        )
-    }
+private fun DedicatedSourceHeader(source: SeriesSourceListing, onBack: () -> Unit) {
+    SecondaryScreenAppBar(
+        title = source.sourceName,
+        onBack = onBack,
+        subtitle = source.languageSubtitle,
+        modifier = Modifier.testTag(DEDICATED_HEADER_TAG),
+    )
 }
 
 @Composable
