@@ -91,10 +91,12 @@ class RoomSeriesRepository(
         }
 
     /**
-     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones: none when no entries
-     * were stored before, since nothing was there to compare with. Entries are written only by a listing or an import,
-     * so a series imported from a backup counts what its source lists beyond the backup's entries as new. Must run in a
-     * transaction.
+     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones. It returns none when
+     * no entries were stored before, since nothing was there to compare with, and none when no listed entry matches a
+     * stored one by address or as a moved entry: such a list almost always means the source changed its addresses, not
+     * that the whole series came out at once, so it is stored as a new baseline. A source that only ever lists its one
+     * newest chapter therefore never reports a new one. Entries are written only by a listing or an import, so a series
+     * imported from a backup counts what its source lists beyond the backup's entries as new. Must run in a transaction.
      */
     private fun storeEntries(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
         val id = stored.series.id
@@ -120,7 +122,8 @@ class RoomSeriesRepository(
         // The series first: its entries refer to its row.
         dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, lastCheckedAtEpochMs = now).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
-        return if (known.isEmpty()) emptyList() else newEntries
+        // No listed entry matched a stored one: the list is a baseline, as when nothing was stored.
+        return if (newEntries.size == current.size) emptyList() else newEntries
     }
 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) {
