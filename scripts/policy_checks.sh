@@ -13,6 +13,11 @@ line_budgets() {
   python3 scripts/check_hotspots.py ${1:+--base "$1"}
 }
 
+# Kotlin and Java comments may only shrink; see config/quality/comment-baseline.json and docs/adr/.
+comment_ratchet() {
+  python3 scripts/check_comments.py
+}
+
 # Project names a build file depends on, in either spelling: project(":x") or project(path = ":x").
 project_dependencies() {
   grep -oE 'project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?"[^"]+"' "$1" | sed -E 's/.*":?([^"]+)"$/\1/'
