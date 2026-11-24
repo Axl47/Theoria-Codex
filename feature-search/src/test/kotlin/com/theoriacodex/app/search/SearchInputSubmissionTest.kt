@@ -47,9 +47,9 @@ class SearchInputSubmissionTest {
         val actions = mutableListOf<SearchAction>()
         compose.setContent { MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
             SearchScreen(
-                state = state.value, related = testRelatedShelf(), creatorBrowsingSources = emptySet(), onAction = { actions += it },
+                state = state.value, related = testRelatedShelf(), onAction = { actions += it },
                 resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                onRequestSaveToCodex = {}, onSaveToDevice = {},
+                onRequestSaveToCodex = {},
             )
         } } }
         compose.onNodeWithTag("Search bar").performClick()
@@ -120,7 +120,6 @@ class SearchInputSubmissionTest {
                     SearchScreen(
                         state = state.value,
                         related = testRelatedShelf(),
-                        creatorBrowsingSources = emptySet(),
                         onAction = { action ->
                             actions += action
                             when (action) {
@@ -142,7 +141,7 @@ class SearchInputSubmissionTest {
                             }
                         },
                         resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                        onRequestSaveToCodex = {}, onSaveToDevice = {},
+                        onRequestSaveToCodex = {},
                     )
                 }
             }

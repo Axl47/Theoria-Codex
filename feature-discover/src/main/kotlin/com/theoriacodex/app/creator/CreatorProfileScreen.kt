@@ -1,6 +1,5 @@
 package com.theoriacodex.app.creator
 
-import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.FeedGridDivider
 import com.theoriacodex.app.ui.components.rememberFeedView
@@ -72,7 +71,7 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.ui.components.FeedPageDemandControl
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
-import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.pagedFeedFooterMessage
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
@@ -103,8 +102,6 @@ fun CreatorProfileScreen(
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
     related: RelatedShelfBinding,
-    onRequestSaveToCodex: (Post) -> Unit,
-    onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
@@ -160,12 +157,9 @@ fun CreatorProfileScreen(
         )
     }
     selectedActionPost?.let { post ->
-        PostActionSheet(
-            post, onDismiss = { selectedActionPost = null }, onSaveToDevice = { onSaveToDevice(post) },
-            liked = post.id in marks.liked, onToggleLike = { onToggleLike(post) },
-            onSaveToCodex = { onRequestSaveToCodex(post) },
-            onShowRelated = { related.controller.show(post) },
-        ) { PostTagActionSection(post) }
+        FeedPostActionSheet(
+            post, { selectedActionPost = null }, onToggleLike = onToggleLike, onShowRelated = { related.controller.show(post) },
+        )
     }
 }
 

@@ -116,7 +116,6 @@ internal data class CodexDetailDestinationState(
     val posts: List<Post>,
     val activeProfile: RecommendationProfile,
     val availableSources: Set<SourceKey>,
-    val creatorBrowsingSources: Set<SourceKey>,
     val resolveUnknownAnimatedDurations: Boolean,
     val savedSearchOwner: com.theoriacodex.app.codex.SavedSearchesCodexViewModel? = null,
     val savedSearches: List<com.theoriacodex.data.repository.SavedSearchEntry> = emptyList(),
@@ -309,9 +308,6 @@ internal fun CodexDetailDestinationStateBoundary(
             posts = posts.orEmpty(),
             activeProfile = settings.activeRecommendationProfile(),
             availableSources = available,
-            creatorBrowsingSources = remember(sources.registry, available) {
-                sources.registry.creatorBrowsingSources().intersect(available)
-            },
             resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
             loading = lookup == null || posts == null,
         ),
@@ -552,9 +548,6 @@ private fun FollowedCodexDestinationStateBoundary(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
         items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),
         availableSources = available,
-        creatorBrowsingSources = remember(sources.registry, available) {
-            sources.registry.creatorBrowsingSources().intersect(available)
-        },
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
         followedOwner = owner, follows = settings.followedCreators, loading = feed.loading || reloading,
     ))

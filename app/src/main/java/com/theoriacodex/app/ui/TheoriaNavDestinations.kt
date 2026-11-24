@@ -151,8 +151,7 @@ private fun CodexDetailEntry(
                 onOpenViewer = shell::openCodexViewer,
                 onOpenCodexActions = shell.overlays::openCollectionActions,
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
-                postMenu = shell.savedPostMenu(),
-                onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
+                onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
             )
             // Offline copies removed from a shelf's Codex menu here; leaving this screen commits them.
             CodexOfflineRemovalUndo(Modifier.align(Alignment.BottomCenter))
@@ -235,7 +234,6 @@ private fun CodexDetailContent(
         posts = state.posts,
         sortMode = sortMode,
         availableSources = state.availableSources,
-        creatorBrowsingSources = state.creatorBrowsingSources,
         pixivUgoiraClient = shell.sources.pixivUgoiraClient,
         durations = durationOwner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations),
         resolvePostById = { postId -> shell.viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX) },
@@ -293,8 +291,6 @@ private fun CreatorDestination(shell: TheoriaShell) {
                 },
                 onNavigateBack = { shell.navController.popBackStack() },
                 onToggleLike = { post -> shell.feedLikeAction(ViewerStreamSource.CREATOR_PROFILE)(post) },
-                onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
-                onSaveToDevice = shell::requestSaveToDevice,
                 onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
             ),
             onOwnerAvailable = routes.creator::publish,

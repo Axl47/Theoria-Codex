@@ -35,14 +35,12 @@ import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.app.ui.undo.UndoPill
 import com.theoriacodex.app.ui.undo.UndoSlot
-import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.routes.CodexDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.RecentsDestinationState
 import com.theoriacodex.app.ui.routes.RecentsDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.SavedCodexRoute
-import com.theoriacodex.app.ui.routes.SavedPostMenu
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
@@ -101,18 +99,10 @@ private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionH
         onOpenViewer = shell::openCodexViewer,
         onOpenCodexActions = shell.overlays::openCollectionActions,
         resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
-        postMenu = shell.savedPostMenu(),
-        onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
+        onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
         header = { Box(Modifier.padding(horizontal = 16.dp).padding(top = 12.dp)) { header {} } },
     )
 }
-
-/** A held Saved post's menu, for Library's Saved section and the standalone Saved route. */
-internal fun TheoriaShell.savedPostMenu() = SavedPostMenu(
-    saveToDevice = ::requestSaveToDevice,
-    saveToCodex = { post -> requestSaveToCodex(post) },
-    goToSearch = { navigation.goToTab(TopLevelDestination.Search) },
-)
 
 private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: RecentsDestinationState, undo: UndoSlot) {
     undo.scope.launch {
@@ -173,12 +163,9 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
             // Recents filters no lengths, so it only reports what its cards learn.
             durations = durationOwner.feedDurations(MediaDurationStates.EMPTY, resolveInBackground = false),
             likedPostIds = state.likedPostIds,
-            creatorBrowsingSources = shell.sources.registry.creatorBrowsingSources(),
             onToggleLike = { post ->
                 shell.toggleLikeAndSyncCodex(post) { outcome -> relatedOwner.related.onLikeCommitted(post, outcome) }
             },
-            onRequestSaveToCodex = { post -> shell.requestSaveToCodex(post) },
-            onSaveToDevice = shell::requestSaveToDevice,
             onGoToSearch = { shell.navigation.showTab(TopLevelDestination.Search) },
             onOpenWatchedPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.WATCHED) },
             onOpenCodexPost = { entries, index -> shell.openRecentSection(entries, index, RecentPostSection.CODEX) },

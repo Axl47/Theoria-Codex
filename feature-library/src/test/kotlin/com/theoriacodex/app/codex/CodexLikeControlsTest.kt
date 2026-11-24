@@ -31,7 +31,7 @@ class CodexLikeControlsTest {
                 CodexDetailScreen(
                     codexId = "searches",
                     codexName = "Searches", posts = listOf(post), sortMode = CodexSortMode.NEWEST_SAVED,
-                    availableSources = emptySet(), creatorBrowsingSources = emptySet(),
+                    availableSources = emptySet(),
                     onOpenViewer = { _, _ -> }, onAddPostsToAnotherCodex = {}, onRemovePosts = {}, onSavePostToDevice = {},
                     onBack = {},
                     likedPostIds = if (liked.value) setOf(post.id) else emptySet(),

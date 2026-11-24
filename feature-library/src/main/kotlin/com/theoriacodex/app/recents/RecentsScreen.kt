@@ -63,9 +63,6 @@ fun RecentsScreen(
     durations: FeedDurations = FeedDurations.NONE,
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
-    creatorBrowsingSources: Set<SourceKey> = emptySet(),
-    onRequestSaveToCodex: (Post) -> Unit,
-    onSaveToDevice: (Post) -> Unit,
     onGoToSearch: () -> Unit,
     onOpenWatchedPost: (List<RecentPostEntry>, Int) -> Unit,
     onOpenCodexPost: (List<RecentPostEntry>, Int) -> Unit,
@@ -127,14 +124,12 @@ fun RecentsScreen(
 
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
-            post, creatorBrowsingSources, { selectedActionPost = null }, onSaveToDevice, onRequestSaveToCodex,
-            onGoToSearch,
+            post, { selectedActionPost = null }, onGoToSearch, onToggleLike,
             onStartOver = {
                 onStartOver(post, selectedActionSection)
                 selectedActionPost = null
             }.takeIf { maxOf(post.mediaCount ?: 1, post.media.size) > 1 },
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
-            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
             onRemoveFromCodex = onRemovePost?.let { remove ->
                 visible.entryFor(post, selectedActionSection)?.let { entry -> { remove(entry) } }
             },
