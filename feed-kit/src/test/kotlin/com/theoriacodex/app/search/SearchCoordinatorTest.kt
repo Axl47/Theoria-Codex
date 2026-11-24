@@ -154,6 +154,27 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `a source whose first page failed is asked for its first page on retry while a paged source gets its continuation (ADR 0069)`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU, requiresExactTags = false).apply {
+            failure = SourceAdapterException(SourceFailureReason.UNKNOWN, "offline")
+        }
+        val coordinator = coordinator(pixiv, gelbooru)
+        coordinator.initializeRoute()
+        val query = unifiedQuery("mixed")
+        val first = coordinator.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
+        gelbooru.failure = null
+
+        val page = coordinator.executePage(first.continuation) as SearchPageResult.Success
+        val retried = coordinator.retrySource(query, SearchSourceScope.GlobalUnified, page.continuation, SourceKey.GELBOORU)
+            as SearchPageResult.Success
+
+        fun pages(posts: List<Post>) = posts.map { "${it.id.source}:${it.id.sourcePostId.substringAfterLast('-')}" }
+        assertEquals(listOf("PIXIV:1"), pages(page.posts))
+        assertEquals(listOf("GELBOORU:0"), pages(retried.posts))
+    }
+
+    @Test
     fun `temporary execution key binds canonical source selection (ADR 0080)`() = runTest {
         val query = unifiedQuery("temporary")
         val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
