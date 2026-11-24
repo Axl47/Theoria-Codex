@@ -44,8 +44,7 @@ class DataStoreFormatTest {
             extensionLanguages = mapOf("extension.a" to listOf("en", "es")),
         )
         val full = SettingsDataStoreFile(settings = settings)
-        val undeclaredKeysAwaitingReview = setOf("settings.activeProfile")
-        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = undeclaredKeysAwaitingReview)
+        assertStoredFormat(golden("settings-full.json") to full)
     }
 
     @Test
@@ -76,8 +75,10 @@ class DataStoreFormatTest {
             savedSearchNewPosts = SavedSearchNewPosts(5L, mapOf("saved" to NewPostMarks(listOf("PIXIV:1"), listOf("PIXIV:2", "PIXIV:1"), 4L))),
         )
         val full = UiRestoreDataStoreFile(state = state)
-        val undeclaredKeysAwaitingReview = setOf("state.feedFabRestoreStates{}.searchAnimationByScope{}.animatedOnly")
-        assertStoredFormat(golden("ui-restore-full.json") to full, retiredKeys = undeclaredKeysAwaitingReview)
+        assertStoredFormat(
+            golden("ui-restore-full.json") to full,
+            retiredKeys = setOf("state.feedFabRestoreStates{}.searchAnimationByScope{}.animatedOnly"),
+        )
     }
 
     @Test
