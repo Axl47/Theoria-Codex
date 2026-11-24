@@ -124,26 +124,25 @@ class ProfileBackupServiceTest {
     }
 
     @Test fun `startup recovery of an interrupted restore stores the backup's repos`() = runTest {
-        val realSettings = InMemorySettingsRepository()
         var fail = true
-        val settings = object : SettingsRepository by realSettings {
-            override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        val base = harness()
+        val store = object : ProfileBackupStore by base.store {
+            override suspend fun merge(library: BackupLibrary): Int {
                 if (fail) error("Simulated storage failure")
-                realSettings.updateSettings(transform)
+                return base.store.merge(library)
             }
         }
         val repos = RecordingRepos(refuse = "", added = "https://present.example/repo")
-        val harness = harness(settings)
-        val service = ProfileBackupService(settings, harness.store, harness.pins, harness.positions, harness.journal, extensionRepos = repos)
+        val service = ProfileBackupService(base.settings, store, base.pins, base.positions, base.journal, extensionRepos = repos)
         val bytes = codec.encode(backup().copy(extensionRepos = listOf(ExtensionRepo("https://new.example/repo", "New", "bb22"))))
 
         assertTrue(runCatching { service.restore(bytes) }.exceptionOrNull() is ProfileRestorePendingException)
+        assertEquals(listOf("https://present.example/repo"), repos.repos().map { it.url })
         fail = false
-        val restarted = ProfileBackupService(settings, harness.store, harness.pins, harness.positions, harness.journal, extensionRepos = repos)
-        assertTrue(restarted.recoverPendingRestore())
+        assertTrue(service.recoverPendingRestore())
 
         assertEquals(listOf("https://present.example/repo", "https://new.example/repo"), repos.repos().map { it.url })
-        assertFalse(harness.journal.exists())
+        assertFalse(base.journal.exists())
     }
 
     @Test fun `portable round trip preserves profile libraries rules settings and exact search replay`() {
