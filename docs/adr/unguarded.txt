@@ -18,7 +18,6 @@
 0020-for-you-retired-searches.md
 0021-local-state-files.md
 0023-post-snapshots.md
-0024-profile-backup-format.md
 0025-profile-backup-restore.md
 0026-profile-deletion-journal.md
 0027-series-download-queue.md

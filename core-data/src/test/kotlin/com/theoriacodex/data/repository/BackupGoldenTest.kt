@@ -40,7 +40,7 @@ class BackupGoldenTest {
         assertEquals(goldenBackup().copy(customSources = emptyList()), codec.decode(golden("backup-v1.json")))
     }
 
-    @Test fun `backups holding retired settings and statistics keys still import`() {
+    @Test fun `backups holding retired settings and statistics keys still import (ADR 0024)`() {
         listOf("backup-v1.json", "backup-v2.json").forEach { name ->
             val raw = golden(name).decodeToString()
             (RETIRED_SETTINGS + RETIRED_STATISTICS).forEach { key -> assertTrue("$name lacks $key", raw.contains("\"$key\"")) }
