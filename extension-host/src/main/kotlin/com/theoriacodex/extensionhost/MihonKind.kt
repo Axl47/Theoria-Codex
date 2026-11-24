@@ -28,6 +28,8 @@ object MihonKind : ExtensionKind {
         return "Needs extension API $libVersion".takeIf { libVersion != SUPPORTED_LIB_VERSION }
     }
 
+    override fun runs(libVersion: String) = libVersion.toFloatOrNull() == SUPPORTED_LIB_VERSION
+
     override fun adapt(instance: Any, host: HostServices): List<HostedSource>? = when (instance) {
         is Source -> listOf(instance)
         is SourceFactory -> instance.createSources()
