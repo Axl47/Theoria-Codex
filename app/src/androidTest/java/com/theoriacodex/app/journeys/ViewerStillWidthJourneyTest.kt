@@ -7,6 +7,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -41,9 +43,9 @@ class ViewerStillWidthJourneyTest : AppJourneyFixture() {
         openSearchPost(GALLERY, RECENT_SEARCH)
         activate(compose.onNodeWithContentDescription("Open post journey-$VIDEO"))
         val (media, pager) = shown("Media actions")
-        var density = 0f
-        scenario.onActivity { density = it.resources.displayMetrics.density }
-        assertEquals(pager.top + 40 * density, media.top)
+        var gap = 0
+        scenario.onActivity { with(Density(it)) { gap = 40.dp.roundToPx() } }
+        assertEquals(pager.top + gap, media.top)
         assertEquals(pager.width, media.width)
     }
 
