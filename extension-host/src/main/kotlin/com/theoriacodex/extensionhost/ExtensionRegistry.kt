@@ -31,6 +31,11 @@ import kotlinx.coroutines.withContext
 
 data class ExtensionSite(val name: String, val hosts: Set<String>)
 
+private fun endProcess(error: Throwable) {
+    val thread = Thread.currentThread()
+    thread.uncaughtExceptionHandler?.uncaughtException(thread, error)
+}
+
 class ExtensionRegistry(
     private val packages: () -> List<ExtensionPackage>,
     private val load: (ExtensionPackage, HostServices) -> List<HostedSource>,
@@ -40,6 +45,7 @@ class ExtensionRegistry(
     private val deviceLanguages: () -> List<String>,
     private val limitMs: Long = LIMIT_MS,
     private val log: (String) -> Unit = {},
+    private val fatal: (Throwable) -> Unit = ::endProcess,
 ) : SeriesExtensions {
     private class Loaded(val sources: List<HostedSource>, val problem: String? = null)
 
@@ -261,11 +267,20 @@ class ExtensionRegistry(
     }
 
     private fun <T> limited(what: String, block: () -> T): Result<T> {
-        val task = threads.submit<T> { block() }
+        val task = threads.submit<T> {
+            try {
+                block()
+            } catch (error: Throwable) {
+                if (error.endsTheProcess()) fatal(error)
+                throw error
+            }
+        }
         val failure = try {
             return Result.success(task.get(limitMs, TimeUnit.MILLISECONDS))
         } catch (error: ExecutionException) {
-            error.cause ?: error
+            val cause = error.cause ?: error
+            if (cause.endsTheProcess()) throw cause
+            cause
         } catch (_: TimeoutException) {
             task.cancel(true)
             TimeoutException("Took longer than ${limitMs / MILLIS_PER_SECOND} s")

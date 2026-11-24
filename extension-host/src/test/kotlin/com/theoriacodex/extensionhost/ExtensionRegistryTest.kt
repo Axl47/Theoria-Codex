@@ -25,7 +25,9 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -64,6 +66,8 @@ class ExtensionRegistryTest {
 
     private var listings = 0
 
+    private val fatalErrors = CopyOnWriteArrayList<Throwable>()
+
     private fun registry(settings: (SettingsHook) -> SourceSettings) = ExtensionRegistry(
         packages = { listings += 1; onDevice },
         load = { extension, host -> loads += extension.apk.path; hosted(extension, host) },
@@ -72,6 +76,7 @@ class ExtensionRegistryTest {
         settings = settings,
         deviceLanguages = { deviceLanguages },
         limitMs = 500,
+        fatal = { fatalErrors += it },
     )
 
     private fun fetchesImages(source: StubHttpSource): Boolean {
@@ -514,6 +519,26 @@ class ExtensionRegistryTest {
         assertEquals(mapOf("hangs" to "Took longer than 0 s", "fails" to "androidx/missing/Thing", "works" to null), listed)
         assertEquals(listOf("custom_mihon_1"), registry.sources().map { it.key.id })
         never.countDown()
+    }
+
+    @Test
+    fun `a virtual machine error while an extension loads ends the process, also after its time ran out, and other failures are load problems (ADR 0060)`() = runBlocking {
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
+        sourcesOf = { throw NoClassDefFoundError("androidx/missing/Thing") }
+        assertEquals(emptyList<Any>(), registry.sources())
+        assertEquals(emptyList<Throwable>(), fatalErrors)
+
+        sourcesOf = { throw OutOfMemoryError("now") }
+        assertFailsWith<OutOfMemoryError> { registry { error("No source here has settings") }.sources() }
+        assertEquals(listOf("now"), fatalErrors.map { it.message })
+
+        val release = CountDownLatch(1)
+        sourcesOf = { while (release.count > 0) Thread.onSpinWait(); throw OutOfMemoryError("late") }
+        assertEquals(emptyList<Any>(), registry { error("No source here has settings") }.sources())
+        release.countDown()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (fatalErrors.size < 2 && System.nanoTime() < deadline) Thread.sleep(10)
+        assertEquals(listOf("now", "late"), fatalErrors.map { it.message })
     }
 
     @Test
