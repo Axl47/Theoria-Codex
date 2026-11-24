@@ -21,6 +21,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.FloatState
+import androidx.compose.runtime.IntState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
@@ -527,15 +529,13 @@ private fun ViewerVideoContent(
     loadingPreview: (@Composable () -> Unit)?,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
-    val subtitleBottomLiftPx = with(LocalDensity.current) { LocalViewerSubtitleBottomLift.current.toPx() }
-    var parentHeightPx by remember { mutableIntStateOf(0) }
-    var viewBottomPx by remember { mutableFloatStateOf(0f) }
-    val subtitleBottomOverlapPx = viewerSubtitleBottomOverlapPx(parentHeightPx, viewBottomPx, subtitleBottomLiftPx)
+    val parentHeightPx = remember { mutableIntStateOf(0) }
+    val viewBottomPx = remember { mutableFloatStateOf(0f) }
     val effectiveAspectRatio = if (controls.fillScreen) null else state.aspectRatio ?: aspectRatio
     val videoModifier = if (controls.fillScreen) Modifier.fillMaxSize() else Modifier.viewerFittedMedia(effectiveAspectRatio)
     Box(
         modifier
-            .onSizeChanged { parentHeightPx = it.height }
+            .onSizeChanged { parentHeightPx.intValue = it.height }
             .testTag(viewerVideoTestTag(postId))
             .then(diagnostics?.let {
                 Modifier.semantics { stateDescription = it.stateDescription; contentDescription = it.contentDescription }
@@ -547,9 +547,10 @@ private fun ViewerVideoContent(
             postId = postId,
             diagnosticsEnabled = diagnosticsEnabled,
             fillScreen = controls.fillScreen,
-            subtitleBottomOverlapPx = subtitleBottomOverlapPx,
+            parentHeightPx = parentHeightPx,
+            viewBottomPx = viewBottomPx,
             modifier = videoModifier
-                .onPlaced { coordinates -> viewBottomPx = coordinates.positionInParent().y + coordinates.size.height }
+                .onPlaced { coordinates -> viewBottomPx.floatValue = coordinates.positionInParent().y + coordinates.size.height }
                 .then(mediaModifier),
         )
         if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
@@ -568,9 +569,12 @@ private fun ViewerVideoSurface(
     postId: PostId,
     diagnosticsEnabled: Boolean,
     fillScreen: Boolean,
-    subtitleBottomOverlapPx: Int,
+    parentHeightPx: IntState,
+    viewBottomPx: FloatState,
     modifier: Modifier,
 ) {
+    val subtitleBottomLiftPx = with(LocalDensity.current) { LocalViewerSubtitleBottomLift.current.toPx() }
+    val subtitleBottomOverlapPx = viewerSubtitleBottomOverlapPx(parentHeightPx.intValue, viewBottomPx.floatValue, subtitleBottomLiftPx)
     AndroidView(
         modifier = modifier,
         factory = { context ->

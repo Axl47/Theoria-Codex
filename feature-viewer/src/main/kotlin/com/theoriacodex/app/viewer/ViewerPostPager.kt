@@ -24,11 +24,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
-import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.loopsPlayback
+import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
+import com.theoriacodex.app.viewer.state.ViewerResolutionState
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -59,7 +62,7 @@ internal fun ViewerPostPagerSurface(
     val vertical = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series) == GalleryReadingMode.VERTICAL
     val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
     val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
-    val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
+    val reservedBottom = if (selection.isAnimated && frame.chromeVisible) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerTimelineInset.current).toPx() }
     } else 0f
     Box(
@@ -220,16 +223,11 @@ private fun ViewerPostPage(
                 frame, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
                 expectedDurationMs = knownDurationMs?.takeIf { carriesPostDuration(post, media) },
             ),
-            events = viewerRendererEvents(
-                session = frame.uiState.session, key = key, generation = loadGeneration,
-                onAction = host.onAction, onPlaybackProgress = host.episodeProgress(frame.uiState.series, post),
-                onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
-                onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
-            ),
+            events = host.rememberPageEvents(frame, key, loadGeneration, controls, post, media),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = host.videoOptions(key, pageState, frame.uiState, screen, quality, qualityHeight, config),
+            videoOptions = host.rememberVideoOptions(key, pageState.resolution, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config.playbackDiagnosticsEnabled),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -244,19 +242,41 @@ private fun ViewerPostPage(
     }
 }
 
-private fun ViewerScreenHost.videoOptions(
+@Composable
+private fun ViewerScreenHost.rememberPageEvents(
+    frame: ViewerFrame,
     key: ViewerMediaKey,
-    pageState: ViewerPageState,
-    uiState: ViewerUiState,
+    loadGeneration: Long,
+    controls: ViewerControls,
+    post: Post,
+    media: ImageRef,
+): ViewerRendererEvents {
+    val session = frame.uiState.session
+    val series = frame.uiState.series
+    return remember(session, key, loadGeneration, this, controls, post, media, series) {
+        viewerRendererEvents(
+            session = session, key = key, generation = loadGeneration,
+            onAction = onAction, onPlaybackProgress = episodeProgress(series, post),
+            onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
+            onDurationKnown = { duration -> if (carriesPostDuration(post, media)) durations.onPlayerDuration(post, duration) },
+        )
+    }
+}
+
+@Composable
+private fun ViewerScreenHost.rememberVideoOptions(
+    key: ViewerMediaKey,
+    resolution: ViewerResolutionState,
+    episode: ViewerEpisodeChoice,
+    session: ViewerSessionIdentity?,
     screen: ViewerScreenState,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    config: ViewerScreenConfig,
-): ViewerVideoOptions {
-    val episode = uiState.controls.episode
-    return ViewerVideoOptions(
-        quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
-        ViewerEpisodeOptions(screen.streamAttempts.forSession(uiState.session), episode.pickedStream(key), pageState.resolution.resolvedAtMs) { label ->
+    diagnosticsEnabled: Boolean,
+): ViewerVideoOptions = remember(key, resolution, episode, session, screen, quality, qualityHeight, diagnosticsEnabled, this) {
+    ViewerVideoOptions(
+        quality, qualityHeight, episode.streamLabelFor(key), resolution.terminalMessage(), diagnosticsEnabled,
+        ViewerEpisodeOptions(screen.streamAttempts.forSession(session), episode.pickedStream(key), resolution.resolvedAtMs) { label ->
             onAction(ViewerAction.FallBackToStream(key, label))
         },
     )
@@ -265,8 +285,7 @@ private fun ViewerScreenHost.videoOptions(
 internal fun ViewerScreenHost.episodeProgress(series: ViewerSeries?, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
     onPlaybackProgress?.takeIf { series is ViewerSeries.Watching }?.let { report -> { progress -> report(post, progress) } }
 
-private fun ViewerPageState.terminalResolutionMessage(): String? = resolution
-    .takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }
+private fun ViewerResolutionState.terminalMessage(): String? = takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }
     ?.message
 
 private fun viewerRendererControls(
@@ -279,7 +298,7 @@ private fun viewerRendererControls(
         isPlaying = controls.playback.playing,
         isPreloading = preloading,
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
-        showPassiveProgress = !frame.chromeVisible && active && !frame.inPictureInPicture,
+        showPassiveProgress = active && !frame.inPictureInPicture && !frame.chromeVisible,
         loopPlayback = frame.uiState.loopsPlayback,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,

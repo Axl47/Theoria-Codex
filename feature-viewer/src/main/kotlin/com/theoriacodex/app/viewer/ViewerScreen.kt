@@ -88,13 +88,14 @@ fun ViewerScreen(
         ViewerNoPosts()
         return
     }
+    val saveContext = remember(saveToCodexQuery, saveFromForYou) { ViewerSaveContext(saveToCodexQuery, saveFromForYou) }
     CompositionLocalProvider(
         LocalViewerInstantSeek provides config.instantSeek,
         LocalViewerAutoRotateVideos provides config.autoRotateVideos,
     ) {
         ViewerLoadedScreen(
             uiState, session, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,
-            videoPositions, host, config, ViewerSaveContext(saveToCodexQuery, saveFromForYou), canLoadMoreFromSource, loadingMoreFromSource, contextActions,
+            videoPositions, host, config, saveContext, canLoadMoreFromSource, loadingMoreFromSource, contextActions,
             relatedShelf, comments, trail,
         )
     }
@@ -151,11 +152,10 @@ private fun ViewerLoadedScreen(
     val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
+    val chromeVisibleState = rememberUpdatedState(chromeVisible)
     val chromeStage = rememberViewerChromeStage(chromeVisible)
-    val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisible, opening, returning)
-    val frame = remember(uiState, navigation, posts, selection, chromeVisible, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
-        ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
-    }
+    val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisibleState, opening, returning)
+    val frame = rememberViewerFrame(uiState, navigation, posts, selection, chromeVisibleState, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
     val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)

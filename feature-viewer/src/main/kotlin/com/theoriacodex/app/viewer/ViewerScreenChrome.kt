@@ -101,10 +101,8 @@ internal fun BoxScope.ViewerChromeOverlays(
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
 
-    ViewerChromeVisibility(frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
-        ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
-            ViewerEpisodeBar(frame, controls, rotationOffer, pictureInPicture, host.onAction)
-        }
+    ViewerBottomStackOverlay(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
+        ViewerEpisodeBar(frame, controls, rotationOffer, pictureInPicture, host.onAction)
     }
     ViewerDockOverlay(watching, frame, screen, controls, activity, quality, qualityHeight, host, config, comments, saveContext, fadesWhileScrubbing)
     ViewerEpisodeCenterOverlay(watching, frame, screen, controls, swipe, config, host.onAction, fadesWhileScrubbing)
@@ -132,6 +130,22 @@ internal fun BoxScope.ViewerChromeOverlays(
                 host.onAction(ViewerAction.SetLocked(false))
             },
         )
+    }
+}
+
+@Composable
+private fun BoxScope.ViewerBottomStackOverlay(
+    frame: ViewerFrame,
+    postPagerState: PagerState,
+    controls: ViewerControls,
+    pendingPostId: MutableState<PostId?>,
+    config: ViewerScreenConfig,
+    loadMoreFromStrip: () -> Unit,
+    fadesWhileScrubbing: Modifier,
+    episodeBar: @Composable () -> Unit,
+) {
+    ViewerChromeVisibility(frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS && !frame.mediaOverviewVisible, Modifier.align(Alignment.BottomCenter)) {
+        ViewerBottomStack(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing, episodeBar)
     }
 }
 

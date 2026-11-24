@@ -159,7 +159,6 @@
 0163-series-switch-source-sheet.md
 0164-series-tab-state.md
 0165-viewer-back-hold-and-return-transition.md
-0166-viewer-chrome-layout-and-selection.md
 0167-viewer-episode-playback.md
 0168-viewer-gesture-recognizer.md
 0169-viewer-gif-frame-rendering.md

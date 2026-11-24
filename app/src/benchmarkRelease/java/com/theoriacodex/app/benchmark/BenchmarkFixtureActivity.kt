@@ -268,6 +268,10 @@ private fun BenchmarkViewerFixture(
             ),
         )
     }
+    val config = remember { ViewerScreenConfig(playbackDiagnosticsEnabled = true) }
+    val host = remember(posts) {
+        ViewerScreenHost(onAction = { action: ViewerAction -> viewerState = reduceViewerState(viewerState, action).state })
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -275,12 +279,8 @@ private fun BenchmarkViewerFixture(
     ) {
         ViewerScreen(
             uiState = viewerState,
-            host = ViewerScreenHost(
-                onAction = { action: ViewerAction ->
-                    viewerState = reduceViewerState(viewerState, action).state
-                },
-            ),
-            config = ViewerScreenConfig(playbackDiagnosticsEnabled = true),
+            host = host,
+            config = config,
         )
     }
 }

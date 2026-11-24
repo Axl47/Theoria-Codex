@@ -26,7 +26,7 @@ class ViewerControlsTest {
         val returning = mutableStateOf(false)
         lateinit var controls: ViewerControls
         compose.setContent {
-            controls = rememberViewerControls(onAction, screen, false, chromeVisible.value, opening.value, returning.value)
+            controls = rememberViewerControls(onAction, screen, false, chromeVisible, opening.value, returning.value)
         }
 
         fun interact(): List<ViewerAction> {
@@ -59,7 +59,7 @@ class ViewerControlsTest {
         val actions = mutableListOf<ViewerAction>()
         val screen = ViewerScreenState()
         fun controls(chromeVisible: Boolean) =
-            ViewerControls({ actions += it }, screen, overviewVisible = false, chromeVisible = chromeVisible, opening = false, returning = false)
+            ViewerControls({ actions += it }, screen, overviewVisible = false, chromeVisible = mutableStateOf(chromeVisible), opening = false, returning = false)
 
         controls(chromeVisible = false).run { beginScrub(); endScrub() }
         assertEquals(listOf(ViewerAction.ToggleChrome, ViewerAction.SetChromeVisible(false)), actions)
@@ -72,7 +72,7 @@ class ViewerControlsTest {
     @Test fun `dismissal closes every surface once`() {
         val actions = mutableListOf<ViewerAction>()
         val screen = ViewerScreenState()
-        val controls = ViewerControls({ actions += it }, screen, overviewVisible = true, chromeVisible = true, opening = false, returning = false)
+        val controls = ViewerControls({ actions += it }, screen, overviewVisible = true, chromeVisible = mutableStateOf(true), opening = false, returning = false)
 
         controls.requestDismiss()
         controls.requestDismiss()

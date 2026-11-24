@@ -1,6 +1,6 @@
 package com.theoriacodex.app.viewer
 
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.unit.dp
 
-val LocalViewerTimelineInset = staticCompositionLocalOf { 0.dp }
+val LocalViewerTimelineInset = compositionLocalOf { 0.dp }
