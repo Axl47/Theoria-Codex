@@ -40,7 +40,7 @@ internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boo
     val hold = state.slideshowImageHold().takeIf { resumed }
     val view = LocalView.current
     val awake = resumed && (running || state.series is ViewerSeries.Reading)
-    DisposableEffect(awake) {
+    DisposableEffect(view, awake) {
         view.keepScreenOn = awake
         onDispose { view.keepScreenOn = false }
     }
