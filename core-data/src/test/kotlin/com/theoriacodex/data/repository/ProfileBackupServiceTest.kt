@@ -94,6 +94,18 @@ class ProfileBackupServiceTest {
         assertEquals(emptyList<ExtensionRepo>(), codec.decode(codec.encode(backup())).extensionRepos)
     }
 
+    @Test fun `statistics with a watched-tag floor are written as version 5 and restore the floor`() {
+        val statistics = LifetimeStatistics(
+            watchedByTag = mapOf(StatisticsTagKey(SourceKey.GELBOORU, "fern") to 9L),
+            watchedTagFloors = mapOf(SourceKey.GELBOORU to 4L),
+        )
+        val written = backup().copy(statistics = statistics)
+
+        assertEquals(5, encodedTree(written)["version"]?.toString()?.toInt())
+        assertEquals(statistics.watchedTagFloors, codec.decode(codec.encode(written)).statistics?.watchedTagFloors)
+        assertEquals(2, encodedTree(backup().copy(statistics = LifetimeStatistics()))["version"]?.toString()?.toInt())
+    }
+
     @Test fun `exporting writes the device's repos, previewing names the new ones, and restoring stores them`() = runTest {
         val held = listOf(ExtensionRepo("https://present.example/repo", "Present", "aa11"))
         val source = object : ExtensionRepos by RecordingRepos(refuse = "", added = "") {
@@ -446,7 +458,7 @@ class ProfileBackupServiceTest {
             byteArrayOf(0xc3.toByte(), 0x28),
             "{}".toByteArray(),
             "[".repeat(65).toByteArray(),
-            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":5").toByteArray(),
+            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":6").toByteArray(),
             codec.encode(backup()).toString(Charsets.UTF_8).replace("\"PIXIV\"", "\"UNKNOWN\"").toByteArray(),
         )
         invalid.forEach { assertTrue(runCatching { codec.decode(it) }.isFailure) }

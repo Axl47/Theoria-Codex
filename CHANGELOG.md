@@ -138,6 +138,7 @@
 - On a series page, the top bar now searches chapters inline, holding a chapter offers per-chapter read/unread, Mark previous as read, and download actions, bulk read/unread changes offer Undo, and the chapter list's filter button remembers sort and filter choices per series with quick-clear pills under the header.
 - Back up profiles opens a sheet holding Include History and statistics and the Back up button. The Backup page itself shows Back up profiles and Restore backup, and notes that Restore also takes Mihon and Aniyomi backups. Daily backup has a group of its own below them.
 - A looping clip in the Viewer lets the screen sleep after 10 minutes without a touch once it has started over, like reading a chapter. Episodes and videos that play once still keep it on while they play.
+- Statistics no longer grow with every tag you see. Each site keeps counts for its most-watched tags, so recording a view stays quick however long your history gets, and For You keeps the same interests. A niche tag kept on only two or three posts may stop counting as an interest, so Trails offer it less. A backup with statistics made once a site reaches that limit needs this version or newer to restore.
 
 ### Removed
 
