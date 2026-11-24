@@ -3,6 +3,7 @@ package com.theoriacodex.extensionhost
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -66,14 +67,15 @@ class AniyomiSeriesSource internal constructor(
      * Only its details tell: sources leave a listing at episodes. So an anime not opened in this process, as a search
      * or the new-episode check asks about, has them asked for first: one more request, for such an anime only.
      */
-    override suspend fun entries(series: Series): List<SeriesEntry> {
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries {
         val anime = listedAnime[series.id.address]?.takeIf { it.initialized } ?: calls.calling { opened(anime(series)) }
         if (anime.fetch_type == FetchType.Seasons) throw UnsupportedEntriesException(SEASONS_UNSUPPORTED)
         return calls.calling {
-            source.getEpisodeList(anime).map { episode ->
+            val episodes = source.getEpisodeList(anime).map { episode ->
                 listedEpisodes[episode.url] = episode
                 extensionEntry(series.title, episode.url, episode.name, episode.episode_number, episode.scanlator, episode.date_upload)
             }
+            SeriesEntries(episodes)
         }
     }
 

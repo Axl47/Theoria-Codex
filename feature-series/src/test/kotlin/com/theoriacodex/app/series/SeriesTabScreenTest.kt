@@ -27,6 +27,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -180,7 +181,7 @@ private class FakeSeriesSource(
     override suspend fun latest(page: Int) = page("Latest", page)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = page(text, page)
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 
     private fun page(prefix: String, page: Int): SeriesPage = SeriesPage(
@@ -200,7 +201,7 @@ private class StubSeriesRepository(private val followed: List<FollowedSeries> = 
     override suspend fun series(id: SeriesId): StoredSeries? = null
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = emptyList()
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit

@@ -23,6 +23,7 @@ import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesCovers
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesFilter
@@ -49,7 +50,7 @@ internal class FakeSeriesSource(override val key: SourceKey, private val answer:
     override suspend fun popular(page: Int): SeriesPage = error("unused")
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
     override suspend fun details(series: Series): Series = series
-    override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
 }
 
 /**
@@ -65,7 +66,7 @@ internal class StoredOnly(stored: StoredSeries, private var entries: List<Stored
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = stored.map { it.takeIf { it.series.id == id } }
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit

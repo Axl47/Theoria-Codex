@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -72,6 +73,19 @@ class SeriesUpdateCheckTest {
         assertEquals(200L, repository.series(series.id)!!.lastCheckedAtEpochMs)
 
         assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)))
+    }
+
+    @Test
+    fun `a check hands the source the stored chapters and keeps the series memo it returns`() = runTest {
+        follow(series)
+        source.chapters[series.id] = listOf(second, first.copy(memo = """{"id":1}"""))
+        repository.checkFollowed(sourcesOn(source))
+
+        source.listingMemo = """{"pages":3}"""
+        repository.checkFollowed(sourcesOn(source))
+
+        assertEquals(listOf(emptyList(), listOf(second, first.copy(memo = """{"id":1}"""))), source.handed)
+        assertEquals("""{"pages":3}""", repository.series(series.id)!!.series.memo)
     }
 
     @Test
@@ -161,10 +175,13 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     /** What a page's refresh waits for in [details]; a check asks for chapters only. */
     var detailsWait: CompletableDeferred<Unit>? = null
     override suspend fun details(series: Series): Series = checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
-    override suspend fun entries(series: Series) = when {
+    /** The stored list each listing was handed, and the series memo a listing returns. */
+    val handed = mutableListOf<List<SeriesEntry>>()
+    var listingMemo: String? = null
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>) = when {
         fails -> throw IllegalStateException("down")
         series.id == stopsAt -> throw CancellationException("stopped")
-        else -> chapters[series.id].orEmpty()
+        else -> SeriesEntries(chapters[series.id].orEmpty(), listingMemo).also { handed += stored }
     }
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }

@@ -167,7 +167,7 @@ internal fun extensionEntry(
 )
 
 /** A source's memo as the app stores it: its JSON text, or null when it keeps nothing. */
-private fun JsonObject?.storedMemo(): String? = this?.takeIf(JsonObject::isNotEmpty)?.toString()
+internal fun JsonObject?.storedMemo(): String? = this?.takeIf(JsonObject::isNotEmpty)?.toString()
 
 /**
  * A memo the app stored, as its source's object again. One that is not a JSON object, which no source wrote, is

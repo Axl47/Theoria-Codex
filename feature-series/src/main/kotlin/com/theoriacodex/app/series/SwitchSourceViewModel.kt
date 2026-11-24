@@ -173,7 +173,7 @@ class SwitchSourceViewModel(
 
     private suspend fun entryCount(source: SeriesSource, series: Series): Int? = calls.withPermit {
         try {
-            source.entries(series).size
+            source.entries(series).entries.size
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {

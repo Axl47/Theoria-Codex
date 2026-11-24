@@ -246,7 +246,7 @@ class AniyomiSeriesSourceTest {
 
         assertEquals(
             listOf(SeriesEntry("/e/2", "Episode 2", 2f, "Subs", 1_000L), SeriesEntry("/e/1", "Show - Episode 1", 1f)),
-            series.entries(stored),
+            series.entries(stored).entries,
         )
         // Listed once its details were asked for, so a second listing asks no more.
         series.entries(stored)

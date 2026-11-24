@@ -134,7 +134,7 @@ class MihonSeriesSourceTest {
         source.chapters = listOf(chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } }, chapter("Chapter 2", "/c/2"))
         val listed = series.popular(1).series.single()
         assertEquals("""{"slug":"s-1"}""", listed.memo)
-        assertEquals(listOf("""{"id":1}""", null), series.entries(listed).map { it.memo })
+        assertEquals(listOf("""{"id":1}""", null), series.entries(listed).entries.map { it.memo })
 
         // A later run: nothing listed, so both are rebuilt from what the app stored.
         val later = MihonSeriesSource(source, HostServices(ExtensionImages()))
@@ -170,12 +170,29 @@ class MihonSeriesSourceTest {
     }
 
     @Test
+    fun `a listing is handed the stored chapters, memos included, and the series memo it records comes back`() = runTest {
+        source.chapters = listOf(chapter("Chapter 2", "/c/2"), chapter("Chapter 1", "/c/1"))
+        source.listingMemo = buildJsonObject { put("pages", 3) }
+        val stored = Series(SeriesId(series.key, "/s"), "Series")
+
+        val listed = series.entries(stored, listOf(SeriesEntry("/c/1", "Chapter 1", 1f, memo = """{"id":1}""")))
+
+        val handed = source.handedChapters.single().single()
+        assertEquals("/c/1", handed.url)
+        assertEquals(buildJsonObject { put("id", 1) }, handed.memo)
+        assertEquals("""{"pages":3}""", listed.seriesMemo)
+        // The held series keeps it, so the source gets it back on its next call.
+        series.details(stored)
+        assertEquals(buildJsonObject { put("pages", 3) }, source.asked.last().memo)
+    }
+
+    @Test
     fun `a chapter listed twice is the first, for the app and for its pages`() = runTest {
         source.chapters = listOf(
             chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } },
             chapter("Chapter 1 again", "/c/1").also { it.memo = buildJsonObject { put("id", 2) } },
         )
-        val entry = series.entries(Series(SeriesId(series.key, "/s"), "Series")).single()
+        val entry = series.entries(Series(SeriesId(series.key, "/s"), "Series")).entries.single()
 
         assertEquals("""{"id":1}""", entry.memo)
         series.media(entry)
@@ -189,7 +206,7 @@ class MihonSeriesSourceTest {
             chapter("Chapter 1", "/c/1"),
         )
 
-        val entries = series.entries(Series(SeriesId(series.key, "/s"), "Series"))
+        val entries = series.entries(Series(SeriesId(series.key, "/s"), "Series")).entries
 
         assertEquals(listOf("/s chapters"), source.updates)
         assertEquals(SeriesEntry("/c/2", "Chapter 2", number = 2f, translatorGroup = "Group", uploadedAtEpochMs = 2_000L), entries[0])
@@ -200,7 +217,7 @@ class MihonSeriesSourceTest {
     fun `media is the chapter's pages, for a listed entry and for one stored in an earlier run`() = runTest {
         source.chapters = listOf(chapter("Chapter 1", "/c/1"))
         source.pages = listOf(Page(0, imageUrl = "https://cdn.test/1.jpg"), Page(1, imageUrl = "https://cdn.test/2.jpg"))
-        val listed = series.entries(Series(SeriesId(series.key, "/s"), "Series")).single()
+        val listed = series.entries(Series(SeriesId(series.key, "/s"), "Series")).entries.single()
 
         assertEquals(SeriesKind.MANGA, series.kind)
         val media = series.media(listed)
@@ -290,6 +307,10 @@ class MihonSeriesSourceTest {
         /** Whether a details call clears the memo of the series it is handed. */
         var clearMemo = false
 
+        /** What a chapter-only call records on the series, on a copy it returns; nothing when null. */
+        var listingMemo: JsonObject? = null
+        val handedChapters = mutableListOf<List<SChapter>>()
+
         val calls = mutableListOf<String>()
         val updates = mutableListOf<String>()
         val asked = mutableListOf<SManga>()
@@ -310,7 +331,9 @@ class MihonSeriesSourceTest {
             asked += manga
             if (fetchDetails && clearMemo) manga.memo = JsonObject(emptyMap())
             updates += "${manga.url}${if (fetchDetails) " details" else ""}${if (fetchChapters) " chapters" else ""}"
-            return SMangaUpdate(details ?: manga, this.chapters)
+            if (fetchChapters) handedChapters += chapters
+            val listingCopy = listingMemo?.takeIf { !fetchDetails }?.let { memo -> manga.copy().also { it.memo = memo } }
+            return SMangaUpdate(listingCopy ?: details ?: manga, this.chapters)
         }
 
         override suspend fun getPageList(chapter: SChapter): List<Page> {
