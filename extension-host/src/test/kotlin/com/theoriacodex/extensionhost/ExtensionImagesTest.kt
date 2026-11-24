@@ -282,7 +282,7 @@ class ExtensionImagesTest {
         val callers = Executors.newFixedThreadPool(waiting)
         fun loadAll() = (0 until waiting).also { reader.arrived = CountDownLatch(waiting) }.map { index ->
             callers.submit<Result<String>> {
-                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1", OkHttpClient().newCall(Request.Builder().url(pageUrl).build())).use { it.body.string() } }
+                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1", caller.newCall(Request.Builder().url(pageUrl).build())).use { it.body.string() } }
             }
         }.map { it.get(5, TimeUnit.SECONDS) }
 
@@ -322,6 +322,24 @@ class ExtensionImagesTest {
         }
     }
 
+    @Test
+    fun `a page the app no longer wants never reaches its source (ADR 0059)`() = runTest {
+        val reader = PagePerImageSource()
+        val pages = MihonImages(reader, MihonKind.sourceKey(reader.id), images)
+        val chapter = SChapter.create().apply { url = "/c/1" }
+        val unnamed = checkNotNull(pages.pageAddress(chapter, Page(0, "${reader.baseUrl}/p/1")))
+        val named = checkNotNull(pages.pageAddress(chapter, Page(1, imageUrl = "https://img.test/2.jpg")))
+        val gone = caller.newCall(Request.Builder().url(named).build()).apply { cancel() }
+
+        for (address in listOf(unnamed, named)) {
+            val (url, data) = address.toHttpUrl().let { it.newBuilder().fragment(null).build() to it.fragment?.substringAfter('/', "")?.takeIf(String::isNotEmpty) }
+            assertFailsWith<IOException> { pages.fetch(address, url, data, gone) }
+        }
+
+        assertEquals(emptyList<String>(), reader.asked)
+        assertEquals(0, reader.requests.get())
+    }
+
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
 
     private fun ExtensionImages.cover(source: SourceKey, url: String): String =
@@ -343,11 +361,13 @@ class ExtensionImagesTest {
         override val supportsLatest = false
         val asked = mutableListOf<String>()
         val listed = mutableListOf<String>()
+        val requests = AtomicInteger()
         var expired = false
 
         override val client: OkHttpClient = OkHttpClient.Builder()
             .addInterceptor(
                 answering { request ->
+                    requests.incrementAndGet()
                     val image = request.url.host == "img.test"
                     if (image && expired) cannedResponse(request, body = "expired", code = 403) else cannedResponse(request, body = "image ${request.url}")
                 },
@@ -466,6 +486,8 @@ class ExtensionImagesTest {
         }
     }
 }
+
+private val caller = OkHttpClient()
 
 private val ignoringReplies = object : Callback {
     override fun onFailure(call: Call, e: IOException) = Unit

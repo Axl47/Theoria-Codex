@@ -35,6 +35,7 @@ fun interface SourceImages {
 }
 
 internal fun Call.executeFor(caller: Call): Response {
+    if (caller.isCanceled()) throw IOException(CANCELED)
     caller.addEventListener(object : EventListener() {
         override fun canceled(call: Call) = cancel()
     })
@@ -42,7 +43,7 @@ internal fun Call.executeFor(caller: Call): Response {
     return execute()
 }
 
-internal fun <T> Call.blockingFor(block: suspend () -> T): T = runBlocking {
+internal fun <T> Call.blockingFor(block: suspend () -> T): T = if (isCanceled()) throw IOException(CANCELED) else runBlocking {
     val work = coroutineContext.job
     addEventListener(object : EventListener() {
         override fun canceled(call: Call) = work.cancel()
@@ -50,6 +51,8 @@ internal fun <T> Call.blockingFor(block: suspend () -> T): T = runBlocking {
     if (isCanceled()) work.cancel()
     block()
 }
+
+private const val CANCELED = "Canceled"
 
 class ExtensionImages(
     private val key: Lazy<ByteArray> = lazy { ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes) },

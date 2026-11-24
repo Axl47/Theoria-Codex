@@ -152,7 +152,7 @@
 
 ### Fixed
 
-- Reopening a chapter no longer leaves you on its cover for seconds, sometimes over 30. Closing a chapter now stops its pages downloading, so they no longer hold up sites that limit how fast you can load them, such as Asura Scans.
+- Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
 - A spinner shows over a chapter until its pages arrive.
 - Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
