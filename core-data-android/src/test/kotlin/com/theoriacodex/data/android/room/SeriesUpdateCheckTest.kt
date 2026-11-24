@@ -20,7 +20,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.theoriacodex.data.repository.refresh
@@ -146,12 +146,11 @@ class SeriesUpdateCheckTest {
         runCurrent()
 
         val askedWhileWaiting = mutableListOf<Boolean>()
-        val followedRead = CompletableDeferred<Unit>()
-        val reading = object : SeriesRepository by repository {
-            override fun observeFollowed() = repository.observeFollowed().onEach { followedRead.complete(Unit) }
+        val followed = repository.observeFollowed().first()
+        val onScheduler = object : SeriesRepository by repository {
+            override fun observeFollowed() = flowOf(followed)
         }
-        val check = launch { reading.checkFollowed({ askedWhileWaiting += !pageRefresh.isCompleted; null }) }
-        followedRead.await()
+        val check = launch { onScheduler.checkFollowed({ askedWhileWaiting += !pageRefresh.isCompleted; null }) }
         runCurrent()
         pageRefresh.complete(Unit)
         joinAll(refresh, check)
