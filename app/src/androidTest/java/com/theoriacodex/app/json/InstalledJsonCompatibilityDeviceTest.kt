@@ -33,6 +33,7 @@ import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.RecentSearchPayload
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.VideoVariantRecord
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -49,10 +50,6 @@ import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import org.json.JSONObject
@@ -165,22 +162,22 @@ class InstalledJsonCompatibilityDeviceTest {
             deleteRecursively()
             mkdirs()
         }
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
-            DataStoreSettingsRepository(directory, scope).updateSettings { it.copy(oldSearchBar = true) }
-            DataStoreUiRestoreRepository(directory, scope).setSearchScrollState("h", SearchScrollState(7, 12))
-            DataStoreStatisticsRepository(directory, scope).recordAppOpen()
-            fun keys(name: String) = JSONObject(directory.resolve(name).readText())
-            assertEquals(setOf("schemaVersion", "settings"), keys(DATASTORE_SETTINGS_FILE_NAME).keySetCompat())
-            assertEquals(true, keys(DATASTORE_SETTINGS_FILE_NAME).getJSONObject("settings").getBoolean("oldSearchBar"))
-            val state = keys(DATASTORE_UI_RESTORE_FILE_NAME).getJSONObject("state")
-            assertEquals(
-                setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx"),
-                state.getJSONObject("searchScrollStates").getJSONObject("h").keySetCompat(),
-            )
-            assertEquals(1L, keys(DATASTORE_STATISTICS_FILE_NAME).getJSONObject("statistics").getLong("appOpenCount"))
+            withDataStoreScope { scope ->
+                DataStoreSettingsRepository(directory, scope).updateSettings { it.copy(oldSearchBar = true) }
+                DataStoreUiRestoreRepository(directory, scope).setSearchScrollState("h", SearchScrollState(7, 12))
+                DataStoreStatisticsRepository(directory, scope).recordAppOpen()
+                fun keys(name: String) = JSONObject(directory.resolve(name).readText())
+                assertEquals(setOf("schemaVersion", "settings"), keys(DATASTORE_SETTINGS_FILE_NAME).keySetCompat())
+                assertEquals(true, keys(DATASTORE_SETTINGS_FILE_NAME).getJSONObject("settings").getBoolean("oldSearchBar"))
+                val state = keys(DATASTORE_UI_RESTORE_FILE_NAME).getJSONObject("state")
+                assertEquals(
+                    setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx"),
+                    state.getJSONObject("searchScrollStates").getJSONObject("h").keySetCompat(),
+                )
+                assertEquals(1L, keys(DATASTORE_STATISTICS_FILE_NAME).getJSONObject("statistics").getLong("appOpenCount"))
+            }
         } finally {
-            scope.cancel()
             directory.deleteRecursively()
         }
     }

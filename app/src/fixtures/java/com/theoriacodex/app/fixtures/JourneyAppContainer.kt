@@ -57,6 +57,7 @@ import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
+import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
@@ -77,7 +78,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -224,7 +224,7 @@ class JourneyAppContainer(
     suspend fun shutdown() = withContext(Dispatchers.IO) {
         features.mediaDurationCoordinator.close()
         tags.close()
-        ownerJob.cancelAndJoin()
+        ownerScope.closeDataStores()
         database.close()
     }
 

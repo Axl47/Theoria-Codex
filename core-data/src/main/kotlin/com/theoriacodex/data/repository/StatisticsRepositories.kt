@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
@@ -15,8 +16,6 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.SerialName
@@ -401,7 +400,7 @@ class DataStoreStatisticsRepository private constructor(
 ) : StatisticsRepository by CellStatisticsRepository(store, clock), AsynchronousStore by store {
     constructor(
         baseDirectory: File,
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        scope: CoroutineScope = newDataStoreScope(),
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         clock: Clock = Clock.systemDefaultZone(),
     ) : this(

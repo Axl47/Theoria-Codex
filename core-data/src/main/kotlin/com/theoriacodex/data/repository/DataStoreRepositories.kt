@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
@@ -11,8 +12,6 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -25,7 +24,7 @@ class DataStoreSettingsRepository private constructor(
 ) : SettingsRepository by CellSettingsRepository(store, profileWriteGuard), AsynchronousStore by store {
     constructor(
         baseDirectory: File,
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        scope: CoroutineScope = newDataStoreScope(),
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
     ) : this(
@@ -174,7 +173,7 @@ internal class CellSettingsRepository(
 
 class DataStoreUiRestoreRepository(
     baseDirectory: File,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    scope: CoroutineScope = newDataStoreScope(),
     recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
 ) : UiRestoreRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)

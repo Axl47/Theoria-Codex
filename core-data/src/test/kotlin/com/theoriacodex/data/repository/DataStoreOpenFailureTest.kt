@@ -1,18 +1,16 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.newDataStoreScope
+import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.sha256
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
@@ -84,7 +82,7 @@ class DataStoreOpenFailureTest {
             val intact = "{also set aside".encodeToByteArray()
             val verified = directory.resolve("$fileName.corrupt-${intact.size}-${intact.sha256()}").apply { writeBytes(intact) }
             val recoveries = FileStoreRecoveryRegistry()
-            val scope = newScope()
+            val scope = newDataStoreScope()
             try {
                 val opened = open(directory, scope, recoveries)
 
@@ -94,7 +92,7 @@ class DataStoreOpenFailureTest {
                 assertEquals(fileName, listOf(verified.absolutePath), recoveries.recoveries.value.map { it.backupPath })
                 assertEquals(fileName, "{changed!!", damaged.readText())
             } finally {
-                closeScope(scope)
+                runBlocking { scope.closeDataStores() }
             }
         }
     }
@@ -106,7 +104,7 @@ class DataStoreOpenFailureTest {
         unblock: () -> Unit,
         unchanged: () -> Unit,
     ) {
-        val scope = newScope()
+        val scope = newDataStoreScope()
         try {
             val opened = open(directory, scope, FileStoreRecoveryRegistry())
             val collector = scope.async { opened.values.first() }
@@ -124,16 +122,11 @@ class DataStoreOpenFailureTest {
             assertEquals(fileName, DurableStorePhase.READY, opened.store.storageStatus.value.phase)
             runBlocking { withTimeout(TIMEOUT_MS) { collector.await() } }
         } finally {
-            closeScope(scope)
+            runBlocking { scope.closeDataStores() }
         }
     }
 
-    private fun newScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private fun closeScope(scope: CoroutineScope) = runBlocking {
-        scope.cancel()
-        scope.coroutineContext.job.join()
-    }
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
