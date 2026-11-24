@@ -3,7 +3,7 @@
 # fail in seconds (the Python unittests only once, in the static part), then the chosen part:
 #   tests    unit tests, coverage, and changed-code coverage for every module
 #   static   Detekt with type resolution, duplicate code, configuration cache
-#   lint     Android lint
+#   lint     the debug APK and instrumented test classes, then Android lint
 #   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
 #   screenshots  Compose screenshot tests against their reference images. References are Linux renders, so
 #            this part runs only on Linux (GitHub) and is recorded as its own result. See scripts/screenshots.sh.
@@ -173,12 +173,9 @@ test_tasks=(
   :core-stubs:test
   :app-logic:test
   :core-data-android:testDebugUnitTest
-  :core-data-android:compileDebugAndroidTestKotlin
   :extension-host:testDebugUnitTest
-  :extension-host:compileDebugAndroidTestKotlin
   :ui-kit:testDebugUnitTest
   :media-kit:testDebugUnitTest
-  :media-kit:compileDebugAndroidTestKotlin
   :vision-kit:testDebugUnitTest
   :feed-kit:testDebugUnitTest
   :feature-viewer:testDebugUnitTest
@@ -188,10 +185,15 @@ test_tasks=(
   :feature-series:testDebugUnitTest
   :feature-settings:testDebugUnitTest
   :app:testDebugUnitTest
-  :app:compileDebugAndroidTestKotlin
-  :app:assembleDebug
   :koverXmlReportQuality
   :koverVerifyQuality
+)
+apk_tasks=(
+  :app:assembleDebug
+  :app:compileDebugAndroidTestKotlin
+  :core-data-android:compileDebugAndroidTestKotlin
+  :extension-host:compileDebugAndroidTestKotlin
+  :media-kit:compileDebugAndroidTestKotlin
 )
 detekt_tasks=(
   :app:detektDebug
@@ -219,19 +221,15 @@ lint_tasks=(:app:lint :core-data-android:lintDebug :extension-host:lintDebug :ui
 # run at the same time without writing the same output or reading sources mid-generation.
 # `./gradlew <tasks> --dry-run` on each side lists the graphs if this needs rechecking.
 shared_tasks=(
-  :app:assembleDebug
+  "${apk_tasks[@]}"
   :app:compileDebugUnitTestKotlin
   :app:compileDebugUnitTestJavaWithJavac
-  :app:compileDebugAndroidTestKotlin
   :core-data-android:compileDebugUnitTestKotlin
   :core-data-android:compileDebugUnitTestJavaWithJavac
-  :core-data-android:compileDebugAndroidTestKotlin
   :core-data-android:bundleLibRuntimeToJarDebug
   :extension-host:compileDebugUnitTestKotlin
   :extension-host:compileDebugUnitTestJavaWithJavac
-  :extension-host:compileDebugAndroidTestKotlin
   :extension-host:bundleLibRuntimeToJarDebug
-  :media-kit:compileDebugAndroidTestKotlin
   :ui-kit:compileDebugUnitTestKotlin
   :ui-kit:compileDebugUnitTestJavaWithJavac
   :ui-kit:bundleLibRuntimeToJarDebug
@@ -343,6 +341,8 @@ run_lint() {
     :feature-settings:compileDebugKotlin \
     --warning-mode=all \
     --console=plain
+  phase 'Gradle: debug APK and instrumented test classes' ./gradlew "${task_timings[@]}" "${apk_tasks[@]}" \
+    --warning-mode=all --console=plain
 
   # Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
   phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --dry-run --console=plain
@@ -357,7 +357,7 @@ run_check() {
   phase 'Gradle: shared build' ./gradlew "${task_timings[@]}" "${shared_tasks[@]}" --warning-mode=all --console=plain
   phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --dry-run --console=plain
   lane 'Gradle: lint' lint_in_daemon
-  lane 'Gradle: tests, coverage and Detekt' ./gradlew "${task_timings[@]}" "${test_tasks[@]}" "${detekt_tasks[@]}" \
+  lane 'Gradle: tests, coverage and Detekt' ./gradlew "${task_timings[@]}" "${test_tasks[@]}" "${apk_tasks[@]}" "${detekt_tasks[@]}" \
     --warning-mode=all --console=plain
   phase 'npm ci' install_node_modules
   phase 'Duplicate audit' npm run audit:duplicates
