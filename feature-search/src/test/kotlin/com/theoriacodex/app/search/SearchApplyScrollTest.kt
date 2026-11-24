@@ -164,13 +164,11 @@ class SearchApplyScrollTest {
                 SearchScreen(
                     state = state.value,
                     related = testRelatedShelf(),
-                    creatorBrowsingSources = emptySet(),
                     fabRestoreState = FeedFabRestoreState(),
                     onAction = onAction,
                     resolvePostById = { null },
                     recoverPostMedia = { _, _ -> null },
                     onRequestSaveToCodex = {},
-                    onSaveToDevice = {},
                 )
             }
         }

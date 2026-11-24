@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.domain.model.PostId
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -75,7 +77,7 @@ class PostActionSheetTest {
 
     @Test fun `offers the Viewer's like, share and link actions the post supports`() {
         val opened = mutableListOf<String>()
-        var liked by mutableStateOf(false)
+        val liked = mutableStateOf(emptySet<PostId>())
         var dismissals = 0
         val actions = PostMenuActions(
             openOriginalPost = { opened += "original $it" },
@@ -84,6 +86,8 @@ class PostActionSheetTest {
             share = { opened += "share $it" },
             copyTags = { post -> opened += "tags ${post.id.sourcePostId}" },
             copyLink = { opened += "copy $it" },
+            likedPostIds = liked,
+            toggleLike = { post -> liked.value += post.id },
         )
         compose.setContent {
             MaterialTheme {
@@ -91,9 +95,6 @@ class PostActionSheetTest {
                     PostActionSheet(
                         post = testPost(pageUrl = "https://example.com/p").copy(originUrl = "https://origin.test/1"),
                         onDismiss = { dismissals++ },
-                        onSaveToDevice = {},
-                        liked = liked,
-                        onToggleLike = { liked = !liked },
                         tagContent = {},
                     )
                 }
@@ -102,6 +103,7 @@ class PostActionSheetTest {
 
         compose.onNodeWithText("Like").performClick()
         compose.onNodeWithText("Unlike").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(setOf(testPost().id), liked.value) }
         val labels = listOf("Share", "Open original post", "Find on other sites", "Open in browser", "Copy tags", "Copy link")
         labels.forEach { label -> compose.onNodeWithText(label).performScrollTo().performClick() }
         compose.runOnIdle {
@@ -119,13 +121,33 @@ class PostActionSheetTest {
     @Test fun `hides actions the post cannot use`() {
         compose.setContent {
             MaterialTheme {
-                PostActionSheet(post = testPost(pageUrl = null), onDismiss = {}, onSaveToDevice = {}, tagContent = {})
+                PostActionSheet(post = testPost(pageUrl = null), onDismiss = {}, tagContent = {})
             }
         }
 
         compose.onNodeWithText("Copy tags").assertExists()
-        listOf("Like", "Share", "Open original post", "Find on other sites", "Open in browser", "Copy link").forEach { label ->
+        listOf("Share", "Open original post", "Find on other sites", "Open in browser", "Copy link").forEach { label ->
             compose.onNodeWithText(label).assertDoesNotExist()
         }
+    }
+
+    @Test fun `a like changes the menu's row without recomposing the route that holds it`() {
+        val post = testPost()
+        val liked = mutableStateOf(emptySet<PostId>())
+        var routeCompositions = 0
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalPostMenuActions provides PostMenuActions(likedPostIds = liked)) {
+                    SideEffect { routeCompositions++ }
+                    PostActionSheet(post = post, onDismiss = {}, tagContent = {})
+                }
+            }
+        }
+
+        compose.onNodeWithText("Like").assertIsDisplayed()
+        val before = compose.runOnIdle { routeCompositions }
+        liked.value = setOf(post.id)
+        compose.onNodeWithText("Unlike").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(before, routeCompositions) }
     }
 }

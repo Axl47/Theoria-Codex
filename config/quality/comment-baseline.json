@@ -1,5 +1,5 @@
 {
-  "app/src/main/java/com/theoriacodex/app/ui/LibraryDestination.kt": 10,
+  "app/src/main/java/com/theoriacodex/app/ui/LibraryDestination.kt": 9,
   "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt": 16,
   "app/src/main/java/com/theoriacodex/app/ui/TheoriaHomeDestinations.kt": 10,
   "app/src/main/java/com/theoriacodex/app/ui/TheoriaNavDestinations.kt": 23,
@@ -7,7 +7,7 @@
   "app/src/main/java/com/theoriacodex/app/ui/routes/CreatorRoute.kt": 4,
   "app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt": 17,
   "app/src/main/java/com/theoriacodex/app/ui/routes/ForYouRoute.kt": 13,
-  "app/src/main/java/com/theoriacodex/app/ui/routes/SavedCodexRoute.kt": 8,
+  "app/src/main/java/com/theoriacodex/app/ui/routes/SavedCodexRoute.kt": 7,
   "app/src/main/java/com/theoriacodex/app/ui/routes/SearchRoute.kt": 12,
   "app/src/test/java/com/theoriacodex/app/recents/RecentsViewerReturnTest.kt": 2,
   "feature-discover/src/main/kotlin/com/theoriacodex/app/creator/CreatorProfileScreen.kt": 12,

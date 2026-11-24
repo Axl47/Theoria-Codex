@@ -30,7 +30,7 @@ class SearchFilterApplyTest {
         compose.setContent {
             MaterialTheme {
                 SearchScreen(
-                    state = state.value, related = testRelatedShelf(), creatorBrowsingSources = emptySet(),
+                    state = state.value, related = testRelatedShelf(),
                     onAction = { action ->
                         actions += action
                         if (action is SearchAction.SelectSort) {
@@ -40,7 +40,7 @@ class SearchFilterApplyTest {
                         }
                     },
                     resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                    onRequestSaveToCodex = {}, onSaveToDevice = {},
+                    onRequestSaveToCodex = {},
                 )
             }
         }

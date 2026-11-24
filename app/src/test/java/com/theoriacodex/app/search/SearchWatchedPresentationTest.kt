@@ -47,10 +47,10 @@ class SearchWatchedPresentationTest {
                         SearchScreen(
                             state = SearchUiState(content = SearchContentUiState(results = listOf(post), hasExecutedSearch = true)),
                             related = testRelatedShelf(),
-                            creatorBrowsingSources = emptySet(), onAction = {},
+                            onAction = {},
                             marks = FeedMarks(watched = setOf(post.id)),
                             resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
-                            onRequestSaveToCodex = {}, onSaveToDevice = {},
+                            onRequestSaveToCodex = {},
                         )
                     }
                 }

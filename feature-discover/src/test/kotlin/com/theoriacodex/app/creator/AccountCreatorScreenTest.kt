@@ -40,8 +40,6 @@ class AccountCreatorScreenTest {
                     marks = FeedMarks.NONE,
                     onToggleLike = {},
                     onAction = { actions += it },
-                    onRequestSaveToCodex = {},
-                    onSaveToDevice = {},
                     onOpenUrl = {},
                 )
             }

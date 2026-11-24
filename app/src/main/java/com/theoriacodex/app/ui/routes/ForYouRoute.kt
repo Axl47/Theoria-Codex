@@ -76,7 +76,6 @@ internal class ForYouRouteCallbacks(
     val onSelectProfile: (profileId: String) -> Unit,
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
-    val onSaveToDevice: (Post) -> Unit,
     val onGoToSearch: () -> Unit,
 )
 
@@ -172,7 +171,6 @@ private fun deckCallbacks(
     onOpenPost = callbacks.onOpenPost,
     onPickCodex = callbacks.onPickCodex,
     onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
-    onSaveToDevice = callbacks.onSaveToDevice,
     onSaveSearch = callbacks.onSaveSearch,
     onToggleLike = callbacks.onToggleLike,
     onOpenSourceAccounts = callbacks.onOpenSourceAccounts,

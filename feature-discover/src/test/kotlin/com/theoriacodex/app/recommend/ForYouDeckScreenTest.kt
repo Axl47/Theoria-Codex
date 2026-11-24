@@ -110,7 +110,6 @@ class ForYouDeckScreenTest {
             onOpenPost = { level, post, _ -> opened += level.id to post },
             onPickCodex = { _, _ -> },
             onRequestSaveToCodex = {},
-            onSaveToDevice = {},
             onSaveSearch = { savedSearches += it },
             onToggleLike = {},
             onOpenSourceAccounts = { sourcesOpened++ },

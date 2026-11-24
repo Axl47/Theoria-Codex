@@ -49,7 +49,7 @@ class PostActionSheetPreloadTest {
             }
             CompositionLocalProvider(LocalCodexSaveRelevanceLoader provides loader) {
                 MaterialTheme {
-                    PostActionSheet(post = post, onDismiss = {}, onSaveToDevice = {},
+                    PostActionSheet(post = post, onDismiss = {},
                         onSaveToCodex = { saves++ }, saveToCodexQuery = query,
                         tagContent = {})
                 }

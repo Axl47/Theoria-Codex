@@ -100,7 +100,6 @@ fun CodexDetailScreen(
     posts: List<Post>,
     sortMode: CodexSortMode,
     availableSources: Set<SourceKey>,
-    creatorBrowsingSources: Set<SourceKey>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
     onOpenViewer: (List<Post>, Int) -> Unit,
@@ -179,12 +178,10 @@ fun CodexDetailScreen(
     CodexTagSheets(tagFilter, codexName, posts, availableSources, onSearchSites)
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
-            post, creatorBrowsingSources, { selectedActionPost = null }, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
-            onGoToSearch,
+            post, { selectedActionPost = null }, onGoToSearch, onToggleLike, onSavePostToDevice, { onAddPostsToAnotherCodex(listOf(it)) },
             saveToCodexLabel = "Add to another Codex",
             onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
             onShowRelated = related?.let { shelf -> { shelf.controller.show(post) } },
-            liked = post.id in likedPostIds, onToggleLike = onToggleLike,
         )
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,36 +40,27 @@ import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.viewer.buildViewerImageRequest
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.SourceKey
 
 @Composable
 fun PostActionSheet(
     post: Post,
-    creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onDismiss: () -> Unit,
-    onSaveToDevice: () -> Unit,
-    liked: Boolean = false,
-    onToggleLike: (() -> Unit)? = null,
-    onSaveToCodex: (() -> Unit)? = null,
+    onToggleLike: ((Post) -> Unit)? = null,
+    onSaveToDevice: ((Post) -> Unit)? = null,
+    onSaveToCodex: ((Post) -> Unit)? = null,
     saveToCodexQuery: Query? = null,
     saveToCodexLabel: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     removeLabel: String = "Remove from Codex",
-    onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
-    onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
     onShowRelated: (() -> Unit)? = null,
     tagContent: @Composable () -> Unit,
 ) {
-    require((onOpenCreatorProfile == null) == (onOpenLegacyCreatorProfile == null)) {
-        "Creator profile callbacks must be supplied together"
-    }
-
-    if (onSaveToCodex != null) PreloadCodexSaveRelevance(post, saveToCodexQuery)
+    PreloadCodexSaveRelevance(post, saveToCodexQuery)
 
     var showingTerms by rememberSaveable { mutableStateOf(false) }
     if (showingTerms) {
@@ -76,18 +68,15 @@ fun PostActionSheet(
         return
     }
 
+    val actions = LocalPostMenuActions.current
     fun dismissThen(action: () -> Unit) {
         onDismiss()
         action()
     }
-    val creatorActions = if (onOpenCreatorProfile != null && onOpenLegacyCreatorProfile != null) {
-        creatorProfileActions(post, creatorBrowsingSources)
-    } else {
-        emptyList()
-    }
+    val creatorActions = creatorProfileActions(post, actions.creatorBrowsingSources.value)
 
     fun openCreator(action: CreatorProfileAction) = dismissThen {
-        action.profile?.let { onOpenCreatorProfile?.invoke(it) } ?: onOpenLegacyCreatorProfile?.invoke()
+        action.profile?.let(actions.openCreator) ?: actions.openPostCreator(post)
     }
 
     ActionMenuSheet(onDismiss) {
@@ -100,9 +89,12 @@ fun PostActionSheet(
             ActionMenuRow(Icons.Default.AutoAwesome, "More like this") { dismissThen(showRelated) }
         }
 
-        onToggleLike?.let { toggle -> PostLikeRow(liked) { dismissThen(toggle) } }
-        onSaveToCodex?.let { save -> SaveToCodexRow(post, saveToCodexLabel) { dismissThen(save) } }
-        ActionMenuRow(Icons.Default.Download, "Save to device") { dismissThen(onSaveToDevice) }
+        val toggleLike = onToggleLike ?: actions.toggleLike
+        PostLikeRow(post.id, actions.likedPostIds) { dismissThen { toggleLike(post) } }
+        val saveToCodex = onSaveToCodex ?: actions.saveToCodex
+        SaveToCodexRow(post, saveToCodexLabel) { dismissThen { saveToCodex(post) } }
+        val saveToDevice = onSaveToDevice ?: actions.saveToDevice
+        ActionMenuRow(Icons.Default.Download, "Save to device") { dismissThen { saveToDevice(post) } }
 
         val extraCreators = creatorActions.drop(1)
         if (extraCreators.isNotEmpty() || onStartOver != null || onGoToSearch != null) {
@@ -117,7 +109,7 @@ fun PostActionSheet(
         }
 
         ActionMenuDivider()
-        PostMenuRows(post, onDismiss)
+        PostMenuRows(post, actions, onDismiss)
 
         onRemoveFromCodex?.let { remove ->
             ActionMenuDivider()
@@ -131,8 +123,8 @@ fun PostActionSheet(
 }
 
 @Composable
-private fun PostLikeRow(liked: Boolean, onClick: () -> Unit) {
-    if (liked) {
+private fun PostLikeRow(postId: PostId, likedPostIds: State<Set<PostId>>, onClick: () -> Unit) {
+    if (postId in likedPostIds.value) {
         ActionMenuRow(Icons.Default.Favorite, "Unlike", tint = LikedHeartColor, onClick = onClick)
     } else {
         ActionMenuRow(Icons.Outlined.FavoriteBorder, "Like", onClick = onClick)
@@ -140,8 +132,7 @@ private fun PostLikeRow(liked: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PostMenuRows(post: Post, onDismiss: () -> Unit) {
-    val actions = LocalPostMenuActions.current
+private fun PostMenuRows(post: Post, actions: PostMenuActions, onDismiss: () -> Unit) {
     actions.shareFor(post)?.let { share -> ActionMenuRow(Icons.Default.Share, "Share") { onDismiss(); share() } }
     actions.availableFor(post).forEach { action ->
         ActionMenuRow(action.icon, action.label) {

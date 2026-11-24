@@ -168,7 +168,6 @@ class SavedSearchControlsTest {
             watchedPosts = watched, codexPosts = emptyList(), searches = searches,
             activity = activity,
             saves = saves,
-            onRequestSaveToCodex = {}, onSaveToDevice = {},
             onGoToSearch = {},
             onOpenWatchedPost = onOpenPost, onOpenCodexPost = { _, _ -> }, onOpenSearch = onOpen, onClear = {},
         )
