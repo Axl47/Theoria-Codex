@@ -84,7 +84,7 @@ class RoomVisualSignatureRepository(
         }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeVisionProgress(modelId: String): Flow<VisionProgress> =
-        dao.observeVisionProgress(modelId).map { VisionProgress(it.analysed, it.total) }.distinctUntilChanged()
+        dao.observeVisionProgress(modelId, MAX_FRAME_ATTEMPTS).map { VisionProgress(it.analysed, it.total) }.distinctUntilChanged()
 
     override suspend fun clearVision() {
         withContext(Dispatchers.IO) {
