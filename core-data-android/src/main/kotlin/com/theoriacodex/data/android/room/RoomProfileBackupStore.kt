@@ -24,7 +24,8 @@ class RoomProfileBackupStore(
 ) : ProfileBackupStore {
     private val dao = database.codexLikesDao()
     private val recents = database.recentsDao()
-    private val recentsWriter = RecentsWriter(recents, SharedPosts(dao))
+    private val sharedPosts = SharedPosts(dao)
+    private val recentsWriter = RecentsWriter(recents, sharedPosts)
     private val series = database.seriesDao()
 
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = database.withTransaction {
@@ -68,9 +69,7 @@ class RoomProfileBackupStore(
     override suspend fun merge(library: BackupLibrary): Int =
         database.withTransaction {
             var collectionsAdded = 0
-            library.posts.forEach { post ->
-                dao.insertPost(PostEntity(post.id.source.id, post.id.sourcePostId, LocalPostPayloadCodec.encode(post)))
-            }
+            library.posts.forEach(sharedPosts::insertIfMissing)
             var displayOrder = dao.codices().size
             library.codices.forEach { codex ->
                 if (dao.insertCodex(CodexEntity(codex.codexId, codex.name, codex.createdAtEpochMs, displayOrder)) != -1L) {

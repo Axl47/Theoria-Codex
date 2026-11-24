@@ -8,7 +8,7 @@ import org.junit.Test
 
 class SeriesKindTest {
     @Test
-    fun `an extension source's kind is read from its id, which parses as a custom-site id`() {
+    fun `an extension source's kind is read from its id, which parses as a custom-site id (ADR 0007)`() {
         val anime = SourceKey.parseOrThrow("${ANIYOMI_SOURCE_ID_PREFIX}2499283573021220255")
         val manga = SourceKey.parseOrThrow("${MIHON_SOURCE_ID_PREFIX}2499283573021220255")
 
@@ -19,7 +19,7 @@ class SeriesKindTest {
     }
 
     @Test
-    fun `sources that run no extension are not extension sources`() {
+    fun `sources that run no extension are not extension sources (ADR 0007)`() {
         val sites = listOf("custom_safebooru_org", "custom_aniyomi-fan_org", "custom_aniyomi_example_org", "custom_mihon_example_org")
         (sites.map(SourceKey::parseOrThrow) + SourceKey.PIXIV).forEach {
             assertFalse(it.id, it.isExtensionSource())

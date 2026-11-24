@@ -23,10 +23,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.EmptyCoroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UnifiedSearchOrchestratorTest {
@@ -115,7 +121,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `fallback branches one OR group filters canonically and retains branch continuation`() = runTest {
+    fun `fallback branches one OR group filters canonically and retains branch continuation (ADR 0011)`() = runTest {
         val required = SearchTerm("landscape")
         val cat = SearchTerm("cat")
         val dog = SearchTerm("dog")
@@ -137,6 +143,49 @@ class UnifiedSearchOrchestratorTest {
             adapter.calls.map { call -> call.first.includeTags.toSet() },
         )
         assertEquals(listOf(null, null, "cat-next"), adapter.calls.map { call -> call.second })
+    }
+
+    @Test
+    fun `provider calls run off the caller's thread by default (ADR 0011)`() {
+        var providerDispatcher: ContinuationInterceptor? = null
+        val adapter = object : SourceAdapter by FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), emptyList()) {
+            override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+                providerDispatcher = currentCoroutineContext()[ContinuationInterceptor]
+                return Page(emptyList(), null)
+            }
+        }
+
+        runBlocking { UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter)).searchSource(adapter, sampleQuery(), null) }
+
+        assertSame(Dispatchers.Default, providerDispatcher)
+    }
+
+    @Test
+    fun `a page that arrived in time stays answered when annotation outlasts the source timeout (ADR 0011)`() = runTest {
+        val adapter = FakeAdapter(SourceKey.GELBOORU, supportedCapabilities(), listOf(post(SourceKey.GELBOORU, "ready")))
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(adapter.sourceKey to adapter), sourceTimeoutMs = 100L, EmptyCoroutineContext,
+            annotateListing = { posts -> delay(1_000L); posts },
+        )
+
+        val result = orchestrator.search(sampleQuery(), setOf(adapter.sourceKey), emptyMap(), emptyMap())
+
+        assertEquals(SourceRunState.SUCCESS, result.statuses.single().state)
+        assertEquals(listOf("ready"), result.items.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `annotations reach the merge so a picture two sources list appears once (ADR 0011)`() = runTest {
+        val gelbooru = FakeAdapter(SourceKey.GELBOORU, supportedCapabilities(), listOf(post(SourceKey.GELBOORU, "g")))
+        val pixiv = FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "p")))
+        val orchestrator = UnifiedSearchOrchestrator(
+            mapOf(gelbooru.sourceKey to gelbooru, pixiv.sourceKey to pixiv), providerContext = EmptyCoroutineContext,
+            annotateListing = { posts -> posts.map { it.copy(pictureHash = 42L) } },
+        )
+
+        val result = orchestrator.search(sampleQuery(), setOf(gelbooru.sourceKey, pixiv.sourceKey), emptyMap(), emptyMap())
+
+        assertEquals(1, result.items.size)
     }
 
     @Test
@@ -419,7 +468,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `a file two sources host appears once, from the source interleaved first`() = runTest {
+    fun `a file two sources host appears once, from the source interleaved first (ADR 0011)`() = runTest {
         val mirrored = "0123456789abcdef0123456789abcdef"
         val orchestrator = testOrchestrator(
             mapOf(
@@ -442,7 +491,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `a date search keeps the copy of a file that is in range`() = runTest {
+    fun `a date search keeps the copy of a file that is in range (ADR 0011)`() = runTest {
         val mirrored = "0123456789abcdef0123456789abcdef"
         val orchestrator = testOrchestrator(
             mapOf(
@@ -490,7 +539,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `a slow source never holds back results and only appends below them`() = runTest {
+    fun `a slow source never holds back results and only appends below them (ADR 0011)`() = runTest {
         val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "fast"))),
@@ -512,7 +561,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `sources answering together are interleaved without a partial publication`() = runTest {
+    fun `sources answering together are interleaved without a partial publication (ADR 0011)`() = runTest {
         val orchestrator = testOrchestrator(
             mapOf(
                 SourceKey.PIXIV to FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), listOf(post(SourceKey.PIXIV, "a"))),

@@ -29,7 +29,7 @@ class DanbooruAccountsTest {
     private fun postsQuery(tags: String, page: String) = mapOf("limit" to "40", "page" to page, "tags" to tags)
 
     @Test
-    fun `only user creators are accounts`() {
+    fun `only user creators are accounts, told apart by the profile alone (ADR 0008)`() {
         assertEquals(listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES), adapter.accountFeeds(account))
         assertEquals(emptyList<AccountFeed>(), adapter.accountFeeds(artistTag))
         assertEquals(emptyList<AccountFeed>(), adapter.accountFeeds(account.copy(uploadsQuery = "user:")))

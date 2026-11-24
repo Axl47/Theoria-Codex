@@ -6,7 +6,7 @@ import org.junit.Test
 
 class StrictPercentDecodingTest {
     @Test
-    fun `decodes escaped utf8 and preserves literal plus`() {
+    fun `decodes escaped utf8 and preserves literal plus (ADR 0010)`() {
         assertEquals("Miku Nakano+猫", decodePercentEncodedUtf8Strict("Miku%20Nakano+%E7%8C%AB"))
     }
 
@@ -16,14 +16,14 @@ class StrictPercentDecodingTest {
     }
 
     @Test
-    fun `rejects malformed escapes and malformed utf8`() {
+    fun `rejects malformed escapes and malformed utf8 (ADR 0010)`() {
         assertNull(decodePercentEncodedUtf8Strict("artist%2"))
         assertNull(decodePercentEncodedUtf8Strict("artist%GG"))
         assertNull(decodePercentEncodedUtf8Strict("%C3%28"))
     }
 
     @Test
-    fun `rejects unpaired utf16 surrogates`() {
+    fun `rejects unpaired utf16 surrogates (ADR 0010)`() {
         assertNull(decodePercentEncodedUtf8Strict("artist\uD800"))
     }
 }

@@ -134,14 +134,14 @@ class CodexLikesPolicyTest {
 
         assertEquals(
             true,
-            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.PIXIV, "blue sky")),
             ),
         )
         assertEquals(
             false,
-            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.GELBOORU, "blue sky")),
             ),
@@ -149,7 +149,7 @@ class CodexLikesPolicyTest {
     }
 
     @Test
-    fun `automatic tag groups require every group while accepting alternatives`() {
+    fun `automatic tag groups require every group while accepting alternatives (ADR 0006)`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "grouped"),
             preview = ImageRef(null, null, null),

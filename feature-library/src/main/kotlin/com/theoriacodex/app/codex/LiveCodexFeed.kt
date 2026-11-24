@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.ui.components.RetainedFrames
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+val LiveCodexSortFrames = RetainedFrames<Post, List<Post>>()
 
 fun sortLiveCodexPosts(
     posts: List<Post>,
