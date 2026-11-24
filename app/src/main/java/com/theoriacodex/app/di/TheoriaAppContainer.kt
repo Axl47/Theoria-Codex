@@ -86,6 +86,7 @@ import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
@@ -382,7 +383,7 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
         recoveryRegistry = fileStoreRecoveryRegistry,
-        writeScope = durableStoreScope,
+        writeBehind = WriteBehind(durableStoreScope),
     )
     private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
         delegate = statisticsStore,
@@ -408,7 +409,7 @@ internal class DefaultTheoriaAppContainer(
         awaitSources = sourceReadiness::await,
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
-    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = durableStoreScope)
+    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeBehind = WriteBehind(durableStoreScope))
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.fixtures
 
+import com.theoriacodex.data.repository.WATCHED_TAGS_PER_SOURCE
 import com.theoriacodex.data.repository.CodexPostStatistics
 import com.theoriacodex.data.repository.CodexStatistics
 import com.theoriacodex.data.repository.DailyActivity
@@ -8,8 +9,7 @@ import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.STATISTICS_HISTORY_DAYS
 import com.theoriacodex.data.repository.SearchedTagKey
 import com.theoriacodex.data.repository.StatisticsTagKey
-import com.theoriacodex.data.storage.closeDataStores
-import com.theoriacodex.data.storage.newDataStoreScope
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
@@ -19,8 +19,6 @@ import java.util.Random
 import kotlin.math.roundToLong
 
 object AgedStatistics {
-    const val TAGS_PER_SOURCE = 4_000
-
     val viewsBySource: Map<SourceKey, Long> = linkedMapOf(
         SourceKey.PIXIV to 60_000L,
         SourceKey.GELBOORU to 140_000L,
@@ -28,13 +26,8 @@ object AgedStatistics {
         SourceKey.RULE34XXX to 90_000L,
     )
 
-    suspend fun write(storageDirectory: File, today: LocalDate = LocalDate.now()) {
-        val scope = newDataStoreScope()
-        try {
-            DataStoreStatisticsRepository(storageDirectory, scope).mergeRestored(statistics(today))
-        } finally {
-            scope.closeDataStores()
-        }
+    suspend fun write(storageDirectory: File, today: LocalDate = LocalDate.now()) = withDataStoreScope { scope ->
+        DataStoreStatisticsRepository(storageDirectory, scope).mergeRestored(statistics(today))
     }
 
     fun statistics(today: LocalDate): LifetimeStatistics {
@@ -71,12 +64,14 @@ object AgedStatistics {
         )
     }
 
-    fun postTags(post: Int): List<String> {
-        val random = Random(SEED + post)
+    fun postTags(posts: Int): List<List<String>> {
         val zipf = Zipf()
-        val ranks = linkedSetOf<Int>()
-        while (ranks.size < TAGS_PER_POST) ranks += zipf.rank(random)
-        return ranks.map(::tagName)
+        return List(posts) { post ->
+            val random = Random(SEED + post)
+            val ranks = linkedSetOf<Int>()
+            while (ranks.size < TAGS_PER_POST) ranks += zipf.rank(random)
+            ranks.map(::tagName)
+        }
     }
 
     private class WatchedTable(val source: SourceKey, val counts: Map<StatisticsTagKey, Long>, val floor: Long)
@@ -84,7 +79,7 @@ object AgedStatistics {
     private fun watchedTags(source: SourceKey, views: Long, random: Random, zipf: Zipf): WatchedTable {
         val floor = zipf.expectedCount(FLOOR_RANK, views).roundToLong().coerceAtLeast(1L)
         val used = HashSet<Int>()
-        val counts = (1..TAGS_PER_SOURCE).associate { rank ->
+        val counts = (1..WATCHED_TAGS_PER_SOURCE).associate { rank ->
             val churned = rank > CHURN_FROM_RANK && random.nextDouble() < CHURN_SHARE
             val tagRank = if (churned) unusedRareRank(random, used) else rank
             used += tagRank
@@ -101,7 +96,7 @@ object AgedStatistics {
 
     private fun unusedRareRank(random: Random, used: Set<Int>): Int {
         while (true) {
-            val rank = TAGS_PER_SOURCE + 1 + random.nextInt(VOCABULARY - TAGS_PER_SOURCE)
+            val rank = WATCHED_TAGS_PER_SOURCE + 1 + random.nextInt(VOCABULARY - WATCHED_TAGS_PER_SOURCE)
             if (rank !in used) return rank
         }
     }
@@ -132,7 +127,7 @@ object AgedStatistics {
         val posts = (0 until POSTS_PER_CODEX).associate { post ->
             val source = viewsBySource.keys.elementAt(post % viewsBySource.size)
             "${source.id}:${100_000 + codex * POSTS_PER_CODEX + post}" to CodexPostStatistics(
-                label = "Saved ${tagName(1 + random.nextInt(TAGS_PER_SOURCE))} ${post + 1}",
+                label = "Saved ${tagName(1 + random.nextInt(WATCHED_TAGS_PER_SOURCE))} ${post + 1}",
                 opens = 1L + random.nextInt(25),
                 videoMs = if (post % 3 == 0) random.nextInt(600_000).toLong() else 0L,
                 imageMs = random.nextInt(120_000).toLong(),

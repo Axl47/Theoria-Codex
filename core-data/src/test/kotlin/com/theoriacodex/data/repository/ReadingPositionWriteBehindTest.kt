@@ -2,6 +2,8 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.FileStateCell
 import com.theoriacodex.data.storage.update
+import com.theoriacodex.data.storage.WRITE_BEHIND_DELAY
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -33,14 +35,14 @@ class ReadingPositionWriteBehindTest {
     fun `rapid page turns write once with the newest page (ADR 0215)`() = runTest {
         val writes = mutableListOf<List<ReadingPosition>>()
         val repository = CellReadingPositionRepository(
-            FileStateCell(emptyList<ReadingPosition>()) { writes += it }.writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
+            FileStateCell(emptyList<ReadingPosition>()) { writes += it }.writeBehind(WriteBehind(writeScope)),
         )
         (1..20).forEach { page -> repository.record(position(page, page * 100L)) }
         writeClock.runCurrent()
         assertEquals(0, writes.size)
         assertEquals(20, repository.get(BOOK, RecentPostSection.WATCHED)?.mediaNumber)
 
-        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds + 1)
+        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds + 1)
 
         assertEquals(listOf(listOf(position(20, 2_000L))), writes)
     }
@@ -57,15 +59,15 @@ class ReadingPositionWriteBehindTest {
                     releaseFirstWrite.await()
                 }
                 writes += positions.single().mediaNumber
-            }.writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
+            }.writeBehind(WriteBehind(writeScope)),
         )
         repository.record(position(1, 100L))
-        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds + 1)
+        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds + 1)
         firstWriteStarted.await()
 
         repository.record(position(2, 200L))
         releaseFirstWrite.complete(Unit)
-        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds + 1)
+        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds + 1)
 
         assertEquals(listOf(1, 2), writes)
     }
@@ -73,7 +75,7 @@ class ReadingPositionWriteBehindTest {
     @Test
     fun `stopping the app flushes so a swiped-away chapter resumes on its last page (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
-        val repository = FileBackedReadingPositionRepository(directory, writeScope = writeScope)
+        val repository = FileBackedReadingPositionRepository(directory, writeBehind = WriteBehind(writeScope))
         (3..7).forEach { page -> repository.record(position(page, page * 100L)) }
 
         assertEquals(listOf(position(7, 700L)), repository.snapshot())
@@ -87,13 +89,13 @@ class ReadingPositionWriteBehindTest {
     @Test
     fun `cancelling during the delay keeps the last written file readable (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
-        val repository = FileBackedReadingPositionRepository(directory, writeScope = writeScope)
+        val repository = FileBackedReadingPositionRepository(directory, writeBehind = WriteBehind(writeScope))
         repository.record(position(4, 400L))
         repository.flush()
         repository.record(position(9, 900L))
 
         writeScope.cancel()
-        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds + 1)
+        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds + 1)
 
         assertEquals(listOf(position(4, 400L)), FileBackedReadingPositionRepository(directory).snapshot())
     }
@@ -102,7 +104,7 @@ class ReadingPositionWriteBehindTest {
     fun `restored positions are on disk before restore returns (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val stoppedScope = CoroutineScope(Job().apply { cancel() })
-        val repository = FileBackedReadingPositionRepository(directory, writeScope = stoppedScope)
+        val repository = FileBackedReadingPositionRepository(directory, writeBehind = WriteBehind(stoppedScope))
 
         repository.replace(listOf(position(2, 200L)))
         assertEquals(listOf(position(2, 200L)), FileBackedReadingPositionRepository(directory).snapshot())
@@ -114,7 +116,7 @@ class ReadingPositionWriteBehindTest {
     @Test
     fun `a page recorded just before the Viewer closes is in the stop flush (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
-        val repository = FileBackedReadingPositionRepository(directory, writeScope = writeScope)
+        val repository = FileBackedReadingPositionRepository(directory, writeBehind = WriteBehind(writeScope))
         repository.snapshot()
         val viewerScope = CoroutineScope(Job())
         viewerScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.record(position(8, 800L)) }
@@ -136,15 +138,15 @@ class ReadingPositionWriteBehindTest {
                     throw java.io.IOException("disk busy")
                 }
                 writes += positions.single().mediaNumber
-            }.writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
+            }.writeBehind(WriteBehind(writeScope)),
         )
         repository.record(position(3, 300L))
 
-        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds * 2 + 1)
+        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds * 2 + 1)
         assertEquals(listOf(3), writes)
 
         repository.flush()
-        writeClock.advanceTimeBy(READING_POSITION_WRITE_DELAY.inWholeMilliseconds * 4)
+        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds * 4)
         assertEquals(listOf(3), writes)
     }
 
@@ -154,7 +156,7 @@ class ReadingPositionWriteBehindTest {
         val written = mutableListOf<List<ReadingPosition>>()
         val repository = CellReadingPositionRepository(
             FileStateCell<List<ReadingPosition>>(load = { loaded.await(); emptyList() }, write = { written += it })
-                .writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
+                .writeBehind(WriteBehind(writeScope)),
         )
         val viewerScope = CoroutineScope(Job())
         viewerScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.record(position(8, 800L)) }
@@ -169,7 +171,7 @@ class ReadingPositionWriteBehindTest {
 
     @Test
     fun `updates run off the caller's thread (ADR 0215)`() = runTest {
-        val cell = FileStateCell(0) {}.writeBehind(writeScope, READING_POSITION_WRITE_DELAY)
+        val cell = FileStateCell(0) {}.writeBehind(WriteBehind(writeScope))
         val caller = Thread.currentThread()
         var applied: Thread? = null
 

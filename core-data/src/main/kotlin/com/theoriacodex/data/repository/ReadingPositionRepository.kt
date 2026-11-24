@@ -6,14 +6,12 @@ import com.theoriacodex.data.storage.FileStateCell
 import com.theoriacodex.data.storage.MemoryStateCell
 import com.theoriacodex.data.storage.StateCell
 import com.theoriacodex.data.storage.decodeEachOrSkip
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.update
 import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -46,7 +44,6 @@ const val READING_POSITIONS_FILE_NAME = "reading_positions.json"
 const val MAX_READING_POSITIONS = 2_000
 
 internal const val READING_POSITION_COALESCE_MS = 5_000L
-val READING_POSITION_WRITE_DELAY = 2.seconds
 
 class FileBackedReadingPositionRepository private constructor(repository: ReadingPositionRepository) :
     ReadingPositionRepository by repository {
@@ -54,24 +51,22 @@ class FileBackedReadingPositionRepository private constructor(repository: Readin
         baseDirectory: File,
         store: AtomicJsonFileStore = AtomicJsonFileStore(),
         entryLimit: Int = MAX_READING_POSITIONS,
-        writeScope: CoroutineScope? = null,
-        writeDelay: Duration = READING_POSITION_WRITE_DELAY,
-    ) : this(fileBackedReadingPositions(baseDirectory.resolve(READING_POSITIONS_FILE_NAME), store, entryLimit, writeScope, writeDelay))
+        writeBehind: WriteBehind? = null,
+    ) : this(fileBackedReadingPositions(baseDirectory.resolve(READING_POSITIONS_FILE_NAME), store, entryLimit, writeBehind))
 }
 
 private fun fileBackedReadingPositions(
     file: File,
     store: AtomicJsonFileStore,
     entryLimit: Int,
-    writeScope: CoroutineScope?,
-    writeDelay: Duration,
+    writeBehind: WriteBehind?,
 ): ReadingPositionRepository {
     require(entryLimit > 0)
     val cell = FileStateCell(
         load = { decodeReadingPositions(store.read(file, ReadingPositionsFile(), ReadingPositionsFile.serializer()), entryLimit) },
         write = { positions -> store.write(file, encodeReadingPositions(positions), ReadingPositionsFile.serializer()) },
     )
-    return CellReadingPositionRepository(writeScope?.let { cell.writeBehind(it, writeDelay) } ?: cell, entryLimit)
+    return CellReadingPositionRepository(cell.writeBehind(writeBehind), entryLimit)
 }
 
 internal class CellReadingPositionRepository(
@@ -85,7 +80,7 @@ internal class CellReadingPositionRepository(
 
     override suspend fun snapshot(): List<ReadingPosition> = cell.value().toList()
 
-    override suspend fun record(position: ReadingPosition) = writing { current ->
+    override suspend fun record(position: ReadingPosition) = cell.update { current ->
         val previous = current.firstOrNull { it.postId == position.postId && it.section == position.section }
         when {
             previous != null && previous.lastViewedAt > position.lastViewedAt -> current
@@ -100,18 +95,17 @@ internal class CellReadingPositionRepository(
             current.firstOrNull() == this
 
     override suspend fun replace(positions: List<ReadingPosition>) {
-        writing { normalizeReadingPositions(positions, entryLimit) }
+        cell.update { normalizeReadingPositions(positions, entryLimit) }
         flush()
     }
 
     override suspend fun merge(positions: List<ReadingPosition>) {
-        writing { current -> normalizeReadingPositions(current + positions, entryLimit) }
+        cell.update { current -> normalizeReadingPositions(current + positions, entryLimit) }
         flush()
     }
 
     override suspend fun flush() = cell.flush()
 
-    private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) = cell.update(transform)
 }
 
 @Serializable

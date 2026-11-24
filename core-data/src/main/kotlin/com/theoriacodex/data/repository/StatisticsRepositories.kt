@@ -4,6 +4,7 @@ import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
 import com.theoriacodex.data.storage.StateCell
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.openDecodedJsonDataStore
 import com.theoriacodex.data.storage.update
 import com.theoriacodex.data.storage.writeBehind
@@ -15,8 +16,6 @@ import java.io.File
 import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -375,22 +374,18 @@ internal object StatisticsPolicies {
     }
 }
 
-val STATISTICS_WRITE_DELAY = 2.seconds
-
 class DataStoreStatisticsRepository private constructor(
     store: JsonDataStore<LifetimeStatistics>,
     clock: Clock,
-    writeScope: CoroutineScope?,
-    writeDelay: Duration,
-) : StatisticsRepository by CellStatisticsRepository(writeScope?.let { store.writeBehind(it, writeDelay) } ?: store, clock),
+    writeBehind: WriteBehind?,
+) : StatisticsRepository by CellStatisticsRepository(store.writeBehind(writeBehind), clock),
     AsynchronousStore by store {
     constructor(
         baseDirectory: File,
         scope: CoroutineScope,
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         clock: Clock = Clock.systemDefaultZone(),
-        writeScope: CoroutineScope? = null,
-        writeDelay: Duration = STATISTICS_WRITE_DELAY,
+        writeBehind: WriteBehind? = null,
     ) : this(
         openDecodedJsonDataStore(
             file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
@@ -406,8 +401,7 @@ class DataStoreStatisticsRepository private constructor(
             encode = StatisticsDataStoreFile::fromDomain,
         ),
         clock,
-        writeScope,
-        writeDelay,
+        writeBehind,
     )
 }
 

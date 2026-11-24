@@ -2,7 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
 
-internal const val WATCHED_TAGS_PER_SOURCE = 4_000
+const val WATCHED_TAGS_PER_SOURCE = 4_000
 
 internal fun LifetimeStatistics.recordWatchedTags(
     source: SourceKey,

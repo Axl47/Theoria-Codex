@@ -200,31 +200,36 @@ internal class BenchmarkByteTransport(
     }
 }
 
-private fun journeyPosts(context: Context, agedStatistics: Boolean): List<Post> = List(24) { index ->
-    val kind = if (agedStatistics) "video" else listOf("video", "gif", "webp", "ugoira")[index % 4]
-    val tags = if (agedStatistics) AgedStatistics.postTags(index) else listOf("benchmark")
-    val resource = when (kind) {
-        "video" -> R.raw.benchmark_motion
-        "gif" -> R.raw.benchmark_two_frame_gif
-        "webp" -> R.raw.benchmark_two_frame_webp
-        else -> R.raw.benchmark_ugoira
+private fun journeyPosts(context: Context, agedStatistics: Boolean): List<Post> {
+    val agedTags = if (agedStatistics) AgedStatistics.postTags(JOURNEY_POSTS) else null
+    return List(JOURNEY_POSTS) { index ->
+        val kind = if (agedStatistics) "video" else listOf("video", "gif", "webp", "ugoira")[index % 4]
+        val tags = agedTags?.get(index) ?: listOf("benchmark")
+        val resource = when (kind) {
+            "video" -> R.raw.benchmark_motion
+            "gif" -> R.raw.benchmark_two_frame_gif
+            "webp" -> R.raw.benchmark_two_frame_webp
+            else -> R.raw.benchmark_ugoira
+        }
+        val mime = when (kind) {
+            "video" -> "video/mp4"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            else -> PIXIV_UGOIRA_MIME
+        }
+        val media = ImageRef("android.resource://${context.packageName}/$resource", null, mime, isAnimated = true)
+        Post(
+            id = PostId(SourceKey.PIXIV, "benchmark_${kind}_$index"),
+            preview = if (kind == "video" || kind == "ugoira") ImageRef(null, null, "image/jpeg") else media,
+            full = media, media = listOf(media), pageUrl = null, width = 640, height = 360,
+            canonicalTags = tags, rawTags = tags, authorName = "Benchmark creator",
+            createdAtEpochMs = index.toLong(), title = "Benchmark $kind ${index + 1}", mediaCount = 1,
+            creatorProfile = CreatorProfile(SourceKey.PIXIV, "Benchmark creator", profileId = "benchmark-creator", uploadsQuery = "benchmark"),
+        )
     }
-    val mime = when (kind) {
-        "video" -> "video/mp4"
-        "gif" -> "image/gif"
-        "webp" -> "image/webp"
-        else -> PIXIV_UGOIRA_MIME
-    }
-    val media = ImageRef("android.resource://${context.packageName}/$resource", null, mime, isAnimated = true)
-    Post(
-        id = PostId(SourceKey.PIXIV, "benchmark_${kind}_$index"),
-        preview = if (kind == "video" || kind == "ugoira") ImageRef(null, null, "image/jpeg") else media,
-        full = media, media = listOf(media), pageUrl = null, width = 640, height = 360,
-        canonicalTags = tags, rawTags = tags, authorName = "Benchmark creator",
-        createdAtEpochMs = index.toLong(), title = "Benchmark $kind ${index + 1}", mediaCount = 1,
-        creatorProfile = CreatorProfile(SourceKey.PIXIV, "Benchmark creator", profileId = "benchmark-creator", uploadsQuery = "benchmark"),
-    )
 }
+
+private const val JOURNEY_POSTS = 24
 
 internal const val BENCHMARK_JOURNEY_STATUS = "benchmark_journey_status"
 internal const val BENCHMARK_COLLECTION_NAME = "Benchmark collection"

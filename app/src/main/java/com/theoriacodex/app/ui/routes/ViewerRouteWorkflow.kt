@@ -29,6 +29,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -229,8 +230,8 @@ internal class ViewerRouteWorkflow(
         post: Post,
         viewedMediaNumber: Int,
         session: ViewerSession?,
-    ) {
-        if (recordSeriesPage(post, viewedMediaNumber, session)) return
+    ) = withContext(NonCancellable) {
+        if (recordSeriesPage(post, viewedMediaNumber, session)) return@withContext
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
@@ -260,8 +261,8 @@ internal class ViewerRouteWorkflow(
         post: Post,
         viewedMediaNumber: Int,
         session: ViewerSession?,
-    ) {
-        if (recordSeriesPage(post, viewedMediaNumber, session)) return
+    ) = withContext(NonCancellable) {
+        if (recordSeriesPage(post, viewedMediaNumber, session)) return@withContext
         val origin = historyOrigin(session?.context)
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {

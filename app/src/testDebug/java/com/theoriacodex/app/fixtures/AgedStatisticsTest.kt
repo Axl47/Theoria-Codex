@@ -1,5 +1,6 @@
 package com.theoriacodex.app.fixtures
 
+import com.theoriacodex.data.repository.WATCHED_TAGS_PER_SOURCE
 import com.theoriacodex.data.repository.DATASTORE_STATISTICS_FILE_NAME
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.StatisticsTagKey
@@ -31,13 +32,13 @@ class AgedStatisticsTest {
 
             assertEquals(AgedStatistics.statistics(today), loaded)
             assertEquals(
-                AgedStatistics.viewsBySource.mapValues { AgedStatistics.TAGS_PER_SOURCE },
+                AgedStatistics.viewsBySource.mapValues { WATCHED_TAGS_PER_SOURCE },
                 loaded.watchedByTag.keys.groupingBy(StatisticsTagKey::source).eachCount(),
             )
             assertTrue(directory.resolve(DATASTORE_STATISTICS_FILE_NAME).length() > MINIMUM_AGED_BYTES)
 
-            val floors = (0 until VIEWED_POSTS).map { post ->
-                repository.recordWatchedPost(SourceKey.PIXIV, AgedStatistics.postTags(post).mapTo(linkedSetOf()) { sourceTagKey(SourceKey.PIXIV, it) })
+            val floors = AgedStatistics.postTags(VIEWED_POSTS).map { tags ->
+                repository.recordWatchedPost(SourceKey.PIXIV, tags.mapTo(linkedSetOf()) { sourceTagKey(SourceKey.PIXIV, it) })
                 repository.observeStatistics().first().watchedTagFloors.getValue(SourceKey.PIXIV)
             }
             val evictions = (listOf(loaded.watchedTagFloors.getValue(SourceKey.PIXIV)) + floors).zipWithNext().count { (before, after) -> after > before }

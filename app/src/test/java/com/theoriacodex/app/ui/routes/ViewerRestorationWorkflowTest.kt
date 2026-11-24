@@ -19,7 +19,12 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -37,6 +42,21 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class)
 class ViewerRestorationWorkflowTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    @Test
+    fun `closing the Viewer right after a post shows keeps its statistics and page (ADR 0215)`() = runTest {
+        val post = testPost(SourceKey.PIXIV, "closing")
+        withGraph(listOf(post)) { graph, workflow ->
+            val launch = ViewerSession(listOf(post), context(ViewerStreamSource.RECENTS, "recents:watched"))
+            val viewerScope = CoroutineScope(Job())
+            val recording = viewerScope.launch(start = CoroutineStart.UNDISPATCHED) { workflow.recordVisiblePost(post, 1, launch) }
+            viewerScope.cancel()
+            recording.join()
+
+            assertEquals(1L, graph.data.statisticsRepository.observeStatistics().first().watchedPostCount)
+            assertEquals(1, graph.data.readingPositions.get(post.id, RecentPostSection.WATCHED)?.mediaNumber)
+        }
+    }
 
     @Test
     fun `cold reconstruction preserves filtered order and canonical selection without a live route`() = runTest {

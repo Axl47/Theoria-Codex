@@ -17,6 +17,7 @@ import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PredictedTagIndex
 import com.theoriacodex.domain.vision.PredictedTagUse
 import com.theoriacodex.domain.vision.tokens
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -209,6 +210,7 @@ fun shareTagAffinityInputs(
     savedSearches: SavedSearchRepository,
     statistics: StatisticsRepository,
     predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
+    computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ): SharedTagAffinity {
     val watched = statistics.observeStatistics()
         .throttleLatest(TAG_AFFINITY_STATISTICS_PERIOD)
@@ -239,7 +241,7 @@ fun shareTagAffinityInputs(
         delay(retryDelayMs(attempt))
         true
     }
-    return SharedTagAffinity(byProfile.distinctUntilChanged().flowOn(Dispatchers.Default).shareIn(scope, SharingStarted.Lazily, replay = 1), scope)
+    return SharedTagAffinity(byProfile.distinctUntilChanged().flowOn(computationDispatcher).shareIn(scope, SharingStarted.Lazily, replay = 1), scope)
 }
 
 internal fun <T> Flow<T>.throttleLatest(period: Duration): Flow<T> = conflate().transform { value ->

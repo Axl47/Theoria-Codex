@@ -2,6 +2,7 @@ package com.theoriacodex.data.storage
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -53,8 +54,16 @@ internal fun <S, T> StateCell<S>.focus(get: (S) -> T, put: (S, T) -> S): StateCe
 
 internal const val WRITE_BEHIND_RETRIES = 3
 
-internal fun <T : Any> StateCell<T>.writeBehind(scope: CoroutineScope, delay: Duration): StateCell<T> =
-    WriteBehindStateCell(this, scope, delay)
+class WriteBehind(internal val scope: CoroutineScope, internal val delay: Duration = WRITE_BEHIND_DELAY) {
+    companion object {
+        fun flushOnly(scope: CoroutineScope) = WriteBehind(scope, Duration.INFINITE)
+    }
+}
+
+internal val WRITE_BEHIND_DELAY = 2.seconds
+
+internal fun <T : Any> StateCell<T>.writeBehind(config: WriteBehind?): StateCell<T> =
+    config?.let { WriteBehindStateCell(this, it.scope, it.delay) } ?: this
 
 private class WriteBehindStateCell<T : Any>(
     private val durable: StateCell<T>,
@@ -74,7 +83,7 @@ private class WriteBehindStateCell<T : Any>(
         emitAll(state.filterNotNull())
     }
 
-    override suspend fun value(): T = mutex.withLock { loaded() }
+    override suspend fun value(): T = withContext(queue) { mutex.withLock { loaded() } }
 
     override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R = withContext(queue + NonCancellable) {
         mutex.withLock { applying(transform) }

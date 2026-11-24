@@ -21,8 +21,7 @@ Emulators cannot establish simultaneous autoplay; only a phone can. A new journe
 
 ## Applies to
 
-- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt`: `completeFiveFeedJourney`, `requireChangingMedia`, `requireMovingFeedPreviews`, `viewerPreviewSnapshot`, `visiblePreviews`, `requirePreviewLeaseCount`
+- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt`: `completeFiveFeedJourney`, `requireChangingMedia`, `requireMovingFeedPreviews`, `viewerPreviewSnapshot`, `visiblePreviews`, `requirePreviewLeaseCount`, `completeViewerSwipes`
 - `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt`: `assumeSearchAutoplayDecodersAvailable`, `agedStatisticsViewerSwipes`
-- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt`: `completeViewerSwipes`
 - `app/src/fixtures/java/com/theoriacodex/app/fixtures/AgedStatistics.kt`: `AgedStatistics.write`, `AgedStatistics.statistics`, `AgedStatistics.postTags`
 - `baseline-profile/src/main/java/com/theoriacodex/baselineprofile/BaselineProfileGenerator.kt`: `feedViewerAndSearchEditor`
