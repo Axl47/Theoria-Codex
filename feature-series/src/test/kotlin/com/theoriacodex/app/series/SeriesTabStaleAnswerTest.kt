@@ -1,8 +1,10 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.domain.series.SeriesFilter
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -44,6 +46,29 @@ class SeriesTabStaleAnswerTest {
         val dedicated = viewModel.state.value.dedicated!!
         assertEquals(BrowseKind.Filtered("four", emptyList(), changed = 0), dedicated.kind)
         assertEquals(listOf("four"), (dedicated.source.listing as SeriesListing.Loaded).series.map { it.title })
+    }
+
+    @Test
+    fun aGenreSearchWhoseSourceIsTurnedOffWhileItsFiltersLoadStaysClosed() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val filters = CompletableDeferred<List<SeriesFilter>>()
+        val kept = Answering("custom_mihon_7")
+        val dropped = Answering("custom_mihon_8").apply { offered = { filters.await() } }
+        var on = listOf(kept, dropped)
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(NothingStored, { on }, changed) { NOTHING_CHECKED }
+        advanceUntilIdle()
+        viewModel.openGenreSearch(dropped.key, "Fantasy")
+        advanceUntilIdle()
+
+        on = listOf(kept)
+        changed.value = 1
+        advanceUntilIdle()
+        filters.complete(emptyList())
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.state.value.dedicated)
+        assertEquals(emptyList<String>(), dropped.asked)
     }
 
     @Test
