@@ -1,6 +1,7 @@
 package com.theoriacodex.data.storage
 
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.encoding.CompositeDecoder
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.json.Json
@@ -12,14 +13,20 @@ import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
-inline fun <reified T> assertStoredFormat(vararg goldens: Pair<String, T>, json: Json = DurableJson) =
-    assertStoredFormat(serializer<T>(), *goldens, json = json)
+inline fun <reified T> assertStoredFormat(vararg goldens: Pair<String, T>, json: Json = DurableJson, retiredKeys: Set<String> = emptySet()) =
+    assertStoredFormat(serializer<T>(), *goldens, json = json, retiredKeys = retiredKeys)
 
-fun <T> assertStoredFormat(serializer: KSerializer<T>, vararg goldens: Pair<String, T>, json: Json = DurableJson) {
+fun <T> assertStoredFormat(
+    serializer: KSerializer<T>,
+    vararg goldens: Pair<String, T>,
+    json: Json = DurableJson,
+    retiredKeys: Set<String> = emptySet(),
+) {
     require(goldens.isNotEmpty()) { "A stored format needs at least one golden" }
     val descriptor = serializer.descriptor
     val type = descriptor.serialName
     val held = mutableSetOf<String>()
+    val undeclared = mutableSetOf<String>()
     goldens.forEachIndexed { index, (golden, expected) ->
         assertEquals("$type golden $index decodes differently", expected, json.decodeFromString(serializer, golden))
         assertEquals(
@@ -28,9 +35,12 @@ fun <T> assertStoredFormat(serializer: KSerializer<T>, vararg goldens: Pair<Stri
             json.decodeFromString(serializer, json.encodeToString(serializer, expected)),
         )
         held += descriptor.heldPaths(json.parseToJsonElement(golden))
+        undeclared += descriptor.undeclaredPaths(json.parseToJsonElement(golden))
     }
     val missing = descriptor.declaredPaths() - held
     assertTrue("$type goldens never hold $missing; add a golden that sets them", missing.isEmpty())
+    val stale = undeclared - retiredKeys
+    assertTrue("$type goldens hold $stale, which it does not declare; list a deliberately old golden's keys in retiredKeys", stale.isEmpty())
 }
 
 private fun SerialDescriptor.declaredPaths(prefix: String = "", visiting: Set<String> = emptySet()): Set<String> =
@@ -61,6 +71,19 @@ private fun SerialDescriptor.heldPaths(element: JsonElement, prefix: String = ""
         element.flatMapTo(mutableSetOf()) { item -> getElementDescriptor(0).heldPaths(item, "$prefix[]") }
     kind == StructureKind.MAP && element is JsonObject ->
         element.values.flatMapTo(mutableSetOf()) { value -> getElementDescriptor(1).heldPaths(value, "$prefix{}") }
+    else -> emptySet()
+}
+
+private fun SerialDescriptor.undeclaredPaths(element: JsonElement, prefix: String = ""): Set<String> = when {
+    kind == StructureKind.CLASS && element is JsonObject -> element.entries.flatMapTo(mutableSetOf()) { (name, value) ->
+        val index = getElementIndex(name)
+        if (index == CompositeDecoder.UNKNOWN_NAME) setOf(child(prefix, name))
+        else getElementDescriptor(index).undeclaredPaths(value, child(prefix, name))
+    }
+    kind == StructureKind.LIST && element is JsonArray ->
+        element.flatMapTo(mutableSetOf()) { item -> getElementDescriptor(0).undeclaredPaths(item, "$prefix[]") }
+    kind == StructureKind.MAP && element is JsonObject ->
+        element.values.flatMapTo(mutableSetOf()) { value -> getElementDescriptor(1).undeclaredPaths(value, "$prefix{}") }
     else -> emptySet()
 }
 

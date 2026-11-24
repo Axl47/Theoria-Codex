@@ -5,7 +5,7 @@ import org.junit.Test
 
 class UpdateStateGoldenTest {
     @Test
-    fun `update state files older builds wrote decode the same`() {
+    fun `update state files older builds wrote decode the same (ADR 0034)`() {
         val markdown = "## Fixed\n- a=b & c<d> 'quoted' \"double\" é☃"
         val sections = listOf(
             ChangelogSection("Fixed", listOf("a=b & c<d>", "'quoted'")),
@@ -44,6 +44,7 @@ class UpdateStateGoldenTest {
                     changelogSections = listOf(ChangelogSection("Fixed")),
                 ),
             ),
+            retiredKeys = setOf("retiredField"),
         )
     }
 
