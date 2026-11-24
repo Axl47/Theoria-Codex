@@ -15,7 +15,9 @@ edit its record. When it is reversed, or the code it governs is gone, set its st
 `Superseded by [NNNN](NNNN-title.md)` (or `Superseded` when nothing replaces it) and leave the record in place.
 
 Number a new record as the highest number on the latest `main` plus one, and rebase right before pushing. If
-another record took the number first, renumber yours.
+another record took the number first, renumber yours before merging. A duplicate that reaches `main` anyway is
+harmless: records are identified and linked by file name, so leave both, and the next record still takes the
+highest number plus one.
 
 ## Finding records
 
@@ -26,8 +28,8 @@ decisions behind a file, search for its name: `grep -l 'SearchViewModel.kt' docs
 ## Integrity check
 
 `scripts/check_adrs.py` runs with the other policy checks (`scripts/policy_checks.sh`, the pre-push hook and
-CI). It fails when a record's `Applies to` names a path that does not exist, a backticked symbol that does
-not appear in the files on its line, or a number another record already uses. Superseded records are skipped.
+CI). It fails when a record's `Applies to` names a path that does not exist, or a backticked symbol that
+does not appear in the files on its line. Superseded records are skipped.
 Each `Applies to` line reads `` `path`[, `path`]: `symbol`, `symbol` ``; a path without its module directory
 resolves against the previous path on the line, a directory stands for every file under it, and prose around the backticked names is ignored. When a
 change moves or deletes a file, the check names every record that still points at the old path; update those

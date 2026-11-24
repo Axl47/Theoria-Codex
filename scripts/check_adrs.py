@@ -24,7 +24,6 @@ from dataclasses import dataclass
 ADR_DIR = pathlib.Path("docs/adr")
 ADR_NAME = re.compile(r"\d{4}-[a-z0-9-]+\.md")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-NUMBERING = "Number a new ADR as the highest on the latest main plus one, and rebase right before pushing."
 
 
 @dataclass(frozen=True)
@@ -107,23 +106,9 @@ def check_record(adr: pathlib.Path, root: pathlib.Path, moved: dict[str, str], d
     return problems
 
 
-def numbering_problems(records: list[pathlib.Path]) -> list[str]:
-    seen: dict[str, str] = {}
-    problems = []
-    for record in records:
-        number = record.name[:4]
-        if number in seen:
-            problems.append(f"docs/adr: {seen[number]} and {record.name} share number {number}. {NUMBERING}")
-        seen.setdefault(number, record.name)
-    return problems
-
-
 def check(root: pathlib.Path, moved: dict[str, str] | None = None, deleted: set[str] | None = None) -> list[str]:
     records = sorted(path for path in (root / ADR_DIR).glob("*.md") if ADR_NAME.fullmatch(path.name))
-    problems = numbering_problems(records)
-    for record in records:
-        problems.extend(check_record(record, root, moved or {}, deleted or set()))
-    return problems
+    return [problem for record in records for problem in check_record(record, root, moved or {}, deleted or set())]
 
 
 def changes(revision: str) -> tuple[dict[str, str], set[str]]:

@@ -86,13 +86,6 @@ class CheckTest(RepositoryTest):
         self.assertEqual(["docs/adr/0001-a.md: `SearchModel` is not in `core/src/b/`. "
                           "Rename it here or move it to the file that now holds it."], self.problems())
 
-    def test_reports_duplicate_numbers_with_the_numbering_rule(self) -> None:
-        self.record("0007-a.md", "- `core/src/a/Search.kt`")
-        self.record("0007-b.md", "- `core/src/a/Search.kt`")
-        self.assertEqual(1, len(problems := self.problems()))
-        self.assertIn("share number 0007", problems[0])
-        self.assertIn("highest on the latest main plus one", problems[0])
-
 
 class ChangesTest(RepositoryTest):
     def git(self, *args: str) -> None:
