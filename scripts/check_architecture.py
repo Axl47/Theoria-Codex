@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import re
 import sys
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -254,6 +255,37 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     return off_main_note_failures(
         (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8")) for path in sorted(ROOT.glob("*/src/main/**/*.kt"))
     )
+
+
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
+ANDROID_NAMESPACE = "{http://schemas.android.com/apk/res/android}"
+
+
+@rule
+def provider_media_never_loads_in_cleartext() -> list[str]:
+    manifest = ElementTree.fromstring(read("app/src/main/AndroidManifest.xml"))
+    application = manifest.find("application")
+    config_name = "" if application is None else application.get(f"{ANDROID_NAMESPACE}networkSecurityConfig", "")
+    if config_name != "@xml/network_security_config":
+        return ["app's manifest must apply @xml/network_security_config (docs/adr/0048-provider-media-urls.md)"]
+    config = ElementTree.fromstring(read("app/src/main/res/xml/network_security_config.xml"))
+    base = config.find("base-config")
+    failures = []
+    if base is None or base.get("cleartextTrafficPermitted") != "false":
+        failures.append("network_security_config.xml must refuse cleartext in its base-config (docs/adr/0048-provider-media-urls.md)")
+    for host in sorted(cleartext_hosts(config, "false") - LOOPBACK_HOSTS):
+        failures.append(f"network_security_config.xml allows cleartext to {host}; only loopback may (docs/adr/0048-provider-media-urls.md)")
+    return failures
+
+
+def cleartext_hosts(parent: ElementTree.Element, inherited: str) -> set[str]:
+    hosts: set[str] = set()
+    for domain_config in parent.findall("domain-config"):
+        permitted = domain_config.get("cleartextTrafficPermitted", inherited)
+        if permitted == "true":
+            hosts |= {(domain.text or "").strip() for domain in domain_config.findall("domain")}
+        hosts |= cleartext_hosts(domain_config, permitted)
+    return hosts
 
 
 def main() -> int:

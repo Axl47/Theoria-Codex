@@ -65,6 +65,42 @@ class DeliveryPlanTest(unittest.TestCase):
                 )
 
 
+class CleartextTest(unittest.TestCase):
+    def test_reports_cleartext_beyond_loopback_adr_0048(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            manifest = root / "app/src/main/AndroidManifest.xml"
+            config = root / "app/src/main/res/xml/network_security_config.xml"
+            config.parent.mkdir(parents=True)
+            manifest.write_text(
+                '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+                '<application android:networkSecurityConfig="@xml/network_security_config" /></manifest>',
+                encoding="utf-8",
+            )
+            config.write_text(
+                "<network-security-config><base-config cleartextTrafficPermitted=\"true\" />"
+                "<domain-config cleartextTrafficPermitted=\"true\"><domain>localhost</domain><domain>cdn.example</domain>"
+                "<domain-config><domain>media.example</domain></domain-config></domain-config>"
+                "</network-security-config>",
+                encoding="utf-8",
+            )
+            self.assertIn(check_architecture.provider_media_never_loads_in_cleartext, check_architecture.RULES)
+            with mock.patch.object(check_architecture, "ROOT", root):
+                self.assertEqual(
+                    [
+                        "network_security_config.xml must refuse cleartext in its base-config (docs/adr/0048-provider-media-urls.md)",
+                        "network_security_config.xml allows cleartext to cdn.example; only loopback may (docs/adr/0048-provider-media-urls.md)",
+                        "network_security_config.xml allows cleartext to media.example; only loopback may (docs/adr/0048-provider-media-urls.md)",
+                    ],
+                    check_architecture.provider_media_never_loads_in_cleartext(),
+                )
+                manifest.write_text("<manifest><application /></manifest>", encoding="utf-8")
+                self.assertEqual(
+                    ["app's manifest must apply @xml/network_security_config (docs/adr/0048-provider-media-urls.md)"],
+                    check_architecture.provider_media_never_loads_in_cleartext(),
+                )
+
+
 @contextlib.contextmanager
 def main_sources(files: dict[str, str]):
     with tempfile.TemporaryDirectory() as directory:
