@@ -1,5 +1,6 @@
 package com.theoriacodex.extensionhost
 
+import com.theoriacodex.domain.coroutines.SharedFlights
 import com.theoriacodex.domain.model.SourceKey
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -23,6 +24,7 @@ internal class MihonImages(
             override fun removeEldestEntry(eldest: Map.Entry<String, Page>): Boolean = size > MAX_PAGES
         },
     )
+    private val listings = SharedFlights<String, List<Page>>()
 
     fun pageAddress(chapter: SChapter, page: Page): String? {
         val address = if (page.imageUrl != null) {
@@ -51,7 +53,7 @@ internal class MihonImages(
             url = chapterUrl
             name = ""
         }
-        val listed = runBlocking { source.getPageList(chapter) }
+        val listed = runBlocking { listings.share(chapterUrl) { source.getPageList(chapter) } }
         listed.forEach { pageAddress(chapter, it) }
         pages[address] ?: listed.firstOrNull { it.index == index } ?: throw IOException("The chapter no longer has this page")
     }
