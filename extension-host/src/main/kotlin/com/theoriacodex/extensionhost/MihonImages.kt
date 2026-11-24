@@ -53,8 +53,7 @@ internal class MihonImages(
             url = chapterUrl
             name = ""
         }
-        val listed = runBlocking { listings.share(chapterUrl) { source.getPageList(chapter) } }
-        listed.forEach { pageAddress(chapter, it) }
+        val listed = runBlocking { listings.share(chapterUrl) { source.getPageList(chapter).onEach { pageAddress(chapter, it) } } }
         pages[address] ?: listed.firstOrNull { it.index == index } ?: throw IOException("The chapter no longer has this page")
     }
 
