@@ -165,8 +165,9 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?):
  * A backed-up memo as Theoria stores one: the JSON object's text, or null for an empty object, the field's default, and
  * for anything that is not a JSON object, which no extension wrote.
  */
-private fun storedMemo(bytes: ByteArray): String? = runCatching { Json.parseToJsonElement(bytes.decodeToString()) }.getOrNull()
-    .let { it as? JsonObject }?.takeIf(JsonObject::isNotEmpty)?.toString()
+private fun storedMemo(bytes: ByteArray): String? = bytes.takeIf(ByteArray::isNotEmpty)
+    ?.let { runCatching { Json.parseToJsonElement(it.decodeToString()) }.getOrNull() as? JsonObject }
+    ?.takeIf(JsonObject::isNotEmpty)?.toString()
 
 /**
  * The parts of a Mihon-family backup this import reads; protobuf skips the rest. Mihon and TachiyomiJ2K keep manga in
@@ -214,7 +215,10 @@ private class TachiyomiSeries(
     /** Mihon writes it only when false, so a series without it is in the library. */
     @ProtoNumber(100) val favorite: Boolean = true,
     @ProtoNumber(104) val history: List<TachiyomiHistory> = emptyList(),
-    /** What the extension keeps with the series, as JSON text; Mihon writes an empty object when it keeps nothing. */
+    /**
+     * What the extension keeps with the series, as JSON text: bytes from Mihon and Aniyomi, a string from TachiyomiJ2K
+     * (one wire type), and an empty object when it keeps nothing. Anikku leaves the number unused.
+     */
     @ProtoNumber(112) val memo: ByteArray = ByteArray(0),
 )
 

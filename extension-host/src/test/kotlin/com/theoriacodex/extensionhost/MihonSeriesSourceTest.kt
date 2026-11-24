@@ -144,6 +144,23 @@ class MihonSeriesSourceTest {
         // A stored memo that is not a JSON object is none, rather than a failed call.
         later.media(SeriesEntry("/c/2", "Chapter 2", memo = "not json"))
         assertTrue(source.pageListRequests.last().memo.isEmpty())
+        // A rebuilt chapter is held, so the source gets the same object when its pages are listed again.
+        val rebuilt = source.pageListRequests.last()
+        later.media(SeriesEntry("/c/2", "Chapter 2"))
+        assertSame(rebuilt, source.pageListRequests.last())
+    }
+
+    @Test
+    fun `a series listed without its memo takes the stored one, and details that give a memo replace it`() = runTest {
+        source.listing = MangasPage(listOf(manga("/s", "Series")), hasNextPage = false)
+        val listed = series.popular(1).series.single()
+        assertNull(listed.memo)
+
+        series.entries(listed.copy(memo = """{"slug":"s-1"}"""))
+        assertEquals(buildJsonObject { put("slug", "s-1") }, source.asked.last().memo)
+
+        source.details = manga("/s", "Series").also { it.memo = buildJsonObject { put("slug", "s-2") } }
+        assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
     }
 
     @Test

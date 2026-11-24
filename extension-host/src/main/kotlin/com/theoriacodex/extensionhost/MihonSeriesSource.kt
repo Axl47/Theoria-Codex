@@ -27,14 +27,15 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
     private val calls = ExtensionCalls(source.name) { challenged -> host.onChallenged(key, challenged) }
 
     /** Fetches its covers and pages through its own client; only an HTTP source has one. */
-    internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, host.images) }
+    internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, host.images) { url -> listedChapters[url] } }
     override val name: String get() = source.name
     override val language: String get() = source.lang
 
     /**
      * Series and chapters as the source listed them. Sources may keep data on them between calls, so a later call
      * about one hands the source its own object back; one from an earlier run is rebuilt from what the app stored,
-     * memo included.
+     * memo included. A held one listed without a memo takes the stored memo, as an import or another call may have
+     * given one.
      */
     private val listedSeries = recentlyListed<SManga>()
     private val listedChapters = recentlyListed<SChapter>()
@@ -68,14 +69,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
     override suspend fun media(entry: SeriesEntry): EntryMedia = EntryMedia.Pages(pages(entry))
 
     private suspend fun pages(entry: SeriesEntry): List<ImageRef> = calls.calling {
-        val chapter = listedChapters[entry.address] ?: SChapter.create().apply {
-            url = entry.address
-            name = entry.name
-            entry.number?.let { chapter_number = it }
-            scanlator = entry.translatorGroup
-            entry.uploadedAtEpochMs?.let { date_upload = it }
-            memo = sourceMemo(entry.memo)
-        }
+        val chapter = chapter(entry)
         source.getPageList(chapter).mapNotNull { page -> pageImage(chapter, page) }
     }
 
@@ -92,13 +86,35 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         hasNextPage = hasNextPage,
     )
 
-    private fun manga(series: Series): SManga = listedSeries[series.id.address] ?: SManga.create().apply {
-        url = series.id.address
-        title = series.title
-        thumbnail_url = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)
-        author = series.author
-        genre = series.genres.joinToString().takeIf(String::isNotBlank)
-        memo = sourceMemo(series.memo)
+    private fun manga(series: Series): SManga {
+        listedSeries[series.id.address]?.let { listed ->
+            if (listed.memo.isEmpty()) listed.memo = sourceMemo(series.memo)
+            return listed
+        }
+        return SManga.create().apply {
+            url = series.id.address
+            title = series.title
+            thumbnail_url = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)
+            author = series.author
+            genre = series.genres.joinToString().takeIf(String::isNotBlank)
+            memo = sourceMemo(series.memo)
+        }
+    }
+
+    /** As [manga], for a chapter. One rebuilt is held too, so [sourceImages] can hand it back when it lists pages again. */
+    private fun chapter(entry: SeriesEntry): SChapter {
+        listedChapters[entry.address]?.let { listed ->
+            if (listed.memo.isEmpty()) listed.memo = sourceMemo(entry.memo)
+            return listed
+        }
+        return SChapter.create().apply {
+            url = entry.address
+            name = entry.name
+            entry.number?.let { chapter_number = it }
+            scanlator = entry.translatorGroup
+            entry.uploadedAtEpochMs?.let { date_upload = it }
+            memo = sourceMemo(entry.memo)
+        }.also { listedChapters[it.url] = it }
     }
 
     /**
