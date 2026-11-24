@@ -33,16 +33,23 @@ Prefer, in order: a type or signature (narrower visibility, a private constructo
 type), a focused test whose name states the promise, then a policy rule in `scripts/check_architecture.py` or a
 Detekt rule. Each record lists its guards under `Guarded by`, after `Applies to` and in the same grammar:
 
-- a test: its file and exact name. The name ends with the record's tag, `` `... (ADR 0022)` `` in Kotlin or
-  `test_..._adr_0022` in Python (several: `(ADR 0008, 0022)`, `_adr_0008_adr_0022`), so the failing test
-  names the record at the moment someone is tempted to edit it.
-- a signature: its file and the declaration as source text, such as `` `suspend fun post(id: String): Post?` ``.
-- a policy rule: its script and function name.
+- a test: its file and exact name. The name ends with the record's tag so the failing test names the record at
+  the moment someone is tempted to edit it: a backticked Kotlin name ends `` `... (ADR 0022)` ``, and a plain
+  identifier (Java, camelCase Kotlin, Python) ends `_adr_0022` (several: `(ADR 0008, 0022)`, `_adr_0008_adr_0022`).
+- a signature: its file and the declaration as source text from the start of its line, such as
+  `` `suspend fun post(id: String): Post?` ``.
+- a policy rule: two lines, the rule's tagged unit test in `scripts/tests/test_check_architecture.py`, which feeds
+  it a violation, and its registered declaration as source text, `` `@rule def rule_name() -> list[str]` ``.
 - `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour. Any
-  other line must name a backticked path.
+  other line must name a backticked path and a guard.
 
-When a guard fails and the promise still holds, fix the code. When the decision changed, edit the record and
-the guard together.
+Before linking a guard, break the promise in the code and watch the guard fail. Prefer a host test where one can
+pin the promise: `androidTest` guards run only after merge to `main`. A guard in an abstract class runs only
+through its concrete subclasses. When a guard fails and the promise still holds, fix the code. When the decision
+changed, edit the record and the guard together.
+
+Every live record has a `Guarded by` section, except those listed in `unguarded.txt`, which only shrinks: a new
+record needs the section, and a record that gains one leaves the list. Delete the file when it is empty.
 
 ## Integrity check
 
@@ -53,12 +60,19 @@ CI). Superseded records are skipped. It fails when:
   its line. Each line reads `` `path`[, `path`]: `symbol`, `symbol` ``; a path without its module directory
   resolves against the previous path on the line, an `Applies to` directory stands for every file under it,
   prose around the backticked names is ignored, and a line with no backticked path is prose;
-- a test guard is not declared exactly once in its file, does not run (`@Test` without `@Ignore`, or a Python
-  `test_` name), or lacks the record's tag; a test anywhere carries a tag its record does not list;
-- a signature guard's text is gone (whitespace and a trailing comma before `)` are ignored), a rule or type
-  guard's name is gone, or `Guarded by` lists nothing.
+- a test guard is not declared exactly once in its file, does not run (`@Test` without `expected` and no
+  `@Ignore` on it or its class, or a Python `test_` method of a class with no skip decorator), or lacks the
+  record's tag; a test carries a tag its record does not list, or a malformed one;
+- a signature guard's text is gone or changed (line breaks and a trailing comma before `)` are ignored; an added
+  modifier, nullability, type argument or return type is a change), a rule or type guard's name is gone, a
+  `Guarded by` line names no guard, or the section lists nothing;
+- a live record has no `Guarded by` section and is not in `unguarded.txt`.
+
+Test files are Kotlin and Java files under source sets named `test`, `androidTest` or `sharedTest`, with any
+suffix (`testDebug`, `testFixtures`), and `scripts/tests/test_*.py`. The check proves a guard exists, is tagged
+and runs, not that its body still bites; the break-it-first proof and the guard-edit note below cover that.
 
 When a change moves or deletes a file, the check names every record that still points at the old path; update
-those records in the same change. On push it also prints notes that never fail: the records governing the files
-the change edits, to reread, and any guard test whose assertions changed beside code its record governs while
-the record did not, which usually means the test was bent to pass.
+those records in the same change. On push it also prints notes that never fail: the records whose `Applies to`
+symbols the change's edited lines touch, to reread, and any guard test edited beside code its record governs
+while the record did not, which usually means the test was bent to pass.

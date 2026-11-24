@@ -27,7 +27,7 @@ class RepositoryTest(unittest.TestCase):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
 
-    def record(self, name: str, applies: str, status: str = "Accepted", guarded: str | None = None) -> None:
+    def record(self, name: str, applies: str, status: str = "Accepted", guarded: str | None = "- Left to prose: none.") -> None:
         guards = "" if guarded is None else f"\n## Guarded by\n\n{guarded}\n"
         self.write(f"docs/adr/{name}", f"# Title\n\nStatus: {status}\n\n## Applies to\n\n{applies}\n{guards}")
 
@@ -138,6 +138,26 @@ class GuardedByTest(RepositoryTest):
         self.assertEqual(3, len(problems))
         self.assertTrue(all("does not run" in problem for problem in problems), problems)
 
+    def test_accepts_a_multi_line_test_annotation(self) -> None:
+        lines = ["class SlowTest {", "    @Test(", "        timeout = 5_000L,", "    )", "    fun `slow`() = Unit", "}"]
+        self.assertTrue(check_adrs.runs(pathlib.Path("SlowTest.kt"), lines, 4, "slow"))
+
+    def test_rejects_ignored_expected_and_skipped_tests(self) -> None:
+        kotlin = {
+            "class": ["@Ignore", "class IgnoredTest {", "    @Test", "    fun `x`() = Unit", "}"],
+            "blank line": ["class IgnoredTest {", "    @Ignore", "", "    @Test", "    fun `x`() = Unit", "}"],
+            "expected": ["class IgnoredTest {", "    @Test(expected = IllegalStateException::class)", "    fun `x`() = Unit", "}"],
+        }
+        for case, lines in kotlin.items():
+            self.assertFalse(check_adrs.runs(pathlib.Path("IgnoredTest.kt"), lines, len(lines) - 2, "x"), case)
+        python = {
+            "skip": ["class ToolTest(unittest.TestCase):", "    @unittest.skip('later')", "    def test_x(self):", "        pass"],
+            "skipped class": ["@skipIf(True, 'no')", "class ToolTest(unittest.TestCase):", "    def test_x(self):", "        pass"],
+            "module level": ["def test_x():", "    pass"],
+        }
+        for case, lines in python.items():
+            self.assertFalse(check_adrs.runs(pathlib.Path("test_tool.py"), lines, len(lines) - 2, "test_x"), case)
+
     def test_reports_a_guard_without_this_records_tag(self) -> None:
         self.record("0002-b.md", "- `core/src/a/Search.kt`", guarded=f"- `{KOTLIN_TEST}`: `search runs once (ADR 0001)`")
         problems = self.problems()
@@ -148,6 +168,18 @@ class GuardedByTest(RepositoryTest):
         self.assertEqual(["0008", "0022"], check_adrs.tags("keeps owners (ADR 0008, 0022)"))
         self.assertEqual(["0008", "0022"], check_adrs.tags("test_keeps_owners_adr_0008_adr_0022"))
         self.assertEqual([], check_adrs.tags("keeps owners (ADR 0008) when idle"))
+
+    def test_pinned_source_text_matches_whole_tokens_from_the_start_of_a_line(self) -> None:
+        def pinned(pin: str, text: str) -> bool:
+            return check_adrs.pinned(pin, text, python=False)
+
+        self.assertFalse(pinned("fun post(): Post", "fun post(): Post?\n"))
+        self.assertFalse(pinned("fun posts(): List<Post>", "fun posts(): List<Post>?\n"))
+        self.assertFalse(pinned("internal class Foo", "internal class FooImpl\n"))
+        self.assertFalse(pinned("fun x()", "    private fun x() = Unit\n"))
+        self.assertFalse(pinned("fun f()", "fun f(): Int = 1\n"))
+        self.assertTrue(pinned("suspend fun post(id: String): Post?", "    suspend fun post(\n        id: String,\n    ): Post? {\n"))
+        self.assertTrue(check_adrs.pinned("@rule def run() -> list[str]", "@rule\ndef run() -> list[str]:\n", python=True))
 
     def test_reports_a_changed_signature(self) -> None:
         self.assertEqual(
@@ -164,9 +196,22 @@ class GuardedByTest(RepositoryTest):
     def test_reports_a_guard_line_without_a_backticked_path(self) -> None:
         self.assertIn("names no backticked path", self.guarded("- core/src/a/Search.kt: `SearchModel`")[0])
 
-    def test_names_new_path_of_a_moved_guard(self) -> None:
-        self.record("0001-a.md", "- `core/src/a/Search.kt`", guarded="- `core/src/test/a/OldTest.kt`: `x (ADR 0001)`")
+    def test_reports_a_guard_line_without_a_guard(self) -> None:
+        self.assertIn("names no guard", self.guarded("- `core/src/a/Search.kt`")[0])
+        self.assertIn("gives no reason", self.guarded("- Left to prose:")[0])
+
+    def test_reports_a_tagged_test_name_on_a_source_file(self) -> None:
+        self.assertIn("is a tagged test name in a file that is not a test source set", self.guarded("- `core/src/a/Search.kt`: `run (ADR 0001)`")[0])
+
+    def test_test_files_include_every_test_source_set(self) -> None:
+        for path in ["app/src/testDebug/kotlin/A.kt", "core-data/src/testFixtures/kotlin/B.kt", "app/src/sharedTest/java/C.java", "app/src/androidTest/D.kt"]:
+            self.assertIsNotNone(check_adrs.TEST_FILE.fullmatch(path), path)
+        self.assertIsNone(check_adrs.TEST_FILE.fullmatch("macrobenchmark/src/main/kotlin/E.kt"))
+
+    def test_names_new_path_of_a_moved_guard_once(self) -> None:
+        self.record("0001-a.md", "- `core/src/test/a/OldTest.kt`", guarded="- `core/src/test/a/OldTest.kt`: `x (ADR 0001)`")
         problems = self.problems({"core/src/test/a/OldTest.kt": "core/src/test/a/NewTest.kt"})
+        self.assertEqual(1, len(problems))
         self.assertIn("It moved to `core/src/test/a/NewTest.kt`", problems[0])
 
     def test_reports_tagged_tests_their_record_does_not_list(self) -> None:
@@ -177,6 +222,40 @@ class GuardedByTest(RepositoryTest):
         self.assertIn(f"{KOTLIN_TEST}: test `search runs once (ADR 0001)` carries the tag of docs/adr/0001-a.md, which does not list it", problems[0])
         self.assertIn("test `stale (ADR 0002)` guards a superseded record (ADR 0002)", problems[1])
         self.assertIn("test `unknown (ADR 0009)` carries the tag of ADR 0009, which does not exist", problems[2])
+
+    def test_reports_malformed_tags(self) -> None:
+        self.write("core/src/test/a/OddTest.kt", "@Test\nfun `odd (ADR 22)`() = Unit\n@Test\nfun `odd (adr 0001)`() = Unit\n@Test\nfun oddName_adr_1() = Unit\n")
+        problems = self.guarded("- Left to prose: nothing to check.", ["core/src/test/a/OddTest.kt"])
+        self.assertEqual(3, len(problems))
+        self.assertTrue(all("malformed ADR tag" in problem for problem in problems), problems)
+
+
+class UnguardedTest(RepositoryTest):
+    def unguarded(self, *names: str) -> None:
+        self.write("docs/adr/unguarded.txt", "".join(f"{name}\n" for name in names))
+
+    def test_accepts_a_listed_record_without_guards(self) -> None:
+        self.record("0001-a.md", "- `core/src/a/Search.kt`", guarded=None)
+        self.unguarded("0001-a.md")
+        self.assertEqual([], self.problems())
+
+    def test_reports_an_unlisted_record_without_guards(self) -> None:
+        self.record("0001-a.md", "- `core/src/a/Search.kt`", guarded=None)
+        self.assertEqual(
+            ["docs/adr/0001-a.md: add a \"Guarded by\" section naming a guard, or a `Left to prose:` line saying why none is possible; see docs/adr/README.md."],
+            self.problems(),
+        )
+
+    def test_reports_a_list_that_did_not_shrink(self) -> None:
+        self.record("0001-a.md", "- `core/src/a/Search.kt`")
+        self.record("0002-b.md", "- `core/src/a/Search.kt`", guarded=None)
+        self.unguarded("0002-b.md", "0001-a.md", "0003-gone.md")
+        self.assertEqual(
+            ["docs/adr/unguarded.txt: names are not sorted; sort them.",
+             "docs/adr/0001-a.md has a \"Guarded by\" section; remove it from docs/adr/unguarded.txt.",
+             "docs/adr/unguarded.txt: `0003-gone.md` is not a live record; remove it."],
+            self.problems(),
+        )
 
 
 class GuardEditTest(unittest.TestCase):
@@ -198,12 +277,13 @@ class GuardEditTest(unittest.TestCase):
         self.assertEqual(lines[1:5], check_adrs.test_span(lines, 1))
         self.assertEqual(["def test_a(self):", "    self.assertTrue(x)"], check_adrs.test_span(["def test_a(self):", "    self.assertTrue(x)", "def test_b(self):"], 0))
 
-    def test_flags_an_edited_assertion_but_not_a_body_edit(self) -> None:
+    def test_flags_any_edit_to_the_guard_body_but_not_formatting_or_other_tests(self) -> None:
         name = "keeps owners (ADR 0001)"
-        self.assertTrue(check_adrs.assertions_changed(self.OLD, self.OLD.replace("assertEquals(2", "assertEquals(3"), name))
-        self.assertFalse(check_adrs.assertions_changed(self.OLD, self.OLD.replace("load()", "loadAll()"), name))
-        self.assertFalse(check_adrs.assertions_changed(self.OLD, self.OLD.replace("assertTrue(true)", "assertTrue(false)"), name))
-        self.assertFalse(check_adrs.assertions_changed(self.OLD.replace("keeps owners", "keeps"), self.OLD, name))
+        self.assertTrue(check_adrs.guard_edited(self.OLD, self.OLD.replace("assertEquals(2", "assertEquals(3"), name))
+        self.assertTrue(check_adrs.guard_edited(self.OLD, self.OLD.replace("load()", "load(cached = true)"), name))
+        self.assertFalse(check_adrs.guard_edited(self.OLD, self.OLD.replace("        val owners", "\n            val owners"), name))
+        self.assertFalse(check_adrs.guard_edited(self.OLD, self.OLD.replace("assertTrue(true)", "assertTrue(false)"), name))
+        self.assertFalse(check_adrs.guard_edited(self.OLD.replace("keeps owners", "keeps"), self.OLD, name))
 
 
 class ChangesTest(RepositoryTest):
@@ -223,25 +303,41 @@ class ChangesTest(RepositoryTest):
 
 
 class NotesTest(RepositoryTest):
-    def test_notes_name_governing_records_and_guards_edited_beside_their_code(self) -> None:
-        guard = "    @Test\n    fun `runs (ADR 0001)`() {\n        assertEquals(1, run())\n    }\n"
-        self.write("core/src/test/a/SearchTest.kt", guard)
-        self.record("0001-a.md", "- `core/src/a/`: `SearchModel`", guarded="- `core/src/test/a/SearchTest.kt`: `runs (ADR 0001)`")
-        self.record("0002-b.md", "- `core/src/b/Other.kt`")
+    def commit(self) -> None:
         for args in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"]):
             subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True)
+
+    def test_notes_name_records_whose_symbols_the_change_touches_and_guards_edited_beside_their_code(self) -> None:
+        guard = "    @Test\n    fun `runs (ADR 0001)`() {\n        assertEquals(1, run())\n    }\n"
+        self.write("core/src/test/a/SearchTest.kt", guard)
+        self.record("0001-a.md", "- `core/src/a/`: `SearchModel.run`", guarded="- `core/src/test/a/SearchTest.kt`: `runs (ADR 0001)`")
+        self.record("0002-b.md", "- `core/src/b/Other.kt`")
+        self.record("0003-c.md", "- `core/src/a/Search.kt`: `SearchModel`")
+        self.record("0004-d.md", "- `core/src/b/`: `otherValue`")
+        self.commit()
         self.write("core/src/a/Search.kt", "class SearchModel {\n    fun run() = 2\n}\n")
+        self.write("core/src/b/New.kt", "val newValue = 1\n")
+        subprocess.run(["git", "add", "core/src/b/New.kt"], cwd=self.root, check=True)
         self.write("core/src/test/a/SearchTest.kt", guard.replace("assertEquals(1", "assertEquals(2"))
 
-        self.assertEqual(["  note: this change edits code governed by docs/adr/0001-a.md; reread them."], check_adrs.governing_notes(self.root, "HEAD"))
-        notes = check_adrs.guard_edit_notes(self.root, "HEAD")
-        self.assertEqual(1, len(notes))
-        self.assertTrue(notes[0].startswith(
-            "  note: docs/adr/0001-a.md: this change edits the assertions of guard `runs (ADR 0001)` and code the record governs (core/src/a/Search.kt)."
-        ))
+        self.assertEqual(["  note: this change edits code governed by docs/adr/0001-a.md, docs/adr/0004-d.md; reread them."], check_adrs.governing_notes(self.root, "HEAD"))
+        self.assertEqual(
+            ["  note: docs/adr/0001-a.md: this change edits guard `runs (ADR 0001)` and code the record governs (core/src/a/Search.kt). "
+             "If the promise still holds, restore the guard; if the decision changed, edit the record."],
+            check_adrs.guard_edit_notes(self.root, "HEAD"),
+        )
 
         self.record("0001-a.md", "- `core/src/a/`: `SearchModel`, `run`", guarded="- `core/src/test/a/SearchTest.kt`: `runs (ADR 0001)`")
+        self.record("0004-d.md", "- `core/src/b/`")
         self.assertEqual(([], []), (check_adrs.governing_notes(self.root, "HEAD"), check_adrs.guard_edit_notes(self.root, "HEAD")))
+
+    def test_governing_note_lists_at_most_eight_records(self) -> None:
+        for number in range(1, 11):
+            self.record(f"{number:04d}-r.md", "- `core/src/b/Other.kt`")
+        self.commit()
+        self.write("core/src/b/Other.kt", "val otherValue = 2\n")
+        note = check_adrs.governing_notes(self.root, "HEAD")[0]
+        self.assertTrue(note.endswith("docs/adr/0008-r.md and 2 more; reread them."), note)
 
 
 if __name__ == "__main__":
