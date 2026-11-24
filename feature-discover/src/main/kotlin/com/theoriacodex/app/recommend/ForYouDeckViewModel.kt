@@ -303,7 +303,11 @@ class ForYouDeckViewModel(
     private suspend fun readRecentSkips(profileId: String) {
         val since = wiring.clock() - SKIP_MEMORY_MS
         // Only the wait is timed: a database query that stalls cannot be cancelled.
-        val read = workScope.async { verdictWrites.withLock { wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT) } }
+        val read = workScope.async {
+            // Waits out the writes already queued, without holding back the swipes made while it reads.
+            verdictWrites.withLock {}
+            wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT)
+        }
         val skips = withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) {
             runCatchingPreservingCancellation { read.await() }
                 .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
