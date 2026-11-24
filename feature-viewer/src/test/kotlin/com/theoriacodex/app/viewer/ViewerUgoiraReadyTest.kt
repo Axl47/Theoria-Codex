@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilWithoutIdling
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
@@ -38,14 +39,14 @@ class ViewerUgoiraReadyTest {
     @Test fun `an ugoira reports ready once its frames are available`() {
         var ready = 0
         showUgoira(active = mutableStateOf(true)) { ready += 1 }
-        compose.waitUntil(timeoutMillis = 10_000L) { ready > 0 }
+        compose.waitUntilWithoutIdling(timeoutMillis = 10_000L) { ready > 0 }
     }
 
     @Test fun `an ugoira that loaded while preloading reports ready again once it becomes active`() {
         var ready = 0
         val active = mutableStateOf(false)
         showUgoira(active) { ready += 1 }
-        compose.waitUntil(timeoutMillis = 10_000L) { ready > 0 }
+        compose.waitUntilWithoutIdling(timeoutMillis = 10_000L) { ready > 0 }
         val whilePreloading = ready
 
         active.value = true

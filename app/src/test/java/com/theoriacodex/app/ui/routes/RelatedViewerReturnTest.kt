@@ -39,6 +39,7 @@ import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.TheoriaAppContent
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Query
@@ -89,15 +90,15 @@ class RelatedViewerReturnTest {
                 SideEffect { viewModelOwner = owner }
                 if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
-            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
             if (forYou) openSeedLaneGrid() else openSeedSearch()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(searchCardTestTag(posts[6].id)).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(searchCardTestTag(posts[6].id)).fetchSemanticsNodes().isNotEmpty() }
             val verticalGrid = hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
             compose.onNode(verticalGrid).performScrollToIndex(10)
             val seedTag = searchCardTestTag(posts[16].id)
             compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(seedTag)), useUnmergedTree = true)
                 .performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
             compose.onNode(verticalGrid, useUnmergedTree = true)
                 .performScrollToNode(hasTestTag(searchCardTestTag(posts[0].id)))
             val relatedCard = compose.onNodeWithTag(searchCardTestTag(posts[0].id))
@@ -105,13 +106,13 @@ class RelatedViewerReturnTest {
             val roots = graph.registry.requests.count { it.pageToken == null }
             repeat(3) { iteration ->
                 relatedCard.assertIsDisplayed().performClick()
-                compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+                compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
                 if (iteration == 1) {
                     restoration.emulateSavedInstanceStateRestore()
-                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+                    compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
                 }
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed().performClick()
-                compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
+                compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
                 relatedCard.assertIsDisplayed()
                 val top = relatedCard.fetchSemanticsNode().boundsInRoot.top
                 // The first return centers the shelf; later returns must preserve that landing.
@@ -136,22 +137,22 @@ class RelatedViewerReturnTest {
     /** Runs the recorded search for "seed" from History. */
     private fun openSeedSearch() {
         compose.onNodeWithContentDescription("Library").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(librarySectionTag(LibrarySection.History)).performClick()
-        compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
+        compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
         compose.onNodeWithContentDescription("Filter History by section").performClick()
         compose.onNodeWithText("Searches").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag("Recent search:return-query").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("Recent search:return-query").performClick()
     }
 
     /** Shows For You as a grid, narrowed to the "seed" lane, so its grid holds the same posts as the search. */
     private fun openSeedLaneGrid() {
         compose.onNodeWithContentDescription("For You").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(FOR_YOU_VIEW_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(FOR_YOU_VIEW_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG).performClick()
         val chip = hasText("seed") and hasClickAction()
-        compose.waitUntil(10_000) { compose.onAllNodes(chip).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodes(chip).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(chip).performClick()
     }
 

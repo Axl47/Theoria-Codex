@@ -31,6 +31,7 @@ import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.TheoriaAppContent
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.CodexItem
@@ -162,7 +163,7 @@ class AppScreenshotTest {
         waitFor { compose.onAllNodesWithTag(searchCardTestTag(posts[0].id)).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    private fun waitFor(condition: () -> Boolean) = compose.waitUntil(15_000, condition)
+    private fun waitFor(condition: () -> Boolean) = compose.waitUntilSettled(15_000, condition = condition)
 
     private fun capture(name: String) {
         compose.waitForIdle()

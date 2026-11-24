@@ -71,6 +71,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(testFixtures(project(":ui-kit")))
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(testFixtures(project(":core-data")))
 }

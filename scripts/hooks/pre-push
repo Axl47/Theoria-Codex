@@ -25,6 +25,7 @@ fail() {
 line_budgets "$(diff_base 2>/dev/null || true)" > /dev/null || fail 'Line budget check'
 module_layering || fail 'Module layering check'
 architecture_rules || fail 'Architecture rules check'
+bare_compose_waits || fail 'Compose test waits check'
 comment_ratchet "$(diff_base 2>/dev/null || true)" || fail 'Comment ratchet'
 module_registration || fail 'Module registration check'
 if [[ -x scripts/detekt_changed.sh ]]; then

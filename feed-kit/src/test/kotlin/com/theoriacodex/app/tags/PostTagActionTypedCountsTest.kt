@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -84,7 +85,7 @@ class PostTagActionTypedCountsTest {
     /** Counts load on real dispatchers, which waiting for Compose to go idle does not cover. */
     private fun assertCountsDisplayed(vararg counts: String) {
         counts.forEach { count ->
-            compose.waitUntil(conditionDescription = "count $count loads", timeoutMillis = 10_000) {
+            compose.waitUntilSettled(conditionDescription = "count $count loads", timeoutMillis = 10_000) {
                 runCatching { compose.tagList().performScrollToNode(hasText(count)) }.isSuccess
             }
             compose.onNodeWithText(count).assertIsDisplayed()
