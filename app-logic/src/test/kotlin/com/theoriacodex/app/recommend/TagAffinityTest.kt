@@ -73,6 +73,10 @@ class TagAffinityTest {
             emptyList(), emptyList(), LifetimeStatistics())
 
         assertEquals(listOf("aardvark", "zebra"), inputs.liked.single().tags)
+        // A copy saved after the Like, with fewer tags, keeps the Like's own.
+        val sparse = tagAffinityInputs(listOf(like(listOf("aardvark", "moth"), id = "zebra")), listOf(post("zebra")),
+            emptyList(), emptyList(), LifetimeStatistics())
+        assertEquals(listOf("zebra", "aardvark", "moth"), sparse.liked.single().tags)
         assertEquals(1, inputs.likedCounts["zebra"])
         assertEquals(1, inputs.keptByTag[source]?.get("zebra"))
     }
