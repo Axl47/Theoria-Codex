@@ -109,7 +109,6 @@ private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionH
 
 /** A held Saved post's menu, for Library's Saved section and the standalone Saved route. */
 internal fun TheoriaShell.savedPostMenu() = SavedPostMenu(
-    creatorBrowsingSources = sources.registry.creatorBrowsingSources(),
     saveToDevice = ::requestSaveToDevice,
     saveToCodex = { post -> requestSaveToCodex(post) },
     goToSearch = { navigation.goToTab(TopLevelDestination.Search) },

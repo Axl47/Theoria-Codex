@@ -40,8 +40,8 @@ import com.theoriacodex.domain.series.SeriesId
 
 /**
  * What the offline rows can do; [remove] and [removeAll] are deferred destruction with Undo in the sheet, and
- * [actOnRemoval] is a pending removal's Undo or Retry (see [OfflineStorageUiState.pendingRemovals]). [openSeries]
- * opens a downloaded series' page.
+ * [actOnRemoval] is a pending removal's Undo or Retry (see [OfflineStorageUiState.pendingRemovals]). [openCodex]
+ * and [openSeries] open the Codex or series a row keeps offline.
  */
 class OfflineRowActions(
     val retry: (owner: String) -> Unit,
@@ -49,6 +49,7 @@ class OfflineRowActions(
     val remove: (owner: String) -> Unit,
     val removeAll: () -> Unit,
     val actOnRemoval: (key: String) -> Unit,
+    val openCodex: (codexId: String) -> Unit,
     val openSeries: (SeriesId) -> Unit,
 )
 

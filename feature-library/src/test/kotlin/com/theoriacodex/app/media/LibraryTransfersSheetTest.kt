@@ -82,11 +82,12 @@ class LibraryTransfersSheetTest {
         assertEquals(listOf("cancel:codex:a", "remove:codex:a"), offlineCalls)
     }
 
-    @Test fun `a downloaded series opens its page from its row`() {
+    @Test fun `a row opens the Codex or series it keeps offline`() {
         val series = SeriesId(SourceKey.GELBOORU, "/series/1")
-        show(owners = listOf(OfflineStorageOwner(seriesOfflineOwner(series), "Series", 2)))
+        show(owners = listOf(OfflineStorageOwner(seriesOfflineOwner(series), "Series", 2), OfflineStorageOwner(codexOfflineOwner("a"), "Codex", 1)))
         compose.onNodeWithText("Series").performClick()
-        assertEquals(listOf("series:/series/1"), offlineCalls)
+        compose.onNodeWithText("Codex").performClick()
+        assertEquals(listOf("series:/series/1", "codex:a"), offlineCalls)
     }
 
     @Test fun `opened for a Codex it scrolls to that row once the owners have loaded`() {
@@ -129,6 +130,7 @@ class LibraryTransfersSheetTest {
                     retry = { offlineCalls += "retry:$it" }, cancel = { offlineCalls += "cancel:$it" },
                     remove = { offlineCalls += "remove:$it" }, removeAll = { offlineCalls += "removeAll" },
                     actOnRemoval = { offlineCalls += "act:$it" },
+                    openCodex = { offlineCalls += "codex:$it" },
                     openSeries = { offlineCalls += "series:${it.address}" },
                 ),
                 batches = if (downloads.isEmpty()) emptyList() else listOf(PostDownloadBatch(1, "Batch", downloads)),

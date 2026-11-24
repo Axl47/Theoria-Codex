@@ -62,6 +62,7 @@ internal fun LibraryTransfersHeaderButton(tools: LibraryTransferTools) {
 internal fun LibraryTransfersSheetHost(
     tools: LibraryTransferTools,
     onOpenPost: suspend (PostDownloadItem) -> Unit,
+    onOpenCodex: (String) -> Unit,
     onOpenSeries: (SeriesId) -> Unit,
 ) {
     val offline by tools.offline.state.collectAsStateWithLifecycle()
@@ -74,6 +75,10 @@ internal fun LibraryTransfersSheetHost(
             remove = { owner -> tools.offline.removeDeferred(owner) },
             removeAll = tools.offline::removeAll,
             actOnRemoval = tools.offline::actOnRemoval,
+            openCodex = { id ->
+                tools.showDownloads = false
+                onOpenCodex(id)
+            },
             openSeries = { id ->
                 tools.showDownloads = false
                 onOpenSeries(id)

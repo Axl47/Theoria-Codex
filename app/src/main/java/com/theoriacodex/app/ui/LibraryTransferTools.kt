@@ -167,12 +167,13 @@ internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
 internal fun LibraryTransferDialogs(
     tools: LibraryTransferTools,
     onOpenPost: suspend (PostDownloadItem) -> Unit,
+    onOpenCodex: (String) -> Unit,
     onOpenSeries: (SeriesId) -> Unit,
 ) {
     val offline = tools.offline
     val offlineState by offline.state.collectAsStateWithLifecycle()
     if (offlineState.isOpen) StorageSheet(offlineState, offline::dismiss, offline::refreshUsage, offline::clearDisposableCache)
-    if (tools.showDownloads) LibraryTransfersSheetHost(tools, onOpenPost, onOpenSeries)
+    if (tools.showDownloads) LibraryTransfersSheetHost(tools, onOpenPost, onOpenCodex, onOpenSeries)
     val backup = tools.backup
     val backupState by backup.state.collectAsStateWithLifecycle()
     BackupDialogs(backupState, backup::dismissDialog, backup::applyPreferences, backup::restore)
