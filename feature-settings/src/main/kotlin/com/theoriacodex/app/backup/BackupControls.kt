@@ -178,7 +178,7 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
             ) {
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
-                if (import.newRepos > 0) Text("Also adds ${countLabel(import.newRepos, "extension repo")}.")
+                import.reposNotice()?.let { Text(it) }
                 import.missingNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
             }
@@ -186,6 +186,13 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
         confirmButton = { TextButton(onClick = onImport, enabled = !busy) { Text("Import") } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
     )
+}
+
+/** "Also adds these extension repos: Keiyoushi, Kohi den.", so the user sees whose extensions they will be offered; null when none are new. */
+internal fun BackupPreview.Series.reposNotice(): String? = when (newRepos.size) {
+    0 -> null
+    1 -> "Also adds this extension repo: ${newRepos.single()}."
+    else -> "Also adds these extension repos: ${newRepos.joinToString()}."
 }
 
 /** "Needs these extensions: Comick, Gogoanime and 1 other.", naming what the backup names; null when nothing is missing. */

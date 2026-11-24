@@ -170,7 +170,7 @@ class TachiyomiBackupTest {
             extensionRepos = repos, extensionSources = { setOf(SourceKey.parseOrThrow("custom_mihon_1")) })
 
         val preview = service.preview(bytes) as BackupPreview.Series
-        assertEquals("The manga repo is added already", 2, preview.newRepos)
+        assertEquals("The manga repo is added already", listOf("Anime", "https://more.example/repo"), preview.newRepos)
         assertEquals(listOf("Comick", "Gogoanime"), preview.missingSources)
         assertEquals(1, preview.unnamedMissingSources)
 

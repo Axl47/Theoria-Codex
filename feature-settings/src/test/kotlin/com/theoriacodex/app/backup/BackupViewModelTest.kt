@@ -87,7 +87,7 @@ class BackupViewModelTest {
     @Test
     fun `a Mihon-family import says which of its repos were added and why others were not`() = runTest {
         val imported = SeriesImportPreview(manga = 3, anime = 0, chaptersRead = 0, episodesWatched = 0)
-        actions.nextPreview = BackupPreview.Series(imported, newRepos = 3)
+        actions.nextPreview = BackupPreview.Series(imported, newRepos = listOf("A", "B", "C"))
         actions.nextImport = SeriesImportResult(imported, reposAdded = 2, repoProblems = mapOf("https://old.example" to "Now signed with another key"))
         val owner = owner()
         owner.import("document")
@@ -108,6 +108,14 @@ class BackupViewModelTest {
             BackupPreview.Series(counts, missingSources = listOf("Comick", "Gogoanime"), unnamedMissingSources = 1).missingNotice(),
         )
         assertEquals("A series stays unavailable until its extension is on here.", BackupPreview.Series(counts, unnamedMissingSources = 2).missingNotice())
+    }
+
+    @Test
+    fun `the import preview names the repos it adds`() {
+        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        assertNull(BackupPreview.Series(counts).reposNotice())
+        assertEquals("Also adds this extension repo: Keiyoushi.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi")).reposNotice())
+        assertEquals("Also adds these extension repos: Keiyoushi, Kohi den.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi", "Kohi den")).reposNotice())
     }
 
     @Test

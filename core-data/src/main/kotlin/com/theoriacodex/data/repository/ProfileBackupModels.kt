@@ -62,8 +62,8 @@ sealed interface BackupPreview {
     data class Profiles(val preview: ProfileBackupPreview) : BackupPreview
     data class Series(
         val preview: SeriesImportPreview,
-        /** How many of the extension repos the backup lists are not added here yet; importing adds them. */
-        val newRepos: Int = 0,
+        /** The names (else addresses) of the extension repos the backup lists that are not added here yet; importing adds them. */
+        val newRepos: List<String> = emptyList(),
         /** The backup's names for the sources its series are on that are not on here, the one with the most series first. */
         val missingSources: List<String> = emptyList(),
         /** How many more sources are missing that the backup gives no name. */

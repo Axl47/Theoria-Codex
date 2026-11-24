@@ -85,8 +85,8 @@ class ProfileBackupService(
         // Details only: a device that cannot answer leaves them out rather than refuse the backup. Sources that cannot be
         // listed are unavailable in Series too, so they count as missing.
         val newRepos = extensionRepos?.let { repos ->
-            runCatchingPreservingCancellation { backup.reposNotIn(repos.repos()).size }.getOrNull()
-        } ?: 0
+            runCatchingPreservingCancellation { backup.reposNotIn(repos.repos()) }.getOrNull()
+        }.orEmpty()
         return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos)
     }
 

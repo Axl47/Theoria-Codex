@@ -35,11 +35,12 @@ internal fun isTachiyomiBackup(bytes: ByteArray): Boolean = bytes.size >= 2 && b
 
 /**
  * What importing reads from a Mihon-family backup: its [series] as Theoria stores them, the extension repos it lists
- * with the signing key each had, and its names for the sources those series are on.
+ * with the signing key each had, and its names for those repos (by address given) and for the sources the series are on.
  */
 internal class TachiyomiImport(
     val series: List<BackupSeries>,
     val repos: List<NewExtensionRepo>,
+    val repoNames: Map<String, String>,
     val sourceNames: Map<SourceKey, String>,
 )
 
@@ -55,11 +56,12 @@ internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): TachiyomiImport
     // Only a repo pinned to a key comes back: an address alone would trust whatever key the repo names now. Older
     // Aniyomi backups keep installed extensions in field 106, whose package names are no address. A folder address is
     // how these apps store a repo, and ExtensionRepos.add takes it as it is.
-    val repos = (backup.repos + backup.animeRepos).filter { it.url.trim().startsWith("https://") && it.signingKey.isNotBlank() }
-        .map { NewExtensionRepo(it.url.trim(), it.signingKey.trim()) }
+    val listed = (backup.repos + backup.animeRepos).filter { it.url.trim().startsWith("https://") && it.signingKey.isNotBlank() }
         .distinctBy { storedRepoAddress(it.url) }
+    val repos = listed.map { NewExtensionRepo(it.url.trim(), it.signingKey.trim()) }
+    val repoNames = listed.filter { it.name.isNotBlank() }.associate { it.url.trim() to it.name.trim() }
     val names = backup.sources.named(SeriesKind.MANGA) + backup.animeSources.named(SeriesKind.ANIME)
-    return TachiyomiImport(series, repos, names)
+    return TachiyomiImport(series, repos, repoNames, names)
 }
 
 /** What importing [this] adds, for the preview and the message after it. */
@@ -80,12 +82,12 @@ internal fun TachiyomiImport.reposNotIn(stored: List<ExtensionRepo>): List<NewEx
 }
 
 /** The preview of importing [this] on a device where [sourcesOn] are the extension sources that are on and [newRepos] of its repos can be added. */
-internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, newRepos: Int): BackupPreview.Series {
+internal fun TachiyomiImport.preview(sourcesOn: Set<SourceKey>, newRepos: List<NewExtensionRepo>): BackupPreview.Series {
     val missing = series.map { it.series.series.id.source }.filterNot { it in sourcesOn }
         .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
     return BackupPreview.Series(
         importPreview(),
-        newRepos = newRepos,
+        newRepos = newRepos.map { repoNames[it.url] ?: it.url },
         missingSources = missing.mapNotNull(sourceNames::get).distinct(),
         unnamedMissingSources = missing.count { it !in sourceNames },
     )
@@ -181,6 +183,7 @@ private class TachiyomiSource(
 @Serializable
 private class TachiyomiRepo(
     @ProtoNumber(1) val url: String = "",
+    @ProtoNumber(2) val name: String = "",
     @ProtoNumber(5) val signingKey: String = "",
 )
 

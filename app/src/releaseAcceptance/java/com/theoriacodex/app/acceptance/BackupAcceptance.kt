@@ -99,7 +99,7 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
     val repos = AddedRepos()
     val (preview, series) = withRestoreService(restore, store, repos) { it.preview(mihon) to it.importSeries(mihon) }
     val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0)
-    check(preview == BackupPreview.Series(counts, newRepos = 1, missingSources = listOf("Source")))
+    check(preview == BackupPreview.Series(counts, newRepos = listOf("https://repo.example"), missingSources = listOf("Source")))
     check(series == SeriesImportResult(counts, reposAdded = 1) && repos.given == listOf(NewExtensionRepo("https://repo.example", "ab")))
     check(imported.last().series.single().entries.single().read)
 }
