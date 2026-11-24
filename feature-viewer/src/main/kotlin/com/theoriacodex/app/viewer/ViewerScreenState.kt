@@ -230,7 +230,7 @@ internal class ViewerFrame(
     val posts: List<Post>,
     val selection: ViewerSelection,
     val chromeVisible: Boolean,
-    val chromeStage: Int,
+    private val chromeStageState: State<Int>,
     val opening: Boolean,
     val returning: Boolean,
     val inPictureInPicture: Boolean,
@@ -238,6 +238,8 @@ internal class ViewerFrame(
     val isLandscape: Boolean,
 ) {
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
+
+    val chromeStage: Int get() = chromeStageState.value
 
     /** Whether the current session is watching long-form episodes. */
     val watching = uiState.series is ViewerSeries.Watching
