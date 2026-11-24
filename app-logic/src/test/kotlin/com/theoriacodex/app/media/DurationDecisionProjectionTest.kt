@@ -17,6 +17,11 @@ class DurationDecisionProjectionTest {
 
         assertEquals(mapOf(first to known, second to known), settled)
         assertEquals(settled, reconcileDurationDecisions(settled, emptyMap(), observed))
+        val unsupported = MediaDurationState.Unsupported(MediaDurationUnsupportedReason.STATIC_MEDIA)
+        assertEquals(
+            mapOf(first to unsupported, second to known),
+            reconcileDurationDecisions(mapOf(first to unsupported), mapOf(second to known), observed),
+        )
     }
 
     @Test fun `a settlement inspects bounded incoming keys rather than traversing any size feed`() {

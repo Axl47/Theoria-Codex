@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.data.repository.FirstPageStore
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
@@ -18,6 +19,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -35,10 +37,15 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
+    @get:Rule val folder = TemporaryFolder()
+
     @Test
     fun `initial execution returns immutable posts status and continuation`() = runTest {
         val coordinator = coordinator(TestAdapter(SourceKey.PIXIV))
@@ -155,6 +162,22 @@ class SearchCoordinatorTest {
             "${QueryHash.from(query)}|temporary-sources:GELBOORU,PIXIV",
             searchExecutionKey(query, scope),
         )
+    }
+
+    @Test
+    fun `a cached first page returns only posts from enabled sources (ADR 0080)`() = runTest {
+        val store = FirstPageStore(File(folder.root, "first-page.json"))
+        val enabled = cachedPost(SourceKey.PIXIV)
+        val disabled = cachedPost(SourceKey.GELBOORU)
+        store.save("key", listOf(disabled, enabled))
+        val coordinator = testSearchCoordinator(
+            registry = TestRegistry(listOf(TestAdapter(SourceKey.PIXIV), TestAdapter(SourceKey.GELBOORU))),
+            firstPageStore = store,
+        )
+
+        val posts = coordinator.cachedFirstPage("key", setOf(SourceKey.PIXIV))
+
+        assertEquals(listOf(enabled.id), posts.map { it.id })
     }
 
     @Test
@@ -465,6 +488,19 @@ class SearchCoordinatorTest {
         assertEquals(setOf("pixiv", "gelbooru"), trending.mapTo(mutableSetOf(), TagSuggestion::text))
         assertFalse(trending.any { it.text == "hitomi" })
     }
+
+    private fun cachedPost(source: SourceKey) = Post(
+        id = PostId(source, "1"),
+        preview = ImageRef(url = "https://example.test/1.jpg", localPath = null, mime = "image/jpeg"),
+        full = null,
+        pageUrl = null,
+        width = 100,
+        height = 100,
+        canonicalTags = emptyList(),
+        rawTags = emptyList(),
+        authorName = null,
+        createdAtEpochMs = null,
+    )
 
     private fun coordinator(vararg adapters: TestAdapter): SearchCoordinator = coordinator(
         InMemoryQueryRepository(),

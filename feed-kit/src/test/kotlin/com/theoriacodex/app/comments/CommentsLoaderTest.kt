@@ -65,20 +65,26 @@ class CommentsLoaderTest {
         val adapter = FakeCommentsAdapter(gate = release)
         val loader = CommentsLoader(FakeRegistry(adapter), StandardTestDispatcher(testScheduler))
 
-        val callers = List(3) { async { loader.load(post, null) } }
+        val parent = PostComment("c1", "a", null, "b", null, hasReplies = true)
+
+        val topCallers = List(3) { async { loader.load(post, null) } }
+        val replyCallers = List(3) { async { loader.load(post, null, parent) } }
         runCurrent()
         release.complete(Unit)
-        val pages = callers.awaitAll()
+        val pages = topCallers.awaitAll()
+        val replies = replyCallers.awaitAll()
 
-        assertEquals(1, adapter.requests.size)
+        assertEquals(2, adapter.requests.size)
         assertTrue(pages.all { it == pages.first() })
+        assertTrue(replies.all { it == replies.first() })
     }
 
     @Test
     fun `a request that missed the cache while another filled the page reads the filled page (ADR 0076)`() = runTest {
         val gate = CompletableDeferred<Unit>()
-        val adapter = FakeCommentsAdapter(gate)
-        val dispatcher = HoldingDispatcher(StandardTestDispatcher(testScheduler), held = "late")
+        val dispatcher = HoldingDispatcher(StandardTestDispatcher(testScheduler))
+        dispatcher.hold("late")
+        val adapter = FakeCommentsAdapter(gate) { dispatcher.hold("early") }
         val loader = CommentsLoader(FakeRegistry(adapter), dispatcher)
 
         val first = async(CoroutineName("early")) { loader.load(post, null) }
@@ -86,8 +92,11 @@ class CommentsLoaderTest {
         val late = async(CoroutineName("late")) { loader.load(post, null) }
         runCurrent()
         gate.complete(Unit)
+        runCurrent()
+        dispatcher.release("late")
+        runCurrent()
+        dispatcher.release("early")
         val filled = first.await()
-        dispatcher.release()
 
         assertEquals(filled, late.await())
         assertEquals(1, adapter.requests.size)
@@ -115,9 +124,11 @@ class CommentsLoaderTest {
         val posts = (1..70).map { testPost(sourcePostId = "p$it") }
 
         posts.forEach { loader.load(it, null) }
-        loader.load(posts.last(), null)
         assertEquals(70, adapter.requests.size)
-        loader.load(posts.first(), null)
+        loader.load(posts.last(), null)
+        loader.load(posts[6], null)
+        assertEquals(70, adapter.requests.size)
+        loader.load(posts[5], null)
         assertEquals(71, adapter.requests.size)
     }
 
@@ -141,7 +152,10 @@ class CommentsLoaderTest {
     }
 }
 
-private class FakeCommentsAdapter(private val gate: CompletableDeferred<Unit>? = null) : SourceAdapter, CommentsSourceAdapter {
+private class FakeCommentsAdapter(
+    private val gate: CompletableDeferred<Unit>? = null,
+    private val onReturn: () -> Unit = {},
+) : SourceAdapter, CommentsSourceAdapter {
     override val sourceKey = SourceKey.PIXIV
     override fun nativeCommentAnchor(commentId: String) = "c$commentId"
     override val capabilities = SourceCapabilities(
@@ -154,6 +168,7 @@ private class FakeCommentsAdapter(private val gate: CompletableDeferred<Unit>? =
     override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
         requests += "${post.id.sourcePostId}/${parent?.id.orEmpty()}/${pageToken.orEmpty()}"
         gate?.await()
+        onReturn()
         if (failNext) {
             failNext = false
             error("offline")
@@ -173,17 +188,23 @@ private class FakeRegistry(private val adapter: SourceAdapter) : SourceAdapterRe
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
 }
 
-private class HoldingDispatcher(private val delegate: CoroutineDispatcher, private val held: String) : CoroutineDispatcher() {
+private class HoldingDispatcher(private val delegate: CoroutineDispatcher) : CoroutineDispatcher() {
+    private val held = mutableSetOf<String>()
     private val parked = mutableListOf<Pair<CoroutineContext, Runnable>>()
-    private var holding = true
 
     override fun dispatch(context: CoroutineContext, block: Runnable) {
-        if (holding && context[CoroutineName]?.name == held) parked += context to block else delegate.dispatch(context, block)
+        if (context[CoroutineName]?.name in held) parked += context to block else delegate.dispatch(context, block)
     }
 
-    fun release() {
-        holding = false
-        parked.forEach { (context, block) -> delegate.dispatch(context, block) }
+    fun hold(name: String) {
+        held += name
+    }
+
+    fun release(name: String) {
+        held -= name
+        val (ready, rest) = parked.partition { (context, _) -> context[CoroutineName]?.name == name }
         parked.clear()
+        parked += rest
+        ready.forEach { (context, block) -> delegate.dispatch(context, block) }
     }
 }

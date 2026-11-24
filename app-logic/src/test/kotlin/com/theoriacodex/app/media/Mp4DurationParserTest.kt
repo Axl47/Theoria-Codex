@@ -43,6 +43,7 @@ class Mp4DurationParserTest {
         assertEquals(264L, nextMp4TopLevelBoxOffset(MediaByteWindow(head + mdat, 0L, 1_000L)))
         assertEquals(null, nextMp4TopLevelBoxOffset(MediaByteWindow(head + moov, 0L, 1_000L)))
         assertEquals(null, nextMp4TopLevelBoxOffset(MediaByteWindow(ByteArray(16), 0L, 1_000L)))
+        assertEquals(8L, nextMp4TopLevelBoxOffset(MediaByteWindow(head + ByteArray(4), 0L, 1_000L)))
     }
 
     @Test

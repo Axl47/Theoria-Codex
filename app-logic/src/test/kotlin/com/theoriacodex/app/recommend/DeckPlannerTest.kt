@@ -41,15 +41,30 @@ class DeckPlannerTest {
             .after(ForYouVerdictKind.SKIPPED, a)
         assertEquals(1.0, broken.weight("a"), 0.0)
 
-        val floor = (1..30).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }
-        assertEquals(DeckSteering.MIN_WEIGHT, floor.weight("a"), 0.0)
+        val reduced = (1..3).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.SKIPPED, a) }
+        assertEquals(1.0, reduced.after(ForYouVerdictKind.SAVED, a).weight("a"), 0.0)
+
+        val floor = (1..12).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }
+        assertEquals(0.25, floor.weight("a"), 0.0)
+    }
+
+    @Test fun `every third hide halves a lane (ADR 0070)`() {
+        val weights = (1..6).runningFold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }.map { it.weight("a") }
+
+        assertEquals(listOf(1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.25), weights)
     }
 
     @Test fun `injected cards come first and undo drops the ones its post asked for (ADR 0070)`() {
         val liked = id("a1")
-        val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(liked, saved = false)), DeckCard(post("s2"), DeckOrigin.Similar(id("other"), saved = false))))
+        val injected = DeckSteering().inject(
+            listOf(
+                DeckCard(post("s1"), DeckOrigin.Similar(liked, saved = false)),
+                DeckCard(post("c1"), DeckOrigin.Creator(liked, "maker")),
+                DeckCard(post("s2"), DeckOrigin.Similar(id("other"), saved = false)),
+            ),
+        )
 
-        assertEquals(listOf("s1", "s2", "a2"), nextBatch(listOf(lane(a, "a2")), injected, { false }, 3).cards.map { it.post.id.sourcePostId })
+        assertEquals(listOf("s1", "c1", "s2", "a2"), nextBatch(listOf(lane(a, "s1", "a2")), injected, { false }, 4).cards.map { it.post.id.sourcePostId })
         assertEquals(listOf("s2"), injected.undone(before = DeckSteering(), post = liked).pending.map { it.post.id.sourcePostId })
     }
 
@@ -83,6 +98,16 @@ class DeckPlannerTest {
 
         assertEquals(listOf("a1", "b3", "a2"), batch.cards.map { it.post.id.sourcePostId })
         assertEquals(mapOf("a" to 2, "b" to 3), batch.taken)
+    }
+
+    @Test fun `an injected picture's copies are not dealt again from a lane (ADR 0070)`() {
+        val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(id("liked"), saved = false))))
+
+        val batch = nextBatch(listOf(lane(a, "a1", "a2")), injected, { false }, size = 2) { post ->
+            if (post.id == id("s1")) setOf(id("s1"), id("a1")) else setOf(post.id)
+        }
+
+        assertEquals(listOf("s1", "a2"), batch.cards.map { it.post.id.sourcePostId })
     }
 
     private fun lane(origin: DeckOrigin.Lane, vararg ids: String) = DeckLane(origin, ids.map(::post))

@@ -8,8 +8,11 @@ import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.data.repository.repositoryTestPost
+import com.theoriacodex.domain.model.SourceKey
 import java.io.IOException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
@@ -49,18 +52,51 @@ class SharedTagAffinityTest {
         codex.addItems(ProfileLibraryIds.codex(main, "a"), listOf(tagged("m", "moth")))
         codex.ensureCodex(ProfileLibraryIds.codex(other, "b"), "Other")
         codex.addItems(ProfileLibraryIds.codex(other, "b"), listOf(tagged("l", "lamp")))
+        settings.addFavoriteTag(main, SourceKey.GELBOORU, listOf("fox"))
+        settings.addFavoriteTag(other, SourceKey.GELBOORU, listOf("owl"))
         val affinity = share(settings, codex)
 
         val mainInterest = affinity.forProfile(main).interest.keys
         settings.setActiveProfile(other)
         val otherInterest = affinity.forProfile(other).interest.keys
 
-        assertTrue(mainInterest.toString(), "moth" in mainInterest && "lamp" !in mainInterest)
-        assertTrue(otherInterest.toString(), "lamp" in otherInterest && "moth" !in otherInterest)
+        assertTrue(mainInterest.toString(), "moth" in mainInterest && "fox" in mainInterest && "lamp" !in mainInterest && "owl" !in mainInterest)
+        assertTrue(otherInterest.toString(), "lamp" in otherInterest && "owl" in otherInterest && "moth" !in otherInterest && "fox" !in otherInterest)
+    }
+
+    @Test
+    fun `a read still running for the previous profile never reaches the latest inputs after a switch (ADR 0085)`() = runTest {
+        val settings = InMemorySettingsRepository()
+        val main = settings.observeSettings().first().activeProfileId
+        val other = settings.addRecommendationProfile("Other").profileId
+        settings.setActiveProfile(main)
+        val inner = InMemoryCodexRepository()
+        inner.ensureCodex(ProfileLibraryIds.codex(main, "a"), "Main")
+        inner.addItems(ProfileLibraryIds.codex(main, "a"), listOf(tagged("m", "moth")))
+        inner.ensureCodex(ProfileLibraryIds.codex(other, "b"), "Other")
+        inner.addItems(ProfileLibraryIds.codex(other, "b"), listOf(tagged("l", "lamp")))
+        val slowForMain = object : CodexRepository by inner {
+            override fun observeLibraryPosts(codexIds: Set<String>) = flow {
+                if (codexIds.any { ProfileLibraryIds.belongsTo(it, main) }) delay(5_000)
+                emitAll(inner.observeLibraryPosts(codexIds))
+            }
+        }
+        val affinity = share(settings, slowForMain)
+        backgroundScope.launch { affinity.latest.collect {} }
+        runCurrent()
+
+        settings.setActiveProfile(other)
+        runCurrent()
+        assertTrue("lamp" in affinity.forProfile(other).interest)
+        advanceTimeBy(6_000)
+
+        val latest = affinity.latest.value.interest.keys
+        assertTrue(latest.toString(), "lamp" in latest && "moth" !in latest)
     }
 
     @Test
     fun `a failing library read gives empty inputs at once and retries after one, then two seconds (ADR 0085)`() = runTest {
+        val failures = 2
         val settings = InMemorySettingsRepository()
         val main = settings.observeSettings().first().activeProfileId
         val inner = InMemoryCodexRepository()
@@ -70,7 +106,7 @@ class SharedTagAffinityTest {
         val failingTwice = object : CodexRepository by inner {
             override fun observeCodices() = flow {
                 attempts += testScheduler.currentTime
-                if (attempts.size <= 2) throw IOException("library unavailable")
+                if (attempts.size <= failures) throw IOException("library unavailable")
                 emitAll(inner.observeCodices())
             }
         }
@@ -84,6 +120,33 @@ class SharedTagAffinityTest {
 
         assertEquals(listOf(0L, 1_000L, 3_000L), attempts)
         assertTrue("moth" in affinity.forProfile(main).interest)
+    }
+
+    @Test
+    fun `retries keep doubling to sixty-four seconds and then stay there (ADR 0085)`() = runTest {
+        val failures = 8
+        val settings = InMemorySettingsRepository()
+        val main = settings.observeSettings().first().activeProfileId
+        val inner = InMemoryCodexRepository()
+        inner.ensureCodex(ProfileLibraryIds.codex(main, "a"), "Main")
+        inner.addItems(ProfileLibraryIds.codex(main, "a"), listOf(tagged("m", "moth")))
+        val attempts = mutableListOf<Long>()
+        val failing = object : CodexRepository by inner {
+            override fun observeCodices() = flow {
+                attempts += testScheduler.currentTime
+                if (attempts.size <= failures) throw IOException("library unavailable")
+                emitAll(inner.observeCodices())
+            }
+        }
+        val affinity = share(settings, failing)
+
+        val first = async { affinity.forProfile(main) }
+        runCurrent()
+        advanceTimeBy(191_001)
+
+        assertEquals(listOf(0L, 1_000L, 3_000L, 7_000L, 15_000L, 31_000L, 63_000L, 127_000L, 191_000L), attempts)
+        assertTrue("moth" in affinity.forProfile(main).interest)
+        first.cancel()
     }
 
     private fun tagged(id: String, tag: String) =

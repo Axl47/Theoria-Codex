@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.model.isSamePicture
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,6 +17,8 @@ class PerceptualHashTest {
     @Test fun `a solid or nearly solid picture has no hash (ADR 0006, 0075)`() {
         assertNull(PerceptualHash.ofLuma(DoubleArray(32 * 32) { 128.0 }))
         assertNull(PerceptualHash.ofArgb(IntArray(40 * 30) { 0xFF336699.toInt() }, 40, 30))
+        assertNull(PerceptualHash.ofLuma(twoLevels(spread = 1.9)))
+        assertNotNull(PerceptualHash.ofLuma(twoLevels(spread = 2.1)))
     }
 
     @Test fun `pixels averaged down to the grid hash like the grid itself`() {
@@ -49,6 +52,8 @@ class PerceptualHashTest {
     private fun hex(hash: Long?) = "%016x".format(hash)
 
     private fun grey(level: (x: Int, y: Int) -> Int) = DoubleArray(32 * 32) { index -> level(index % 32, index / 32).toDouble() }
+
+    private fun twoLevels(spread: Double) = DoubleArray(32 * 32) { index -> if (index < 512) 128.0 - spread else 128.0 + spread }
 
     private fun disc() = grey { x, y -> minOf(255, (if ((x - 12) * (x - 12) + (y - 20) * (y - 20) < 64) 230 else 30) + x * 2) }
 

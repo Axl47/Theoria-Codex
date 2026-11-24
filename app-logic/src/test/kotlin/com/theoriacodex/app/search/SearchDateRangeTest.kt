@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.TimeZone
 
 class SearchDateRangeTest {
     private val day = 24L * 60L * 60L * 1000L
@@ -27,14 +28,20 @@ class SearchDateRangeTest {
         val from = 1_767_225_600_000L
         val range = customDateRange(from, from + 7 * day)
         assertEquals(from + 8 * day - 1, range.toEpochMs)
-        assertEquals("Jan 1, 2026 – Jan 8, 2026", dateRangeLabel(range, now))
+        val zone = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+        try {
+            assertEquals("Jan 1, 2026 – Jan 8, 2026", dateRangeLabel(range, now))
+        } finally {
+            TimeZone.setDefault(zone)
+        }
     }
 
     @Test fun `local date filter keeps posts in range and hides unknown dates (ADR 0084)`() {
         val inRange = post("in", now - day)
         val filters = SearchVisibilityFilters(dateRange = DateRange(now - 2 * day, now))
         val visible = filterSearchResults(
-            listOf(inRange, post("old", now - 5 * day), post("unknown", null)),
+            listOf(post("old", now - 5 * day), inRange, post("future", now + day), post("unknown", null)),
             filters, emptySet(), emptySet(),
         )
         assertEquals(listOf(inRange), visible)

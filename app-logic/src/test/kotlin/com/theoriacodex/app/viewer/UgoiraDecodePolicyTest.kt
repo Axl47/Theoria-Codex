@@ -11,5 +11,7 @@ class UgoiraDecodePolicyTest {
         assertEquals(2, ugoiraFrameSampleSize(1200, 1200, 10, UgoiraSizeBucket.CARD))
         assertEquals(1, ugoiraFrameSampleSize(1200, 1200, 10, UgoiraSizeBucket.VIEWER))
         assertEquals(1, ugoiraFrameSampleSize(1200, 1200, 400, UgoiraSizeBucket.EXPORT))
+        assertEquals(2, ugoiraFrameSampleSize(219, 219, 400, UgoiraSizeBucket.VIEWER))
+        assertEquals(1, ugoiraFrameSampleSize(219, 219, 300, UgoiraSizeBucket.VIEWER))
     }
 }

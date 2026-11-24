@@ -10,9 +10,12 @@ class ViolationLedgerTest {
         val ledger = ViolationLedger(siteLimit = 5)
 
         val outcomes = listOf("a", "b", "a", "a").map { site -> ledger.record("parse") { site } }
+        val otherKind = listOf("c", "c").map { site -> ledger.record("io") { site } }
 
         assertEquals(listOf(Outcome.REPORT, Outcome.REPORT, Outcome.COUNT_ONLY, Outcome.COUNT_ONLY), outcomes)
+        assertEquals(listOf(Outcome.REPORT, Outcome.COUNT_ONLY), otherKind)
         assertEquals(4L, ledger.count("parse"))
+        assertEquals(2L, ledger.count("io"))
         assertEquals(0L, ledger.count("other"))
     }
 

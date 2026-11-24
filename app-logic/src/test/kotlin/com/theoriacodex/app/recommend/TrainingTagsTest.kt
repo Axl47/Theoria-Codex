@@ -37,7 +37,8 @@ class TrainingTagsTest {
 
     @Test
     fun `a Like keeps every tag, however far down the provider's alphabetical list (ADR 0088)`() {
-        val tags = (1..60).map { "tag_%02d".format(it) }
+        val tags = (1..60).map { "tag_%02d".format((it * 37) % 60 + 1) }
+        val listed = tags + listOf(tags[3].uppercase(), tags[0])
         val post = Post(
             id = PostId(SourceKey.GELBOORU, "7"),
             preview = ImageRef(url = "https://example.com/7.jpg", localPath = null, mime = "image/jpeg"),
@@ -45,13 +46,36 @@ class TrainingTagsTest {
             pageUrl = null,
             width = null,
             height = null,
-            canonicalTags = tags,
-            rawTags = tags,
+            canonicalTags = listed,
+            rawTags = listed,
             authorName = null,
             createdAtEpochMs = null,
         )
 
         assertEquals(tags, trainingTagsFor(post))
+    }
+
+    @Test
+    fun `a tag held under two namespaces is taught once (ADR 0088)`() {
+        val post = Post(
+            id = PostId(SourceKey.GELBOORU, "9"),
+            preview = ImageRef(url = "https://example.com/9.jpg", localPath = null, mime = "image/jpeg"),
+            full = null,
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = listOf("wolf", "moth"),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+            taxonomy = listOf(
+                PostTaxonomyTerm(value = "wolf", facet = SearchFacet.TAG, sourceNamespace = "general"),
+                PostTaxonomyTerm(value = "wolf", facet = SearchFacet.TAG, sourceNamespace = "character"),
+                PostTaxonomyTerm(value = "moth", facet = SearchFacet.TAG, sourceNamespace = "general"),
+            ),
+        )
+
+        assertEquals(listOf("wolf", "moth"), trainingTagsFor(post))
     }
 
     @Test
@@ -95,7 +119,7 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `typed suggestion metadata keeps non-tag taxonomy out of recommendation fallbacks (ADR 0088)`() {
+    fun `typed suggestion metadata keeps non-tag taxonomy out of recommendation fallbacks`() {
         assertEquals(
             listOf("tag", "female"),
             listOf(

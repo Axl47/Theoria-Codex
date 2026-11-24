@@ -14,12 +14,14 @@ class SaveTargetRankingTest {
     private val a = codex("a")
     private val b = codex("b")
     private val c = codex("c")
+    private val d = codex("d")
     private val likes = Codex(ProfileLibraryIds.likes(profile), "Likes", 0)
 
     @Test fun `picker order puts containing Codices first, then score, ties in library order (ADR 0078)`() {
-        val ranked = rankSaveTargets(listOf(a, b, c), profile, setOf("c"), relevance = mapOf("b" to 0.4))
-        assertEquals(listOf("c", "b", "a"), ranked.ordered.ids())
-        assertEquals(listOf("a", "b", "c"), rankSaveTargets(listOf(a, b, c), profile, emptySet()).ordered.ids())
+        val library = listOf(d, a, c, b)
+        val ranked = rankSaveTargets(library, profile, setOf("c"), relevance = mapOf("b" to 0.4))
+        assertEquals(listOf("c", "b", "d", "a"), ranked.ordered.ids())
+        assertEquals(listOf("d", "a", "c", "b"), rankSaveTargets(library, profile, emptySet()).ordered.ids())
     }
 
     @Test fun `suggestions skip containing Codices, Likes and exclusions (ADR 0078)`() {
@@ -29,10 +31,9 @@ class SaveTargetRankingTest {
         )
         assertEquals(listOf("c"), ranked.suggestions.ids())
         assertEquals(listOf("a", "c"), ranked.ordered.ids())
-        assertTrue(ranked.inAnyCodex)
     }
 
-    @Test fun `in any Codex ignores Likes but counts an excluded Codex (ADR 0078)`() {
+    @Test fun `in any Codex ignores Likes but counts an excluded Codex`() {
         assertFalse(rankSaveTargets(listOf(likes, a), profile, setOf(likes.codexId)).inAnyCodex)
         assertTrue(rankSaveTargets(listOf(a, b), profile, setOf("a"), excludedCodexIds = setOf("a")).inAnyCodex)
     }
@@ -57,6 +58,20 @@ class SaveTargetRankingTest {
 
         assertEquals("a", rankSaveTargets(listOf(a, b), profile, emptySet(), relevance, lastSavedAt = lastSavedAt, nowEpochMs = now).suggestions.first().codexId)
         assertEquals("b", rankSaveTargets(listOf(a, b), profile, emptySet(), relevance, lastSavedAt = lastSavedAt, nowEpochMs = now + 3 * HOUR).suggestions.first().codexId)
+    }
+
+    @Test fun `a save fades by about two thirds every half hour, from a boost of three tenths (ADR 0078)`() {
+        val now = 10 * HOUR
+        fun leader(savedAgo: Long, bRelevance: Double) = rankSaveTargets(
+            listOf(a, b), profile, emptySet(), mapOf("b" to bRelevance), lastSavedAt = mapOf("a" to now - savedAgo), nowEpochMs = now,
+        ).suggestions.first().codexId
+
+        assertEquals("a", leader(savedAgo = 0, bRelevance = 0.29))
+        assertEquals("b", leader(savedAgo = 0, bRelevance = 0.31))
+        assertEquals("a", leader(savedAgo = 30 * MINUTE, bRelevance = 0.11))
+        assertEquals("b", leader(savedAgo = 30 * MINUTE, bRelevance = 0.111))
+        assertEquals("a", leader(savedAgo = 60 * MINUTE, bRelevance = 0.04))
+        assertEquals("b", leader(savedAgo = 60 * MINUTE, bRelevance = 0.042))
     }
 
     @Test fun `a recent save never lifts a strong match over a Codex this search already saved into (ADR 0078)`() {

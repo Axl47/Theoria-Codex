@@ -26,6 +26,12 @@ class AccountFeedStateTest {
         val load = opened.effect as CreatorEffect.LoadPage
         assertEquals(AccountFeed.UPLOADS, load.feed)
         assertEquals("creator:GELBOORU:user:Account:favorites", creatorQueryHash(account, AccountFeed.FAVORITES))
+
+        val favoritesFirst = CreatorUiState()
+            .reduce(CreatorAction.OpenCreator(account, listOf(AccountFeed.FAVORITES, AccountFeed.UPLOADS)))
+        assertEquals(AccountFeed.FAVORITES, favoritesFirst.state.selectedFeed)
+        assertEquals("creator:GELBOORU:user:Account:favorites", favoritesFirst.state.queryHash)
+        assertEquals(AccountFeed.FAVORITES, (favoritesFirst.effect as CreatorEffect.LoadPage).feed)
     }
 
     @Test
@@ -54,6 +60,7 @@ class AccountFeedStateTest {
         assertTrue(opened.uploadsRefreshing)
         assertTrue(opened.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state.uploadsRefreshing)
         assertFalse(loaded(listOf(testPost(sourcePostId = "u1")), null).reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state.uploadsRefreshing)
+        assertTrue(CreatorUiState().reduce(CreatorAction.OpenCreator(account, listOf(AccountFeed.FAVORITES))).state.uploadsRefreshing)
     }
 
     @Test
@@ -85,6 +92,9 @@ class AccountFeedStateTest {
         assertEquals(switched, switched.reduce(CreatorAction.RequestFailed(uploadsRequest, "late")).state)
         assertEquals(switched, switched.reduce(CreatorAction.RequestCancelled(uploadsRequest)).state)
 
+        val settled = opened.state.reduce(CreatorAction.RequestFailed(uploadsRequest, "failed")).state
+        assertEquals(settled, settled.reduce(CreatorAction.RequestCancelled(uploadsRequest)).state)
+
         val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), "uploads-2").reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
         val favoritesRequest = (onFavorites.effect as CreatorEffect.LoadPage).request
         val favoritesShown = onFavorites.state
@@ -110,6 +120,18 @@ class AccountFeedStateTest {
         val backToFavorites = backToUploads.state.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
         assertNull(backToFavorites.effect)
         assertEquals("network failed", backToFavorites.state.errorMessage)
+    }
+
+    @Test
+    fun `a feed that finished empty is not reloaded when selected again (ADR 0066)`() {
+        val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), null).reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        val request = (onFavorites.effect as CreatorEffect.LoadPage).request
+        val settledEmpty = onFavorites.state.reduce(CreatorAction.PageLoaded(request, Page(emptyList(), null))).state
+        val parked = settledEmpty.reduce(CreatorAction.SelectFeed(AccountFeed.UPLOADS)).state
+
+        val back = parked.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        assertNull(back.effect)
+        assertEquals(CreatorEmptyReason.NO_RESULTS, back.state.emptyReason)
     }
 
     @Test

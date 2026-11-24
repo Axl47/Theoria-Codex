@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search.state
 
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.SearchScrollState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,6 +18,10 @@ class SearchHistoryTest {
         assertEquals(listOf(entry("a", SearchScrollState(12, 34))), history.back)
         assertEquals(entry("b"), history.current)
         assertEquals(history, history.settled(entry("b", SearchScrollState(5, 6))))
+
+        val sameQueryOtherScope = SearchQueryHistory().settled(entry("a"))
+            .settled(entry("a").copy(sourceScope = SearchSourceScope.Single(SourceKey.PIXIV)))
+        assertEquals(listOf(entry("a")), sameQueryOtherScope.back)
     }
 
     @Test fun `back and forward restore each place and a new search drops forward steps (ADR 0081)`() {

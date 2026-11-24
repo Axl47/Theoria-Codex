@@ -22,6 +22,7 @@ class OmniboxMatcherTest {
         )
         assertEquals(listOf("Instant Seek"), titles(matchOmnibox(entries, "scr")))
         assertEquals(listOf("Storage & caching"), titles(matchOmnibox(entries, "c")))
+        assertEquals(listOf("Storage & caching"), titles(matchOmnibox(entries, "ac")))
         assertEquals(emptyList<OmniboxEntry>(), matchOmnibox(entries, "t"))
         assertEquals(emptyList<OmniboxEntry>(), matchOmnibox(entries, "  "))
     }
@@ -47,6 +48,12 @@ class OmniboxMatcherTest {
         assertEquals(
             listOf("Blues", "Bluebird", "blue 1", "blue 2", "Blue mode", "Deep blue"),
             titles(matchOmnibox(entries, "blue", capPerKind = 2)),
+        )
+        val crowded = ('a'..'d').map { action(OmniboxKind.CODEX, "blue $it") } +
+            (1..5).map { action(OmniboxKind.RECENT_SEARCH, "blue $it") }
+        assertEquals(
+            listOf("blue a", "blue b", "blue c", "blue 1", "blue 2", "blue 3"),
+            titles(matchOmnibox(crowded, "blue")),
         )
     }
 

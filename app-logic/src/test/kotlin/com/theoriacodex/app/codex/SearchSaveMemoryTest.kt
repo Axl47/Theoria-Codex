@@ -18,7 +18,7 @@ class SearchSaveMemoryTest {
         memory.record(search, "a")
         memory.record(search, "b")
         memory.record(search, "b")
-        val boosted = memory.boost(search, mapOf("c" to 0.9, "a" to 0.1))
+        val boosted = memory.boost(search, mapOf("c" to 0.95, "a" to 0.9))
         assertEquals(listOf("b", "a", "c"), boosted.entries.sortedByDescending { it.value }.map { it.key })
     }
 

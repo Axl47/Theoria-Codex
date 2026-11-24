@@ -28,4 +28,4 @@ Removing and re-adding a site restores its library. Cookie sharing is limited to
 
 ## Guarded by
 
-- Left to prose: every promise here is unguarded, because the work is done by `CustomSitesControllerImpl` and `SiteCookieBridge` in `:app`, whose tests are not linked here; the interface in app-logic declares the operations but decides nothing.
+- Left to prose: every promise here is unguarded, because the work is done by `CustomSitesControllerImpl` in `:app` and by `SiteCookieBridge` and the setup form's lifecycle in `feature-settings`, whose tests are not linked here; the interface in app-logic declares the operations but decides nothing.

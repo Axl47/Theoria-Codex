@@ -38,6 +38,20 @@ class FeedResultsTest {
         assertEquals("fresher", merged[1].title)
     }
 
+    @Test
+    fun `posts with the same provider id on different sources are different posts (ADR 0069)`() {
+        val shown = listOf(post(SourceKey.PIXIV, "7", title = "pixiv"), post(SourceKey.DANBOORU, "8"))
+        val incoming = listOf(post(SourceKey.GELBOORU, "7", title = "gelbooru"), post(SourceKey.PIXIV, "9"))
+
+        val merged = mergeFeedPosts(shown, incoming)
+
+        assertEquals(
+            listOf(PostId(SourceKey.PIXIV, "7"), PostId(SourceKey.DANBOORU, "8"), PostId(SourceKey.GELBOORU, "7"), PostId(SourceKey.PIXIV, "9")),
+            merged.map { it.id },
+        )
+        assertEquals(listOf("pixiv", null, "gelbooru", null), merged.map { it.title })
+    }
+
     private companion object {
         const val HASH = "0123456789abcdef0123456789abcdef"
     }

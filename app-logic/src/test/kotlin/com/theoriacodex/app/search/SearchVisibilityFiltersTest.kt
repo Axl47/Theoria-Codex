@@ -15,15 +15,32 @@ import org.junit.Test
 class SearchVisibilityFiltersTest {
     @Test
     fun `mark inputs drop marks whose hide toggle is off so new likes keep the same key (ADR 0084)`() {
-        val liked = setOf(PostId(SourceKey.PIXIV, "a"))
-        val likedMore = liked + PostId(SourceKey.PIXIV, "b")
+        val liked = setOf(PostId(SourceKey.PIXIV, "liked"))
+        val saved = setOf(PostId(SourceKey.PIXIV, "saved"))
+        val watched = setOf(PostId(SourceKey.PIXIV, "watched"))
+        val retained = setOf(PostId(SourceKey.PIXIV, "retained"))
+        val none = emptySet<PostId>()
         val showAll = SearchVisibilityFilters()
         assertEquals(
-            showAll.markInputs(liked, liked, liked, liked),
-            showAll.markInputs(likedMore, likedMore, likedMore, likedMore),
+            showAll.markInputs(liked, saved, watched, retained),
+            showAll.markInputs(liked + PostId(SourceKey.PIXIV, "b"), saved, watched, retained),
         )
-        val hideLiked = SearchVisibilityFilters(hideLiked = true)
-        assertEquals(PostMarkInputs(likedMore, emptySet(), emptySet(), liked), hideLiked.markInputs(likedMore, likedMore, likedMore, liked))
+        assertEquals(
+            PostMarkInputs(none, none, none, none),
+            showAll.markInputs(liked, saved, watched, retained),
+        )
+        assertEquals(
+            PostMarkInputs(liked, none, none, retained),
+            SearchVisibilityFilters(hideLiked = true).markInputs(liked, saved, watched, retained),
+        )
+        assertEquals(
+            PostMarkInputs(none, saved, none, retained),
+            SearchVisibilityFilters(hideSaved = true).markInputs(liked, saved, watched, retained),
+        )
+        assertEquals(
+            PostMarkInputs(none, none, watched, retained),
+            SearchVisibilityFilters(hideWatched = true).markInputs(liked, saved, watched, retained),
+        )
     }
 
     @Test
@@ -138,15 +155,16 @@ class SearchVisibilityFiltersTest {
         val rawTagged = samplePost(id = "raw", source = SourceKey.GELBOORU).copy(rawTags = listOf("Animated_GIF"))
         val canonicalTagged = samplePost(id = "canonical", source = SourceKey.DANBOORU).copy(canonicalTags = listOf("video"))
         val untagged = samplePost(id = "untagged", source = SourceKey.GELBOORU).copy(rawTags = listOf("animal"))
+        val plainTagged = samplePost(id = "plain", source = SourceKey.GELBOORU).copy(rawTags = listOf("animated"))
 
         val visible = filterSearchResults(
-            results = listOf(rawTagged, canonicalTagged, untagged),
+            results = listOf(rawTagged, canonicalTagged, untagged, plainTagged),
             filters = SearchVisibilityFilters(animatedOnly = true),
             likedPostIds = emptySet(),
             savedPostIds = emptySet(),
         )
 
-        assertEquals(listOf(rawTagged.id, canonicalTagged.id), visible.map { it.id })
+        assertEquals(listOf(rawTagged.id, canonicalTagged.id, plainTagged.id), visible.map { it.id })
     }
 
     @Test
@@ -154,8 +172,8 @@ class SearchVisibilityFiltersTest {
         val still = samplePost(id = "still", source = SourceKey.GELBOORU)
         val video = samplePost(id = "video", source = SourceKey.GELBOORU, fullMime = "video/mp4", fullUrl = "https://cdn.test/video.mp4")
         val hidingModes = listOf(QueryMode.Unified) +
-            SourceKey.builtIns.filterNot { it == SourceKey.NHENTAI }.map { QueryMode.Source(it) }
-        assertEquals(11, hidingModes.size)
+            (SourceKey.builtIns.filterNot { it == SourceKey.NHENTAI } + requireNotNull(SourceKey.parse("custom_example_com"))).map { QueryMode.Source(it) }
+        assertEquals(12, hidingModes.size)
         hidingModes.forEach { mode ->
             val query = Query.newest(SourceKey.GELBOORU).copy(mode = mode, media = MediaFilter.ANIMATED)
             assertEquals(mode.toString(), listOf(video.id), listOf(still, video).keptByMedia(query).map { it.id })

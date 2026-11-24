@@ -113,14 +113,28 @@ class SearchDraftReducerTest {
         assertEquals(listOf(SearchTerm("portable")), reconciled.query.applied.includeTerms)
         assertEquals("half typed", reconciled.suggestions.input)
         assertEquals("Pick a suggested tag", reconciled.suggestions.inputError)
+
+        val gelbooru = query(QueryMode.Source(SourceKey.GELBOORU), listOf(SearchTerm("kept")))
+        val split = initial.copy(
+            query = initial.query.copy(applied = gelbooru, appliedSourceScope = SearchSourceScope.Single(SourceKey.GELBOORU)),
+        )
+        val splitReconciled = SearchDraftReducer.reconcileEnvironment(
+            split, listOf(SourceKey.GELBOORU), setOf(SourceKey.GELBOORU), emptyMap(), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(SearchSourceScope.GlobalUnified, splitReconciled.query.draftSourceScope)
+        assertEquals(SearchSourceScope.Single(SourceKey.GELBOORU), splitReconciled.query.appliedSourceScope)
+        assertEquals(gelbooru, splitReconciled.query.applied)
     }
 
     @Test
     fun `a group added at once keeps only general tags, so it suits every source (ADR 0079)`() {
         val artist = SearchTerm("someone", SearchFacet.ARTIST, "artist")
 
-        val added = SearchDraftReducer.addIncludeGroup(state(), listOf(SearchTerm("cat"), artist))
-        val rejected = SearchDraftReducer.addIncludeGroup(state(), listOf(artist))
+        val sourceOwned = SearchTerm("scenery", SearchFacet.TAG, "meta")
+
+        val added = SearchDraftReducer.addIncludeGroup(state(), listOf(SearchTerm("cat"), sourceOwned, artist))
+        val rejected = SearchDraftReducer.addIncludeGroup(state(), listOf(artist, sourceOwned))
 
         assertEquals(listOf(SearchTermGroup(listOf(SearchTerm("cat")))), added.state.query.draft.effectiveIncludeTermGroups)
         assertFalse(rejected.accepted)
@@ -404,8 +418,12 @@ class SearchDraftReducerTest {
         ).copy(excludeTerms = listOf(SearchTerm("series", SearchFacet.SERIES, "series")))
         val restored = SearchDraftReducer.restoreDraft(state(), historical)
 
+        val excludedScoped = SearchDraftReducer.addTerm(state(), SearchTerm("najar", SearchFacet.ARTIST, "artist"), excluded = true)
+
         assertFalse(scoped.accepted)
         assertTrue(scoped.state.validationMessage.orEmpty().contains("specific source"))
+        assertFalse(excludedScoped.accepted)
+        assertTrue(excludedScoped.state.query.draft.excludeTerms.isEmpty())
         assertEquals(listOf(SearchTerm("portable")), restored.state.query.draft.includeTerms)
         assertTrue(restored.state.query.draft.excludeTerms.isEmpty())
         assertTrue(restored.state.query.validationMessage.orEmpty().contains("removed"))

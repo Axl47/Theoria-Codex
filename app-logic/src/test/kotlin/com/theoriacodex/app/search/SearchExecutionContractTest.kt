@@ -10,6 +10,7 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,6 +24,15 @@ class SearchExecutionContractTest {
         assertEquals(
             searchExecutionKey(query, SearchSourceScope.GlobalUnified),
             searchExecutionKey(withArtist, SearchSourceScope.GlobalUnified),
+        )
+        val temporary = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+        assertEquals(searchExecutionKey(query, temporary), searchExecutionKey(withArtist, temporary))
+        assertNotEquals(
+            searchExecutionKey(query, SearchSourceScope.GlobalUnified),
+            searchExecutionKey(
+                query.withIncludeTermsAsRequired(listOf(SearchTerm("cat"), SearchTerm("dog"))),
+                SearchSourceScope.GlobalUnified,
+            ),
         )
     }
 

@@ -53,6 +53,8 @@ class FeedPageDemandTest {
         repeat(10) {
             assertEquals(FeedPageDemandResult(), demand.update(hiddenPage.copy(atVisibleEnd = it % 2 == 0)))
         }
+        assertEquals(FeedPageDemandResult(), demand.update(hiddenPage.copy(scrolling = true)))
+        assertEquals(FeedPageDemandResult(), demand.update(hiddenPage.copy(canonicalCount = 120)))
         assertFalse(demand.update(hiddenPage.copy(paging = true, completedGeneration = 2L)).loadNextPage)
         assertTrue(demand.update(hiddenPage.copy(completedGeneration = 2L)).loadNextPage)
     }
@@ -95,6 +97,9 @@ class FeedPageDemandTest {
         assertFalse(demand.update(hiddenPage.copy(refreshing = true)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(paging = true)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(durationsBlockPaging = true)).loadNextPage)
+        assertFalse(
+            demand.update(hiddenPage.copy(durationsBlockPaging = true, canonicalCount = 20, requiredCanonicalIndex = 110)).loadNextPage,
+        )
         assertTrue(demand.update(hiddenPage).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(completedGeneration = 2L, durationsBlockPaging = true)).showContinue)
         assertTrue(demand.update(hiddenPage.copy(completedGeneration = 2L)).showContinue)

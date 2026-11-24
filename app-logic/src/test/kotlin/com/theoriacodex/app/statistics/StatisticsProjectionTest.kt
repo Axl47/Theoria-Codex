@@ -48,7 +48,7 @@ class StatisticsProjectionTest {
     fun `a Codex summary keeps every recorded post beyond its top five (ADR 0086)`() {
         val posts = (1..7).associate { index ->
             "PIXIV:$index" to com.theoriacodex.data.repository.CodexPostStatistics(label = "Post $index", opens = index.toLong())
-        }
+        } + ("PIXIV:8" to com.theoriacodex.data.repository.CodexPostStatistics(label = "Post 8", videoMs = 9L))
         val rows = codexStatistics(
             LifetimeStatistics(codexStatistics = mapOf("first" to com.theoriacodex.data.repository.CodexStatistics(0L, 0L, posts))),
             listOf(codex("first", "First")),

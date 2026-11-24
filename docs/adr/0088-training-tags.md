@@ -18,4 +18,5 @@ Changing a source's preferred vocabulary changes what its Likes teach.
 
 ## Guarded by
 
-- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TrainingTagsTest.kt`: `a Like keeps every tag, however far down the provider's alphabetical list (ADR 0088)`, `recommendations keep tag facets and ignore search-only taxonomy (ADR 0088)`, `pixiv recommendation training keeps native raw tags instead of translated aliases (ADR 0088)`, `typed suggestion metadata keeps non-tag taxonomy out of recommendation fallbacks (ADR 0088)`, `a post with raw tags and no typed taxonomy teaches its raw tags (ADR 0088)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TrainingTagsTest.kt`: `a Like keeps every tag, however far down the provider's alphabetical list (ADR 0088)`, `recommendations keep tag facets and ignore search-only taxonomy (ADR 0088)`, `pixiv recommendation training keeps native raw tags instead of translated aliases (ADR 0088)`, `a post with raw tags and no typed taxonomy teaches its raw tags (ADR 0088)`, `a tag held under two namespaces is taught once (ADR 0088)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/post/PostMutationViewModelTest.kt`: `a Like hands the store every tag the post teaches, in the post's order (ADR 0088)`

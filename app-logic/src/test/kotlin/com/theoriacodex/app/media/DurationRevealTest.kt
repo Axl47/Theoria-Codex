@@ -26,6 +26,9 @@ class DurationRevealTest {
         val arrived = advance(passed, decided = setOf(0, 1, 2, 3), window = 2)
         assertEquals(listOf("0", "2", "3", "1"), arrived.present(posts).ids())
 
+        val withAdvance = advance(passed, decided = (0..5).toSet(), window = 2)
+        assertEquals(listOf("0", "2", "3", "1", "4", "5"), withAdvance.present(posts).ids())
+
         val extended = advance(arrived, decided = setOf(0, 1, 2, 3, 4, 5), window = 2)
         assertEquals(listOf("0", "2", "3", "1", "4", "5"), extended.present(posts).ids())
     }
@@ -46,7 +49,7 @@ class DurationRevealTest {
     @Test
     fun `a replaced post list starts over (ADR 0068)`() {
         val reveal = advance(DurationReveal(), decided = posts.indices.toSet())
-        val replacement = listOf(video(100), video(101))
+        val replacement = (100 until 106).map(::video)
 
         val next = advanceDurationReveal(reveal, replacement, emptyMap(), emptyMap())
 

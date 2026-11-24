@@ -69,6 +69,16 @@ class PostCommentsStateTest {
     }
 
     @Test
+    fun `an empty later page leaves a populated section and its comments (ADR 0076)`() {
+        val populated = CommentList().withPage(commentPage("a", "b", next = "p2"))
+        val afterEmpty = populated.loading().withPage(commentPage())
+        val state = PostCommentsState(top = afterEmpty)
+
+        assertEquals(listOf("a", "b"), afterEmpty.comments.map { it.id })
+        assertTrue(state.hasSection)
+    }
+
+    @Test
     fun `reply button text`() {
         assertEquals("Replies", repliesLabel(null, expanded = false))
         assertEquals("1 reply", repliesLabel(1, expanded = false))

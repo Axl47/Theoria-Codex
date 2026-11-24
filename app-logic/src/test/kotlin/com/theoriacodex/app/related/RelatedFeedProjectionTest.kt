@@ -39,14 +39,15 @@ class RelatedFeedProjectionTest {
 
     @Test
     fun `a late arrival below its neighbours does not pull the shelf away from its seed (ADR 0077)`() {
-        val posts = listOf(post("0"), post("1"), post("2"), post("3"))
+        val posts = listOf(post("0"), post("1"), post("2"), post("3"), post("4"))
         val related = RelatedPostsUiState.Idle.begin(posts[1], 1, 1)
-        val lateFirst = listOf(posts[1], posts[2], posts[3], posts[0])
+        val lateFirst = listOf(posts[1], posts[2], posts[0], posts[4])
 
         val projection = buildRelatedFeedProjection(posts, lateFirst, related)
 
-        assertEquals(listOf("1", "shelf", "2", "3", "0"), projection.labels())
+        assertEquals(listOf("1", "shelf", "2", "0", "4"), projection.labels())
         assertEquals(0, projection.gridIndexForCanonicalIndex(1))
+        assertEquals(2, projection.gridIndexForCanonicalIndex(3))
     }
 
     @Test
@@ -73,7 +74,7 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
-    fun `each post entry carries its index in the filtered list, past posts the feed no longer has (ADR 0077)`() {
+    fun `each post entry carries its index in the filtered list, past posts the feed no longer has`() {
         val posts = listOf(post("0"), post("2"))
         val visible = listOf(post("0"), post("1"), post("2"))
 

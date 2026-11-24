@@ -13,7 +13,7 @@ Feed cards are small and often on metered networks, while series episodes expose
 - `ugoiraFrameSampleSize` trades preview resolution for bounded complete playback of long animations and keeps export quality.
 - `MediaStorageBreakdown` categories are disjoint stores (downloads live in the public Downloads folder); percentages share the total of all managed media.
 - Delivery plans upgrade quality from the media's renditions and size, never from lists of sources; `PostMediaTest` pins this for the preview plan.
-- `isAnimatedPost` has one exception, decided from the source: Iwara, Rule34Video and Rule34Gen list only videos, and their listings carry a JPEG thumbnail and no media until the post is opened, so the media cannot tell yet. Posts from these three sources count as animated; no other source key decides whether a post is animated.
+- `isAnimatedPost` has one exception, decided from the source: Iwara, Rule34Video and Rule34Gen list only videos, and their listings can lack playable media, so the source key supplies the answer even then. Posts from these three sources count as animated; no other source key decides whether a post is animated.
 
 ## Consequences
 New sources get delivery optimizations automatically if their media offers variants or streams.
@@ -29,10 +29,11 @@ New sources get delivery optimizations automatically if their media offers varia
 
 ## Guarded by
 
-- `app-logic/src/test/kotlin/com/theoriacodex/app/media/PostMediaPolicyTest.kt`: `a ref with streams is video even when its address and mime name no type (ADR 0074)`, `an Iwara, Rule34Video or Rule34Gen listing post is animated before its media is known (ADR 0074)`, `no other source key makes a still post animated (ADR 0074)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/media/PostMediaPolicyTest.kt`: `a ref with streams is video even when its address and mime name no type (ADR 0074)`, `an Iwara, Rule34Video or Rule34Gen listing post is animated before its media is known (ADR 0074)`, `no other source key decides whether a post is animated (ADR 0074)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/media/VideoQualityPolicyTest.kt`: `network defaults and explicit choices select renditions of one item (ADR 0074)`, `offline media and unavailable resolution retain usable media (ADR 0074)`, `feed cards use the smallest sensible stream only on metered networks (ADR 0074)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/media/PostSnapshotUpdatesTest.kt`: `a snapshot replaces its own card in place, admits nothing and keeps the listing's comment hint (ADR 0074)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/UgoiraDecodePolicyTest.kt`: `a long animation decodes smaller to fit its playback budget while short ones and exports keep resolution (ADR 0074)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/media/MediaStorageBreakdownTest.kt`: `every category, downloads included, shares one byte accurate total (ADR 0074)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/DeliveryPlanSourceParityTest.kt`: `the Viewer plan for the same media is the same for a built-in, Pixiv and a custom source (ADR 0074)`, `the card plan for the same media is the same for a built-in and a custom source, and for Pixiv without renditions (ADR 0074)`
 - `scripts/tests/test_check_architecture.py`: `test_reports_a_delivery_plan_that_decides_from_a_source_adr_0074`
 - Left to prose: that the storage categories are disjoint stores, with downloads in the public Downloads folder, is unguarded because it is file layout decided where each store writes; that cards still autoplay together under the feed previews is unguarded because it is playback on a device.

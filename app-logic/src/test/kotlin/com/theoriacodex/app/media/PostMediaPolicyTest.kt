@@ -41,6 +41,14 @@ class PostMediaPolicyTest {
             PostMediaKind.VIDEO,
             mediaKind(master.copy(streams = listOf(MediaStream("https://example.test/master", "Auto")))),
         )
+        assertEquals(
+            PostMediaKind.VIDEO,
+            mediaKind(
+                ImageRef("https://example.test/poster.jpg", null, "image/jpeg").copy(
+                    streams = listOf(MediaStream("https://example.test/master", "Auto")),
+                ),
+            ),
+        )
     }
 
     @Test
@@ -51,7 +59,7 @@ class PostMediaPolicyTest {
     }
 
     @Test
-    fun `no other source key makes a still post animated (ADR 0074)`() {
+    fun `no other source key decides whether a post is animated (ADR 0074)`() {
         val videoOnlySites = setOf(SourceKey.IWARA, SourceKey.RULE34VIDEO, SourceKey.RULE34GEN)
         val others = SourceKey.builtIns.filterNot { it in videoOnlySites } +
             requireNotNull(SourceKey.parse("custom_example_org"))
@@ -59,6 +67,8 @@ class PostMediaPolicyTest {
         others.forEach { source ->
             assertFalse(source.id, isAnimatedPost(post(source, full = null)))
             assertFalse(source.id, isAnimatedPost(post(source, full = ref("file.jpg", "image/jpeg"))))
+            assertTrue(source.id, isAnimatedPost(post(source, full = ref("file.mp4", "video/mp4"))))
+            assertTrue(source.id, isAnimatedPost(post(source, full = ref("file.gif", "image/gif"))))
         }
     }
 

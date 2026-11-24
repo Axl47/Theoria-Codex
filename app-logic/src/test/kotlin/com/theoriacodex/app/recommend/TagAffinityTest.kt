@@ -159,13 +159,46 @@ class TagAffinityTest {
 
     @Test
     fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal (ADR 0087)`() {
-        val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") }
-        val watched = statistics(watched = 300, "tree" to 280, "moth" to 3)
+        val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") } +
+            List(30) { index -> LikedPost("profile", PostId(SourceKey.DANBOORU, "d$index"), 0L, listOf("tree", "moth")) }
+        val watched = LifetimeStatistics(
+            watchedBySource = mapOf(source to 300L, SourceKey.DANBOORU to 300L),
+            watchedByTag = mapOf(
+                StatisticsTagKey(source, "tree") to 280L, StatisticsTagKey(source, "moth") to 3L,
+                StatisticsTagKey(SourceKey.DANBOORU, "tree") to 20L, StatisticsTagKey(SourceKey.DANBOORU, "moth") to 150L,
+            ),
+        )
         val inputs = tagAffinityInputs(kept, emptyList(), listOf("tree"), emptyList(), watched)
 
+        assertEquals(30.5 / 31 / (3.0 / 300), inputs.lift(source, "moth")!!, 1e-9)
+        assertEquals(30.5 / 31 / (150.0 / 300), inputs.lift(SourceKey.DANBOORU, "moth")!!, 1e-9)
+        assertEquals(null, inputs.lift(SourceKey.NHENTAI, "moth"))
+        val tree = tagAffinities(post("tree", "moth"), inputs).single { it.tag == "tree" }
+        assertTrue(tree.universal)
+        assertFalse(tree.informative)
+        assertFalse(tree.proven)
+    }
+
+    @Test
+    fun `a source with plenty watched but fewer than twenty kept posts has no lift yet (ADR 0087)`() {
+        fun inputs(kept: Int) = tagAffinityInputs(
+            List(kept) { index -> like(listOf("moth"), "$index") }, emptyList(), emptyList(), emptyList(), statistics(watched = 300, "moth" to 3),
+        )
+
+        assertEquals(null, inputs(19).lift(source, "moth"))
+        assertTrue(inputs(20).lift(source, "moth")!! > 10)
+    }
+
+    @Test
+    fun `a tag kept once is a guess, however rare in what was watched (ADR 0087)`() {
+        val kept = List(30) { index -> like(listOfNotNull("tree", "moth".takeIf { index == 0 }), "$index") }
+        val inputs = tagAffinityInputs(kept, emptyList(), emptyList(), emptyList(), statistics(watched = 300, "tree" to 280, "moth" to 1))
+
+        val moth = inputs.affinity(source, "moth")
+
         assertTrue(inputs.lift(source, "moth")!! > 10)
-        assertEquals(null, inputs.lift(SourceKey.DANBOORU, "moth"))
-        assertTrue(tagAffinities(post("tree", "moth"), inputs).single { it.tag == "tree" }.universal)
+        assertFalse(moth.proven)
+        assertTrue(moth.informative)
     }
 
     @Test

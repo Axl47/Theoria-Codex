@@ -177,6 +177,7 @@ class RelatedPostsStateTest {
         assertEquals(2, request.anchorIndexIn(ids(listOf("new", "a", "seed"))))
         assertEquals(1, request.anchorIndexIn(ids(listOf("new", "seed", "a"))))
         assertEquals(1, request.anchorIndexIn(ids(listOf("a", "b"))))
+        assertEquals(2, request.anchorIndexIn(ids(listOf("a", "b", "c", "d"))))
         assertEquals(-1, request.anchorIndexIn(emptyList()))
     }
 

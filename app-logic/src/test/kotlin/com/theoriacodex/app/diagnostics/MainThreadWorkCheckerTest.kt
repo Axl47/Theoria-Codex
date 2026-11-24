@@ -45,13 +45,27 @@ class MainThreadWorkCheckerTest {
 
     @Test
     fun `a failing report never reaches the caller and the run is still counted (ADR 0073)`() {
-        val failing = MainThreadWorkChecker(isMainThread = { true }, report = { error("report failed") })
-        OffMainWork.install(failing)
+        listOf<() -> Unit>({ error("report failed") }, { throw AssertionError("report failed") }).forEach { failure ->
+            val failing = MainThreadWorkChecker(isMainThread = { true }, report = { failure() })
+            OffMainWork.install(failing)
 
-        firstSite()
+            firstSite()
 
-        assertEquals(1L, failing.mainThreadRuns(OffMainWork.SOURCE_PARSE))
+            assertEquals(1L, failing.mainThreadRuns(OffMainWork.SOURCE_PARSE))
+        }
     }
+
+    @Test
+    fun `one call path noting two labels is reported once for each label (ADR 0073)`() {
+        listOf(OffMainWork.SOURCE_PARSE, OffMainWork.SELF_TEST).forEach { note(it) }
+
+        assertEquals(
+            listOf(OffMainWork.SOURCE_PARSE, OffMainWork.SELF_TEST),
+            reports.map { (it as MainThreadWorkReport.CallSite).label },
+        )
+    }
+
+    private fun note(label: String) = OffMainWork.note(label)
 
     private fun firstSite() = OffMainWork.note(OffMainWork.SOURCE_PARSE)
 

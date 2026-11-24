@@ -25,6 +25,9 @@ class SearchScopedInputPolicyTest {
         assertEquals(FacetedSearchScope(SearchFacet.TAG), typedInputScope(parseScopedInput("tag:cat"), FacetedSearchScope.All, artistOnly))
         assertNull(typedInputScope(parseScopedInput("character:miku"), FacetedSearchScope.All, artistOnly))
         assertNull(typedInputScope(parseScopedInput("female:fox"), FacetedSearchScope.All, artistOnly))
+        assertEquals(FacetedSearchScope(SearchFacet.TAG), typedInputScope(parseScopedInput("tag:cat"), artistOnly.single(), artistOnly))
+        assertNull(typedInputScope(parseScopedInput("character:miku"), artistOnly.single(), artistOnly))
+        assertEquals(artistOnly.single(), typedInputScope(parseScopedInput("cat"), artistOnly.single(), artistOnly))
     }
 
     @Test

@@ -149,9 +149,11 @@ class PostCommentsControllerTest {
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader) { open.await() }
 
+        controller.show(post)
         controller.focus(post, CommentTarget("c"))
         assertTrue(loader.requests.isEmpty())
         open.complete(Unit)
+        assertEquals("comment:c", controller.state.value.getValue(post.id).focusKey)
         assertEquals(listOf("1:/", "1:/p2"), loader.requests)
     }
 
@@ -198,6 +200,53 @@ class PostCommentsControllerTest {
         controller.focus(post, CommentTarget("c"))
         assertEquals(1, failing.requests.size)
         assertNull(controller.state.value.getValue(post.id).focusKey)
+    }
+
+    @Test
+    fun `a reply search on a later page stops at the cap and keeps every page it loaded (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
+        val endlessReplies = (0..20).associate { page ->
+            (if (page == 0) "a/" else "a/r$page") to commentPage("r$page", next = "r${page + 1}")
+        }
+        val loader = FakeCommentsLoader(
+            mapOf("/" to commentPage("x", next = "p1"), "/p1" to commentPage("a")) + endlessReplies,
+        )
+        val controller = controller(loader)
+
+        controller.focus(post, CommentTarget("never", parentId = "a"))
+
+        val state = controller.state.value.getValue(post.id)
+        assertEquals(12, loader.requests.size)
+        assertEquals(listOf("x", "a"), state.top.comments.map { it.id })
+        assertEquals((0..9).map { "r$it" }, state.replies.getValue("a").comments.map { it.id })
+        assertEquals(CommentLoadStatus.Loaded, state.replies.getValue("a").status)
+        assertNull(state.focusKey)
+    }
+
+    @Test
+    fun `a page that fails after others loaded keeps them and sets no focus (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
+        val threads = mapOf(
+            "/" to commentPage("x", next = "p1"),
+            "/p1" to commentPage("a"),
+            "a/" to commentPage("r0", next = "r1"),
+        )
+        val topFails = FakeCommentsLoader(threads, failKeys = setOf("/p1"))
+        val topController = controller(topFails)
+        topController.focus(post, CommentTarget("a"))
+        val top = topController.state.value.getValue(post.id)
+        assertEquals(listOf("1:/", "1:/p1"), topFails.requests)
+        assertEquals(listOf("x"), top.top.comments.map { it.id })
+        assertEquals(CommentLoadStatus.Failed, top.top.status)
+        assertNull(top.focusKey)
+
+        val repliesFail = FakeCommentsLoader(threads, failKeys = setOf("a/r1"))
+        val replyController = controller(repliesFail)
+        replyController.focus(post, CommentTarget("r9", parentId = "a"))
+        val state = replyController.state.value.getValue(post.id)
+        assertEquals(listOf("1:/", "1:/p1", "1:a/", "1:a/r1"), repliesFail.requests)
+        assertEquals(listOf("x", "a"), state.top.comments.map { it.id })
+        assertEquals(listOf("r0"), state.replies.getValue("a").comments.map { it.id })
+        assertEquals(CommentLoadStatus.Failed, state.replies.getValue("a").status)
+        assertNull(state.focusKey)
     }
 
     @Test
