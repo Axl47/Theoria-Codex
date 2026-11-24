@@ -59,3 +59,4 @@ and link the record that replaces it.
 | [0039](0039-tachiyomi-backup-import.md) | Mihon-family backups are decoded from their protobuf wire format and import their followed or started series |
 | [0040](0040-host-test-compose-waits.md) | Host-test Compose waits drain the main looper |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
+| [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
