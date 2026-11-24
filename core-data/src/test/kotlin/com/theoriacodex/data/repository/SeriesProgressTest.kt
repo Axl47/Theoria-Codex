@@ -49,6 +49,8 @@ class SeriesProgressTest {
         val clip = entry("e2", order = 1).withProgress(position = 54_000, length = 60_000, SeriesKind.ANIME)
         assertEquals("A short one's tail is its last 10%", 0L, clip.resumePositionMs())
         assertEquals(53_000L, clip.withProgress(position = 53_000, length = 60_000, SeriesKind.ANIME).resumePositionMs())
+        val switched = entry("e3", order = 2).copy(read = true, position = 1_230_000)
+        assertEquals("Without a duration, as after a switch, the Viewer judges the tail", 1_230_000L, switched.resumePositionMs())
 
         val rewatched = finished.withProgress(position = 60_000, length = length, SeriesKind.ANIME)
         assertTrue(rewatched.read)

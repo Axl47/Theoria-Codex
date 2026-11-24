@@ -27,9 +27,9 @@ class SeriesSwitchTest {
         val ours = SeriesEntry("/1-a", "Ch. 1", 1f, "Group A")
         val candidates = listOf(first, ours, SeriesEntry("/2", "Ch. 2", 2f))
 
-        assertEquals(ours, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f, "group-a"), emptyList(), candidates))
-        assertEquals(first, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f, "Other"), emptyList(), candidates))
-        assertEquals(first, matchingEntry(SeriesEntry("/old", "Chapter 1", 1f), emptyList(), candidates))
+        assertEquals(ours, EntryMatcher(emptyList(), candidates).match(SeriesEntry("/old", "Chapter 1", 1f, "group-a")))
+        assertEquals(first, EntryMatcher(emptyList(), candidates).match(SeriesEntry("/old", "Chapter 1", 1f, "Other")))
+        assertEquals(first, EntryMatcher(emptyList(), candidates).match(SeriesEntry("/old", "Chapter 1", 1f)))
     }
 
     @Test
@@ -38,7 +38,7 @@ class SeriesSwitchTest {
         val numbered = SeriesEntry("/5", "Oneshot", 5f)
         val half = SeriesEntry("/10.5", "Chapter 10.5")
         val candidates = listOf(numbered, extra, half, SeriesEntry("/n1", "Notice"), SeriesEntry("/n2", "notice"))
-        fun match(entry: SeriesEntry, own: List<SeriesEntry> = listOf(entry)) = matchingEntry(entry, own, candidates)
+        fun match(entry: SeriesEntry, own: List<SeriesEntry> = listOf(entry)) = EntryMatcher(own, candidates).match(entry)
 
         assertEquals(extra, match(SeriesEntry("/old", "extra side story")))
         assertEquals(numbered, match(SeriesEntry("/old", "oneshot")))
@@ -126,6 +126,26 @@ class SeriesSwitchTest {
             changed.map { Triple(it.entry.address, it.read, it.position) },
         )
         assertEquals("/n5", series.lastOpenedEntry)
+    }
+
+    @Test
+    fun `each release of a chapter keeps its own read state, and another group's release takes the chapter's`() {
+        val old = listOf(
+            stored(SeriesEntry("/o5a", "5", 5f, "A"), order = 0, read = true),
+            stored(SeriesEntry("/o5b", "5", 5f, "B"), order = 1, position = 4),
+        )
+        val new = listOf(
+            stored(SeriesEntry("/n5c", "5", 5f, "C"), order = 0),
+            stored(SeriesEntry("/n5b", "5", 5f, "B"), order = 1),
+            stored(SeriesEntry("/n5a", "5", 5f, "A"), order = 2),
+        )
+
+        val (_, changed) = carryProgress(from, old, to, new)
+
+        assertEquals(
+            listOf(Triple("/n5a", true, 0L), Triple("/n5b", false, 4L), Triple("/n5c", true, 0L)),
+            changed.map { Triple(it.entry.address, it.read, it.position) },
+        )
     }
 
     @Test

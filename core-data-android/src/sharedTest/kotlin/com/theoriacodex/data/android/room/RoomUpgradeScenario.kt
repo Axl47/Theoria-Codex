@@ -21,6 +21,9 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntry
+import com.theoriacodex.domain.series.SeriesId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -32,6 +35,7 @@ import org.junit.Assert.assertTrue
 /** Same persisted upgrade journey runs on Robolectric and Android SQLite through the production factory. */
 object RoomUpgradeScenario {
     private const val PICTURE_HASH = 0x5E5E_0000_FFFFL
+    private val seriesId = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
     suspend fun verify(context: Context, helper: MigrationTestHelper, startingVersion: Int) = withContext<Unit>(Dispatchers.IO) {
         val name = "upgrade-journey-v$startingVersion.db"
         context.deleteDatabase(name)
@@ -72,6 +76,11 @@ object RoomUpgradeScenario {
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
                 RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
                 RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
+                RoomSeriesRepository(database, clock = { 100L }).run {
+                    store(Series(seriesId, "Title"), listOf(SeriesEntry("/c/2", "Ch.2"), SeriesEntry("/c/1", "Ch.1")))
+                    setFollowed(seriesId, true)
+                    recordProgress(seriesId, "/c/1", position = 4, length = 9)
+                }
                 assertEquals(21, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
@@ -104,6 +113,9 @@ object RoomUpgradeScenario {
                 assertTrue(translations.getAll(setOf(translationKey.copy(backendVersion = "google-nmt-v2"))).isEmpty())
                 assertEquals(listOf(ForYouVerdictKind.SKIPPED), RoomForYouVerdictRepository(database).verdicts("a").map { it.kind })
                 assertEquals(mapOf(shared.id to PICTURE_HASH), RoomVisualSignatureRepository(database).observePictureHashes().first())
+                val series = RoomSeriesRepository(database)
+                assertEquals("/c/1" to true, series.series(seriesId)?.let { it.lastOpenedEntry to it.followed })
+                assertEquals(4L to 9L, series.entries(seriesId).single { it.entry.address == "/c/1" }.let { it.position to it.length })
 
                 // Subsequent writes still honor membership isolation and actual foreign-key cascades.
                 assertFalse(collections.toggleLikeAndSyncSystemCodex("a", "likes-a", "Likes A", shared, emptyList()).nowLiked)
