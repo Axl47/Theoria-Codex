@@ -16,11 +16,11 @@ import com.theoriacodex.data.repository.CacheSettings
 import com.theoriacodex.data.repository.ChapterUnavailable
 import com.theoriacodex.data.repository.DownloadScheduler
 import com.theoriacodex.data.repository.DrainProgress
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -106,17 +106,11 @@ class SeriesDownloadJobService : JobService() {
         runs[params.jobId] = scope.launch {
             // A chapter that may download later, or a full disk while the queue is saved: the system runs the job again
             // after a growing wait.
-            val retry = try {
-                drain(params)
-            } catch (error: CancellationException) {
-                // onStopJob ended this run; what is left stays queued for the next.
-                throw error
-            } catch (error: IOException) {
-                Diagnostics.report("series", "Chapter downloads paused", error)
-                true
-            } catch (error: Exception) {
-                Diagnostics.report("series", "Chapter downloads stopped", error)
-                false
+            val retry = runCatchingExceptionsPreservingCancellation { drain(params) }.getOrElse { error ->
+                showDownloadsWaiting(this@SeriesDownloadJobService, params.automatic, 0, null)
+                val paused = error is IOException
+                Diagnostics.report("series", if (paused) "Chapter downloads paused" else "Chapter downloads stopped", error)
+                paused
             }
             if (!params.isUserInitiatedJob) cancelDownloadProgress(this@SeriesDownloadJobService)
             // Only this run's entry: a replacement of the job may already be running under the same id.
@@ -131,7 +125,7 @@ class SeriesDownloadJobService : JobService() {
      * metered, even if the system started the job on an unmetered one, since requests go over the default network.
      */
     private suspend fun drain(params: JobParameters): Boolean {
-        val automatic = params.jobId == AppJob.AUTOMATIC_DOWNLOAD.id
+        val automatic = params.automatic
         if (automatic && getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) return true
         val series = (application as TheoriaAppContainerOwner).awaitAppContainer().series ?: return false
         val result = series.downloads.drain(automatic) { showProgress(params, it) }
@@ -166,3 +160,5 @@ class SeriesDownloadJobService : JobService() {
         }
     }
 }
+
+private val JobParameters.automatic get() = jobId == AppJob.AUTOMATIC_DOWNLOAD.id
