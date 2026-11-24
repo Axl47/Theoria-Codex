@@ -342,7 +342,7 @@ class SeriesTabViewModel(
             )
         }
         (searchListings.keys - sources.mapTo(HashSet()) { it.key }).forEach { searchListings.remove(it)?.cancel() }
-        if (hadDedicated && state.value.dedicated == null) closeFilters()
+        if (hadDedicated && state.value.dedicated == null) closeDedicated()
         val currentDedicated = state.value.dedicated
         if (currentDedicated != null && fresh.any { it.key == currentDedicated.source.key }) {
             closeFilters()
@@ -420,8 +420,7 @@ class SeriesTabViewModel(
     /** Leaves dedicated source search and returns to the global search results underneath. */
     fun closeDedicatedSearch() {
         if (state.value.dedicated == null) return
-        closeFilters()
-        dedicatedListing.cancel()
+        closeDedicated()
         mutableState.update { it.copy(dedicated = null) }
     }
 
@@ -536,7 +535,7 @@ class SeriesTabViewModel(
         val sources = state.value.sources.orEmpty()
         searchText = query
         saved[SAVED_SEARCH] = query
-        if (state.value.dedicated != null) closeFilters()
+        if (state.value.dedicated != null) closeDedicated()
         mutableState.update {
             it.copy(
                 search = sources.map { source -> source.toListing(sources, SeriesListing.Loading) },
@@ -558,7 +557,7 @@ class SeriesTabViewModel(
         searchText = null
         searchListings.values.forEach(PagedListing::cancel)
         saved.remove<String>(SAVED_SEARCH)
-        if (state.value.dedicated != null) closeFilters()
+        if (state.value.dedicated != null) closeDedicated()
         mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
     }
 
@@ -571,10 +570,16 @@ class SeriesTabViewModel(
     }
 
     private fun searchIn(source: SeriesSource, query: String) {
-        val listing = searchListings.getOrPut(source.key) {
-            PagedListing(viewModelScope, { state.value.search?.firstOrNull { it.key == source.key }?.listing }) { showSearch(source.key, it) }
+        val key = source.key
+        val listing = searchListings.getOrPut(key) {
+            PagedListing(viewModelScope, { state.value.search?.firstOrNull { it.key == key }?.listing }) { showSearch(key, it) }
         }
         listing.start { source.search(query, it) }
+    }
+
+    private fun closeDedicated() {
+        closeFilters()
+        dedicatedListing.cancel()
     }
 
     private fun showSearch(key: SourceKey, listing: SeriesListing) {
