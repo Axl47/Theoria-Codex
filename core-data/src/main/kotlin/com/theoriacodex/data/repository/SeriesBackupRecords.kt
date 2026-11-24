@@ -37,9 +37,8 @@ internal data class BackupSeriesRecord(
     @SerialName("lastCheckedAt") val lastCheckedAt: Long? = null,
     /** Absent from backups written before the setting existed, which restore with it off. */
     @SerialName("downloadNewChapters") val downloadNewChapters: Boolean = false,
-    /** Both absent from backups written before the Following sorts, which restore without them. */
+    /** Absent from backups written before the Following sorts, which restore without it. */
     @SerialName("followedAt") val followedAt: Long? = null,
-    @SerialName("lastReadAt") val lastReadAt: Long? = null,
     @SerialName("entries") val entries: List<BackupSeriesEntryRecord> = emptyList(),
 ) {
     /** A status or mode this build does not know is dropped; [validateBackupSeries] refuses what no build wrote. */
@@ -62,7 +61,6 @@ internal data class BackupSeriesRecord(
                 lastCheckedAtEpochMs = lastCheckedAt,
                 downloadNewChapters = downloadNewChapters,
                 followedAtEpochMs = followedAt,
-                lastReadAtEpochMs = lastReadAt,
             ),
             entries = entries.map(BackupSeriesEntryRecord::toDomain),
         )
@@ -86,7 +84,6 @@ internal data class BackupSeriesRecord(
                 lastCheckedAt = lastCheckedAtEpochMs,
                 downloadNewChapters = downloadNewChapters,
                 followedAt = followedAtEpochMs,
-                lastReadAt = lastReadAtEpochMs,
                 entries = backup.entries.map(BackupSeriesEntryRecord::fromDomain),
             )
         }
@@ -106,14 +103,17 @@ internal data class BackupSeriesEntryRecord(
     // The keys predate anime; they hold [StoredSeriesEntry.position] and [StoredSeriesEntry.length] for both kinds.
     @SerialName("lastPage") val position: Long = 0,
     @SerialName("pageCount") val length: Long? = null,
+    /** Absent from backups written before read times were kept. */
+    @SerialName("lastReadAt") val lastReadAt: Long? = null,
 ) {
-    fun toDomain() = StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, position, length)
+    fun toDomain() =
+        StoredSeriesEntry(SeriesEntry(address, name, number, translatorGroup, uploadedAt), sourceOrder, firstSeenAt, read, position, length, lastReadAt)
 
     companion object {
         fun fromDomain(stored: StoredSeriesEntry): BackupSeriesEntryRecord = with(stored) {
             BackupSeriesEntryRecord(
                 entry.address, entry.name, entry.number, entry.translatorGroup, entry.uploadedAtEpochMs,
-                sourceOrder, firstSeenAtEpochMs, read, position, length,
+                sourceOrder, firstSeenAtEpochMs, read, position, length, lastReadAtEpochMs,
             )
         }
     }

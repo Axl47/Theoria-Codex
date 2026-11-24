@@ -4,7 +4,6 @@ import androidx.room.withTransaction
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
-import com.theoriacodex.data.repository.READ_STAMP_INTERVAL_MS
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -43,7 +42,7 @@ class RoomSeriesRepository(
                     series = row.series.toStored().series,
                     unreadCount = row.unreadCount,
                     followedAtEpochMs = row.series.followedAtEpochMs,
-                    lastReadAtEpochMs = row.series.lastReadAtEpochMs,
+                    lastReadAtEpochMs = row.lastReadAtEpochMs,
                     lastUpdatedAtEpochMs = row.lastUpdatedAtEpochMs,
                     started = row.started,
                 )
@@ -180,15 +179,12 @@ class RoomSeriesRepository(
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
             val series = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction
-            // Unchanged rows are not written, so observers are not woken on every page of a chapter already recorded: the
-            // read time moves when another entry opens, or once it is READ_STAMP_INTERVAL_MS old.
-            val now = clock()
-            val stale = series.lastReadAtEpochMs.let { it == null || now - it >= READ_STAMP_INTERVAL_MS }
-            if (series.lastOpenedEntry != entryAddress || stale) {
-                dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress, lastReadAtEpochMs = now).toEntity())
-            }
+            // Unchanged rows are not written, so observers are not woken by a chapter reopened where it was left. The entry
+            // takes the read time whenever it is written: when it is opened, or its place moves.
+            val opened = series.lastOpenedEntry != entryAddress
+            if (opened) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
             val progressed = if (length == null || length <= 0) entry else entry.withProgress(position, length, id.source.seriesKind)
-            if (progressed != entry) dao.upsertEntries(listOf(progressed.toEntity(id)))
+            if (opened || progressed != entry) dao.upsertEntries(listOf(progressed.copy(lastReadAtEpochMs = clock()).toEntity(id)))
         }
     }
 
@@ -261,7 +257,6 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     downloadNewChapters = downloadNew,
     chaptersShareFirstPage = chaptersShareFirstPage,
     followedAtEpochMs = followedAtEpochMs,
-    lastReadAtEpochMs = lastReadAtEpochMs,
 )
 
 internal fun StoredSeries.toEntity() = SeriesEntity(
@@ -281,7 +276,6 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     downloadNewChapters,
     chaptersShareFirstPage,
     followedAtEpochMs,
-    lastReadAtEpochMs,
 )
 
 /**
@@ -300,6 +294,7 @@ internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     read = read,
     position = lastPage,
     length = pageCount,
+    lastReadAtEpochMs = lastReadAtEpochMs,
 )
 
 internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
@@ -315,4 +310,5 @@ internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     read,
     position,
     length,
+    lastReadAtEpochMs,
 )

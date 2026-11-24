@@ -34,6 +34,7 @@ class SeriesLibraryTest {
         assertEquals(listOf("Zeta", "alpha"), shown(LibraryShow.UNREAD))
         assertEquals(listOf("alpha"), shown(LibraryShow.NOT_STARTED))
         assertEquals(listOf("Zeta"), shown(LibraryShow.IN_PROGRESS))
+        assertEquals(listOf("Mid"), shown(LibraryShow.CAUGHT_UP))
         assertEquals(listOf("Mid"), shown(LibraryShow.COMPLETED))
         assertEquals(listOf("alpha"), shown(LibraryShow.ALL, query = " ALP "))
     }

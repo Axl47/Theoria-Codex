@@ -205,12 +205,13 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
-    // When a series was followed and last read, for the Following sorts. A series followed before has no follow time;
-    // the earliest time any of its entries was first seen, when it was first stored, stands in. Nothing was read since.
+    // When a series was followed and each entry last read, for the Following sorts. A series followed before has no
+    // follow time; the earliest time any of its entries was first seen, when it was first stored, stands in. Read times
+    // were never kept, so they start empty.
     public static final Migration MIGRATION_18_19 = new Migration(18, 19) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` ADD COLUMN `followed_at_epoch_ms` INTEGER");
-            database.execSQL("ALTER TABLE `series` ADD COLUMN `last_read_at_epoch_ms` INTEGER");
+            database.execSQL("ALTER TABLE `series_entries` ADD COLUMN `last_read_at_epoch_ms` INTEGER");
             database.execSQL("UPDATE `series` SET `followed_at_epoch_ms` = (SELECT MIN(`first_seen_at_epoch_ms`) FROM `series_entries` "
                     + "WHERE `series_entries`.`source` = `series`.`source` AND `series_entries`.`series_address` = `series`.`address`) "
                     + "WHERE `followed` = 1");

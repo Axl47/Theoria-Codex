@@ -27,12 +27,7 @@ data class StoredSeries(
     val chaptersShareFirstPage: Boolean = false,
     /** When the user last followed it; null while not followed, and for some followed before the time was kept. */
     val followedAtEpochMs: Long? = null,
-    /** When the user last read or watched one of its entries, to within [READ_STAMP_INTERVAL_MS]. */
-    val lastReadAtEpochMs: Long? = null,
 )
-
-/** How stale [StoredSeries.lastReadAtEpochMs] may get while one entry stays open, so a page turn rarely writes it. */
-const val READ_STAMP_INTERVAL_MS = 5 * 60_000L
 
 /**
  * An entry as stored, with the user's progress through it. [position] and [length] are one pair for both kinds, in the
@@ -50,12 +45,14 @@ data class StoredSeriesEntry(
     val position: Long = 0,
     /** The entry's page count or duration; known once the entry has been opened. */
     val length: Long? = null,
+    /** When the user last opened it or moved through it; null before that was kept. Marking it read does not count. */
+    val lastReadAtEpochMs: Long? = null,
 )
 
 /**
  * A followed series as the Following list shows it. [lastUpdatedAtEpochMs] is when its newest listed entry came out,
  * by the source's upload dates, or, from a source that gives none, when the newest was first seen; null with no
- * entries stored. [started] is whether any entry was opened or read.
+ * entries stored. [lastReadAtEpochMs] is the latest of its entries'. [started] is whether any entry was opened or read.
  */
 data class FollowedSeries(
     val series: Series,
