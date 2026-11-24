@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +59,7 @@ import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.allProfileCodices
 import com.theoriacodex.app.statistics.shareOverall
 import com.theoriacodex.app.ui.components.ActionMenuRow
+import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
@@ -512,16 +512,12 @@ private fun ProfileDeleteDialog(state: SettingsUiState, onAction: (SettingsActio
     val profile = state.profileDeleteTargetId?.let { targetId ->
         state.settings.recommendationProfiles.firstOrNull { it.profileId == targetId }
     } ?: return
-    AlertDialog(
-        onDismissRequest = { onAction(SettingsAction.DismissRemoveProfile) },
-        title = { Text("Delete Profile?") },
-        text = { Text("Delete profile \"${profile.name}\" with its likes and Codices? This cannot be undone.") },
-        dismissButton = {
-            TextButton(onClick = { onAction(SettingsAction.DismissRemoveProfile) }) { Text("Cancel") }
-        },
-        confirmButton = {
-            TextButton(onClick = { onAction(SettingsAction.ConfirmRemoveProfile) }) { Text("Delete") }
-        },
+    ConfirmDialog(
+        title = "Delete Profile?",
+        text = "Delete profile \"${profile.name}\" with its likes and Codices? This cannot be undone.",
+        confirmLabel = "Delete",
+        onConfirm = { onAction(SettingsAction.ConfirmRemoveProfile) },
+        onDismiss = { onAction(SettingsAction.DismissRemoveProfile) },
     )
 }
 
