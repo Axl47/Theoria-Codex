@@ -91,7 +91,7 @@ def check_record(adr: pathlib.Path, root: pathlib.Path, moved: dict[str, str], d
             if resolved is None:
                 relative = [str(place.relative_to(root)) for place in places]
                 problems.append(missing_path_message(name, path, relative, moved, deleted))
-                previous = places[0]
+                previous = next((root / place for place in relative if place in moved or place in deleted), previous or places[0])
                 continue
             previous = resolved
             files += sorted(file for file in resolved.rglob("*") if file.is_file()) if resolved.is_dir() else [resolved]
