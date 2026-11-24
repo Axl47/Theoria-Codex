@@ -21,3 +21,8 @@ The conversion can be removed once no backups with For You searches remain in us
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ForYouSavedSearchConversion.kt`: `withForYouSearchesConverted`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SavedSearchRepository.kt`: `MutableSavedSearchRepository`, `mergedWith`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt`: `RecentSearchEntry.isRetiredForYouSearch`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ForYouSavedSearchConversionTest.kt`: `a saved mix splits into one search per source, named for its source (ADR 0020)`, `a For You search without tags is dropped and other searches are untouched (ADR 0020)`, `an ordinary search wins a collision with a converted one, whichever comes first (ADR 0020)`, `split searches take only free slots, so every existing search stays (ADR 0020)`, `a split search keeps the same generated id forever, so converting again adds nothing (ADR 0020)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedSavedSearchRepositoryTest.kt`: `a file the Gson store wrote loads with its For You pin as source searches, rewritten once (ADR 0020)`, `a backup's For You pin is imported as source searches (ADR 0020)`, `a backup's For You pin never replaces the local search with its ID (ADR 0020)`, `an incoming ordinary search replaces the local one with its ID (ADR 0020, 0025)`

@@ -61,6 +61,22 @@ class AppJobTest {
     }
 
     @Test
+    fun `automatic downloads wait for an unmetered network while user downloads follow the download settings (ADR 0027)`() = runTest {
+        var settings = CacheSettings(downloadsOverMetered = false)
+        val downloads = SeriesDownloadScheduler(context) { settings }
+        fun network(job: AppJob) = scheduler.getPendingJob(job.id)!!.networkType
+
+        downloads.schedule(automatic = true)
+        downloads.schedule(automatic = false)
+        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED to JobInfo.NETWORK_TYPE_UNMETERED, network(AppJob.AUTOMATIC_DOWNLOAD) to network(AppJob.USER_DOWNLOAD))
+
+        settings = CacheSettings(downloadsOverMetered = true, downloadsOverRoaming = true)
+        downloads.schedule(automatic = true)
+        downloads.schedule(automatic = false)
+        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED to JobInfo.NETWORK_TYPE_ANY, network(AppJob.AUTOMATIC_DOWNLOAD) to network(AppJob.USER_DOWNLOAD))
+    }
+
+    @Test
     fun `ensuring a lane schedules it only when it has no pending job`() = runTest {
         val counting = RefusingUserInitiated(scheduler, refuse = false)
         val downloads = SeriesDownloadScheduler(counting.context(context)) { CacheSettings() }

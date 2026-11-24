@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
@@ -26,7 +27,7 @@ import org.junit.Test
 
 class PostStorageRecordsTest {
     @Test
-    fun `versioned storage record round trips every supported Post field`() {
+    fun `versioned storage record round trips every supported Post field (ADR 0038)`() {
         val post = samplePost()
         val record = PostStorageCodec.encode(post)
         val json = DurableJson.encodeToString(record)
@@ -79,7 +80,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `a gallery of unknown length keeps its flag, and other records stay as they were (ADR 0006)`() {
+    fun `a gallery of unknown length keeps its flag, and other records stay as they were (ADR 0006, 0038)`() {
         val gallery = samplePost().copy(galleryLengthUnknown = true)
         val stored = DurableJson.decodeFromString<PostStorageRecord>(DurableJson.encodeToString(PostStorageCodec.encode(gallery)))
 
@@ -102,7 +103,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks`() {
+    fun `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks (ADR 0038)`() {
         fun legacyRecord(source: String) = DurableJson.decodeFromString<PostStorageRecord>(
             """
             {
@@ -139,7 +140,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `an explicit fallback field is never reinterpreted`() {
+    fun `an explicit fallback field is never reinterpreted (ADR 0038)`() {
         val post = samplePost().copy(
             id = PostId(SourceKey.NHENTAI, "1"),
             media = listOf(ImageRef("https://example.com/1.webp", null, "image/webp", progressiveUrls = listOf("https://example.com/small.webp"))),
@@ -151,7 +152,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `merging a ref without a thumbnail keeps the stored one`() {
+    fun `merging a ref without a thumbnail keeps the stored one (ADR 0023)`() {
         val stored = samplePost()
         val sparse = stored.copy(media = stored.media.map { it.copy(thumbnailUrl = null) })
 
@@ -161,18 +162,19 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `merging a snapshot without a hash keeps the stored hash only for the same file`() {
+    fun `merging a snapshot without a hash keeps the stored hash only for the same file (ADR 0023)`() {
         val stored = samplePost()
         val sparse = stored.copy(contentHash = null)
         val replaced = sparse.copy(full = stored.full?.copy(url = "https://example.com/replaced.webp"))
 
         assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse).contentHash)
         assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse.copy(full = null)).contentHash)
+        assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse.copy(full = stored.full?.copy(url = null))).contentHash)
         assertNull(mergeSparsePost(existing = stored, incoming = replaced).contentHash)
     }
 
     @Test
-    fun `merging tags without counts or translations keeps the stored ones`() {
+    fun `merging tags without counts or translations keeps the stored ones (ADR 0023)`() {
         val stored = samplePost()
         val sparse = stored.copy(taxonomy = stored.taxonomy.map { it.copy(count = null, translation = null) })
 
@@ -180,7 +182,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `merging creators without links keeps the stored links`() {
+    fun `merging creators without links keeps the stored links (ADR 0023)`() {
         val stored = samplePost()
         val sparse = stored.copy(creatorProfiles = stored.creatorProfiles.map { it.copy(profileUrl = null, uploadsQuery = null) })
 
@@ -204,7 +206,42 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `pre-versioned storage record retains safe typed fallbacks`() {
+    fun `stored video renditions survive a merge only while the full file's address is absent or unchanged (ADR 0023)`() {
+        val renditions = listOf(VideoVariant("https://example.com/720.mp4", height = 720))
+        val stored = samplePost().let { it.copy(full = it.full!!.copy(videoVariants = renditions)) }
+        val sparse = stored.copy(full = stored.full!!.copy(videoVariants = emptyList()))
+        val moved = sparse.copy(full = sparse.full!!.copy(url = "https://example.com/replaced.mp4"))
+
+        assertEquals(renditions, mergeSparsePost(existing = stored, incoming = sparse).full!!.videoVariants)
+        assertEquals(renditions, mergeSparsePost(existing = stored, incoming = sparse.copy(full = sparse.full!!.copy(url = null))).full!!.videoVariants)
+        assertEquals(emptyList<VideoVariant>(), mergeSparsePost(existing = stored, incoming = moved).full!!.videoVariants)
+        val own = listOf(VideoVariant("https://example.com/480.mp4", height = 480))
+        assertEquals(own, mergeSparsePost(existing = stored, incoming = moved.copy(full = moved.full!!.copy(videoVariants = own))).full!!.videoVariants)
+        assertEquals(own, mergeSparsePost(existing = stored, incoming = sparse.copy(full = sparse.full!!.copy(videoVariants = own))).full!!.videoVariants)
+    }
+
+    @Test
+    fun `a creator from another source replaces the stored profile whole (ADR 0023)`() {
+        val stored = samplePost()
+        val other = CreatorProfile(source = SourceKey.GELBOORU, displayName = "someone", profileId = stored.creatorProfile!!.profileId)
+
+        assertEquals(other, mergeSparsePost(existing = stored, incoming = stored.copy(creatorProfile = other)).creatorProfile)
+    }
+
+    @Test
+    fun `a merge lists incoming entries first, then stored entries the snapshot lacks (ADR 0023)`() {
+        val stored = samplePost().copy(canonicalTags = listOf("a", "b", "c"))
+
+        assertEquals(listOf("c", "d", "a", "b"), mergeSparsePost(existing = stored, incoming = stored.copy(canonicalTags = listOf("c", "d"))).canonicalTags)
+        val mirrored = stored.copy(full = stored.full!!.copy(fallbackUrls = listOf("https://other.example.com/full.webp")))
+        assertEquals(
+            listOf("https://other.example.com/full.webp") + stored.full!!.fallbackUrls,
+            mergeSparsePost(existing = stored, incoming = mirrored).full!!.fallbackUrls,
+        )
+    }
+
+    @Test
+    fun `pre-versioned storage record retains safe typed fallbacks (ADR 0038)`() {
         val legacyJson =
             """
             {
@@ -255,7 +292,7 @@ class PostStorageRecordsTest {
     }
 
     @Test
-    fun `unknown explicit storage version fails closed`() {
+    fun `unknown explicit storage version fails closed (ADR 0038)`() {
         val future = PostStorageCodec.encode(samplePost()).copy(schemaVersion = 99)
 
         assertNull(PostStorageCodec.decode(future))

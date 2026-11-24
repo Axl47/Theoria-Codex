@@ -26,7 +26,7 @@ class ForYouSavedSearchConversionTest {
     }
 
     @Test
-    fun `a saved mix splits into one search per source, named for its source`() {
+    fun `a saved mix splits into one search per source, named for its source (ADR 0020)`() {
         val mix = saved("mix", "Evening", linkedMapOf(SourceKey.GELBOORU to listOf("sky"), SourceKey.PIXIV to listOf("空")))
 
         val converted = listOf(mix).withForYouSearchesConverted(sourceName)
@@ -39,7 +39,17 @@ class ForYouSavedSearchConversionTest {
     }
 
     @Test
-    fun `a For You search without tags is dropped and other searches are untouched`() {
+    fun `a split search keeps the same generated id forever, so converting again adds nothing (ADR 0020)`() {
+        val mix = saved("mix", "Evening", linkedMapOf(SourceKey.GELBOORU to listOf("sky"), SourceKey.PIXIV to listOf("空")))
+
+        val converted = listOf(mix).withForYouSearchesConverted(sourceName)
+
+        assertEquals(listOf("mix", "508eac8e-909f-3bcd-b2d1-ad0d357fcece"), converted.map { it.id })
+        assertEquals(converted, converted.withForYouSearchesConverted(sourceName))
+    }
+
+    @Test
+    fun `a For You search without tags is dropped and other searches are untouched (ADR 0020)`() {
         val other = SavedSearchEntry("other", "Other", RecentSearchEntry(sourceQuery(SourceKey.PIXIV, listOf("a")), "h", 1), 1)
         val empty = saved("empty", "Empty", mapOf(SourceKey.PIXIV to emptyList(), SourceKey.GELBOORU to listOf(" ")))
 
@@ -47,7 +57,7 @@ class ForYouSavedSearchConversionTest {
     }
 
     @Test
-    fun `split searches take only free slots, so every existing search stays`() {
+    fun `split searches take only free slots, so every existing search stays (ADR 0020)`() {
         val existing = List(MAX_SAVED_SEARCHES - 2) { index ->
             SavedSearchEntry("id-$index", "Search $index", RecentSearchEntry(sourceQuery(SourceKey.PIXIV, listOf("t$index")), "h$index", 1), 1)
         }
@@ -63,7 +73,7 @@ class ForYouSavedSearchConversionTest {
     }
 
     @Test
-    fun `an ordinary search wins a collision with a converted one, whichever comes first`() {
+    fun `an ordinary search wins a collision with a converted one, whichever comes first (ADR 0020)`() {
         val query = sourceQuery(SourceKey.PIXIV, listOf("forest"))
         val ordinary = SavedSearchEntry("mine", "My forest", RecentSearchEntry(query, QueryHash.from(query), 5), 7)
         val shelf = saved("shelf", "Forest", mapOf(SourceKey.PIXIV to listOf("forest")))

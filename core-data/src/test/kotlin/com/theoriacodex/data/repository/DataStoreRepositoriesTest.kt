@@ -8,12 +8,23 @@ import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,20 +68,31 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `constructors perform no file reads or writes`() = runTest {
+    fun `constructors perform no file reads or writes (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("constructor-no-io")
-        val scope = newDataStoreScope()
+        val names = listOf(DATASTORE_SETTINGS_FILE_NAME, DATASTORE_UI_RESTORE_FILE_NAME, DATASTORE_STATISTICS_FILE_NAME)
+        names.forEach { directory.resolve(it).writeText("{broken") }
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
 
-        DataStoreSettingsRepository(directory, scope)
+        val settings = DataStoreSettingsRepository(directory, scope)
         DataStoreUiRestoreRepository(directory, scope)
         DataStoreStatisticsRepository(directory, scope)
+        advanceUntilIdle()
 
-        assertTrue(directory.listFiles().orEmpty().isEmpty())
-        scope.closeDataStores()
+        assertEquals(names.sorted(), directory.list().orEmpty().sorted())
+        assertTrue(names.all { directory.resolve(it).readText() == "{broken" })
+        settings.observeSettings().first()
+        assertEquals(1, directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).size)
+        val unreadable = tempFolder.newFolder("constructor-no-read")
+        names.forEach { unreadable.resolve(it).apply { writeText("{}") }.setReadable(false) }
+        DataStoreSettingsRepository(unreadable, scope)
+        DataStoreUiRestoreRepository(unreadable, scope)
+        DataStoreStatisticsRepository(unreadable, scope)
+        scope.cancel()
     }
 
     @Test
-    fun `source weight memory survives repository reconstruction`() = runTest {
+    fun `source weight memory survives repository reconstruction (ADR 0036)`() = runTest {
         val directory = tempFolder.newFolder("weight-memory")
         val firstScope = newDataStoreScope()
         val first = DataStoreSettingsRepository(directory, firstScope)
@@ -116,6 +138,30 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `settings values this build does not know fall back without resetting the file (ADR 0038)`() = runTest {
+        val record = SettingsStoreRecord.serializer().descriptor
+        val unknown = (0 until record.elementsCount).filter { record.getElementDescriptor(it).kind == PrimitiveKind.STRING }
+            .associate { record.getElementName(it) to JsonPrimitive("FUTURE_VALUE") }
+        val health = ProviderHealthSnapshotRecord("PIXIV", "FUTURE_VALUE", 1L, 2L, "timeout", "slow")
+        val known = mapOf("invertMultiImageScrollDirection" to JsonPrimitive(true))
+        val scope = newDataStoreScope()
+        suspend fun load(name: String, stored: Map<String, JsonElement>): AppSettings {
+            val directory = tempFolder.newFolder(name)
+            directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("""{"schemaVersion":3,"settings":${JsonObject(stored)}}""")
+            return DataStoreSettingsRepository(directory, scope).observeSettings().first()
+                .also { assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isEmpty()) }
+        }
+
+        val withUnknown = load("settings-unknown-values", known + unknown + ("providerHealth" to JsonArray(listOf(DurableJson.encodeToJsonElement(health)))))
+
+        assertTrue(unknown.keys.containsAll(listOf("codexLibrarySort", "seriesUpdateInterval", "videoQuality", "viewerPlaybackMode")))
+        assertTrue(withUnknown.viewer.invertMultiImageScrollDirection)
+        assertEquals(ProviderHealthSnapshotStatus.UNKNOWN, withUnknown.providerHealth.getValue(SourceKey.PIXIV).status)
+        assertEquals(load("settings-without-them", known), withUnknown.copy(providerHealth = emptyMap()))
+        scope.closeDataStores()
+    }
+
+    @Test
     fun `retired legacy files and import proofs are ignored without resetting either store`() = runTest {
         val directory = tempFolder.newFolder("retired-legacy-imports")
         val proofs = """[{"sourceFileName":"settings_store.json","sourceSchemaVersion":2,""" +
@@ -152,7 +198,7 @@ class DataStoreRepositoriesTest {
         scope.closeDataStores()
     }
     @Test
-    fun `minimal pre-catalog settings gain every later source and retain legacy defaults`() = runTest {
+    fun `minimal pre-catalog settings gain every later source and retain legacy defaults (ADR 0029)`() = runTest {
         val directory = tempFolder.newFolder("settings-pre-catalog")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
             """{"schemaVersion":3,"settings":{"enabledSources":["PIXIV"],"cacheFullImageOnSave":true}}"""
@@ -172,7 +218,7 @@ class DataStoreRepositoriesTest {
         scope.closeDataStores()
     }
     @Test
-    fun `settings corruption is backed up and resets to defaults`() = runTest {
+    fun `settings corruption is backed up and resets to defaults (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("settings-corruption")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("{broken")
         val scope = newDataStoreScope()
@@ -185,7 +231,7 @@ class DataStoreRepositoriesTest {
         scope.closeDataStores()
     }
     @Test
-    fun `a second corruption keeps the first set-aside file`() = runTest {
+    fun `a second corruption keeps the first set-aside file (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("settings-corrupted-twice")
         val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         listOf("{first broken", "{second broken").forEach { broken ->
@@ -202,7 +248,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings that cannot be set aside fail to open instead of resetting`() = runTest {
+    fun `settings that cannot be set aside fail to open instead of resetting (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("settings-set-aside-fails")
         val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         val broken = "{broken".encodeToByteArray()
@@ -219,7 +265,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `newer settings schema fails closed without corruption replacement`() = runTest {
+    fun `newer settings schema fails closed without corruption replacement (ADR 0032, 0033)`() = runTest {
         val directory = tempFolder.newFolder("settings-future-schema")
         val destination = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         val future = """{"schemaVersion":99,"settings":{},"legacyImports":[]}"""
@@ -236,7 +282,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `concurrent settings mutations are serialized without lost profile state`() = runTest {
+    fun `concurrent settings mutations are serialized without lost profile state (ADR 0035)`() = runTest {
         val directory = tempFolder.newFolder("settings-concurrency")
         val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
@@ -256,7 +302,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings persistence policy bounds growing profile-owned collections`() {
+    fun `settings persistence policy bounds growing profile-owned collections (ADR 0036)`() {
         val profileId = "profile-0"
         val normalized = normalizeDataStoreSettings(
             AppSettings(
@@ -349,7 +395,7 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `newer ui schema fails closed without corruption replacement`() = runTest {
+    fun `newer ui schema fails closed without corruption replacement (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("ui-future-schema")
         val destination = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
         val future = """{"schemaVersion":99,"state":{},"legacyImports":[]}"""

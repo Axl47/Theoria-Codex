@@ -19,7 +19,7 @@ class TagSuggestionStoreGoldenTest {
     val tempFolder = TemporaryFolder()
 
     @Test
-    fun `a Gson-written cache loads every suggestion`() = runTest {
+    fun `a Gson-written cache loads every suggestion (ADR 0034)`() = runTest {
         withStore("gson-written.json") { store ->
             assertEquals(
                 listOf(
@@ -37,7 +37,7 @@ class TagSuggestionStoreGoldenTest {
     }
 
     @Test
-    fun `a sparse legacy cache keeps what Gson kept`() = runTest {
+    fun `a sparse legacy cache keeps what Gson kept (ADR 0034)`() = runTest {
         withStore("legacy.json") { store ->
             assertEquals(listOf(TagSuggestion("legacy", "trending", 9)), store.get(SourceKey.GELBOORU, 10))
             assertEquals(emptyList<TagSuggestion>(), store.get(SourceKey.DANBOORU, 10))
@@ -45,7 +45,7 @@ class TagSuggestionStoreGoldenTest {
     }
 
     @Test
-    fun `the full cache holds every stored key`() {
+    fun `the full cache holds every stored key (ADR 0034)`() {
         val full = TagStoreSnapshot(
             mapOf("GELBOORU" to listOf(TagStoreEntry("a & b", "ARTIST", "artist", "artist", 3, "A <b>", listOf("SEEN", "TRENDING")))),
         )

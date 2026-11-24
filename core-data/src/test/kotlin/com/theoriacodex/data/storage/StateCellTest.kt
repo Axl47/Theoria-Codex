@@ -12,7 +12,7 @@ import org.junit.Test
 
 class StateCellTest {
     @Test
-    fun `a failed or cancelled write keeps the value and preserves the failure`() = runTest {
+    fun `a failed or cancelled write keeps the value and preserves the failure (ADR 0035)`() = runTest {
         listOf(IOException("write failed"), CancellationException("cancelled")).forEach { expected ->
             val cell = FileStateCell(initial = "persisted") { throw expected }
 
@@ -25,7 +25,7 @@ class StateCellTest {
     }
 
     @Test
-    fun `an unchanged value is not written`() = runTest {
+    fun `an unchanged value is not written (ADR 0035)`() = runTest {
         val writes = mutableListOf<String>()
         val cell = FileStateCell(load = { "stored" }) { writes += it }
 

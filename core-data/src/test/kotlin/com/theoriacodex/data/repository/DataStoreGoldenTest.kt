@@ -21,14 +21,14 @@ import org.junit.rules.TemporaryFolder
 class DataStoreGoldenTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `settings null on a defaulted boolean repairs to the default`() = runTest {
+    @Test fun `settings null on a defaulted boolean repairs to the default (ADR 0033, 0034)`() = runTest {
         val settings = loadSettings("settings-null-primitive")
 
         assertFalse(settings.cache.cacheFullImageOnSave)
         assertTrue(settings.oldSearchBar)
     }
 
-    @Test fun `settings null on a non-null list repairs to the default and keeps the rest`() = runTest {
+    @Test fun `settings null on a non-null list repairs to the default and keeps the rest (ADR 0034)`() = runTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), loadSettings("settings-null-list"))
     }
 
@@ -43,17 +43,17 @@ class DataStoreGoldenTest {
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), settings)
     }
 
-    @Test fun `settings unknown and retired keys are ignored`() = runTest {
+    @Test fun `settings unknown and retired keys are ignored (ADR 0033)`() = runTest {
         val settings = loadSettings("settings-retired-keys")
 
         assertTrue(settings.oldSearchBar)
         assertEquals(SettingsDataStoreFile().toDomain().copy(oldSearchBar = true), settings)
     }
 
-    @Test fun `settings holding the retired scenario and extension keys load and drop them on the next write`() = runTest {
+    @Test fun `settings holding the retired scenario key load and drop it on the next write`() = runTest {
         val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, "settings-full")
         val file = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
-        val retired = listOf("scenarioPreset", "trustedExtensions", "extensionLanguages")
+        val retired = listOf("scenarioPreset")
         retired.forEach { key -> assertTrue("golden lacks $key", file.readText().contains("\"$key\"")) }
 
         withDataStoreScope { scope ->
@@ -77,7 +77,7 @@ class DataStoreGoldenTest {
         assertTrue(settings.runtime.sourceWeights.getValue(SourceKey.PIXIV) > SourceRuntimeSettings().sourceWeights.getValue(SourceKey.PIXIV))
     }
 
-    @Test fun `ui restore null on a non-null map or string repairs and keeps the rest`() = runTest {
+    @Test fun `ui restore null on a non-null map or string repairs and keeps the rest (ADR 0034)`() = runTest {
         withUiRestore("ui-restore-null-map") { repository ->
             assertEquals("codex", repository.getLastTab())
             assertNull(repository.getSearchScrollState("h"))
@@ -138,7 +138,7 @@ class DataStoreGoldenTest {
         assertEquals(mapOf(SourceKey.PIXIV to 3L), statistics.watchedBySource)
     }
 
-    @Test fun `statistics null inside a nested record repairs that field`() = runTest {
+    @Test fun `statistics null inside a nested record repairs that field (ADR 0034)`() = runTest {
         val statistics = loadStatistics("statistics-null-nested-map")
 
         assertEquals(mapOf("c" to CodexStatistics(browsingMs = 5L)), statistics.codexStatistics)
@@ -186,7 +186,7 @@ class DataStoreGoldenTest {
         assertEquals(emptyList<SiteProfile>(), loadSites("sites-null-list"))
     }
 
-    @Test fun `unreadable or unsupported files surface as CorruptionException`() = runTest {
+    @Test fun `unreadable or unsupported files surface as CorruptionException (ADR 0034)`() = runTest {
         val settings = JsonDataStoreSerializer(
             "settings", SETTINGS_DATASTORE_SCHEMA_VERSION, SettingsDataStoreFile(), SettingsDataStoreFile.serializer(),
             SettingsDataStoreFile::validate,
