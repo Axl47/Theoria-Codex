@@ -208,7 +208,6 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
             verdicts().map { searchCardTestTag(it.postId) to it.kind },
         )
 
-        // The skip keeps its card out of the Mix after the restart, and out of a refreshed Mix.
         tab("For You")
         compose.waitUntil(15_000) { currentCardOrNull() != null }
         assertNotEquals(skipped, currentCard())

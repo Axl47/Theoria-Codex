@@ -52,5 +52,4 @@ class RoomForYouVerdictRepository(
     }
 }
 
-/** The row's post, or null for a source this build no longer knows. */
 private fun ForYouVerdictEntity.postId(): PostId? = SourceKey.parse(source)?.let { PostId(it, sourcePostId) }
