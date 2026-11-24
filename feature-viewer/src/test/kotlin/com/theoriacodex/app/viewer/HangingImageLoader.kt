@@ -11,10 +11,14 @@ import coil.decode.DataSource
 import coil.fetch.DrawableResult
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
+import coil.network.HttpException
 import coil.request.ImageRequest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Response
 
 /**
  * Replaces Coil's loader with one whose requests never finish, except the one ending in [loadsImmediately],
@@ -52,6 +56,11 @@ internal fun installFailingLoader(): ImageLoadLog {
     val log = ImageLoadLog()
     installTestLoader(log) { data -> error("No image in tests: $data") }
     return log
+}
+
+internal fun installNotFoundLoader() = installTestLoader(EventListener.NONE) { data ->
+    val request = Request.Builder().url(data.toString()).build()
+    throw HttpException(Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(404).message("Not Found").build())
 }
 
 /** Unconfined, so loads finish on the main thread, where Compose's idling tracks them. */

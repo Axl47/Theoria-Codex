@@ -17,8 +17,11 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
+import coil.Coil
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -30,6 +33,42 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class)
 class ViewerMediaErrorInteractionTest {
     @get:Rule val compose = createComposeRule()
+
+    @After fun resetImages() = Coil.reset()
+
+    @Test fun `a missing image hands its recovery to the route instead of awaiting it in the page`() {
+        installNotFoundLoader()
+        val image = ImageRef("https://example.test/missing.jpg", null, "image/jpeg")
+        val post = testPost(source = SourceKey.GELBOORU, full = image, media = listOf(image))
+        val key = ViewerMediaKey(post.id, 0)
+        val asked = mutableListOf<Post>()
+        val recovery = object : ViewerMediaRecoveryRequest {
+            override fun ask(post: Post, failedMedia: ImageRef) {
+                asked += post
+            }
+
+            override suspend fun recoverStreams(post: Post, failedMedia: ImageRef): ViewerMediaRecovery =
+                error("An image's recovery must not run in its page's coroutine, which leaving the page cancels")
+        }
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.size(360.dp, 500.dp)) {
+                    ViewerMediaPage(
+                        post = post, media = image, mediaIndex = 0,
+                        controls = ViewerRendererControls(true, true, false, true, 1f, 0L, 0L),
+                        events = viewerRendererEvents(null, key, 0L, {}, {}, {}),
+                        transform = remember { mutableStateOf(ViewerTransformState()) }, onTransformChanged = {},
+                        layout = ViewerMediaLayout(false, false, false),
+                        videoOptions = ViewerVideoOptions(VideoQuality.AUTO, null, null, "Unavailable", false),
+                        videoPositions = ViewerVideoPositions(), mediaError = null, imageSession = ViewerImageSession(),
+                        pixivUgoiraClient = null, onAction = {}, onInteraction = {},
+                        onToggleChrome = {}, onRequestMediaRecovery = recovery,
+                    )
+                }
+            }
+        }
+        compose.runOnIdle { assertEquals(setOf(post), asked.toSet()) }
+    }
 
     @Test fun `Retry receives real touches above video gestures for all recoverable error messages`() {
         val video = ImageRef("https://example.test/video.mp4", null, "video/mp4")
