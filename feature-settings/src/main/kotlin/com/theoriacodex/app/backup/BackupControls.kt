@@ -201,7 +201,11 @@ internal fun List<String>.reposNotice(): String? = when (size) {
 /** "Needs these extensions: Comick, Gogoanime and 1 other.", naming what the backup names; null when nothing is missing. */
 internal fun BackupPreview.Series.missingNotice(): String? {
     val named = missingSources
-    if (named.isEmpty()) return "A series stays unavailable until its extension is on here.".takeIf { unnamedMissingSources > 0 }
+    if (named.isEmpty()) {
+        if (unnamedMissingSources == 0) return null
+        // Turning on the extensions named beside it would not cover these, so they are counted apart.
+        return if (turnOn.isEmpty()) "A series stays unavailable until its extension is on here." else "Needs ${countLabel(unnamedMissingSources, "other extension")}."
+    }
     val others = if (unnamedMissingSources > 0) " and ${countLabel(unnamedMissingSources, "other")}" else ""
     val subject = if (named.size + unnamedMissingSources == 1) "this extension" else "these extensions"
     return "Needs $subject: ${named.joinToString()}$others."

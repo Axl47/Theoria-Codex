@@ -125,6 +125,8 @@ class BackupViewModelTest {
             BackupPreview.Series(counts, missingSources = listOf("Comick", "Gogoanime"), unnamedMissingSources = 1).missingNotice(),
         )
         assertEquals("A series stays unavailable until its extension is on here.", BackupPreview.Series(counts, unnamedMissingSources = 2).missingNotice())
+        // Beside extensions to turn on, the unnamed ones must not read as covered by that.
+        assertEquals("Needs 2 other extensions.", BackupPreview.Series(counts, turnOn = listOf(SourceOff("Comix")), unnamedMissingSources = 2).missingNotice())
     }
 
     @Test

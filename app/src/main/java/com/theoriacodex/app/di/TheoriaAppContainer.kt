@@ -435,7 +435,6 @@ internal class DefaultTheoriaAppContainer(
         SeriesDependencies(
             repository, host::sources, host::source, host.extensions, host.repos(httpClients.shared), downloads, scope = durableStoreScope, covers = host.covers,
             pictures = ChapterPictures(repository) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
-            availability = host::availability,
         ) { Log.i("SeriesReader", it) }
     }
 
@@ -449,7 +448,7 @@ internal class DefaultTheoriaAppContainer(
         writeGuard = profileWriteGuard,
         siteProfiles = siteProfiles,
         extensionRepos = series?.repos,
-        extensionSources = { series?.availability?.invoke() ?: SourceAvailability() },
+        extensionSources = { extensionHost?.availability() ?: SourceAvailability() },
     )
     private val autoBackup = AutoBackupWorkflow(
         store = SharedPreferencesAutoBackupStore(appContext),
