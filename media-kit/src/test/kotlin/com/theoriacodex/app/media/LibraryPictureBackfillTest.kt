@@ -15,7 +15,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LibraryPictureBackfillTest {
-    @Test fun `the Library is hashed until done, and a preview that fails is skipped`() = runTest {
+    @Test fun `the Library is hashed until done, and a preview that fails is skipped (ADR 0111)`() = runTest {
         val library = FakeSignatures(listOf(post("hashed"), post("flat"), post("offline")))
         val hashed = mutableListOf<String>()
         val backfill = LibraryPictureBackfill(library) { post ->
@@ -33,7 +33,7 @@ class LibraryPictureBackfillTest {
         assertEquals(listOf(2), library.writes)
     }
 
-    @Test fun `ADR 0111 a Library that cannot be reached is read once, a batch at a time`() = runTest {
+    @Test fun `a Library that cannot be reached is read once, a batch at a time (ADR 0111)`() = runTest {
         val library = FakeSignatures(List(100) { post("offline-$it") })
         val asked = mutableListOf<String>()
 
