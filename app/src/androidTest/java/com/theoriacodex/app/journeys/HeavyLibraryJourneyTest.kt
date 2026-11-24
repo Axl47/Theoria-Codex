@@ -113,7 +113,7 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         // Most Codex posts are also Liked; each saved post counts once.
         compose.waitUntil(10_000) { showsText("${history.watched.size} watched · ${history.savedPosts} saved") }
 
-        back()
+        back("Settings") { libraryTabShows() }
         library(LibrarySection.Saved)
         activate(likesShelf(history.likes.size))
         val unliked = history.likes.last()
@@ -124,7 +124,9 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         assertEquals(history.likes.size - 1, likedIds().size)
         assertTrue(unliked.id in codexPosts(HeavyHistory.FRIEREN_CODEX))
 
-        repeat(2) { back() }
+        // The Viewer holds Back while its media returns to the card, so each Back waits for the screen it leads to.
+        back("the Viewer") { !viewerShows() && showsText("Likes") && !libraryTabShows() }
+        back("Likes") { libraryTabShows() }
         library(LibrarySection.Saved)
         compose.waitUntil(10_000) { likesShelf(history.likes.size - 1).isDisplayed() }
         openSettings()
@@ -132,10 +134,20 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { showsText(" · ${history.savedPosts} saved") }
     }
 
-    private fun back() {
+    /** Presses Back on [from] and waits until [arrived], failing with what shows instead. */
+    private fun back(from: String, arrived: () -> Boolean) {
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        compose.waitForIdle()
+        try {
+            compose.waitUntil(10_000, arrived)
+        } catch (timeout: ComposeTimeoutException) {
+            val shows = listOfNotNull("Viewer".takeIf { viewerShows() }, "Library tab".takeIf { libraryTabShows() })
+            throw AssertionError("Back from $from did not arrive; showing: ${shows.ifEmpty { listOf("neither Viewer nor Library tab") }}", timeout)
+        }
     }
+
+    private fun viewerShows() = compose.onAllNodesWithTag("viewer-dock-save", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun libraryTabShows() = compose.onAllNodes(hasContentDescription("Library")).fetchSemanticsNodes().isNotEmpty()
 
     /** Hides `hatsune_miku` from the deck's card, which must carry it. */
     private fun hideMiku() {
