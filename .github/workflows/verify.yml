@@ -81,7 +81,8 @@ jobs:
 
   # The parts check out the PR's head so their results can be reused for the same code, but a branch
   # made before a policy check existed carries no copy of it and passes without it. This job runs the
-  # seconds-long policy checks on the merge result GitHub would create instead.
+  # seconds-long policy checks on the merge result GitHub would create instead. It sees main as of this
+  # run only; main-policy.yml catches a merge that breaks a check after main moved on.
   merge-policy:
     name: Merge policy
     if: github.event_name == 'pull_request'
@@ -93,8 +94,14 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Comment ratchet against main
-        run: source scripts/policy_checks.sh && comment_ratchet HEAD^1
+      - name: Policy checks against main
+        run: |
+          source scripts/policy_checks.sh
+          line_budgets HEAD^1
+          comment_ratchet HEAD^1
+          module_layering
+          architecture_rules
+          module_registration
 
   # A static name: GitHub shows each run as `Check part (tests)` and so on, and a skipped job as
   # `Check part`. A name built from the matrix would show unevaluated when the job is skipped.

@@ -1,0 +1,38 @@
+name: Main policy
+
+# PR checks may have run against an older main, and Main's own run is cancelled by a newer push, so a
+# merge can break a policy check without any run pinning it on that merge. This seconds-long run checks
+# every push to main against its first parent and, when the parent still passed, names the commit
+# that broke a check.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: Main policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 3
+
+      - name: Policy checks against the previous main
+        run: |
+          source scripts/policy_checks.sh
+          checks() { line_budgets "$1" && comment_ratchet "$1" && module_layering && architecture_rules && module_registration; }
+          checks HEAD^1 && exit 0
+          previous="$(mktemp -d)/previous"
+          git worktree add -q --detach "$previous" HEAD^1
+          if (cd "$previous" && checks HEAD^1 > /dev/null 2>&1); then
+            echo "::error::$(git log -1 --format='%h %s') broke a policy check on main. Fix it in a follow-up PR."
+          else
+            echo "::error::main already failed a policy check before $(git log -1 --format=%h); an earlier push broke it."
+          fi
+          exit 1
