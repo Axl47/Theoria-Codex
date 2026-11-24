@@ -75,6 +75,16 @@ interface ExtensionRepos {
      */
     suspend fun add(repos: List<NewExtensionRepo>): Map<String, String>
 
+    /**
+     * Keeps each repo as recorded, without reading it: a record (address, name, signing key) is what [repos] stores,
+     * and the key is what is trusted, since every later read of the repo refuses an index naming another key and
+     * installs check each APK against it. So a backup's repos need no network to restore. Skips one already added at
+     * the same [storedRepoAddress]. Refuses, keyed by the [ExtensionRepo.url] given, one that is not `https://` or
+     * whose key is not a valid fingerprint, and stores all the others in one change. A blank name falls back to the
+     * address. A repo that is gone shows as unreachable on the Extensions page, not here.
+     */
+    suspend fun restore(repos: List<ExtensionRepo>): Map<String, String>
+
     suspend fun remove(url: String)
 
     /** The extensions the repos offer that this app can run. Reads each repo once per process unless [refresh]. */

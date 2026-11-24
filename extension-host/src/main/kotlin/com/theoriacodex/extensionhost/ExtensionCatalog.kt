@@ -74,6 +74,26 @@ class ExtensionCatalog(
         problems
     }
 
+    override suspend fun restore(repos: List<ExtensionRepo>): Map<String, String> {
+        val problems = LinkedHashMap<String, String>()
+        val accepted = LinkedHashMap<String, ExtensionRepo>()
+        for (repo in repos) {
+            val url = storedRepoAddress(repo.url)
+            // Lowercase, as an index's key is read, so later reads compare equal to what was stored.
+            val key = repo.signingKey.lowercase()
+            when {
+                !url.startsWith("https://") -> problems[repo.url] = "Not an https address"
+                !key.matches(FINGERPRINT) -> problems[repo.url] = "Names no signing key"
+                else -> accepted.putIfAbsent(url, ExtensionRepo(url, repo.name.ifBlank { url }, key))
+            }
+        }
+        choices.update { current ->
+            val held = current.repos.mapTo(HashSet()) { it.url }
+            current.copy(repos = current.repos + accepted.values.filter { it.url !in held })
+        }
+        return problems
+    }
+
     /** Reads the repo at [url] and keeps it with the key it names, which must be [knownKey] when a backup knew one. */
     private suspend fun addOne(url: String, knownKey: String?) {
         if (!url.startsWith("https://")) throw RepoProblem("Not an https address")

@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.SiteProfile
@@ -44,7 +45,7 @@ class ProfileBackupService(
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
-    /** Where a Mihon-family import adds its repos; null where no extensions run. */
+    /** Where a backup's repos are added, and read from when making one; null where no extensions run. */
     private val extensionRepos: ExtensionRepos? = null,
     /** The extension sources that are on, so a Mihon-family import can name the ones its series still need. */
     private val extensionSources: suspend () -> Set<SourceKey> = { emptySet() },
@@ -54,6 +55,7 @@ class ProfileBackupService(
     suspend fun export(includeRecents: Boolean = true): ByteArray = withContext(Dispatchers.IO) {
         mutex.withLock {
             check(!journalFile.exists()) { "Finish the pending restore before making a backup" }
+            val repos = extensionRepos?.repos().orEmpty()
             repeat(3) {
                 val initialSettings = settings.observeSettings().first()
                 val sites = siteProfiles.observeProfiles().first()
@@ -66,7 +68,7 @@ class ProfileBackupService(
                     (!includeRecents || positions == readingPositions.snapshot())
                 ) {
                     return@withLock codec.encode(
-                        ProfileBackup(clock(), initialSettings, library, pins, positions, statisticsFor(includeRecents), sites),
+                        ProfileBackup(clock(), initialSettings, library, pins, positions, statisticsFor(includeRecents), sites, repos),
                     )
                 }
             }
@@ -80,21 +82,25 @@ class ProfileBackupService(
 
     /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
     suspend fun preview(bytes: ByteArray): BackupPreview {
-        if (!isTachiyomiBackup(bytes)) return BackupPreview.Profiles(codec.decode(bytes).preview())
+        if (!isTachiyomiBackup(bytes)) {
+            val backup = codec.decode(bytes)
+            return BackupPreview.Profiles(backup.preview(newRepos(backup.extensionRepos)))
+        }
         val backup = decodeTachiyomiBackup(bytes, clock())
-        // Details only: a device that cannot answer leaves them out rather than refuse the backup. Sources that cannot be
-        // listed are unavailable in Series too, so they count as missing.
-        val newRepos = extensionRepos?.let { repos ->
-            runCatchingPreservingCancellation { backup.reposNotIn(repos.repos()) }.getOrNull()
-        }.orEmpty()
-        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos)
+        // Sources that cannot be listed are unavailable in Series too, so they count as missing.
+        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos(backup.repos))
     }
+
+    /** The [listed] repos not added here yet. Details only: a device that cannot answer leaves them out rather than refuse the backup. */
+    private suspend fun newRepos(listed: List<ExtensionRepo>): List<ExtensionRepo> = extensionRepos?.let { repos ->
+        runCatchingPreservingCancellation { listed.notIn(repos.repos()) }.getOrNull()
+    }.orEmpty()
 
     /**
      * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
      * on the device is removed, each entry keeps the further progress of the two sides, and importing twice adds
-     * nothing more. One Room transaction holds it all, so it needs no journal. Then adds the repos the backup lists
-     * ([ExtensionRepos.add], which skips those already added and refuses one now signed with another key).
+     * nothing more. One Room transaction holds it all, so it needs no journal. Then restores the repos the backup lists
+     * ([restoreFromBackup]).
      */
     suspend fun importSeries(bytes: ByteArray): SeriesImportResult = withContext(Dispatchers.IO) {
         val backup = mutex.withLock {
@@ -104,16 +110,18 @@ class ProfileBackupService(
             }
         }
         val imported = backup.importPreview()
-        // Outside the lock: each repo is read over the network, and none touches the library. The series are in by now,
-        // so a failure here is reported against the repos alone.
+        // Outside the lock: the repos do not touch the library. The series are in by now, so a failure here is
+        // reported against the repos alone.
         val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(imported)
-        runCatchingPreservingCancellation {
-            val new = backup.reposNotIn(repos.repos())
-            val problems = repos.add(backup.repos)
-            SeriesImportResult(imported, reposAdded = new.count { it.url !in problems }, repoProblems = problems)
-        }.getOrElse { SeriesImportResult(imported, repoProblems = backup.repos.associate { it.url to "Import the backup again to retry" }) }
+        val added = runCatchingPreservingCancellation { repos.restoreFromBackup(backup.repos) }
+            .getOrElse { BackupReposAdded(problems = backup.repos.associate { it.url to "Import the backup again to retry" }) }
+        SeriesImportResult(imported, reposAdded = added.added, repoProblems = added.problems)
     }
 
+    /**
+     * Restores a Theoria backup: its library, settings and sites, and its extension repos ([restoreFromBackup]), all
+     * in [finish], so startup recovery of an interrupted restore stores the repos too.
+     */
     suspend fun restore(
         bytes: ByteArray,
         applyPreferences: Boolean = false,
@@ -177,6 +185,7 @@ class ProfileBackupService(
             readingPositions.merge(imported.readingPositions)
             val sites = siteProfiles.mergeRestored(imported.customSources)
             imported.statistics?.let { statistics?.mergeRestored(it) }
+            val repos = extensionRepos?.takeIf { imported.extensionRepos.isNotEmpty() }?.restoreFromBackup(imported.extensionRepos)
             settings.updateSettings {
                 val merged = it.mergeRestoredSettings(imported.settings, pending.applyPreferences)
                 if (pending.selectImportedProfile) merged.copy(activeProfileId = imported.settings.activeProfileId) else merged
@@ -192,6 +201,8 @@ class ProfileBackupService(
                 profilesAdded = imported.settings.recommendationProfiles.count { it.profileId !in existingProfileIds },
                 collectionsAdded = collectionsAdded,
                 keptExistingSites = sites.keptExisting,
+                reposAdded = repos?.added ?: 0,
+                repoProblems = repos?.problems.orEmpty(),
             )
         } catch (cancelled: CancellationException) {
             throw cancelled

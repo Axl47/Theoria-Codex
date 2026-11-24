@@ -100,7 +100,7 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
     val (preview, series) = withRestoreService(restore, store, repos) { it.preview(mihon) to it.importSeries(mihon) }
     val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0)
     check(preview == BackupPreview.Series(counts, newRepos = listOf("https://repo.example"), missingSources = listOf("Source")))
-    check(series == SeriesImportResult(counts, reposAdded = 1) && repos.given == listOf(NewExtensionRepo("https://repo.example", "ab")))
+    check(series == SeriesImportResult(counts, reposAdded = 1) && repos.given == listOf(ExtensionRepo("https://repo.example", "https://repo.example", "ab")))
     check(imported.last().series.single().entries.single().read)
 }
 
@@ -124,11 +124,12 @@ private suspend fun <T> withRestoreService(
         )
     }
 
-/** Adds every repo it is given, offline, keeping what it was given. */
+/** Restores every repo it is given, keeping what it was given. */
 private class AddedRepos : ExtensionRepos {
-    val given = mutableListOf<NewExtensionRepo>()
-    override suspend fun repos() = given.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
-    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = emptyMap<String, String>().also { given += repos }
+    val given = mutableListOf<ExtensionRepo>()
+    override suspend fun repos() = given.toList()
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = error("unused")
+    override suspend fun restore(repos: List<ExtensionRepo>): Map<String, String> = emptyMap<String, String>().also { given += repos }
     override suspend fun remove(url: String) = error("unused")
     override suspend fun available(refresh: Boolean): RepoListing = error("unused")
     override suspend fun install(repo: String, packageName: String): String? = error("unused")

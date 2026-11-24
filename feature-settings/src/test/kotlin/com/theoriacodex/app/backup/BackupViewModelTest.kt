@@ -70,6 +70,21 @@ class BackupViewModelTest {
     }
 
     @Test
+    fun `a Theoria restore says which extension repos were added and why others were not`() = runTest {
+        actions.nextRestore = ProfileRestoreResult(2, 3, reposAdded = 1, repoProblems = mapOf("https://old.example" to "Now signed with another key"))
+        val owner = owner()
+        owner.import("document")
+        advanceUntilIdle()
+        owner.restore()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Backup restored: 2 profiles and 3 Codices added. Added 1 extension repo. Could not add 1 extension repo: Now signed with another key.",
+            owner.effects.first(),
+        )
+    }
+
+    @Test
     fun `a Mihon-family backup imports its series instead of restoring profiles`() = runTest {
         actions.nextPreview = BackupPreview.Series(SeriesImportPreview(manga = 212, anime = 1, chaptersRead = 900, episodesWatched = 3))
         val owner = owner()
@@ -111,11 +126,10 @@ class BackupViewModelTest {
     }
 
     @Test
-    fun `the import preview names the repos it adds`() {
-        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
-        assertNull(BackupPreview.Series(counts).reposNotice())
-        assertEquals("Also adds this extension repo: Keiyoushi.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi")).reposNotice())
-        assertEquals("Also adds these extension repos: Keiyoushi, Kohi den.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi", "Kohi den")).reposNotice())
+    fun `a backup preview names the repos it adds`() {
+        assertNull(emptyList<String>().reposNotice())
+        assertEquals("Also adds this extension repo: Keiyoushi.", listOf("Keiyoushi").reposNotice())
+        assertEquals("Also adds these extension repos: Keiyoushi, Kohi den.", listOf("Keiyoushi", "Kohi den").reposNotice())
     }
 
     @Test
@@ -258,6 +272,7 @@ private class FakeBackupActions : BackupActions {
     var nextPreview: BackupPreview = preview
     var seriesImports = 0
 
+    var nextRestore = ProfileRestoreResult(2, 3)
     var nextImport: SeriesImportResult? = null
 
     override suspend fun preview(bytes: ByteArray) = nextPreview
@@ -268,7 +283,7 @@ private class FakeBackupActions : BackupActions {
         appliedPreferences = applyPreferences
         restoreGate?.await()
         restoreFailure?.let { throw it }
-        return ProfileRestoreResult(2, 3)
+        return nextRestore
     }
 
     override suspend fun importSeries(bytes: ByteArray): SeriesImportResult {
