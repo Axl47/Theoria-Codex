@@ -228,7 +228,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
 
     private fun waitForCard(index: Int) {
         val tag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id)
-        waitFor("search card is displayed after scrolling to it") { compose.onNodeWithTag(tag).isDisplayed() }
+        waitFor("Pixiv search card $index is displayed") { compose.onNodeWithTag(tag).isDisplayed() }
         compose.onNodeWithTag(tag).assertIsDisplayed()
     }
 

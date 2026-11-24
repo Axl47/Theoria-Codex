@@ -24,6 +24,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performImeAction
@@ -302,17 +303,26 @@ abstract class AppJourneyFixture {
         check(UiDevice.getInstance(instrumentation).takeScreenshot(shots.resolve("$name.png"))) { "No screenshot for $name" }
     }
 
-    protected fun waitFor(what: String, timeoutMillis: Long = 10_000, condition: () -> Boolean) =
-        compose.waitUntil(conditionDescription = what, timeoutMillis = timeoutMillis, condition = condition)
-
-    private fun waitForNode(node: SemanticsNodeInteraction, what: String, condition: () -> Boolean) {
+    protected fun waitFor(
+        what: String,
+        timeoutMillis: Long = 10_000,
+        diagnostics: () -> String = ::semanticsTree,
+        condition: () -> Boolean,
+    ) {
         try {
-            waitFor("control is $what", condition = condition)
+            compose.waitUntil(conditionDescription = what, timeoutMillis = timeoutMillis, condition = condition)
         } catch (timeout: ComposeTimeoutException) {
-            val state = runCatching { node.printToString() }.getOrElse { it.message.orEmpty() }
-            throw AssertionError("Control never became $what:\n$state", timeout)
+            val state = runCatching(diagnostics).getOrElse { "Diagnostics failed: $it" }
+            throw ComposeTimeoutException("${timeout.message}\n$state").apply { initCause(timeout) }
         }
     }
+
+    private fun semanticsTree(): String = compose.onRoot(useUnmergedTree = true).printToString()
+
+    private fun waitForNode(node: SemanticsNodeInteraction, what: String, condition: () -> Boolean) =
+        waitFor("control is $what", diagnostics = {
+            runCatching { node.printToString() }.getOrElse { it.message.orEmpty() } + "\n" + semanticsTree()
+        }, condition = condition)
 
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }
 

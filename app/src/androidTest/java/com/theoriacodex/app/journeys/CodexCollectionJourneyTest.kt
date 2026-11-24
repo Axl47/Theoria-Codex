@@ -28,7 +28,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("Create Codex"))
         compose.onNodeWithText("Name").performTextInput("Second collection")
         activate(compose.onNodeWithText("Save"))
-        waitFor("Second collection exists in Library") { io { container.content.observeCodices().first().any { it.name == "Second collection" } } }
+        waitFor("repository holds a collection named Second collection") { io { container.content.observeCodices().first().any { it.name == "Second collection" } } }
         activate(compose.onNodeWithText("Journey collection"))
 
         activate(compose.onNodeWithText("Journey collection"))
