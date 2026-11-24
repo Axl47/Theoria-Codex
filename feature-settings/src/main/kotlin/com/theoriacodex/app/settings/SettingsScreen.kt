@@ -91,7 +91,7 @@ fun SettingsScreen(
     diagnostics: SettingsDiagnosticsEntry? = null,
     storageTools: (@Composable () -> Unit)? = null,
     showSeries: Boolean = false,
-    appLock: @Composable () -> Unit = {},
+    appLock: (@Composable () -> Unit)? = null,
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
     onOpenExtensions: (() -> Unit)? = null,
@@ -152,7 +152,7 @@ private fun SettingsHome(
     pictures: SettingsPicturesEntry?,
     showDiagnostics: Boolean,
     showSeries: Boolean,
-    appLock: @Composable () -> Unit,
+    appLock: (@Composable () -> Unit)?,
     onClose: () -> Unit,
     onOpenExtensions: (() -> Unit)?,
 ) {
@@ -280,7 +280,7 @@ private fun SettingsHomeGroups(
     pictures: SettingsPicturesEntry?,
     showDiagnostics: Boolean,
     showSeries: Boolean,
-    appLock: @Composable () -> Unit,
+    appLock: (@Composable () -> Unit)?,
     onOpenExtensions: (() -> Unit)?,
     onSheet: (SettingsSheet) -> Unit,
 ) {
@@ -316,8 +316,10 @@ private fun SettingsHomeGroups(
                 onClick = { open(SettingsPage.BACKUP) },
             )
         }
-        SettingsRowDivider()
-        appLock()
+        appLock?.let {
+            SettingsRowDivider()
+            it()
+        }
         SettingsRowDivider()
         SettingsRow(
             SettingDestinations.WhatsNew.title,
