@@ -21,28 +21,28 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         val original = posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST]
         val codex = io { container.content.ensureCodex(profileScopedCodexId("profile-main", "trail"), "Trail collection") }
         openSearchPost(ORIGINAL_POST, RECENT_SEARCH)
-        compose.waitUntil(10_000) { selectedPost() == original.id.sourcePostId }
+        waitFor("Viewer shows post ${original.id.sourcePostId}") { selectedPost() == original.id.sourcePostId }
 
         val save = compose.onNodeWithTag("viewer-dock-save")
-        compose.waitUntil(10_000) { save.isDisplayed() && save.description() == "Save to Trail collection" }
+        waitFor("Viewer save button offers Save to Trail collection") { save.isDisplayed() && save.description() == "Save to Trail collection" }
         activate(save)
-        compose.waitUntil(10_000) { io { container.content.observeCodexItems(codex.codexId).first() }.any { it.postId == original.id } }
-        compose.waitUntil(5_000) { save.description()?.startsWith("Saved to Trail collection") == true }
+        waitFor("original post is saved to the Trail collection") { io { container.content.observeCodexItems(codex.codexId).first() }.any { it.postId == original.id } }
+        waitFor("Viewer save button shows Saved to Trail collection", timeoutMillis = 5_000) { save.description()?.startsWith("Saved to Trail collection") == true }
 
         // Every fixture post carries "landscape", so it is universal and offers no chip; half carry "green", post 3 among them.
         activate(compose.onNodeWithTag("viewer-trail-chip-tag:green"))
         val forkCrumb = compose.onNodeWithTag("viewer-trail-crumb-1")
-        compose.waitUntil(15_000) { forkCrumb.isDisplayed() }
+        waitFor("fork crumb is displayed", timeoutMillis = 15_000) { forkCrumb.isDisplayed() }
         val forkStart = selectedPost()
 
         // The active media overlay owns the paging swipe; stay off the system back-gesture edges.
         compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true).performTouchInput {
             swipe(start = Offset(width * 0.85f, height * 0.5f), end = Offset(width * 0.15f, height * 0.5f), durationMillis = 400L)
         }
-        compose.waitUntil(10_000) { selectedPost().let { it != null && it != forkStart } }
+        waitFor("Viewer moved to another post in the fork") { selectedPost().let { it != null && it != forkStart } }
 
         activate(compose.onNodeWithContentDescription("Back"))
-        compose.waitUntil(10_000) { !forkCrumb.isDisplayed() && selectedPost() == original.id.sourcePostId }
+        waitFor("Viewer is back on the original post without the fork crumb") { !forkCrumb.isDisplayed() && selectedPost() == original.id.sourcePostId }
     }
 
 

@@ -81,7 +81,7 @@ class SourceCallThreadJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Open original post"))
         val viewer = compose.onNodeWithContentDescription("Open post $RESOLVED_POST", useUnmergedTree = true)
         try {
-            compose.waitUntil(conditionDescription = "Viewer or browser opened", timeoutMillis = 10_000) {
+            waitFor("Viewer or browser opened") {
                 viewer.isDisplayed() || browserLaunches.isNotEmpty()
             }
         } catch (_: ComposeTimeoutException) {

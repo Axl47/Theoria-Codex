@@ -72,7 +72,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val chips = compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG))).fetchSemanticsNodes()
         val interest = chips.map { it.text() }.last { it != "Mix" }
         activate(compose.onNode(chip(interest)))
-        compose.waitUntil(10_000) { origin() == interest }
+        waitFor("deck origin is $interest") { origin() == interest }
         repeat(3) {
             decide("Skip")
             assertEquals(interest, origin())
@@ -80,7 +80,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         saveScreenshot("deck-chip-narrowed")
 
         activate(compose.onNode(chip("Mix")))
-        compose.waitUntil(10_000) { compose.onNode(chip("Mix")).fetchSemanticsNode().config[SemanticsProperties.Selected] }
+        waitFor("Mix chip is selected") { compose.onNode(chip("Mix")).fetchSemanticsNode().config[SemanticsProperties.Selected] }
         val widened = (0 until 6).any { (origin() != interest).also { other -> if (!other) decide("Skip") } }
         assertTrue("The Mix dealt only $interest after widening", widened)
     }
@@ -97,7 +97,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         saveScreenshot("deck-tag-trail")
 
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(FOR_YOU_CRUMBS_TAG).fetchSemanticsNodes().isEmpty() }
+        waitFor("trail crumbs are gone after Back") { compose.onAllNodesWithTag(FOR_YOU_CRUMBS_TAG).fetchSemanticsNodes().isEmpty() }
         assertEquals(card, currentCard())
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertIsDisplayed()
     }
@@ -107,14 +107,14 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         openDeck()
         val tag = forkByTag()
         activate(compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG))
-        compose.waitUntil(10_000) { savedSearches().isNotEmpty() }
+        waitFor("a saved search exists") { savedSearches().isNotEmpty() }
 
         val saved = savedSearches().single().search
         assertEquals(RecentSearchKind.SOURCE, saved.kind)
         assertTrue(saved.query.mode is QueryMode.Source)
         assertEquals(listOf(tag), saved.query.includeTags.map { it.replace('_', ' ') })
         assertTrue(saved.sourceTags.isEmpty())
-        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Saved").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("Saved indicator is displayed") { compose.onAllNodesWithContentDescription("Saved").fetchSemanticsNodes().isNotEmpty() }
         saveScreenshot("deck-trail-saved")
     }
 
@@ -123,12 +123,12 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         openDeck()
         val card = currentCard()
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
-        compose.waitUntil(10_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
+        waitFor("grid view is displayed") { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
         compose.onNodeWithTag(card).assertIsDisplayed()
         saveScreenshot("deck-as-grid")
 
         scenario.recreate()
-        compose.waitUntil(15_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
+        waitFor("grid view is displayed after recreating the activity", timeoutMillis = 15_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
         compose.onNodeWithTag(card).assertIsDisplayed()
     }
 
@@ -156,7 +156,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         openDeck()
         forkByTag()
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
-        compose.waitUntil(10_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
+        waitFor("grid view is displayed") { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
         val first = topGridCard()
         repeat(3) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).performTouchInput { swipeUp() }; compose.waitForIdle() }
         val scrolled = topGridCard()
@@ -164,17 +164,17 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
 
         // Forks are offered on deck cards: open the card's creator from the deck, then come back to the grid.
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
-        compose.waitUntil(10_000) { currentCardOrNull() != null }
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("deck shows a card") { currentCardOrNull() != null }
+        waitFor("creator fork is offered") { compose.onAllNodesWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator"))
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("creator crumb 2 is displayed") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
-        compose.waitUntil(10_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
+        waitFor("grid view is displayed") { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
 
         // The crumb leaves the creator's trail as Back does.
         activate(compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1"))
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isEmpty() }
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(FOR_YOU_GRID_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("creator crumb 2 is gone") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isEmpty() }
+        waitFor("grid view is back") { compose.onAllNodesWithTag(FOR_YOU_GRID_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(scrolled, topGridCard())
     }
 
@@ -183,9 +183,9 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         io { container.data.settingsRepository.setEnabledSources(emptySet()) }
         launch()
         tab("For You")
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("No sources enabled").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("No sources enabled message is displayed", timeoutMillis = 15_000) { compose.onAllNodesWithText("No sources enabled").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithText("Manage sources"))
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Built-in").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("Built-in sources list is displayed") { compose.onAllNodesWithText("Built-in").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
@@ -198,8 +198,8 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val undone = currentCard()
         decide("Skip")
         activate(compose.onNodeWithTag(FOR_YOU_UNDO_TAG))
-        compose.waitUntil(10_000) { currentCardOrNull() == undone }
-        compose.waitUntil(10_000) { verdicts().size == 2 }
+        waitFor("deck shows the undone card") { currentCardOrNull() == undone }
+        waitFor("2 verdicts are recorded") { verdicts().size == 2 }
 
         coldGraphRelaunch()
         assertEquals(
@@ -227,10 +227,10 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         compose.onNodeWithTag(FOR_YOU_UNDO_TAG).assertIsDisplayed()
 
         deck.performTouchInput { swipeLeft() }
-        compose.waitUntil(10_000) { currentCard() != first }
+        waitFor("deck advanced after swiping left") { currentCard() != first }
         val second = currentCard()
         deck.performTouchInput { swipeRight() }
-        compose.waitUntil(10_000) { currentCard() != second }
+        waitFor("deck advanced after swiping right") { currentCard() != second }
         assertNotEquals(first, currentCard())
         compose.onNodeWithTag(FOR_YOU_UNDO_TAG).assertIsDisplayed()
         saveScreenshot("deck-after-swipes")
@@ -239,7 +239,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     private fun openDeck() {
         launch()
         tab("For You")
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("deck origin is displayed", timeoutMillis = 15_000) { compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().isNotEmpty() }
     }
 
     /** Decides the card through the action the deck gives TalkBack, as a swipe would, and waits for the next card. */
@@ -252,7 +252,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val before = currentCard()
         val action = compose.onNode(offers).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { label(it.label) }
         compose.runOnUiThread { action.action() }
-        compose.waitUntil(10_000) { currentCardOrNull().let { it != null && it != before } }
+        waitFor("deck advanced to a new card after the decision") { currentCardOrNull().let { it != null && it != before } }
     }
 
     /** Opens the first tag fork the current card offers and returns its label. */
@@ -260,10 +260,10 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val fork = SemanticsMatcher("a tag fork") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("${FOR_YOU_FORK_TAG_PREFIX}tag:") == true
         }
-        compose.waitUntil(10_000) { compose.onAllNodes(fork).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("tag fork is offered") { compose.onAllNodes(fork).fetchSemanticsNodes().isNotEmpty() }
         val label = compose.onAllNodes(fork).onFirst().fetchSemanticsNode().text()
         activate(compose.onAllNodes(fork).onFirst())
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("crumb 1 is displayed after forking") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().isNotEmpty() }
         return label
     }
 

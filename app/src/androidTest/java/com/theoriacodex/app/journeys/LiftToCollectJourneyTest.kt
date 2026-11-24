@@ -31,21 +31,21 @@ class LiftToCollectJourneyTest : AppJourneyFixture() {
         openRecentsSection("Searches")
         compose.onNodeWithTag("Recent search:lift").performClick()
         val cardTag = searchCardTestTag(first.id)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("search card for ${first.id} is displayed") { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
         val card = compose.onNodeWithTag(cardTag)
         card.performTouchInput {
             down(center)
             advanceEventTime(viewConfiguration.longPressTimeoutMillis + 200)
         }
         val targetTag = "Collect target codex:${collection.codexId}"
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(targetTag).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("collect target for the collection is displayed during the lift") { compose.onAllNodesWithTag(targetTag).fetchSemanticsNodes().isNotEmpty() }
         val target = compose.onNodeWithTag(targetTag).fetchSemanticsNode().boundsInRoot.center
         val cardTopLeft = card.fetchSemanticsNode().boundsInRoot.topLeft
         card.performTouchInput { moveTo(target - cardTopLeft) }
         compose.waitForIdle()
         card.performTouchInput { up() }
 
-        compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }
+        waitFor("collection holds at least one post after the drop") { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(collection.codexId).first().map { it.postId } })
     }
 }

@@ -48,32 +48,32 @@ class StatsTopPostJourneyTest : AppJourneyFixture() {
         launch()
         openSettings()
         activate(compose.onNodeWithText("Share my stats"))
-        compose.waitUntil(10_000) { compose.onNodeWithText("1 opens", substring = true).isDisplayed() }
+        waitFor("share sheet shows 1 open") { compose.onNodeWithText("1 opens", substring = true).isDisplayed() }
         compose.onNodeWithText("Share file").assertIsEnabled()
 
         // The saved preview stands in until a ranked post has its own Stats thumbnail, and Back keeps this page.
         activate(compose.onNodeWithText("Landscapes").performScrollTo())
         val thumbnail = compose.onNodeWithTag("stats-post-thumbnail:${statisticsPostKey(post.id)}", useUnmergedTree = true)
-        compose.waitUntil(10_000) { thumbnail.isDisplayed() }
+        waitFor("top post thumbnail is displayed") { thumbnail.isDisplayed() }
         openFromTopPosts("Gelbooru journey-5", post, returnTo = "Tap a post to look at it. Uncheck it to leave it out.")
         activate(compose.onNodeWithContentDescription("Include Gelbooru journey-5"))
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
 
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("0 opens", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("stats show 0 opens after leaving the post out") { compose.onAllNodesWithText("0 opens", substring = true).fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithContentDescription("Include Landscapes").performScrollTo())
         compose.onNodeWithText("Left out").performScrollTo().assertIsDisplayed()
         // Overall stats alone still make a file, so the button disables only once they are left out too.
         compose.onNodeWithText("Share file").assertIsEnabled()
         activate(compose.onNodeWithContentDescription("Include overall stats").performScrollTo())
         val shareFile = compose.onNodeWithText("Share file")
-        compose.waitUntil(10_000) { !isEnabled().matches(shareFile.fetchSemanticsNode()) }
+        waitFor("Share file is disabled once everything is left out") { !isEnabled().matches(shareFile.fetchSemanticsNode()) }
     }
 
     private fun openFromTopPosts(label: String, post: Post, returnTo: String = "Top posts") {
         activate(compose.onNodeWithText(label))
         val viewer = compose.onNodeWithContentDescription("Open post ${post.id.sourcePostId}", useUnmergedTree = true)
-        compose.waitUntil(10_000) { viewer.isDisplayed() || compose.onNodeWithTag("viewer-post-navigation-strip").isDisplayed() }
+        waitFor("Viewer shows post ${post.id.sourcePostId}'s Open post control or its navigation strip") { viewer.isDisplayed() || compose.onNodeWithTag("viewer-post-navigation-strip").isDisplayed() }
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        compose.waitUntil(10_000) { compose.onNodeWithText(returnTo).isDisplayed() }
+        waitFor("$returnTo is displayed after Back from the Viewer") { compose.onNodeWithText(returnTo).isDisplayed() }
     }
 }

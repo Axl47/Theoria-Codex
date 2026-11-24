@@ -49,10 +49,10 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         longPress(compose.onNodeWithText("Offline collection"))
         activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
-        compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
+        waitFor("offline store keeps 2 posts") { offline.store.snapshot.value.postCount == 2 }
         // The Library header's entry opens the offline sheet, whose row reports what is kept.
         activate(compose.onNodeWithContentDescription("Offline and downloads", substring = true))
-        compose.waitUntil(10_000) { compose.onNodeWithText("2 posts offline").isDisplayed() }
+        waitFor("Library shows 2 posts offline") { compose.onNodeWithText("2 posts offline").isDisplayed() }
         val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
         assertTrue(localPaths.all { File(it).isFile })
         localPaths.forEach { path ->
@@ -83,11 +83,11 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         val ordered = io { container.content.observeCodexPosts(collection.codexId, CodexSortMode.NEWEST_SAVED).first() }
         container.registry.resolveRequests.clear()
         activate(compose.onNodeWithTag(searchCardTestTag(ordered.first().id)))
-        compose.waitUntil(conditionDescription = "Viewer records the first offline post", timeoutMillis = 10_000) {
+        waitFor("Viewer records the first offline post") {
             io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.first().id } }
         }
         val activeMedia = compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true)
-        compose.waitUntil(conditionDescription = "Viewer displays the first active media surface", timeoutMillis = 10_000) {
+        waitFor("Viewer displays the first active media surface") {
             activeMedia.isDisplayed()
         }
         awaitFixturePixels("first-offline-post", localPaths)
@@ -101,7 +101,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 durationMillis = 400L,
             )
         }
-        compose.waitUntil(conditionDescription = "Viewer swipe records the second offline post", timeoutMillis = 10_000) {
+        waitFor("Viewer swipe records the second offline post") {
             io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } }
         }
         awaitFixturePixels("second-offline-post", localPaths)
@@ -127,7 +127,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         lateinit var decor: View
         scenario.onActivity { decor = it.window.decorView }
         try {
-            compose.waitUntil(conditionDescription = "$label renders the retained cyan PNG", timeoutMillis = 10_000) {
+            waitFor("$label renders the retained cyan PNG") {
                 requireNotNull(diagnostics).activeMediaShowsFixturePixels(compose, decor)
             }
         } catch (timeout: ComposeTimeoutException) {

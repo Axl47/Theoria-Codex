@@ -35,26 +35,26 @@ class SamePictureJourneyTest : AppJourneyFixture() {
     fun aPictureOnTwoSitesIsOneCardAndItsLikedCopyHidesTheOtherAfterARestart() {
         val copies = listOf(SourceKey.PIXIV, SourceKey.GELBOORU).map { PostId(it, "journey-0") }
         search("journey:both", QueryMode.Unified)
-        compose.waitUntil(15_000) { copies.any(::shows) }
-        compose.waitUntil(5_000) { shows(PostId(SourceKey.PIXIV, "journey-1")) }
+        waitFor("a copy of the picture is shown", timeoutMillis = 15_000) { copies.any(::shows) }
+        waitFor("Pixiv journey-1 copy is shown", timeoutMillis = 5_000) { shows(PostId(SourceKey.PIXIV, "journey-1")) }
         compose.waitForIdle()
         assertEquals("Both copies of one picture are cards", 1, copies.count(::shows))
         val liked = copies.single(::shows)
         val other = copies.single { it != liked }
 
         activate(compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(searchCardTestTag(liked))), useUnmergedTree = true))
-        compose.waitUntil(10_000) { io { liked in container.data.likesRepository.observeLikedPostIds("profile-main").first() } }
+        waitFor("liked copy is saved in likes") { io { liked in container.data.likesRepository.observeLikedPostIds("profile-main").first() } }
         // Saved with the hash its listing gave it, which a restart keeps.
         assertTrue(io { liked in container.data.visualSignatures.observePictureHashes().first() })
 
         coldGraphRelaunch()
         search("journey:other", QueryMode.Source(other.source))
-        compose.waitUntil(15_000) { shows(other) }
+        waitFor("search result for ${other.source} shows the other copy", timeoutMillis = 15_000) { shows(other) }
         activate(compose.onNodeWithContentDescription("Filter and sort"))
         activate(compose.onNodeWithText("Hide saved"))
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
-        compose.waitUntil(10_000) { !shows(other) }
-        compose.waitUntil(5_000) { shows(PostId(other.source, "journey-1")) }
+        waitFor("other copy is hidden after Hide saved") { !shows(other) }
+        waitFor("${other.source} journey-1 copy is shown", timeoutMillis = 5_000) { shows(PostId(other.source, "journey-1")) }
     }
 
     /** Runs a "multi" search recorded in Recents as [label], from History, as a user repeats a search. */

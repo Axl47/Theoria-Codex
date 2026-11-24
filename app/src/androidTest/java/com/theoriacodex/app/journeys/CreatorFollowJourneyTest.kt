@@ -22,16 +22,16 @@ class CreatorFollowJourneyTest : AppJourneyFixture() {
     fun unfollowingOffersUndoInTheButtonAndUndoRestoresTheSameFollow() {
         openCreatorPage()
         activate(compose.onNodeWithText("Follow"))
-        compose.waitUntil(10_000) { follows().size == 1 }
+        waitFor("one creator is followed") { follows().size == 1 }
         val followed = follows().single()
 
         activate(compose.onNodeWithText("Following"))
-        compose.waitUntil(10_000) { follows().isEmpty() }
+        waitFor("no creators are followed") { follows().isEmpty() }
         activate(compose.onNodeWithContentDescription("Unfollowed", substring = true))
-        compose.waitUntil(10_000) { follows().isNotEmpty() }
+        waitFor("creator is followed again") { follows().isNotEmpty() }
 
         assertEquals(listOf(followed), follows())
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Following").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("Following button is shown") { compose.onAllNodesWithText("Following").fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun follows(): List<FollowedCreator> = io { CreatorFollowsRepository(container.data.settingsRepository).observe().first() }
@@ -49,7 +49,7 @@ class CreatorFollowJourneyTest : AppJourneyFixture() {
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$RECENT_SEARCH"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV).first().id))
-        compose.waitUntil(10_000) { card.isDisplayed() }
+        waitFor("creator search card is displayed") { card.isDisplayed() }
         longPress(card)
         activate(compose.onNodeWithContentDescription("Open Journey artist's profile"))
     }

@@ -34,7 +34,7 @@ class TriageDeckJourneyTest : AppJourneyFixture() {
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:triage"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV).first().id))
-        compose.waitUntil(10_000) { card.isDisplayed() }
+        waitFor("Triage launch card is displayed") { card.isDisplayed() }
         activate(compose.onNodeWithContentDescription("Filter and sort"))
         activate(compose.onNodeWithText("Triage"))
     }
@@ -46,14 +46,14 @@ class TriageDeckJourneyTest : AppJourneyFixture() {
         }
         openTriageDeck()
         val deck = compose.onNodeWithTag("triage-deck")
-        compose.waitUntil(10_000) { deck.isDisplayed() }
+        waitFor("triage deck is displayed") { deck.isDisplayed() }
 
         deck.performTouchInput { swipeRight() }
-        compose.waitUntil(10_000) { io { container.data.likesRepository.observeLikedPostIds("profile-main").first().size == 1 } }
-        compose.waitUntil(10_000) { compose.onNodeWithTag("triage-progress").isDisplayed() }
+        waitFor("one post is liked after swiping right") { io { container.data.likesRepository.observeLikedPostIds("profile-main").first().size == 1 } }
+        waitFor("triage progress is displayed") { compose.onNodeWithTag("triage-progress").isDisplayed() }
 
         deck.performTouchInput { swipeUp() }
-        compose.waitUntil(10_000) { io { container.content.observeCodexItems(codexId).first().size == 1 } }
+        waitFor("one post is saved to the collection after swiping up") { io { container.content.observeCodexItems(codexId).first().size == 1 } }
 
         val liked = io { container.data.likesRepository.observeLikedPostIds("profile-main").first() }.single()
         val saved = io { container.content.observeCodexItems(codexId).first() }.single().postId
@@ -72,13 +72,13 @@ class TriageDeckJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Removal deck"))
         activate(compose.onNodeWithText("Triage"))
         val deck = compose.onNodeWithTag("triage-deck")
-        compose.waitUntil(10_000) { deck.isDisplayed() }
+        waitFor("triage deck is displayed") { deck.isDisplayed() }
 
         deck.performTouchInput { swipeLeft() }
-        compose.waitUntil(10_000) { io { container.content.observeCodexItems(codex.codexId).first().size == 2 } }
+        waitFor("collection holds 2 posts after swiping left") { io { container.content.observeCodexItems(codex.codexId).first().size == 2 } }
 
         activate(compose.onNodeWithTag("triage-undo"))
-        compose.waitUntil(10_000) { io { container.content.observeCodexItems(codex.codexId).first().size == 3 } }
+        waitFor("collection holds 3 posts after Undo") { io { container.content.observeCodexItems(codex.codexId).first().size == 3 } }
         assertEquals(original, io { container.content.observeCodexItems(codex.codexId).first().sortedBy { it.savedAtEpochMs } })
     }
 }

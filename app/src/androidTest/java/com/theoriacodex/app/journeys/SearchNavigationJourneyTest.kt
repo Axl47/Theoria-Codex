@@ -46,7 +46,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         submitSearch()
-        compose.waitUntil(10_000) {
+        waitFor("applied query includes the landscape tag") {
             io { container.data.queryRepository.observeAppliedQuery("source:PIXIV").first() }
                 ?.includeTags?.contains("landscape") == true
         }
@@ -74,7 +74,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         activate(compose.onNode(hasText("journeytag") and hasClickLabel("Exclude journeytag from Search")))
         compose.onNodeWithText("Excluded").assertIsDisplayed()
         submitSearch()
-        compose.waitUntil(conditionDescription = "Provider excludes the saved tag", timeoutMillis = 10_000) {
+        waitFor("Provider excludes the saved tag") {
             container.registry.requests.any { request ->
                 request.source == SourceKey.PIXIV && request.pageToken == null &&
                     request.query.excludeTags.contains("journeytag")
@@ -110,10 +110,10 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             request.source == SourceKey.PIXIV && request.pageToken == null &&
                 request.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } } == expectedGroups
         }
-        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) { groupedRoots().isNotEmpty() }
+        waitFor("Provider receives the grouped search") { groupedRoots().isNotEmpty() }
         val summary = compose.onNodeWithText("landscape, blue or green", useUnmergedTree = true)
         try {
-            compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
+            waitFor("Grouped query is applied and its field is collapsed") {
                 summary.isDisplayed()
             }
         } catch (timeout: ComposeTimeoutException) {
@@ -130,13 +130,13 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         summary.assertIsDisplayed()
         assertEquals(1, groupedRoots().size)
         scrollToFirstVisibleCard(SourceKey.PIXIV, 18)
-        compose.waitUntil(10_000) { container.registry.requests.any { it.pageToken == "20" } }
+        waitFor("provider received the next page request") { container.registry.requests.any { it.pageToken == "20" } }
         scrollToFirstVisibleCard(SourceKey.PIXIV, 22)
         val cardTag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[22].id)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         val before = cardOffsetInViewport(cardTag)
         activate(compose.onNodeWithTag(cardTag))
-        compose.waitUntil(10_000) {
+        waitFor("1 post watched is recorded") {
             io { container.data.statisticsRepository.observeStatistics().first().watchedPostCount == 1L }
         }
         scenario.recreate()
@@ -150,7 +150,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         scenario.recreate()
-        compose.waitUntil(10_000) { compose.onNodeWithTag(cardTag).isDisplayed() }
+        waitFor("search card is displayed after recreating the activity") { compose.onNodeWithTag(cardTag).isDisplayed() }
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(before, cardOffsetInViewport(cardTag), 2f)
         assertEquals(1, io { container.data.recentsRepository.observeSearches().first().size })
@@ -179,7 +179,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val expectedScroll = SearchScrollState(6, -offset.roundToInt())
         assertTrue("A real drag should retain its nonzero pixel offset; card top is $offset px from the viewport's",
             expectedScroll.firstVisibleItemOffsetPx > 0)
-        compose.waitUntil(10_000) {
+        waitFor("saved scroll position matches the expected position") {
             io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) == expectedScroll }
         }
         val savedScroll = requireNotNull(io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) })
@@ -190,7 +190,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
 
         org.junit.Assert.assertNotSame(previousDatabase, container.database)
         org.junit.Assert.assertNotSame(previousSettings, container.settings)
-        compose.waitUntil(10_000) { compose.onNodeWithTag(cardTag).isDisplayed() }
+        waitFor("search card is displayed after relaunching the graph") { compose.onNodeWithTag(cardTag).isDisplayed() }
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(offset, cardOffsetInViewport(cardTag), 2f)
         assertEquals(savedScroll, io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) })
@@ -228,7 +228,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
 
     private fun waitForCard(index: Int) {
         val tag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id)
-        compose.waitUntil(10_000) { compose.onNodeWithTag(tag).isDisplayed() }
+        waitFor("Pixiv search card $index is displayed") { compose.onNodeWithTag(tag).isDisplayed() }
         compose.onNodeWithTag(tag).assertIsDisplayed()
     }
 

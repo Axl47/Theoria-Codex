@@ -42,24 +42,24 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
             .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         activate(compose.onNodeWithText("Save search"))
         // Saving is immediate, under the query's name; once it commits, Rename names it in the row.
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Rename").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("Rename action appears on the saved search") { compose.onAllNodesWithText("Rename").fetchSemanticsNodes().isNotEmpty() }
         activate(compose.onNodeWithText("Rename"))
         compose.onNode(hasSetTextAction()).performTextReplacement("My landscapes")
         compose.onNode(hasSetTextAction()).performImeAction()
-        compose.waitUntil(10_000) {
+        waitFor("saved search is named My landscapes") {
             io { container.data.savedSearches.observeSavedSearches().first().singleOrNull()?.name == "My landscapes" }
         }
         val savedSearch = io { container.data.savedSearches.observeSavedSearches().first().single() }
         compose.onNodeWithContentDescription("History actions").performClick()
         compose.onNodeWithText("Clear all History").performClick()
-        compose.waitUntil(10_000) { io { container.data.recentsRepository.observeSearches().first().isEmpty() } }
+        waitFor("History has no recent searches after Clear all") { io { container.data.recentsRepository.observeSearches().first().isEmpty() } }
         coldGraphRelaunch()
         assertEquals(listOf(savedSearch), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))
         // The new-posts check also asks these sources, newest first; the feed keeps the saved sort.
-        compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null && it.query.sort == query.sort } >= 2 }
+        waitFor("at least two first-page requests use the saved sort") { container.registry.requests.count { it.pageToken == null && it.query.sort == query.sort } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }
         assertEquals(participating.toSet(), requests.filter { it.query.sort == query.sort }.map { it.source }.toSet())
         assertTrue(requests.all {

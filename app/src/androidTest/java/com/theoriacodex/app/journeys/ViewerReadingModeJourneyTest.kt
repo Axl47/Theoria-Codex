@@ -34,22 +34,22 @@ class ViewerReadingModeJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("Left to right").assertIsDisplayed()
         activate(compose.onNodeWithText("Vertical"))
         activate(compose.onNodeWithContentDescription("Close media overview"))
-        compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Page 1").isDisplayed() }
+        waitFor("Viewer shows Page 1 after closing the media overview") { compose.onNodeWithContentDescription("Page 1").isDisplayed() }
 
         // Scrolling down reads on and tucks the controls away; scrolling back up brings them back.
         repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) } }
-        compose.waitUntil(5_000) { !compose.onNodeWithContentDescription("Open media overview").isDisplayed() }
+        waitFor("Viewer controls are tucked away after scrolling down", timeoutMillis = 5_000) { !compose.onNodeWithContentDescription("Open media overview").isDisplayed() }
         compose.onNodeWithContentDescription("Page 1").assertDoesNotExist()
         compose.onRoot().performTouchInput { swipeDown(startY = centerY - height / 8f, endY = centerY + height / 8f) }
-        compose.waitUntil(5_000) { compose.onNodeWithContentDescription("Open media overview").isDisplayed() }
+        waitFor("Viewer controls are back after scrolling up", timeoutMillis = 5_000) { compose.onNodeWithContentDescription("Open media overview").isDisplayed() }
 
         // The choice outlives the app, and a sideways swipe still moves to the next post.
         coldGraphRelaunch()
         showGallery()
-        compose.waitUntil(10_000) { stripPageShown() }
+        waitFor("Viewer strip page is shown after relaunch") { stripPageShown() }
         // Starts inside the screen: a swipe from the edge is the system's Back gesture, which the Viewer leaves alone.
         compose.onRoot().performTouchInput { swipeLeft(startX = width * 0.8f, endX = width * 0.2f) }
-        compose.waitUntil(10_000) { !stripPageShown() }
+        waitFor("Viewer strip page is gone after swiping to the next post") { !stripPageShown() }
     }
 
     private fun openGallery() {
@@ -68,7 +68,7 @@ class ViewerReadingModeJourneyTest : AppJourneyFixture() {
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$RECENT_SEARCH"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[GALLERY].id))
-        compose.waitUntil(10_000) { card.isDisplayed() }
+        waitFor("gallery card is displayed") { card.isDisplayed() }
         activate(card)
     }
 
