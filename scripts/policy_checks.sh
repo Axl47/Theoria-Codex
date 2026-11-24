@@ -44,6 +44,10 @@ module_layering() {
   return "$failed"
 }
 
+architecture_rules() {
+  python3 scripts/check_architecture.py
+}
+
 # Whether a file names "$2" exactly on a line that is not commented out. The second grep counts instead of
 # stopping at the first match: stopping early kills the first grep, and under pipefail that reads as "no entry".
 has_active_entry() {
