@@ -4,10 +4,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import java.io.File
 
-/**
- * Compact process accounting; it retains neither decoded posts nor offline provenance references, only each copy's
- * first two pages, so a picture of it costs no manifest read.
- */
 internal class OfflineMediaCatalog {
     private data class Entry(val id: PostId?, val owners: Set<String>, val media: Int, val bytes: Long, val leadPages: List<ImageRef>)
     private val entries = mutableMapOf<File, Entry>()
@@ -17,10 +13,6 @@ internal class OfflineMediaCatalog {
     private var mediaCount = 0
     private var bytes = 0L
 
-    /**
-     * Indexes [folder]. A folder without a usable copy ([id] null) still lists its [ownerIds], so removing an owner
-     * reaches it, but adds nothing to their post counts.
-     */
     fun update(folder: File, id: PostId?, ownerIds: Set<String>, media: Int, size: Long, leadPages: List<ImageRef> = emptyList()) {
         entries.remove(folder)?.let { adjust(it, -1) }
         if (id != null || size > 0L) {
@@ -50,7 +42,6 @@ internal class OfflineMediaCatalog {
         entry.id?.let { ids.adjustCount(it, direction) }
         entry.owners.forEach { owner ->
             ownerFolders.adjustCount(owner, direction)
-            // A folder's name is its post id's digest, so one id never sits in two folders.
             if (entry.id != null) {
                 val posts = ownerPosts.getOrPut(owner, ::mutableSetOf)
                 if (direction > 0) posts += entry.id else posts -= entry.id

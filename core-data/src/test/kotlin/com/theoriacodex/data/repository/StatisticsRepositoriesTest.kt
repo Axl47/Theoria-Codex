@@ -111,7 +111,6 @@ class StatisticsRepositoriesTest {
             mapOf(searched(SourceKey.NHENTAI, "sky") to 1L, searched(SourceKey.NHENTAI, "Shindol", SearchFacet.ARTIST, "artist") to 1L),
             counted.searchesByTag,
         )
-        // Unified runs only portable general tags, so a typed term left in its draft is not counted.
         assertEquals(setOf(SearchTerm("sky")), query(QueryMode.Unified, SearchTerm("sky"), artist).searchedTerms())
     }
 
@@ -149,7 +148,6 @@ class StatisticsRepositoriesTest {
         assertEquals(listOf(StatisticsTagCountRecord("HITOMI", "sky", 2L)), record.searchesByTag)
         assertEquals(listOf(StatisticsTypedTagCountRecord("HITOMI", "mika", "TAG", "female", 5L)), record.searchesByTypedTag)
         assertEquals(statistics, record.toDomain())
-        // A facet from a later build is skipped rather than failing the whole store.
         val future = record.copy(searchesByTypedTag = record.searchesByTypedTag + StatisticsTypedTagCountRecord("HITOMI", "x", "STUDIO", null, 1L))
         assertEquals(statistics, future.toDomain())
     }

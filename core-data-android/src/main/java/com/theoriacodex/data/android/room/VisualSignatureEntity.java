@@ -6,19 +6,6 @@ import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.ForeignKey;
 
-/**
- * What the app derived from a stored post's picture. Rows follow their post: deleting the post deletes them.
- * <p>
- * A null [phash] with [phashChecked] records that the picture was looked at and could not be hashed (too flat, not an
- * image), so it is not fetched again; without [phashChecked] the row was made by the tagger and no hash was tried yet.
- * [modelId] names the tagger model that analysed the picture: with a null [embedding] and null [predictedTags] it
- * looked and could not analyse it. [embedding] is opaque bytes; [predictedTags] is the text
- * {@code PredictedTagCodec} writes.
- * <p>
- * [frameState] says whether that analysis read only the still (0), only the still of a post that plays, whose frames
- * are still to be read (1), or the still and frames from across the post (2). [frameAttempts] counts failed frame reads;
- * at the cap the still analysis stands for good.
- */
 @Entity(
         tableName = "post_visual_signatures",
         primaryKeys = {"source", "source_post_id"},

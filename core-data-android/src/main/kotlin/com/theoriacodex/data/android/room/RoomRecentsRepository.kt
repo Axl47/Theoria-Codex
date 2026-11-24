@@ -32,7 +32,6 @@ class RoomRecentsRepository(
     private val sharedPosts = SharedPosts(contentDao)
     private val writer = RecentsWriter(dao, sharedPosts)
 
-    /** Every watched collector projects the same bounded query, so one retained decode serves them all. */
     private val watchedPayloads = RetainedPostPayloads(LocalPostPayloadCodec::decode)
 
     init {

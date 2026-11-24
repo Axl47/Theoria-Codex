@@ -5,7 +5,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 
-/** Absent route-snapshot fields cannot erase known media or metadata from the shared Post. */
 fun mergeSparsePost(existing: Post, incoming: Post): Post {
     require(existing.id == incoming.id) {
         "Cannot merge different Post identities: ${existing.id} and ${incoming.id}"
@@ -33,7 +32,6 @@ fun mergeSparsePost(existing: Post, incoming: Post): Post {
         mediaCount = incoming.mediaCount ?: existing.mediaCount,
         taxonomy = mergeTaxonomy(existing.taxonomy, incoming.taxonomy),
         creatorProfiles = mergeCreatorProfiles(existing.creatorProfiles, incoming.creatorProfiles),
-        // The hash names the original file, so it survives only while the snapshot still points at that file.
         contentHash = incoming.contentHash ?: existing.contentHash.takeIf {
             val incomingUrl = incomingFull?.url
             incomingUrl.isNullOrBlank() || incomingUrl == existingFull?.url
@@ -85,7 +83,6 @@ private fun mergeCreatorProfiles(
     merge = ::mergeCreatorProfile,
 )
 
-/** A count the snapshot omits is unknown rather than zero, so the stored one stays. */
 private fun mergeTaxonomyTerm(existing: PostTaxonomyTerm, incoming: PostTaxonomyTerm): PostTaxonomyTerm =
     incoming.copy(
         count = incoming.count ?: existing.count,
@@ -100,7 +97,6 @@ private fun mergeOptionalCreatorProfile(
     else -> mergeCreatorProfile(existing, incoming)
 }
 
-/** A profile from another source replaces the stored one whole; the same source merges field by field. */
 private fun mergeCreatorProfile(existing: CreatorProfile, incoming: CreatorProfile): CreatorProfile {
     if (existing.source != incoming.source) return incoming
     return incoming.copy(
@@ -114,10 +110,6 @@ private fun mergeCreatorProfile(existing: CreatorProfile, incoming: CreatorProfi
 private fun <T : Any> mergeStableValues(existing: List<T>, incoming: List<T>): List<T> =
     mergeStableBy(existing, incoming, key = { it })
 
-/**
- * Incoming entries first, in their order, then stored entries whose key the snapshot lacks. An incoming entry
- * whose key is stored goes through [merge] with the first stored entry under that key.
- */
 private inline fun <T : Any, K> mergeStableBy(
     existing: List<T>,
     incoming: List<T>,

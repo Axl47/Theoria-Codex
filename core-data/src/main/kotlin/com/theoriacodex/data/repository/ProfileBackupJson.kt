@@ -18,20 +18,10 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.put
 
-/*
- * Strict readers for backup and restore-journal documents. Each check matches what the Gson tree accepted,
- * so a malformed field still fails with the same message.
- */
-
-/**
- * Parses a backup document's root object. kotlinx reports malformed JSON as an [IllegalArgumentException], whose
- * message the backup screen shows verbatim; Gson's parse errors were not, so they keep reaching its generic message.
- */
 internal fun parseBackupObject(raw: String): JsonObject = rejectMalformedBackup {
     DurableJson.parseToJsonElement(raw) as? JsonObject ?: throw SerializationException("Backup root is not an object")
 }
 
-/** Runs [decode], reporting a [SerializationException] as a malformed backup instead of a user-facing message. */
 internal inline fun <T> rejectMalformedBackup(decode: () -> T): T = try {
     decode()
 } catch (malformed: SerializationException) {
@@ -75,20 +65,14 @@ internal fun JsonObject.backupStrings(name: String): List<String> {
     }
 }
 
-/**
- * A nested object that must be present. A value of another type fails as Gson's cast did, outside
- * [IllegalArgumentException], so the backup screen shows its generic message.
- */
 internal fun JsonObject.backupObject(name: String): JsonObject {
     val value = requireNotNull(get(name)) { "Invalid backup record: $name" }
     return value as? JsonObject ?: throw IllegalStateException("Invalid backup record: $name")
 }
 
-/** Matches Gson's `isNumber`: an unquoted numeric literal, not a string, boolean, or null. */
 internal fun JsonElement?.isBackupNumber(): Boolean =
     this is JsonPrimitive && !isString && this !is JsonNull && content.toDoubleOrNull() != null
 
-/** Matches Gson's `isBoolean`: an unquoted true or false. */
 internal fun JsonElement?.isBackupBoolean(): Boolean = this is JsonPrimitive && !isString && booleanOrNull != null
 
 internal fun JsonObjectBuilder.putId(id: PostId) {

@@ -7,7 +7,6 @@ import java.nio.charset.CodingErrorAction
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
-/** Reads only one byte beyond the limit, even when a provider cannot report its document size. */
 suspend fun readBoundedDocument(input: InputStream, maximumBytes: Int): ByteArray {
     require(maximumBytes > 0)
     val output = ByteArrayOutputStream()

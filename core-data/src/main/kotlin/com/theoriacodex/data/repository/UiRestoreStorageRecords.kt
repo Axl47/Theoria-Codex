@@ -3,10 +3,6 @@ package com.theoriacodex.data.repository
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/**
- * The `state` object of `ui_restore_store_v2.json`: last tab, Library section, Search scroll
- * positions, feed filters, Viewer launch, and saved searches' new-post marks.
- */
 @Serializable
 internal data class UiRestoreStoreRecord(
     @SerialName("lastTab")

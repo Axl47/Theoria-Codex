@@ -15,11 +15,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Pins the version 3 offline manifest. v1.4.0 through v1.9.1 wrote it with Gson and later builds with kotlinx; both
- * produce these exact bytes. The generation folder is a random UUID, so it appears as a placeholder. Never regenerate
- * the golden to make a change pass: installed copies must keep loading unchanged.
- */
 internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
     @Test
     fun `new manifests keep the version 3 bytes`() = runTest {
@@ -48,8 +43,6 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         assertEquals(mapOf("codex:a" to setOf(source.id), "codex:b" to setOf(source.id)), store.snapshot.value.postsByOwner)
     }
 
-    // v3.json is what Gson and kotlinx both write; kotlinx-full.json is captured from current kotlinx output and also
-    // sets video variants, a duration, a content hash and local paths on the source post, which v3.json never holds.
     @Test
     fun `the version 3 manifest goldens pin every stored key`() {
         val generation = "/offline/8d4c1d1e"
@@ -60,7 +53,6 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
             golden("v3.json").replace(GENERATION, generation) to OfflineManifest(
                 3, PostStorageCodec.encode(offline), PostStorageCodec.encode(source), listOf("codex:a", "codex:b"), listOf(5L, 5L),
             ),
-            // kotlinx-gallery.json: a listed gallery whose length is unknown, the only post that writes that flag.
             golden("kotlinx-gallery.json") to galleryManifest(),
         )
     }
@@ -96,7 +88,6 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         )
     }
 
-    // Paths appear JSON-escaped, which matters for Windows separators.
     private fun jsonPath(file: File) = file.absolutePath.replace("\\", "\\\\")
 
     private fun golden(name: String = "v3.json"): String =
@@ -104,7 +95,6 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
 
     private companion object {
         const val GENERATION = "\$GENERATION"
-        // SHA-256 of "PIXIV:42", the folder every build derives from the post id.
         const val FOLDER = "085f8d98b58407021b860be805e79130750967159f5f9b05b3e1b8ea48ecf801"
         val creator = CreatorProfile(SourceKey.PIXIV, "Artist", "7", "https://www.pixiv.net/users/7", "user:7")
         val source = Post(

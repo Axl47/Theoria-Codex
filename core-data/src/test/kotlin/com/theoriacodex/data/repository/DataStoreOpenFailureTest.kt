@@ -24,10 +24,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * Each DataStore can refuse to open. Its value flows are collected while the app is still being built, so a refusal
- * must reach the startup gate through [AsynchronousStore.awaitReady] and leave those collectors waiting, not failing.
- */
 class DataStoreOpenFailureTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
@@ -69,7 +65,6 @@ class DataStoreOpenFailureTest {
             val directory = tempFolder.newFolder()
             val broken = "{broken".encodeToByteArray()
             val file = directory.resolve(fileName).apply { writeBytes(broken) }
-            // A directory holds the set-aside name, so the file cannot be moved there.
             val blocker = directory.resolve("$fileName.corrupt-${broken.size}-${broken.sha256()}").apply { mkdir() }
 
             assertRefusesThenRetries(fileName, directory, open, unblock = { blocker.delete() }) {
@@ -104,11 +99,6 @@ class DataStoreOpenFailureTest {
         }
     }
 
-    /**
-     * Opens the store at [fileName] with a collector already running, as the app container does. The collector must
-     * not fail, [AsynchronousStore.awaitReady] must throw and record why, and [unchanged] holds while it is refused.
-     * After [unblock], a retry on the same instance opens it and the waiting collector receives its value.
-     */
     private fun assertRefusesThenRetries(
         fileName: String,
         directory: File,
@@ -147,7 +137,6 @@ class DataStoreOpenFailureTest {
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
-        /** Long enough for an early collector's own open attempt to fail, which used to fail the collector. */
         const val SETTLE_MS = 200L
     }
 }

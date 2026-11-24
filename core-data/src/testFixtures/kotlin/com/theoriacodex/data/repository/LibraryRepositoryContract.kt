@@ -16,20 +16,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Codex and Recents behavior that every backing shares. Each test asks for fresh repositories: the in-memory
- * fakes run it in core-data and Room runs it in core-data-android, so the fakes cannot drift from the durable store.
- */
 abstract class LibraryRepositoryContract {
     protected abstract fun createCodexRepository(): CodexRepository
 
-    /** The transactions over [repository]'s data. */
     protected abstract fun transactionsFor(repository: CodexRepository): CodexLikesTransactions
 
-    /** The Likes [transactions] write, read back through the repository interface. */
     protected abstract fun likesFor(transactions: CodexLikesTransactions): LikesRepository
 
-    /** A Recents repository keeping at most [watchedLimit] watched rows and [searchLimit] searches, the app's limits by default. */
     protected abstract fun createRecentsRepository(
         clock: () -> Long,
         watchedLimit: Int = 200,

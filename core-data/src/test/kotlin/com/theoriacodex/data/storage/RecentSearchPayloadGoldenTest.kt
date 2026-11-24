@@ -13,11 +13,6 @@ import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * recent_searches.query_payload_json rows as the Gson encoder wrote them (HTML-escaped strings) must decode to the
- * same searches. legacy-query.json is the pre-versioned row shape: a bare stored Query. fyp.json is a For You search
- * from before the shelves page was removed; it stays as input that old saved searches and backups still hold.
- */
 class RecentSearchPayloadGoldenTest {
     @Test
     fun `a Gson-written Multi-Search row decodes to the same search`() {
@@ -46,8 +41,6 @@ class RecentSearchPayloadGoldenTest {
         )
     }
 
-    // The Gson rows are all Multi-Search or For You, so source.json and animated.json, captured from the kotlinx encoder,
-    // add a source mode and the media key.
     @Test
     fun `the goldens hold every stored key`() {
         val source = RecentSearchPayload(

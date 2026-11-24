@@ -2,10 +2,6 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.vision.PredictedTag
 
-/**
- * The text form of a post's predicted tags in storage: one line per tag, `<score per mille> <g|c> <tag>`, such as
- * `873 c hatsune_miku`. Danbooru tags hold no spaces or line breaks, so the tag is the rest of the line.
- */
 object PredictedTagCodec {
     private const val SCORE_STEPS = 1000
 
@@ -18,7 +14,6 @@ object PredictedTagCodec {
         "$perMille $kind ${tag.tag}"
     }
 
-    /** The tags [encoded] holds; lines that do not read as a tag are skipped. */
     fun decode(encoded: String): List<PredictedTag> = encoded.lineSequence().mapNotNull(::decodeLine).toList()
 
     private fun decodeLine(line: String): PredictedTag? {

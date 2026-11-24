@@ -19,7 +19,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
 
-/** Logical snapshots and additive imports share the existing Room transaction boundary. */
 class RoomProfileBackupStore(
     private val database: TheoriaRoomDatabase,
 ) : ProfileBackupStore {
@@ -60,7 +59,6 @@ class RoomProfileBackupStore(
                     RecentPostSection.valueOf(it.section), it.maxViewedMediaNumber)
             },
             if (includeRecents) recents.searches().map(RecentSearchEntity::toDomain) else emptyList(),
-            // Entries the source stopped listing are kept too: one that returns is then as the user left it.
             series.keptSeries().map { row ->
                 BackupSeries(row.toStored(), series.allEntries(row.source, row.address).map(SeriesEntryEntity::toStored))
             },
@@ -70,7 +68,6 @@ class RoomProfileBackupStore(
     override suspend fun merge(library: BackupLibrary): Int =
         database.withTransaction {
             var collectionsAdded = 0
-            // Existing shared payloads can contain useful offline bytes and richer resolved media.
             library.posts.forEach { post ->
                 dao.insertPost(PostEntity(post.id.source.id, post.id.sourcePostId, LocalPostPayloadCodec.encode(post)))
             }
@@ -97,13 +94,6 @@ class RoomProfileBackupStore(
             collectionsAdded
         }
 
-    /**
-     * Adds a backed-up series to what the device holds. An entry on both sides takes the further progress. When the
-     * device already has entries for the series, they are the source's current list, so an entry only the backup has
-     * arrives as one the source no longer lists: kept with its progress, but neither counted as unread nor announced
-     * as new, and listed again as it was if the source brings it back. When that entry is the Continue point, the
-     * series page offers the nearest listed chapter until its next refresh lists the entry again.
-     */
     private fun mergeSeries(backup: BackupSeries) {
         val stored = backup.series
         val id = stored.series.id
@@ -138,13 +128,11 @@ class RoomProfileBackupStore(
                 recentsWriter.upsertSearch(entry.queryHash, RecentSearchPayloadCodec.encodeJson(entry), entry.searchedAtEpochMs)
             }
         }
-        // Trimming releases posts only the trimmed rows held, as Recents itself does.
         recentsWriter.trimWatched(DEFAULT_RECENT_WATCHED_LIMIT)
         recentsWriter.trimSearches(DEFAULT_RECENT_SEARCH_LIMIT)
     }
 }
 
-/** Pre-Room Likes could persist an identity and tags without any saved Post snapshot. */
 private fun legacyLikedPost(like: LikedPost) = Post(
     id = like.postId,
     preview = ImageRef(null, null, null),

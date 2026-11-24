@@ -90,19 +90,15 @@ class SeriesProgressTest {
 
     @Test
     fun `after a finished entry, continue takes the next while unread, else one partway through, else the first unread`() {
-        // The newest chapter was just finished and nothing follows it: the chapter left at page 5 comes before chapter 1.
         val newestFinished = listOf(entry("c4", order = 0, read = true), entry("c3", order = 1, position = 5), entry("c2", order = 2, position = 1), entry("c1", order = 3))
         assertEquals("c3", continueEntry(series(lastOpened = "c4"), newestFinished)?.entry?.address)
 
-        // The chapter after the finished one is read too; of two partway through, the later one is taken.
         val nextRead = listOf(entry("c5", order = 0, position = 2), entry("c4", order = 1, position = 9), entry("c3", order = 2, read = true), entry("c2", order = 3, read = true), entry("c1", order = 4))
         assertEquals("c5", continueEntry(series(lastOpened = "c2"), nextRead)?.entry?.address)
 
-        // An unread chapter after the finished one wins over a chapter partway through elsewhere.
         val nextUnread = listOf(entry("c3", order = 0, position = 7), entry("c2", order = 1), entry("c1", order = 2, read = true))
         assertEquals("c2", continueEntry(series(lastOpened = "c1"), nextUnread)?.entry?.address)
 
-        // Nothing partway through: the first unread chapter in reading order.
         val gaps = listOf(entry("c4", order = 0, read = true), entry("c3", order = 1), entry("c2", order = 2), entry("c1", order = 3, read = true))
         assertEquals("c2", continueEntry(series(lastOpened = "c4"), gaps)?.entry?.address)
     }

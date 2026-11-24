@@ -15,7 +15,6 @@ const val MAX_PERSISTED_BLACKLIST_ENTRIES_PER_PROFILE = 250
 internal const val SETTINGS_DATASTORE_SCHEMA_VERSION = 3
 internal const val UI_RESTORE_DATASTORE_SCHEMA_VERSION = 2
 
-/** `settings_store_v3.json`, also read by developer profile copies. */
 @Serializable
 internal data class SettingsDataStoreFile(
     @SerialName("schemaVersion")

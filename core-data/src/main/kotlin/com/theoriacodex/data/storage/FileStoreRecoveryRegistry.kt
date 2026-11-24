@@ -10,21 +10,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/**
- * Application-scoped record of stores, file stores and DataStores alike, that set an unreadable file aside with
- * [setAsideCorruptFile] and started empty. Settings lists them under Recovered storage.
- */
 class FileStoreRecoveryRegistry {
     private val mutableRecoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
 
     val recoveries: StateFlow<List<CorruptionRecovery>> = mutableRecoveries.asStateFlow()
 
-    /**
-     * Re-lists files [setAsideCorruptFile] left beside [liveFile] in an earlier process. A file whose bytes no longer
-     * match its name is left out of the list but never blocks the store: it is a copy of data that was already
-     * unreadable, and the live file decides on its own whether the store opens. Only files whose size matches their
-     * name are read to check the checksum.
-     */
     fun registerStore(logicalStore: String, liveFile: File) {
         val prefix = "${liveFile.name}.corrupt-"
         val parent = liveFile.parentFile ?: return
@@ -72,21 +62,12 @@ class FileStoreRecoveryRegistry {
     }
 }
 
-/** False when the file changed since it was named after [sha256] or can no longer be read. */
 private fun File.hasSha256(sha256: String): Boolean = try {
     readBytes().sha256() == sha256
 } catch (_: IOException) {
     false
 }
 
-/**
- * Sets [file], whose current contents are [bytes], aside as `<name>.corrupt-<size>-<sha256>` and returns the recovery
- * to report. Every store that resets an unreadable file goes through here. The file is renamed, which needs no free
- * space and leaves either the live name or the set-aside name on disk if the process dies. The name is
- * content-addressed, so a later failure never replaces an earlier set-aside file, and
- * [FileStoreRecoveryRegistry.registerStore] finds it again after a restart. Throws when the file cannot be set aside;
- * the live file then keeps its bytes, and callers must not reset it.
- */
 internal fun setAsideCorruptFile(
     file: File,
     bytes: ByteArray,
@@ -99,7 +80,6 @@ internal fun setAsideCorruptFile(
     try {
         operations.moveWithoutReplace(file, setAside)
     } catch (_: FileAlreadyExistsException) {
-        // The same bytes were set aside before, by a recovery interrupted before its reset was written.
         check(operations.readBytes(setAside).contentEquals(bytes)) {
             "Refusing to replace a different quarantine at ${setAside.absolutePath}"
         }

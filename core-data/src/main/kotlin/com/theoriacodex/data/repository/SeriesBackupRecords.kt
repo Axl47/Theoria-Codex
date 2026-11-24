@@ -12,17 +12,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
-/**
- * A series in a profile backup (`library.series`): what its source said, what the user did with it, and its entries
- * with their progress. Series are stored once for the whole app, not per profile, so a backup holds them once.
- * Pages are never stored, so none are here; opening a restored chapter needs the series' extension installed and on.
- * Downloads are neither: the files stay on the device they were made on. Nor is
- * [StoredSeries.chaptersShareFirstPage], which the Viewer finds again from the chapters it shows.
- *
- * The cover is the address the source gave, as stored. Which client fetches it is decided when it is loaded, by the
- * series' own source, so a file cannot pick one; it can name the address that source's client is sent to, as it can
- * for the series and its chapters.
- */
 @Serializable
 internal data class BackupSeriesRecord(
     @SerialName("source") val source: String,
@@ -37,15 +26,11 @@ internal data class BackupSeriesRecord(
     @SerialName("followed") val followed: Boolean = false,
     @SerialName("readingMode") val readingMode: String? = null,
     @SerialName("lastOpenedEntry") val lastOpenedEntry: String? = null,
-    /** Absent from backups written before the setting existed, which restore with it off. */
     @SerialName("downloadNewChapters") val downloadNewChapters: Boolean = false,
-    /** Absent from backups written before the Following sorts, which restore without it. */
     @SerialName("followedAt") val followedAt: Long? = null,
-    /** Absent from backups written before memos were kept, and for a series whose source keeps none. */
     @SerialName("memo") val memo: String? = null,
     @SerialName("entries") val entries: List<BackupSeriesEntryRecord> = emptyList(),
 ) {
-    /** A status or mode this build does not know is dropped; [validateBackupSeries] refuses what no build wrote. */
     fun toDomain(): BackupSeries {
         return BackupSeries(
             series = StoredSeries(
@@ -104,12 +89,9 @@ internal data class BackupSeriesEntryRecord(
     @SerialName("sourceOrder") val sourceOrder: Int,
     @SerialName("firstSeenAt") val firstSeenAt: Long,
     @SerialName("read") val read: Boolean = false,
-    // The keys predate anime; they hold [StoredSeriesEntry.position] and [StoredSeriesEntry.length] for both kinds.
     @SerialName("lastPage") val position: Long = 0,
     @SerialName("pageCount") val length: Long? = null,
-    /** Absent from backups written before read times were kept. */
     @SerialName("lastReadAt") val lastReadAt: Long? = null,
-    /** Absent from backups written before memos were kept, and for an entry whose source keeps none. */
     @SerialName("memo") val memo: String? = null,
 ) {
     fun toDomain() = StoredSeriesEntry(
@@ -127,16 +109,10 @@ internal data class BackupSeriesEntryRecord(
     }
 }
 
-/**
- * A backed-up memo as Theoria stores one: the JSON object's text, or null for an empty object, the default of
- * Mihon-family backups, for anything that is not a JSON object, which no extension wrote, and for text longer than
- * [MAX_MEMO_LENGTH]. Null stays eligible for a later restore to fill.
- */
 internal fun storedMemo(text: String?): String? = text?.takeIf { it.isNotBlank() && it.length <= MAX_MEMO_LENGTH }
     ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() as? JsonObject }
     ?.takeIf(JsonObject::isNotEmpty)?.toString()
 
-/** The one check for series on both paths: a backup the app writes is one it restores. */
 internal fun validateBackupSeries(all: List<BackupSeries>) {
     require(all.size <= MAX_BACKUP_SERIES && all.distinctBy { it.series.series.id }.size == all.size) { "Backup contains duplicate series" }
     all.forEach { backup ->
@@ -151,12 +127,6 @@ internal fun validateBackupSeries(all: List<BackupSeries>) {
     }
 }
 
-/**
- * The series a backup writes. An extension can list a series without a title or a chapter without an address, and
- * one such row must not fail the export of everything else: a series without an address and a chapter without one are
- * left out, since nothing could find them again, and a blank title is written as the address. A restore still refuses
- * such input, which no export writes.
- */
 internal fun List<BackupSeries>.writable(): List<BackupSeries> = filter { it.series.series.id.address.isNotBlank() }.map { backup ->
     val series = backup.series.series
     backup.copy(
@@ -165,12 +135,6 @@ internal fun List<BackupSeries>.writable(): List<BackupSeries> = filter { it.ser
     ).withinEntryLimit()
 }
 
-/**
- * What a backup writes for a series with more entries than a restore accepts, so that one huge series cannot fail the
- * whole export: the entry Continue points at, then entries with progress, then the rest the source lists, then those
- * it dropped; within each, as the source orders them. An entry without progress carries nothing a restore needs,
- * since the source lists it again.
- */
 internal fun BackupSeries.withinEntryLimit(): BackupSeries {
     if (entries.size <= MAX_BACKUP_SERIES_ENTRIES) return this
     fun tier(entry: StoredSeriesEntry) = when {
@@ -183,6 +147,5 @@ internal fun BackupSeries.withinEntryLimit(): BackupSeries {
     return copy(entries = kept.take(MAX_BACKUP_SERIES_ENTRIES))
 }
 
-/** Sanity bounds: far more than anyone follows, or than a series has chapters. */
 internal const val MAX_BACKUP_SERIES = 10_000
 internal const val MAX_BACKUP_SERIES_ENTRIES = 20_000

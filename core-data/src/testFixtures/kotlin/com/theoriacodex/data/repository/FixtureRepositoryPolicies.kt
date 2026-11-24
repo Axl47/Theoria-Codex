@@ -5,7 +5,6 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** In-memory collection mechanics used only by repository test fixtures. */
 internal object FixtureRepositoryPolicies {
     data class Result<State, Value>(val state: State, val value: Value)
 
@@ -36,7 +35,6 @@ internal object FixtureRepositoryPolicies {
                     .thenByDescending { it.first.savedAtEpochMs }
                     .thenBy { it.second.id.sourcePostId }
             )
-            // Like the Room store, other sorts come back newest saved first for the app to refine.
             else -> pairs.sortedByDescending { it.first.savedAtEpochMs }
         }
     }

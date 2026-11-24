@@ -18,7 +18,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 
-/** Last visible media, independent of Recents' monotonic highest-media achievement. */
 data class ReadingPosition(
     val postId: PostId,
     val section: RecentPostSection,
@@ -43,14 +42,8 @@ interface ReadingPositionRepository {
 const val READING_POSITIONS_FILE_NAME = "reading_positions.json"
 const val MAX_READING_POSITIONS = 2_000
 
-/**
- * A repeat of the newest position for the same media inside this window keeps the stored timestamp.
- * The Viewer reports one swipe through both its visible-post and media-progress callbacks; relative
- * "watched" labels have minute granularity, so a few seconds of timestamp lag is not visible.
- */
 internal const val READING_POSITION_COALESCE_MS = 5_000L
 
-/** The store writes compact JSON because the Viewer rewrites this file on every media change. */
 class FileBackedReadingPositionRepository private constructor(repository: ReadingPositionRepository) :
     ReadingPositionRepository by repository {
     constructor(
@@ -69,11 +62,6 @@ private fun fileBackedReadingPositions(file: File, store: AtomicJsonFileStore, e
     return CellReadingPositionRepository(cell, entryLimit)
 }
 
-/**
- * Positions over a [StateCell], shared by the file-backed store and the in-memory default. A position older than the
- * stored one for the same post is ignored, and a repeat of the newest one inside [READING_POSITION_COALESCE_MS] keeps
- * the stored timestamp.
- */
 internal class CellReadingPositionRepository(
     private val cell: StateCell<List<ReadingPosition>>,
     private val entryLimit: Int = MAX_READING_POSITIONS,
@@ -107,15 +95,10 @@ internal class CellReadingPositionRepository(
         normalizeReadingPositions(current + positions, entryLimit)
     }
 
-    /** Each write re-sorts and re-encodes the whole list, which must not run on a caller's main thread. */
     private suspend fun writing(transform: (List<ReadingPosition>) -> List<ReadingPosition>) =
         withContext(Dispatchers.Default) { cell.update(transform) }
 }
 
-/**
- * reading_positions.json. The list stays raw JSON so a newer schema is rejected before its shape is read, and one
- * unreadable entry is skipped instead of failing the file.
- */
 @Serializable
 internal data class ReadingPositionsFile(
     @SerialName("schemaVersion")
@@ -138,12 +121,10 @@ internal data class ReadingPositionRecord(
     val lastViewedAt: Long,
 )
 
-/** A newer schema fails rather than being read as, or rewritten to, this one. */
 internal fun decodeReadingPositions(document: ReadingPositionsFile, entryLimit: Int = MAX_READING_POSITIONS): List<ReadingPosition> {
     require(document.schemaVersion == 1) { "Unsupported reading-position schema ${document.schemaVersion}" }
     val entries = requireNotNull(document.positions as? JsonArray) { "Reading positions are not a list" }
     val decoded = entries.decodeEachOrSkip<ReadingPositionRecord>().mapNotNull { record ->
-        // An unknown source or section, or an id the domain rejects, also skips only its own entry.
         runCatching {
             ReadingPosition(
                 postId = PostId(SourceKey.parseOrThrow(record.source), record.postId),
@@ -171,7 +152,6 @@ private fun encodeReadingPositions(updated: List<ReadingPosition>) = ReadingPosi
     }),
 )
 
-/** Fixture/default owner; production supplies the file-backed repository. */
 class InMemoryReadingPositionRepository :
     ReadingPositionRepository by CellReadingPositionRepository(MemoryStateCell(emptyList()))
 

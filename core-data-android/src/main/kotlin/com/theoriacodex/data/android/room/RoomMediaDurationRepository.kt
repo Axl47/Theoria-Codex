@@ -19,11 +19,6 @@ class RoomMediaDurationRepository(
         require(maxEntries > 0) { "Media duration entry limit must be positive" }
     }
 
-    /**
-     * Looks up a stored duration with a plain WAL read, so per-card lookups never queue behind writes
-     * on Room's transaction executor. Only an expired retry needs the transaction, which re-reads the
-     * row before deleting it in case a newer state was stored meanwhile.
-     */
     override suspend fun get(key: StoredMediaDurationKey): StoredMediaDurationState? {
         val state = withContext(Dispatchers.IO) { dao.find(key) }?.toStoredState() ?: return null
         if (!state.isExpiredRetry()) return state

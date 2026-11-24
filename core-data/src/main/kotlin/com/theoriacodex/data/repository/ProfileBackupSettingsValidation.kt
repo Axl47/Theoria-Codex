@@ -8,7 +8,6 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/** Reject malformed external settings rather than invoking legacy migration's lossy fallbacks. */
 internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
     root.backupStrings("enabledSources").forEach { SourceKey.parseOrThrow(it) }
     validateSourceWeights(root.backupObject("sourceWeights"))
@@ -52,7 +51,6 @@ private fun validateProfileTags(root: JsonObject, key: String, profileIds: Set<S
                 require(tags.isNotEmpty() && tags.all(String::isNotBlank))
             } else {
                 entry.backupString("tag")
-                // A saved "or" group also lists every alternative.
                 if (entry["tags"].isPresentValue()) {
                     val tags = entry.backupStrings("tags")
                     require(tags.isNotEmpty() && tags.all(String::isNotBlank))
@@ -73,5 +71,4 @@ private fun validateSourceWeights(weights: JsonObject) {
     }
 }
 
-/** A key that is present with a non-null value. */
 private fun JsonElement?.isPresentValue() = this != null && this !is JsonNull

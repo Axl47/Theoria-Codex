@@ -41,7 +41,6 @@ class SeriesDownloadsTest {
     private val source = SourceKey.parseOrThrow("custom_mihon_7")
     private val id = SeriesId(source, "/title/1")
 
-    /** Chapters 1 to 3, listed newest first as sources do. */
     private val chapters = (3 downTo 1).mapIndexed { order, number -> chapter(number, order) }
 
     @Test fun `deleting a chapter or a series leaves the rest`() = runTest {
@@ -58,10 +57,8 @@ class SeriesDownloadsTest {
 
     @Test fun `the files decide what is downloaded whatever the database or a lost queue says`() = runTest {
         val harness = Harness(this)
-        // A restored database lists every chapter, but nothing is on the device.
         assertEquals(emptyMap<String, ChapterDownload>(), harness.downloads.states(id).first())
 
-        // Files a profile restore finds show as downloaded with no queue or database record of them.
         harness.store.saveChapter(id, "/c2")
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), Harness(this).downloads.states(id).first())
     }
@@ -82,7 +79,6 @@ class SeriesDownloadsTest {
         harness.downloads.download(id, listOf("/c1"))
         harness.downloads.drain(automatic = false)
 
-        // Offline, the first page is the preview; the chapter as its source gave it keeps the cover.
         val saved = harness.store.withoutOfflineLocations(checkNotNull(harness.downloads.chapter(id, "/c1")))
         assertEquals("https://cover.test/1.jpg#loadable", saved.preview.url)
     }
@@ -130,7 +126,6 @@ class SeriesDownloadsTest {
         val attempts = mutableMapOf<String, Int>()
         harness.onFetch = { url ->
             val attempt = attempts.merge(url, 1, Int::plus)!!
-            // Chapter 1's first page arrives on its last try; chapter 2's never does.
             if (url == "$PAGES/c1/1" && attempt < SeriesDownloads.PAGE_ATTEMPTS || url == "$PAGES/c2/1") throw IOException("Lost")
         }
         harness.downloads.download(id, listOf("/c1", "/c2", "/c3"))
@@ -169,7 +164,6 @@ class SeriesDownloadsTest {
             if (url == "$PAGES/c2/1") {
                 harness.off = emptySet()
                 sources.value = 1
-                // Lets the change reach the downloads before this chapter finishes.
                 delay(1)
             }
         }
@@ -183,10 +177,8 @@ class SeriesDownloadsTest {
     @Test fun `an unavailable chapter leaves the queue and the lane goes on`() = runTest {
         val harness = Harness(this)
         harness.onFetch = { url -> if ("/c1/" in url) throw ChapterUnavailable("Gone") }
-        // Chapter 9 is not one the source lists.
         harness.downloads.download(id, listOf("/c1", "/c9", "/c2"))
 
-        // The chapter the source does not list is named as nothing.
         val failed = listOf(ChapterName(id, "Title", "Ch. 1"), ChapterName(id, "Title", ""))
         assertEquals(DrainResult(downloaded = 1, failed = failed), harness.downloads.drain(automatic = false))
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(id).first())
@@ -220,7 +212,6 @@ class SeriesDownloadsTest {
     }
 
     @Test fun `delete after reading removes read chapters except where the series was last opened, also at start`() = runTest {
-        // Chapters 1 and 2 are read, and the series was last opened at 2.
         val entries = (3 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number != 3) }
         val stored = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/c2")
         listOf("/c1", "/c2", "/c3").forEach { address -> store().saveChapter(id, address) }
@@ -267,11 +258,9 @@ class SeriesDownloadsTest {
         val user = async { harness.downloads.drain(automatic = false) }
         advanceUntilIdle()
 
-        // While the user's lane runs, a chapter the check queues still gets the job that waits for an unmetered network.
         harness.downloads.download(id, listOf("/c2"), automatic = true)
         assertEquals(listOf("schedule user", "schedule automatic"), harness.scheduled)
         held.complete(Unit)
-        // The user's job leaves it to that one.
         assertEquals(DrainResult(downloaded = 1), user.await())
         assertEquals(mapOf("/c1" to ChapterDownload.OnDevice, "/c2" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
         assertEquals(DrainResult(downloaded = 1), harness.downloads.drain(automatic = true))
@@ -281,14 +270,12 @@ class SeriesDownloadsTest {
         val harness = Harness(this)
         val sources = MutableStateFlow(1)
         val network = MutableStateFlow(false)
-        // runCurrent, not advanceUntilIdle: the latter stops once only backgroundScope's work is left.
         backgroundScope.launch { harness.downloads.rescheduleOnChanges(sources, network) }
         harness.downloads.download(id, listOf("/c1"))
         harness.downloads.download(id, listOf("/c2"), automatic = true)
         runCurrent()
         harness.scheduled.clear()
 
-        // Only the user's job follows the network settings.
         network.value = true
         runCurrent()
         assertEquals(listOf("schedule user"), harness.scheduled)
@@ -298,7 +285,6 @@ class SeriesDownloadsTest {
         runCurrent()
         assertEquals(listOf("schedule user", "schedule automatic"), harness.scheduled)
 
-        // A sources change leaves a draining lane its running job; a network change replaces it.
         val held = CompletableDeferred<Unit>()
         harness.onFetch = { url -> if ("/c1/" in url) held.await() }
         val user = async { harness.downloads.drain(automatic = false) }
@@ -323,14 +309,11 @@ class SeriesDownloadsTest {
         val replaced = launch { harness.downloads.drain(automatic = false) }
         advanceUntilIdle()
 
-        // The system starts the replacing job before the replaced one has stopped.
         val replacing = async { harness.downloads.drain(automatic = false) }
         advanceUntilIdle()
         replaced.cancel()
         advanceUntilIdle()
-        // Chapter 1 is still queued, now fetched by the replacing drain.
         assertEquals(mapOf("/c1" to ChapterDownload.Queued(0f)), harness.downloads.states(id).first())
-        // The lane still counts as draining, so a chapter queued now joins the running drain instead of replacing its job.
         harness.scheduled.clear()
         harness.downloads.download(id, listOf("/c2"))
         assertEquals(emptyList<String>(), harness.scheduled)
@@ -349,7 +332,6 @@ class SeriesDownloadsTest {
         val on = Harness(this, StoredSeries(Series(id, "Title"), followed = true, downloadNewChapters = true))
         on.downloads.downloadNew(update)
         on.downloads.drain(automatic = true)
-        // Oldest first.
         assertEquals(listOf("/c2", "/c2", "/c3", "/c3"), on.fetched.map { it.substringBeforeLast('/').removePrefix(PAGES) })
     }
 
@@ -364,7 +346,6 @@ class SeriesDownloadsTest {
     }
 
     @Test fun `each menu choice picks its chapters oldest first, leaving out those already there`() {
-        // Chapter 1 was skipped, 2 is read and was opened last, so Continue is at 3; 4 is already downloaded.
         val entries = (9 downTo 1).mapIndexed { order, number -> chapter(number, order, read = number == 2) }
         val series = StoredSeries(Series(id, "Title"), lastOpenedEntry = "/c2")
         fun pick(choice: DownloadChoice) = chaptersToDownload(choice, series, entries, present = setOf("/c4"))
@@ -381,7 +362,6 @@ class SeriesDownloadsTest {
 
     private fun TestScope.store() = OfflineMediaStore(root(), StandardTestDispatcher(testScheduler))
 
-    /** Puts the chapter at [address] of [series] on the device, as a finished download leaves it. */
     private suspend fun OfflineMediaStore.saveChapter(series: SeriesId, address: String) {
         val entry = SeriesEntry(address, address)
         val pages = twoPages(entry)
@@ -391,7 +371,6 @@ class SeriesDownloadsTest {
         }
     }
 
-    /** Downloads over this test's folder, with a source of two pages per chapter unless [mediaOf] says otherwise, and a fetch that records each page. */
     private inner class Harness(
         scope: TestScope,
         stored: StoredSeries = StoredSeries(Series(id, "Title")),
@@ -404,7 +383,6 @@ class SeriesDownloadsTest {
         var onFetch: suspend (String) -> Unit = {}
         var mediaOf: (SeriesEntry) -> EntryMedia = { EntryMedia.Pages(twoPages(it)) }
 
-        /** Sources that are off; every other source is on. */
         var off: Set<SourceKey> = emptySet()
         val store = scope.store()
         val downloads = SeriesDownloads(
@@ -438,10 +416,8 @@ class SeriesDownloadsTest {
         val PAGE = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
     }
 
-    /** Two pages, at addresses naming the chapter. */
     private fun twoPages(entry: SeriesEntry) = (1..2).map { ImageRef(url = "$PAGES${entry.address}/$it", localPath = null, mime = null) }
 
-    /** A source whose entries open as [mediaOf] gives. */
     private class FakeSource(override val key: SourceKey, private val mediaOf: (SeriesEntry) -> EntryMedia) : SeriesSource {
         override val name = "Fake"
         override val language = "en"
@@ -452,7 +428,6 @@ class SeriesDownloadsTest {
         override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
     }
 
-    /** A repository that only answers what is stored; downloads need nothing else. */
     private class Stored(private val stored: List<StoredSeries>, private val entries: List<StoredSeriesEntry>) : SeriesRepository {
         override suspend fun series(id: SeriesId) = stored.firstOrNull { it.series.id == id }
         override suspend fun entries(id: SeriesId) = entries

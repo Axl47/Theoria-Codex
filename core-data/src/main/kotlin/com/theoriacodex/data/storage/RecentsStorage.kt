@@ -14,7 +14,6 @@ import kotlinx.serialization.Serializable
 
 const val CURRENT_QUERY_STORAGE_SCHEMA_VERSION = 2
 
-/** One stored Query, in query_store.json and in Room recent-search payloads. */
 @Serializable
 data class QueryStorageRecord(
     @SerialName("schemaVersion")
@@ -41,7 +40,6 @@ data class QueryStorageRecord(
     val excludeTerms: List<SearchTermStorageRecord?>? = null,
     @SerialName("includeTermGroups")
     val includeTermGroups: List<List<SearchTermStorageRecord?>?>? = null,
-    /** Written only for a restricted search, so every query stored without it keeps its exact payload. */
     @SerialName("media")
     val media: String? = null,
 )
@@ -78,7 +76,6 @@ object QueryStorageCodec {
         )
     }
 
-    /** Missing version is the legacy v1 shape; newer versions fail closed. */
     fun decode(record: QueryStorageRecord): Query {
         require(record.schemaVersion == null || record.schemaVersion in 1..CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
             "Unsupported stored Query version: ${record.schemaVersion}"

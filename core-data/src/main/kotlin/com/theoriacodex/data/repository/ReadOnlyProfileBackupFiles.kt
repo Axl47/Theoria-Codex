@@ -4,13 +4,11 @@ import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
 import java.io.File
 
-/** Strict snapshot decoding without DataStore startup, migration, quarantine, or recovery writes. */
 class ReadOnlyProfileBackupFiles private constructor(
     private val directory: File,
     private val documents: Map<String, ByteArray?>,
 ) {
 
-    /** No file means the live store shows its defaults: a fresh install, or a reset before any setting changed. */
     val settings: AppSettings = (
         documents[DATASTORE_SETTINGS_FILE_NAME]?.let { bytes ->
             DurableJson.decodeFromString(SettingsDataStoreFile.serializer(), decodeDocumentUtf8(bytes)).also { record ->
@@ -30,7 +28,6 @@ class ReadOnlyProfileBackupFiles private constructor(
         requireNoPendingOperations()
     }
 
-    /** Detects cross-store changes while the independent library snapshot was being acquired. */
     suspend fun requireUnchanged() {
         requireNoPendingOperations()
         require(names.all { name ->

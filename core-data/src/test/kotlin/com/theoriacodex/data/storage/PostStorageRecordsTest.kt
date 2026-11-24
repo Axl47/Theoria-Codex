@@ -46,7 +46,6 @@ class PostStorageRecordsTest {
             DurableJson.encodeToString(PostStorageCodec.encode(episode)),
             encodeBackupPost(episode).toString(),
         )
-        // The media item has no address of its own, so nothing a stream has is written, its address included.
         written.forEach { json -> listOf("video.test", "Server A", "mpegURL", "host.test", "subs.test").forEach { assertTrue(json, it !in json) } }
         val stored = PostStorageCodec.decode(DurableJson.decodeFromString<PostStorageRecord>(written.first()))
         assertTrue(checkNotNull(stored).media.all { it.streams.isEmpty() })
@@ -145,7 +144,6 @@ class PostStorageRecordsTest {
         assertNull(mergeSparsePost(existing = stored, incoming = replaced).contentHash)
     }
 
-    // nhentai's mirror fallback and Codex share payloads carry tags without counts.
     @Test
     fun `merging tags without counts or translations keeps the stored ones`() {
         val stored = samplePost()

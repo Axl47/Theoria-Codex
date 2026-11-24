@@ -1,9 +1,5 @@
 package com.theoriacodex.data.repository
 
-/**
- * Only for a journal written before restores kept the backup's own IDs: its database commit may already
- * have used these IDs, so finishing it any other way could duplicate rows or overflow capacity at startup.
- */
 internal fun ProfileBackup.forLegacyRestore(operationId: String): ProfileBackup {
     val profileMap = settings.recommendationProfiles.mapIndexed { index, profile ->
         profile.profileId to "restored-$operationId-$index"
@@ -40,7 +36,6 @@ internal fun ProfileBackup.forLegacyRestore(operationId: String): ProfileBackup 
     )
 }
 
-/** Adds what the backup has and this device lacks; anything already here keeps its current values. */
 internal fun AppSettings.mergeRestoredSettings(imported: AppSettings, applyPreferences: Boolean): AppSettings {
     val existingProfileIds = recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
     val follows = (followedCreators + imported.followedCreators).distinctBy { it.creator.followKey() }

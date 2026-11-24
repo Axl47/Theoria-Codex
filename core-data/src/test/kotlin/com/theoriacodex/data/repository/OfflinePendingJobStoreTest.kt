@@ -30,7 +30,6 @@ class OfflinePendingJobStoreTest {
         )
     }
 
-    // The golden is the Gson store's own output.
     @Test
     fun `the offline queue golden pins every stored key`() {
         assertStoredFormat(

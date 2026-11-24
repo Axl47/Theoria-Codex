@@ -3,7 +3,6 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.flow.first
 
-/** Storage-independent transaction fake for app workflow tests. */
 class InMemoryCodexLikesTransactions(
     val codices: CodexRepository = InMemoryCodexRepository(),
     val likes: InMemoryLikesRepository = InMemoryLikesRepository(),

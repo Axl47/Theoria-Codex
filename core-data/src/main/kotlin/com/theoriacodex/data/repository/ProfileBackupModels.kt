@@ -7,7 +7,6 @@ import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.SourceOff
 import com.theoriacodex.domain.source.SiteProfile
 
-/** A logical transaction snapshot, independent of Room's tables and database version. */
 data class BackupLibrary(
     val codices: List<Codex>,
     val items: List<CodexItem>,
@@ -15,23 +14,13 @@ data class BackupLibrary(
     val likes: List<LikedPost>,
     val watched: List<RecentPostEntry> = emptyList(),
     val searches: List<RecentSearchEntry> = emptyList(),
-    /** Absent from backups made before series existed. */
     val series: List<BackupSeries> = emptyList(),
 )
 
-/**
- * A series the user follows, started reading or chose a reading mode for, with every entry stored for it and the
- * progress through each. Series belong to the whole app, not to a profile.
- */
 data class BackupSeries(val series: StoredSeries, val entries: List<StoredSeriesEntry>)
 
 interface ProfileBackupStore {
     suspend fun snapshot(includeRecents: Boolean): BackupLibrary
-    /**
-     * Imports the entire library atomically, keeping existing membership and post payloads. A series already stored
-     * keeps what it has: it only becomes followed if the backup followed it, takes the backup's reading mode when it
-     * has none, and gains the entries it lacks. Returns collections added.
-     */
     suspend fun merge(library: BackupLibrary): Int
 }
 
@@ -41,14 +30,10 @@ data class ProfileBackup(
     val library: BackupLibrary,
     val savedSearches: List<SavedSearchEntry> = emptyList(),
     val readingPositions: List<ReadingPosition> = emptyList(),
-    /** Absent from older backups and from backups made without history. */
     val statistics: LifetimeStatistics? = null,
-    /** User-added sites. Credentials are never part of a backup. */
     val customSources: List<SiteProfile> = emptyList(),
-    /** The user's extension repos, so a new device finds the repos its series came from. Absent from older backups. */
     val extensionRepos: List<ExtensionRepo> = emptyList(),
 ) {
-    /** [newRepos] are the backup's extension repos not added here yet; restoring adds them. */
     fun preview(newRepos: List<ExtensionRepo> = emptyList()) = ProfileBackupPreview(
         createdAtEpochMs = createdAtEpochMs,
         profileNames = settings.recommendationProfiles.map(RecommendationProfile::name),
@@ -63,26 +48,19 @@ data class ProfileBackup(
     )
 }
 
-/** What restoring a chosen file would add: a Theoria backup's profiles, or the series of a Mihon-family app's backup. */
 sealed interface BackupPreview {
     data class Profiles(val preview: ProfileBackupPreview) : BackupPreview
     data class Series(
         val preview: SeriesImportPreview,
-        /** The names (else addresses) of the extension repos the backup lists that are not added here yet; importing adds them. */
         val newRepos: List<String> = emptyList(),
-        /** Installed extensions (and the language, where only that is off) that offer sources the backup's series are on, but are off here. */
         val turnOn: List<SourceOff> = emptyList(),
-        /** The backup's names for the sources its series are on that no installed extension offers, the one with the most series first. */
         val missingSources: List<String> = emptyList(),
-        /** How many more sources are missing that the backup gives no name. */
         val unnamedMissingSources: Int = 0,
     ) : BackupPreview
 }
 
-/** What importing a Mihon-family backup adds: the series it follows by kind, and the entries it finished. */
 data class SeriesImportPreview(val manga: Int, val anime: Int, val chaptersRead: Int, val episodesWatched: Int)
 
-/** What a Mihon-family import did: what it [imported], how many of its repos are new here, and why each refused repo was, by address. */
 data class SeriesImportResult(
     val imported: SeriesImportPreview,
     val reposAdded: Int = 0,
@@ -99,16 +77,13 @@ data class ProfileBackupPreview(
     val recentCount: Int,
     val followedCreatorCount: Int,
     val seriesCount: Int = 0,
-    /** The names (else addresses) of the extension repos the backup lists that are not added here yet; restoring adds them. */
     val newRepos: List<String> = emptyList(),
 )
 
-/** [keptExistingSites]: ids of sites kept as already configured here, though the backup's address or family differed. */
 data class ProfileRestoreResult(
     val profilesAdded: Int,
     val collectionsAdded: Int,
     val keptExistingSites: List<String> = emptyList(),
-    /** How many of the backup's extension repos were new here and added, and why each refused one was not, by address. */
     val reposAdded: Int = 0,
     val repoProblems: Map<String, String> = emptyMap(),
 )

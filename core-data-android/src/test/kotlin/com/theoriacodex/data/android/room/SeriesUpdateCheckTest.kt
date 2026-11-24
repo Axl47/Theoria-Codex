@@ -83,7 +83,6 @@ class SeriesUpdateCheckTest {
         assertEquals(listOf(emptyList(), listOf(second, first.copy(memo = """{"id":1}"""))), source.handed)
         assertEquals("""{"pages":3}""", repository.series(series.id)!!.series.memo)
 
-        // A listing with no chapters leaves them as they are and still stores the memo.
         source.chapters[series.id] = emptyList()
         source.listingMemo = "{}"
         repository.checkFollowed(sourcesOn(source))
@@ -101,7 +100,6 @@ class SeriesUpdateCheckTest {
         repository.checkFollowed(sourcesOn(failing, source))
 
         source.chapters[series.id] = listOf(second, first)
-        // The uninstalled source's series is not counted as checked; the failing one's is, and as failed.
         assertEquals(
             FollowedCheck(listOf(SeriesUpdate(series, listOf(second))), checked = 2, failed = 1),
             repository.checkFollowed(sourcesOn(failing, source)),
@@ -131,7 +129,6 @@ class SeriesUpdateCheckTest {
         source.chapters[later.id] = listOf(first)
         var asked = 0
 
-        // The source is on for the first series and gone by the second.
         repository.checkFollowed({ source.takeIf { asked++ == 0 } })
 
         assertEquals(1, repository.entries(series.id).size)
@@ -149,7 +146,6 @@ class SeriesUpdateCheckTest {
 
         val askedWhileWaiting = mutableListOf<Boolean>()
         val check = launch { repository.checkFollowed({ askedWhileWaiting += !pageRefresh.isCompleted; null }) }
-        // Real time for the check to read the followed series and reach the refresh it has to wait for.
         withContext(Dispatchers.Default) { delay(200) }
         pageRefresh.complete(Unit)
         joinAll(refresh, check)
@@ -171,7 +167,6 @@ class SeriesUpdateCheckTest {
 private class FakeSource(id: String, private val fails: Boolean = false) : SeriesSource {
     val chapters = mutableMapOf<SeriesId, List<SeriesEntry>>()
 
-    /** The series at which the check is cancelled, as the system stopping the job would. */
     var stopsAt: SeriesId? = null
     override val key = SourceKey.parseOrThrow(id)
     override val name = id
@@ -179,10 +174,8 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
 
-    /** What a page's refresh waits for in [details]; a check asks for chapters only. */
     var detailsWait: CompletableDeferred<Unit>? = null
     override suspend fun details(series: Series): Series = checkNotNull(detailsWait) { "A check asks for chapters only" }.await().let { series }
-    /** The stored list each listing was handed, and the series memo a listing returns. */
     val handed = mutableListOf<List<SeriesEntry>>()
     var listingMemo: String? = null
     override suspend fun entries(series: Series, stored: List<SeriesEntry>) = when {
@@ -193,5 +186,4 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }
 
-/** A source lookup that finds [sources] by key, as the extension host's does. */
 internal fun sourcesOn(vararg sources: SeriesSource): suspend (SourceKey) -> SeriesSource? = { key -> sources.firstOrNull { it.key == key } }

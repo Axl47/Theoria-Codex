@@ -8,7 +8,6 @@ import kotlinx.serialization.Serializable
 
 const val STATISTICS_HISTORY_DAYS = 400L
 
-/** Independent daily counters; foreground includes uncategorized activity. */
 @Serializable
 data class DailyActivity(
     @SerialName("appOpenCount") val appOpenCount: Long = 0L,
@@ -16,21 +15,17 @@ data class DailyActivity(
     @SerialName("browsingMs") val browsingMs: Long = 0L,
     @SerialName("watchingMs") val watchingMs: Long = 0L,
     @SerialName("codexMs") val codexMs: Long = 0L,
-    // Absent from days recorded before series time counted, which read as zero.
     @SerialName("readingMs") val readingMs: Long = 0L,
     @SerialName("animeMs") val animeMs: Long = 0L,
     @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
     @SerialName("searchCount") val searchCount: Long = 0L,
 )
 
-/** A monotonic duration allocated to a local calendar date. */
 data class DailyUsageDuration(val date: LocalDate, val usage: UsageDurationDelta)
 
-/** Split elapsed time using a wall-clock anchor, respecting local midnight and DST. */
 fun splitDailyUsage(start: Instant, zone: ZoneId, usage: UsageDurationDelta): List<DailyUsageDuration> {
     if (usage.totalMs <= 0L) return emptyList()
     val end = start.plusMillis(usage.totalMs)
-    // Only dates in the retention window need allocating, even after an unusually long interval.
     var cursor = maxOf(start, end.atZone(zone).toLocalDate().minusDays(STATISTICS_HISTORY_DAYS - 1)
         .atStartOfDay(zone).toInstant())
     val result = mutableListOf<DailyUsageDuration>()

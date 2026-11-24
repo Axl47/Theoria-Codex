@@ -14,7 +14,6 @@ import kotlinx.serialization.json.JsonObject
 
 private const val CURRENT_RECENT_SEARCH_PAYLOAD_VERSION = 1
 
-/** The stored kind of a For You search, from before the shelves page was removed; see [RecentSearchPayloadCodec.decode]. */
 private const val RETIRED_FOR_YOU_KIND = "FYP"
 
 @Serializable
@@ -33,7 +32,6 @@ data class RecentSearchPayload(
     val sourceTags: Map<SourceKey, List<String>> = emptyMap(),
 )
 
-/** Backward-compatible payload stored in the existing Room recent-search query column. */
 object RecentSearchPayloadCodec {
     fun encodeJson(entry: RecentSearchEntry): String = encodeJson(
         query = entry.query,
@@ -50,16 +48,11 @@ object RecentSearchPayloadCodec {
     ): String =
         DurableJson.encodeToString(RecentSearchPayloadRecord.serializer(), record(query, kind, sources, sourceTags))
 
-    /** The same payload as a JSON tree, for documents that embed it: backups and pinned searches. */
     fun encode(entry: RecentSearchEntry): JsonElement = DurableJson.encodeToJsonElement(
         RecentSearchPayloadRecord.serializer(),
         record(entry.query, entry.kind, entry.sources, entry.sourceTags),
     )
 
-    /**
-     * [entry] as storing and reading it back would return it: sources de-duplicated, source tags kept only for
-     * participating sources, and the whole search validated. For entries that did not come from [decode].
-     */
     fun normalize(entry: RecentSearchEntry): RecentSearchEntry {
         val payload = decode(encode(entry))
         return entry.copy(query = payload.query, kind = payload.kind, sources = payload.sources, sourceTags = payload.sourceTags)
@@ -87,16 +80,9 @@ object RecentSearchPayloadCodec {
 
     fun decodeJson(payload: String): RecentSearchPayload = decode(DurableJson.parseToJsonElement(payload))
 
-    /**
-     * Reads any payload this app has stored. A retired For You search ([RETIRED_FOR_YOU_KIND]) reads as a Unified
-     * search that keeps an entry of tags for every source it searched, even an empty one, so the saved-search
-     * library can convert it
-     * ([com.theoriacodex.data.repository.RecentSearchEntry.isRetiredForYouSearch]) instead of failing.
-     */
     fun decode(root: JsonElement): RecentSearchPayload {
         require(root is JsonObject) { "Stored recent search root must be an object" }
         if (!root.containsKey("recentSearchSchemaVersion")) {
-            // Rows written before payloads carried their own version hold a bare stored Query.
             val bare = DurableJson.decodeFromJsonElement(QueryStorageRecord.serializer(), root)
             require(bare.schemaVersion != null && bare.schemaVersion in 1..CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
                 "Room Query payload requires a supported schema version"

@@ -6,7 +6,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.net.URI
 
-/** Device paths, credentials, and signed URLs are never portable document data. */
 fun portablePostSnapshot(post: Post): Post = post.copy(
     preview = portableBackupImage(post.preview),
     full = post.full?.let(::portableBackupImage)?.takeIf { it.url != null },
@@ -33,7 +32,6 @@ private fun portableBackupImage(image: ImageRef): ImageRef = image.copy(
     videoVariants = image.videoVariants.mapNotNull { variant ->
         portableMediaUrl(variant.url)?.let { variant.copy(url = it) }
     },
-    // Expiring, header-bound addresses; the storage records cannot carry them either.
     streams = emptyList(),
 )
 
@@ -50,7 +48,6 @@ private fun portableBackupPageUrl(post: Post): String? {
         SourceKey.RULE34XXX -> "rule34.xxx"
         else -> null
     }
-    // These public post identities use query parameters; rebuild only their known canonical form.
     return if (host != null && post.id.sourcePostId.matches(Regex("[0-9]+"))) {
         "https://$host/index.php?page=post&s=view&id=${post.id.sourcePostId}"
     } else portableMediaUrl(post.pageUrl)

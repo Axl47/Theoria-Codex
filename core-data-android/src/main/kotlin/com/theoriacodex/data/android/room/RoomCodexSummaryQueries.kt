@@ -13,12 +13,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
-/** SQL selects only bounded covers; decoding never loads the rest of a collection. */
 internal class RoomCodexSummaryQueries(
     private val dao: CodexLikesDao,
     private val payloads: RetainedPostPayloadCache,
 ) {
-    /** Covers keep their decoded Posts across updates; only changed cover payloads decode again. */
     fun observeSummaries(codexIds: Set<String>, coverLimit: Int): Flow<List<CodexSummary>> {
         if (codexIds.isEmpty()) return flowOf(emptyList())
         val ids = codexIds.sorted()

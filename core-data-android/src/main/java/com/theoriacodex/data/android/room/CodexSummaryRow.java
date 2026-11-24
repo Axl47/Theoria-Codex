@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.room.ColumnInfo;
 
-/** One bounded cover row; empty collections retain a row with null Post columns. */
 public final class CodexSummaryRow {
     @NonNull @ColumnInfo(name = "codex_id") public final String codexId;
     @ColumnInfo(name = "item_count") public final int itemCount;

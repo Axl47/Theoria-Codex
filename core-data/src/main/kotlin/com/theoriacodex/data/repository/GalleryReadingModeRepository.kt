@@ -21,7 +21,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 
-/** The reading mode a user chose for one gallery; galleries without one follow the global default. */
 interface GalleryReadingModeRepository {
     fun observe(): Flow<Map<PostId, GalleryReadingMode>>
     suspend fun set(postId: PostId, mode: GalleryReadingMode)
@@ -30,7 +29,6 @@ interface GalleryReadingModeRepository {
 const val GALLERY_READING_MODES_FILE_NAME = "gallery_reading_modes.json"
 const val MAX_GALLERY_READING_MODES = 2_000
 
-/** The most recent choices are kept; the oldest beyond [entryLimit] fall back to the default. */
 class FileBackedGalleryReadingModeRepository private constructor(repository: GalleryReadingModeRepository) :
     GalleryReadingModeRepository by repository {
     constructor(
@@ -40,7 +38,6 @@ class FileBackedGalleryReadingModeRepository private constructor(repository: Gal
     ) : this(fileBackedGalleryReadingModes(baseDirectory.resolve(GALLERY_READING_MODES_FILE_NAME), store, entryLimit))
 }
 
-/** Fixture/default owner; production supplies the file-backed repository. */
 class InMemoryGalleryReadingModeRepository :
     GalleryReadingModeRepository by CellGalleryReadingModeRepository(MemoryStateCell(emptyList()))
 
@@ -55,7 +52,6 @@ private fun fileBackedGalleryReadingModes(file: File, store: AtomicJsonFileStore
 
 internal data class GalleryReadingModeChoice(val postId: PostId, val mode: GalleryReadingMode)
 
-/** Choices newest first over a [StateCell]; setting one moves it to the front. */
 internal class CellGalleryReadingModeRepository(
     private val cell: StateCell<List<GalleryReadingModeChoice>>,
     private val entryLimit: Int = MAX_GALLERY_READING_MODES,
@@ -68,7 +64,6 @@ internal class CellGalleryReadingModeRepository(
     }
 }
 
-/** gallery_reading_modes.json. The list stays raw JSON so a newer schema is rejected before its shape is read. */
 @Serializable
 internal data class GalleryReadingModesFile(
     @SerialName("schemaVersion")
@@ -87,10 +82,6 @@ internal data class GalleryReadingModeRecord(
     val mode: String,
 )
 
-/**
- * A newer schema fails rather than being read as, or rewritten to, this one; one unreadable entry is skipped. So is one
- * for an extension source: the extension spike kept series here as posts, and a series now keeps its mode with itself.
- */
 internal fun decodeGalleryReadingModes(
     document: GalleryReadingModesFile,
     entryLimit: Int = MAX_GALLERY_READING_MODES,

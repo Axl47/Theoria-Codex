@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-/** User-owned settings must be admitted before persistence, never evicted by storage normalization. */
 internal fun AppSettings.requireSettingsCapacity(): AppSettings = apply {
     require(recommendationProfiles.size <= MAX_PERSISTED_RECOMMENDATION_PROFILES) {
         "You can keep up to $MAX_PERSISTED_RECOMMENDATION_PROFILES profiles. Remove one before adding or restoring more."

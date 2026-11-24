@@ -32,10 +32,6 @@ internal data class StatisticsTagCountRecord(
     @SerialName("count") val count: Long = 0L,
 )
 
-/**
- * A searched term other than a portable general tag. These live apart from [StatisticsTagCountRecord]s
- * so a build that predates typed counting skips them instead of reading an artist as a general tag.
- */
 @Serializable
 internal data class StatisticsTypedTagCountRecord(
     @SerialName("source") val source: String = "",
@@ -45,7 +41,6 @@ internal data class StatisticsTypedTagCountRecord(
     @SerialName("count") val count: Long = 0L,
 )
 
-/** Lifetime statistics in `statistics_store_v1.json` and backups. */
 @Serializable
 internal data class StatisticsStoreRecord(
     @SerialName("history") val history: Map<String, DailyActivity> = emptyMap(),
@@ -55,7 +50,6 @@ internal data class StatisticsStoreRecord(
     @SerialName("browsingMs") val browsingMs: Long = 0L,
     @SerialName("watchingMs") val watchingMs: Long = 0L,
     @SerialName("codexMs") val codexMs: Long = 0L,
-    // Absent from stores and backups written before series time counted, which read as zero.
     @SerialName("readingMs") val readingMs: Long = 0L,
     @SerialName("animeMs") val animeMs: Long = 0L,
     @SerialName("watchedPostCount") val watchedPostCount: Long = 0L,
@@ -358,12 +352,6 @@ internal object StatisticsPolicies {
         )
     }
 
-    /**
-     * Counts each manual search in [recentSearches] once per term and source. Portable general tags were
-     * counted from one release and every other term from a later one, so each kind is seeded once, on its
-     * own flag. A key already counted keeps the larger value, since searches made after counting began
-     * are also still in Recents.
-     */
     fun seedSearchedTags(current: LifetimeStatistics, recentSearches: List<RecentSearchEntry>): LifetimeStatistics {
         if (current.searchesByTagSeeded && current.searchesByTypedTagSeeded) return current
         val unseeded = { term: SearchTerm ->
@@ -433,10 +421,6 @@ class DataStoreStatisticsRepository private constructor(
     )
 }
 
-/**
- * Statistics over a [StateCell], shared by the DataStore store and the in-memory default. Every change is
- * normalized and keeps only the retained daily history, dated by [clock].
- */
 internal class CellStatisticsRepository(
     private val cell: StateCell<LifetimeStatistics>,
     private val clock: Clock = Clock.systemDefaultZone(),
@@ -502,7 +486,6 @@ internal fun Long.saturatingAdd(delta: Long): Long {
     return if (this > Long.MAX_VALUE - normalizedDelta) Long.MAX_VALUE else this + normalizedDelta
 }
 
-/** A history key that is not an ISO date fails validation like any other bad field, so the store resets it. */
 private fun parseHistoryDay(day: String): LocalDate = try {
     LocalDate.parse(day)
 } catch (invalid: DateTimeParseException) {
@@ -529,7 +512,6 @@ private fun <K> Map<K, Long>.increment(key: K): Map<K, Long> {
     return toMutableMap().apply { this[key] = (this[key] ?: 0L).saturatingAdd(1L) }
 }
 
-/** Counts each non-blank tag once under every source in [sources]. */
 private fun Map<StatisticsTagKey, Long>.incrementTags(sources: Set<SourceKey>, tags: Set<String>): Map<StatisticsTagKey, Long> {
     val normalizedTags = tags.mapNotNullTo(linkedSetOf()) { tag -> tag.trim().takeIf(String::isNotBlank) }
     if (normalizedTags.isEmpty() || sources.isEmpty()) return this
@@ -543,13 +525,8 @@ private fun Map<StatisticsTagKey, Long>.incrementTags(sources: Set<SourceKey>, t
     }
 }
 
-/** The terms a completed search counts: those it required and actually ran, so Unified skips source-owned terms. */
 fun Query.searchedTerms(): Set<SearchTerm> = portableTermsForUnified().includeTerms.toSet()
 
-/**
- * Counts each term once under every source in [sources]. Values are trimmed and namespaces lowercased,
- * so one tag searched twice is one key.
- */
 private fun Map<SearchedTagKey, Long>.incrementTerms(sources: Set<SourceKey>, terms: Set<SearchTerm>): Map<SearchedTagKey, Long> {
     val normalizedTerms = terms.mapNotNullTo(linkedSetOf(), SearchTerm::normalizedForCountOrNull)
     if (normalizedTerms.isEmpty() || sources.isEmpty()) return this
@@ -575,7 +552,6 @@ private fun decodeSearchedTagCounts(
     val counts = general.decodeTagCounts().mapKeysTo(linkedMapOf()) { (key, _) -> SearchedTagKey(key.source, SearchTerm(key.tag)) }
     typed.forEach { record ->
         val source = SourceKey.parse(record.source) ?: return@forEach
-        // A facet added by a later build cannot be searched here, so its counts are skipped.
         val facet = SearchFacet.entries.firstOrNull { it.name == record.facet } ?: return@forEach
         val term = SearchTerm(record.tag, facet, record.sourceNamespace).normalizedForCountOrNull() ?: return@forEach
         if (record.count <= 0L) return@forEach

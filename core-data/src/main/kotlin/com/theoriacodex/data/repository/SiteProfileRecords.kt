@@ -7,11 +7,6 @@ import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/**
- * Durable JSON for one user-added site, shared by the site-profile store (`custom_sites_v1.json`)
- * and backups (`customSources`). Never holds credentials. Every field has a default, so a partial
- * record still decodes; validation happens in [toDomainOrNull].
- */
 @Serializable
 internal data class SiteProfileRecord(
     @SerialName("sourceId") val sourceId: String? = null,
@@ -26,10 +21,6 @@ internal data class SiteProfileRecord(
     @SerialName("verifiedAt") val verifiedAt: Long? = null,
     @SerialName("iconUrl") val iconUrl: String? = null,
 ) {
-    /**
-     * Null for an invalid record. The local store skips such records so one bad entry cannot lock
-     * the user out; the backup decoder treats null as an invalid backup.
-     */
     fun toDomainOrNull(): SiteProfile? = runCatching {
         val address = (SiteAddress.parse(baseUrl.orEmpty()) as? SiteAddressParse.Valid)?.address ?: return null
         SiteProfile(

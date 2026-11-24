@@ -4,7 +4,6 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
-/** Keeps the active weights and durable per-combination memory in the same settings transaction. */
 object SourceWeightSettings {
     fun normalize(runtime: SourceRuntimeSettings): SourceRuntimeSettings {
         val remembered = runtime.sourceWeightsByConfiguration
@@ -26,7 +25,6 @@ object SourceWeightSettings {
         )
     }
 
-    /** Read the same combination-specific weights used by Search and its settings controls. */
     fun weightsFor(runtime: SourceRuntimeSettings, sources: Set<SourceKey>): Map<SourceKey, Double> =
         RepositoryPolicies.normalizeSourceWeights(
             sources,
@@ -34,7 +32,6 @@ object SourceWeightSettings {
             else runtime.sourceWeightsByConfiguration[configurationKey(sources)] ?: runtime.sourceWeights,
         )
 
-    /** Update one group without changing the sources used by other browsing surfaces. */
     fun updateWeights(
         runtime: SourceRuntimeSettings,
         sources: Set<SourceKey>,
@@ -49,7 +46,6 @@ object SourceWeightSettings {
         )
     }
 
-    /** Keep the edited source fixed and distribute the remaining 5% units proportionally. */
     fun redistribute(weights: Map<SourceKey, Double>, source: SourceKey, value: Double): Map<SourceKey, Double> {
         require(source in weights && weights.size > 1)
         val selectedUnits = (value.coerceIn(0.0, 1.0) * 20).roundToInt()

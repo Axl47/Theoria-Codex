@@ -40,11 +40,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
-/**
- * Completed offline copies live outside disposable caches. The manifest is the commit point.
- * Every copy is a post kept by one or more owners: a Codex, saved posts, or a series for its downloaded chapters.
- * [manifests] reads and writes each [OfflineManifest]; tests wrap it to count decodes.
- */
 class OfflineMediaStore internal constructor(
     private val directory: File,
     private val ioDispatcher: CoroutineDispatcher,
@@ -54,7 +49,6 @@ class OfflineMediaStore internal constructor(
         this(directory, ioDispatcher, OfflineManifest.serializer())
 
     private val ownedPath = directory.absoluteFile.toPath().normalize()
-    // Values retain only source refs, never the offline keys: removed copies live only as long as their Viewer refs.
     private val collectedOfflineRefs = ReferenceQueue<ImageRef>()
     private val sourceMediaByOfflineRef = mutableMapOf<OfflineRefKey, OfflineSourceMedia>()
     private val mutex = Mutex()
@@ -69,7 +63,6 @@ class OfflineMediaStore internal constructor(
     fun hasOfflineLocations(post: Post): Boolean =
         isOfflineRef(post.preview) || post.full?.let(::isOfflineRef) == true || post.media.any(::isOfflineRef)
 
-    /** Restore canonical source media before persistence or duration identity; no disk access is needed. */
     fun withoutOfflineLocations(post: Post): Post {
         val source = synchronized(sourceMediaByOfflineRef) {
             forgetCollectedOfflineRefs()
@@ -110,7 +103,6 @@ class OfflineMediaStore internal constructor(
         while (true) sourceMediaByOfflineRef.remove((collectedOfflineRefs.poll() as? OfflineRefKey) ?: return)
     }
 
-    /** Startup owners may both call load; only explicit refresh reconciles the whole disk again. */
     suspend fun load() = withContext(ioDispatcher) { mutex.withLock { ensureCatalogLoaded() } }
 
     suspend fun refresh() = withContext(ioDispatcher) { mutex.withLock { rebuildCatalog() } }
@@ -125,12 +117,10 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /** Capture before queueing or resolving so a subsequent remove also invalidates waiting work. */
     suspend fun admit(owner: String): OfflineMediaAdmission = mutex.withLock {
         OfflineMediaAdmission(owner, revision to (ownerRevisions[owner] ?: 0L))
     }
 
-    /** A complete existing copy can be shared by multiple collections without duplicate downloads. */
     suspend fun retain(id: PostId, owner: String, admission: OfflineMediaAdmission? = null): Post? = withContext(ioDispatcher) {
         mutex.withLock {
             ensureCatalogLoaded()
@@ -147,11 +137,6 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /**
-     * Downloads are staged separately so failure or cancellation never replaces a completed copy. [acquire] writes
-     * one of [media] into the file it is handed, up to [parallel] at a time, and returns the media type it found, or
-     * null to keep the ref's; the saved file and ref take that type, so a page whose address names none still opens.
-     */
     suspend fun save(
         post: Post,
         media: List<ImageRef>,
@@ -201,7 +186,6 @@ class OfflineMediaStore internal constructor(
         ensureCatalogLoaded()
         val folder = postDirectory(post.id).apply { mkdirs() }
         val old = readRecord(folder)
-        // An undecodable manifest must not make other collections forget their copy.
         val priorOwners = if (old == null) salvageOwners(folder) else emptySet()
         if (old != null) {
             val retained = old.copy(owners = old.owners + owner)
@@ -217,7 +201,6 @@ class OfflineMediaStore internal constructor(
             media = completedMedia,
             full = completedMedia.first(),
             mediaCount = completedMedia.size,
-            // First-page still images are also useful offline card previews; video/ZIP retain their image preview.
             preview = completedMedia.first().takeIf { it.mime?.startsWith("image/") == true && it.mime != "image/ugoira" }
                 ?: post.preview,
         )
@@ -235,7 +218,6 @@ class OfflineMediaStore internal constructor(
         return completed
     }
 
-    /** Drops [owner] from every copy, deleting those no other owner keeps, and refuses its admitted work. */
     suspend fun removeOwner(owner: String) = withContext(ioDispatcher) {
         mutex.withLock {
             ownerRevisions[owner] = (ownerRevisions[owner] ?: 0L) + 1L
@@ -244,10 +226,6 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /**
-     * Drops [owner] from [id]'s copy alone, deleting it when no other owner keeps it. [owner]'s other admitted work
-     * stays valid, so a caller stops its own save of [id] before calling this.
-     */
     suspend fun removeOwner(owner: String, id: PostId) = withContext(ioDispatcher) {
         mutex.withLock {
             ensureCatalogLoaded()
@@ -258,7 +236,6 @@ class OfflineMediaStore internal constructor(
     private fun release(folder: File, owner: String) {
         val record = readRecord(folder)
         val owners = record?.owners ?: salvageOwners(folder)
-        // Ownership is confirmed on disk, so a manifest that cannot be read now never deletes the folder.
         if (owner !in owners) return updateCatalog(folder, record)
         val retained = owners - owner
         when {
@@ -277,7 +254,6 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /** The manifest is the commit point, so it goes first: whatever a stopped delete leaves is never a copy. */
     private fun deleteCopy(folder: File) {
         File(folder, MANIFEST_NAME).delete()
         folder.deleteRecursively()
@@ -289,12 +265,10 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /** Any other version, including the v2 manifests that builds before v1.4.0 wrote, is not a usable copy. */
     private fun readRecord(folder: File): OfflineRecord? = runCatching {
         val manifest = readManifest(folder, manifests)?.takeIf { it.version == MANIFEST_VERSION } ?: return null
         val post = PostStorageCodec.decode(manifest.post) ?: return null
         val sourcePost = PostStorageCodec.decode(manifest.sourcePost) ?: return null
-        // The folder name is derived from the id, so a manifest decoded onto the wrong values cannot pass.
         if (folder.name != digest("${post.id.source.id}:${post.id.sourcePostId}")) return null
         if (!hasCanonicalSourceSnapshot(post, sourcePost) || !mediaMatchesManifest(folder, post, manifest.mediaBytes)) return null
         OfflineRecord(post, sourcePost, manifest.owners.toSet(), manifest.mediaBytes.sum())
@@ -306,12 +280,6 @@ class OfflineMediaStore internal constructor(
         return DurableJson.decodeFromString(reader, manifest.readText())
     }
 
-    /**
-     * Every page must sit inside this copy's folder once its path is normalized, so `..` cannot escape it. The check
-     * is lexical: the store lives in app-private storage that only the app writes, so no symlink can redirect a page
-     * and resolving each path on disk would only cost a system call per page. A missing file's length is 0, so one
-     * length read per page confirms both that it exists and that it is complete.
-     */
     private fun mediaMatchesManifest(folder: File, post: Post, mediaBytes: List<Long>): Boolean {
         if (post.media.isEmpty() || post.media.size != mediaBytes.size) return false
         val root = folder.absoluteFile.toPath().normalize()
@@ -321,11 +289,6 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    /**
-     * Every manifest version keeps its owners at the root, so they survive a post that cannot be decoded. Only JSON
-     * strings count: decodeEachOrSkip<String> would read a number as an owner under lenient [DurableJson], and such an
-     * owner would keep the folder from ever being deleted.
-     */
     private fun salvageOwners(folder: File): Set<String> =
         runCatching { readManifest(folder, ManifestOwners.serializer())?.owners }.getOrNull().orEmpty()
             .filterIsInstance<JsonPrimitive>().filter { it.isString }.map { it.content }.toSet()
@@ -335,7 +298,6 @@ class OfflineMediaStore internal constructor(
         return (listOfNotNull(source.preview, source.full) + source.media).none(::isOfflineRef)
     }
 
-    /** Returns the media's total length, as recorded in the manifest. */
     private fun writeManifest(folder: File, post: Post, sourcePost: Post, owners: Set<String>): Long {
         val manifest = OfflineManifest(
             version = MANIFEST_VERSION,
@@ -348,7 +310,6 @@ class OfflineMediaStore internal constructor(
         return manifest.mediaBytes.sum()
     }
 
-    /** Replaces only the owners of a manifest whose post cannot be decoded; the rest stays as it was parsed. */
     private fun writeSalvagedOwners(folder: File, owners: Set<String>) {
         val manifest = DurableJson.parseToJsonElement(File(folder, MANIFEST_NAME).readText()).jsonObject
         val ownerList = JsonArray(owners.sorted().map(::JsonPrimitive))
@@ -373,8 +334,6 @@ class OfflineMediaStore internal constructor(
         directory.listFiles().orEmpty().forEach { folder ->
             when {
                 folder.name.startsWith(".pending-") -> if (folder !in activeStaging) folder.deleteRecursively()
-                // A delete or first save stopped before its manifest. Commits write theirs under the same lock, and an
-                // unreadable manifest is kept so its owners can still be salvaged.
                 folder.isDirectory && !File(folder, MANIFEST_NAME).exists() -> folder.deleteRecursively()
                 else -> indexFolder(folder, readRecord(folder))
             }
@@ -388,14 +347,9 @@ class OfflineMediaStore internal constructor(
         mutableSnapshot.value = catalog.snapshot()
     }
 
-    /**
-     * A folder without a usable copy keeps its salvaged owners, so removing the last of them deletes it. A usable
-     * copy's media lengths were matched against its files when it was read, so only folders without one are walked.
-     */
     private fun indexFolder(folder: File, record: OfflineRecord?) {
         val bytes = record?.let { it.mediaBytes + File(folder, MANIFEST_NAME).length() }
             ?: folder.walkTopDown().filter(File::isFile).sumOf(File::length)
-        // A detached copy: the record's own refs are weak keys of [sourceMediaByOfflineRef], which the catalog must not pin.
         val leadPages = record?.post?.media.orEmpty().take(OFFLINE_LEAD_PAGES).map { ImageRef(url = null, localPath = it.localPath, mime = it.mime) }
         catalog.update(folder, record?.post?.id, record?.owners ?: salvageOwners(folder), record?.post?.media?.size ?: 0, bytes, leadPages)
     }
@@ -405,7 +359,6 @@ class OfflineMediaStore internal constructor(
 
     private fun extension(ref: ImageRef): String = mediaFileExtension(ref.mime, ref.url)
 
-    /** Identity matters: equal refs decoded by a later read must not replace an existing Viewer's weak key. */
     private class OfflineRefKey(ref: ImageRef, queue: ReferenceQueue<ImageRef>? = null) : WeakReference<ImageRef>(ref, queue) {
         private val identityHash = System.identityHashCode(ref)
         override fun hashCode(): Int = identityHash
@@ -429,20 +382,15 @@ class OfflineMediaStore internal constructor(
     }
 }
 
-/** manifest.json: the commit point of one offline copy. Version 3 stores both posts as stable-keyed records. */
 @Serializable
 internal data class OfflineManifest(
     @SerialName("version") val version: Int,
     @SerialName("post") val post: PostStorageRecord,
-    // The post as its source supplied it, so offline paths never replace canonical media.
     @SerialName("sourcePost") val sourcePost: PostStorageRecord,
     @SerialName("owners") val owners: List<String>,
-    // Each media file's length when committed; a mismatch means the copy is incomplete.
     @SerialName("mediaBytes") val mediaBytes: List<Long>,
 )
 
-/** Reads only the owners, from any manifest version, when the rest cannot be decoded; a malformed entry costs only itself. */
-/** How many of each copy's first pages the catalog keeps in memory. */
 internal const val OFFLINE_LEAD_PAGES = 2
 
 @Serializable
@@ -452,10 +400,8 @@ data class OfflineMediaSnapshot(
     val postCount: Int = 0,
     val mediaCount: Int = 0,
     val bytes: Long = 0L,
-    /** Every owner with a folder on disk, and the ids of its posts that are available; empty when none of its copies open. */
     val postsByOwner: Map<String, Set<PostId>> = emptyMap(),
     val availablePostIds: Set<PostId> = emptySet(),
-    /** Each available copy's first [OFFLINE_LEAD_PAGES] pages, as files: enough to picture it even when its first page is a credit. */
     val leadPages: Map<PostId, List<ImageRef>> = emptyMap(),
 )
 
