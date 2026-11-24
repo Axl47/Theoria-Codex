@@ -42,6 +42,8 @@ internal class ViewerScreenState {
     var chromeShownForScrub = false
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
+    /** A Back pressed while this Viewer was already leaving, run once it has left (see [ViewerHeldBackHandler]). */
+    var heldBack = false
 
     /** The dock's Save fan; lives here so the auto-hide can see when the Save button holds the chrome. */
     val saveFan = ViewerSaveFanState()

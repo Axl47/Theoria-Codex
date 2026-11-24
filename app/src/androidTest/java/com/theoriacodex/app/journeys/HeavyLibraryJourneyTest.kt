@@ -134,6 +134,24 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { showsText(" · ${history.savedPosts} saved") }
     }
 
+    @Test
+    fun twoQuickBacksFromTheViewerLandTwoScreensBack() {
+        launch()
+        library(LibrarySection.Saved)
+        activate(likesShelf(history.likes.size))
+        val unliked = history.likes.last()
+        activate(compose.onNodeWithTag(searchCardTestTag(unliked.id)))
+        compose.waitUntil(10_000) { viewerShows() }
+        // Unliking takes the card out of Likes, so the media's return waits on a card that is gone: the longest return.
+        activate(compose.onNode(hasContentDescription("Unlike post") and hasClickAction()))
+        compose.waitUntil(10_000) { unliked.id !in likedIds() }
+
+        // The second Back lands while the media is still returning; it is held, then leaves Likes.
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeByFrame()
+        back("Likes, during the Viewer's return") { !viewerShows() && libraryTabShows() }
+    }
+
     /** Presses Back on [from] and waits until [arrived], failing with what shows instead. */
     private fun back(from: String, arrived: () -> Boolean) {
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }

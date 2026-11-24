@@ -2,10 +2,12 @@ package com.theoriacodex.app.viewer
 
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
@@ -21,6 +23,10 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import androidx.navigationevent.NavigationEventDispatcher
+import androidx.navigationevent.NavigationEventDispatcherOwner
+import androidx.navigationevent.NavigationEventHandler
+import androidx.navigationevent.NavigationEventInfo
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerPageState
@@ -202,8 +208,7 @@ private fun ViewerBackHandlers(
     dismissDrag: ViewerDismissDrag,
 ) {
     val scope = rememberCoroutineScope()
-    // Nothing may pop the route underneath a return that is already moving.
-    BackHandler(enabled = screen.pendingDismiss || frame.returning) {}
+    ViewerHeldBackHandler(holding = screen.pendingDismiss || frame.returning, screen)
     BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.locked) {
         screen.revealUnlock()
     }
@@ -215,8 +220,50 @@ private fun ViewerBackHandlers(
             events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }
             committed = true
         } finally {
-            // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope.
-            if (committed) controls.requestDismiss() else scope.launch { dismissDrag.recoil() }
+            // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope. A second Back can
+            // commit here before the frame that enables the hold, so it is held like one the hold caught.
+            when {
+                !committed -> scope.launch { dismissDrag.recoil() }
+                screen.pendingDismiss -> screen.heldBack = true
+                else -> controls.requestDismiss()
+            }
+        }
+    }
+}
+
+/**
+ * Nothing may pop the route underneath a return that is already moving, so a Back pressed while [holding] is kept in
+ * [ViewerScreenState.heldBack] and runs when the Viewer leaves composition at the end of its return, so two quick Backs
+ * still mean two steps back. At most one held Back runs. A hold that ends while the Viewer stays, such as a new Viewer
+ * opening and clearing the return, drops it: the screen on top is no longer the one that Back was meant for.
+ *
+ * The hold is an overlay: it outranks every ordinary Back handler, including those the screen underneath registers as
+ * it returns, and no lifecycle turns it off, since popping the Viewer stops its destination before the return ends.
+ */
+@Composable
+internal fun ViewerHeldBackHandler(holding: Boolean, screen: ViewerScreenState) {
+    val owner = LocalOnBackPressedDispatcherOwner.current ?: return
+    val events = (owner as? NavigationEventDispatcherOwner)?.navigationEventDispatcher ?: return
+    val view = LocalView.current
+    val hold = remember(screen) {
+        object : NavigationEventHandler<NavigationEventInfo.None>(NavigationEventInfo.None, false) {
+            override fun onBackCompleted() {
+                screen.heldBack = true
+            }
+        }
+    }
+    SideEffect { hold.isBackEnabled = holding }
+    LaunchedEffect(holding) {
+        if (!holding) screen.heldBack = false
+    }
+    DisposableEffect(events, hold) {
+        events.addHandler(hold, NavigationEventDispatcher.PRIORITY_OVERLAY)
+        onDispose {
+            hold.remove()
+            if (!screen.heldBack) return@onDispose
+            screen.heldBack = false
+            // Posted so every handler leaving with the Viewer is gone first; a Viewer leaving with its activity drops it.
+            view.post { if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) owner.onBackPressedDispatcher.onBackPressed() }
         }
     }
 }
