@@ -1,11 +1,13 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
@@ -14,11 +16,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
@@ -79,7 +84,7 @@ internal fun ViewerPostPagerSurface(
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
-                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && frame.uiState.series is ViewerSeries.Reading },
+                    openNextChapter = chapterPushUp(frame, swipe, config).takeIf { vertical && frame.uiState.series is ViewerSeries.Reading },
                 ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
@@ -92,10 +97,13 @@ internal fun ViewerPostPagerSurface(
                 reverseLayout = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series).reversed,
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
-                ViewerPostPage(
-                    postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
-                    qualityHeight, videoPositions, host, config,
-                )
+                Box(Modifier.fillMaxSize()) {
+                    ViewerPostPage(
+                        postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
+                        qualityHeight, videoPositions, host, config,
+                    )
+                    if (frame.navigation.pages[postPage].awaitsChapterPages(frame.uiState.series)) ChapterPagesLoading()
+                }
             }
         }
     }
@@ -139,6 +147,18 @@ private fun viewerGestureHandler(
     override fun onScrubStart() = controls.beginScrub()
     override fun onScrubEnd() = controls.endScrub()
 }
+
+@Composable
+private fun BoxScope.ChapterPagesLoading() {
+    CircularProgressIndicator(Modifier.align(Alignment.Center).semantics { contentDescription = "Loading pages" })
+}
+
+private fun chapterPushUp(frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? =
+    if (frame.uiState.currentPage?.awaitsChapterPages(frame.uiState.series) == true) {
+        {}
+    } else {
+        nextPostOpener(frame.navigation.currentIndex, frame, swipe, config)
+    }
 
 internal fun previousPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val previous = frame.navigation.pages.getOrNull(index - 1) ?: return null

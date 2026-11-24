@@ -149,7 +149,6 @@
 0164-series-tab-state.md
 0165-viewer-back-hold-and-return-transition.md
 0167-viewer-episode-playback.md
-0168-viewer-gesture-recognizer.md
 0169-viewer-gif-frame-rendering.md
 0170-viewer-image-loading-and-prefetch.md
 0171-viewer-level-controls.md

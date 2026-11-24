@@ -109,14 +109,14 @@ class ViewerVerticalGalleryTest {
         assertFalse(state.value.controls.slideshow)
     }
 
-    @Test fun `a sideways swipe in a vertical gallery moves to the next post`() {
+    @Test fun `a sideways swipe in a vertical gallery moves to the next post (ADR 0168)`() {
         show()
         compose.onRoot().performTouchInput { swipeLeft() }
         compose.waitForIdle()
         assertEquals(1, state.value.currentPageIndex)
     }
 
-    @Test fun `pulling down at the top of a vertical gallery closes the Viewer`() {
+    @Test fun `pulling down at the top of a vertical gallery closes the Viewer (ADR 0168)`() {
         show()
         compose.onRoot().performTouchInput { swipeDown(startY = centerY - height / 4f, endY = centerY + height / 4f) }
         compose.waitForIdle()
@@ -175,6 +175,24 @@ class ViewerVerticalGalleryTest {
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals("reported page counts $reported", gallery.media.size, reported.lastOrNull()) }
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a push up on a chapter still loading its pages stays on the chapter and shows it loading (ADR 0168)`() {
+        val session = ViewerSessionIdentity("loading")
+        val cover = gallery.copy(media = listOf(page))
+        state.value = createViewerUiState(
+            session, listOf(cover, next), requiresResolution = { it.id == gallery.id }, series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL),
+        )
+        show(mapOf(gallery.id to GalleryReadingMode.VERTICAL, next.id to GalleryReadingMode.VERTICAL))
+        compose.onNodeWithContentDescription("Loading pages").assertIsDisplayed()
+
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) }
+        compose.waitForIdle()
+
+        assertEquals(0, state.value.currentPageIndex)
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.onNodeWithContentDescription("Loading pages").assertDoesNotExist()
     }
 
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
