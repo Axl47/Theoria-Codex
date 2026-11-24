@@ -6,6 +6,7 @@ import com.theoriacodex.app.media.PostDownloadBatch
 import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.media.PostDownloadRequest
 import com.theoriacodex.app.media.PostDownloadStatus
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.data.repository.CodexLikesTransactions
@@ -41,7 +42,7 @@ internal suspend fun verifyRecordFiles(context: Context, token: String, phase: S
     val databaseName = "release-contract-$token-records.db"
     val database = TheoriaRoomDatabase.create(context, databaseName)
     try {
-        withStoreScope { scope ->
+        withDataStoreScope { scope ->
             val settings = DataStoreSettingsRepository(directory.resolve("settings"), scope).apply { awaitReady() }
             if (phase == "write") writeRecordFiles(directory, settings, RoomCodexLikesRepository(database))
             else readRecordFiles(directory, settings, RoomCodexLikesRepository(database))

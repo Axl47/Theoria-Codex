@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.withDataStoreScope
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -87,22 +88,22 @@ class DeveloperCopyActivity : Activity() {
 
     private suspend fun importCopy(payload: DeveloperCopyPayload) {
         val storage = File(filesDir, "theoria_codex")
-        val storesScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val database = TheoriaRoomDatabase.create(this)
         try {
-            val settings = DataStoreSettingsRepository(storage, storesScope)
-            settings.awaitReady()
-            openProfileLibrary(database)
-            val backup = ProfileBackupService(
-                settings, RoomProfileBackupStore(database), FileBackedSavedSearchRepository(storage),
-                FileBackedReadingPositionRepository(storage), File(storage, "pending_profile_restore.json"),
-            )
-            // Recover any earlier admitted restore before starting a new snapshot's import.
-            backup.recoverPendingRestore()
-            backup.restore(payload.backup, applyPreferences = true, selectImportedProfile = true)
-            check(AndroidCredentialEnvelopeStore(this).writeVerified(payload.credentials) == CredentialStoreWriteResult.Success)
+            withDataStoreScope { storesScope ->
+                val settings = DataStoreSettingsRepository(storage, storesScope)
+                settings.awaitReady()
+                openProfileLibrary(database)
+                val backup = ProfileBackupService(
+                    settings, RoomProfileBackupStore(database), FileBackedSavedSearchRepository(storage),
+                    FileBackedReadingPositionRepository(storage), File(storage, "pending_profile_restore.json"),
+                )
+                // Recover any earlier admitted restore before starting a new snapshot's import.
+                backup.recoverPendingRestore()
+                backup.restore(payload.backup, applyPreferences = true, selectImportedProfile = true)
+                check(AndroidCredentialEnvelopeStore(this).writeVerified(payload.credentials) == CredentialStoreWriteResult.Success)
+            }
         } finally {
-            storesScope.cancel()
             database.close()
         }
     }

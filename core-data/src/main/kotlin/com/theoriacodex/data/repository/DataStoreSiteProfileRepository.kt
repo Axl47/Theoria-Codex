@@ -8,8 +8,6 @@ import com.theoriacodex.data.storage.openJsonDataStore
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -23,7 +21,7 @@ class DataStoreSiteProfileRepository private constructor(
 ), AsynchronousStore by store {
     constructor(
         baseDirectory: File,
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        scope: CoroutineScope,
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
     ) : this(
         openJsonDataStore(

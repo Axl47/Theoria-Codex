@@ -1,11 +1,11 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.closeDataStores
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -24,8 +24,7 @@ class DataStoreDispatchTest {
     @Test
     fun `storage transaction and shutdown do not need the caller dispatcher to keep running`() = runBlocking {
         val storageDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-        val storageJob = SupervisorJob()
-        val storageScope = CoroutineScope(storageJob + storageDispatcher)
+        val storageScope = CoroutineScope(SupervisorJob() + storageDispatcher)
         val repository = DataStoreSettingsRepository(temporary.newFolder(), storageScope)
         val callerJob = SupervisorJob()
         val callerScheduler = TestCoroutineScheduler()
@@ -46,13 +45,13 @@ class DataStoreDispatchTest {
             callerScheduler.runCurrent()
             releaseStorage.countDown()
             withTimeout(5_000) { transformed.await() }
-            withTimeout(5_000) { storageJob.cancelAndJoin() }
+            storageScope.closeDataStores()
         } finally {
             releaseStorage.countDown()
             callerJob.cancel()
             callerScheduler.advanceUntilIdle()
             try {
-                withTimeout(5_000) { storageJob.cancelAndJoin() }
+                storageScope.closeDataStores()
             } finally {
                 storageDispatcher.close()
             }

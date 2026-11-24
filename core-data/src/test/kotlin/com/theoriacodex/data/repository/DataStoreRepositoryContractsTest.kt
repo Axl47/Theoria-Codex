@@ -1,13 +1,11 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.newDataStoreScope
+import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -31,11 +29,8 @@ class DataStoreRepositoryContractsTest(
     private var directoryIndex = 0
 
     @After
-    fun closeDataStores() = runBlocking {
-        dataStoreScopes.forEach { scope ->
-            scope.cancel()
-            scope.coroutineContext.job.join()
-        }
+    fun closeStores() = runBlocking {
+        dataStoreScopes.forEach { scope -> scope.closeDataStores() }
     }
 
     @Test
@@ -117,19 +112,19 @@ class DataStoreRepositoryContractsTest(
     private fun createSettingsRepository(): SettingsRepository {
         return when (backend) {
             Backend.IN_MEMORY -> InMemorySettingsRepository()
-            Backend.DATASTORE -> DataStoreSettingsRepository(newDirectory(), newDataStoreScope())
+            Backend.DATASTORE -> DataStoreSettingsRepository(newDirectory(), trackedScope())
         }
     }
 
     private fun createUiRestoreRepository(): UiRestoreRepository {
         return when (backend) {
             Backend.IN_MEMORY -> InMemoryUiRestoreRepository()
-            Backend.DATASTORE -> DataStoreUiRestoreRepository(newDirectory(), newDataStoreScope())
+            Backend.DATASTORE -> DataStoreUiRestoreRepository(newDirectory(), trackedScope())
         }
     }
 
-    private fun newDataStoreScope(): CoroutineScope {
-        return CoroutineScope(SupervisorJob() + Dispatchers.IO).also(dataStoreScopes::add)
+    private fun trackedScope(): CoroutineScope {
+        return newDataStoreScope().also(dataStoreScopes::add)
     }
 
     private fun newDirectory(): File {

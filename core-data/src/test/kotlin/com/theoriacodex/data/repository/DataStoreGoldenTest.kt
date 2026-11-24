@@ -3,13 +3,10 @@ package com.theoriacodex.data.repository
 import androidx.datastore.core.CorruptionException
 import com.theoriacodex.data.storage.JsonDataStoreSerializer
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -145,7 +142,7 @@ class DataStoreGoldenTest {
     @Test fun `sites missing required values are skipped and kept for a newer app`() = runTest {
         val directory = directoryWith(SITE_PROFILES_FILE_NAME, "sites-missing-required")
 
-        withScope { scope ->
+        withDataStoreScope { scope ->
             val repository = DataStoreSiteProfileRepository(directory, scope)
             assertEquals(listOf(safebooru), repository.observeProfiles().first().map { it.sourceId })
             repository.update(safebooru) { it.copy(label = "Renamed") }
@@ -196,25 +193,25 @@ class DataStoreGoldenTest {
 
     private suspend fun loadSettings(name: String): AppSettings {
         val directory = directoryWith(DATASTORE_SETTINGS_FILE_NAME, name)
-        return withScope { DataStoreSettingsRepository(directory, it).observeSettings().first() }
+        return withDataStoreScope { DataStoreSettingsRepository(directory, it).observeSettings().first() }
             .also { assertFalse(name, directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isNotEmpty()) }
     }
 
     private suspend fun loadStatistics(name: String): LifetimeStatistics {
         val directory = directoryWith(DATASTORE_STATISTICS_FILE_NAME, name)
-        return withScope { DataStoreStatisticsRepository(directory, it).observeStatistics().first() }
+        return withDataStoreScope { DataStoreStatisticsRepository(directory, it).observeStatistics().first() }
             .also { assertFalse(name, directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).isNotEmpty()) }
     }
 
     private suspend fun loadSites(name: String): List<SiteProfile> {
         val directory = directoryWith(SITE_PROFILES_FILE_NAME, name)
-        return withScope { DataStoreSiteProfileRepository(directory, it).observeProfiles().first() }
+        return withDataStoreScope { DataStoreSiteProfileRepository(directory, it).observeProfiles().first() }
             .also { assertFalse(name, directory.setAsideCopiesOf(SITE_PROFILES_FILE_NAME).isNotEmpty()) }
     }
 
     private suspend fun withUiRestore(name: String, block: suspend (DataStoreUiRestoreRepository) -> Unit) {
         val directory = directoryWith(DATASTORE_UI_RESTORE_FILE_NAME, name)
-        withScope { block(DataStoreUiRestoreRepository(directory, it)) }
+        withDataStoreScope { block(DataStoreUiRestoreRepository(directory, it)) }
         assertFalse(name, directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isNotEmpty())
     }
 
@@ -224,12 +221,4 @@ class DataStoreGoldenTest {
     private fun golden(name: String): String =
         checkNotNull(javaClass.classLoader.getResource("golden/datastore/$name.json")) { "Missing golden $name" }.readText()
 
-    private suspend fun <T> withScope(block: suspend (CoroutineScope) -> T): T {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        try {
-            return block(scope)
-        } finally {
-            scope.cancel()
-        }
-    }
 }
