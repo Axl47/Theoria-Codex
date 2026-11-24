@@ -6,7 +6,6 @@ import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.ForeignKey;
 
-/** One entry (a chapter or an episode) of a stored series, with the user's progress. Its media is never stored. */
 @Entity(
         tableName = "series_entries",
         primaryKeys = {"source", "series_address", "address"},
@@ -25,20 +24,12 @@ public final class SeriesEntryEntity {
     @Nullable @ColumnInfo(name = "number") private final Float number;
     @Nullable @ColumnInfo(name = "translator_group") private final String translatorGroup;
     @Nullable @ColumnInfo(name = "uploaded_at_epoch_ms") private final Long uploadedAtEpochMs;
-    /** The entry's place in its source's list, which runs newest first. */
     @ColumnInfo(name = "source_order") private final int sourceOrder;
     @ColumnInfo(name = "first_seen_at_epoch_ms") private final long firstSeenAtEpochMs;
     @ColumnInfo(name = "read") private final boolean read;
-    /**
-     * Where the user left, 0 before the entry was opened: a page from 1, or milliseconds for an episode. The columns are
-     * named for pages, which came first; renaming them would need a schema upgrade for nothing.
-     */
     @ColumnInfo(name = "last_page") private final long lastPage;
-    /** The page count or duration that the position counts within. */
     @Nullable @ColumnInfo(name = "page_count") private final Long pageCount;
-    /** When the user last read or watched in it; null before that was kept. */
     @Nullable @ColumnInfo(name = "last_read_at_epoch_ms") private final Long lastReadAtEpochMs;
-    /** What its extension keeps with it, as JSON text; null when it keeps nothing. */
     @Nullable @ColumnInfo(name = "memo") private final String memo;
 
     public SeriesEntryEntity(

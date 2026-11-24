@@ -6,10 +6,6 @@ import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.Index;
 
-/**
- * The latest For You swipe on a post per profile. No foreign key to posts: skipped posts are never stored, so the
- * row keeps the preview address to show or hash the picture again later.
- */
 @Entity(
         tableName = "for_you_verdicts",
         primaryKeys = {"profile_id", "source", "source_post_id"},

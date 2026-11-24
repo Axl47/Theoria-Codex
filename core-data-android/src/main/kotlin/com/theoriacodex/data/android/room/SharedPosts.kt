@@ -4,14 +4,6 @@ import com.theoriacodex.data.repository.mergeSparsePost
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.domain.model.Post
 
-/**
- * Transaction-local owner of the shared posts table: sparse writes, and deleting posts nothing holds any more.
- *
- * Save, Like and Recents may receive a route snapshot before lazy media resolution finishes. Those absent fields
- * must not erase richer data already owned by Codex or Likes, while newly known values should still
- * refresh the shared payload. A row is rewritten only when a stored value changes, so rows older builds wrote
- * keep their bytes until the post itself changes.
- */
 internal class SharedPosts(
     private val dao: CodexLikesDao,
 ) {
@@ -29,8 +21,6 @@ internal class SharedPosts(
         }
         val existing = LocalPostPayloadCodec.decode(current)
         val merged = PostStorageCodec.encode(mergeSparsePost(existing, post))
-        // Compare what the row would decode to, not bytes: the encoder no longer writes the escapes Gson did, and
-        // live-only Post fields such as the comment hint are never stored.
         if (PostStorageCodec.decode(merged) != existing) {
             check(dao.updatePost(source, sourcePostId, LocalPostPayloadCodec.encode(merged)) == 1) {
                 "Shared Post disappeared while updating $source:$sourcePostId"
@@ -38,7 +28,6 @@ internal class SharedPosts(
         }
     }
 
-    /** Deletes each of these `(source, sourcePostId)` posts that no Codex item, like or Recents row still holds. */
     fun releaseIfOrphaned(postIds: List<Pair<String, String>>) {
         postIds.distinct().forEach { (source, sourcePostId) -> dao.deleteOrphanPost(source, sourcePostId) }
     }

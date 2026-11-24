@@ -23,10 +23,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
-/**
- * The `source_order` of an entry its source stopped listing. The row stays, hidden from every list and count, so the
- * chapter is neither new nor unread again if the source lists it once more.
- */
 internal const val NOT_LISTED = -1
 
 class RoomSeriesRepository(
@@ -53,7 +49,6 @@ class RoomSeriesRepository(
     override fun observeHasFollowed(): Flow<Boolean> = dao.observeHasFollowed().distinctUntilChanged()
 
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = dao.observeSeries(id.source.id, id.address)
-        // Room emits null while no row matches, whatever the Java signature says.
         .map<SeriesEntity?, StoredSeries?> { it?.toStored() }
         .distinctUntilChanged().flowOn(Dispatchers.Default)
 
@@ -73,7 +68,6 @@ class RoomSeriesRepository(
     override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> =
         database.withTransaction { write(series, entries) }
 
-    /** [store]'s work. Must run in a transaction. */
     private fun write(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> {
         val id = series.id
         val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
@@ -89,24 +83,14 @@ class RoomSeriesRepository(
             val withMemo = stored.copy(series = stored.series.copy(memo = seriesMemo ?: stored.series.memo))
             when {
                 entries.isNotEmpty() -> storeEntries(withMemo, entries)
-                // An empty list leaves the entries as they are, but the memo is stored, as [store] stores it.
                 withMemo != stored -> emptyList<SeriesEntry>().also { dao.upsertSeries(withMemo.toEntity()) }
                 else -> emptyList()
             }
         }
 
-    /**
-     * Writes [stored] with [entries] as its entry list, and returns the new ones. It returns none when
-     * no entries were stored before, since nothing was there to compare with, and none when no listed entry matches a
-     * stored one by address or as a moved entry: such a list almost always means the source changed its addresses, not
-     * that the whole series came out at once, so it is stored as a new baseline. A source that only ever lists its one
-     * newest chapter therefore never reports a new one. Entries are written only by a listing or an import, so a series
-     * imported from a backup counts what its source lists beyond the backup's entries as new. Must run in a transaction.
-     */
     private fun storeEntries(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
         val id = stored.series.id
         val now = clock()
-        // A source can list one address twice; the first is kept.
         val current = entries.distinctBy { it.address }
         val listed = current.mapTo(HashSet()) { it.address }
         val known = dao.allEntries(id.source.id, id.address).map(SeriesEntryEntity::toStored).associateBy { it.entry.address }
@@ -116,18 +100,13 @@ class RoomSeriesRepository(
             val kept = known[entry.address]
             val before = kept ?: moved[entry.address]
             if (before == null) newEntries += entry
-            // An entry listed without a memo keeps the one stored at its address, as a series does.
             val listed = if (entry.memo == null && kept?.entry?.memo != null) entry.copy(memo = kept.entry.memo) else entry
             (before?.copy(entry = listed, sourceOrder = order) ?: StoredSeriesEntry(listed, order, firstSeenAtEpochMs = now))
         }
-        // A dropped entry keeps its row and progress, also when a new address took its progress over: if the source
-        // lists both again, neither is new or unread.
         val dropped = known.values.filter { it.entry.address !in listed && it.sourceOrder != NOT_LISTED }.map { it.copy(sourceOrder = NOT_LISTED) }
         val reopened = moved.entries.firstOrNull { it.value.entry.address == stored.lastOpenedEntry }?.key
-        // The series first: its entries refer to its row.
         dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
-        // No listed entry matched a stored one: the list is a baseline, as when nothing was stored.
         return if (newEntries.size == current.size) emptyList() else newEntries
     }
 
@@ -195,12 +174,9 @@ class RoomSeriesRepository(
     }
 
     override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
-        // A series moved to another source while its chapter was open is gone with its entries, so this writes nothing.
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
             val series = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction
-            // Unchanged rows are not written, so observers are not woken by a chapter reopened where it was left. The entry
-            // takes the read time whenever it is written: when it is opened, or its place moves.
             val opened = series.lastOpenedEntry != entryAddress
             if (opened) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
             val progressed = if (length == null || length <= 0) entry else entry.withProgress(position, length, id.source.seriesKind)
@@ -213,7 +189,6 @@ class RoomSeriesRepository(
         return database.withTransaction {
             val old = dao.series(from.source.id, from.address)?.toStored() ?: return@withTransaction false
             val oldEntries = dao.allEntries(from.source.id, from.address).map(SeriesEntryEntity::toStored)
-            // All stored entries count, also ones the old source no longer lists: their progress goes with the series.
             if (entries.isEmpty() && oldEntries.any(StoredSeriesEntry::hasProgress)) throw NoChaptersToMoveToException()
             write(to, entries)
             val target = dao.series(to.id.source.id, to.id.address).toStored()
@@ -234,7 +209,6 @@ class RoomSeriesRepository(
     }
 }
 
-/** A chapter number and who released it: several groups release the same number, each a chapter of its own. */
 private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it to translatorGroup }
 
 private fun StoredSeriesEntry.withReadState(targets: Set<String>?, read: Boolean): StoredSeriesEntry? {
@@ -243,12 +217,6 @@ private fun StoredSeriesEntry.withReadState(targets: Set<String>?, read: Boolean
     return next.takeIf { it != this }
 }
 
-/**
- * The stored entry each added address continues, by that address. [listed] is the source's list now, split into the
- * addresses stored before and the added ones. An added entry continues a [dropped] one when each is the only one of
- * its [release] among its kind, and no address stored before is that release now, by what the source says of it now.
- * Anything less certain could hand one group's read chapter to another group's release, or hide a new chapter.
- */
 private fun movedEntries(listed: Pair<List<SeriesEntry>, List<SeriesEntry>>, dropped: List<StoredSeriesEntry>): Map<String, StoredSeriesEntry> {
     val (kept, added) = listed
     val taken = kept.mapNotNullTo(HashSet()) { it.release }
@@ -298,11 +266,6 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     series.memo,
 )
 
-/**
- * [this] with [stored]'s description, status and memo where it has none: only a details page gives the first two, so a
- * listing of the series, or details that leave them out, must not erase what an earlier details page said. A source
- * may likewise give its memo on one of those and not the other, and needs it to open the series again.
- */
 private fun Series.keeping(stored: Series): Series = copy(
     description = description ?: stored.description,
     status = status.takeUnless { it == SeriesStatus.UNKNOWN } ?: stored.status,

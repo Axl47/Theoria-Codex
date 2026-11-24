@@ -43,12 +43,12 @@ class SeriesFilterTest {
     @Test
     fun `a value that no longer lines up keeps the default`() {
         val chosen = listOf(
-            Check("Options", true), // another kind in the header's place
+            Check("Options", true),
             Separator,
-            Text("Artist", "Oda"), // another name
+            Text("Artist", "Oda"),
             Check("Completed", true),
-            Select("Status", listOf("Any", "Hiatus"), 1), // an option the source no longer offers
-            Sort("Order", listOf("Title", "Updated"), Sort.Selection(5, ascending = true)), // out of range
+            Select("Status", listOf("Any", "Hiatus"), 1),
+            Sort("Order", listOf("Title", "Updated"), Sort.Selection(5, ascending = true)),
         )
 
         val merged = defaults.withChoices(chosen)

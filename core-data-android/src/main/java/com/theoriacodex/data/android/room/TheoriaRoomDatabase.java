@@ -37,10 +37,6 @@ import org.json.JSONObject;
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
     public static final String DEFAULT_DATABASE_NAME = "theoria_content.db";
 
-    /**
-     * Explicit migrations only. A future schema bump must add and test a migration here; this
-     * database intentionally never opts into destructive fallback.
-     */
     public static final Migration MIGRATION_1_2 = new Migration(1, 2) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("CREATE TABLE IF NOT EXISTS `recent_watched` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `viewed_at_epoch_ms` INTEGER NOT NULL, `sort_sequence` INTEGER NOT NULL, `origin` TEXT NOT NULL, `origin_query_hash` TEXT, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )");
@@ -78,7 +74,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
     };
     public static final Migration MIGRATION_6_7 = new Migration(6, 7) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
-            // Existing source-specific rules were OR expressions, so they all remain in group 0.
             database.execSQL("ALTER TABLE `codex_automatic_tags` ADD COLUMN `group_index` INTEGER NOT NULL DEFAULT 0");
         }
     };
@@ -99,21 +94,18 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_items_codex_id_saved_at_epoch_ms` ON `codex_items` (`codex_id`, `saved_at_epoch_ms`)");
         }
     };
-    // Drops the proof tables of the retired JSON importers; nothing has read them since.
     public static final Migration MIGRATION_10_11 = new Migration(10, 11) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("DROP TABLE IF EXISTS `migration_metadata`");
             database.execSQL("DROP TABLE IF EXISTS `recents_migration_metadata`");
         }
     };
-    // The For You shelves page is gone: drop its search history and the posts some builds briefly kept from it.
     public static final Migration MIGRATION_11_12 = new Migration(11, 12) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("DELETE FROM `recent_searches` WHERE `query_payload_json` LIKE '%\"kind\":\"FYP\"%'");
             database.execSQL("DELETE FROM `recent_watched` WHERE `section` = 'FYP'");
         }
     };
-    // Logs For You swipes per profile and keeps each stored post's perceptual hash.
     public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("CREATE TABLE IF NOT EXISTS `for_you_verdicts` (`profile_id` TEXT NOT NULL, `source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `decision` TEXT NOT NULL, `decided_at_epoch_ms` INTEGER NOT NULL, `preview_url` TEXT, PRIMARY KEY(`profile_id`, `source`, `source_post_id`))");
@@ -121,31 +113,24 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE TABLE IF NOT EXISTS `post_visual_signatures` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `indexed_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )");
         }
     };
-    // Series from extensions get tables of their own. The spike that showed a series as a post stored those posts
-    // under `custom_mihon_` source ids, which no source answers for any more: they are deleted from every table here.
-    // Preferences are not touched.
     public static final Migration MIGRATION_13_14 = new Migration(13, 14) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("CREATE TABLE IF NOT EXISTS `series` (`source` TEXT NOT NULL, `address` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_url` TEXT, `author` TEXT, `genres` TEXT NOT NULL, `language` TEXT NOT NULL, `followed` INTEGER NOT NULL, `reading_mode` TEXT, `last_opened_entry` TEXT, `last_checked_at_epoch_ms` INTEGER, `description` TEXT, `status` TEXT, PRIMARY KEY(`source`, `address`))");
             database.execSQL("CREATE TABLE IF NOT EXISTS `series_entries` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )");
-            // Rows that point at a post go before the post itself.
             for (String table : new String[] {"codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags", "post_visual_signatures", "posts"}) {
                 database.execSQL("DELETE FROM `" + table + "` WHERE " + SPIKE_SOURCE);
             }
             deleteSpikeSearches(database);
         }
     };
-    // The per-series choice to download the chapters the background check finds; off for every series stored before.
     public static final Migration MIGRATION_14_15 = new Migration(14, 15) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` ADD COLUMN `download_new` INTEGER NOT NULL DEFAULT 0");
         }
     };
-    // A spike id is `custom_mihon_` and digits only: a Custom Site can be named `custom_mihon_example_org`.
     private static final String SPIKE_SOURCE = "`source` GLOB 'custom_mihon_[0-9]*' AND `source` NOT GLOB 'custom_mihon_*[^0-9]*'";
     private static final Pattern SPIKE_SOURCE_ID = Pattern.compile("custom_mihon_[0-9]+");
 
-    /** Deletes the recent searches that name a spike source as a source; the same text in a tag is left alone. */
     private static void deleteSpikeSearches(SupportSQLiteDatabase database) {
         List<String> spikes = new ArrayList<>();
         try (Cursor rows = database.query("SELECT `query_hash`, `query_payload_json` FROM `recent_searches` "
@@ -159,7 +144,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     }
 
-    /** Whether a recent search's payload has a spike id in a source field. Old payloads are the query alone. */
     private static boolean namesSpikeSource(String payloadJson) {
         try {
             JSONObject payload = new JSONObject(payloadJson);
@@ -179,7 +163,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             return false;
         }
     }
-    // Pictures also get what the on-device tagger saw. Every existing row had its hash tried, hence the default of 1.
     public static final Migration MIGRATION_15_16 = new Migration(15, 16) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `phash_checked` INTEGER NOT NULL DEFAULT 1");
@@ -188,8 +171,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `predicted_tags` TEXT");
         }
     };
-    // Analyses can be upgraded with a playing post's frames. Every existing analysis read only a still; each is marked as
-    // awaiting frames, and the frame job sets aside those whose post turns out not to play.
     public static final Migration MIGRATION_16_17 = new Migration(16, 17) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `frame_state` INTEGER NOT NULL DEFAULT 0");
@@ -197,17 +178,12 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("UPDATE `post_visual_signatures` SET `frame_state` = 1 WHERE `model_id` IS NOT NULL");
         }
     };
-    // Whether a series' chapters open on the same page, kept so the Viewer's strip knows from its first frame. Unknown,
-    // hence off, for every series stored before; the Viewer finds it again.
     public static final Migration MIGRATION_17_18 = new Migration(17, 18) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` ADD COLUMN `chapters_share_first_page` INTEGER NOT NULL DEFAULT 0");
         }
     };
 
-    // When a series was followed and each entry last read, for the Following sorts. A series followed before has no
-    // follow time; the earliest time any of its entries was first seen, when it was first stored, stands in. Read times
-    // were never kept, so they start empty.
     public static final Migration MIGRATION_18_19 = new Migration(18, 19) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` ADD COLUMN `followed_at_epoch_ms` INTEGER");
@@ -218,7 +194,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
-    // What an extension keeps with a series or chapter to open it again. Nothing was kept before.
     public static final Migration MIGRATION_19_20 = new Migration(19, 20) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` ADD COLUMN `memo` TEXT");
@@ -226,8 +201,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
-    // When a series was last checked. Nothing read it once a refresh judged a first listing by whether entries were
-    // stored, so it is dropped rather than kept to suggest it decides something.
     public static final Migration MIGRATION_20_21 = new Migration(20, 21) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` DROP COLUMN `last_checked_at_epoch_ms`");

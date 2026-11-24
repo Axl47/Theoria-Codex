@@ -4,7 +4,6 @@ data class DateRange(
     val fromEpochMs: Long?,
     val toEpochMs: Long?,
 ) {
-    /** A post with no known date cannot be shown to be in range, so it is outside every range. */
     operator fun contains(epochMs: Long?): Boolean =
         epochMs != null && epochMs >= (fromEpochMs ?: Long.MIN_VALUE) && epochMs <= (toEpochMs ?: Long.MAX_VALUE)
 }
@@ -27,22 +26,15 @@ data class SearchTerm(
     val isPortableGeneralTag: Boolean
         get() = facet == SearchFacet.TAG && sourceNamespace == null
 
-    /** The term's tag type, for matching like with like. */
     val tagType: SearchTagType
         get() = SearchTagType.of(facet, sourceNamespace)
 
-    /** A general tag, whether or not its source spells it with the [GENERAL_TAG_NAMESPACE]. */
     val isGeneralTag: Boolean
         get() = tagType == SearchTagType.General
 }
 
-/** The namespace nhentai and Hitomi give general tags; such a tag is still a general tag. */
 const val GENERAL_TAG_NAMESPACE = "tag"
 
-/**
- * A kind of tag: a facet and source namespace, compared without case. General tags are one type
- * however a source spells their namespace, so a tag searched as `tag:sky` matches a plain `sky`.
- */
 @ConsistentCopyVisibility
 data class SearchTagType private constructor(val facet: SearchFacet, val sourceNamespace: String?) {
     companion object {
@@ -83,18 +75,14 @@ data class Query(
     val excludeTerms: List<SearchTerm>,
     val sort: SortMode,
     val dateRange: DateRange?,
-    /** Retired filter kept so stored queries still decode and hash; sources ignore it. */
     val minScore: Int?,
-    /** What kind of media to ask for; each source translates it (see `withMediaTerms`). */
     val media: MediaFilter = MediaFilter.ANY,
 ) {
-    // Cached projection is derived during construction and cannot be changed by copy independently.
     val includeTerms: List<SearchTerm> = includeTermGroups.flatMap(SearchTermGroup::terms)
     val effectiveIncludeTermGroups: List<SearchTermGroup> get() = includeTermGroups
     val includeTags: List<String> get() = includeTerms.map(SearchTerm::value)
     val excludeTags: List<String> get() = excludeTerms.map(SearchTerm::value)
 
-    /** Legacy flat construction remains explicit; supplied groups must agree with its flat input. */
     constructor(mode: QueryMode, includeTerms: Iterable<SearchTerm>, excludeTerms: List<SearchTerm>,
         sort: SortMode, dateRange: DateRange?, minScore: Int?, includeTermGroups: List<SearchTermGroup>? = null) :
         this(mode, canonicalIncludeGroups(includeTerms.toList(), includeTermGroups), excludeTerms, sort, dateRange, minScore)
@@ -108,7 +96,6 @@ data class Query(
     fun withIncludeTermsAsRequired(terms: List<SearchTerm>): Query = withIncludeTermGroups(terms.map(SearchTermGroup::single))
 
     companion object {
-        /** [source]'s newest posts, with no terms: the request that shows a source answers searches. */
         fun newest(source: SourceKey): Query = Query(
             mode = QueryMode.Source(source),
             includeTags = emptyList(),
@@ -128,7 +115,6 @@ private fun canonicalIncludeGroups(terms: List<SearchTerm>, groups: List<SearchT
 
 data class QueryNormalization(val query: Query, val removedSourceOwnedTerms: Boolean)
 
-/** One portability policy is shared by draft editing and provider execution. */
 fun Query.normalizedForMode(mode: QueryMode): QueryNormalization {
     if (mode != QueryMode.Unified) return QueryNormalization(copy(mode = mode), false)
     val groups = includeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
@@ -146,7 +132,6 @@ sealed interface QueryMode {
     data class Source(val source: SourceKey) : QueryMode
 }
 
-/** A media restriction a search asks its sources for, on top of its terms. */
 enum class MediaFilter {
     ANY,
     ANIMATED,

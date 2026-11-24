@@ -11,14 +11,10 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
 
-// Row <-> domain mappings shared by the Room repositories and the backup store. Lenient readers (`OrNull`) skip a
-// row from an unknown source; the backup snapshot reads strictly instead, so a backup never silently drops rows.
-
 internal fun LikedPost.toEntity() = LikedPostEntity(
     profileId, postId.source.id, postId.sourcePostId, likedAtEpochMs, LikedTagsCodec.encode(tags),
 )
 
-/** Unreadable tags degrade to none rather than hiding the like. */
 internal fun LikedPostEntity.toLikedPostOrNull(): LikedPost? {
     val postId = toPostIdOrNull() ?: return null
     val tags = runCatching { LikedTagsCodec.decode(tagsJson) }.getOrDefault(emptyList())

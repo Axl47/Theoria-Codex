@@ -9,15 +9,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 
-/**
- * Keeps the Posts published by the previous projection so unchanged payloads are not decoded again.
- * Only the latest projection is retained; callers that share one instance must project the same rows.
- */
 internal class RetainedPostPayloads(private val decode: (PostEntity) -> Post) {
     private var previous = emptyMap<Pair<String, String>, Snapshot>()
     private val digest = MessageDigest.getInstance("SHA-256")
 
-    /** Number of Posts this projection currently keeps alive. */
     val size: Int
         @Synchronized get() = previous.size
 
@@ -39,12 +34,6 @@ internal class RetainedPostPayloads(private val decode: (PostEntity) -> Post) {
     private class Snapshot(val fingerprint: ByteArray, val post: Post)
 }
 
-/**
- * Small LRU of projections that outlives one collection, so a screen returning to a recent Codex
- * reuses its decoded Posts after retained flows stopped. A projection larger than [maxRetainedPosts]
- * is dropped once its collection ends, so large libraries do not become a process-wide cache;
- * an active collector keeps its own reference either way.
- */
 internal class RetainedPostPayloadCache(
     private val decode: (PostEntity) -> Post,
     private val maxEntries: Int = 8,
@@ -55,7 +44,6 @@ internal class RetainedPostPayloadCache(
     @Synchronized
     fun projection(key: String): RetainedPostPayloads = entries.getOrPut(key) { RetainedPostPayloads(decode) }
 
-    /** Drops projections that alone exceed the budget, then least recently used ones until both bounds hold. */
     @Synchronized
     fun trim() {
         entries.values.removeAll { it.size > maxRetainedPosts }
@@ -68,7 +56,6 @@ internal class RetainedPostPayloadCache(
     }
 }
 
-/** Only identities, small fingerprints and the already-published Posts survive an emission. */
 internal fun Flow<List<PostEntity>>.decodePostSnapshots(
     payloads: RetainedPostPayloadCache,
     key: String,

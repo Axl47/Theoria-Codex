@@ -505,7 +505,6 @@ class RoomCodexLikesRepositoryTest {
         val watching = launch(Dispatchers.IO) { repository.observeLibraryPosts(setOf(codex.codexId)).collect(updates::send) }
         assertEquals(listOf("one"), withTimeout(UPDATE_TIMEOUT_MS) { updates.receive() }.map { it.id.sourcePostId })
 
-        // Viewing a saved post writes its row like this, on every view.
         repository.updatePost(post("one").copy(title = "edited"))
         delay(QUIET_MS)
         assertTrue(updates.isEmpty)

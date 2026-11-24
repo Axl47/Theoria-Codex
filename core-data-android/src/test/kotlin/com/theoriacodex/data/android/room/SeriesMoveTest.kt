@@ -39,7 +39,6 @@ class SeriesMoveTest {
 
     @After fun close() = database.close()
 
-    /** [old] followed in [mode] with new chapters downloading, chapters 1 and 2 read, and chapter 3 left at page 4. */
     private suspend fun readOld(mode: GalleryReadingMode = GalleryReadingMode.entries.last()) {
         repository.store(old, (3 downTo 1).map { SeriesEntry("/o$it", "Chapter $it", it.toFloat()) })
         repository.setFollowed(old.id, true)

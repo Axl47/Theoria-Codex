@@ -30,7 +30,6 @@ object QueryHash {
         val date = query.dateRange?.let { "${it.fromEpochMs ?: "-"}:${it.toEpochMs ?: "-"}" } ?: "none"
         val score = query.minScore?.toString() ?: "none"
         val parts = listOf(VERSION, mode, terms, query.sort.name, date, score)
-        // Added only when set, so every query stored before the field existed keeps its hash.
         val media = if (query.media == MediaFilter.ANIMATED) listOf("media=animated") else emptyList()
         return (parts + media).joinToString("|")
     }

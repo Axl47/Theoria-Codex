@@ -4,33 +4,20 @@ import java.net.IDN
 import java.security.MessageDigest
 import java.util.Locale
 
-// Shared contracts for user-added booru sites. See .docs/exec/custom-booru-sources.html (C1, C3).
-// Signatures here are frozen for the parallel step 3/4 threads; change them only through the plan.
-
-/** A booru API dialect served by one adapter. Persisted by [name]; add families by adding entries. */
 enum class ProtocolFamily(val displayName: String) {
     DANBOORU("Danbooru"),
     GELBOORU_02("Gelbooru 0.2"),
 }
 
-/**
- * Persisted ids of user-added sites: `custom_` + host with dots written as underscores, then
- * `__p<port>` for a non-default port and `__h<8 hex>` (SHA-256 of the path) for an install path.
- * Root installs keep the plain form, e.g. `custom_safebooru_org`. The alphabet avoids every
- * separator existing source-id encodings use (':', '.', '/', ',', '|'). A profile's stored id is
- * authoritative once created; [fromAddress] only names new profiles.
- */
 object CustomSourceIds {
     const val PREFIX = "custom_"
 
-    /** Keeps `custom_<id>_<postId>.<ext>` cache file names far below 255 bytes. */
     const val MAX_LENGTH = 96
 
     private const val PATH_HASH_LENGTH = 8
     private const val LABEL = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
     private val ID_PATTERN = Regex("^${PREFIX}$LABEL(?:_$LABEL)*(?:__p[1-9][0-9]{0,4})?(?:__h[0-9a-f]{$PATH_HASH_LENGTH})?$")
 
-    /** [host] is lowercase ASCII DNS labels, [port] is null for 443, [path] is "" for a root install. */
     fun fromAddress(host: String, port: Int?, path: String): String = buildString {
         append(PREFIX)
         append(host.removePrefix("www.").replace('.', '_'))
@@ -40,7 +27,6 @@ object CustomSourceIds {
 
     fun isValid(id: String): Boolean = id.length <= MAX_LENGTH && ID_PATTERN.matches(id)
 
-    /** `custom_safebooru_org__p8443` → `safebooru.org`: the readable host for a site with no profile. */
     fun hostLabel(id: String): String = id.removePrefix(PREFIX).substringBefore("__").replace('_', '.')
 
     private fun sha256Hex(value: String): String =
@@ -55,20 +41,12 @@ sealed interface SiteAddressParse {
     data class Invalid(val error: SiteAddressError) : SiteAddressParse
 }
 
-/**
- * A validated HTTPS site root. [baseUrl] has no user-info, query, fragment or trailing '/'; its
- * path stops before the first booru page segment, so pasting a post or search URL finds the root.
- */
 class SiteAddress private constructor(
     val baseUrl: String,
-    /** Lowercase ASCII (IDNA) host. */
     val host: String,
-    /** Null for the default HTTPS port. */
     val port: Int?,
-    /** Install path without a trailing '/', or "" for a root install. Case is preserved. */
     val path: String,
 ) {
-    /** Id a new profile for this address receives. Stored ids are authoritative afterwards. */
     val derivedSourceId: String get() = CustomSourceIds.fromAddress(host, port, path)
 
     override fun equals(other: Any?): Boolean = other is SiteAddress && other.baseUrl == baseUrl
@@ -83,7 +61,6 @@ class SiteAddress private constructor(
         private val HOST_LABEL = Regex("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
         private val PAGE_SEGMENTS = setOf("index.php", "posts", "post", "tags", "pools", "wiki_pages", "artists", "comments")
 
-        /** Schemeless input is treated as HTTPS; any other scheme is [SiteAddressError.NOT_HTTPS]. */
         fun parse(input: String): SiteAddressParse {
             val trimmed = input.trim()
             val error = when {
@@ -133,7 +110,6 @@ class SiteAddress private constructor(
             return if (valid) ascii else fail(SiteAddressError.UNSUPPORTED_HOST)
         }
 
-        /** Drops empty segments and everything from the first booru page segment on. */
         private fun normalizePath(rawPath: String): String {
             val segments = rawPath.split('/').filter(String::isNotEmpty)
                 .takeWhile { segment -> segment.lowercase(Locale.ROOT) !in PAGE_SEGMENTS }
@@ -155,10 +131,6 @@ class SiteAddress private constructor(
     }
 }
 
-/**
- * Optional per-site request headers; null uses the defaults. Only these two are customizable.
- * Values must be single-line, so they can never inject further headers.
- */
 data class SiteHeaders(val userAgent: String? = null, val referer: String? = null) {
     init {
         listOfNotNull(userAgent, referer).forEach { value ->
@@ -173,10 +145,6 @@ data class SiteHeaders(val userAgent: String? = null, val referer: String? = nul
     }
 }
 
-/**
- * Danbooru `login` + `api_key`, or Gelbooru `user_id` + `api_key`. Kept in encrypted storage only;
- * never logged, persisted in clear, or backed up.
- */
 class SiteCredentials(val user: String, val apiKey: String) {
     init {
         require(user.isNotBlank() && apiKey.isNotBlank()) { "Site credentials need a user and an API key" }
@@ -187,22 +155,16 @@ class SiteCredentials(val user: String, val apiKey: String) {
     override fun toString(): String = "SiteCredentials([REDACTED])"
 }
 
-/** Data describing one user-added site. Credentials live separately, in encrypted storage. */
 data class SiteProfile(
-    /** Authoritative identity; equals the source id persisted with this site's posts. */
     val sourceId: String,
     val address: SiteAddress,
     val label: String,
-    /** [ProtocolFamily.name], kept raw so a family added by a newer app version round-trips. */
     val familyId: String,
-    /** Null when the site accepts any number of search terms. */
     val searchTermLimit: Int? = null,
     val headers: SiteHeaders = SiteHeaders(),
-    /** The probe found anonymous access refused; without stored keys the site is unavailable. */
     val credentialsRequired: Boolean = false,
     val addedAtEpochMs: Long,
     val verifiedAtEpochMs: Long? = null,
-    /** The site's own icon from its home page; null falls back to `/favicon.ico`. */
     val iconUrl: String? = null,
 ) {
     init {
@@ -213,7 +175,6 @@ data class SiteProfile(
         require(addedAtEpochMs >= 0 && (verifiedAtEpochMs == null || verifiedAtEpochMs >= 0)) { "Invalid timestamp" }
     }
 
-    /** Null when this app version doesn't know the family: the profile is kept and the site is unavailable. */
     val family: ProtocolFamily? get() = ProtocolFamily.entries.firstOrNull { it.name == familyId }
 
     companion object {
@@ -224,43 +185,29 @@ data class SiteProfile(
 
 enum class ProbeFailure { DNS, TLS, TIMEOUT, HTTP_ERROR, BLOCKED, INSECURE_REDIRECT, CROSS_HOST_REDIRECT }
 
-/** Outcome of probing an address for a supported protocol family. A probe never persists anything. */
 sealed interface SiteProbeResult {
-    /** [credentialsRequired]: anonymous access was refused and the supplied credentials worked. */
     data class Supported(
         val address: SiteAddress,
         val family: ProtocolFamily,
         val suggestedLabel: String,
         val searchTermLimit: Int?,
         val credentialsRequired: Boolean,
-        /** The largest raster icon the home page declares, if any. */
         val iconUrl: String? = null,
     ) : SiteProbeResult
 
-    /** The family answered but refused this access; [rejected] when supplied credentials failed. */
     data class CredentialsRequired(val address: SiteAddress, val family: ProtocolFamily, val rejected: Boolean) : SiteProbeResult
 
-    /** Recognized as a booru whose family is not supported yet, e.g. "Moebooru". */
     data class UnsupportedFamily(val address: SiteAddress, val familyName: String) : SiteProbeResult
 
-    /** Every request got a well-formed answer and none matched a known booru API. */
     data class NotABooru(val address: SiteAddress) : SiteProbeResult
 
-    /** The address belongs to a shipped source, which cannot be added a second time. */
     data class AlreadyBuiltIn(val builtInSourceId: String) : SiteProbeResult
 
-    /** Inconclusive: at least one request failed before the site could answer. */
     data class Unreachable(val address: SiteAddress, val reason: ProbeFailure) : SiteProbeResult
 
-    /** The input is not a usable HTTPS site address; nothing was requested. */
     data class InvalidAddress(val error: SiteAddressError) : SiteProbeResult
 }
 
-/**
- * Whether the site itself answered, so a browser challenge in front of it is no longer refusing the app.
- * An answer counts even when it is not usable (keys needed, unknown family); a transport failure, a
- * refusal and input that was never requested do not. No `else`: a new variant must be decided here.
- */
 val SiteProbeResult.clearedChallenge: Boolean
     get() = when (this) {
         is SiteProbeResult.Supported,

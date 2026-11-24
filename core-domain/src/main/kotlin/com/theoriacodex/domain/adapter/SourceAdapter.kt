@@ -25,12 +25,7 @@ interface SourceAdapter {
     suspend fun resolvePost(id: PostId): Post?
 }
 
-/** Optional hydration for sources whose search cards do not contain authoritative tag metadata. */
 interface SearchMetadataSourceAdapter {
-    /**
-     * Returns metadata suitable for local search predicates, retaining already complete posts
-     * without another request. Null means the post no longer exists; acquisition failures throw.
-     */
     suspend fun resolveSearchMetadata(post: Post): Post?
 }
 
@@ -41,61 +36,30 @@ interface CreatorPostsSourceAdapter {
     ): Page<Post>
 }
 
-/**
- * Optional account pages for creators that are site accounts (people), as opposed to artist tags or
- * searches. A source whose creators can be either decides from the profile's shape alone, so the app
- * knows the page's layout before any request.
- */
 interface AccountProfileSourceAdapter {
-    /** The feeds [creator] offers as an account, in tab order; empty when it is not an account. */
     fun accountFeeds(creator: CreatorProfile): List<AccountFeed>
 
-    /** Header facts for an account; null when the source has nothing beyond what [creator] holds. Failures throw. */
     suspend fun accountDetails(creator: CreatorProfile): AccountDetails?
 
-    /** One page of [feed]; a null [pageToken] asks for the first. [AccountFeed.UPLOADS] matches [CreatorPostsSourceAdapter]. */
     suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post>
 }
 
-/**
- * Optional lookup of a post by its original file's MD5 ([com.theoriacodex.domain.model.fileHash]), which the Viewer uses
- * to find one file on the user's other sites. The Danbooru and Gelbooru families, custom sites included, answer it
- * with an `md5:` search. Sources without such a search term leave it out.
- */
 interface FileHashLookupSourceAdapter {
-    /** This site's post holding the file with lowercase [md5], or null when it has none. Failures throw. */
     suspend fun findByFileHash(md5: String): Post?
 }
 
-/** Candidate budget; presentation removes already-visible posts before choosing its smaller shelf. */
 const val MAX_RELATED_POST_CANDIDATES = 30
 
-/** Optional source-owned discovery for a bounded set of posts related to one canonical post. */
 interface RelatedPostsSourceAdapter {
     suspend fun relatedPosts(seed: PostId, limit: Int): List<Post>
 }
 
-/**
- * Optional read-only comments for one post. A null [pageToken] asks for the first page; a non-null
- * [parent] (one with [PostComment.hasReplies]) asks for that comment's replies instead. Families
- * implement this once, so built-in and custom sites of the same family share it.
- */
 interface CommentsSourceAdapter {
     suspend fun comments(post: Post, pageToken: String?, parent: PostComment? = null): CommentPage
 
-    /**
-     * The fragment (without `#`) the site's own post page uses to jump to a top-level comment, such as
-     * Gelbooru's `c123`. Null when the site has none; links then carry Theoria's own fragment
-     * ([commentLink]).
-     */
     fun nativeCommentAnchor(commentId: String): String? = null
 }
 
-/**
- * Optional source-owned recovery for media URLs whose provider configuration can change after a
- * post was loaded. The adapter receives the original post and exact failed media reference so it
- * can preserve source identity without teaching the app layer provider URL rules.
- */
 interface MediaRecoverySourceAdapter {
     suspend fun recoverPostMedia(
         post: Post,
@@ -103,7 +67,6 @@ interface MediaRecoverySourceAdapter {
     ): Post?
 }
 
-/** Optional, narrow metadata capability that avoids hydrating a complete post for one duration. */
 interface DurationMetadataSourceAdapter {
     suspend fun resolveDurationMetadata(post: Post): DurationMetadataSourceResult
 }
@@ -133,11 +96,9 @@ data class FacetedSearchScope(
     val isAll: Boolean
         get() = facet == null
 
-    /** The tag type this scope asks for; null for [All], which takes every type. */
     val tagType: SearchTagType?
         get() = facet?.let { SearchTagType.of(it, sourceNamespace) }
 
-    /** Whether [term] belongs in this scope: All takes every term, any other scope terms of its tag type. */
     fun accepts(term: SearchTerm): Boolean = isAll || tagType == term.tagType
 
     companion object {
@@ -150,7 +111,6 @@ data class FacetedTagSuggestion(
     val facet: SearchFacet,
     val sourceNamespace: String? = null,
     val count: Int? = null,
-    /** Optional provider-supplied label, as on [TagSuggestion.alternateText]; [text] stays the search value. */
     val alternateText: String? = null,
 ) {
     fun toSearchTerm(): SearchTerm {
@@ -174,7 +134,6 @@ interface FacetedSearchSourceAdapter {
         limit: Int,
     ): List<FacetedTagSuggestion>
 
-    /** Source-owned values that make a selected facet discoverable before the user types. */
     suspend fun featuredFacetedSuggestions(
         scope: FacetedSearchScope,
         limit: Int,
@@ -184,10 +143,6 @@ interface FacetedSearchSourceAdapter {
 interface TagCountLookupSourceAdapter {
     suspend fun fetchTagCounts(tags: List<String>): Map<String, Int>
 
-    /**
-     * Publish completed batches before returning so callers retain them if later work times out. [onCounts] may
-     * be called on any thread, but never concurrently with itself.
-     */
     suspend fun fetchTagCountsIncrementally(tags: List<String>, onCounts: (Map<String, Int>) -> Unit) {
         onCounts(fetchTagCounts(tags))
     }
@@ -202,7 +157,6 @@ data class TagSuggestion(
     val text: String,
     val type: String?,
     val count: Int?,
-    /** Optional localized or provider-supplied label; [text] remains the submitted search value. */
     val alternateText: String? = null,
 )
 
@@ -213,24 +167,11 @@ data class SourceCapabilities(
     val supportsSortRandom: Boolean,
     val supportsExcludeTagsServerSide: Boolean,
     val supportsGroupedIncludeTagsServerSide: Boolean = false,
-    /** Null when the provider accepts any number of terms per request. */
     val searchTermLimit: SearchTermLimit? = null,
-    /**
-     * The provider matches only tags spelled as it lists them, so Search adds a typed tag only once autocomplete or
-     * search history confirms it, and Unified looks up the provider's spelling before searching.
-     */
     val requiresExactTags: Boolean = false,
-    /**
-     * The term that asks this source's server for animated posts when a search wants them; null when it has none and
-     * the phone's filter does all the work (it runs either way).
-     */
     val animatedTerm: AnimatedSearchTerm? = null,
 )
 
-/**
- * A source's way to ask for animated posts: [term] is added to the request as one more required tag; [overLimit]
- * replaces it when the source's term limit is already full and costs no term itself (Danbooru's `filetype:`).
- */
 data class AnimatedSearchTerm(
     val term: SearchTerm,
     val overLimit: SearchTerm? = null,

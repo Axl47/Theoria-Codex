@@ -39,12 +39,6 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 
-/**
- * One Room-backed owner for Codex membership, reusable post snapshots, and profile likes.
- *
- * Keeping these tables in one database makes the user-visible Likes collection atomic: a like
- * cannot commit without its system-Codex membership, and an unlike cannot leave a stale item.
- */
 class RoomCodexLikesRepository(
     private val database: TheoriaRoomDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -71,7 +65,6 @@ class RoomCodexLikesRepository(
         } else emptyList()
         rows.forEach { row -> dao.deleteCodexItem(request.targetId, row.source, row.sourcePostId) }
         likes.forEach { like -> dao.deleteLike(request.profileId, like.postId.source.id, like.postId.sourcePostId) }
-        // Comparison memberships still own these shared posts; no payload or offline file is removed.
         CodexCleaningSnapshot(request, items, posts, likes)
     }
 
@@ -225,7 +218,6 @@ class RoomCodexLikesRepository(
             val codex = snapshot.codex
             writeGuard.requireCodexWritable(codex.codexId)
             val current = dao.codices()
-            // A Codex created under this name during the Undo window keeps it; this one gets a free one.
             val name = CodexLikesPolicy.resolveUniqueCodexName(codex.name, current.map { it.toDomain() }, excludeCodexId = codex.codexId)
             if (dao.insertCodex(CodexEntity(codex.codexId, name, codex.createdAtEpochMs, current.size)) != -1L) {
                 if (codex.automaticTags.isNotEmpty()) dao.insertAutomaticTags(codex.automaticTags.map { it.toEntity(codex.codexId) })
@@ -247,7 +239,6 @@ class RoomCodexLikesRepository(
             CodexSortMode.BY_SOURCE -> dao.observeCodexPostsBySource(codexId)
             else -> dao.observeCodexPostsNewest(codexId)
         }
-        // Every sort projects the same rows, so sorts share one retained projection per Codex.
         return rows.decodePostSnapshots(retainedPayloads, "codex:$codexId")
     }
 
@@ -255,14 +246,10 @@ class RoomCodexLikesRepository(
     override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> {
         if (codexIds.isEmpty()) return flowOf(emptyList())
         val ids = codexIds.sorted()
-        // Every viewed post writes `posts`, which would rerun this whole-library read, so only membership writes trigger
-        // it: even ones that leave the same IDs (a removal and its Undo), since the read can fall between them.
         return dao.observeSavedPostIds(ids).flatMapLatest { dao.observeLibraryPosts(ids).take(1) }
             .decodePostSnapshots(retainedPayloads, "library:${ids.joinToString("\u0000")}")
     }
 
-    // Single-statement reads skip withTransaction: its one serialized executor and BEGIN IMMEDIATE
-    // would queue them behind likes, imports and cleaning. WAL readers see the last committed state.
     override suspend fun hasLibraryData(source: SourceKey): Boolean =
         withContext(Dispatchers.IO) { dao.hasPosts(source.id) }
 
@@ -499,19 +486,16 @@ class RoomCodexLikesRepository(
         writeDisplayOrder(dao.codices())
     }
 
-    /** Gives each Codex its position in [ordered] as its display order; returns how many moved. */
     private fun writeDisplayOrder(ordered: List<CodexEntity>): Int = ordered.withIndex().count { (index, entity) ->
         (entity.displayOrder != index).also { moved -> if (moved) dao.updateCodexOrder(entity.codexId, index) }
     }
 
-    /** Stores [post]'s snapshot, then its membership in [codexId]; true when the membership is new. */
     private fun saveItem(codexId: String, post: Post, savedAtEpochMs: Long): Boolean {
         sharedPosts.upsert(post)
         rememberPicture(post)
         return insertItem(codexId, post.id, savedAtEpochMs)
     }
 
-    /** Keeps the picture hash a listed post arrived with, which the post's own payload does not store. */
     private fun rememberPicture(post: Post) {
         val hash = post.pictureHash ?: return
         database.visualSignatureDao().put(post.id.source.id, post.id.sourcePostId, hash, clock())

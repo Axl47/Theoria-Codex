@@ -4,12 +4,6 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 
-/**
- * Decodes percent-escaped bytes as strict UTF-8 without applying form/query semantics.
- *
- * In particular, a literal `+` remains `+`. Malformed escapes, unpaired UTF-16 surrogates,
- * and malformed UTF-8 return null rather than producing a replacement character.
- */
 fun decodePercentEncodedUtf8Strict(value: String): String? {
     val bytes = ByteArrayOutputStream(value.length)
     var index = 0

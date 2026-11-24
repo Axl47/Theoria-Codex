@@ -129,7 +129,6 @@ class RoomSeriesRepositoryTest {
         repository.store(series.copy(title = "Renamed", memo = null))
         assertEquals(detailed.copy(title = "Renamed"), repository.series(id)!!.series)
 
-        // So does an entry listed without its memo, while one listed with a memo replaces it.
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", memo = """{"id":2}"""), SeriesEntry("/c/1", "Chapter 1", memo = """{"id":1}""")))
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1", memo = """{"id":"1b"}""")))
         assertEquals(listOf("""{"id":2}""", """{"id":"1b"}"""), repository.entries(id).map { it.entry.memo })
@@ -168,7 +167,6 @@ class RoomSeriesRepositoryTest {
         assertEquals(5L, moved.length)
         assertEquals("/c/2-v2", repository.series(id)!!.lastOpenedEntry)
 
-        // The old address is remembered: listed again beside its replacement, it is neither new nor unread.
         repository.recordProgress(id, "/c/2-v2", position = 5, length = 5)
         val both = listOf(third, reuploaded, SeriesEntry("/c/2", "Chapter 2", number = 2f), first)
         assertEquals(emptyList<SeriesEntry>(), repository.store(series, both))
@@ -180,12 +178,10 @@ class RoomSeriesRepositoryTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.recordProgress(id, "/c/1", position = 3, length = 3)
 
-        // Every address changes, and no chapter carries a number to match it as moved.
         val relisted = listOf(SeriesEntry("/v2/3", "Chapter 3"), SeriesEntry("/v2/2", "Chapter 2"), SeriesEntry("/v2/1", "Chapter 1"))
         assertEquals(emptyList<SeriesEntry>(), repository.store(series, relisted))
         assertEquals(relisted.map { it.address }, repository.entries(id).map { it.entry.address })
 
-        // The old chapter kept its row and progress: listed again, it is neither new nor unread.
         assertEquals(emptyList<SeriesEntry>(), repository.store(series, relisted + SeriesEntry("/c/1", "Chapter 1")))
         assertTrue(repository.entries(id).single { it.entry.address == "/c/1" }.read)
     }
@@ -198,7 +194,6 @@ class RoomSeriesRepositoryTest {
         val arrived = listOf(SeriesEntry("/v2/4", "Chapter 4"), SeriesEntry("/v2/3", "Chapter 3"))
         assertEquals(arrived, repository.store(series, arrived + first))
 
-        // Only a moved chapter matches: the rest is still new.
         val later = listOf(SeriesEntry("/v3/5", "Chapter 5"))
         assertEquals(later, repository.store(series, later + SeriesEntry("/v3/1", "Chapter 1", number = 1f)))
     }
@@ -210,7 +205,6 @@ class RoomSeriesRepositoryTest {
         repository.store(series, listOf(read, prologue))
         repository.recordProgress(id, "/c/1-a", position = 4, length = 4)
 
-        // Group A's release goes; group B's and two of a group that never released it arrive, and an unnumbered one.
         val arrived = listOf(
             SeriesEntry("/c/1-b", "Chapter 1", number = 1f, translatorGroup = "B"),
             SeriesEntry("/c/1-c", "Chapter 1", number = 1f, translatorGroup = "C"),
@@ -227,7 +221,6 @@ class RoomSeriesRepositoryTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), SeriesEntry("/c/1", "Chapter 1", number = 1f)))
         repository.recordProgress(id, "/c/1", position = 3, length = 3)
 
-        // Chapter 1's address goes; the kept address now says it is chapter 1, and a new address says so too.
         val added = SeriesEntry("/c/1-v2", "Chapter 1", number = 1f)
         assertEquals(listOf(added), repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 1", number = 1f), added)))
         assertEquals(listOf(false, false), repository.entries(id).map { it.read })
@@ -280,7 +273,6 @@ class RoomSeriesRepositoryTest {
         val restore = repository.setEntriesRead(id, listOf("/c/2", "/c/1"), read = true)
         assertEquals(listOf(false, true, true), repository.entries(id).map { it.read })
 
-        // Separate edit to an unrelated chapter after the bulk action.
         repository.setEntriesRead(id, listOf("/c/3"), read = true)
 
         repository.restoreProgress(id, restore)
@@ -296,7 +288,6 @@ class RoomSeriesRepositoryTest {
         assertEquals(4L, repository.entries(id).last().position)
         assertEquals("/c/1", repository.series(id)!!.lastOpenedEntry)
 
-        // If another chapter was opened after Mark all unread, Undo keeps that newer Continue destination.
         val allUnreadRestore = repository.setAllRead(id, read = false)
         repository.recordProgress(id, "/c/3", position = 2, length = 8)
         repository.restoreProgress(id, allUnreadRestore)
@@ -324,7 +315,6 @@ class RoomSeriesRepositoryTest {
         repository.setFollowed(id, true)
         assertEquals(FollowedSeries(series, 2, followedAtEpochMs = 200L, lastUpdatedAtEpochMs = 50L), repository.observeFollowed().first().single())
 
-        // Opening an entry stamps it; reopening it where it was left does not, and moving on does.
         now = 300L
         repository.recordProgress(id, "/c/1", position = 1, length = 4)
         now = 400L
@@ -333,7 +323,6 @@ class RoomSeriesRepositoryTest {
         now = 500L
         repository.recordProgress(id, "/c/1", position = 2, length = 4)
         assertEquals(500L, repository.observeFollowed().first().single().lastReadAtEpochMs)
-        // Marking an entry read is not reading it.
         now = 600L
         repository.setAllRead(id, read = true)
         assertEquals(listOf(null, 500L), repository.entries(id).map { it.lastReadAtEpochMs })

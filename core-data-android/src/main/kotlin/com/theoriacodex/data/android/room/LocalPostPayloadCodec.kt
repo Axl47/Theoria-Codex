@@ -26,16 +26,6 @@ class MalformedLocalPostPayloadException(
     cause: Throwable? = null,
 ) : LocalPostPayloadException("Malformed local Post payload: $reason", cause)
 
-/**
- * Strict Room boundary around the storage-independent [PostStorageRecord].
- *
- * The shared codec owns the durable field mapping. Room additionally requires an explicit current
- * schema version, validates the current record shape, and verifies that the JSON identity matches
- * the row key. This prevents corrupt or future payloads from being mistaken for missing posts.
- *
- * Rows written by Gson escape `& = < > '` as `\u0026`-style sequences and kotlinx writes them raw, so the same post can
- * be stored as different bytes; compare decoded values, never payload strings.
- */
 internal object LocalPostPayloadCodec {
     private val FULL_FIELDS = listOf(
         "fullUrl",
@@ -128,7 +118,6 @@ internal object LocalPostPayloadCodec {
     }
 }
 
-/** A JSON string, number, or boolean; null is not a value here, as it was not under Gson's tree. */
 private fun JsonElement.valueOrNull(): JsonPrimitive? = (this as? JsonPrimitive)?.takeUnless { it is JsonNull }
 
 private fun JsonObject.required(field: String): JsonElement =

@@ -22,7 +22,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** Single-statement reads use a WAL reader connection instead of queueing behind open writes. */
 @RunWith(RobolectricTestRunner::class)
 class RoomReadIsolationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()

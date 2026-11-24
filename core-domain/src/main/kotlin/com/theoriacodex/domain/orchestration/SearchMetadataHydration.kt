@@ -8,13 +8,6 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.model.Post
 
-/**
- * Hydrates overlapping branches once per input identity without changing provider continuation.
- *
- * A post whose detail page cannot be parsed is dropped: its tags cannot be verified, so it must not
- * reach local include/exclude predicates. Its siblings still publish. Source-wide failures (network,
- * auth, rate limits), or every post failing, still fail the page.
- */
 internal suspend fun List<Page<Post>>.withSearchMetadata(adapter: SourceAdapter): List<Page<Post>> {
     val metadataSource = adapter as? SearchMetadataSourceAdapter ?: return this
     val outcomes = flatMap { page -> page.items }
