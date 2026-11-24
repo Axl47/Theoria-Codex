@@ -74,6 +74,13 @@ class CheckTest(RepositoryTest):
         problems = self.problems(moved)
         self.assertIn("It moved to `core/src/new/Second.kt`", problems[1])
 
+    def test_existing_sibling_after_a_moved_sibling_still_resolves(self) -> None:
+        self.write("core/src/a/Third.kt", "")
+        self.record("0001-a.md", "- `core/src/a/Search.kt`, `Second.kt`, `Third.kt`")
+        problems = self.problems({"core/src/a/Second.kt": "core/src/z/Second.kt"})
+        self.assertEqual(1, len(problems))
+        self.assertIn("It moved to `core/src/z/Second.kt`", problems[0])
+
     def test_directory_stands_for_every_file_under_it(self) -> None:
         self.record("0001-a.md", "- `core/src/`: `SearchModel`, `otherValue`\n- `core/src/b/`: `SearchModel`")
         self.assertEqual(["docs/adr/0001-a.md: `SearchModel` is not in `core/src/b/`. "
