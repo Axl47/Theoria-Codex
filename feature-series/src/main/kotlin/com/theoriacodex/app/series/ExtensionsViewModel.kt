@@ -151,11 +151,15 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
         showListing(refresh = false)
     }
 
+    /** The latest [showListing]; an earlier one still reading the repos, such as the first refresh, is not shown. */
+    private var listingRequest = 0
+
     private suspend fun showListing(refresh: Boolean) {
+        val request = ++listingRequest
         val repos = repos.repos()
         mutableState.update { it.copy(repos = repos) }
         val listing = this.repos.available(refresh)
-        mutableState.update { it.copy(listing = listing) }
+        if (request == listingRequest) mutableState.update { it.copy(listing = listing) }
     }
 
     private fun show(listed: List<InstalledExtension>) = mutableState.update { it.copy(extensions = listed) }
