@@ -70,7 +70,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SourceKey
 
 /**
  * Likes, Followed and saved Searches as shelves under a fixed [header]: Library's own in its Saved
@@ -129,7 +128,6 @@ internal fun SavedBackHeader(onBack: () -> Unit) {
 
 /** What a held Saved post's menu can do besides liking. */
 internal class SavedPostMenu(
-    val creatorBrowsingSources: Set<SourceKey>,
     val saveToDevice: (Post) -> Unit,
     val saveToCodex: (Post) -> Unit,
     val goToSearch: () -> Unit,
@@ -200,7 +198,8 @@ private fun SavedCodexSection(
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     val postIds = remember(posts) { posts.map { it.id } }
-    // Followed and saved-search sections are live feeds, so only they can like.
+    // Followed and saved-search sections are live feeds, so only their card hearts like; the hold menu, like Codex
+    // detail's, can also unlike from Likes.
     val durations = remember(owner, durationStates) { owner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations) }
     val cards = rememberFeedCardEnvironment(
         sources.pixivUgoiraClient, state.likedPostIds, emptyMap(), durations,
@@ -231,7 +230,7 @@ private fun SavedCodexSection(
     menuPost?.let { post ->
         val menu = actions.postMenu
         FeedPostActionSheet(
-            post, menu.creatorBrowsingSources, { menuPost = null }, menu.saveToDevice, menu.saveToCodex, menu.goToSearch,
+            post, state.creatorBrowsingSources, { menuPost = null }, menu.saveToDevice, menu.saveToCodex, menu.goToSearch,
             liked = post.id in state.likedPostIds, onToggleLike = actions.toggleLike,
         )
     }
