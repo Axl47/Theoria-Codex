@@ -332,7 +332,13 @@ class SeriesTabViewModel(
             source(currentDedicated.source.key)?.let { showIn(ListingSlot.Dedicated, it, currentDedicated.kind) }
         }
         val browsedKey = state.value.browse?.key
-        if (browsedKey != null && fresh.any { it.key == browsedKey }) browse(browsedKey) else browseWhenShown()
+        if (browsedKey != null && fresh.any { it.key == browsedKey }) {
+            // A replaced source is browsed afresh, or dropped until its listing shows again.
+            val shown = state.value.view == SeriesView.BROWSE && state.value.search == null
+            if (shown) browse(browsedKey) else mutableState.update { it.copy(browse = null) }
+        } else {
+            browseWhenShown()
+        }
         if (query != null) fresh.forEach { searchIn(it, query) }
         pendingGenre?.let { (genreSource, genre) ->
             pendingGenre = null
