@@ -173,12 +173,9 @@ test_tasks=(
   :core-stubs:test
   :app-logic:test
   :core-data-android:testDebugUnitTest
-  :core-data-android:compileDebugAndroidTestKotlin
   :extension-host:testDebugUnitTest
-  :extension-host:compileDebugAndroidTestKotlin
   :ui-kit:testDebugUnitTest
   :media-kit:testDebugUnitTest
-  :media-kit:compileDebugAndroidTestKotlin
   :vision-kit:testDebugUnitTest
   :feed-kit:testDebugUnitTest
   :feature-viewer:testDebugUnitTest
@@ -188,10 +185,15 @@ test_tasks=(
   :feature-series:testDebugUnitTest
   :feature-settings:testDebugUnitTest
   :app:testDebugUnitTest
-  :app:compileDebugAndroidTestKotlin
-  :app:assembleDebug
   :koverXmlReportQuality
   :koverVerifyQuality
+)
+apk_tasks=(
+  :app:assembleDebug
+  :app:compileDebugAndroidTestKotlin
+  :core-data-android:compileDebugAndroidTestKotlin
+  :extension-host:compileDebugAndroidTestKotlin
+  :media-kit:compileDebugAndroidTestKotlin
 )
 detekt_tasks=(
   :app:detektDebug
@@ -341,6 +343,7 @@ run_lint() {
     :feature-discover:compileDebugKotlin \
     :feature-series:compileDebugKotlin \
     :feature-settings:compileDebugKotlin \
+    "${apk_tasks[@]}" \
     --warning-mode=all \
     --console=plain
 
@@ -357,7 +360,7 @@ run_check() {
   phase 'Gradle: shared build' ./gradlew "${task_timings[@]}" "${shared_tasks[@]}" --warning-mode=all --console=plain
   phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --dry-run --console=plain
   lane 'Gradle: lint' lint_in_daemon
-  lane 'Gradle: tests, coverage and Detekt' ./gradlew "${task_timings[@]}" "${test_tasks[@]}" "${detekt_tasks[@]}" \
+  lane 'Gradle: tests, coverage and Detekt' ./gradlew "${task_timings[@]}" "${test_tasks[@]}" "${apk_tasks[@]}" "${detekt_tasks[@]}" \
     --warning-mode=all --console=plain
   phase 'npm ci' install_node_modules
   phase 'Duplicate audit' npm run audit:duplicates
