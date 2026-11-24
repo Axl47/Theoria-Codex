@@ -32,26 +32,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** Which icon marks each Saved collection; anything else is the profile's Likes. */
 fun savedCodexChildIcon(codexId: String): ImageVector = when (codexId) {
     FOLLOWED_CODEX_ID -> Icons.Default.Person
     SAVED_SEARCHES_CODEX_ID -> Icons.Default.Search
     else -> Icons.Default.Favorite
 }
 
-/** The word after a Saved shelf's [count], if its collection is counted in something other than items. */
 fun savedCodexCountSuffix(codexId: String, count: Int): String? = when (codexId) {
     FOLLOWED_CODEX_ID -> countNoun(count, "creator")
     SAVED_SEARCHES_CODEX_ID -> "saved"
     else -> null
 }
 
-/**
- * Every Codex in the library: name and count over its cover, with actions on long press, and the offline ring in
- * the corner while the Codex is kept offline (status only: a tap anywhere opens the Codex). Without
- * [longPressOpensActions] the grid owns the long-press gesture (Manual sort's drag) and only accessibility services
- * open the actions here.
- */
 @Composable
 internal fun CodexCoverTile(
     codexId: String,
@@ -79,7 +71,6 @@ internal fun CodexCoverTile(
     ) {
         if (onCover) {
             CodexCoverImage(covers, null, Modifier.fillMaxSize()) {}
-            // Covers vary, so a scrim keeps the name and count readable over any of them.
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.72f)),

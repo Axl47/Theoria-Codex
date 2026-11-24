@@ -19,12 +19,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 
-/**
- * Suggested save targets per post for one-tap save surfaces, ranked by [rankSaveTargets] like the picker.
- *
- * The active profile's Codices, their item lists and covers are observed once and shared by every post being
- * asked about; each post adds only its relevance lookup from [relevance]. Stops 5 s after the last collector.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SaveSuggestionSource(
     codices: CodexRepository,
@@ -42,7 +36,6 @@ class SaveSuggestionSource(
             .flatMapLatest { (profileId, profileCodices) -> observeLibrary(codices, collection, profileId, profileCodices) }
             .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), replay = 1)
 
-    /** The top [limit] Codices [post] is not in yet, for a post shown from search [query]. */
     fun observe(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> =
         combine(library, relevance.observe(listOf(post), query)) { library, scores ->
             val containing = library.items.filterValues { items -> items.any { it.postId == post.id } }.keys

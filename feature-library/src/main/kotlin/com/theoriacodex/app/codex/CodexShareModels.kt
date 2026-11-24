@@ -24,10 +24,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 
-/**
- * The Codex share export, written with kotlinx.serialization. Imports walk the JSON tree in [parseCodexShareFile]
- * instead, so a wrong-typed optional value is dropped while the rest of the file still imports.
- */
 @Serializable
 data class CodexShareFile(
     @SerialName("version")
@@ -88,7 +84,6 @@ data class CodexSharePostSnapshot(
 data class CodexShareImageRef(
     @SerialName("url")
     val url: String? = null,
-    // Device paths never leave the device. kotlinx ignores kotlin.jvm.Transient, so this must be the kotlinx one.
     @Transient
     val localPath: String? = null,
     @SerialName("mime")
@@ -141,7 +136,6 @@ internal fun buildCodexShareFile(title: String, posts: List<Post>): CodexShareFi
     )
 }
 
-/** The export file's JSON text for [posts] under the Codex [title]. */
 fun encodeCodexShareFile(title: String, posts: List<Post>): String =
     DurableJson.encodeToString(CodexShareFile.serializer(), buildCodexShareFile(title, posts))
 
@@ -428,12 +422,10 @@ private fun JsonObject.toCodexShareCreatorProfile(): CodexShareCreatorProfile {
 
 private fun JsonObject.objectOrNull(name: String): JsonObject? = get(name) as? JsonObject
 
-/** The content of a JSON string; numbers, booleans, and nulls do not count. */
 private fun JsonObject.stringOrNull(name: String): String? = (get(name) as? JsonPrimitive)?.stringOrNull()
 
 private fun JsonPrimitive.stringOrNull(): String? = content.takeIf { isString }
 
-/** The literal text of a JSON number, for the typed readers below. */
 private fun JsonObject.numberOrNull(name: String): String? =
     (get(name) as? JsonPrimitive)?.takeIf { !it.isString && it !is JsonNull && it.booleanOrNull == null }?.content
 
@@ -454,7 +446,6 @@ private fun <T> JsonObject.objectListOrNull(
     return listOrNull(name) { value -> (value as? JsonObject)?.let(transform) }
 }
 
-/** Absent or null is null; any other non-array is an empty list, so a damaged list never fails the post. */
 private fun <T> JsonObject.listOrNull(
     name: String,
     transform: (JsonElement) -> T?,
@@ -469,7 +460,6 @@ private const val CODEX_SHARE_VERSION = 2
 const val CODEX_SHARE_MAX_BYTES = 32 * 1024 * 1024
 internal const val CODEX_SHARE_MAX_POSTS = 100_000
 
-/** Byte/depth checks precede parsing; per-value bounds cap work inside otherwise valid documents. */
 private fun boundedShareValue(value: JsonElement, root: Boolean = false): Boolean = when (value) {
     is JsonObject -> value.entries.all { (key, child) ->
         key.length <= 256 && if (root && key == "posts" && child is JsonArray) {

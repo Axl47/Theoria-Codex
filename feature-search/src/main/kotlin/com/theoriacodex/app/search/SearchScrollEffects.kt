@@ -37,22 +37,16 @@ internal fun SearchScrollRestorationEffect(
     val restoration = state.restoration as? SearchRestorationUiState.Restored
     val currentRestoration by rememberUpdatedState(restoration)
     val dispatch by rememberUpdatedState(onAction)
-    // Decided once per request, when it first arrives: a grid showing posts then kept its place, while one
-    // that was not yet showing posts is restored however many jumps it takes. Read without observation so
-    // scrolling neither recomposes the screen nor restarts the effect.
     val gridWasShowingPosts = remember(restoration?.scrollRequestId) {
         Snapshot.withoutReadObservation { gridState.layoutInfo.visibleItemsInfo.isNotEmpty() }
     }
-    // A deliberate drag supersedes restoration; scrollToItem emits no DragInteraction.
     LaunchedEffect(gridState) {
         gridState.interactionSource.interactions.filterIsInstance<DragInteraction.Start>().collect {
             currentRestoration?.let { supersedeScrollRequest(it, dispatch) }
         }
     }
-    // Only the state rules wait, so the grid facts passed here cannot change whether a step is ready.
     val canRestore =
         state.scrollStep(visibilityReady, projection.entries.size, gridWasShowingPosts = false) != ScrollStep.Wait
-    // A retry needs the posts that arrived, which can reach the projection after the state that loaded them.
     LaunchedEffect(restoration?.scrollRequestId, canRestore, projection.entries.size) {
         val activeProjection = currentProjection
         when (val step = state.scrollStep(visibilityReady, activeProjection.entries.size, gridWasShowingPosts)) {
@@ -63,7 +57,6 @@ internal fun SearchScrollRestorationEffect(
                 gridState.scrollToItem(index, step.offsetPx)
                 val reached = gridState.firstVisibleItemIndex == index &&
                     gridState.firstVisibleItemScrollOffset == step.offsetPx
-                // An open request lets the list end ask for the next page, whose posts retry the jump.
                 val after = state.scrollStepAfterJump(reached, gridState.canScrollForward)
                 if (after is ScrollStep.Finish) dispatch(SearchAction.ScrollRestorationApplied(after.requestId))
             }
@@ -83,8 +76,6 @@ internal fun SearchScrollPersistenceEffect(
     val dispatch by rememberUpdatedState(onAction)
     LaunchedEffect(queryHash, restoration.allowsScrollPersistence) {
         if (!restoration.allowsScrollPersistence) return@LaunchedEffect
-        // Filtering can replace the post at an unchanged grid index and offset. Each persist writes saved
-        // state, so mid-scroll only a new leading item is reported; the exact offset follows once it settles.
         snapshotFlow {
             val offset = if (gridState.isScrollInProgress) {
                 Snapshot.withoutReadObservation { gridState.firstVisibleItemScrollOffset }
@@ -102,15 +93,10 @@ internal fun SearchScrollPersistenceEffect(
     }
 }
 
-/**
- * Closes an open scroll request before a deliberate move (drag, Reset, tab reselect), so the posts it waits for
- * do not later jump the grid back to the old place.
- */
 internal fun supersedeScrollRequest(restoration: SearchRestorationUiState, onAction: (SearchAction) -> Unit) {
     restoration.openScrollRequestId?.let { onAction(SearchAction.ScrollRestorationApplied(it)) }
 }
 
-/** Tapping the Search tab again scrolls to the top, which supersedes an open request like a drag does. */
 @Composable
 internal fun SearchTabReselectEffect(
     restoration: SearchRestorationUiState,
@@ -123,14 +109,12 @@ internal fun SearchTabReselectEffect(
     }
 }
 
-/** The composer's Reset: moves the grid to the top and saves that as the query's place. */
 internal suspend fun resetSearchScroll(
     visibleResults: List<Post>,
     gridState: LazyStaggeredGridState,
     restoration: SearchRestorationUiState,
     onAction: (SearchAction) -> Unit,
 ) {
-    // Closed first: an open request blocks persistence, which would drop the ScrollChanged below.
     supersedeScrollRequest(restoration, onAction)
     if (visibleResults.isNotEmpty()) {
         runCatchingPreservingCancellation {

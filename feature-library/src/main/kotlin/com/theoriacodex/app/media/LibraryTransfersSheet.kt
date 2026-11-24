@@ -38,11 +38,6 @@ import com.theoriacodex.app.ui.undo.PendingRemoval
 import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
 import com.theoriacodex.domain.series.SeriesId
 
-/**
- * What the offline rows can do; [remove] and [removeAll] are deferred destruction with Undo in the sheet, and
- * [actOnRemoval] is a pending removal's Undo or Retry (see [OfflineStorageUiState.pendingRemovals]). [openCodex]
- * and [openSeries] open the Codex or series a row keeps offline.
- */
 class OfflineRowActions(
     val retry: (owner: String) -> Unit,
     val cancel: (owner: String) -> Unit,
@@ -53,12 +48,6 @@ class OfflineRowActions(
     val openSeries: (SeriesId) -> Unit,
 )
 
-/**
- * The Library's one sheet for offline Codices (with progress, Cancel, Retry, Remove) above exported
- * downloads. Opened for a Codex ([markedCodexId]), it scrolls to and marks that Codex's row. Each pending removal
- * draws its Undo where the item was ([downloadRemovals], [OfflineStorageUiState.pendingRemovals]); leaving the
- * sheet calls [onLeave], which commits them.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryTransfersSheet(
@@ -76,7 +65,6 @@ fun LibraryTransfersSheet(
         val content = TransfersSheetContent(offline, batches, downloadRemovals.pending)
         val marked = markedCodexId?.let(::codexOfflineOwner)
         val grid = rememberLazyGridState()
-        // Owners may still be loading when the sheet opens, so scroll once the marked row exists.
         val markedRow = offline.owners.indexOfFirst { it.id == marked }
         LaunchedEffect(marked, markedRow >= 0) {
             if (markedRow >= 0) grid.scrollToItem(content.offlineRowsStart + markedRow)
@@ -95,14 +83,8 @@ fun LibraryTransfersSheet(
     }
 }
 
-/** The pending download removals and the action of each one's row (Undo, or Retry after a failure). */
 class DownloadRemovalRows(val pending: Map<DownloadRemoval, PendingRemoval>, val act: (DownloadRemoval) -> Unit)
 
-/**
- * What the sheet lists given the pending removals: a download removed from its tile keeps that slot, drawn as
- * Undo; section-wide removals draw under their section's header. A removal also covers the pages a removed gallery
- * expands into while it waits, so they stay hidden and the gallery's first page keeps its one Undo row.
- */
 internal class TransfersSheetContent(
     offline: OfflineStorageUiState,
     batches: List<PostDownloadBatch>,
@@ -111,7 +93,6 @@ internal class TransfersSheetContent(
     private val items = batches.asReversed().flatMap { it.items }
     private val hidden = downloadRemovals.keys.flatMapTo(mutableSetOf()) { it.ids }
 
-    /** Each download removed from its own tile, by the id of the first tile it covers: its row takes that place. */
     val tileRemovals = downloadRemovals.keys.filter { it.anchor != DownloadsUndoAnchor }
         .mapNotNull { removal -> items.firstOrNull { it.removedBy(removal.ids) }?.let { it.id to removal } }.toMap()
     val visibleItems = items.filterNot { it.removedBy(hidden) }
@@ -120,7 +101,6 @@ internal class TransfersSheetContent(
     val showOffline = offline.owners.isNotEmpty() || offline.pendingRemovals.isNotEmpty() || offline.message != null
     val showDownloads = shownItems.isNotEmpty() || bulkRemovals.isNotEmpty()
 
-    /** The grid index of the first offline owner row: after the header, any message and any Undo rows. */
     val offlineRowsStart = 1 + listOfNotNull(offline.message).size + offline.pendingRemovals.size
 }
 

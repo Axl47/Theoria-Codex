@@ -19,7 +19,6 @@ internal fun EmptyBlock(messageOverride: String? = null) {
     )
 }
 
-/** A failed search, whose action verifies the source in the browser when a challenge blocked it, else retries. */
 @Composable
 fun SourceFailureBlock(
     message: String,
@@ -42,7 +41,6 @@ fun SourceFailureBlock(
     )
 }
 
-/** Says a source needs an account, with a way straight to the key field when it is an added site. */
 @Composable
 internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus>, onDismiss: (() -> Unit)? = null) {
     val health = LocalSourceHealth.current
@@ -56,10 +54,6 @@ internal fun SourceAccountNotice(message: String, statuses: List<SourceRunStatus
     )
 }
 
-/**
- * Says which sources a multi-source search is missing and why. Their chips live in the composer, which is
- * collapsed once results are showing. Each notice stays dismissed for as long as its outage lasts.
- */
 @Composable
 fun SourceOutageNotices(notices: List<SourceOutageNotice>) {
     val health = LocalSourceHealth.current

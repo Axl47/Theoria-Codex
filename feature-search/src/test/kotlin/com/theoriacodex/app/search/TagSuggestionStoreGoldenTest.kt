@@ -14,11 +14,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * tag_suggestions.json files older builds wrote must load to the same suggestions. gson-written.json is the Gson
- * store's own output (HTML-escaped strings); legacy.json is a sparse file with a quoted count, a null source list,
- * an unknown source, and a retired key.
- */
 class TagSuggestionStoreGoldenTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
@@ -49,7 +44,6 @@ class TagSuggestionStoreGoldenTest {
         }
     }
 
-    // The Gson store never wrote a source namespace, so full.json, captured from the kotlinx store, sets every key.
     @Test
     fun `the full cache holds every stored key`() {
         val full = TagStoreSnapshot(

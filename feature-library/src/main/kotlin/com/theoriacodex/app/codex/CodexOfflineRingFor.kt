@@ -12,12 +12,6 @@ import com.theoriacodex.app.media.LocalCodexOfflineControls
 import com.theoriacodex.app.media.LocalCodexOfflineStates
 import com.theoriacodex.app.ui.components.ActionMenuRow
 
-/**
- * Codex [codexId]'s offline ring on its detail screen, drawn only while the Codex is kept offline. A tap toggles
- * the copy: a full ring removes it (Undo on this screen), a running one opens the Library's offline sheet on its
- * row, and an incomplete or failed one tops it up or retries through [onTopUp], which skips what is already
- * kept. Without [onTopUp] those open the sheet instead.
- */
 @Composable
 internal fun CodexOfflineRingFor(codexId: String, onTopUp: (() -> Unit)?, modifier: Modifier = Modifier) {
     val state = LocalCodexOfflineStates.current[codexId] ?: return
@@ -25,17 +19,11 @@ internal fun CodexOfflineRingFor(codexId: String, onTopUp: (() -> Unit)?, modifi
     CodexOfflineRing(state, modifier, clickLabel = tap.label, onClick = tap.run)
 }
 
-/** Codex [codexId]'s offline ring on a Library tile: status only, so a tap anywhere on the tile opens the Codex. */
 @Composable
 internal fun CodexOfflineStatusFor(codexId: String, modifier: Modifier = Modifier) {
     LocalCodexOfflineStates.current[codexId]?.let { CodexOfflineRing(it, modifier) }
 }
 
-/**
- * The Codex menu's offline row: "Make available offline" through [makeOffline] when the Codex is not kept offline,
- * "Remove offline copy" (deferred, with Undo where the menu was opened: Codex detail or the Library) when it is.
- * [close] dismisses the menu first.
- */
 @Composable
 internal fun CodexOfflineMenuRow(codexId: String, close: () -> Unit, makeOffline: (String) -> Unit) {
     if (codexId in LocalCodexOfflineStates.current) {
@@ -46,7 +34,6 @@ internal fun CodexOfflineMenuRow(codexId: String, close: () -> Unit, makeOffline
     }
 }
 
-/** What tapping the detail ring does, and the label TalkBack reads for it. */
 internal class CodexOfflineRingTap(val label: String, val run: () -> Unit)
 
 internal fun codexOfflineRingTap(

@@ -123,7 +123,6 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
             assertEquals("nhentai-search-id:123", effect.context.queryHash)
             assertFalse(effect.liveSearchBinding)
             assertTrue(effect.fromTypedId)
-            // The ID is a shortcut: it never joins the draft, and no search runs for it.
             assertTrue(viewModel.state.value.query.draft.includeTags.isEmpty())
             assertFalse(viewModel.state.value.content.hasExecutedSearch)
         }

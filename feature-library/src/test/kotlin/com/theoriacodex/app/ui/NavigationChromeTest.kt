@@ -63,7 +63,6 @@ class NavigationChromeTest {
         compose.onNodeWithText("3").assertExists()
 
         compose.onNodeWithContentDescription("Clear filters").performClick()
-        // TalkBack reads only "Undo", announced as it appears.
         compose.onNodeWithText("Undo")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
@@ -79,7 +78,6 @@ class NavigationChromeTest {
     @Test
     fun filteredCodexCardLaunchesOnlyVisiblePostsInRepositoryOrder() {
         val first = post(SourceKey.PIXIV, "first")
-        // A provider-local ID collision must not leak a filtered post into the Viewer launch.
         val hidden = post(SourceKey.GELBOORU, "second")
         val second = post(SourceKey.PIXIV, "second")
         var launch: Pair<List<Post>, Int>? = null

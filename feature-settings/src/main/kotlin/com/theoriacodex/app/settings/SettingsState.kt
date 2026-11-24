@@ -16,28 +16,16 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-/** Pages inside Settings; held by the owner so other screens can open Settings at a page. */
 enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS, PICTURE_TAGS }
 
-/** Sheets over Settings' home; held by the owner, like [SettingsPage], so the search box can open one. */
 enum class SettingsSheet { DOWNLOADS, CONTROLS, SERIES_UPDATES }
 
-/**
- * What Sites shows of the accounts Settings owns: a built-in source's status line (null when it has no
- * accounts) and its controls.
- */
 class BuiltInAccounts(val summary: (SourceKey) -> String?, val controls: @Composable (SourceKey) -> Unit)
 
-/**
- * Settings → Sites, supplied by the app shell so Settings stays independent of the sites owner.
- * [summary] is the home row's value; [page] renders the page and calls its `onBack` to return home.
- */
-/** What the Stats page asks of the app shell: leaving Settings for the Viewer and exchanging files. */
 class StatsActions(
     val openPost: suspend (PostId) -> Unit = {},
     val share: suspend (StatsShareFile) -> Unit = {},
     val readFile: suspend (document: String) -> StatsShareFile? = { null },
-    /** A post for showing its thumbnail: the saved copy, or one looked up on its site without saving it. */
     val previewPost: suspend (PostId) -> Post? = { null },
     val download: suspend (StatsShareFile) -> Unit = {},
 )
@@ -51,13 +39,8 @@ class SettingsDiagnosticsEntry(
 
 class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () -> Unit, accounts: BuiltInAccounts) -> Unit)
 
-/** Settings → Picture tags, supplied by the app shell, which owns the tagger: the home row's value and the page. */
 class SettingsPicturesEntry(val summary: String, val page: @Composable (onBack: () -> Unit) -> Unit)
 
-/**
- * The Settings home row and page for backups: [controls] for backing up and restoring, then [daily] in a group of its
- * own. [summary] and [daily] are null when this build has no daily backup.
- */
 class SettingsBackupEntry(val summary: AutoBackupSummary?, val daily: (@Composable () -> Unit)? = null, val controls: @Composable () -> Unit)
 
 data class SettingsAccountUiState(
@@ -88,18 +71,15 @@ data class SettingsUiState(
     val cacheSnapshot: CacheSnapshot = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     val showDeveloperScenarios: Boolean = false,
     val page: SettingsPage = SettingsPage.HOME,
-    /** The sheet open over home; opening any page closes it. */
     val sheet: SettingsSheet? = null,
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
     val profileDeleteTargetId: String? = null,
     val changelogLoading: Boolean = false,
     val recoveredStores: List<CorruptionRecovery> = emptyList(),
-    /** Someone else's stats file while it is being compared; deliberately never written to storage. */
     val statsComparison: StatsShareFile? = null,
 )
 
 sealed interface SettingsAction {
-    /** Opens [page], with [sheet] over it when the page is home; `OpenPage(HOME)` closes an open sheet. */
     data class OpenPage(val page: SettingsPage, val sheet: SettingsSheet? = null) : SettingsAction
     data class SetStatsComparison(val file: StatsShareFile?) : SettingsAction
     data class SetActiveProfile(val profileId: String) : SettingsAction
@@ -111,10 +91,8 @@ sealed interface SettingsAction {
     data class RemoveBlacklistEntry(val source: SourceKey, val tags: List<String>) : SettingsAction
     data class SetEnabledSources(val sources: Set<SourceKey>) : SettingsAction
     data class SetSourceWeights(val sources: Set<SourceKey>, val weights: Map<SourceKey, Double>) : SettingsAction
-    /** Writes one of [com.theoriacodex.data.repository.SettingToggles]; every switch in Settings and the search box sends this. */
     data class SetToggle(val toggle: SettingToggle, val enabled: Boolean) : SettingsAction
 
-    /** Writes one of [com.theoriacodex.data.repository.SettingChoices]. */
     data class SetChoice<T>(val choice: SettingChoice<T>, val value: T) : SettingsAction {
         fun applyTo(settings: AppSettings): AppSettings = choice.write(settings, value)
     }
@@ -140,7 +118,6 @@ sealed interface SettingsAction {
     data object DismissCredentialRecovery : SettingsAction
     data object ResetCredentialStore : SettingsAction
 
-    /** Opens Settings → Sites from elsewhere in the app. */
     data object OpenCustomSites : SettingsAction
     data object SettingsEntered : SettingsAction
 }

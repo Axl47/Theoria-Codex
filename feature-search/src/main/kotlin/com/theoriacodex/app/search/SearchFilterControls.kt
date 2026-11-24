@@ -61,7 +61,6 @@ internal fun FavoriteTagSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Saved tags", style = MaterialTheme.typography.titleLarge)
-            // What each kind does, since saved searches (which run) sit beside these in the composer.
             Text(
                 "Saved tags add to the search you're building. Save a tag by holding it in a post's info, " +
                     "or an “or” group from the composer.",
@@ -102,7 +101,6 @@ private fun FavoriteTagSectionContent(
     }
 }
 
-/** Quick ranges plus a calendar. Picker values and local filtering both read dates in UTC. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePreset) -> Unit, onCustom: (DateRange) -> Unit) {
@@ -143,10 +141,6 @@ internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePrese
     }
 }
 
-/**
- * The current scope stays visible; holding menu sources edits the Unified source group. [onOpenSourceMix], given
- * while the search is Unified, adds a Source mix chip after the sources.
- */
 @Composable
 internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,

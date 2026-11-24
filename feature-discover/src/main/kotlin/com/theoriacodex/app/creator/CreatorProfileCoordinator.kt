@@ -18,19 +18,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Stateless provider boundary. The route owns admission, continuation, and request lifetime. */
 interface CreatorRouteEngine {
     fun supports(creator: CreatorProfile): Boolean
 
-    /** The feeds [creator] offers as a site account, in tab order; empty for creators that are artist tags or searches. */
     fun accountFeeds(creator: CreatorProfile): List<AccountFeed> = emptyList()
 
-    /** Header facts for an account; null when the source has none. Failures throw. */
     suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = null
     suspend fun load(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post>
     suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>)
 
-    /** The post ids [creator]'s follow has seen, or null when it is not followed. */
     suspend fun seenPostIds(creator: CreatorProfile): Set<String>? = null
     suspend fun resolvePost(postId: PostId): Post?
 }
@@ -38,10 +34,8 @@ interface CreatorRouteEngine {
 class CreatorProfileCoordinator(
     private val registry: SourceAdapterRegistry,
     private val follows: CreatorFollowsRepository? = null,
-    /** Shared with the Viewer, so a card and the Viewer asking for one post at once fetch it once. */
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
-    /** Account and creator pages are fetched and parsed here, off the main thread. Tests pass [kotlin.coroutines.EmptyCoroutineContext]. */
     private val providerContext: CoroutineContext = Dispatchers.Default,
 ) : CreatorRouteEngine {
     override fun supports(creator: CreatorProfile): Boolean = accountAdapterFor(creator) != null || adapterFor(creator) != null
@@ -54,7 +48,6 @@ class CreatorProfileCoordinator(
         return withTimeoutOrNull(SOURCE_TIMEOUT_MS) { withContext(providerContext) { adapter.accountDetails(creator) } }
     }
 
-    /** An account's feeds, uploads included, come from its account adapter; any other creator is an uploads search. */
     override suspend fun load(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> {
         val account = accountAdapterFor(creator)
         val search = adapterFor(creator)

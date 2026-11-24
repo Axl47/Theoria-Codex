@@ -33,29 +33,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/**
- * Long-press drag reordering for the Library's Codex grid under Manual sort.
- *
- * The gesture runs on the grid ([codexReorderGestures]), not on a tile, so a tile the lazy grid disposes mid-drag
- * never cancels it. The lifted tile follows the finger; when its centre crosses another movable tile it takes that
- * tile's place in [order], and the others glide there through `animateItem`. Keys for which [isFixed] holds (a
- * Codex waiting to be deleted) never move. The grid binds what it presents through [bind] on every composition, and
- * reports a commit that failed through [commitFailed].
- */
 @Stable
 internal class CodexGridReorderState(private val grid: LazyGridState, private val isFixed: (String) -> Boolean) {
-    /** What the grid shows while a drag or its commit is pending; null shows the presented order. */
     var order by mutableStateOf<List<String>?>(null)
         private set
 
-    /** The lifted tile, kept while it settles into its cell so it stays drawn above its neighbours. */
     var liftedKey by mutableStateOf<String?>(null)
         private set
 
     var dragging by mutableStateOf(false)
         private set
 
-    // Where the lifted tile's top-left belongs, in viewport coordinates; scrolling moves cells, not the finger.
     private var finger by mutableStateOf(Offset.Zero)
     private var settleOffset by mutableStateOf(Offset.Zero)
     private var liftedFrom = Offset.Zero
@@ -66,10 +54,6 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
     private var settleJob: Job? = null
     private var shown: List<String> = emptyList()
 
-    /**
-     * Takes the presented keys after each composition. A commit that arrived, a Codex that came or went, or
-     * reordering turning off ([enabled] false: an automatic sort) ends the pending order.
-     */
     fun bind(presented: List<String>, enabled: Boolean) {
         shown = presented
         val pending = order ?: return
@@ -78,22 +62,15 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         when {
             !enabled || pendingIds.toSet() != shownIds.toSet() -> abandon()
             !dragging && pendingIds == shownIds -> order = null
-            // A fixed cell that went would leave the pending order out of step with the grid.
             else -> order = displayed(presented)
         }
     }
 
-    /** The keys to lay out: the pending order while it holds the [presented] Codices, less a fixed cell since gone. */
     fun displayed(presented: List<String>): List<String> {
         val pending = order?.takeIf { it.filterNot(isFixed).toSet() == presented.filterNot(isFixed).toSet() }
         return pending?.filter { !isFixed(it) || it in presented } ?: presented
     }
 
-    /**
-     * A commit of [failed] did not land, so the grid would keep showing an order that was never saved: drop the
-     * pending order while it is still that one. A newer order waiting on its own commit stays. A drag in progress
-     * keeps its order, but if it was lifted from [failed] it falls back to the presented order when it ends unchanged.
-     */
     fun commitFailed(failed: List<String>) {
         if (dragging) {
             if (pickedOrder == failed) pickedOrder = shown
@@ -102,14 +79,12 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         }
     }
 
-    /** Where tile [key] is drawn relative to its cell. */
     fun translationOf(key: String): Offset = when {
         key != liftedKey -> Offset.Zero
         dragging -> cell(key)?.let { finger - it.offset.toOffset() } ?: Offset.Zero
         else -> settleOffset
     }
 
-    /** Lifts the movable tile under [position]; returns its key, or null when there is none. */
     fun pickUp(position: Offset): String? {
         val item = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.contains(position) } ?: return null
         val key = (item.key as? String)?.takeUnless(isFixed) ?: return null
@@ -133,22 +108,16 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         swapUnderCentre(haptics)
     }
 
-    /**
-     * Ends the drag: commits a changed order through [commit] and settles the tile into its cell. Returns the key
-     * whose menu to open when the tile was released where it was picked up.
-     */
     fun release(scope: CoroutineScope, touchSlop: Float, commit: (List<String>) -> Unit): String? {
         val key = liftedKey?.takeIf { dragging } ?: return null
         val from = translationOf(key)
         dragging = false
         val next = order
-        // Committing even an order equal to the presented one overrides a commit of the previous drag still in flight.
         if (swapped && next != null && next != pickedOrder) commit(next) else order = pickedOrder.takeUnless { it == shown }
         settle(scope, from)
         return key.takeIf { !swapped && travel <= touchSlop }
     }
 
-    /** A cancelled gesture puts the order back as it was when the tile was lifted. */
     fun cancel() {
         if (!dragging) return
         dragging = false
@@ -156,10 +125,8 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         order = pickedOrder.takeUnless { it == shown }
     }
 
-    /** Whether [key] can move [step] places among [presented]; see [stepTile]. */
     fun canStep(presented: List<String>, key: String, step: Int): Boolean = !dragging && step(presented, key, step) != null
 
-    /** Moves [key] [step] places without a drag, for TalkBack, and commits the result at once. */
     fun stepAndCommit(presented: List<String>, key: String, step: Int, commit: (List<String>) -> Unit): Boolean {
         val next = step(presented, key, step)?.takeIf { !dragging } ?: return false
         order = next
@@ -167,7 +134,6 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         return true
     }
 
-    /** Scrolls while the lifted tile is near the grid's top or bottom edge, for as long as the drag lasts. */
     suspend fun autoScroll(edgeZone: Float, maxStep: Float, haptics: HapticFeedback) {
         while (dragging) {
             withFrameNanos { }
@@ -192,13 +158,11 @@ internal class CodexGridReorderState(private val grid: LazyGridState, private va
         val key = liftedKey ?: return
         val current = order ?: return
         val visible = grid.layoutInfo.visibleItemsInfo
-        // Until the grid lays the last swap out, its cells still describe the order before it.
         if (visible.any { current.getOrNull(it.index) != it.key }) return
         val centre = finger + pickedSize.center.toOffset()
         val target = visible.firstOrNull { it.key != key && it.contains(centre) }?.key as? String ?: return
         val next = moveTile(current, key, target, current.filter(isFixed).toSet())
         if (next == current) return
-        // The grid keeps its first visible key in place, so moving that tile would scroll the grid with it.
         val first = grid.firstVisibleItemIndex
         if (first == current.indexOf(key) || first == current.indexOf(target)) {
             grid.requestScrollToItem(first, grid.firstVisibleItemScrollOffset)
@@ -231,10 +195,6 @@ private fun LazyGridItemInfo.contains(point: Offset): Boolean =
 
 private val SETTLE_SPEC = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow, Offset.VisibilityThreshold)
 
-/**
- * Lifts a tile of the grid this modifies on long press and drags it until release; see [CodexGridReorderState].
- * [onCommit] receives a changed order once; [onOpenActions] the key of a tile released where it was lifted.
- */
 internal fun Modifier.codexReorderGestures(
     state: CodexGridReorderState,
     haptics: HapticFeedback,
@@ -256,10 +216,6 @@ internal fun Modifier.codexReorderGestures(
     }
 }
 
-/**
- * Feeds the lifted pointer to [state] until it lifts (true) or goes missing (false). It is consumed in the initial
- * pass, so neither the grid's scrolling nor the tile's click acts on it.
- */
 private suspend fun AwaitPointerEventScope.followFinger(id: PointerId, state: CodexGridReorderState, haptics: HapticFeedback): Boolean {
     while (true) {
         val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == id } ?: return false

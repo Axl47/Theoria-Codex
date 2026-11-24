@@ -22,7 +22,6 @@ internal class SearchSourceSwitchViewModelTest : SearchViewModelTestFixture() {
         val owner = viewModel(pixiv, additionalAdapters = listOf(aibooru))
         restore(owner)
 
-        // Before anything is on screen, picking a source only prepares the draft.
         owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.AIBOORU)))
         advanceUntilIdle()
         assertEquals(0, pixiv.searchCount + aibooru.searchCount)

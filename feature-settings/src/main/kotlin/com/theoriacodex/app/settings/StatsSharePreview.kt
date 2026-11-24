@@ -61,10 +61,8 @@ import com.theoriacodex.app.ui.components.SettingsPageColumn
 
 private val StringSetSaver = listSaver<Set<String>, String>({ it.toList() }, { it.toSet() })
 
-/** This set with [key] present when [present] is true, and absent otherwise. */
 private fun Set<String>.withMember(key: String, present: Boolean): Set<String> = if (present) this + key else this - key
 
-/** Shows exactly what the file will hold; everything left unchecked is recalculated out of the totals. */
 @Composable
 fun StatsSharePreview(
     profiles: List<ProfileStatistics>,
@@ -75,7 +73,6 @@ fun StatsSharePreview(
     onBack: () -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
-    // Starts with the profile in use: another profile may be private, so including it takes a deliberate tap.
     var includedProfiles by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(setOf(activeProfileId)) }
     var includeOverall by rememberSaveable { mutableStateOf(true) }
     var excludedCodices by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
@@ -128,7 +125,6 @@ fun StatsSharePreview(
     }
 }
 
-/** Each chip switches the list below; its check shows whether that profile is part of the file. */
 @Composable
 private fun ShareProfileTabs(
     profiles: List<ProfileStatistics>,
@@ -169,7 +165,6 @@ private fun ShareProfileToggle(profile: ProfileStatistics, included: Boolean, on
     }
 }
 
-/** [file] is the preview, which can trail the last tap; the shared file is rebuilt from the current selection. */
 @Composable
 private fun ShareButtons(file: StatsShareFile, buildFile: () -> StatsShareFile, actions: StatsActions) {
     var busy by remember { mutableStateOf(false) }
@@ -205,7 +200,6 @@ private fun ShareNameCard(name: String, onNameChange: (String) -> Unit) {
     }
 }
 
-/** App-wide totals, which hold time outside Codices too; they can be left out as a whole. */
 @Composable
 private fun ShareOverall(overall: StatsShareOverall, included: Boolean, onIncludedChange: (Boolean) -> Unit) {
     if (included) {
@@ -244,7 +238,6 @@ private fun ShareTotalsCard(totals: StatsShareTotals, codexCount: Int, profileCo
     }
 }
 
-/** The same list as Stats → Codices, with a checkbox for leaving a Codex out. */
 @Composable
 private fun ShareCodices(
     codices: List<CodexStatisticsSummary>,
@@ -284,7 +277,6 @@ private fun ShareCodices(
     }
 }
 
-/** Rows open the post so it can be inspected; only the checkbox changes what is shared. */
 @Composable
 private fun ShareCodexPosts(
     codex: CodexStatisticsSummary,
@@ -296,7 +288,6 @@ private fun ShareCodexPosts(
 ) {
     val shared = remember(codex, excludedPosts) { shareCodex(codex, excludedPosts) }
     val rows = shared.posts.orEmpty().filterNotNull().mapNotNull { it.key } +
-        // Unchecked posts stay listed so they can be put back; the next-ranked post has already taken their place.
         codex.posts.keys.filter(excludedPosts::contains)
     val totalOpens = codex.posts.values.sumOf { it.opens }.coerceAtLeast(1L)
     SettingsPageColumn {

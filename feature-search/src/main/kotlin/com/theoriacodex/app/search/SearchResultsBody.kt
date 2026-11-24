@@ -73,7 +73,6 @@ internal fun ColumnScope.SearchResultsBody(
     val issues = LocalSourceHealth.current.issues
     val scope = state.query.appliedSourceScope
     val outageNotices = remember(state.content.statuses, issues, scope) {
-        // A single source already says so in its own error, whose action verifies or retries it.
         if (scope is SearchSourceScope.Single) emptyList() else sourceOutageNotices(state.content.statuses, issues)
     }
     SourceOutageNotices(outageNotices)
@@ -84,8 +83,6 @@ internal fun ColumnScope.SearchResultsBody(
             SearchFailureSurface(failure, state.content.statuses, retrySearch, onDismiss = dismiss)
         }
     }
-    // Results show the pull indicator for a refresh; this line covers newer searches (the open composer shows its
-    // own) and refreshes of an emptied feed.
     val emptied = feed.related.projection.entries.isEmpty()
     if ((state.replacingResults && !composerOpen) || (state.refreshingAppliedSearch && emptied)) SearchRefreshProgress()
     when {
@@ -120,7 +117,6 @@ private fun SearchEmptyResults(
     outageNotices: List<SourceOutageNotice>,
     onRetry: () -> Unit,
 ) {
-    // Sources with a notice of their own are left out of both this message and its action.
     val unannounced = remember(state.content.statuses, outageNotices) {
         val announced = outageNotices.flatMap(SourceOutageNotice::sources)
         state.content.statuses.filterNot { it.source in announced }
@@ -161,9 +157,7 @@ private fun SearchResultsGrid(
     onAction: (SearchAction) -> Unit,
     openPostActions: (Post) -> Unit,
 ) {
-    // Cards capture this rather than the whole state, which changes on every keystroke and page.
     val showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single
-    // Read at tap time: the filtered list is rebuilt on every like, and cards must not recompose for it.
     val currentFeed by rememberUpdatedState(feed)
     CompositionLocalProvider(LocalLiftQuery provides state.query.applied) {
         TwoColumnProjectedPostStaggeredGrid(
@@ -231,10 +225,6 @@ private fun SearchStartSplash(
     }
 }
 
-/**
- * Loads a failed source again by itself once its browser check passes, here or anywhere else: one at a time, and only
- * once the search is not asking anything else, since a retry is ignored while a request runs.
- */
 @Composable
 private fun RetryVerifiedSources(
     state: SearchUiState,

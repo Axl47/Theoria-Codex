@@ -24,23 +24,17 @@ data class AutoBackupStatus(
     val enabled: Boolean get() = folderUri != null
 }
 
-/** Device-local schedule state: a folder grant cannot travel with a backup or to another install. */
 interface AutoBackupStore {
     fun read(): AutoBackupStatus
     fun write(status: AutoBackupStatus)
 }
 
-/** The chosen folder. A write either leaves a complete, verified file or none at all. */
 interface AutoBackupFolder {
     fun names(): List<String>
     fun write(name: String, bytes: ByteArray)
     fun delete(name: String)
 }
 
-/**
- * Daily backup to a user-chosen folder, run when the app leaves the foreground. Library data only
- * changes while the app is in use, so that moment captures everything without background scheduling.
- */
 class AutoBackupWorkflow constructor(
     private val store: AutoBackupStore,
     private val openFolder: (String) -> AutoBackupFolder,
@@ -72,7 +66,6 @@ class AutoBackupWorkflow constructor(
             mutableStatus.update { it.copy(running = true) }
             val result = runCatchingPreservingCancellation { writeBackup(openFolder(folderUri)) }
             publish { current ->
-                // Turning this off or changing folders during a run must not revive the old state.
                 if (current.folderUri != folderUri) current.copy(running = false)
                 else result.fold(
                     onSuccess = { current.copy(lastSuccessEpochMs = clock(), failure = null, running = false) },
@@ -85,7 +78,6 @@ class AutoBackupWorkflow constructor(
     private suspend fun writeBackup(folder: AutoBackupFolder) {
         folder.names().filter { it.isAbandonedPart() }.forEach(folder::delete)
         folder.write(autoBackupFileName(clock()), export())
-        // Only ever delete complete files this feature named, and only after a newer one is safe.
         folder.names().filter(AUTO_BACKUP_NAME::matches).sortedDescending().drop(AUTO_BACKUP_KEEP_COUNT).forEach(folder::delete)
     }
 
@@ -116,7 +108,6 @@ private fun Throwable.autoBackupMessage(): String = when (this) {
 internal const val AUTO_BACKUP_PART_SUFFIX = ".part"
 internal const val AUTO_BACKUP_KEEP_COUNT = 7
 
-// Shorter than a day so a habit of opening the app at about the same time still backs up daily.
 internal const val AUTO_BACKUP_INTERVAL_MS = 20L * 60L * 60L * 1000L
 
 private const val AUTO_BACKUP_FAILED = "Could not save the automatic backup."

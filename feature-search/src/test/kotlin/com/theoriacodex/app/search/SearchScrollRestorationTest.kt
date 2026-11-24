@@ -129,7 +129,6 @@ class SearchScrollRestorationTest {
             assertEquals(17, grid.firstVisibleItemScrollOffset)
             assertEquals(SearchAction.ScrollChanged(22, 17), writes.first())
         }
-        // An ordinary page append cannot replay the acknowledged route-entry request.
         compose.onNodeWithTag("restore-grid").performScrollToIndex(25)
         compose.runOnIdle { state.value = state.value.copy(content = state.value.content.copy(results = posts)) }
         compose.runOnIdle {
@@ -217,8 +216,6 @@ class SearchScrollRestorationTest {
         }
     }
 
-    // Returning from the Viewer recomposes the grid around its retained state, which must still count as
-    // showing posts so the keep-live request leaves it alone.
     @Test fun `keep-live request opened while a retained grid is out of composition leaves it in place`() {
         state.value = state.value.copy(
             content = state.value.content.copy(results = posts.take(40)),
@@ -312,7 +309,6 @@ class SearchScrollRestorationTest {
             }
             val projection = buildRelatedFeedProjection(current.content.results, visible, RelatedPostsUiState.Idle)
             grid = rememberLazyStaggeredGridState()
-            // A hidden grid keeps its state but has no layout, as before its first frame.
             if (gridShown.value) {
                 LazyVerticalStaggeredGrid(columns = StaggeredGridCells.Fixed(1), state = grid,
                     modifier = Modifier.height(300.dp).testTag("restore-grid")) {

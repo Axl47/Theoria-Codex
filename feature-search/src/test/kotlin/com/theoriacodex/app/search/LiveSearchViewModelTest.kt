@@ -167,7 +167,6 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
         owner.onAction(SearchAction.RestoreDraftTerms(listOf(SearchTermGroup.single(SearchTerm("slow"))), emptyList()))
         advanceTimeBy(901); runCurrent()
         aibooru.releaseSlowSearch.complete(Unit)
-        // Past the wait for other sources to answer alongside the first one.
         advanceTimeBy(5_000); runCurrent()
         assertEquals(listOf("slow"), owner.state.value.query.applied.includeTags)
 
@@ -213,14 +212,12 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
 
     @Test fun `an edit staged before Search first opens runs on the restored draft at its first resume`() = runTest(mainDispatcherRule.dispatcher) {
         val adapter = ViewModelSearchAdapter()
-        // Restoration outlasts the live pause, so a search scheduled at resume would run before it.
         val stored = InMemoryQueryRepository()
         val slowQueries = object : QueryRepository by stored {
             override fun observeAppliedQuery(modeKey: String) = stored.observeAppliedQuery(modeKey).onStart { delay(1_000) }
         }
         val owner = viewModel(adapter, queryRepository = slowQueries, recentsRepository = recents)
         owner.onAction(SearchAction.StageDraftEdit(SearchAction.AddIncludeTerm(SearchTerm("b"))))
-        // The order SearchRoute delivers them in: the queued edit, the first resume, then restoration.
         owner.onAction(SearchAction.Resume)
         owner.onAction(SearchAction.Restore)
         advanceUntilIdle()
@@ -236,7 +233,6 @@ internal class LiveSearchViewModelTest : SearchViewModelTestFixture() {
             assertFirstSearchReplacedAfterSwitching(QueryMode.Source(SourceKey.AIBOORU), QueryMode.Unified)
         }
 
-    /** Starts a first Pixiv search, switches through [modes] before it answers, and expects the last one to run. */
     private suspend fun TestScope.assertFirstSearchReplacedAfterSwitching(vararg modes: QueryMode) {
         val owner = viewModel(ViewModelSearchAdapter(), additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.AIBOORU)), recentsRepository = recents)
         restore(owner)

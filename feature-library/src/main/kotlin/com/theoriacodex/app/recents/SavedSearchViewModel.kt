@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Owns durable pin changes outside the lifetime of the picker or name dialog. */
 class SavedSearchViewModel(private val repository: SavedSearchRepository) : ViewModel() {
     val savedSearches = repository.observeSavedSearches()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -27,17 +26,12 @@ class SavedSearchViewModel(private val repository: SavedSearchRepository) : View
     private val justSaved = MutableStateFlow<String?>(null)
     private var confirmation: Job? = null
 
-    /** The id of the saved search [saveInPlace] committed in the last [SAVED_CONFIRM_MS], for "Saved · Rename". */
     val justSavedId: StateFlow<String?> = justSaved.asStateFlow()
 
     fun save(name: String, entry: RecentSearchEntry) = mutate("Search saved.") {
         repository.save(name, entry)
     }
 
-    /**
-     * Saves a search that is not saved yet, for a surface that confirms in place: once the save commits,
-     * [justSavedId] names it for a moment, and only failures send a message. A search already saved keeps its name.
-     */
     fun saveInPlace(name: String, entry: RecentSearchEntry) = mutate(successMessage = null) {
         if (repository.observeSavedSearches().first().savedFor(entry) == null) confirm(repository.save(name, entry).id)
     }

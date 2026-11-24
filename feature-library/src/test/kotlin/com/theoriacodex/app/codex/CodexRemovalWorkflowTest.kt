@@ -259,7 +259,6 @@ class CodexRemovalWorkflowTest {
     }
 }
 
-/** Presses feedback [id]'s Undo or Retry the way the app does: offered into the undo slot, then acted on there. */
 internal fun CodexCommandViewModel.press(id: Long) {
     val slot = UndoSlot()
     offer(id, slot)

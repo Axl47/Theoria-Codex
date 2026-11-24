@@ -22,10 +22,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.RecommendationProfile
 
-/**
- * The active recommendation profile in For You's header, with a menu that switches to another. Drawn only
- * when there is more than one profile to switch between.
- */
 @Composable
 internal fun ForYouProfileChip(
     profiles: List<RecommendationProfile>,

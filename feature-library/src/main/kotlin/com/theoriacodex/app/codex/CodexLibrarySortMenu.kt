@@ -13,7 +13,6 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.data.repository.CodexLibrarySort
 
-/** The Library header's sort menu for Codices; under Manual the grid itself reorders by drag. */
 @Composable
 internal fun CodexLibrarySortMenu(sort: CodexLibrarySort, onChange: (CodexLibrarySort) -> Unit) {
     var expanded by remember { mutableStateOf(false) }

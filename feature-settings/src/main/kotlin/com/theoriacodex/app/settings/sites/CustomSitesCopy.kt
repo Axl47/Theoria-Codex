@@ -14,9 +14,6 @@ import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
 
-// User-facing copy for Settings → Sites. Pure functions so every outcome is covered by host tests.
-
-/** Explains a probe result that can't be saved as is. Null for [SiteProbeResult.Supported]. */
 internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
     is SiteProbeResult.Supported -> null
     is SiteProbeResult.CredentialsRequired -> if (result.rejected) {
@@ -32,7 +29,6 @@ internal fun probeMessage(result: SiteProbeResult): String? = when (result) {
     is SiteProbeResult.InvalidAddress -> invalidAddressMessage(result.error)
 }
 
-/** Names the shipped source when the id parses, e.g. "Danbooru is already built into Theoria." */
 internal fun alreadyBuiltInMessage(builtInSourceId: String): String =
     SourceKey.parse(builtInSourceId)?.takeUnless { it.isCustom }?.let { "${it.displayName()} is already built into Theoria." }
         ?: "This site is already built into Theoria."
@@ -54,17 +50,12 @@ internal fun invalidAddressMessage(error: SiteAddressError): String = when (erro
     SiteAddressError.TOO_LONG -> "That address is too long."
 }
 
-/** Danbooru signs in with a login name, Gelbooru 0.2 with a numeric user ID. */
 internal fun userFieldLabel(family: ProtocolFamily?): String = when (family) {
     ProtocolFamily.DANBOORU -> "Username"
     ProtocolFamily.GELBOORU_02 -> "User ID"
     null -> "User ID or username"
 }
 
-/**
- * Helper under the user field once the family is known. Gelbooru 0.2 user IDs are numeric, so a
- * non-numeric entry is flagged ([UserFieldHint.error]); Danbooru logins can be anything.
- */
 internal fun userFieldHint(family: ProtocolFamily?, user: String): UserFieldHint? = when (family) {
     ProtocolFamily.DANBOORU -> UserFieldHint("Danbooru sites use your username, not a numeric ID.", error = false)
     ProtocolFamily.GELBOORU_02 -> {
@@ -80,7 +71,6 @@ internal fun userFieldHint(family: ProtocolFamily?, user: String): UserFieldHint
 
 internal data class UserFieldHint(val text: String, val error: Boolean)
 
-/** What a re-test found; a failure's message shows under the row. Never suggests the profile changed. */
 internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): RetestStatus.Done {
     val answeredFamily = when (result) {
         is SiteProbeResult.Supported -> result.family
@@ -106,7 +96,6 @@ internal fun retestStatus(site: CustomSiteSummary, result: SiteProbeResult): Ret
     }
 }
 
-/** What a real search through a built-in source found, in the shape its row shows. */
 internal fun builtInTestStatus(site: BuiltInSiteSummary, result: BuiltInTestResult): RetestStatus.Done = when (result) {
     BuiltInTestResult.WORKING -> RetestStatus.Done("Working", ok = true)
     BuiltInTestResult.NEEDS_BROWSER_CHECK -> RetestStatus.Done("Needs browser verification.", ok = false, blocked = true)
@@ -116,14 +105,11 @@ internal fun builtInTestStatus(site: BuiltInSiteSummary, result: BuiltInTestResu
     BuiltInTestResult.FAILED -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.HTTP_ERROR), ok = false)
 }
 
-/** The status line while Test all runs. */
 internal fun testProgressLine(progress: SitesTestProgress): String =
     "Testing ${progress.label}… ${progress.position} of ${progress.total}"
 
-/** The status line once Test all has finished. */
 internal fun testSummaryLine(working: Int, total: Int): String = "$working of $total working"
 
-/** Explains a save, edit or removal that didn't happen. Null for [CustomSiteMutation.Success]. */
 internal fun mutationMessage(result: CustomSiteMutation): String? = when (result) {
     CustomSiteMutation.Success -> null
     is CustomSiteMutation.DuplicateHost -> "This site is already in your list."
@@ -135,28 +121,23 @@ internal fun mutationMessage(result: CustomSiteMutation): String? = when (result
     is CustomSiteMutation.InvalidLabel -> "Use a name of 1 to ${result.maxLength} characters."
 }
 
-/** Status words for a row. Always text, so state never depends on color alone. */
 internal fun availabilityLabel(availability: CustomSiteAvailability): String = when (availability) {
     CustomSiteAvailability.AVAILABLE -> "Ready"
     CustomSiteAvailability.NEEDS_CREDENTIALS -> "Needs API key"
     CustomSiteAvailability.UNSUPPORTED_FAMILY -> "Unsupported in this version"
 }
 
-/** Second line of a built-in source's row: host, its account status, and whether a browser check is needed. */
 internal fun builtInRowSummary(site: BuiltInSiteSummary, account: String?): String =
     listOfNotNull(site.host, account, "Needs browser verification".takeIf { site.needsVerification }).joinToString(" · ")
 
-/** Second line of a row: host, then [siteStatusSummary]. */
 internal fun siteRowSummary(site: CustomSiteSummary): String = "${site.host} · ${siteStatusSummary(site)}"
 
-/** Family and status, plus the Unified/For You opt-in when on. */
 internal fun siteStatusSummary(site: CustomSiteSummary): String = buildList {
     add(site.family?.displayName ?: "Unknown type")
     add(availabilityLabel(site.availability))
     if (site.includedInUnifiedAndForYou) add("In Unified and For You")
 }.joinToString(" · ")
 
-/** The Settings home row's value. */
 fun customSitesSummary(sites: List<CustomSiteSummary>): String {
     if (sites.isEmpty()) return "Add a booru by its address"
     val count = "${sites.size} added"

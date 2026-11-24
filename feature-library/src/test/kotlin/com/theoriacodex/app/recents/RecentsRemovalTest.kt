@@ -119,7 +119,6 @@ class RecentsRemovalTest {
         compose.onNodeWithTag("Recent search:${search.queryHash}").performSemanticsAction(SemanticsActions.OnLongClick) { it() }
         compose.onNodeWithText("Remove from History").performClick()
         compose.onNodeWithTag(searchCardTestTag(post.post.id)).performSemanticsAction(SemanticsActions.OnLongClick) { it() }
-        // The post menu's last row sits below the sheet's first screen.
         compose.onNodeWithText("Remove from History").performScrollTo().performClick()
 
         assertEquals(listOf(search), removedSearches)
@@ -132,7 +131,6 @@ class RecentsRemovalTest {
     private fun offerUndoFor(entry: RecentSearchEntry) =
         undo.offer(offers, UndoOffer("Removed", recentSearchRemovalAnchor(entry), lifetime = UndoLifetime.UntilLeft) {})
 
-    /** Runs the custom action on the merged node, the one TalkBack focuses, failing when it is missing there. */
     private fun removeFromHistory(node: SemanticsNodeInteraction) {
         val actions = node.fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
         val remove = actions.single { it.label == "Remove from History" }

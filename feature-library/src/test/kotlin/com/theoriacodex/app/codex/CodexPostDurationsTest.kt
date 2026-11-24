@@ -48,7 +48,6 @@ class CodexPostDurationsTest {
         }
         compose.runOnIdle {
             assertEquals(lengths, durations)
-            // One pass for the first list, one for the appended page.
             assertEquals(2, ShadowTrace.getPreviousSections().count { it == FeedTraceSections.KNOWN_DURATIONS })
             sort = CodexSortMode.NEWEST_SAVED
         }

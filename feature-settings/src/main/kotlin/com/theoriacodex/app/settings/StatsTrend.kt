@@ -14,7 +14,6 @@ internal enum class StatsTrendRange(val label: String) {
 
 internal data class StatsTrendBar(val label: String, val foregroundMs: Long, val watchedPosts: Long)
 
-/** Fills inactive days with empty bars, since history omits them. Year buckets by calendar month. */
 internal fun statsTrendBars(
     history: List<DailyStatistic>,
     today: LocalDate,
@@ -38,7 +37,6 @@ internal fun statsTrendBars(
 private fun bar(label: String, days: List<DailyStatistic>) =
     StatsTrendBar(label, days.sumOf(DailyStatistic::totalForegroundMs), days.sumOf(DailyStatistic::watchedPostCount))
 
-/** Stats show minutes as their finest unit, except for durations under a minute. */
 fun formatStatsDuration(durationMs: Long): String {
     val totalSeconds = durationMs.coerceAtLeast(0L) / 1_000L
     val hours = totalSeconds / 3_600L

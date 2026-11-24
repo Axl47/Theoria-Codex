@@ -9,7 +9,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One row of the All tab: a day heading, that day's searches, that day's posts, or the related shelf. */
 internal sealed interface RecentsTimelineItem {
     data class Day(val date: LocalDate, val label: String) : RecentsTimelineItem
     data class Searches(val date: LocalDate, val entries: List<RecentSearchEntry>) : RecentsTimelineItem
@@ -26,15 +25,10 @@ internal fun recentsDayLabel(epochMs: Long, now: Long, zone: ZoneId = ZoneId.sys
     return when {
         day == today -> "Today"
         day == today.minusDays(1) -> "Yesterday"
-        // Built per call so a locale change while the app runs takes effect.
         else -> DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()).format(day)
     }
 }
 
-/**
- * Groups newest-first activity by day. Each day shows its searches as one row above one shelf of its
- * posts; how searches and views interleaved within a day is deliberately not shown.
- */
 internal fun recentsTimeline(
     activity: List<RecentActivityEntry>,
     now: Long,
@@ -51,7 +45,6 @@ internal fun recentsTimeline(
         )
     }
 
-/** One cell of a post grid: a full-width day heading, a post at its index in the visible list, or the related shelf. */
 internal sealed interface RecentsGridRow {
     data class Day(val date: LocalDate, val label: String) : RecentsGridRow
     data class Post(val index: Int, val entry: RecentPostEntry) : RecentsGridRow

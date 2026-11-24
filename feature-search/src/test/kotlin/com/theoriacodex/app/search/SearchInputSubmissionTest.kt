@@ -125,7 +125,6 @@ class SearchInputSubmissionTest {
                             actions += action
                             when (action) {
                                 SearchAction.RefreshAutocomplete -> {
-                                    // Focus refresh reads the owner's current input, never a captured render value.
                                     focusRefreshInputs += state.value.suggestions.input
                                 }
                                 is SearchAction.AutocompleteChanged -> state.value = state.value.copy(

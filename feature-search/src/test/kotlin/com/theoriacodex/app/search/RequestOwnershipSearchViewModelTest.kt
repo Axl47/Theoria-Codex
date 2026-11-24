@@ -406,7 +406,6 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
             advanceUntilIdle()
 
             val viewModel = viewModel(adapter, queryRepository = queries, uiRestoreRepository = restores)
-            // The shell flushes queued actions when the owner is published, ahead of the route's Restore.
             viewModel.onAction(SearchAction.ApplyTagSearch(listOf(SearchTermGroup.single(SearchTerm("codex"))), mode = QueryMode.Source(SourceKey.PIXIV)))
             viewModel.onAction(SearchAction.Restore)
             advanceUntilIdle()

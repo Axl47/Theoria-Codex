@@ -17,7 +17,7 @@ import org.junit.Test
 
 class RecentsTimelineTest {
     private val day = 24L * 60L * 60L * 1000L
-    private val now = 1_767_268_800_000L // 2026-01-01T12:00Z
+    private val now = 1_767_268_800_000L
 
     private fun post(at: Long, id: String = "1") = RecentPostEntry(testPost(sourcePostId = id), at, ViewerStreamSource.SEARCH, null)
 

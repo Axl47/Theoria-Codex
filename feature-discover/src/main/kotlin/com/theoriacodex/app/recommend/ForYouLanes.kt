@@ -21,12 +21,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Builds a Mix's lanes: the profile's interests on each source, ranked by [tagAffinity] as Trails rank chips, taken in
- * turn across sources so every source gets a lane, or the sources' trending tags when its history gives none. Lanes the
- * profile's hidden tags hide are left out.
- * [random] varies which interests lead between Mixes; null keeps them in weight order.
- */
 internal class ForYouLanesLoader(
     private val registry: SourceAdapterRegistry,
     private val store: TagSuggestionStore,
@@ -46,7 +40,6 @@ internal class ForYouLanesLoader(
         seeds.inTurnBySource().take(LANE_LIMIT).map { (source, tags) -> lane(source, tags, request) }
     }
 
-    /** Each source's interests, strongest first, ending with a guess to explore. */
     private suspend fun interestSeeds(
         sources: List<SourceKey>,
         profile: String,
@@ -60,16 +53,10 @@ internal class ForYouLanesLoader(
         }.flatten().filterNot { blocked.hidesSeed(it.source, it.tags) }
     }
 
-    /**
-     * [source]'s interests, picked again without any tag the source reports no posts for, since its lane would stay
-     * empty. Counts are asked only for the picked tags; after [AVAILABILITY_ROUNDS] picks, interests with such tags drop.
-     * The candidates are weighed once, before the rounds.
-     */
     private suspend fun availableInterests(source: SourceKey, training: CrossSourceTraining, affinity: TagAffinityInputs): List<ForYouInterest> {
         val documents = training.documentsFor(source)
         val translate = { tag: String, into: SourceKey -> training.translate(tag, source, into) }
         val affinity = affinity.respellChosen { training.spellSaved(it, source) }
-        // Predicted tags are Danbooru's words, spelled for the source when it shares that vocabulary.
         val pictured = affinity.pictures.candidates.mapNotNull { token ->
             training.translate(token.replace(' ', '_'), SourceKey.DANBOORU, source)?.let { it to token }
         }.toMap()
@@ -85,10 +72,8 @@ internal class ForYouLanesLoader(
         return emptyList()
     }
 
-    /** One lane per trending tag, for a profile whose history gives no interests. */
     private suspend fun trendingSeeds(sources: List<SourceKey>, blocked: List<ForYouBlacklistEntry>): List<LaneSeed> =
         sources.mapConcurrent { source ->
-            // What trends on a source is often its medium (animated, 3d), which says nothing about an interest.
             trendingTags(source).filterNot { isFileTag(normalizeMatchToken(it)) }.map { LaneSeed(source, listOf(it)) }
                 .filterNot { blocked.hidesSeed(it.source, it.tags) }.take(TRENDING_LANES_PER_SOURCE)
         }.flatten()
@@ -105,7 +90,6 @@ internal class ForYouLanesLoader(
     }
 
     private fun lane(source: SourceKey, tags: List<String>, request: ForYouFeedRequest): ForYouLane {
-        // The source filters by media where it can; the deck's owner filters again for sources that cannot.
         val media = if (request.animatedOnly) MediaFilter.ANIMATED else MediaFilter.ANY
         return ForYouLane(
             source, tags,
@@ -121,7 +105,6 @@ internal class ForYouLanesLoader(
 
 private data class LaneSeed(val source: SourceKey, val tags: List<String>)
 
-/** Every source's first seed, then every source's second, and so on. */
 private fun List<LaneSeed>.inTurnBySource(): List<LaneSeed> {
     val groups = groupBy { it.source }.values.toList()
     return (0 until (groups.maxOfOrNull { it.size } ?: 0)).flatMap { index -> groups.mapNotNull { it.getOrNull(index) } }
@@ -132,10 +115,8 @@ private fun forYouBaseQuery(sort: SortMode): Query = Query(
     sort = sort, dateRange = null, minScore = null,
 )
 
-/** The most lanes a Mix runs: each opens with its own request, and each gets a chip. */
 private const val LANE_LIMIT = 6
 
-/** How many times a source's interests are picked again around tags it has no posts for. */
 private const val AVAILABILITY_ROUNDS = 3
 private const val TRENDING_LANES_PER_SOURCE = 3
 private const val TRENDING_LIMIT = 20

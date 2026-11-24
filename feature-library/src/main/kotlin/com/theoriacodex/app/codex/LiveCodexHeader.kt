@@ -18,11 +18,6 @@ import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.rememberFeedPageDemand
 import com.theoriacodex.domain.model.Post
 
-/**
- * A live Saved feed's app bar (Followed, Searches) over its paging and failures. [branches] names what the feed
- * merges, as its failures' Retry says it; [manageLabel] is the button that opens their management, which a long press
- * on the title also opens.
- */
 @Composable
 internal fun LiveCodexHeader(
     title: String,
@@ -45,7 +40,6 @@ internal fun LiveCodexHeader(
             Icon(Icons.Default.Refresh, contentDescription = "Refresh $title")
         }
     }
-    // The grid shows the feed's projection, which places an open related shelf among the posts.
     val demand = rememberFeedPageDemand(
         input = FeedPageDemandInput(
             contextKey = contextKey, completedGeneration = state.generation,
@@ -61,7 +55,6 @@ internal fun LiveCodexHeader(
     FeedContinueLoading(demand)
 }
 
-/** Which followed or saved branches failed, beside the posts that did load; Dismiss hides them until they change. */
 @Composable
 fun LiveCodexFailures(
     errors: Map<String, String>,

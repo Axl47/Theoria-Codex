@@ -46,7 +46,6 @@ class FileBackedTagSuggestionStore(
     private val persistenceMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + workDispatcher)
     private val inMemory: MutableMap<SourceKey, MutableList<CachedSuggestion>> = seedInitial()
-    /** Immutable count index published under [lock], so Compose-driven [getCount] reads never wait on merges. */
     @Volatile private var countsBySource: Map<SourceKey, Map<String, Int>> =
         inMemory.mapValues { (source, entries) -> indexCounts(source, entries) }
     private var estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
@@ -342,7 +341,6 @@ class FileBackedTagSuggestionStore(
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                // Keep the dirty version pending so flush or the next mutation can retry it.
             }
         }
     }
@@ -382,7 +380,6 @@ class FileBackedTagSuggestionStore(
             }
             trimmedSources += sourceToTrim
         }
-        // Trimmed tags must stop reporting counts, or getCount keeps answering for tags the store dropped.
         trimmedSources.forEach { source ->
             val remaining = inMemory[source]
             countsBySource = if (remaining == null) countsBySource - source else countsBySource + (source to indexCounts(source, remaining))
@@ -401,7 +398,6 @@ class FileBackedTagSuggestionStore(
         return TagStoreSnapshot(sources = sources)
     }
 
-    /** Recomputes the byte estimate from scratch for whatever seeded [inMemory], so a seed past the budget gets trimmed. */
     private fun rebuildByteEstimateLocked() {
         val seeded = inMemory.mapValues { (_, suggestions) -> suggestions.toList() }
         inMemory.clear()
@@ -433,7 +429,6 @@ class FileBackedTagSuggestionStore(
     }
 }
 
-/** tag_suggestions.json. Nullable lists keep a damaged source list or entry from discarding the whole cache. */
 @Serializable
 internal data class TagStoreSnapshot(
     @SerialName("sources")
@@ -470,7 +465,6 @@ private data class CachedSuggestion(
     val normalizedText = normalizeMatchToken(text)
     val normalizedAlternate = alternateText?.let(::normalizeMatchToken)
 
-    /** Approximate persisted size, charged against the store's byte budget. Never persisted; fixed per instance, so [copy] recomputes it. */
     val estimatedBytes: Int by lazy(LazyThreadSafetyMode.PUBLICATION) {
         DurableJson.encodeToString(TagStoreEntry.serializer(), toStoreEntry()).toByteArray().size +
             ENTRY_ESTIMATED_FORMATTING_OVERHEAD_BYTES

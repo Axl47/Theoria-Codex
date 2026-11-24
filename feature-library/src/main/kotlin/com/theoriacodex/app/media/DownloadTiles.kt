@@ -39,10 +39,6 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import java.util.Locale
 
-/**
- * What a download tile and the Downloads header can do. [remove] is deferred destruction (see
- * [DownloadRemovals]): it hides the items and draws Undo at the given anchor.
- */
 class DownloadTileActions(
     val open: (PostDownloadItem) -> Unit,
     val cancel: (batchId: Long) -> Unit,
@@ -51,11 +47,9 @@ class DownloadTileActions(
     val localFile: suspend (PostDownloadItem) -> DownloadedPostFile?,
 )
 
-/** Where a removed download draws its Undo: the tile it vacated, or under the header for bulk actions. */
 internal fun downloadUndoAnchor(id: Long) = UndoAnchor(LIBRARY_TRANSFERS_UNDO_SCOPE, "download:$id")
 internal val DownloadsUndoAnchor = UndoAnchor(LIBRARY_TRANSFERS_UNDO_SCOPE, "downloads")
 
-/** The Downloads section's title row; its menu acts on every download. */
 @Composable
 internal fun DownloadsHeader(batches: List<PostDownloadBatch>, items: List<PostDownloadItem>, actions: DownloadTileActions) {
     var expanded by remember { mutableStateOf(false) }
@@ -82,7 +76,6 @@ internal fun DownloadsHeader(batches: List<PostDownloadBatch>, items: List<PostD
     }
 }
 
-/** One exported file: tap opens it; its own menu (also on long-press) cancels, retries, removes or deletes. */
 @Composable
 internal fun DownloadItemCard(item: PostDownloadItem, batch: PostDownloadBatch?, actions: DownloadTileActions) {
     var menu by remember { mutableStateOf(false) }
@@ -91,7 +84,6 @@ internal fun DownloadItemCard(item: PostDownloadItem, batch: PostDownloadBatch?,
         DownloadItemPreview(item, actions.localFile)
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f).padding(start = 10.dp, top = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Without a title the source's name leads, rather than a raw post id.
                 val source = item.request.post.id.source.displayName()
                 val title = item.request.post.title?.takeIf(String::isNotBlank)
                 Text(title ?: source, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

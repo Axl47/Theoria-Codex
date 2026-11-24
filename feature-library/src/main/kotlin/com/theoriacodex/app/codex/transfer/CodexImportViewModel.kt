@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 
 data class CodexImportState(val running: Boolean = false, val progress: CodexImportProgress? = null)
 
-/** One retained import owns document reading, resolution and the atomic commit across UI reattachment. */
 class CodexImportViewModel(
     private val transfer: CodexTransferService,
     private val readDocument: suspend (String) -> String?,

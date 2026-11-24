@@ -20,7 +20,6 @@ internal object SearchSavedStateKeys {
     const val SCROLL_OFFSET = "search_scroll_offset"
 }
 
-/** Bundle-safe codec: SavedStateHandle stores one compact String, never a domain object graph. */
 internal object SearchSavedQueryCodec {
     private const val NULL = "~"
 
@@ -40,7 +39,6 @@ internal object SearchSavedQueryCodec {
     fun decode(encoded: String): Query? {
         return runCatching {
             val parts = encoded.split('|')
-            // A draft saved before the media part existed has 7 parts.
             require(parts.size == 7 || parts.size == 8)
             Query(
                 mode = decodeMode(parts[0]),

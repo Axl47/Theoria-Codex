@@ -51,10 +51,6 @@ import com.theoriacodex.data.repository.followKey
 import com.theoriacodex.domain.model.CreatorProfile
 import kotlinx.coroutines.delay
 
-/**
- * Followed creators with their new-post counts. Opening it checks for new posts when the last check is stale;
- * unfollowing acts at once with Undo in the vacated row.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: () -> Unit, onOpen: (CreatorProfile) -> Unit) {
@@ -64,7 +60,6 @@ fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: () -> Unit,
     val errors by owner.errors.collectAsStateWithLifecycle()
     val undo = LocalUndoSlot.current
     val offer by undo.offer.collectAsStateWithLifecycle()
-    // Only an unfollow made here holds its row; one made on a creator page draws its Undo there.
     val vacated = unfollowed?.takeIf { offer?.anchor == CreatorFollowAnchors.sheetRow(it.follow.creator) }
     val rows = remember(follows, vacated) { followedCreatorRows(follows, vacated) }
     LaunchedEffect(owner) { owner.refreshIfStale(System.currentTimeMillis()) }
@@ -97,10 +92,6 @@ fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: () -> Unit,
     }
 }
 
-/**
- * Checks every followed creator for new posts; spins while a check runs, for at least [CHECK_MIN_SPIN_MS] so a
- * check that finds nothing new at once is still seen to run. New posts then show on their creators' rows.
- */
 @Composable
 internal fun CheckButton(refreshing: Boolean, onCheck: () -> Unit) {
     var holding by remember { mutableStateOf(false) }

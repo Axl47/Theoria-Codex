@@ -7,24 +7,12 @@ import com.theoriacodex.sources.http.HostOutageTracker
 import java.net.URI
 import okhttp3.CookieJar
 
-/** One saved site's `Authorization` value. A plain class, so the value can't reach a log through `toString`. */
 class SiteMediaKey(val address: SiteAddress, val authorization: String)
 
-/**
- * Lets the clearance cookies a person earned in the in-app browser apply to the app's own requests, for
- * saved custom sites, built-in sites verified in the browser and the one site being set up, plus their
- * subdomains, such as media CDNs. Every other host gets no cookies, so an unverified built-in source
- * behaves exactly as before. The allowed hosts come from [updateSiteHosts], [updateBuiltInAgents] and
- * [setSetupHost]; nothing is stored here. Every store call is guarded: a missing or updating WebView
- * means "no cookies", never an exception on a request thread.
- *
- * Every OkHttp client in the app carries [cookieJar], which reads and writes only through that gate.
- */
 class SiteCookieBridge(private val store: BrowserCookieStore) {
     @Volatile
     private var siteHosts: Set<String> = emptySet()
 
-    /** Verified built-in sites' hosts and the browser agent each clearance is bound to. */
     @Volatile
     private var builtInAgents: Map<String, String> = emptyMap()
 
@@ -37,17 +25,14 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
     @Volatile
     private var checkHost: String? = null
 
-    /** The hosts of every saved custom site. */
     fun updateSiteHosts(hosts: Set<String>) {
         siteHosts = hosts.mapTo(HashSet(), HostOutageTracker::normalizeHost)
     }
 
-    /** The built-in sites verified in the browser, by host, with the agent that earned each clearance. */
     fun updateBuiltInAgents(agents: Map<String, String>) {
         builtInAgents = agents.mapKeys { (host, _) -> HostOutageTracker.normalizeHost(host) }
     }
 
-    /** The agent a verified built-in site's clearance needs on [url], or null for any other site. */
     fun userAgentFor(url: String): String? {
         val agents = builtInAgents
         if (agents.isEmpty()) return null
@@ -55,15 +40,10 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
         return agents.entries.firstOrNull { (site, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.value
     }
 
-    /** The saved sites whose API accepts their key in an `Authorization` header. */
     fun updateMediaKeys(keys: List<SiteMediaKey>) {
         mediaKeys = keys
     }
 
-    /**
-     * The value a media request to [url] may offer: HTTPS only, on one saved site's own port and hosts, and under
-     * its install path on its main host. Installs that can't be told apart get no key, so none reaches another.
-     */
     fun mediaAuthorizationFor(url: String): String? {
         val keys = mediaKeys
         if (keys.isEmpty()) return null
@@ -79,15 +59,10 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
         return path == address.path || path.startsWith("${address.path}/")
     }
 
-    /** The site the Add form is setting up, or null once the form gives way. Only the Add form sets it. */
     fun setSetupHost(host: String?) {
         setupHost = host?.let(HostOutageTracker::normalizeHost)
     }
 
-    /**
-     * The not-yet-kept site whose browser check is on screen, or null once it closes. Only the check page sets it, so
-     * a check ending never takes away the Add form's [setSetupHost], nor the reverse.
-     */
     fun setCheckHost(host: String?) {
         checkHost = host?.let(HostOutageTracker::normalizeHost)
     }
@@ -96,16 +71,13 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
         runCatching { store.flush() }
     }
 
-    /** Drops [host]'s cookies from the shared store, for a site that was removed. */
     fun forget(host: String) {
         runCatching { store.expire("https://$host/") }
     }
 
-    /** The cookies the in-app browser holds for [url], when its host is allowed. */
     fun cookiesFor(url: String): String? =
         if (isAllowed(runCatching { URI(url).host }.getOrNull())) runCatching { store.cookieHeader(url) }.getOrNull() else null
 
-    /** Whether [host] shares the browser's identity. On every image and API request: no allocation, and no parsing beyond the host's normalization. */
     fun isAllowed(host: String?): Boolean {
         if (host == null) return false
         return keepsCookies(host) || setupHost.covers(host) || checkHost.covers(host)
@@ -113,11 +85,6 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
 
     private fun String?.covers(host: String): Boolean = this != null && HostOutageTracker.hostBelongsToSite(host, this)
 
-    /**
-     * Whether [host] keeps the browser's cookies for good: a saved custom site, or a built-in one verified by hand. The
-     * app's own requests try a hidden browser check only for these, so an expired clearance renews out of sight while a
-     * never-verified built-in site still asks the user, and a hidden check never widens which hosts get cookies.
-     */
     fun keepsCookies(host: String): Boolean =
         siteHosts.any { HostOutageTracker.hostBelongsToSite(host, it) } ||
             builtInAgents.keys.any { HostOutageTracker.hostBelongsToSite(host, it) }
@@ -125,7 +92,6 @@ class SiteCookieBridge(private val store: BrowserCookieStore) {
     val cookieJar: CookieJar = BrowserCookieJar(store, ::isAllowed)
 }
 
-/** Implemented by the application, which owns the one bridge every HTTP client carries. */
 interface SiteCookieBridgeOwner {
     val siteCookieBridge: SiteCookieBridge
 }

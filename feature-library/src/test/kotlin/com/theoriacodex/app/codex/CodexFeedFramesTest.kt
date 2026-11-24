@@ -32,11 +32,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowTrace
 
-/**
- * What a saved Codex sorted by length shows after every frame when it returns from the Viewer (plan
- * `.docs/exec/shared-feed-presenter.html`, Phase 1), through the route's sort and the detail screen's filter. Frames
- * advance by hand and background work runs only when [background] is drained; [feedShown] stands in for the Viewer.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class CodexFeedFramesTest {
@@ -44,7 +39,6 @@ class CodexFeedFramesTest {
 
     private val background = SteppedDispatcher()
 
-    // Stored newest first. Videos v0..v5 get lengths that reorder them; s0..s2 are stills.
     private val videos = List(6) { testPost(SourceKey.RULE34VIDEO, "v$it") }
     private val stills = List(3) { testPost(sourcePostId = "s$it") }
     private val lengths = mapOf("v0" to 3_000L, "v1" to 9_000L, "v2" to 1_000L, "v3" to 7_000L, "v4" to 5_000L, "v5" to 2_000L)
@@ -113,7 +107,6 @@ class CodexFeedFramesTest {
     }
 
     @Test fun `a filter change on screen keeps the previous result until its one background pass`() {
-        // No post matches "Animated only", so the grid goes empty ("No matching posts") and back.
         stored = stills
         show()
         assertEquals(Frame(stills.map { it.id.sourcePostId }), frame())
@@ -123,7 +116,6 @@ class CodexFeedFramesTest {
         assertEquals(1, drainedPasses().filter)
         assertEquals(Frame(emptyList()), frame())
 
-        // Cleared from the empty result: the empty grid stays until the pass lands, then the posts return.
         fab = fab.copy(animatedOnly = false)
         assertEquals(Frame(emptyList()), frame())
         assertEquals(1, drainedPasses().filter)
@@ -143,7 +135,6 @@ class CodexFeedFramesTest {
         stored = videos + stills
 
         feedShown = true
-        // A new list object: computed in place, never Codex b's kept result.
         assertEquals(Frame(longest, knownLengths = 1, sort = 1, filter = 1), frame())
     }
 
@@ -163,7 +154,6 @@ class CodexFeedFramesTest {
         show()
         assertEquals(Frame(listOf("v0")), frame())
 
-        // v4 lies behind the reveal frontier, which waits at v1: the length step presents the very same list.
         durations = durations + (mediaDurationKey(videos[4]) to known(SHORT_MS))
         assertEquals(Frame(listOf("v0")), frame())
         assertEquals(0, drainedPasses().filter)
@@ -186,7 +176,6 @@ class CodexFeedFramesTest {
             val whole = filterCodexCollectionPosts(
                 videos.take(index + 1), fab.savedCollectionFilters(), knownMs,
             ).map { it.id.sourcePostId }
-            // The length step answered in the background; the newly revealed post is filtered alone, in the frame.
             assertEquals(Frame(whole, filter = 1), frame())
             assertEquals(Frame(whole), drainedFrame())
         }
@@ -227,7 +216,6 @@ class CodexFeedFramesTest {
         assertEquals(Frame(null), frame())
     }
 
-    /** What the grid draws and how many passes of each traced step ran inside the frame, on the main thread. */
     private data class Frame(val shown: List<String>?, val knownLengths: Int = 0, val sort: Int = 0, val filter: Int = 0)
 
     private fun frame(): Frame {
@@ -238,7 +226,6 @@ class CodexFeedFramesTest {
         return Frame(shown, after.knownLengths - before.knownLengths, after.sort - before.sort, after.filter - before.filter)
     }
 
-    /** Runs queued background work, asserts none of it was a traced pass, then advances a frame. */
     private fun drainedFrame(): Frame {
         val before = passes()
         background.drain()
@@ -246,7 +233,6 @@ class CodexFeedFramesTest {
         return frame()
     }
 
-    /** Runs queued background work and returns the traced passes it held. */
     private fun drainedPasses(): Frame {
         val before = passes()
         background.drain()
@@ -272,7 +258,7 @@ class CodexFeedFramesTest {
     private fun List<Post>.ids() = map { it.id.sourcePostId }.toSet()
 
     private companion object {
-        const val SHORT_MS = 4_000L // inside the 0-10 s range of duration bucket 2
+        const val SHORT_MS = 4_000L
         const val LONG_MS = 30_000L
     }
 }

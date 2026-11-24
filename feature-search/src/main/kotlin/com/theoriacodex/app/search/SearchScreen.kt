@@ -103,7 +103,6 @@ fun SearchScreen(
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
-    /** What the composer's typed text reaches besides tags; composed only while the composer is open. */
     omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
     sourceMix: SearchSourceMix? = null,
 ) {
@@ -155,19 +154,16 @@ fun SearchScreen(
     }
     SearchSideSheets(state, chrome, favoriteTags, sourceMix, onAction, onRemoveFavoriteTag, onRenameFavoriteTag)
     if (chrome.showFilterSheet) {
-        // The deck follows the applied query, so a draft that has not searched yet has nothing to triage.
         val onTriage = rememberTriageAction(
             ViewerStreamSource.SEARCH, state.query.appliedQueryHash.takeIf(String::isNotBlank), feed.view.triageSeed(),
         )
         SearchFilterSheet(state, feed, fabRestoreState, onAction, onFabRestoreStateChange, filterActions::resetFilterDraft, onTriage) {
-            // Filters apply live as they change; closing the sheet settles the search they made.
             chrome.showFilterSheet = false
             onAction(SearchAction.SettleSearch)
         }
     }
 }
 
-/** The sheets Search opens over its results besides filters: saved tags and the source mix. */
 @Composable
 private fun SearchSideSheets(
     state: SearchUiState,
@@ -184,7 +180,6 @@ private fun SearchSideSheets(
     SearchSourceMixSheet(state, chrome, sourceMix)
 }
 
-/** Scrolling results tucks the search bar away and gives the keyboard back. */
 @Composable
 private fun SearchScrollDismissEffect(gridState: LazyStaggeredGridState, chrome: SearchChromeState, inputFocus: SearchInputFocus) {
     LaunchedEffect(gridState) {
@@ -262,10 +257,6 @@ internal fun rememberSearchChromeState(composerOpen: MutableState<Boolean>): Sea
     return remember(composerOpen, barDismissed) { SearchChromeState(composerOpen, barDismissed) }
 }
 
-/**
- * Which of Search's surfaces are open. The composer and the tucked-away search bar survive recreation and the
- * Viewer round trip, so returning does not push the results down; the sheets do not.
- */
 @Stable
 internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarDismissedByScroll: MutableState<Boolean>) {
     var composerOpen by composerOpen
@@ -274,7 +265,6 @@ internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarD
     var showFavoriteTagSheet by mutableStateOf(false)
     var showSourceMix by mutableStateOf(false)
 
-    /** Closing the composer settles the search it left on screen. */
     fun closeComposer(onAction: (SearchAction) -> Unit) {
         onAction(SearchAction.ClearAutocomplete)
         onAction(SearchAction.SettleSearch)
@@ -326,7 +316,6 @@ private fun SearchComposerDialog(
         onDismiss = { chrome.closeComposer(onAction) },
         savedSearches = savedSearches,
         savedTags = ComposerSavedTags(
-            // The same tag can be a favorite on several sources, but it reads as one chip here.
             entries = favoriteSections.flatMap(FavoriteTagSection::entries).distinctBy(FavoriteTagEntry::key),
             saveSource = savedTagSource(state),
             onSave = onAddFavoriteTag,
@@ -435,7 +424,6 @@ private fun SearchPostSheet(
     )
 }
 
-/** The post whose action sheet is open, shown at once and replaced when fuller data arrives. */
 @Stable
 private class SearchActionPostState {
     var post by mutableStateOf<Post?>(null)
@@ -469,7 +457,6 @@ private class SearchActionPostState {
     }
 }
 
-/** Filter commands for one composition, so each sees the current restore state and draft. */
 private class SearchFilterActions(
     private val state: SearchUiState,
     private val fabRestoreState: FeedFabRestoreState,
@@ -481,7 +468,6 @@ private class SearchFilterActions(
         onAction(SearchAction.SelectSort(filters.sort))
         onAction(SearchAction.SetMedia(filters.media))
         onAction(SearchAction.SetDateRange(filters.dateRange))
-        // These two rewrite the draft's nhentai terms, so only a real change may dispatch them.
         if (filters.fullColor != currentServerFilters.value.fullColor) onAction(SearchAction.SetNhentaiFullColor(filters.fullColor))
         if (filters.language != currentServerFilters.value.language) onAction(SearchAction.SetNhentaiLanguage(filters.language))
     }
@@ -499,7 +485,6 @@ private class SearchFilterActions(
         )
     }
 
-    /** Clears every filter, settling the search that leaves, and returns how to put them back. */
     fun clearFilters(previousServerFilters: SearchServerFilters): () -> Unit {
         val previousFab = fabRestoreState
         resetFilterDraft()
@@ -540,14 +525,6 @@ private fun activeSearchFilterCount(state: SearchUiState, feed: SearchFeed, fabR
         language = state.query.nhentaiLanguageFilter,
     )
 
-/**
- * Where a tag saved from the composer goes. Saved tags belong to a source, so a search across
- * several saves under the first one it covers; every saved tag shows while searching them all.
- */
-/**
- * Saved searches for the composer. "Save" saves the search on screen (applied, not the draft being
- * edited), recorded the way Recents records it so the saved entry reopens the same scope.
- */
 private fun composerSavedSearches(
     state: SearchUiState,
     entries: List<SavedSearchEntry>,
@@ -586,7 +563,6 @@ private fun savedTagSource(state: SearchUiState): SourceKey? =
         ?: state.query.draftSourceScope.explicitSources.firstOrNull()
         ?: state.query.availableSources.firstOrNull()
 
-/** The favorite tags that apply to the draft's source, grouped per source when searching all of them. */
 @Composable
 private fun rememberFavoriteTagSections(
     state: SearchUiState,
@@ -744,7 +720,6 @@ private fun nhentaiLanguageLabel(filter: NhentaiLanguageFilter): String = when (
     NhentaiLanguageFilter.JAPANESE -> "Japanese"
 }
 
-/** The filters that change what a source returns, so changing them runs a new search. */
 private data class SearchServerFilters(
     val sort: SortMode,
     val media: MediaFilter,

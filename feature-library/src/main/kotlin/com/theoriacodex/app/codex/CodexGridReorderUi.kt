@@ -19,10 +19,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
-/**
- * The grid modifier for Manual sort's drag reordering, with its haptics, settle scope and edge auto-scroll; see
- * [codexReorderGestures].
- */
 @Composable
 internal fun rememberCodexReorderGestures(
     state: CodexGridReorderState,
@@ -41,10 +37,6 @@ internal fun rememberCodexReorderGestures(
     return Modifier.codexReorderGestures(state, haptics, scope, { commit(it) }, { openActions(it) })
 }
 
-/**
- * Places tile [key]: other tiles glide to new cells while [animated] (Manual sort), and the lifted tile is drawn
- * raised above them, under the finger.
- */
 internal fun Modifier.codexTilePlacement(
     scope: LazyGridItemScope,
     state: CodexGridReorderState,
@@ -68,10 +60,6 @@ internal fun Modifier.codexTilePlacement(
     }
 }
 
-/**
- * TalkBack's way to reorder tile [key] among [presented] without a drag; null [presented] (an automatic sort) adds
- * no moves.
- */
 internal fun Modifier.codexTileMoves(
     state: CodexGridReorderState,
     presented: List<String>?,

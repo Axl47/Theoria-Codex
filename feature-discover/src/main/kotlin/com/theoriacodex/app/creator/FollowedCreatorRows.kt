@@ -4,7 +4,6 @@ import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.data.repository.RemovedFollow
 import com.theoriacodex.data.repository.followKey
 
-/** One row of the followed-creators sheet: a follow, or the place an unfollowed one held while its Undo is live. */
 internal sealed interface FollowedCreatorRow {
     val follow: FollowedCreator
     val key: String
@@ -18,10 +17,6 @@ internal sealed interface FollowedCreatorRow {
     }
 }
 
-/**
- * The sheet's rows: creators with new posts first, otherwise in follow order, with [removed] holding its place
- * until it is restored or its creator is followed again.
- */
 internal fun followedCreatorRows(follows: List<FollowedCreator>, removed: RemovedFollow?): List<FollowedCreatorRow> {
     val rows = follows.map<FollowedCreator, FollowedCreatorRow>(FollowedCreatorRow::Followed).toMutableList()
     val gone = removed?.takeIf { r -> follows.none { it.creator.followKey() == r.follow.creator.followKey() } }

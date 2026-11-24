@@ -48,7 +48,6 @@ data class SavedSearchQueryBranch(
     val error get() = requestError ?: failures.values.takeIf { it.isNotEmpty() }?.joinToString("; ")
 }
 
-/** Read-only query execution: never persists applied Search, Recents, statistics, or new recommendation seeds. */
 class SavedSearchFeedLoader(
     private val coordinator: SearchCoordinator,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -56,7 +55,6 @@ class SavedSearchFeedLoader(
     private var availableSources = coordinator.availableSources.toSet()
     private var runtime = SourceRuntimeSettings()
 
-    /** Saved searches run on [sources] with [runtime]'s Unified sources and weights. */
     fun updateEnvironment(sources: Set<SourceKey>, runtime: SourceRuntimeSettings) {
         availableSources = sources
         this.runtime = runtime

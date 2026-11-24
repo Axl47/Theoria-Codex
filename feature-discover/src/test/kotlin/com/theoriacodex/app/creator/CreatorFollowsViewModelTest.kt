@@ -79,7 +79,7 @@ class CreatorFollowsViewModelTest {
             store.put("follows", owner)
             val undo = UndoSlot()
             owner.toggle(first, listOf(testPost(SourceKey.PIXIV, "visible")), undo)
-            runCurrent() // advancing time would expire the offer
+            runCurrent()
             val offer = requireNotNull(undo.offer.value)
             assertEquals(CreatorFollowAnchors.page(first), offer.anchor)
             assertEquals(first, owner.unfollowed.value?.follow?.creator)
@@ -168,7 +168,6 @@ class CreatorFollowsViewModelTest {
                 advanceUntilIdle()
             }
             assertEquals(2, calls)
-            // A restarted app has no memory of the attempt, only what the follows saved.
             val restarted = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
             store.put("restarted", restarted)
             restarted.refreshIfStale(3 * hour + hour / 2)
@@ -187,7 +186,6 @@ class CreatorFollowsViewModelTest {
             val unfinished = CreatorProfile(SourceKey.PIXIV, "Unfinished", "2", uploadsQuery = "user:2")
             listOf(done, unfinished).forEach { repository.follow(it, emptyList()) }
             val hour = 60 * 60 * 1000L
-            // A run that was interrupted after writing the first batch only.
             repository.recordChecks(mapOf(repository.observe().first().first().membershipId to emptyList()), 2 * hour)
             val checked = mutableListOf<String>()
             val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {

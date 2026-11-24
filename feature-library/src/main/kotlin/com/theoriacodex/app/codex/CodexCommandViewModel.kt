@@ -39,13 +39,11 @@ sealed interface CodexCommand {
     data class AutomaticTag(val id: String, val tag: CodexAutomaticTag, val enabled: Boolean) : CodexCommand
     data class ClearLikes(val profileId: String) : CodexCommand
     data class RestoreLikes(val snapshot: ClearedLikesSnapshot) : CodexCommand
-    /** [restoring] marks the Undo of a reorder, which offers no Undo of its own. */
     data class Reorder(val visibleIds: List<String>, val restoring: Boolean = false) : CodexCommand
     data class Remove(val id: String, val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
     data class Restore(val items: List<CodexItem>, val posts: List<Post>) : CodexCommand
 }
 
-/** Where Codex offers are drawn: one Codex's detail screen, or the Library's Codices section. */
 object CodexUndoAnchors {
     const val DETAIL_SCOPE = "codex-detail"
     const val LIBRARY_SCOPE = "library-codices"
@@ -53,7 +51,6 @@ object CodexUndoAnchors {
     fun detail(codexId: String) = UndoAnchor(DETAIL_SCOPE, codexId)
 }
 
-/** The outcome of one command; [anchor] is where the command was given and where its Undo or Retry is offered. */
 data class CodexCommandFeedback(
     val id: Long,
     val command: CodexCommand,
@@ -64,7 +61,6 @@ data class CodexCommandFeedback(
 ) {
     val action: CodexCommand? get() = if (succeeded) undo else command
 
-    /** A rename or a restored order shows in the Library itself, so its success needs no notice. */
     val quiet: Boolean get() = succeeded && (command is CodexCommand.Rename || command is CodexCommand.Reorder)
     val undoAction: UndoAction? get() = if (!succeeded) UndoAction.Retry else if (undo != null) UndoAction.Undo else null
     val message: String get() = when (command) {
@@ -88,15 +84,6 @@ data class CodexCommandFeedback(
     }
 }
 
-/**
- * Serial retained mutations with acknowledged feedback; cancelling a UI collector loses no Retry or Undo.
- * Notices without an action are shown as snackbars; Undo and Retry move into the app's [UndoSlot] through
- * [offer], anchored where each command was given.
- *
- * Deleting a Codex is deferred destruction ([pendingDeletes]): it hides at once and is deleted when the Library is
- * left ([commitDeletes]) or this owner is cleared, in [removalScope], which must be application-lived. The commit
- * also stops and drops the Codex's offline copy through [releaseOffline].
- */
 class CodexCommandViewModel(
     private val repository: CodexRepository,
     private val clearLikes: suspend (String) -> ClearedLikesSnapshot?,
@@ -115,13 +102,10 @@ class CodexCommandViewModel(
     private val deletions = DeferredRemovals<String>(removalScope ?: scope, ::commitDelete)
     private val mutableReorderFailures = MutableSharedFlow<List<String>>(extraBufferCapacity = 8)
 
-    /** Codices deleted but not yet gone, by id: hidden from the Library and save targets, each tile showing Undo. */
     val pendingDeletes: StateFlow<Map<String, PendingRemoval>> = deletions.pending
 
-    /** Each order whose write failed, so the grid can drop that optimistic order (its Retry is in the slot). */
     val reorderFailures: SharedFlow<List<String>> = mutableReorderFailures.asSharedFlow()
 
-    // Each command takes the anchor of the surface it was given on; Library is where the Codex menus live.
     fun clean(profileId: String, targetId: String, comparisonIds: Set<String>, anchor: UndoAnchor = CodexUndoAnchors.Library) =
         submit(CodexCommand.Clean(CodexCleaningRequest(profileId, targetId, comparisonIds.toSet())), anchor)
 
@@ -132,19 +116,13 @@ class CodexCommandViewModel(
         submit(CodexCommand.AutomaticTag(id, tag, enabled), anchor)
     fun reorder(ids: List<String>, anchor: UndoAnchor = CodexUndoAnchors.Library) = submit(CodexCommand.Reorder(ids.toList()), anchor)
 
-    /**
-     * Deletes Codex [id] (named [name]) until the Library is left, with Undo in its tile; deleting from Codex detail
-     * navigates there. Likes is cleared instead, through the slot at [anchor].
-     */
     fun delete(id: String, profileId: String, anchor: UndoAnchor = CodexUndoAnchors.Library, name: String? = null) {
         if (id == likesCodexIdForProfile(profileId)) return submit(CodexCommand.ClearLikes(profileId), anchor)
         deletions.remove(id, name?.let { "Deleted $it" } ?: "Deleted Codex", UndoLifetime.UntilLeft)
     }
 
-    /** A deleted Codex tile's Undo, or its Retry after the deletion failed. */
     fun actOnDelete(id: String) = deletions.act(id)
 
-    /** Deletes every Codex still waiting on Undo; the Library calls it when left. */
     fun commitDeletes() = deletions.commitAll()
 
     override fun onCleared() = deletions.commitAll()
@@ -160,16 +138,10 @@ class CodexCommandViewModel(
         if (selected.isNotEmpty()) submit(CodexCommand.Remove(id, selected, posts.toList()), anchor)
     }
 
-    /** Removes [post] from Codex [id] for a surface that shows the post without the Codex's items, such as the Viewer. */
     fun removePost(id: String, post: Post) {
         scope.launch { remove(id, repository.observeCodexItems(id).first(), listOf(post), UndoAnchor.App) }
     }
 
-    /**
-     * Removes [post] from Codex [id] in line with the other commands, for a surface with its own Undo (the triage
-     * deck), so no feedback is offered. Returns what puts exactly that membership back, or null when the post was not
-     * in the Codex; throws when the write fails.
-     */
     suspend fun removeWithOwnUndo(id: String, post: Post): (suspend () -> Unit)? {
         val restore = mutex.withLock {
             val items = repository.observeCodexItems(id).first().filter { it.postId == post.id }
@@ -178,12 +150,10 @@ class CodexCommandViewModel(
         return { mutex.withLock { execute(restore) } }
     }
 
-    /** Dismisses feedback [id] without acting on it. */
     fun acknowledge(id: Long) {
         take(id)
     }
 
-    /** Moves actionable feedback [id] into [undo]; its Undo or Retry then runs here, in this owner's scope. */
     fun offer(id: Long, undo: UndoSlot) {
         val item = take(id) ?: return
         val action = item.action ?: return
@@ -211,7 +181,6 @@ class CodexCommandViewModel(
         }
     }
 
-    /** Commits [command]'s order and returns the command that puts the previous order back, if it changed. */
     private suspend fun reorder(command: CodexCommand.Reorder): CodexCommand? {
         val moved = command.visibleIds.toSet()
         val previous = repository.observeCodices().first().map(Codex::codexId).filter { it in moved }

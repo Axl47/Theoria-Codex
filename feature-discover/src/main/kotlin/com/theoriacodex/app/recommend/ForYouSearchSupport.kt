@@ -9,7 +9,6 @@ import com.theoriacodex.domain.recommendation.CrossSourceTraining
 import com.theoriacodex.domain.recommendation.LikedTagDocument
 import com.theoriacodex.domain.recommendation.PixivTagDictionary
 
-/** The search one For You lane runs on [source]. */
 internal fun forYouSourceQuery(
     source: SourceKey,
     includeTags: List<String>,
@@ -23,7 +22,6 @@ internal fun forYouSourceQuery(
     minScore = null,
 )
 
-/** Lets Likes on one tag-compatible source train the others, using learned Pixiv translations. */
 internal suspend fun crossSourceTraining(likes: List<LikedTagDocument>, store: TagSuggestionStore): CrossSourceTraining {
     store.awaitLoaded()
     val pixivPairs = store.get(SourceKey.PIXIV, Int.MAX_VALUE)

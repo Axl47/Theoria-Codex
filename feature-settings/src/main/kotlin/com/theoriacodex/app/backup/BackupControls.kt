@@ -32,10 +32,6 @@ import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.BackupPreview
 import com.theoriacodex.domain.series.languageName
 
-/**
- * Back up and Restore. Backing up opens a sheet with the backup's choices; Restore also reads Mihon and Aniyomi
- * backups (`.tachibk`), which the page says because nothing else would tell the user.
- */
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
     var choosing by rememberSaveable { mutableStateOf(false) }
@@ -70,7 +66,6 @@ fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, on
     }
 }
 
-/** What a backup holds, then the button that picks where to save it. */
 @Composable
 private fun BackupSheet(includeRecents: Boolean, onIncludeRecents: (Boolean) -> Unit, onDismiss: () -> Unit, onBackUp: () -> Unit) {
     ExpandedBottomSheet(onDismiss) {
@@ -97,7 +92,6 @@ private fun BackupSheet(includeRecents: Boolean, onIncludeRecents: (Boolean) -> 
 
 private const val BACK_UP_LABEL = "Back up profiles"
 
-/** Daily backup to a folder, under its own "Daily backup" heading; compact because it is checked rarely and only needs attention on failure. */
 @Composable
 fun AutoBackupControls(
     status: AutoBackupStatus,
@@ -135,17 +129,14 @@ private fun autoBackupProgress(status: AutoBackupStatus): String {
     }
 }
 
-/** What the Settings home row says about daily backup; [failed] when the last automatic backup failed. */
 data class AutoBackupSummary(val text: String, val failed: Boolean = false)
 
-/** The Settings home row's value: a failure where it will be seen, else how daily backup stands. */
 fun autoBackupSummary(status: AutoBackupStatus): AutoBackupSummary = when {
     status.failure != null -> AutoBackupSummary(status.failure, failed = true)
     !status.enabled -> AutoBackupSummary("Daily backup off")
     else -> AutoBackupSummary("Daily · ${autoBackupProgress(status)}")
 }
 
-/** The restore preview, the one backup step that asks first: restoring adds to every matching profile. */
 @Composable
 fun BackupDialogs(
     state: BackupUiState,
@@ -198,7 +189,6 @@ private fun RestoreBackupDialog(
     )
 }
 
-/** A Mihon-family backup brings only series and its extension repos, so its preview says what of them comes along and which extensions are still missing. */
 @Composable
 private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
     val preview = import.preview
@@ -218,7 +208,6 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
                 import.newRepos.reposNotice()?.let { Text(it) }
-                // Ones to turn on first, so a count of "other" missing extensions reads against them.
                 import.turnOnNotice()?.let { Text(it) }
                 import.missingNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
@@ -229,19 +218,16 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
     )
 }
 
-/** "Also adds these extension repos: Keiyoushi, Kohi den." for the [ProfileBackupPreview.newRepos] or [BackupPreview.Series.newRepos] of a backup, so the user sees whose extensions they will be offered; null when none are new. */
 internal fun List<String>.reposNotice(): String? = when (size) {
     0 -> null
     1 -> "Also adds this extension repo: ${single()}."
     else -> "Also adds these extension repos: ${joinToString()}."
 }
 
-/** "Needs these extensions: Comick, Gogoanime and 1 other.", naming what the backup names; null when nothing is missing. */
 internal fun BackupPreview.Series.missingNotice(): String? {
     val named = missingSources
     if (named.isEmpty()) {
         if (unnamedMissingSources == 0) return null
-        // Turning on the extensions named beside it would not cover these, so they are counted apart.
         return if (turnOn.isEmpty()) "A series stays unavailable until its extension is on here." else "Needs ${countLabel(unnamedMissingSources, "other extension")}."
     }
     val others = if (unnamedMissingSources > 0) " and ${countLabel(unnamedMissingSources, "other")}" else ""
@@ -249,7 +235,6 @@ internal fun BackupPreview.Series.missingNotice(): String? {
     return "Needs $subject: ${named.joinToString()}$others."
 }
 
-/** "Turn on in Extensions: Comix, Comix (Spanish).": installed extensions, and the language where only that is off; null when none. */
 internal fun BackupPreview.Series.turnOnNotice(): String? = turnOn.takeIf { it.isNotEmpty() }?.joinToString(
     prefix = "Turn on in Extensions: ", postfix = ".",
 ) { off -> off.language?.let { "${off.extension} (${languageName(it)})" } ?: off.extension }

@@ -17,26 +17,19 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** The post ids [creator]'s follow had seen when its page opened, before this visit recorded more. */
 data class CreatorSeenSnapshot(val creator: CreatorProfile, val seenPostIds: Set<String>)
 
-/**
- * The post the "new since last visit" divider goes before: the first of [posts] that [seenPostIds] holds, when
- * unseen posts come before it. Null when no loaded post was seen (the rest are unloaded, not new) or the first was.
- */
 internal fun newSinceVisitBoundary(posts: List<Post>, creator: CreatorProfile, seenPostIds: Set<String>): PostId? {
     val index = posts.indexOfFirst { it.id.source == creator.source && it.id.sourcePostId in seenPostIds }
     return posts.getOrNull(index)?.id?.takeIf { index > 0 }
 }
 
-/** [newSinceVisitBoundary] over the shown [posts] of the uploads [feed]; null on other feeds or when [seenAtOpen] is. */
 @Composable
 internal fun rememberNewSinceVisit(feed: AccountFeed, creator: CreatorProfile, posts: List<Post>, seenAtOpen: Set<String>?): PostId? =
     remember(feed, creator, posts, seenAtOpen) {
         seenAtOpen?.takeIf { feed == AccountFeed.UPLOADS }?.let { newSinceVisitBoundary(posts, creator, it) }
     }
 
-/** The full-width line between a followed creator's new posts and those already seen. */
 @Composable
 internal fun NewSinceVisitDivider() {
     Row(

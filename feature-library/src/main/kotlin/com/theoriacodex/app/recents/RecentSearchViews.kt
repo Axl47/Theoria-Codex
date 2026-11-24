@@ -39,10 +39,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * A search's query as text that reads like the composer: required groups in order with quiet "or"
- * alternatives, then exclusions in [excluded] color with a minus sign.
- */
 internal fun recentSearchQueryText(query: Query, quiet: Color, excluded: Color): AnnotatedString = buildAnnotatedString {
     fun separate() {
         if (length > 0) withStyle(SpanStyle(color = quiet)) { append(", ") }
@@ -61,10 +57,6 @@ internal fun recentSearchQueryText(query: Query, quiet: Color, excluded: Color):
     if (length == 0) withStyle(SpanStyle(color = quiet)) { append("No tags") }
 }
 
-/**
- * One entry of the Searches section: up to two lines of query, its context, and a visible save. [onLongPress] opens
- * its menu; [modifier] goes on its clickable node.
- */
 @Composable
 internal fun RecentSearchRow(
     entry: RecentSearchEntry,
@@ -117,7 +109,6 @@ internal fun RecentSearchRow(
     }
 }
 
-/** A compact search in the All view's per-day row, with the same save and menu as rows. [modifier] goes on its clickable node. */
 @Composable
 internal fun RecentSearchTile(
     entry: RecentSearchEntry,
@@ -151,7 +142,6 @@ internal fun RecentSearchTile(
                 SavedSearchNameField(renaming, saving, MaterialTheme.typography.bodyMedium, Modifier.weight(1f).padding(end = 8.dp))
                 return@Row
             }
-            // Weighted so a long query leaves room for the save control; not filled, so a short tile stays narrow.
             Column(Modifier.weight(1f, fill = false)) {
                 Text(
                     recentSearchQueryText(entry.query, colors.onSurfaceVariant, colors.error),
@@ -171,7 +161,6 @@ internal fun RecentSearchTile(
     }
 }
 
-/** The search's source in a tonal tile, or a search glyph when it spans sources. */
 @Composable
 private fun RecentSearchMark(entry: RecentSearchEntry, size: Dp) {
     val colors = MaterialTheme.colorScheme
@@ -193,10 +182,8 @@ private fun RecentSearchMark(entry: RecentSearchEntry, size: Dp) {
     }
 }
 
-/** The single source a search ran on, if it ran on exactly one. */
 private fun recentSearchSource(entry: RecentSearchEntry): SourceKey? = (entry.query.mode as? QueryMode.Source)?.source
 
-/** Which sources the search covered. */
 private fun recentSearchContext(entry: RecentSearchEntry): String =
     recentSearchPresentation(entry).subtitle ?: recentSearchSource(entry)?.displayName().orEmpty()
 

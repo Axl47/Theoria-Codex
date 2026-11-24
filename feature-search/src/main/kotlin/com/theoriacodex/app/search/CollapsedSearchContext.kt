@@ -3,7 +3,6 @@ package com.theoriacodex.app.search
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 
-/** The search bar's one line: the first required groups or exclusions, how many more, and active filters. */
 internal fun collapsedSearchContextSummary(
     query: Query,
     activeFilterCount: Int,

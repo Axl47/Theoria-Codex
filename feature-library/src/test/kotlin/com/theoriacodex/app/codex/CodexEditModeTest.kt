@@ -28,7 +28,6 @@ class CodexEditModeTest {
         val post = testPost(sourcePostId = "saved").copy(preview = media, full = media, media = listOf(media))
         var destinationBacks = 0
         compose.setContent {
-            // Stands in for the destination's own Back handler, which pops the Codex.
             BackHandler { destinationBacks++ }
             MaterialTheme {
                 CodexDetailScreen(

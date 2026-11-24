@@ -30,13 +30,11 @@ fun searchViewModelFactory(
     }
 }
 
-/** Retries what failed while offline, one source at a time so each keeps its own continuation. */
 internal suspend fun retrySearchAfterReconnect(
     state: StateFlow<SearchUiState>,
     retry: () -> Unit,
     retrySource: (SourceKey) -> Job?,
 ) {
-    // A request begun offline may still be failing; waiting lets its outcome get this retry too.
     val settled = state.first { it.execution.activeRequestId == null }
     if (settled.content.error != null) {
         retry()

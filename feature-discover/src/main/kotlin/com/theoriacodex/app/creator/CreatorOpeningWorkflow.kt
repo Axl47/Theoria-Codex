@@ -14,7 +14,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 data class CreatorOpeningOutcome(val creator: CreatorProfile?, val resolvedPost: Post? = null)
 
-/** Resolves creator identity only; the shell owns navigation and committing a hydrated Post. */
 class CreatorOpeningWorkflow(
     private val registry: SourceAdapterRegistry,
     private val http: SourceHttpClient,

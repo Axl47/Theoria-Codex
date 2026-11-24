@@ -7,7 +7,6 @@ import com.theoriacodex.data.repository.PROFILE_BACKUP_MAX_BYTES
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.io.InputStream
 
-/** The owner passes document IDs; stream and permission lifetimes stay in this gateway. */
 interface BackupDocuments {
     suspend fun read(document: String): ByteArray
     suspend fun write(document: String, bytes: ByteArray)
@@ -34,7 +33,6 @@ class AndroidBackupDocuments(private val resolver: ContentResolver) : BackupDocu
     }
 }
 
-/** Reads at most one extra byte beyond the limit, including for streams without a size. */
 internal suspend fun readBackupDocument(
     input: InputStream,
     maximumBytes: Int = PROFILE_BACKUP_MAX_BYTES,

@@ -6,7 +6,6 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.domain.model.SourceKey
 
-/** One initial query and its execution identity are shared by draft and applied state. */
 internal fun initialSearchState(sources: List<SourceKey>): SearchUiState {
     val query = emptySearchQuery()
     return SearchUiState(

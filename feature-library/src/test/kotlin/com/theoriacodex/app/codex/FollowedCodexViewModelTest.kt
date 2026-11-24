@@ -204,7 +204,6 @@ class FollowedCodexViewModelTest {
             owner.related.onLikeCommitted(old, LikeToggleOutcome.LIKED)
             advanceUntilIdle()
             val loaded = owner.relatedState.value as RelatedPostsUiState.Loaded
-            // Newest first, so "old" is the second tile the grid shows.
             assertEquals(1, loaded.request.anchorCanonicalIndex)
             assertEquals(related, loaded.loadedPosts)
 

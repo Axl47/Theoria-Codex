@@ -60,7 +60,6 @@ class CollapsingSearchChromeTest {
     }
 
     @Test fun `an expanded bar reserves its space on the first frame after returning to Search`() {
-        // Search leaves composition while the Viewer is shown; navigation keeps its saved state in a holder.
         val shown = mutableStateOf(true)
         compose.setContent {
             val holder = rememberSaveableStateHolder()
@@ -79,10 +78,8 @@ class CollapsingSearchChromeTest {
         compose.runOnIdle { shown.value = false }
         compose.waitForIdle()
 
-        // Paused, so a top still animating toward the bar's height is caught mid-slide.
         compose.mainClock.autoAdvance = false
         compose.runOnUiThread { shown.value = true }
-        // Step frame by frame until Search is back, then read that first frame's layout.
         repeat(MAX_RETURN_FRAMES) {
             if (compose.onAllNodesWithTag("grid").fetchSemanticsNodes().isEmpty()) compose.mainClock.advanceTimeByFrame()
         }
@@ -104,7 +101,6 @@ class CollapsingSearchChromeTest {
         assertTrue(compose.onNodeWithTag("grid").fetchSemanticsNode().positionInRoot.y > 0f)
     }
 
-    // Counts how often the chrome's content was composed, proving the round trip really re-entered it.
     private var compositions = 0
 
     private fun gridTop() = compose.onNodeWithTag("grid").fetchSemanticsNode().positionInRoot.y

@@ -36,21 +36,14 @@ internal data class CodexListPresentation(
     val actionFailed: Boolean = false,
     val retryActionOptions: () -> Unit = {},
     val librarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
-    /** Null until statistics first answer, or while no sort needs them. */
     val libraryUsage: Map<String, CodexUsage>? = null,
-    /** For a cleaning target and its comparisons, the target's posts each comparison also holds. */
     val observeCleaningMatches: (String, List<String>) -> Flow<Map<String, Set<PostId>>> = { _, _ -> flowOf(emptyMap()) },
-    /** Codices waiting to be deleted, by id; each keeps its tile's cell, drawn as its Undo. */
     val pendingDeletes: Map<String, PendingRemoval> = emptyMap(),
-    /** Orders whose write failed; the grid drops the matching optimistic order. */
     val reorderFailures: Flow<List<String>> = emptyFlow(),
-    /** The menu was opened from a screen whose title renames in place, so it shows no Rename row. */
     val renameInPlace: Boolean = false,
 ) {
-    /** What the grid shows: Likes lives in Library's Saved section instead. */
     val libraryCodices: List<Codex> get() = codices.filterNot { it.codexId == likesCodexId }
 
-    /** Whether the sort still waits for counts or usage; a first frame in manual order would move the restored scroll anchor. */
     val awaitingSortInputs: Boolean get() {
         val awaitingCounts = librarySort.usesItemCounts && libraryCodices.any { it.codexId !in itemCounts }
         return awaitingCounts || librarySort.usesUsage && libraryUsage == null
@@ -62,7 +55,6 @@ internal data class CodexListActions(
     val importCodex: () -> Unit,
     val downloadCodex: (String) -> Unit,
     val shareCodex: (String) -> Unit,
-    /** Opens the Codex filtered by tag, with its tag sheet showing. */
     val filterByTag: (String) -> Unit,
     val commitReorder: (List<String>) -> Unit,
     val createCodex: (String) -> Unit,
@@ -72,8 +64,6 @@ internal data class CodexListActions(
     val cleanCodex: (String, Set<String>) -> Unit,
     val makeAvailableOffline: ((String) -> Unit)? = null,
     val setLibrarySort: (CodexLibrarySort) -> Unit = {},
-    /** A deleted Codex tile's Undo, or its Retry after the deletion failed. */
     val actOnDelete: (String) -> Unit = {},
-    /** The Library was left: commits the Codices waiting to be deleted. */
     val leaveLibrary: () -> Unit = {},
 )

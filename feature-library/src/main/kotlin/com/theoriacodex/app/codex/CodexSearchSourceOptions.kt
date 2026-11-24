@@ -83,10 +83,8 @@ fun codexSearchTagOptions(
         }
 }
 
-/** One saved post's tags, the pool that "Draw" picks from. */
 data class CodexDrawPost(val sourcePostId: String, val terms: List<SearchTerm>)
 
-/** What the Codex search offers for one source: every typed tag with its post count, and the posts. */
 data class CodexSearchTerms(
     val options: List<CodexSearchTermOption>,
     val posts: List<CodexDrawPost>,
@@ -115,10 +113,6 @@ private fun codexTermKey(source: SourceKey, term: SearchTerm) = Triple(
     sourceTagKey(source, term.value),
 )
 
-/**
- * A random saved post's tags, so at least that post matches when they are all required. Tags drawn
- * independently across a collection may never appear together.
- */
 internal fun drawCodexTerms(posts: List<CodexDrawPost>, amount: Int, random: Random = Random): CodexDraw? {
     val post = posts.randomOrNull(random) ?: return null
     return CodexDraw(post.sourcePostId, post.terms.shuffled(random).take(amount))

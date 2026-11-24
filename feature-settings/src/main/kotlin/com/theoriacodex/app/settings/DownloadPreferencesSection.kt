@@ -21,7 +21,6 @@ import com.theoriacodex.data.repository.SeriesUpdateInterval
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.domain.model.VideoQuality
 
-/** Settings' Downloads sheet. Default video quality is set from the Viewer's playback menu instead. */
 @Composable
 fun DownloadPreferencesSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     Text(SettingDestinations.Downloads.title, style = MaterialTheme.typography.titleMedium)
@@ -45,10 +44,6 @@ private fun QualityChoices(choice: SettingChoice<VideoQuality>, selected: VideoQ
     }
 }
 
-/**
- * Settings' sheet for how often followed series are checked for new chapters. [onOpenNotificationSettings] is given
- * while the app may not notify, which only the system's settings can change once its prompt was refused.
- */
 @Composable
 fun SeriesUpdatesSection(state: SettingsUiState, onOpenNotificationSettings: (() -> Unit)?, onAction: (SettingsAction) -> Unit) {
     val choice = SettingChoices.SeriesUpdates

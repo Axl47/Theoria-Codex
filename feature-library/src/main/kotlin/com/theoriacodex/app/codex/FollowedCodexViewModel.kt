@@ -24,13 +24,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 internal typealias FollowedFeedState = LiveCodexFeedState
 
-/** Session-owned live collection. Branch identity includes the durable follow membership. */
 class FollowedCodexViewModel(
     private val registry: SourceAdapterRegistry,
     private val cacheRepository: CacheRepository,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
-    /** Creator pages are fetched and parsed here, off the main thread. Tests pass [kotlin.coroutines.EmptyCoroutineContext]. */
     private val providerContext: CoroutineContext = Dispatchers.Default,
 ) : ViewModel(), LiveCodexFeedOwner {
     private val feed = LiveCodexFeedController<CreatorBranch>(viewModelScope,
@@ -52,7 +50,6 @@ class FollowedCodexViewModel(
         durations: Map<PostId, Long> = emptyMap(),
     ) {
         feed.updateCoverSort(sort, usage, durations)
-        // Check/visit metadata must not restart an otherwise identical feed.
         val identity = selected.map { it.membershipId to it.creator }
         if (identity == follows.map { it.membershipId to it.creator } && available == availableSources) return
         follows = selected

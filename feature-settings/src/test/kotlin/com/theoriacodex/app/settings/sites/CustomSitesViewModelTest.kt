@@ -507,7 +507,6 @@ class CustomSitesViewModelTest {
         assertEquals(RetestStatus.Done("Working", ok = true), owner.state.value.retests[SourceKey.IWARA.id])
     }
 
-    /** Opens the check for [host] and lets the browser through a page with [userAgent]. */
     private fun TestScope.passCheck(owner: CustomSitesViewModel, host: String, userAgent: String = "WebView/1") {
         owner.onAction(CustomSitesAction.StartVerification(host))
         checks.pageLoaded(requireNotNull(checks.opened), userAgent, letThrough = true)

@@ -90,7 +90,6 @@ class CodexGridReorderUiTest {
         showLibrary()
         compose.runOnIdle { assertTrue(moves("Gamma").single { it.label == "Move earlier" }.action()) }
         compose.runOnIdle { assertTrue(precedes("Gamma", "Beta")) }
-        // While a tile is lifted its edge auto-scroll asks for every frame, so the clock is driven by hand until release.
         compose.mainClock.autoAdvance = false
         compose.onNodeWithText("Alpha").performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(LONG_PRESS_MILLIS)

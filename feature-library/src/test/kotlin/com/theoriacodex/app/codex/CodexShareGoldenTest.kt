@@ -12,7 +12,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class CodexShareGoldenTest {
-    // gson-export.json is what the Gson exporter wrote for these posts, HTML-escaped strings included.
     @Test
     fun `an export imports exactly like the file older builds exported`() {
         val golden = golden("gson-export.json")
@@ -24,7 +23,6 @@ class CodexShareGoldenTest {
         assertEquals(listOf("42", "7"), imported.second.map { it?.id?.sourcePostId })
     }
 
-    // The Gson export holds no URL for a gallery entry, so full.json, captured from the kotlinx exporter, sets every key.
     @Test
     fun `the full export holds every stored key`() {
         val image = CodexShareImageRef("https://e.test/a?x=1&y=2", null, "image/png", listOf("p"), listOf("f"), true)

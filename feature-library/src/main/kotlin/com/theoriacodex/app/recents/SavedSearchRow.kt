@@ -26,7 +26,6 @@ import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.newPostsLabel
 
-/** One saved search: its name, where it searches, and Rename and Remove. */
 @Composable
 internal fun SavedSearchRow(
     entry: SavedSearchEntry,
