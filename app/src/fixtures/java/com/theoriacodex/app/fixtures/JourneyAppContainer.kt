@@ -64,6 +64,7 @@ import com.theoriacodex.data.repository.FileBackedGalleryReadingModeRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileDeletionService
+import com.theoriacodex.data.repository.TachiyomiBackupImport
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
@@ -190,6 +191,7 @@ class JourneyAppContainer(
             storageDirectory.resolve("pending_profile_deletion.json"), profileWriteGuard),
         profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
             data.readingPositions, storageDirectory.resolve("pending_profile_restore.json"), siteProfiles = siteProfiles),
+        seriesImport = TachiyomiBackupImport(RoomProfileBackupStore(database)),
     )
     /** Real controller over in-memory stores; the fixture registry does not list custom sites. */
     override val customSites: CustomSitesController = CustomSitesControllerImpl(

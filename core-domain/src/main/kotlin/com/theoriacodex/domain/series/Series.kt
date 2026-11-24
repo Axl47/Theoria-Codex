@@ -25,6 +25,21 @@ enum class SeriesStatus {
     UPCOMING,
 }
 
+/**
+ * The status a Mihon or Aniyomi status number names, as their extensions and their apps' backups both number them:
+ * Aniyomi numbers its statuses as Mihon does and adds [SeriesStatus.UPCOMING]. Any other number is unknown.
+ */
+fun extensionSeriesStatus(number: Int): SeriesStatus = when (number) {
+    1 -> SeriesStatus.ONGOING
+    2 -> SeriesStatus.COMPLETED
+    3 -> SeriesStatus.LICENSED
+    4 -> SeriesStatus.PUBLISHING_FINISHED
+    5 -> SeriesStatus.CANCELLED
+    6 -> SeriesStatus.ON_HIATUS
+    7 -> SeriesStatus.UPCOMING
+    else -> SeriesStatus.UNKNOWN
+}
+
 /** A work read or watched in order over time, such as a manga or an anime, as its source describes it. */
 data class Series(
     val id: SeriesId,

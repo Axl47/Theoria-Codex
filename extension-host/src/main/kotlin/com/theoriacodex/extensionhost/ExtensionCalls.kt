@@ -6,12 +6,10 @@ import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
-import com.theoriacodex.domain.series.SeriesStatus
+import com.theoriacodex.domain.series.extensionSeriesStatus
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
-import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.network.HttpException
-import eu.kanade.tachiyomi.source.model.SManga
 import java.io.IOException
 import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
@@ -121,7 +119,7 @@ internal fun extensionSeries(id: SeriesId, title: String, cover: String?, author
     genres = genres.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty),
     language = language,
     description = description?.trim()?.takeIf(String::isNotEmpty),
-    status = seriesStatus(status),
+    status = extensionSeriesStatus(status),
 )
 
 /**
@@ -145,15 +143,3 @@ internal fun extensionEntry(seriesTitle: String, address: String, name: String, 
     translatorGroup = group?.takeIf(String::isNotBlank),
     uploadedAtEpochMs = uploadedAtEpochMs.takeIf { it > 0L },
 )
-
-/** A status number as the app's status. Aniyomi numbers its statuses as Mihon does and adds one; any other is unknown. */
-internal fun seriesStatus(status: Int): SeriesStatus = when (status) {
-    SManga.ONGOING -> SeriesStatus.ONGOING
-    SManga.COMPLETED -> SeriesStatus.COMPLETED
-    SManga.LICENSED -> SeriesStatus.LICENSED
-    SManga.PUBLISHING_FINISHED -> SeriesStatus.PUBLISHING_FINISHED
-    SManga.CANCELLED -> SeriesStatus.CANCELLED
-    SManga.ON_HIATUS -> SeriesStatus.ON_HIATUS
-    SAnime.UPCOMING -> SeriesStatus.UPCOMING
-    else -> SeriesStatus.UNKNOWN
-}
