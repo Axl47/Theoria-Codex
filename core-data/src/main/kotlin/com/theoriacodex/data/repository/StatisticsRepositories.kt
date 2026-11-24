@@ -16,6 +16,7 @@ import java.io.File
 import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -373,6 +374,8 @@ internal object StatisticsPolicies {
         return current.copy(codexEntryCounts = current.codexEntryCounts.increment(normalized))
     }
 }
+
+val STATISTICS_WRITE_DELAY = 10.seconds
 
 class DataStoreStatisticsRepository private constructor(
     store: JsonDataStore<LifetimeStatistics>,

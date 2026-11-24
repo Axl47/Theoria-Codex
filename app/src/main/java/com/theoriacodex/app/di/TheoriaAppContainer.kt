@@ -84,6 +84,7 @@ import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileDeletionService
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.SettingsRepository
+import com.theoriacodex.data.repository.STATISTICS_WRITE_DELAY
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.storage.WriteBehind
@@ -383,7 +384,7 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
         recoveryRegistry = fileStoreRecoveryRegistry,
-        writeBehind = WriteBehind(durableStoreScope),
+        writeBehind = WriteBehind(durableStoreScope, STATISTICS_WRITE_DELAY),
     )
     private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
         delegate = statisticsStore,
