@@ -215,6 +215,28 @@ class ViewerVerticalGalleryTest {
     }
 
     @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a chapter left on its first page restores onto that page, not onto the cover shown while it loads (ADR 0192)`() {
+        val land = installGatedLoader(width = 100, height = 400)
+        val session = ViewerSessionIdentity("first-page")
+        state.value = createViewerUiState(
+            session, listOf(gallery.copy(media = emptyList(), full = null, galleryLengthUnknown = true), next),
+            requiresResolution = { it.id == gallery.id },
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.5f)),
+        )
+        show()
+        compose.runOnIdle { land() }
+        compose.mainClock.advanceTimeBy(FRAME_MS * 10)
+        compose.waitForIdle()
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.mainClock.advanceTimeBy(FRAME_MS * 10)
+        compose.waitForIdle()
+
+        val shown = compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode()
+        val line = compose.onRoot().fetchSemanticsNode().size.height / 3f
+        assertEquals(0.5f, (line - shown.positionInRoot.y) / shown.size.height, 0.02f)
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
     @Test fun `a chapter left near the top of its page reopens with that page first on screen (ADR 0192)`() {
         val land = installGatedLoader(width = 100, height = 400)
         state.value = createViewerUiState(

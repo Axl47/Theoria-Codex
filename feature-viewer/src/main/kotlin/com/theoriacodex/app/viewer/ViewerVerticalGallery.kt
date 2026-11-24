@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,8 +80,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Stable
-internal class ViewerVerticalGalleryState(val list: LazyListState, pageOffset: Float? = null) {
-    var pendingPageOffset by mutableStateOf(pageOffset)
+internal class ViewerVerticalGalleryState(val list: LazyListState, pendingPageFraction: Pair<Int, Float>? = null) {
+    var pendingPageFraction by mutableStateOf(pendingPageFraction)
     var scale by mutableFloatStateOf(1f)
         private set
     var panX by mutableFloatStateOf(0f)
@@ -143,7 +144,7 @@ internal fun ViewerVerticalGallery(
         screen.verticalGalleries[post.id] = gallery
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }
     }
-    val shapes = remember(post.id) { HashMap<Int, MutableFloatState>() }
+    val shapes = remember(post.id, pageState.hasPendingGalleryMedia()) { HashMap<Int, MutableFloatState>() }
     val latestShape = remember(post.id) { object { var value = viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE } }
     val painted = { index: Int -> !shapes.getOrPut(index) { mutableFloatStateOf(Float.NaN) }.floatValue.isNaN() }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, frame.uiState.series is ViewerSeries.Reading, painted, screen, host)
@@ -193,7 +194,7 @@ private fun rememberVerticalGalleryState(pageState: ViewerPageState, series: Vie
     screen.verticalGalleryPositions.getOrPut(pageState.post.id) {
         ViewerVerticalGalleryState(
             LazyListState(pageState.selectedMediaIndex.coerceIn(0, maxOf(0, pageState.media.lastIndex))),
-            (series as? ViewerSeries.Reading)?.pageOffsets?.get(pageState.post.id),
+            (series as? ViewerSeries.Reading)?.pageOffsets?.get(pageState.post.id)?.let { pageState.targetMediaIndex to it },
         )
     }
 }
@@ -238,7 +239,7 @@ private fun VerticalGalleryEffects(
     var aligned by remember(list) { mutableStateOf(false) }
     VerticalGalleryScrollSelection(list, pageCount, selected, enabled = isCurrentPost && aligned, host)
     VerticalGalleryPageReport(post, gallery, selected, isCurrentPost && aligned, reportsPageOffset, painted, host)
-    VerticalGalleryOffsetRestore(gallery, selected, isCurrentPost && aligned, painted)
+    VerticalGalleryOffsetRestore(gallery, selected, isCurrentPost && aligned && !pageState.hasPendingGalleryMedia(), painted)
     LaunchedEffect(selected, pageCount, resuming) {
         if (resuming || selected !in 0 until pageCount) {
             aligned = false
@@ -264,9 +265,9 @@ private fun VerticalGalleryPageReport(
     LaunchedEffect(post, selected, enabled, reportsPageOffset) {
         val report = host.onVisibleMediaChanged?.takeIf { enabled } ?: return@LaunchedEffect
         if (!reportsPageOffset) return@LaunchedEffect report(post, selected + 1, null)
-        snapshotFlow { list.isScrollInProgress || gallery.pendingPageOffset != null }
+        snapshotFlow { list.isScrollInProgress || gallery.pendingPageFraction != null }
             .filter { busy -> !busy }
-            .collect { report(post, selected + 1, list.pageOffset(selected).takeUnless { it.isNaN() || !painted(selected) }) }
+            .collect { report(post, selected + 1, list.pageFraction(selected).takeUnless { it.isNaN() || !painted(selected) }) }
     }
 }
 
@@ -274,13 +275,13 @@ private fun VerticalGalleryPageReport(
 private fun VerticalGalleryOffsetRestore(gallery: ViewerVerticalGalleryState, selected: Int, ready: Boolean, painted: (Int) -> Boolean) {
     val list = gallery.list
     LaunchedEffect(gallery, ready) {
-        val offset = gallery.pendingPageOffset?.takeIf { ready } ?: return@LaunchedEffect
-        val target = selected
+        val (target, fraction) = gallery.pendingPageFraction?.takeIf { ready } ?: return@LaunchedEffect
         fun position() = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
         val start = position()
-        snapshotFlow { painted(target) || list.isScrollInProgress }.first { it }
-        if (painted(target) && !list.isScrollInProgress && start == position()) list.scrollToPageOffset(target, offset)
-        gallery.pendingPageOffset = null
+        if (target == selected) snapshotFlow { painted(target) || list.isScrollInProgress }.first { it }
+        repeat(LAYOUT_FRAMES) { withFrameNanos { } }
+        if (target == selected && painted(target) && !list.isScrollInProgress && start == position()) list.scrollToPageFraction(target, fraction)
+        gallery.pendingPageFraction = null
     }
 }
 
@@ -318,16 +319,16 @@ private fun LazyListState.focusedPage(pageCount: Int): Int {
     return (crossing ?: firstVisibleItemIndex).coerceIn(0, pageCount - 1)
 }
 
-private fun LazyListState.pageOffset(index: Int): Float {
+private fun LazyListState.pageFraction(index: Int): Float {
     val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.takeIf { it.size > 0 } ?: return Float.NaN
     val reached = ((selectionLine() - page.offset).toFloat() / page.size).coerceIn(0f, 1f)
     return (reached * PAGE_OFFSET_STEPS).roundToInt() / PAGE_OFFSET_STEPS
 }
 
-private suspend fun LazyListState.scrollToPageOffset(index: Int, offset: Float) {
+private suspend fun LazyListState.scrollToPageFraction(index: Int, fraction: Float) {
     scrollToItem(index)
     val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    scrollToItem(index, (page.offset + offset * page.size - selectionLine()).roundToInt().coerceIn(0, page.size))
+    scrollToItem(index, (layoutInfo.viewportStartOffset + fraction * page.size - selectionLine()).roundToInt().coerceIn(0, page.size))
 }
 
 private fun LazyListState.selectionLine(): Int = with(layoutInfo) { viewportStartOffset + (viewportEndOffset - viewportStartOffset) / 3 }
@@ -502,6 +503,7 @@ private val VERTICAL_PAGE_CONTROLS = ViewerRendererControls(
 
 private const val DEFAULT_PAGE_SHAPE = 0.7f
 private const val PAGE_OFFSET_STEPS = 1000f
+private const val LAYOUT_FRAMES = 2
 private const val MAX_ZOOM = 4f
 private const val DOUBLE_TAP_ZOOM = 2f
 
