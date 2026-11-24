@@ -38,7 +38,7 @@ class ForYouDeckVettingTest {
     private val ForYouDeckViewModel.posts get() = levels.value.last().feed.value.posts
     private val ForYouDeckViewModel.ids get() = posts.map { it.id.sourcePostId }
 
-    @Test fun `a post whose picture carries a hidden tag is never dealt, though its provider never tagged it`() {
+    @Test fun `a post whose picture carries a hidden tag is never dealt, though its provider never tagged it (ADR 0135)`() {
         val pictures = FakePictureTags(predicted = mapOf("b-0-0" to seen("x"), "a-0-1" to seen("y")))
         val owner = owner(pictures)
 
@@ -65,7 +65,7 @@ class ForYouDeckVettingTest {
         assertFalse(owner.levels.value.last().feed.value.loadingMore)
     }
 
-    @Test fun `nothing is dealt while its picture is being tagged`() {
+    @Test fun `nothing is dealt while its picture is being tagged (ADR 0135)`() {
         val pictures = FakePictureTags().apply { held = CompletableDeferred() }
         val owner = owner(pictures)
 
@@ -96,6 +96,20 @@ class ForYouDeckVettingTest {
         assertFalse("a-0-2" in owner.ids)
     }
 
+    @Test fun `a chip that restarts vetting runs one loop though the first post deals again before the loop suspends (ADR 0135)`() {
+        val pictures = FakePictureTags()
+        val owner = owner(pictures)
+        pictures.unseen = setOf("a-0-0")
+        pictures.held = CompletableDeferred()
+        val before = pictures.asked.size
+        owner.selectChip(laneId("a"))
+
+        assertEquals(1, pictures.mostLooking)
+        pictures.release()
+        val restarted = pictures.asked.drop(before)
+        assertEquals(restarted.distinct(), restarted)
+    }
+
     @Test fun `vetting keeps ahead of the deal through pages far bigger than its look-ahead`() {
         val big = FakeForYouEngine(listOf("a", "b", "c"), pages = 1, pageSize = 24)
         val owner = ForYouDeckViewModel(big, deckWiring(writeScope, pictures = FakePictureTags())).also { it.synchronize(deckEnvironment(hiding("x"))) }
@@ -118,7 +132,7 @@ class ForYouDeckVettingTest {
         assertTrue(owner.ids.any { it.startsWith("a-") })
     }
 
-    @Test fun `a profile that hides nothing is dealt without tagging`() {
+    @Test fun `a profile that hides nothing is dealt without tagging (ADR 0135)`() {
         val pictures = FakePictureTags()
         val owner = owner(pictures, deckEnvironment())
         assertEquals(4, owner.posts.size)
@@ -138,14 +152,14 @@ class ForYouDeckVettingTest {
         assertFalse("b-0-0" in owner.ids)
     }
 
-    @Test fun `a post whose preview did not load is left out, since its picture may carry a hidden tag`() {
+    @Test fun `a post whose preview did not load is left out, since its picture may carry a hidden tag (ADR 0135)`() {
         val pictures = FakePictureTags().apply { unseen = setOf("a-0-1") }
         val owner = owner(pictures)
         assertEquals(4, owner.posts.size)
         assertFalse("a-0-1" in owner.ids)
     }
 
-    @Test fun `nothing is dealt while the model will not load, and dealing resumes once it does`() {
+    @Test fun `nothing is dealt while the model will not load, and dealing resumes once it does (ADR 0135)`() {
         val pictures = FakePictureTags().apply { blind = true }
         val owner = owner(pictures)
         assertEquals(emptyList<Post>(), owner.posts)

@@ -203,13 +203,22 @@ internal class FakePictureTags(ready: Boolean = true, private val predicted: Map
     var held: CompletableDeferred<Unit>? = null
     var unseen: Set<String> = emptySet()
     var blind = false
+    private var looking = 0
+    var mostLooking = 0
+        private set
 
     fun release() = held?.complete(Unit)
 
     override suspend fun look(post: Post): PictureLook {
         if (!ready.value || blind) return PictureLook.Blind
-        held?.await()
-        if (post.id.sourcePostId in unseen) return PictureLook.Unseen
+        looking += 1
+        mostLooking = maxOf(mostLooking, looking)
+        try {
+            if (post.id.sourcePostId in unseen) return PictureLook.Unseen
+            held?.await()
+        } finally {
+            looking -= 1
+        }
         asked += post.id.sourcePostId
         val tags = predicted[post.id.sourcePostId].orEmpty()
         seen[post.id] = tags

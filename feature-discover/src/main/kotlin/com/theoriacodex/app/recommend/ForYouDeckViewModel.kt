@@ -23,6 +23,7 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.coroutines.SoleJob
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Post
@@ -110,7 +111,7 @@ class ForYouDeckViewModel(
     private var opening = false
     private var forking: Job? = null
 
-    private var vetting: Job? = null
+    private val vetting = SoleJob(workScope)
 
     private val relatedState = MutableStateFlow<RelatedPostsUiState>(RelatedPostsUiState.Idle)
     private val relatedPosts = RelatedPostsRouteController(
@@ -210,7 +211,6 @@ class ForYouDeckViewModel(
         val profileId = request.settings.activeProfileId
         work.cancelChildren()
         asking.clear()
-        vetting = null
         mix = null
         lastDecision = null
         plannedUnder = hidden
@@ -374,14 +374,13 @@ class ForYouDeckViewModel(
     private val vetsPictures: Boolean get() = wiring.pictures.ready.value && hiddenTokens.value.values.any { it.isNotEmpty() }
 
     private fun vet(mix: ForYouMix) {
-        if (vetting?.isActive == true) return
-        vetting = workScope.launch(start = CoroutineStart.LAZY) {
+        vetting.launchIfIdle {
             while (true) {
                 val (lane, post) = mix.nextToVet(VET_AHEAD) ?: break
                 vetOne(mix, lane, post)
                 if (mix.wanted) makeUp(mix) else publish()
             }
-        }.also { it.start() }
+        }
     }
 
     private suspend fun vetOne(mix: ForYouMix, lane: MixLane, post: Post) {
