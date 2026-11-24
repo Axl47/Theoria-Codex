@@ -63,10 +63,8 @@ internal fun FavoriteTagSheet(
             Text("Saved tags", style = MaterialTheme.typography.titleLarge)
             // What each kind does, since saved searches (which run) sit beside these in the composer.
             Text(
-                "Saved tags add to the search you're building. A single tag is added on its own; an " +
-                    "“or” group matches posts with any of its tags, and can be named. Save a tag by " +
-                    "holding it in a post's info, or a group from the composer. Some sites also offer " +
-                    "a built-in Animated group.",
+                "Saved tags add to the search you're building. Save a tag by holding it in a post's info, " +
+                    "or an “or” group from the composer.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

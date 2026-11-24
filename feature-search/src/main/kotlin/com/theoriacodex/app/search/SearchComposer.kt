@@ -577,21 +577,12 @@ private fun ComposerTagList(
     onAction: (SearchAction) -> Unit,
     modifier: Modifier,
 ) {
-    val empty = terms.groups.isEmpty() && terms.excluded.isEmpty()
     Column(
         modifier = modifier.verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         ComposerQuery(terms, targetIndex, selection, queryActions)
         if (compact) return@Column
-        if (empty) {
-            Text(
-                "Add tags to build your search.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-        }
         ComposerSavedSection(savedSearches, savedTags, state.query.draft, targetIndex, onManageSavedTags, onAction)
         if (
             state.query.appliedSourceScope !is SearchSourceScope.Single &&
@@ -648,7 +639,7 @@ private fun ComposerSavedSection(
     }
     if (savedTags.entries.isEmpty()) return
     if (showSearches) HorizontalDivider(Modifier.padding(top = 8.dp))
-    SavedPartHeader("Saved tags", "Tap to add to your search") {
+    SavedPartHeader("Saved tags") {
         if (savedTags.entries.isNotEmpty()) {
             TextButton(
                 onClick = onManageSavedTags,
@@ -659,16 +650,11 @@ private fun ComposerSavedSection(
     SavedTagChips(savedTags, draft, targetIndex, onAction)
 }
 
-/** A part's title, what tapping its chips does when that is not obvious, and its buttons at the end. */
+/** A part's title with its buttons at the end. */
 @Composable
-private fun SavedPartHeader(title: String, tapHint: String? = null, actions: @Composable () -> Unit) {
+private fun SavedPartHeader(title: String, actions: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            ComposerSectionTitle(title)
-            tapHint?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+        Box(Modifier.weight(1f)) { ComposerSectionTitle(title) }
         actions()
     }
 }
