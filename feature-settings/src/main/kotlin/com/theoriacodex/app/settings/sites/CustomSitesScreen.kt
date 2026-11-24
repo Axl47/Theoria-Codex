@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +30,7 @@ import com.theoriacodex.app.customsites.CustomSiteSummary
 import com.theoriacodex.app.settings.BuiltInAccounts
 import com.theoriacodex.app.settings.SETTINGS_PATH
 import com.theoriacodex.app.ui.components.AnnouncedText
+import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.undo.DeferredRemovalRow
 import com.theoriacodex.app.ui.undo.SurfaceLeaveEffect
@@ -198,11 +198,11 @@ internal fun WorkingMark() {
 @Composable
 private fun ReconnectDialog(form: SiteForm?, onAction: (CustomSitesAction) -> Unit) {
     val stage = (form as? SiteForm.Add)?.stage as? AddStage.Reconnect ?: return
-    AlertDialog(
-        onDismissRequest = { onAction(CustomSitesAction.DismissReconnect) },
-        title = { Text("Reconnect site?") },
-        text = { Text(reconnectConfirmationText(stage.hostLabel)) },
-        dismissButton = { TextButton(onClick = { onAction(CustomSitesAction.DismissReconnect) }) { Text("Cancel") } },
-        confirmButton = { TextButton(onClick = { onAction(CustomSitesAction.ConfirmReconnect) }) { Text("Reconnect") } },
+    ConfirmDialog(
+        title = "Reconnect site?",
+        text = reconnectConfirmationText(stage.hostLabel),
+        confirmLabel = "Reconnect",
+        onConfirm = { onAction(CustomSitesAction.ConfirmReconnect) },
+        onDismiss = { onAction(CustomSitesAction.DismissReconnect) },
     )
 }

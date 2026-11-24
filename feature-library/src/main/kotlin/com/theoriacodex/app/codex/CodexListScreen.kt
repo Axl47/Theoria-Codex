@@ -21,12 +21,9 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,6 +34,7 @@ import com.theoriacodex.app.ui.components.ActionMenuFollowUpRow
 import com.theoriacodex.app.ui.components.ActionMenuHeader
 import com.theoriacodex.app.ui.components.ActionMenuRow
 import com.theoriacodex.app.ui.components.ActionMenuSheet
+import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.domain.model.Codex
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -175,17 +173,15 @@ private fun CodexDeleteConfirmation(
 ) {
     val codex = state.deleteTarget ?: return
     if (codex.codexId != likesCodexId) return
-    AlertDialog(
-        onDismissRequest = { state.deleteTarget = null },
-        title = { Text("Clear likes?") },
-        text = { Text("Every post liked in this profile is unliked.") },
-        dismissButton = { TextButton(onClick = { state.deleteTarget = null }) { Text("Cancel") } },
-        confirmButton = {
-            TextButton(onClick = {
-                onDeleteCodex(codex.codexId)
-                state.deleteTarget = null
-            }) { Text("Clear") }
+    ConfirmDialog(
+        title = "Clear likes?",
+        text = "Every post liked in this profile is unliked.",
+        confirmLabel = "Clear",
+        onConfirm = {
+            onDeleteCodex(codex.codexId)
+            state.deleteTarget = null
         },
+        onDismiss = { state.deleteTarget = null },
     )
 }
 

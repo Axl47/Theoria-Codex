@@ -5,13 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsHeader
 import com.theoriacodex.app.ui.components.SettingsPageColumn
@@ -89,17 +88,15 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
         )
     }
     if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete picture tags?") },
-            text = { Text("Frees $size and removes the Library's picture tags.") },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    scope.launch { model.delete() }
-                }) { Text("Delete") }
+        ConfirmDialog(
+            title = "Delete picture tags?",
+            text = "Frees $size and removes the Library's picture tags.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                confirmDelete = false
+                scope.launch { model.delete() }
             },
+            onDismiss = { confirmDelete = false },
         )
     }
 }
