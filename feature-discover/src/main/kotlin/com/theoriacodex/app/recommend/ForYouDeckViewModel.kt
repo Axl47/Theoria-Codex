@@ -34,6 +34,7 @@ import com.theoriacodex.domain.vision.PictureLook
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -86,6 +87,11 @@ class ForYouDeckViewModel(
     private var mix: ForYouMix? = null
     private var mixFeed = MutableStateFlow(LOADING_FEED)
 
+    private var dealtBefore = false
+    private var lastKept: Pair<String, List<Post>>? = null
+    private val deckWrites = Channel<KeptDeck>(Channel.CONFLATED)
+    private val heldAsks = LinkedHashMap<PostId, Pair<Post, Boolean>>()
+
     private val session = UUID.randomUUID().toString().take(8)
 
     private var sequence = 0
@@ -129,6 +135,9 @@ class ForYouDeckViewModel(
 
     init {
         stack.value = listOf(mixLevel())
+        wiring.writeScope.launch {
+            for (deck in deckWrites) runCatchingPreservingCancellation { engine.rememberDeck(deck.request, deck.posts) }
+        }
         viewModelScope.launch { wiring.reconnections.collect { retryAfterReconnect() } }
         viewModelScope.launch {
             var wasReady = wiring.pictures.ready.value
@@ -187,6 +196,7 @@ class ForYouDeckViewModel(
                 if (unhidden.any { it in plannedUnder }) restoreLanes(unhidden)
             }
         }
+        keepUpcoming()
     }
 
     fun startOver() {
@@ -204,26 +214,56 @@ class ForYouDeckViewModel(
         mix = null
         lastDecision = null
         plannedUnder = hidden
+        heldAsks.clear()
         resetLevels()
         ui.update { it.copy(mix = ForYouMixState.Dealing, failure = null, chips = emptyList(), only = null, failures = emptyList()) }
         if (request.availableSources.isEmpty()) return settle(ForYouMixState.NoSources)
+        val restoring = !dealtBefore
+        dealtBefore = true
         if (vetsPictures) workScope.launch { wiring.pictures.prepare() }
         workScope.launch {
             val skips = async { verdictLog.readSkips(profileId) }
+            val painted = if (restoring) async { paintLastDeck(request, skips) } else null
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
+                painted?.cancel()
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
                 return@launch settle(ForYouMixState.Failed, error.message)
             }
             skips.await()
-            if (lanes.isEmpty()) return@launch settle(ForYouMixState.NoLanes)
-            val built = ForYouMix(lanes, wiring.copiesOf)
+            if (lanes.isEmpty()) {
+                painted?.cancel()
+                return@launch settle(ForYouMixState.NoLanes)
+            }
+            val leading = painted?.await().orEmpty()
+            val built = ForYouMix(lanes, wiring.copiesOf, leading)
             mix = built
+            lastKept = request.deckKey() to leading
             opening = true
             refill(built)
             opening = false
             if (built.wanted) makeUp(built)
+            heldAsks.values.forEach { (post, saved) -> askForMore(built, post, saved) }
+            heldAsks.clear()
             vet(built)
         }
+    }
+
+    private suspend fun paintLastDeck(request: ForYouFeedRequest, skips: Deferred<Unit>): List<Post> {
+        val saved = runCatchingPreservingCancellation { engine.lastDeck(request) }.getOrDefault(emptyList())
+        skips.await()
+        if (!verdictLog.hasSkipsFor(request.settings.activeProfileId)) return emptyList()
+        val shown = saved.filter { post -> request.offers(post) && showsAgain(post) && !needsLook(post) }
+        if (shown.isNotEmpty()) mixFeed.value = TriageFeedSnapshot(shown, canLoadMore = true, loadingMore = true)
+        return shown
+    }
+
+    private fun keepUpcoming() {
+        val mix = mix?.takeIf { it.only == null } ?: return
+        val request = request() ?: return
+        val kept = request.deckKey() to mix.freshFirst().filter(::showsAgain).take(KEPT_DECK_SIZE)
+        if (kept == lastKept) return
+        lastKept = kept
+        deckWrites.trySend(KeptDeck(request, kept.second))
     }
 
     private fun request(): ForYouFeedRequest? {
@@ -288,11 +328,15 @@ class ForYouDeckViewModel(
     }
 
     override fun onCleared() {
+        deckWrites.close()
         stack.value.forEach(ForYouLevel::close)
     }
 
     private fun retryAfterReconnect() {
-        if (ui.value.mix == ForYouMixState.Failed) return rebuild()
+        if (ui.value.mix == ForYouMixState.Failed) {
+            if (mixFeed.value.posts.isEmpty()) rebuild()
+            return
+        }
         mix?.let { mix ->
             mix.lanes.filter { it.status?.retriesOnReconnect() == true }.forEach { lane ->
                 lane.clearFailure()
@@ -305,7 +349,7 @@ class ForYouDeckViewModel(
 
     private fun settle(state: ForYouMixState, failure: String? = null) {
         ui.update { it.copy(mix = state, failure = failure) }
-        mixFeed.value = TriageFeedSnapshot(emptyList(), canLoadMore = false, pageFailed = state == ForYouMixState.Failed)
+        mixFeed.value = TriageFeedSnapshot(mixFeed.value.posts, canLoadMore = false, pageFailed = state == ForYouMixState.Failed)
     }
 
     private fun load(mix: ForYouMix, lane: MixLane) {
@@ -370,6 +414,7 @@ class ForYouDeckViewModel(
     private fun publish() {
         val mix = mix ?: return
         mixFeed.value = mix.snapshot()
+        keepUpcoming()
         ui.update { state ->
             state.copy(chips = mix.lanes.map { ForYouChip(it.origin.laneId, it.origin.label) }, only = mix.only, failures = mix.failures())
         }
@@ -377,6 +422,8 @@ class ForYouDeckViewModel(
 
     private fun shows(post: Post): Boolean =
         (inputs?.animatedOnly != true || isAnimatedPost(post)) && !post.hiddenBy(hiddenTokens.value, wiring.pictures)
+
+    private fun showsAgain(post: Post): Boolean = !post.copyOfAny(::isKnown) && shows(post)
 
     private fun needsLook(post: Post): Boolean = vetsPictures && post.needsPictureCheck(wiring.pictures.library.value.baseRates.keys)
 
@@ -478,10 +525,12 @@ class ForYouDeckViewModel(
         when (event) {
             is TriageDecisionEvent.Decided -> {
                 seen += post.id
+                keepUpcoming()
                 verdictLog.record(event.decision, inputs?.profileId ?: return)
             }
             is TriageDecisionEvent.Reverted -> {
                 seen -= post.id
+                keepUpcoming()
                 verdictLog.revert(event.decision)
             }
         }
@@ -493,14 +542,16 @@ class ForYouDeckViewModel(
 
     private fun onMixDecision(level: Int, event: TriageDecisionEvent) {
         onTrailDecision(event)
-        val mix = mix?.takeIf { level == sequence } ?: return
+        if (level != sequence) return
+        val mix = mix ?: return holdAsk(event)
         val post = event.decision.post
         when (event) {
             is TriageDecisionEvent.Decided -> {
                 val signal = event.decision.verdictKind() ?: return
-                val origin = mix.origins[post.id] ?: return
-                lastDecision = post.id to mix.steering
-                mix.steering = mix.steering.after(signal, origin)
+                mix.origins[post.id]?.let { origin ->
+                    lastDecision = post.id to mix.steering
+                    mix.steering = mix.steering.after(signal, origin)
+                }
                 if (signal == ForYouVerdictKind.LIKED || signal == ForYouVerdictKind.SAVED) askForMore(mix, post, saved = signal == ForYouVerdictKind.SAVED)
             }
             is TriageDecisionEvent.Reverted -> {
@@ -510,6 +561,18 @@ class ForYouDeckViewModel(
                 mix.steering = mix.steering.undone(before ?: mix.steering, post.id)
                 publish()
             }
+        }
+    }
+
+    private fun holdAsk(event: TriageDecisionEvent) {
+        val post = event.decision.post
+        when (event) {
+            is TriageDecisionEvent.Decided -> when (event.decision.verdictKind()) {
+                ForYouVerdictKind.LIKED -> heldAsks[post.id] = post to false
+                ForYouVerdictKind.SAVED -> heldAsks[post.id] = post to true
+                else -> Unit
+            }
+            is TriageDecisionEvent.Reverted -> heldAsks.remove(post.id)
         }
     }
 
@@ -558,8 +621,15 @@ class ForYouDeckViewModel(
         const val INJECTED = 2
 
         const val VET_AHEAD = 3
+
+        const val KEPT_DECK_SIZE = 12
     }
 }
+
+private class KeptDeck(val request: ForYouFeedRequest, val posts: List<Post>)
+
+private fun ForYouFeedRequest.offers(post: Post): Boolean =
+    post.id.source in availableSources && (selectedSource == null || post.id.source == selectedSource)
 
 private fun TrailRequest.name(): String = when (this) {
     is TrailRequest.Tag -> tag.replace('_', ' ')

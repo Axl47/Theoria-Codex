@@ -7,7 +7,7 @@ import com.theoriacodex.app.viewer.clearViewerGifCache
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.app.viewer.viewerGifCacheBytes
 import com.theoriacodex.data.repository.CacheRepository
-import com.theoriacodex.data.repository.SearchFirstPageStore
+import com.theoriacodex.data.repository.FirstPageStore
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -33,7 +33,7 @@ class MediaCacheMaintenance(
         withContext(Dispatchers.IO) {
             context.imageLoader.diskCache?.clear()
             context.imageLoader.memoryCache?.clear()
-            File(context.cacheDir, SearchFirstPageStore.FILE_NAME).delete()
+            FirstPageStore.FILE_NAMES.forEach { File(context.cacheDir, it).delete() }
         }
         cache.clearThumbnailCache()
         cache.clearFullImageCache()

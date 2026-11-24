@@ -56,7 +56,7 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
-import com.theoriacodex.data.repository.SearchFirstPageStore
+import com.theoriacodex.data.repository.FirstPageStore
 import com.theoriacodex.app.codex.CodexCleaningService
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
@@ -365,8 +365,9 @@ internal class DefaultTheoriaAppContainer(
         recoveryRegistry = fileStoreRecoveryRegistry,
         profileWriteGuard = profileWriteGuard,
     )
+    private val forYouDeck = FirstPageStore(File(appContext.cacheDir, FirstPageStore.FOR_YOU_FILE_NAME))
     private val profileDeletion = ProfileDeletionService(settingsRepository, contentRepository,
-        File(storageDirectory, "pending_profile_deletion.json"), profileWriteGuard)
+        File(storageDirectory, "pending_profile_deletion.json"), profileWriteGuard, removeProfileCaches = { forYouDeck.clear() })
     private val statisticsStore = DataStoreStatisticsRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
@@ -527,7 +528,7 @@ internal class DefaultTheoriaAppContainer(
             recentsRepository = recentsRepository,
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
-            firstPageStore = SearchFirstPageStore(File(appContext.cacheDir, SearchFirstPageStore.FILE_NAME)),
+            firstPageStore = FirstPageStore(File(appContext.cacheDir, FirstPageStore.SEARCH_FILE_NAME)),
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,
         ),
@@ -540,6 +541,8 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
             postResolutions = postResolutions,
             fileMirrors = data.fileMirrors,
+            deckStore = forYouDeck,
+            deckWritable = { !profileWriteGuard.isRetired(it) },
         ),
         tagAffinity = tagAffinity,
         relatedPosts = RelatedPostsLoader(sourceRegistry, data.fileMirrors),

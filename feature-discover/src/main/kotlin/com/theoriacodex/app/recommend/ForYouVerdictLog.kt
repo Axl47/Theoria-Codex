@@ -31,6 +31,8 @@ internal class ForYouVerdictLog(
 
     operator fun contains(id: PostId): Boolean = id in skips
 
+    fun hasSkipsFor(profileId: String): Boolean = skipsReadFor == profileId
+
     fun record(decision: TriageDecision, profileId: String) {
         val kind = decision.verdictKind() ?: return
         val post = decision.post

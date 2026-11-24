@@ -3,7 +3,7 @@ package com.theoriacodex.app.search
 import com.theoriacodex.app.fixtures.JourneySourceRegistry
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.SearchFirstPageStore
+import com.theoriacodex.data.repository.FirstPageStore
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -33,7 +33,7 @@ class SearchCachedFirstPageTest {
 
     @Test
     fun `sources turned off or removed since the last run are left out`() = runTest {
-        val store = SearchFirstPageStore(File(folder.root, "first-page.json"))
+        val store = FirstPageStore(File(folder.root, "first-page.json"))
         store.save("key", listOf(SourceKey.GELBOORU, SourceKey.PIXIV, SourceKey.DANBOORU).map(::post))
         val available = mapOf(SourceKey.GELBOORU to emptyList<Post>(), SourceKey.PIXIV to emptyList())
         val coordinator = testSearchCoordinator(JourneySourceRegistry(available, 20), firstPageStore = store)
