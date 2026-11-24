@@ -11,6 +11,7 @@ import com.theoriacodex.domain.model.PostId
 import java.util.IdentityHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,6 +25,7 @@ internal class ForYouVerdictLog(
 ) {
     private var skips: Set<PostId> = emptySet()
     private var skipsReadFor: String? = null
+    private var read: Job? = null
     private val logged = IdentityHashMap<TriageDecision, ForYouVerdict>()
     private val writes = Mutex()
 
@@ -46,17 +48,20 @@ internal class ForYouVerdictLog(
         if (skipsReadFor == profileId) return
         val until = clock()
         val since = until - SKIP_MEMORY_MS
-        val read = readScope.launch {
+        val job = readScope.launch {
             writes.withLock {}
             skips = runCatchingPreservingCancellation { repository.skippedBetween(profileId, since, until, SKIP_READ_LIMIT) }
                 .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
                 .getOrNull() ?: return@launch
             skipsReadFor = profileId
         }
-        withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) { read.join() }
+        read = job
+        withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) { job.join() }
     }
 
     fun reset(readFor: String?) {
+        read?.cancel()
+        read = null
         skips = emptySet()
         skipsReadFor = readFor
     }
