@@ -3,8 +3,9 @@ name: Main
 # Proves every commit that lands on main, so Release only has to sign and publish it. Runs the host
 # check, the release part, the screenshots, and the emulator tests side by side, even when the pre-PR
 # check was already recorded, and records each result that passes. It is also the only run that saves caches.
-# The run in progress always finishes so its results and caches are saved; a newer push replaces any
-# older run still waiting, so only the newest commit queues behind it.
+# Main has no concurrency group of its own: verify.yml and device-validation.yml each queue in their own
+# never-cancelled group, so a run in progress always finishes and records, a newer push replaces any older
+# run still waiting, and the next commit's host check and caches don't wait for the emulator tests.
 on:
   push:
     branches:
@@ -12,10 +13,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: main-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   verify:
