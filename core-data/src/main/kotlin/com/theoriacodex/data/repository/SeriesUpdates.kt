@@ -8,6 +8,7 @@ import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesSource
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -19,7 +20,7 @@ import kotlinx.coroutines.withContext
 
 data class SeriesUpdate(val series: Series, val newEntries: List<SeriesEntry>)
 
-data class FollowedCheck(val updates: List<SeriesUpdate>, val checked: Int, val failed: Int)
+data class FollowedCheck(val updates: List<SeriesUpdate>, val checked: Int, val failed: Int, val notDue: Int = 0)
 
 internal val refreshLocks = ConcurrentHashMap<SourceKey, Mutex>()
 
@@ -40,15 +41,24 @@ internal suspend fun SeriesRepository.fetchEntries(source: SeriesSource, series:
 
 suspend fun SeriesRepository.checkFollowed(
     source: suspend (SourceKey) -> SeriesSource?,
+    runEvery: Duration? = null,
+    now: Long = System.currentTimeMillis(),
     onUpdate: suspend (SeriesUpdate) -> Unit = {},
 ): FollowedCheck = coroutineScope {
-    val checks = observeFollowed().first().map(FollowedSeries::series).groupBy { it.id.source }.values.map { followed ->
-        async { followed.map { series -> check(source, series, onUpdate) } }
+    val followed = observeFollowed().first().map(FollowedSeries::series)
+    val due = if (runEvery == null) {
+        followed
+    } else {
+        followed.filter { isCheckDue(series(it.id)?.checkedAtEpochMs, runEvery, now) { entries(it.id) } }
+    }
+    val checks = due.groupBy { it.id.source }.values.map { sameSource ->
+        async { sameSource.map { series -> check(source, series, onUpdate) } }
     }.awaitAll().flatten()
     FollowedCheck(
         updates = checks.filterIsInstance<Checked.Updated>().map(Checked.Updated::update),
         checked = checks.count { it != Checked.Skipped },
         failed = checks.count { it == Checked.Failed },
+        notDue = followed.size - due.size,
     )
 }
 

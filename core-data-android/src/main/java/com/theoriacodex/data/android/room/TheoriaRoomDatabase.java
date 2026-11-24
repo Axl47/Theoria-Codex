@@ -30,7 +30,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 22,
+        version = 23,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -180,6 +180,12 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
+    public static final Migration MIGRATION_22_23 = new Migration(22, 23) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series` ADD COLUMN `checked_at_epoch_ms` INTEGER");
+        }
+    };
+
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_10_11,
             MIGRATION_11_12,
@@ -192,7 +198,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_18_19,
             MIGRATION_19_20,
             MIGRATION_20_21,
-            MIGRATION_21_22
+            MIGRATION_21_22,
+            MIGRATION_22_23
     };
 
     public abstract CodexLikesDao codexLikesDao();

@@ -91,6 +91,7 @@
 - Locking an episode hides controls and blocks accidental taps, swipes, pinches and Back; tapping or pressing Back reveals only the lock icon to unlock, and lock stays active across automatic moves to the next episode.
 - Video timelines across the Viewer now tint the buffered range ahead of the current playback position.
 - Pulling down on the Series tab notifies you of the new chapters and episodes it finds, the same way the background check does.
+- The background check for new chapters checks quiet series less often. A series that releases often is still checked every time; one with nothing new for months is checked every two days. The check also waits while the battery is low. Pulling down on Following still checks every series.
 - Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
 - In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
 - When a series' chapters open on the same page, such as a scanlation group's credits, the reader's chapter strip shows each chapter's second page instead, and remembers that for the series.

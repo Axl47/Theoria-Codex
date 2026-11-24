@@ -151,4 +151,20 @@ class RoomUpgradeJourneyTest {
             }
         }
     }
+
+    @Test fun `a stored series starts with no check time, so the next background run checks it`() {
+        val name = "series-check-time-back.db"
+        helper.createDatabase(name, 22).use {
+            it.execSQL(
+                "INSERT INTO series (source, address, title, genres, language, followed, followed_at_epoch_ms, memo) " +
+                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, 40, '{}')",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 23, true, TheoriaRoomDatabase.MIGRATION_22_23).use { database ->
+            database.query("SELECT title, followed, followed_at_epoch_ms, memo, checked_at_epoch_ms FROM series").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(listOf("A", "1", "40", "{}", null), (0..4).map(it::getString))
+            }
+        }
+    }
 }

@@ -129,7 +129,7 @@ class RoomSeriesRepository(
         val dropped = known.values.filter { it.entry.address !in listed && it.sourceOrder != NOT_LISTED }.map { it.copy(sourceOrder = NOT_LISTED) }
         val reopened = moved.entries.firstOrNull { it.value.entry.address == stored.lastOpenedEntry }?.key
         // The series first: its entries refer to its row.
-        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry).toEntity())
+        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, checkedAtEpochMs = now).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
         // No listed entry matched a stored one: the list is a baseline, as when nothing was stored.
         return when {
@@ -292,6 +292,7 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     downloadNewChapters = downloadNew,
     chaptersShareFirstPage = chaptersShareFirstPage,
     followedAtEpochMs = followedAtEpochMs,
+    checkedAtEpochMs = checkedAtEpochMs,
 )
 
 internal fun StoredSeries.toEntity() = SeriesEntity(
@@ -311,6 +312,7 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     chaptersShareFirstPage,
     followedAtEpochMs,
     series.memo,
+    checkedAtEpochMs,
 )
 
 /**

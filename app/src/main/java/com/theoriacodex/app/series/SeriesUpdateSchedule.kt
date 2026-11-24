@@ -21,19 +21,21 @@ internal suspend fun keepSeriesUpdatesScheduled(context: Context, anyFollowed: F
 }
 
 /**
- * Schedules [SeriesUpdateJobService] every [intervalHours] on any network, kept across reboots; null cancels it. The
- * manifest declares the service and `RECEIVE_BOOT_COMPLETED` for that.
+ * Schedules [SeriesUpdateJobService] every [intervalHours] on any network while the battery is not low, kept across
+ * reboots; null cancels it. The manifest declares the service and `RECEIVE_BOOT_COMPLETED` for that.
  */
 internal fun scheduleSeriesUpdates(context: Context, intervalHours: Int?) {
     val scheduler = context.getSystemService(JobScheduler::class.java)
     if (intervalHours == null) return scheduler.cancel(AppJob.SERIES_UPDATE.id)
     val period = intervalHours.hours.inWholeMilliseconds
     // Scheduling again restarts the wait, so a job already running this often is left alone at every app start.
-    if (scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)?.intervalMillis == period) return
+    val pending = scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)
+    if (pending?.intervalMillis == period && pending.isRequireBatteryNotLow) return
     scheduler.schedule(
         AppJob.SERIES_UPDATE.builder(context)
             .setPeriodic(period)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setRequiresBatteryNotLow(true)
             .setPersisted(true)
             .build(),
     )
