@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import com.theoriacodex.app.testing.waitUntilWithoutIdling
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -79,7 +80,7 @@ class OffMainComputationTest {
         assertTrue(returning.await(5, TimeUnit.SECONDS))
         // A parked worker has finished resuming the helper's coroutine, which either ran it or queued it for
         // the composition's dispatcher; waitForIdle then drains that queue.
-        compose.waitUntil(5_000) { worker?.state in setOf(Thread.State.WAITING, Thread.State.TIMED_WAITING) }
+        compose.waitUntilWithoutIdling(5_000) { worker?.state in setOf(Thread.State.WAITING, Thread.State.TIMED_WAITING) }
         compose.waitForIdle()
     }
 

@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
@@ -65,7 +66,7 @@ class ExtensionsScreenTest {
         // The open dialog's cursor keeps Compose busy, so the repo is added without it.
         vm.askForRepo(false)
         vm.addRepo("https://repo.example")
-        compose.waitUntil { vm.state.value.repos?.isNotEmpty() == true }
+        compose.waitUntilSettled { vm.state.value.repos?.isNotEmpty() == true }
         compose.onNodeWithText("Get extensions").performClick()
         assertEquals(ExtensionsSubpage.BROWSE, vm.state.value.subpage)
 

@@ -16,6 +16,7 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.media.MediaDurationAcquirer
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
@@ -53,7 +54,7 @@ class ViewerRouteRestorationUiTest {
         var dismissed = false
         withRoute(onDismiss = { dismissed = true; dismiss.await() }) {
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitUntil { dismissed }
+            compose.waitUntilSettled { dismissed }
             assertExitingPresentation()
             compose.runOnIdle { dismiss.complete(Unit) }
             assertExitingPresentation()
@@ -72,7 +73,7 @@ class ViewerRouteRestorationUiTest {
                 owner.onAction(ViewerAction.RetryMedia)
             }
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitUntil { dismissed }
+            compose.waitUntilSettled { dismissed }
             compose.runOnIdle { recovery.complete(null) }
         }
     }
@@ -90,7 +91,7 @@ class ViewerRouteRestorationUiTest {
                 owner.onAction(ViewerAction.MediaFailed(identity, ViewerMediaError.Recoverable(key, "Network")))
                 owner.onAction(ViewerAction.RetryMedia)
             }
-            compose.waitUntil { recoveryRequested }
+            compose.waitUntilSettled { recoveryRequested }
             compose.runOnIdle {
                 owner.applyResolvedPost(resolved)
                 val refreshed = ImageRef("https://example.com/refreshed.jpg", null, "image/jpeg")

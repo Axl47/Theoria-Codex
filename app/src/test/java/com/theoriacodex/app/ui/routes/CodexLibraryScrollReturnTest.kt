@@ -91,7 +91,7 @@ class CodexLibraryScrollReturnTest {
             val restoration = StateRestorationTester(compose)
             setLibraryContent(restoration, show, data, graph)
             releaseLibraryData()
-            compose.waitUntil(10_000) {
+            compose.waitUntilSettled(10_000) {
                 compose.onAllNodesWithText("Collection", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNode(grid).performScrollToIndex(24)

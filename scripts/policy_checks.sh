@@ -50,6 +50,15 @@ module_layering() {
   return "$failed"
 }
 
+bare_compose_waits() {
+  local found
+  found="$(grep -rnE --include='*.kt' '(\.|^[[:space:]]*)waitUntil[[:space:]]*[({]' -- */src/test || true)"
+  [[ -n "$found" ]] || return 0
+  printf '%s\n' "$found" >&2
+  echo 'Host tests wait with waitUntilSettled from ComposeWaitTestSupport.kt, or waitUntilWithoutIdling on a screen that never goes idle.' >&2
+  return 1
+}
+
 architecture_rules() {
   python3 scripts/check_architecture.py
 }
