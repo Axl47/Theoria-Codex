@@ -324,6 +324,11 @@ class ProfileBackupServiceTest {
         // The cover travels as the plain address the source gave; a series without one is written without the field.
         assertTrue(encoded.toString(Charsets.UTF_8).contains("\"coverUrl\":\"https://example.test/cover.jpg\""))
         assertEquals(listOf(series), codec.decode(encoded).library.series)
+        // A memo no build writes, an empty object or text that is not one, restores as none.
+        val withMemo = encoded.toString(Charsets.UTF_8)
+        val emptyMemo = withMemo.replace(""""memo":"{\"slug\":\"t\"}"""", """"memo":"{}"""")
+        assertTrue(emptyMemo != withMemo)
+        assertEquals(null, codec.decode(emptyMemo.toByteArray()).library.series.single().series.series.memo)
         // Trust is never in a backup, with or without series.
         assertFalse(encoded.toString(Charsets.UTF_8).contains("trustedExtensions"))
         val twice = withSeries.copy(library = withSeries.library.copy(series = listOf(series, series)))

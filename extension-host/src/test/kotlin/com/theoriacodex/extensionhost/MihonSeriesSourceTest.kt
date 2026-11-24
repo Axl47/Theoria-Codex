@@ -23,6 +23,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
@@ -161,6 +162,24 @@ class MihonSeriesSourceTest {
 
         source.details = manga("/s", "Series").also { it.memo = buildJsonObject { put("slug", "s-2") } }
         assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
+
+        // Details that clear the memo of the series they were handed keep the one it had.
+        source.details = null
+        source.clearMemo = true
+        assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
+    }
+
+    @Test
+    fun `a chapter listed twice is the first, for the app and for its pages`() = runTest {
+        source.chapters = listOf(
+            chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } },
+            chapter("Chapter 1 again", "/c/1").also { it.memo = buildJsonObject { put("id", 2) } },
+        )
+        val entry = series.entries(Series(SeriesId(series.key, "/s"), "Series")).single()
+
+        assertEquals("""{"id":1}""", entry.memo)
+        series.media(entry)
+        assertSame(source.chapters.first(), source.pageListRequests.last())
     }
 
     @Test
@@ -268,6 +287,9 @@ class MihonSeriesSourceTest {
         var pages = emptyList<Page>()
         var failure: Throwable? = null
 
+        /** Whether a details call clears the memo of the series it is handed. */
+        var clearMemo = false
+
         val calls = mutableListOf<String>()
         val updates = mutableListOf<String>()
         val asked = mutableListOf<SManga>()
@@ -286,6 +308,7 @@ class MihonSeriesSourceTest {
             fetchChapters: Boolean,
         ): SMangaUpdate {
             asked += manga
+            if (fetchDetails && clearMemo) manga.memo = JsonObject(emptyMap())
             updates += "${manga.url}${if (fetchDetails) " details" else ""}${if (fetchChapters) " chapters" else ""}"
             return SMangaUpdate(details ?: manga, this.chapters)
         }

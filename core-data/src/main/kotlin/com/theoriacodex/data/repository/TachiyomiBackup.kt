@@ -18,8 +18,6 @@ import java.util.zip.GZIPInputStream
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromByteArray
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.protobuf.ProtoNumber
 
@@ -161,13 +159,7 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?):
     )
 }
 
-/**
- * A backed-up memo as Theoria stores one: the JSON object's text, or null for an empty object, the field's default, and
- * for anything that is not a JSON object, which no extension wrote.
- */
-private fun storedMemo(bytes: ByteArray): String? = bytes.takeIf(ByteArray::isNotEmpty)
-    ?.let { runCatching { Json.parseToJsonElement(it.decodeToString()) }.getOrNull() as? JsonObject }
-    ?.takeIf(JsonObject::isNotEmpty)?.toString()
+private fun storedMemo(bytes: ByteArray): String? = bytes.takeIf(ByteArray::isNotEmpty)?.let { storedMemo(it.decodeToString()) }
 
 /**
  * The parts of a Mihon-family backup this import reads; protobuf skips the rest. Mihon and TachiyomiJ2K keep manga in

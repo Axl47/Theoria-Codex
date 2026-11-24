@@ -8,6 +8,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * A series in a profile backup (`library.series`): what its source said, what the user did with it, and its entries
@@ -56,7 +58,7 @@ internal data class BackupSeriesRecord(
                     language = language,
                     description = description,
                     status = SeriesStatus.entries.firstOrNull { it.name == status } ?: SeriesStatus.UNKNOWN,
-                    memo = memo,
+                    memo = storedMemo(memo),
                 ),
                 followed = followed,
                 readingMode = GalleryReadingMode.entries.firstOrNull { it.name == readingMode },
@@ -113,7 +115,7 @@ internal data class BackupSeriesEntryRecord(
     @SerialName("memo") val memo: String? = null,
 ) {
     fun toDomain() = StoredSeriesEntry(
-        SeriesEntry(address, name, number, translatorGroup, uploadedAt, memo),
+        SeriesEntry(address, name, number, translatorGroup, uploadedAt, storedMemo(memo)),
         sourceOrder, firstSeenAt, read, position, length, lastReadAt,
     )
 
@@ -126,6 +128,15 @@ internal data class BackupSeriesEntryRecord(
         }
     }
 }
+
+/**
+ * A backed-up memo as Theoria stores one: the JSON object's text, or null for an empty object, the default of
+ * Mihon-family backups, and for anything that is not a JSON object, which no extension wrote. Null stays eligible for
+ * a later restore to fill.
+ */
+internal fun storedMemo(text: String?): String? = text?.takeIf(String::isNotBlank)
+    ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() as? JsonObject }
+    ?.takeIf(JsonObject::isNotEmpty)?.toString()
 
 /** The one check for series on both paths: a backup the app writes is one it restores. */
 internal fun validateBackupSeries(all: List<BackupSeries>) {

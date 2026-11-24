@@ -55,12 +55,16 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
 
     override suspend fun details(series: Series): Series = calls.calling {
         val manga = manga(series)
+        // A source may change the series it is handed in place, so its memo is read before the call.
+        val memo = manga.memo
         val details = source.getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = false).manga
-        manga.withDetails(details).also { listedSeries[it.url] = it }.toSeries()
+        manga.withDetails(details).also { if (it.memo.isEmpty()) it.memo = memo }.also { listedSeries[it.url] = it }.toSeries()
     }
 
+    /** A chapter listed twice is the first, as the app stores it. */
     override suspend fun entries(series: Series): List<SeriesEntry> = calls.calling {
-        source.getMangaUpdate(manga(series), emptyList(), fetchDetails = false, fetchChapters = true).chapters.map { chapter ->
+        val chapters = source.getMangaUpdate(manga(series), emptyList(), fetchDetails = false, fetchChapters = true).chapters
+        chapters.distinctBy { it.url }.map { chapter ->
             listedChapters[chapter.url] = chapter
             extensionEntry(series.title, chapter.url, chapter.name, chapter.chapter_number, chapter.scanlator, chapter.date_upload, chapter.memo)
         }
