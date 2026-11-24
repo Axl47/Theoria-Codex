@@ -38,6 +38,14 @@ class FindCommentsTest(unittest.TestCase):
         )
         self.assertEqual(texts(source), [])
 
+    def test_backticked_names_are_not_character_literals(self) -> None:
+        source = "fun `doesn't crash`() = Unit\n// after\n"
+        self.assertEqual(texts(source), ["// after"])
+
+    def test_java_text_blocks_honour_escaped_quotes(self) -> None:
+        source = 'String a = """\n  \\""" // inside\n  """; // after\n'
+        self.assertEqual(texts(source, kotlin=False), ["// after"])
+
     def test_finds_comments_inside_string_templates(self) -> None:
         self.assertEqual(texts('val a = "${ b /* inner */ }"'), ["/* inner */"])
 
@@ -47,9 +55,9 @@ class FindCommentsTest(unittest.TestCase):
         self.assertEqual(texts(source, kotlin=False), ["/* outer /* inner */"])
 
     def test_tool_directives_are_not_counted(self) -> None:
-        source = "//noinspection AndroidLintSdCardPath\n// @formatter:off\n// prose\n"
+        source = "//noinspection AndroidLintSdCardPath\n// @formatter:off\n// prose\n/* @formatter:on\nTODO */\n"
         path = write_source(self, source)
-        self.assertEqual([c.text for c in check_comments.counted_comments(path)], ["// prose"])
+        self.assertEqual([c.text for c in check_comments.counted_comments(path)], ["// prose", "/* @formatter:on\nTODO */"])
 
 
 class RatchetTest(unittest.TestCase):
@@ -57,6 +65,11 @@ class RatchetTest(unittest.TestCase):
         self.assertEqual(check_comments.check({"a.kt": 2}, {"a.kt": 2}), [])
         self.assertIn("--update", check_comments.check({"a.kt": 2}, {"a.kt": 1})[0])
         self.assertIn("--update", check_comments.check({"a.kt": 2}, {})[0])
+
+    def test_baseline_may_not_rise_above_the_base(self) -> None:
+        problems = check_comments.check({"a.kt": 3, "b.kt": 1}, {"a.kt": 3, "b.kt": 1}, base={"a.kt": 2})
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(all("may only shrink" in problem for problem in problems))
 
     def test_new_comments_fail(self) -> None:
         path = str(write_source(self, "// new\n"))
