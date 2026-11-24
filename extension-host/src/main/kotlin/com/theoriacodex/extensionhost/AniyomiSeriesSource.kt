@@ -27,7 +27,7 @@ class AniyomiSeriesSource internal constructor(
     override val key: SourceKey = AniyomiKind.sourceKey(source.id)
     private val calls = ExtensionCalls(source.name) { challenged -> host.onChallenged(key, challenged) }
     private val http = source as? AnimeHttpSource
-    private val streams = AniyomiStreams(source, host, calls, limits)
+    internal val streams = AniyomiStreams(source, host, calls, limits)
 
     internal val sourceImages: SourceImages? = http?.let { SourceImages { _, url, _ -> it.imageCall(url.toString()).execute() } }
     override val name: String get() = source.name
