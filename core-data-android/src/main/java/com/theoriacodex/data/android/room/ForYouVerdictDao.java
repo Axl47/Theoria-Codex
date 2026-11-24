@@ -28,4 +28,8 @@ public interface ForYouVerdictDao {
     @Query("SELECT * FROM for_you_verdicts WHERE profile_id = :profileId "
             + "ORDER BY decided_at_epoch_ms DESC, source ASC, source_post_id ASC")
     List<ForYouVerdictEntity> forProfile(String profileId);
+
+    @Query("SELECT * FROM for_you_verdicts WHERE profile_id = :profileId AND decision = :decision "
+            + "AND decided_at_epoch_ms BETWEEN :sinceEpochMs AND :untilEpochMs ORDER BY decided_at_epoch_ms DESC LIMIT :limit")
+    List<ForYouVerdictEntity> between(String profileId, String decision, long sinceEpochMs, long untilEpochMs, int limit);
 }

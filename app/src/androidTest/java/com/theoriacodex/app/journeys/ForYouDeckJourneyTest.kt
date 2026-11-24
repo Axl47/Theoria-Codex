@@ -30,6 +30,7 @@ import com.theoriacodex.app.recommend.FOR_YOU_FORK_TAG_PREFIX
 import com.theoriacodex.app.recommend.FOR_YOU_GRID_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_SAVE_SEARCH_TAG
+import com.theoriacodex.app.recommend.FOR_YOU_REFRESH_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_UNDO_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
@@ -206,6 +207,13 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
             listOf(skipped to ForYouVerdictKind.SKIPPED, liked to ForYouVerdictKind.LIKED),
             verdicts().map { searchCardTestTag(it.postId) to it.kind },
         )
+
+        tab("For You")
+        compose.waitUntil(15_000) { currentCardOrNull() != null }
+        assertNotEquals(skipped, currentCard())
+        activate(compose.onNodeWithTag(FOR_YOU_REFRESH_TAG))
+        compose.waitUntil(15_000) { currentCardOrNull() != null }
+        assertNotEquals(skipped, currentCard())
     }
 
     @Test

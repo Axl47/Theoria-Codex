@@ -7,13 +7,16 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.InMemoryForYouVerdictRepository
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +46,7 @@ class ForYouDeckViewModelTest {
     private val actions = FakeDeckActions()
     private val quickSave = FakeDeckQuickSave()
     private val verdicts = InMemoryForYouVerdictRepository()
+    private val clock = AtomicLong()
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
@@ -55,7 +59,8 @@ class ForYouDeckViewModelTest {
     }
 
     private fun owner(environment: ForYouEnvironment = deckEnvironment(), copiesOf: (Post) -> Set<PostId> = { setOf(it.id) }) =
-        ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, copiesOf)).also { it.synchronize(environment) }
+        ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, copiesOf, clock = clock::incrementAndGet))
+            .also { it.synchronize(environment) }
 
     private val ForYouDeckViewModel.top get() = levels.value.last()
     private val ForYouDeckViewModel.posts get() = top.feed.value.posts
@@ -433,14 +438,111 @@ class ForYouDeckViewModelTest {
         assertEquals(1, owner.levels.value.size)
     }
 
-    @Test fun `a recreated owner deals a fresh Mix`() {
+    @Test fun `a recreated owner deals a fresh Mix without the profile's recent skips`() {
         val first = owner()
         first.skip(3)
         val second = owner()
         assertNotEquals(first.top.id, second.top.id)
-        assertEquals(listOf("a-0-0", "b-0-0", "c-0-0", "a-0-1"), second.posts.map { it.id.sourcePostId })
+        assertEquals(listOf("a-0-1", "b-0-1", "c-0-1", "a-0-2"), second.posts.map { it.id.sourcePostId })
         assertEquals(0, second.top.deck.state.value.index)
         assertEquals(2, engine.builds)
+    }
+
+    @Test fun `a skip older than 30 days is dealt again, and another profile's skips are not read`() = runTest {
+        val now = 40L * DAY_MS
+        verdicts.record(ForYouVerdict("other", lanePost("a", 0, 1).id, ForYouVerdictKind.SKIPPED, now, null))
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("a", 0, 0).id, ForYouVerdictKind.SKIPPED, now - 31 * DAY_MS, null))
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("b", 0, 0).id, ForYouVerdictKind.SKIPPED, now - 29 * DAY_MS, null))
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, clock = { now }))
+        owner.synchronize(deckEnvironment())
+        assertEquals(listOf("a-0-0", "b-0-1", "c-0-0", "a-0-1"), owner.posts.map { it.id.sourcePostId })
+    }
+
+    @Test fun `Start over deals a small source's skipped posts again, while Refresh keeps them out`() {
+        val small = FakeForYouEngine(listOf("a"), pages = 1, pageSize = 4)
+        fun smallOwner() = ForYouDeckViewModel(small, deckWiring(writeScope, trails, actions, quickSave, verdicts, clock = clock::incrementAndGet))
+            .also { it.synchronize(deckEnvironment()) }
+        smallOwner().skip(4)
+
+        val next = smallOwner()
+        assertTrue(next.posts.isEmpty())
+        assertFalse(next.top.feed.value.canLoadMore)
+        next.rebuild()
+        assertTrue(next.posts.isEmpty())
+        next.startOver()
+        assertEquals(listOf("a-0-0", "a-0-1", "a-0-2", "a-0-3"), next.posts.map { it.id.sourcePostId })
+    }
+
+    @Test fun `Start over after a failed skip read does not read the skips back`() = runTest {
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("a", 0, 0).id, ForYouVerdictKind.SKIPPED, 1, null))
+        var down = true
+        val flaky = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int) =
+                if (down) error("down") else verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit)
+        }
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, flaky)).also { it.synchronize(deckEnvironment()) }
+        assertEquals("a-0-0", owner.current.id.sourcePostId)
+        down = false
+        owner.startOver()
+        assertEquals("a-0-0", owner.current.id.sourcePostId)
+    }
+
+    @Test fun `skips read after the first deal still keep their posts out of later deals`() = runTest {
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("b", 0, 1).id, ForYouVerdictKind.SKIPPED, 1, null))
+        val slow = CompletableDeferred<Unit>()
+        val held = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> {
+                slow.await()
+                return verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit)
+            }
+        }
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, held)).also { it.synchronize(deckEnvironment()) }
+        assertTrue(owner.posts.isEmpty())
+        testScheduler.advanceTimeBy(2_000)
+        testScheduler.runCurrent()
+        assertEquals(4, owner.posts.size)
+
+        slow.complete(Unit)
+        owner.skip(2)
+        assertEquals(8, owner.posts.size)
+        assertFalse(lanePost("b", 0, 1) in owner.posts)
+    }
+
+    @Test fun `a skip undone while the skips are read is not kept out by the read`() = runTest {
+        val queried = CompletableDeferred<Unit>()
+        val landed = CompletableDeferred<Unit>()
+        val held = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> {
+                queried.await()
+                return verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit).also { landed.await() }
+            }
+        }
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, held)).also { it.synchronize(deckEnvironment()) }
+        testScheduler.advanceTimeBy(2_000)
+        testScheduler.runCurrent()
+        val undone = owner.decide(TriageChoice.Skip)
+        queried.complete(Unit)
+        owner.top.deck.undo()
+        landed.complete(Unit)
+
+        owner.rebuild()
+        assertTrue(undone in owner.posts)
+    }
+
+    @Test fun `a trail still offers posts skipped in an earlier session`() = runTest {
+        val skipped = testPost(DECK_SOURCE, "t-1")
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, skipped.id, ForYouVerdictKind.SKIPPED, 1, null))
+        trails.creator = listOf(skipped, testPost(DECK_SOURCE, "t-2"))
+        val owner = owner(deckEnvironment(creatorBrowsingSources = setOf(DECK_SOURCE)))
+        owner.fork(TrailRequest.Creator(checkNotNull(owner.current.creatorProfile), owner.current))
+        assertEquals(listOf(skipped.id, PostId(DECK_SOURCE, "t-2")), owner.posts.map(Post::id))
+    }
+
+    @Test fun `a session's skips stay out of a refreshed Mix`() {
+        val owner = owner()
+        val skipped = List(2) { owner.decide(TriageChoice.Skip) }
+        owner.rebuild()
+        assertTrue(owner.posts.none { it in skipped })
     }
 
     @Test fun `posts the profile already liked or saved are not dealt`() {
@@ -484,3 +586,5 @@ class ForYouDeckViewModelTest {
         assertEquals(4, owner.posts.size)
     }
 }
+
+private const val DAY_MS = 24L * 60 * 60 * 1000
