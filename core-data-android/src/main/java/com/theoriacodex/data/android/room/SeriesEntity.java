@@ -20,7 +20,6 @@ public final class SeriesEntity {
     /** The mode the user chose; null follows the guess. */
     @Nullable @ColumnInfo(name = "reading_mode") private final String readingMode;
     @Nullable @ColumnInfo(name = "last_opened_entry") private final String lastOpenedEntry;
-    @Nullable @ColumnInfo(name = "last_checked_at_epoch_ms") private final Long lastCheckedAtEpochMs;
     @Nullable @ColumnInfo(name = "description") private final String description;
     /** A `SeriesStatus` name; null while the source has not said. */
     @Nullable @ColumnInfo(name = "status") private final String status;
@@ -44,7 +43,6 @@ public final class SeriesEntity {
             boolean followed,
             @Nullable String readingMode,
             @Nullable String lastOpenedEntry,
-            @Nullable Long lastCheckedAtEpochMs,
             @Nullable String description,
             @Nullable String status,
             boolean downloadNew,
@@ -62,7 +60,6 @@ public final class SeriesEntity {
         this.followed = followed;
         this.readingMode = readingMode;
         this.lastOpenedEntry = lastOpenedEntry;
-        this.lastCheckedAtEpochMs = lastCheckedAtEpochMs;
         this.description = description;
         this.status = status;
         this.downloadNew = downloadNew;
@@ -81,7 +78,6 @@ public final class SeriesEntity {
     public boolean getFollowed() { return followed; }
     @Nullable public String getReadingMode() { return readingMode; }
     @Nullable public String getLastOpenedEntry() { return lastOpenedEntry; }
-    @Nullable public Long getLastCheckedAtEpochMs() { return lastCheckedAtEpochMs; }
     @Nullable public String getDescription() { return description; }
     @Nullable public String getStatus() { return status; }
     public boolean getDownloadNew() { return downloadNew; }

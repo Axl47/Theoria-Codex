@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 20,
+        version = 21,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -226,6 +226,14 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
+    // When a series was last checked. Nothing read it once a refresh judged a first listing by whether entries were
+    // stored, so it is dropped rather than kept to suggest it decides something.
+    public static final Migration MIGRATION_20_21 = new Migration(20, 21) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series` DROP COLUMN `last_checked_at_epoch_ms`");
+        }
+    };
+
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -245,7 +253,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_16_17,
             MIGRATION_17_18,
             MIGRATION_18_19,
-            MIGRATION_19_20
+            MIGRATION_19_20,
+            MIGRATION_20_21
     };
 
     public abstract CodexLikesDao codexLikesDao();

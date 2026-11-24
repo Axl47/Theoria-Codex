@@ -91,7 +91,7 @@ class RoomSeriesRepository(
         }
 
     /**
-     * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones. It returns none when
+     * Writes [stored] with [entries] as its entry list, and returns the new ones. It returns none when
      * no entries were stored before, since nothing was there to compare with, and none when no listed entry matches a
      * stored one by address or as a moved entry: such a list almost always means the source changed its addresses, not
      * that the whole series came out at once, so it is stored as a new baseline. A source that only ever lists its one
@@ -120,7 +120,7 @@ class RoomSeriesRepository(
         val dropped = known.values.filter { it.entry.address !in listed && it.sourceOrder != NOT_LISTED }.map { it.copy(sourceOrder = NOT_LISTED) }
         val reopened = moved.entries.firstOrNull { it.value.entry.address == stored.lastOpenedEntry }?.key
         // The series first: its entries refer to its row.
-        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, lastCheckedAtEpochMs = now).toEntity())
+        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
         // No listed entry matched a stored one: the list is a baseline, as when nothing was stored.
         return if (newEntries.size == current.size) emptyList() else newEntries
@@ -269,7 +269,6 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     followed = followed,
     readingMode = readingMode?.let { name -> GalleryReadingMode.entries.firstOrNull { it.name == name } },
     lastOpenedEntry = lastOpenedEntry,
-    lastCheckedAtEpochMs = lastCheckedAtEpochMs,
     downloadNewChapters = downloadNew,
     chaptersShareFirstPage = chaptersShareFirstPage,
     followedAtEpochMs = followedAtEpochMs,
@@ -286,7 +285,6 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     followed,
     readingMode?.name,
     lastOpenedEntry,
-    lastCheckedAtEpochMs,
     series.description,
     series.status.takeUnless { it == SeriesStatus.UNKNOWN }?.name,
     downloadNewChapters,
