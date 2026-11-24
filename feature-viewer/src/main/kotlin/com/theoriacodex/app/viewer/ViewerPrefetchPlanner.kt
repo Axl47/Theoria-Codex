@@ -10,6 +10,9 @@ import kotlin.math.abs
 internal const val VIEWER_PREFETCH_LEFT_COUNT = 3
 internal const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 
+/** Vertical reading only moves forward through a column of pages it shows several at a time, so it looks further ahead. */
+internal const val VIEWER_VERTICAL_PREFETCH_RIGHT_COUNT = 6
+
 /** Videos and ugoira archives warm only the immediate neighbours; each one can cost megabytes of disk cache. */
 internal const val VIEWER_VIDEO_PREFETCH_DISTANCE = 1
 
@@ -46,18 +49,21 @@ internal fun planAdjacentViewerPrefetch(
 }
 
 /**
- * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. Static images
- * within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so a page first downloaded while it was
- * far away is decoded into memory once it becomes a neighbour, and shows without a decode when reached.
+ * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan, which looks further
+ * ahead while [verticalReading]. Static images within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so
+ * a page first downloaded while it was far away is decoded into memory once it becomes a neighbour, and shows
+ * without a decode when reached.
  */
 fun viewerPrefetchAction(
     pages: List<ViewerPageState>,
     current: ViewerMediaKey?,
     swipeTarget: ViewerMediaKey?,
+    verticalReading: Boolean = false,
 ): ViewerAction.QueuePrefetch {
     val flattened = pages.flatMap(ViewerPageState::media)
     val currentIndex = current?.let { key -> flattened.indexOfFirst { media -> media.key == key } } ?: -1
-    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
+    val rightCount = if (verticalReading) VIEWER_VERTICAL_PREFETCH_RIGHT_COUNT else VIEWER_PREFETCH_RIGHT_COUNT
+    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current, rightCount = rightCount)).distinct()
     return ViewerAction.QueuePrefetch(
         keys.map { key ->
             val index = flattened.indexOfFirst { media -> media.key == key }

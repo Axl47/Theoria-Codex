@@ -117,7 +117,11 @@ internal fun ViewerFrameEffects(
     val showInfoSheet = uiState.controls.panel == ViewerPanel.INFO && !frame.inPictureInPicture
     ViewerSelectionEffects(frame, screen, controls, swipe.settling, onAction)
     ViewerBackHandlers(frame, screen, controls, dismissDrag)
-    ViewerNavigationEffects(frame, swipe, postPagerState, controls, canLoadMoreFromSource, loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged)
+    val verticalReading = config.readingModeOf(uiState.currentPage, uiState.series) == GalleryReadingMode.VERTICAL
+    ViewerNavigationEffects(
+        frame, swipe, postPagerState, controls, canLoadMoreFromSource, loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged,
+        verticalReading,
+    )
     ViewerChromeAutoHideEffect(
         chromeVisible = frame.chromeVisible,
         interactionSerial = screen.interactionSerial,
@@ -228,6 +232,7 @@ private fun ViewerNavigationEffects(
     loadMoreFromStrip: () -> Unit,
     onAction: (ViewerAction) -> Unit,
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
+    verticalReading: Boolean,
 ) {
     val uiState = frame.uiState
     val navigation = frame.navigation
@@ -239,11 +244,11 @@ private fun ViewerNavigationEffects(
     LaunchedEffect(swipeLoadPost?.id) {
         swipeLoadPost?.let { onAction(ViewerAction.RequestPageResolution(it.id)) }
     }
-    LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget) {
+    LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget, verticalReading) {
         val targetKey = swipeLoadTarget?.let { target ->
             pages.getOrNull(target.postIndex)?.media?.getOrNull(target.mediaIndex)?.key
         }
-        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey))
+        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey, verticalReading))
     }
     LaunchedEffect(navigation.originalPosts.size, navigation.stripAnchorIndex, canLoadMoreFromSource, loadingMoreFromSource) {
         if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect
