@@ -154,3 +154,5 @@ class UndoSlot(val scope: CoroutineScope = CoroutineScope(SupervisorJob())) {
         }
     }
 }
+
+fun UndoOffer?.shownAt(anchor: UndoAnchor): UndoOffer? = this?.takeIf { it.anchor == anchor }
