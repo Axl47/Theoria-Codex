@@ -8,6 +8,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,8 +70,10 @@ class WriteBehind(
         WriteBehindStateCell(durable, scope, if (timed) delay else Duration.INFINITE, newQueue()).also(cells::add)
 
     suspend fun flushAll() {
-        val failures = cells.mapNotNull { cell -> runCatchingPreservingCancellation { cell.flush() }.exceptionOrNull() }
-        failures.firstOrNull()?.let { throw it }
+        val failures = coroutineScope {
+            cells.map { cell -> async { runCatchingPreservingCancellation { cell.flush() }.exceptionOrNull() } }.awaitAll()
+        }
+        failures.firstNotNullOfOrNull { it }?.let { throw it }
     }
 }
 

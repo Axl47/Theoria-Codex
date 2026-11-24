@@ -168,7 +168,7 @@ data class DataDependencies(
     val librarySections: LibrarySectionStore = LibrarySectionStore(uiRestoreRepository),
     val forYouVerdicts: ForYouVerdictRepository,
     val visualSignatures: VisualSignatureRepository,
-    val writeBehind: WriteBehind,
+    private val writeBehind: WriteBehind,
 ) {
     suspend fun flushPendingWrites() = writeBehind.flushAll()
 }
