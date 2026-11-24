@@ -86,7 +86,6 @@ internal data class BrowsingDestinationState(
     val watchedPostIds: Set<PostId>,
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
 ) {
-    /** The one place a feed's liked, saved and watched marks come from, plus this profile's likes still being written. */
     fun feedMarks(pendingLikes: Set<PostId> = emptySet()) = FeedMarks(likedPostIds, savedPostIds, watchedPostIds, pendingLikes)
 }
 
@@ -139,11 +138,9 @@ internal data class SaveToCodexDestinationState(
 
 internal data class ViewerDestinationState(
     val browsing: BrowsingDestinationState,
-    /** What each live feed shows now, keyed by the Viewer stream it launches. */
     val feeds: Map<ViewerStreamSource, ViewerFeedSnapshot>,
 )
 
-/** The state read belongs to this restart scope, never to the caller's shell scope. */
 @Composable
 internal fun <T> DestinationStateBoundary(
     state: State<T>,
@@ -191,10 +188,6 @@ internal fun RecentsDestinationStateBoundary(
     content(recentState)
 }
 
-/**
- * Shared across the whole activity, not per navigation entry: a Viewer or Codex opened from a feed
- * must not wait on its own fresh queries for state the app already has.
- */
 @Composable
 internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataViewModel = viewModel(
     viewModelStoreOwner = activityViewModelStoreOwner(),
@@ -204,7 +197,6 @@ internal fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataView
         galleryReadingModes = data.galleryReadingModes, pictureHashes = data.visualSignatures.observePictureHashes())
 }
 
-/** The activity's store, for read models every destination shares; the nearest store outside an activity. */
 @Composable
 internal fun activityViewModelStoreOwner(): ViewModelStoreOwner =
     LocalContext.current.findActivity() as? ViewModelStoreOwner ?: checkNotNull(LocalViewModelStoreOwner.current)
@@ -220,7 +212,6 @@ internal fun CodexDestinationStateBoundary(
     val settings = settingsState.value ?: return
     val codicesState = rememberRetained("codices") { data.codexRepository.observeCodices() }
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
-    // A placeholder grid with only virtual tiles would clamp or move the restored collection anchor.
     val codices = codicesState.value ?: return
     val savedSearches = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
     val availableSources = availableSourcesState.value
@@ -233,7 +224,6 @@ internal fun CodexDestinationStateBoundary(
             codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
         }
         val collection = rememberCodexCollection(data)
-        // The shared presentation spans every profile; warm-up and tiles only consider this profile's Codices.
         val itemCounts = remember(collection.itemCounts, visible) {
             visible.mapNotNull { codex -> collection.itemCounts[codex.codexId]?.let { codex.codexId to it } }.toMap()
         }
@@ -241,7 +231,6 @@ internal fun CodexDestinationStateBoundary(
             { id: String -> source.observeActionOptions(id, availableSources) }
         }
         CodexContentWarmUp(data, itemCounts, savedSortFor)
-        // Subscribed only while a usage sort needs it, since statistics are written during use.
         val libraryUsage = if (settings.codexLibrarySort.usesUsage) {
             rememberRetained("library-usage") { data.statisticsRepository.observeCodexLibraryUsage() }.value
         } else {
@@ -295,7 +284,6 @@ internal fun CodexDetailDestinationStateBoundary(
     val storedPosts by rememberRetained(codexPostsKey(codexId, storeSort), content) { codexPostsFlow(data, codexId, storeSort) }
     val usage = rememberCodexPostUsage(data.statisticsRepository, codexId, sortMode)
     val sortedPosts = rememberSortedCodexPosts(codexId, storedPosts, sortMode, usage, durationStates)
-    // Changing the sort keeps showing the previous order until the new one answers.
     val shownPosts = remember(codexId) { ShownPosts() }
     sortedPosts?.let { shownPosts.latest = it }
     val posts = shownPosts.latest
@@ -325,7 +313,6 @@ private fun codexPostsFlow(data: DataDependencies, codexId: String, sort: CodexS
 private const val WARM_CODEX_MIN_ITEMS = 200
 private const val WARM_CODEX_LIMIT = 2
 
-/** Prepares the largest Codices while the Library shows, since only they outlast the opening animation. */
 @Composable
 private fun CodexContentWarmUp(data: DataDependencies, itemCounts: Map<String, Int>, savedSortFor: (String) -> CodexSortMode) {
     val content = rememberCodexContentFlows()
@@ -348,7 +335,6 @@ private fun CodexContentWarmUp(data: DataDependencies, itemCounts: Map<String, I
     }
 }
 
-/** Tells "not answered yet" from "answered that no such Codex exists", which a bare null cannot. */
 private data class CodexLookup(val codex: Codex?)
 
 private class ShownPosts {
@@ -362,7 +348,6 @@ internal fun SaveToCodexDestinationStateBoundary(
     searchQuery: com.theoriacodex.domain.model.Query? = null,
     content: @Composable (SaveToCodexDestinationState) -> Unit,
 ) {
-    // Keeps what the last open loaded, instead of restarting from defaults and empty lists each time.
     val settings = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value?.settings ?: return
     val codices = rememberRetained("save-codices") { data.codexRepository.observeCodices() }.value ?: return
     val collectionIds = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
@@ -382,11 +367,9 @@ internal fun SaveToCodexDestinationStateBoundary(
                 .observeSaveRelevance(codices.mapTo(linkedSetOf(), Codex::codexId), posts, searchQuery)
         }.collectAsStateWithLifecycle(initialValue = emptyMap())
     }
-    // One reading per open: watching behind this sheet writes usage, which must not move rows under a tap.
     val libraryUsage = produceState(emptyMap<String, CodexUsage>(), data.statisticsRepository) {
         value = data.statisticsRepository.observeCodexLibraryUsage().first()
     }
-    // Read once per open too, so a save from behind the sheet cannot reorder it.
     val lastSavedAt = produceState(emptyMap<String, Long>(), data.codexRepository, collectionIds) {
         value = latestSaveTimes(collectionIds.associateWith { id -> data.codexRepository.observeCodexItems(id).first() })
     }
@@ -428,7 +411,6 @@ internal fun SettingsDestinationStateBoundary(
     onOpenExtensions: (() -> Unit)? = null,
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
-    // Subscribing here keeps statistics collection scoped to a visible Settings destination.
     val statistics = owner.statistics.collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
@@ -482,7 +464,6 @@ internal fun ViewerDestinationStateBoundary(
     content: @Composable (ViewerDestinationState) -> Unit,
 ) {
     BrowsingDestinationStateBoundary(data, sources) { browsing ->
-        // Only what a Viewer reads from each feed, so the rest of a feed's state never recomposes the Viewer.
         val feeds = feedOwners.associate { owner ->
             key(owner) {
                 owner.streamSource to remember(owner) { owner.viewerFeedChanges }
@@ -499,7 +480,6 @@ internal fun ActiveProfileCoordinationEffect(
     onProfileChanged: suspend (RecommendationProfile) -> Unit,
 ) {
     val settingsFlow = remember(settingsRepository) { settingsRepository.observeSettings() }
-    // Waits for real settings, so it never acts on the default profile while they load.
     val settings = settingsFlow.collectAsStateWithLifecycle(initialValue = null).value ?: return
     val profile = settings.activeRecommendationProfile()
     LaunchedEffect(profile.profileId, profile.name) { onProfileChanged(profile) }

@@ -48,11 +48,6 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
-/**
- * The Library tab: one header (title, the section's actions, the Settings gear) over Codices, Saved
- * or History. Only the chosen section is composed, so tab reselect scrolls whichever one shows; the others keep
- * their saved state, so each returns where it was left.
- */
 @Composable
 internal fun LibraryDestination(shell: TheoriaShell) {
     val store = shell.data.librarySections
@@ -64,7 +59,6 @@ internal fun LibraryDestination(shell: TheoriaShell) {
             transfers = { LibraryTransfersHeaderButton(shell.transfers) }, actions = actions,
         )
     }
-    // Each section keeps its saved state (scroll positions) while another one shows.
     val sectionStates = rememberSaveableStateHolder()
     Box(Modifier.fillMaxSize()) {
         sectionStates.SaveableStateProvider(section.name) {
@@ -80,14 +74,12 @@ internal fun LibraryDestination(shell: TheoriaShell) {
             LibrarySection.History -> RecentsUndoAnchor
         }
         Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-            // Offline copies removed from a Codex's menu opened here; leaving the Library commits them.
             CodexOfflineRemovalUndo()
             undoAnchor?.let { UndoPill(it) }
         }
     }
 }
 
-/** Saved's shelves (Likes, Followed, saved Searches) as a Library section. */
 @Composable
 private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionHeader) {
     SavedCodexRoute(
@@ -116,7 +108,6 @@ private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: Recents
     }
 }
 
-/** Resolves durations for every post Recents can show. */
 @Composable
 private fun rememberRecentsDurationOwner(shell: TheoriaShell, state: RecentsDestinationState): MediaDurationRouteViewModel {
     val durationOwner = viewModel<MediaDurationRouteViewModel>(
@@ -160,7 +151,6 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
             searches = state.searches,
             activity = state.activity,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            // Recents filters no lengths, so it only reports what its cards learn.
             durations = durationOwner.feedDurations(MediaDurationStates.EMPTY, resolveInBackground = false),
             likedPostIds = state.likedPostIds,
             onToggleLike = { post ->
@@ -181,10 +171,6 @@ private fun RecentsDestination(shell: TheoriaShell, header: LibrarySectionHeader
     }
 }
 
-/**
- * The Codex library. Called from two places on purpose: Library's Codices section, and the shell's
- * keyed action overlay above the NavHost. Each call retains its flows under its own ViewModel store owner.
- */
 @Composable
 internal fun CodexLibraryDestination(
     shell: TheoriaShell,
@@ -192,10 +178,8 @@ internal fun CodexLibraryDestination(
     header: LibrarySectionHeader = BareSectionHeader,
 ) {
     val commands = shell.owners.codexCommands
-    // The keyed overlay floats over whatever screen opened it, so its offers use the shell's own pill.
     val undoAnchor = if (actionCodexId == null) CodexUndoAnchors.Library else UndoAnchor.App
     val pendingDeletes by commands.pendingDeletes.collectAsStateWithLifecycle()
-    // Codex detail renames in its title, so its menu leaves Rename out.
     val fromDetail = actionCodexId != null &&
         shell.navController.currentBackStackEntry?.arguments?.getString("codexId") == actionCodexId
     CodexDestinationStateBoundary(

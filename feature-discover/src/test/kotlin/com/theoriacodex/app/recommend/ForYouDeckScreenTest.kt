@@ -67,7 +67,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The For You screen over a real owner and fakes that answer at once: the deck, its trails, and the grid toggle. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class ForYouDeckScreenTest {
@@ -81,7 +80,6 @@ class ForYouDeckScreenTest {
     private var sort by mutableStateOf(SortMode.NEWEST)
     private var animated by mutableStateOf(false)
 
-    /** Each Viewer launch, as the level's id and the post. */
     private val opened = mutableListOf<Pair<String, PostId>>()
     private val savedSearches = mutableStateListOf<Query>()
     private val selectedProfiles = mutableListOf<String>()
@@ -133,7 +131,6 @@ class ForYouDeckScreenTest {
         return owner
     }
 
-    /** Decides the card through the action the deck gives TalkBack, as a swipe would. */
     private fun decide(label: String) {
         val node = compose.onNode(SemanticsMatcher("offers $label") { node ->
             node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label == label }
@@ -178,7 +175,6 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0").assertTextEquals("Mix")
         compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("artist")
         compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertDoesNotExist()
-        // Only a tag trail is a search to save, and a trail's cards say nothing about lanes.
         compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG).assertDoesNotExist()
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertDoesNotExist()
         card("t-1").assertExists()
@@ -189,7 +185,6 @@ class ForYouDeckScreenTest {
     }
 
     @Test fun `a card a like asked for says so and does not offer its own creator again`() {
-        // No similar posts on this source, so the like asks the liked post's creator.
         trails.creator = listOf(lanePost("more", 0, 0))
         render()
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertExists()
@@ -203,7 +198,6 @@ class ForYouDeckScreenTest {
 
     @Test fun `the fork row scrolls only when its forks overflow it, so a card that fits still swipes from it`() {
         val similar = TrailFork.Similar
-        // Each capped well short of the row, but together wider than it whatever the test font's width.
         val long = List(5) { TrailFork.Tag("long_".repeat(100) + it) }
         var forks by mutableStateOf<List<TrailFork>>(listOf(similar))
         compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) { ForYouForkRow(forks) {} } } }
@@ -361,7 +355,6 @@ class ForYouDeckScreenTest {
     @Test fun `Hidden tags is a row that leaves the sheet for the profile's hidden tags`() {
         render()
         compose.onNodeWithTag(FOR_YOU_FILTERS_TAG).performClick()
-        // A row, not a choice: it has no selected state.
         compose.onNode(hasText("Hidden tags") and hasClickAction() and SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected)).performClick()
         compose.runOnIdle { assertEquals(1, hiddenTagsOpened) }
         compose.onNodeWithText("Animated only").assertDoesNotExist()

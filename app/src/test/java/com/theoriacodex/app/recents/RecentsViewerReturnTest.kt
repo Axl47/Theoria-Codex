@@ -29,7 +29,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The default All view is a column of rows, where posts must still land back on their own cards. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, qualifiers = "w400dp-h800dp-mdpi")
 class RecentsViewerReturnTest {
@@ -52,7 +51,6 @@ class RecentsViewerReturnTest {
 
     private fun showAllView(): ViewerReturnTransition {
         val transition = ViewerReturnTransition()
-        // A search between posts splits them into two separate rows.
         val search = RecentSearchEntry(
             query = Query(QueryMode.Unified, listOf("night"), emptyList(), SortMode.NEWEST, null, null),
             queryHash = "split", searchedAtEpochMs = now - 2, kind = RecentSearchKind.SOURCE, sources = listOf(SourceKey.GELBOORU),

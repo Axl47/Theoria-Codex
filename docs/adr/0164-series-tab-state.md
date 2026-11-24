@@ -14,6 +14,7 @@ Source calls are slow, sources and extensions can change while answers are in fl
 - A source that is replaced (its extension updated) is browsed afresh when Browse shows, else dropped until its listing shows. A search on screen, or one sent before the sources loaded, runs in every source that is new or replaced. Labels are taken again on each change because a source turned on can share a name with one already listed. An answer from a source switched off or replaced meanwhile is dropped.
 - `searchRun` and `dedicatedRun` count submitted searches and listings; an answer asked for under an earlier run is dropped, even when its text is the same. `followShown` is followed in the view model, not in the tab's composition, because the pager drops the composition before it reports another tab settled; once the tab is left the filter sheet closes and a filtered browse returns to popular.
 - The filter sheet's filters load afresh each time it opens, since some sources fill theirs in from what they fetched meanwhile; a source whose filters fail to load offers none, and the sheet still searches it. Searching before the filters load keeps the filters of the listing on screen and changes only the text.
+- `openDedicatedSearch` reuses the listing the global search already loaded for that source, with its paging flags reset, so the switch is immediate and sends no duplicate request; without a query it fetches the source's popular series.
 - The tab's query is hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
 - `arranged` keeps the stored order (unread first, most first) for ties and for series a time sort has no time for, which go last.
 
@@ -23,6 +24,6 @@ Anything new that must survive process death goes through the saved-state handle
 
 ## Applies to
 
-- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `content`, `browse`, `showSources`, `searchIn`, `search`, `followShown`, `openFilters`, `searchSource`, `searchAllSources`
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `content`, `browse`, `showSources`, `searchIn`, `search`, `followShown`, `openFilters`, `openDedicatedSearch`, `searchSource`, `searchAllSources`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabScreen.kt`: `SeriesTabScreen` query state
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesLibrary.kt`: `SharedPreferencesSeriesLibraryPreferences`, `arranged`

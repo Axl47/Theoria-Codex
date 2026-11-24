@@ -51,7 +51,6 @@ import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** The top-level tabs, side by side; a sideways swipe changes tab wherever [tabSwipeEnabled] allows it. */
 @Composable
 internal fun HomePager(shell: TheoriaShell) {
     val pagerState = shell.navigation.pagerState
@@ -119,7 +118,6 @@ private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationSta
     resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
 )
 
-/** Search keeps its own saved launch context, and a launch that will not follow the feed reuses a Viewer on top. */
 private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewer) {
     val query = routes.search.current?.state?.value?.query?.applied
     openFeedViewer(
@@ -127,7 +125,6 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
         FeedViewerLaunch(effect.posts, effect.context, effect.liveSearchBinding, effect.visibilityFilters),
         saveContext = false,
         singleTop = !effect.liveSearchBinding,
-        // A typed ID was never searched, so saving it to a Codex has no search to record.
         saveQuery = query?.takeUnless { effect.fromTypedId },
     )
 }
@@ -143,7 +140,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
         ForYouRoute(
             services = ForYouRouteServices(
                 coordinator = shell.features.forYou,
-                // The deck's writes run in the activity's scope, so they finish after the tab, or the deck, is gone.
                 wiring = { shell.forYouWiring(quickSave, writes.viewModelScope) },
                 mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
                 pixivUgoiraClient = shell.sources.pixivUgoiraClient,
@@ -177,10 +173,6 @@ private fun ForYouDestination(shell: TheoriaShell) {
     }
 }
 
-/**
- * What the deck's owner takes from the app. [ForYouDeckWiring.trails] is the deck's one way to the app's trails: a
- * fork's level and the posts a like asks for both come from it, with the deck's own media filter.
- */
 private fun TheoriaShell.forYouWiring(quickSave: QuickSave, writeScope: CoroutineScope) = ForYouDeckWiring(
     actions = ShellTriageActions(this),
     quickSave = quickSave,
@@ -193,10 +185,6 @@ private fun TheoriaShell.forYouWiring(quickSave: QuickSave, writeScope: Coroutin
     pictures = features.pictureTags,
 )
 
-/**
- * Opens the Viewer on [post] of [level], which keeps following that level's feed while it is on top. Nothing is saved
- * for restore: the deck does not outlive its owner.
- */
 private fun TheoriaShell.openForYouPost(level: ForYouLevel, post: PostId, scrollOffsetHint: Int) {
     val posts = level.feed.value.posts
     val index = posts.indexOfFirst { it.id == post }.takeIf { it >= 0 } ?: return
@@ -204,7 +192,6 @@ private fun TheoriaShell.openForYouPost(level: ForYouLevel, post: PostId, scroll
     scope.launch {
         openFeedViewer(
             ViewerStreamSource.FOR_YOU,
-            // The deck's owner already applied For You's filters to its feed.
             FeedViewerLaunch(posts, context, liveSearchBinding = true, visibilityFilters = SearchVisibilityFilters()),
             saveContext = false,
             singleTop = false,
@@ -213,7 +200,6 @@ private fun TheoriaShell.openForYouPost(level: ForYouLevel, post: PostId, scroll
     }
 }
 
-/** Opens the Viewer on a post of the related shelf under [seed]; it does not follow the deck. */
 private fun TheoriaShell.openForYouRelated(seed: Post, posts: List<Post>, index: Int) {
     scope.launch {
         openFeedViewer(
@@ -225,11 +211,9 @@ private fun TheoriaShell.openForYouRelated(seed: Post, posts: List<Post>, index:
     }
 }
 
-/** A tag trail's search as History would record it, which is what a saved search of it holds. */
 private fun trailSearchEntry(query: Query) =
     RecentSearchEntry(query, searchExecutionKey(query, SearchSourceScope.fromQuery(query)), System.currentTimeMillis())
 
-/** Saves a tag trail's search as a saved search, named as Recents would title it. */
 private fun TheoriaShell.saveTrailSearch(query: Query) {
     val entry = trailSearchEntry(query)
     owners.savedSearches.save(recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH), entry)

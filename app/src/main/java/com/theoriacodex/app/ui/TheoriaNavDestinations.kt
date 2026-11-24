@@ -87,7 +87,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Every navigation entry. Each builds its Codex morph here, from its own and the shared scope. */
 internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScope: SharedTransitionScope) {
     composable(AppRoute.Home) {
         CompositionLocalProvider(LocalCodexMorph provides remember { CodexMorphScope(sharedScope, this) }) {
@@ -103,8 +102,6 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     composable(AppRoute.CreatorProfile) { CreatorDestination(shell) }
     composable(
         AppRoute.Viewer,
-        // Media owns the expansion/shrink; navigation retains both destinations. A trail fork fades over the Viewer it covers,
-        // and any trail level, also one opened from a grid, fades out as it closes.
         enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
         exitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else null },
         popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
@@ -112,8 +109,6 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
             if (targetState.destination.route == AppRoute.Viewer || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
         },
     ) { entry ->
-        // Viewer to Viewer (a fork opening, or closing to its parent) and a trail level's close hold no card return, and
-        // the level going under stops at once, so two levels never play side by side.
         val top by shell.navController.currentBackStackEntryAsState()
         ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
         ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
@@ -133,12 +128,10 @@ private fun CodexDetailEntry(
     sharedScope: SharedTransitionScope,
     entryScope: AnimatedContentScope,
 ) {
-    // Commit system Back through the same animated pop as the toolbar.
     BackHandler { shell.navController.popBackStack() }
     val codexId = requireNotNull(entry.arguments?.getString("codexId"))
     RecordCodexEntryEffect(entry, codexId, shell.data.statisticsRepository)
     val codexMorph = remember { CodexMorphScope(sharedScope, entryScope) }
-    // Opaque so the screen hides the tile it grows out of.
     Box(Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)) {
         if (codexId == SAVED_CODEX_ID) {
             SavedCodexRoute(
@@ -153,7 +146,6 @@ private fun CodexDetailEntry(
                 resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
                 onGoToSearch = { shell.navigation.goToTab(TopLevelDestination.Search) },
             )
-            // Offline copies removed from a shelf's Codex menu here; leaving this screen commits them.
             CodexOfflineRemovalUndo(Modifier.align(Alignment.BottomCenter))
         } else {
             CodexDetailDestination(shell, codexId, entry.codexTagSheetRequest())
@@ -257,7 +249,6 @@ private fun CodexDetailContent(
 @Composable
 private fun CreatorDestination(shell: TheoriaShell) {
     val routes = shell.routes
-    // Each creator entry keeps the creator it opened with, so Back through Creator → Viewer → Creator returns to the right page.
     val entryCreator by rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf(shell.pendingCreatorProfile) }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val creator = entryCreator ?: return@BrowsingDestinationStateBoundary
@@ -280,7 +271,6 @@ private fun CreatorDestination(shell: TheoriaShell) {
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(fabContext, updated) },
             callbacks = CreatorRouteCallbacks(
                 onToggleFollow = shell.owners.follows::toggle,
-                // Creator pages save no launch context; a launch that will not follow the feed reuses a Viewer on top.
                 onOpenViewer = { effect ->
                     shell.openFeedViewer(
                         ViewerStreamSource.CREATOR_PROFILE,
@@ -302,11 +292,9 @@ private fun CreatorDestination(shell: TheoriaShell) {
 private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val routes = shell.routes
     val level = rememberViewerLevel(shell.navController, entry, shell.viewerSessions.session.value?.sessionId)
-    // Built once per shell and trail level, so a Search, For You or Creator state change leaves the Viewer's controls as they are.
     val tagActions = remember(shell) { viewerTagSearchActions(shell) }
     val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell, tagActions).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }
-    // Viewer entries stack in a trail: each withdraws only its own owner, never the one now on top of or under it.
     val onOwnerChanged = remember<(ViewerViewModel?) -> Unit>(routes.viewer) {
         var published: ViewerViewModel? = null
         { owner -> if (owner != null) routes.viewer.publish(owner.also { published = it }) else published?.let(routes.viewer::withdraw) }
@@ -317,7 +305,6 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
         sources = shell.sources,
         feedOwners = routes.feeds + listOfNotNull(level.feed),
     ) { state ->
-        // Every tag sheet in the Viewer stages its edits, not only the Viewer's own include and exclude.
         CompositionLocalProvider(LocalPostTagSearchActions provides tagActions) {
             ViewerRoute(
                 dependencies = ViewerRouteDependencies(
@@ -357,20 +344,12 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     }
 }
 
-/**
- * What a series session changes in the Viewer's configuration: every chapter reads in the series' mode, the strip
- * numbers its chapters, and none of the collecting controls show. Any other session's configuration passes through
- * unchanged.
- */
 @Composable
 private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig) -> ViewerScreenConfig {
-    // The Viewer's owner holds the session; the retained one is claimed before this destination composes.
     val owner = shell.routes.viewer.current ?: return { it }
     val session = owner.session.collectAsStateWithLifecycle().value
         ?.takeIf { it.context.streamSource == ViewerStreamSource.SERIES }
         ?: return { it }
-    // The Viewer's owner outlives configuration changes and is cleared when the Viewer closes. Keyed, so it counts as one
-    // open reader however often this composes.
     LaunchedEffect(owner) {
         val reader = shell.seriesReader ?: return@LaunchedEffect
         if (owner.getCloseable<AutoCloseable>(SERIES_READER_KEY) == null) {
@@ -378,13 +357,11 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
             owner.addCloseable(SERIES_READER_KEY, AutoCloseable(reader::closed))
         }
     }
-    // Only chapters are read in a mode; an episode plays.
     val reading = session.series as? ViewerSeries.Reading
     val mode by remember(session.context.queryHash, reading != null) {
         shell.seriesReader?.takeIf { reading != null }?.readingMode(session) ?: emptyFlow()
     }.collectAsStateWithLifecycle(initialValue = reading?.mode)
     val modes = mode?.let { chosen -> session.posts.associate { it.id to chosen } }.orEmpty()
-    // Strip marks number chapters and show their first pages; an episode session carries none.
     val marks by remember(session.sessionId) { shell.seriesReader?.stripMarks(session) ?: emptyFlow() }
         .collectAsStateWithLifecycle(initialValue = session.stripMarks)
     return { it.copy(galleryReadingModes = modes, stripMarks = marks) }
@@ -392,7 +369,6 @@ private fun rememberSeriesViewerConfig(shell: TheoriaShell): (ViewerScreenConfig
 
 private const val SERIES_READER_KEY = "series-reader"
 
-/** Pending likes stay visible in a feed that hides liked posts until the like commits or fails. */
 private fun viewerLiveSourceState(
     state: ViewerDestinationState,
     pendingLikes: Set<com.theoriacodex.domain.model.PostId>,
@@ -403,7 +379,6 @@ private fun viewerLiveSourceState(
     watchedPostIds = state.browsing.watchedPostIds,
 )
 
-/** Names where a Viewer download came from, by the stream the session was launched from. */
 private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
     val launch = routes.viewer.current?.session?.value?.context
     return when (launch?.streamSource) {
@@ -422,10 +397,6 @@ private suspend fun TheoriaShell.viewerDownloadOrigin(): String {
     }
 }
 
-/**
- * The Viewer's tag edits: staged in the Search draft, so Search does not rerun behind the Viewer and replace the card it
- * returns to. Running the draft ([PostTagSearchActions.applyDraft]) still runs it.
- */
 private fun viewerTagSearchActions(shell: TheoriaShell): PostTagSearchActions {
     fun stage(edit: SearchAction.DraftEdit) = shell.routes.dispatchOrQueue(SearchAction.StageDraftEdit(edit))
     return PostTagSearchActions(
@@ -507,7 +478,6 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onOpenCreatorFallback = shell::launchOpenCreator,
 )
 
-/** Binds a shelf whose owner no feed pages, opening its posts in the Viewer as a related stream. */
 @Composable
 internal fun rememberRelatedShelfBinding(
     shell: TheoriaShell,

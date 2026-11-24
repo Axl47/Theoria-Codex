@@ -138,7 +138,6 @@ fun RecentsScreen(
     }
 }
 
-/** History while it loads: its header, then the loading state. */
 @Composable
 fun RecentsLoading(header: LibrarySectionHeader = BareSectionHeader) {
     Column(
@@ -168,7 +167,6 @@ private fun RecentsSourceSelector(selectedSource: SourceKey?, onSelected: (Sourc
     )
 }
 
-/** Picks which Recents section fills the screen; it sits beside the source selector to keep the header on one row. */
 @Composable
 private fun RecentsSectionSelector(filter: RecentsFilter, onSelected: (RecentsFilter) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
@@ -200,7 +198,6 @@ private fun RecentsSectionSelector(filter: RecentsFilter, onSelected: (RecentsFi
     }
 }
 
-/** Recents after the [source] filter; everything the tabs show comes from here. */
 internal class VisibleRecents(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
@@ -208,10 +205,8 @@ internal class VisibleRecents(
     val activity: List<RecentActivityEntry>,
     private val source: SourceKey?,
 ) {
-    /** Whether the source filter lets [entry] through, so a removed search's Undo placeholder belongs here. */
     fun shows(entry: RecentSearchEntry) = entry.matchesSource(source)
 
-    /** The History entry [post] was long-pressed as, if it is one (related posts are not). */
     fun entryFor(post: Post, section: RecentPostSection): RecentPostEntry? =
         (if (section == RecentPostSection.CODEX) codexPosts else watchedPosts).firstOrNull { it.post.id == post.id }
 }
@@ -233,7 +228,6 @@ private fun rememberVisibleRecents(
     )
 }
 
-/** What each post tile and the related shelf in Recents share, and where the grid reports when it is idle. */
 internal class RecentsPostCards(
     val environment: FeedCardEnvironment,
     val onEnvironmentChanged: (lifecycleStarted: Boolean, scrollIdle: Boolean) -> Unit,
@@ -250,7 +244,6 @@ private fun rememberRecentsPostCards(
     durations.onEnvironmentChanged,
 )
 
-/** Names exactly what will be cleared. Clearing a section always covers every source. */
 @Composable
 private fun RecentsClearMenu(
     filter: RecentsFilter,

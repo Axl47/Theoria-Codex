@@ -87,7 +87,6 @@ import com.theoriacodex.app.update.toReleaseHistoryEntry
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 
-/** The active profile's single saved tags, for the star in post sheets, and how to unsave one. */
 @Composable
 private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = remember(shell) {
     PostTagSavedTags(
@@ -100,7 +99,6 @@ private fun rememberPostTagSavedTags(shell: TheoriaShell): PostTagSavedTags = re
     )
 }
 
-/** Renderable app-shell boundary with dependencies supplied by the application owner. */
 @Composable
 internal fun TheoriaAppContent(
     appContainer: TheoriaAppContainer,
@@ -109,14 +107,12 @@ internal fun TheoriaAppContent(
     incomingUri: Uri? = null,
     onIncomingUriConsumed: () -> Unit = {},
 ) {
-    // One undo slot per Activity, kept across recreation like the shell's other owners.
     val undo = viewModel(key = "undo-slot") { UndoSlotOwner() }.slot
     ProvideUndoSlot(undo) {
         TheoriaAppShellContent(appContainer, viewerSessionOwner, appShellOwner, incomingUri, onIncomingUriConsumed)
     }
 }
 
-/** Holds the app's one [UndoSlot] in the Activity's ViewModel store; its scope outlives a recreation. */
 private class UndoSlotOwner : ViewModel() {
     val slot = UndoSlot(viewModelScope)
 }
@@ -133,9 +129,7 @@ private fun TheoriaAppShellContent(
     ShellOwnerHosts(shell)
     val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
     shell.overlays.codexActionTargetId?.let { id ->
-        // This overlay is composed above the app shell's theme and locals, so it must apply them itself.
         TheoriaNightTheme {
-            // Cleaning's Review opens the deck through the triage opener, which the shell provides only below.
             CompositionLocalProvider(
                 *libraryTransferLocals(shell.transfers),
                 LocalTriageOpener provides rememberTriageOpener(shell),
@@ -210,7 +204,6 @@ private fun ShellOverlaySheets(shell: TheoriaShell) {
     }
 }
 
-/** The splash, and whatever the updater needs decided before the app can open. */
 @Composable
 private fun StartupSurface(shell: TheoriaShell, appShellState: AppShellUiState) {
     val appShellOwner = shell.appShellOwner
@@ -254,7 +247,6 @@ private fun StartupSurface(shell: TheoriaShell, appShellState: AppShellUiState) 
 private fun rememberInstalledVersionCode(shell: TheoriaShell): Int =
     remember(shell.appContext) { installedAppVersionCode(shell.appContext) }
 
-/** The adaptive scaffold and its navigation graph, once the app is ready to show them. */
 @Composable
 private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?) {
     val navigation = shell.navigation
@@ -278,13 +270,11 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
         snackbarHostState = shell.snackbarHostState,
         destinations = TopLevelDestination.entries,
         marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
-        // The status bar's inset shows this color, and the Viewer's letterboxing is black.
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
         onDestinationSelected = { destination ->
             val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
                 tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
             navigation.homeTabRoute = destination.route
-            // New posts wait in Saved, so a lit Library tab opens there; without the dot the remembered section stays.
             if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
                 shell.data.librarySections.select(LibrarySection.Saved)
             }
@@ -368,7 +358,6 @@ private fun ShellDialogs(shell: TheoriaShell, appShellState: AppShellUiState) {
     }
 }
 
-/** The shell's post actions that work the same everywhere, shared by the Viewer and every feed post menu. */
 @Composable
 internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions {
     val metadata = browsingMetadataOwner(shell.data)
@@ -400,7 +389,6 @@ internal fun rememberPostMenuActions(shell: TheoriaShell): PostMenuActions {
 private fun SaveToCodexOverlay(shell: TheoriaShell) {
     val pendingSave = shell.pendingSave
     val posts = pendingSave.posts
-    // A Codex waiting to be deleted is no save target.
     val deleting by shell.owners.codexCommands.pendingDeletes.collectAsStateWithLifecycle()
     SaveToCodexDestinationStateBoundary(shell.data, posts, pendingSave.query) { state ->
         SaveToCodexSheet(
@@ -455,10 +443,6 @@ private fun SaveToCodexOverlay(shell: TheoriaShell) {
     }
 }
 
-/**
- * Down sources, extension ones included, refreshed when outages change and each minute so expired ones
- * clear. Starts the background startup check once the app is showing (it never blocks startup).
- */
 @Composable
 internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
     val outages = shell.sources.outages
@@ -469,7 +453,6 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
                 startupCheckSources(shell.sources.availableSources.value.inPresentationOrder(), keyedSiteIds)
             }
             shell.scope.launch(kotlinx.coroutines.Dispatchers.IO) { shell.sources.warmConnections() }
-            // An expired Pixiv token would otherwise refresh inside the first search. No account is not an error here.
             shell.scope.launch { runCatchingPreservingCancellation { shell.sources.pixivTokens.activeTokens() } }
         }
     }
@@ -477,7 +460,6 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
         val extensions = shell.container.extensionSites
         val extensionChanges = extensions?.siteChanges ?: flowOf(Unit)
         combine(outages.outages, shell.sources.availableSources, minuteTicks(), extensionChanges) { recorded, sources, _, _ ->
-            // Read when outages change: a source whose host was just challenged has loaded by then.
             val extensionSites = extensions?.sites()?.mapValues { it.value.hosts }.orEmpty()
             sourceIssues(recorded, sources, System.currentTimeMillis(), extensionSites)
         }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { value = it }
@@ -489,7 +471,6 @@ internal fun rememberSourceHealth(shell: TheoriaShell): SourceHealth {
         }
     }
     var dismissedNotices by remember { mutableStateOf(emptySet<SourceKey>()) }
-    // Forgotten when the outage ends, so the next one is announced.
     LaunchedEffect(issues) { dismissedNotices = dismissedNotices intersect issues.keys }
     return remember(issues, shell, dismissedNotices) {
         SourceHealth(

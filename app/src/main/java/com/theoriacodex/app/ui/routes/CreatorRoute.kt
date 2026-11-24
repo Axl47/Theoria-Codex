@@ -28,7 +28,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.FeedFabRestoreState
 
-/** App-level inputs rendered by Creator or used to reconcile source capability. */
 internal data class CreatorRouteConfig(
     val activeCreator: CreatorProfile?,
     val followed: Boolean = false,
@@ -37,17 +36,14 @@ internal data class CreatorRouteConfig(
     val resolveUnknownAnimatedDurations: Boolean,
 )
 
-/** Platform and navigation effects that remain owned by the application shell. */
 internal data class CreatorRouteCallbacks(
     val onOpenViewer: suspend (CreatorEffect.OpenViewer) -> Unit,
     val onNavigateBack: () -> Unit,
     val onToggleLike: (Post) -> Unit,
-    /** Follows or unfollows; an unfollow offers Undo through the [UndoSlot]. */
     val onToggleFollow: (CreatorProfile, List<Post>, UndoSlot) -> Unit = { _, _, _ -> },
     val onOpenUrl: (String) -> Unit,
 )
 
-/** Navigation-scoped Creator owner plus its immutable rendering boundary. */
 @Composable
 internal fun CreatorRoute(
     coordinator: CreatorProfileCoordinator,

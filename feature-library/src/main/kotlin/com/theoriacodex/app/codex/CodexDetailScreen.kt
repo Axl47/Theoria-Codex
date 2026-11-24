@@ -77,7 +77,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
-/** Not answered yet is not the same as gone; saying so would flash on every first open. */
 @Composable
 private fun CodexUnavailable(loading: Boolean, onBack: () -> Unit) {
     if (loading) return
@@ -120,9 +119,7 @@ fun CodexDetailScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     related: RelatedShelfBinding? = null,
-    /** Takes the tag sheet's chosen tags to a site search; null leaves Search sites out. */
     onSearchSites: ((SourceKey, Query) -> Unit)? = null,
-    /** Asks the screen to open its tag sheet, as a Library tile's Filter by tag does. */
     tagSheetRequested: Boolean = false,
     onTagSheetRequestHandled: () -> Unit = {},
 ) {
@@ -143,13 +140,11 @@ fun CodexDetailScreen(
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
     if (codexName == null) return CodexUnavailable(loading, onBack)
     val filterScroll = rememberFeedScrollSignal()
-    // Sort is a chip of its own, so resetting the filters keeps it.
     val resetFilters = { onFabRestoreStateChange(FeedFabRestoreState(sortMode = sortMode.name)) }
     val chips = CodexDetailChips(
         sortMode, codexSortModes(posts.any(::isAnimatedPost), sortMode),
         { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
         tagFilter,
-        // Followed and Saved searches pass a custom header; the deck only knows Codices, which Likes is one of.
         rememberCodexTriageAction(codexId, real = customHeader == null, seed = feed.triageSeed()),
     )
     Scaffold(
@@ -186,7 +181,6 @@ fun CodexDetailScreen(
     }
 }
 
-/** Codex detail's Undo: a pending removal of this Codex's offline copy, above the slot's offers anchored here. */
 @Composable
 private fun CodexDetailUndo(codexId: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -195,14 +189,12 @@ private fun CodexDetailUndo(codexId: String) {
     }
 }
 
-/** Edit selection that drops posts that leave the Codex; while selecting, Back ends selection first. */
 @Composable
 private fun rememberCodexEditSelection(posts: List<Post>): MutableState<CodexEditSelection> {
     val selection = remember { mutableStateOf(CodexEditSelection()) }
     LaunchedEffect(posts.map(Post::id)) {
         selection.value = selection.value.retainAvailable(posts.mapTo(mutableSetOf(), Post::id))
     }
-    // Registered after the destination's own Back handler, so it wins while enabled.
     BackHandler(enabled = selection.value.active) { selection.value = selection.value.exit() }
     return selection
 }
@@ -239,7 +231,6 @@ private fun CodexDetailBody(
     val focusManager = LocalFocusManager.current
     Column(
         modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp)
-            // A tap nothing else takes leaves the title's rename field, which commits it.
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -286,19 +277,11 @@ private fun CodexDetailFilterFab(
     )
 }
 
-/**
- * Keeps the posts the collection's saved filters and its transient [tagKeys] let through; compared by equality, so
- * a filter change refilters.
- */
 private data class CodexPostFilter(val filters: CodexCollectionFilters, val tagKeys: List<String>) : FeedPostFilter {
     override fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
         filterCodexCollectionPosts(posts, filters, knownDurationMsByPostId).withCodexTags(tagKeys)
 }
 
-/**
- * The grid's feed for Codex [codexId]: [posts] after the length step, [filters] and the tags of [tagKeys], plus the
- * related shelf of [relatedShelf] when the collection has one. The shelf takes only the collection's media filters.
- */
 @Composable
 internal fun rememberCodexDetailFeed(
     codexId: String,
@@ -314,7 +297,6 @@ internal fun rememberCodexDetailFeed(
     }
     return rememberFeedView(
         "codex-detail:$codexId", posts, visibility, durations, relatedShelf?.state ?: RelatedPostsUiState.Idle,
-        // The filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
         revealInOrder = !sortMode.usesDuration,
         postFilter = remember(filters, tagKeys) { CodexPostFilter(filters, tagKeys) },
     )
@@ -367,7 +349,6 @@ private fun CodexDetailGrid(
     val resolvingDurations = feed.durations.readiness.isResolving
     if (posts.isEmpty()) return CodexDetailEmptyState(collectionIsEmpty, loading, resolvingDurations, emptyMessage)
     val footerMessage = if (resolvingDurations) "Resolving durations…" else null
-    // Drag-select reads grid positions as post indices, so it runs only while no related shelf shifts them.
     val postIds = remember(posts) { posts.map(Post::id) }
     val dragSelect = if (relatedShelf == null) Modifier.codexDragSelect(gridState, postIds, editSelection, onSelectionChange) else Modifier
     FeedGrid(
@@ -390,14 +371,12 @@ private fun CodexDetailGrid(
     }
 }
 
-/** The grid's place-holder while a live collection loads or when nothing matches. */
 @Composable
 private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, resolvingDurations: Boolean, emptyMessage: String?) {
     if (loading) {
         LoadingState(Modifier.fillMaxSize())
     } else {
         FeedEmptyTile(
-            // A live feed (Followed, saved searches) is not a Codex, so it states only what to do.
             title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
             message = emptyMessage ?: when {
                 collectionIsEmpty -> "No posts"
@@ -427,12 +406,10 @@ private fun CodexSelectablePostCard(
             onClick = {
                 if (editSelection.active) onToggleSelection(post.id) else onOpenViewer(index)
             },
-            // While selecting, the grid's drag-select owns long press.
             onLongPress = { if (!editSelection.active) onOpenPostActions(post) },
             showSourceBadge = true,
             likeEnabled = !editSelection.active,
             refreshOnPreviewError = true,
-            // Only the collection's own cards resolve by id; the related shelf shares this environment without it.
             resolvePostById = resolvePostById,
         )
         if (editSelection.active) {
@@ -441,7 +418,6 @@ private fun CodexSelectablePostCard(
     }
 }
 
-/** Drawing only: a Surface here would swallow taps meant for the card, which toggles selection. */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.CodexSelectionMarker(selected: Boolean) {
     Box(

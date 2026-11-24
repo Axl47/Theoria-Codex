@@ -67,7 +67,6 @@ class CreatorRelatedPostsScreenTest {
             }
         }
         compose.onNodeWithContentDescription("Like post").performClick()
-        // Room membership may reach the grid before the commit callback starts the shelf.
         compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
         compose.runOnIdle {
             val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
@@ -77,7 +76,6 @@ class CreatorRelatedPostsScreenTest {
         compose.onNodeWithText("No new related posts").assertIsDisplayed()
         compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
         compose.onNodeWithText("Dismiss").performClick()
-        // Releasing the seed changes the feed's filter inputs, which refilter off the main thread.
         val emptyMessage = "No uploads match the current filters."
         compose.waitUntilSettled(5_000) { compose.onAllNodesWithText(emptyMessage).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(emptyMessage).assertIsDisplayed()

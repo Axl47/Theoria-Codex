@@ -129,7 +129,6 @@ class SearchApplyScrollTest {
         repeat(2) {
             grid.performScrollToIndex(20)
             compose.onNode(hasContentDescription("Expand Search") or hasTestTag("Search bar")).performClick()
-            // The keyboard's Search action runs the draft at once.
             compose.onNodeWithTag("Search query input").performImeAction()
             compose.runOnIdle {
                 val current = state.value
@@ -202,7 +201,6 @@ class SearchApplyScrollTest {
         compose.runOnIdle { assertEquals(2, acknowledgements.size) }
     }
 
-    /** A continuation with nothing after it, for the search this state shows. */
     private fun SearchUiState.lastPage() = SearchContinuation(
         query.appliedQueryHash, query.appliedSourceScope, emptySet(), emptyList(), FeedCursor(query.applied),
     )
