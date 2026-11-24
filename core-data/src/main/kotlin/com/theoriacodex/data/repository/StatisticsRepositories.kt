@@ -6,6 +6,7 @@ import com.theoriacodex.data.storage.JsonDataStore
 import com.theoriacodex.data.storage.StateCell
 import com.theoriacodex.data.storage.openDecodedJsonDataStore
 import com.theoriacodex.data.storage.update
+import com.theoriacodex.data.storage.writeBehind
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -14,6 +15,7 @@ import java.io.File
 import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -372,15 +374,20 @@ internal object StatisticsPolicies {
     }
 }
 
+internal val STATISTICS_WRITE_DELAY = 2.seconds
+
 class DataStoreStatisticsRepository private constructor(
     store: JsonDataStore<LifetimeStatistics>,
     clock: Clock,
-) : StatisticsRepository by CellStatisticsRepository(store, clock), AsynchronousStore by store {
+    writeScope: CoroutineScope?,
+) : StatisticsRepository by CellStatisticsRepository(writeScope?.let { store.writeBehind(it, STATISTICS_WRITE_DELAY) } ?: store, clock),
+    AsynchronousStore by store {
     constructor(
         baseDirectory: File,
         scope: CoroutineScope,
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         clock: Clock = Clock.systemDefaultZone(),
+        writeScope: CoroutineScope? = null,
     ) : this(
         openDecodedJsonDataStore(
             file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
@@ -396,6 +403,7 @@ class DataStoreStatisticsRepository private constructor(
             encode = StatisticsDataStoreFile::fromDomain,
         ),
         clock,
+        writeScope,
     )
 }
 
@@ -442,9 +450,12 @@ internal class CellStatisticsRepository(
         StatisticsPolicies.recordCodexEntry(current, codexId)
     }
 
-    override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->
-        StatisticsPolicies.mergeRestored(current, imported)
+    override suspend fun mergeRestored(imported: LifetimeStatistics) {
+        mutate { current -> StatisticsPolicies.mergeRestored(current, imported) }
+        flush()
     }
+
+    override suspend fun flush() = cell.flush()
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
         cell.update { current ->

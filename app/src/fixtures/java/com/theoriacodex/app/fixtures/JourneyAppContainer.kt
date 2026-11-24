@@ -111,7 +111,7 @@ class JourneyAppContainer(
     private val storeScope = newDataStoreScope()
     val settings = DataStoreSettingsRepository(storageDirectory, storeScope, profileWriteGuard = profileWriteGuard)
     private val restore = DataStoreUiRestoreRepository(storageDirectory, storeScope)
-    private val statistics = DataStoreStatisticsRepository(storageDirectory, storeScope)
+    private val statistics = DataStoreStatisticsRepository(storageDirectory, storeScope, writeScope = ownerScope)
     private val durations = RoomMediaDurationRepository(database)
     private val accounts = JourneyAccounts(registry.availableSources())
     private val siteProfiles = InMemorySiteProfileRepository()

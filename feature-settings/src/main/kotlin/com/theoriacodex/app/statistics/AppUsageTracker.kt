@@ -117,6 +117,7 @@ class AppUsageTracker constructor(
         if (!state.foreground) return state
         val nextStart = flushInterval(state.intervalStartedAtMs, state.category, state.target)
         mutableLiveUsage.value = UsageDurationDelta()
+        runCatchingPreservingCancellation { repository.flush() }
         return state.copy(foreground = false, intervalStartedAtMs = nextStart)
     }
 

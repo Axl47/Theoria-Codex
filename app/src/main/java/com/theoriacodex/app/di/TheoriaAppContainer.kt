@@ -169,6 +169,7 @@ data class DataDependencies(
 ) {
     suspend fun flushPendingWrites() {
         readingPositions.flush()
+        statisticsRepository.flush()
     }
 }
 
@@ -378,6 +379,7 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
         recoveryRegistry = fileStoreRecoveryRegistry,
+        writeScope = durableStoreScope,
     )
     private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
         delegate = statisticsStore,
