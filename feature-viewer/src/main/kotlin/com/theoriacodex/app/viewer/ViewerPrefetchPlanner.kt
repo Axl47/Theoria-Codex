@@ -10,6 +10,9 @@ import kotlin.math.abs
 internal const val VIEWER_PREFETCH_LEFT_COUNT = 3
 internal const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 
+/** Vertical reading only moves forward through a column of pages it shows several at a time, so it looks further ahead. */
+internal const val VIEWER_VERTICAL_PREFETCH_RIGHT_COUNT = 6
+
 /** Videos and ugoira archives warm only the immediate neighbours; each one can cost megabytes of disk cache. */
 internal const val VIEWER_VIDEO_PREFETCH_DISTANCE = 1
 
@@ -46,25 +49,31 @@ internal fun planAdjacentViewerPrefetch(
 }
 
 /**
- * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. Static images
- * within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so a page first downloaded while it was
- * far away is decoded into memory once it becomes a neighbour, and shows without a decode when reached.
+ * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. [verticalPageWidthPx]
+ * gives the width a post's pages lay out at when it reads vertically (null otherwise): its images decode as
+ * full-width pages of that width, and the plan looks further ahead while the current post reads so. Static images within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so
+ * a page first downloaded while it was far away is decoded into memory once it becomes a neighbour, and shows
+ * without a decode when reached.
  */
 fun viewerPrefetchAction(
     pages: List<ViewerPageState>,
     current: ViewerMediaKey?,
     swipeTarget: ViewerMediaKey?,
+    verticalPageWidthPx: (ViewerPageState) -> Int? = { null },
 ): ViewerAction.QueuePrefetch {
     val flattened = pages.flatMap(ViewerPageState::media)
     val currentIndex = current?.let { key -> flattened.indexOfFirst { media -> media.key == key } } ?: -1
-    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current)).distinct()
+    fun pageWidthPx(key: ViewerMediaKey) = pages.firstOrNull { page -> page.post.id == key.postId }?.let(verticalPageWidthPx)
+    val vertical = current?.let(::pageWidthPx) != null
+    val rightCount = if (vertical) VIEWER_VERTICAL_PREFETCH_RIGHT_COUNT else VIEWER_PREFETCH_RIGHT_COUNT
+    val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current, rightCount = rightCount)).distinct()
     return ViewerAction.QueuePrefetch(
         keys.map { key ->
             val index = flattened.indexOfFirst { media -> media.key == key }
             // Media-item distance in the flattened stream; unknown when either end is absent.
             val distance = if (currentIndex < 0 || index < 0) Int.MAX_VALUE else abs(index - currentIndex)
             val image = flattened.getOrNull(index)?.kind == ViewerMediaKind.IMAGE
-            ViewerPrefetchRequest(key, distance, decode = image && distance <= VIEWER_MEMORY_PREFETCH_DISTANCE)
+            ViewerPrefetchRequest(key, distance, decode = image && distance <= VIEWER_MEMORY_PREFETCH_DISTANCE, pageWidthPx = pageWidthPx(key))
         },
     )
 }

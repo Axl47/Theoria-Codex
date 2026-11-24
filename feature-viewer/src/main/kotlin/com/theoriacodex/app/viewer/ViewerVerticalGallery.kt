@@ -54,7 +54,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -68,7 +71,6 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.Post
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -85,6 +87,17 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
         private set
 
     val zoomed: Boolean get() = scale > 1.01f
+
+    /**
+     * Where a zoom asked for without a tap (a TalkBack action) centres: the middle of page [index]'s part on screen,
+     * so that page stays in view and keeps its actions. The screen's middle when it is not laid out.
+     */
+    fun zoomAnchor(index: Int): Offset {
+        val info = list.layoutInfo
+        val page = info.visibleItemsInfo.firstOrNull { it.index == index }
+        val y = page?.let { (maxOf(it.offset, info.viewportStartOffset) + minOf(it.offset + it.size, info.viewportEndOffset)) / 2f }
+        return Offset(viewportWidth / 2f, y ?: (info.viewportSize.height / 2f))
+    }
 
     /** Returns the pages to fit, as starting a slideshow does for horizontal media. */
     fun resetZoom() {
@@ -153,13 +166,13 @@ internal fun ViewerVerticalGallery(
     val shapes = remember(post.id) { mutableStateMapOf<Int, Float>() }
     var latestShape by remember(post.id) { mutableFloatStateOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
-    val scope = rememberCoroutineScope()
     val session = frame.uiState.session
     // The selected page reports readiness and failure to the Viewer, as a horizontal page does (slideshow holds wait on it).
     val selectedEvents = { key: ViewerMediaKey, generation: Long ->
         viewerRendererEvents(session, key, generation, host.onAction, onTimelineInteractionActiveChanged = {}, onDurationKnown = {})
     }
     val quickReturn = rememberQuickReturn { reveal -> if (isCurrentPost && reveal != frame.chromeVisible) controls.toggleChrome() }
+    val (actions, assistive) = verticalGalleryActions(gallery, frame, controls, host)
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize()
@@ -167,7 +180,7 @@ internal fun ViewerVerticalGallery(
             .onSizeChanged { gallery.resize(it.width) }
             .nestedScroll(quickReturn)
             .verticalGalleryZoom(gallery, controls)
-            .verticalGalleryTaps(gallery, controls, scope, host.onAction),
+            .verticalGalleryTaps(gallery, controls, frame.touchExplorationEnabled, actions),
     ) {
         items(pages.size, key = { index -> index }) { index ->
             val placeholder = remember { latestShape }
@@ -185,12 +198,40 @@ internal fun ViewerVerticalGallery(
                     }
                 },
                 onRequestMediaRecovery = host.onRequestMediaRecovery,
+                assistive = assistive,
             )
         }
         if (onOpenNext != null) {
             // Clear of the dock, which shows again as the list is scrolled back up.
             item(key = "next") { VerticalGalleryNextCard(frame.posts.getOrNull(postPage + 1), Modifier.padding(bottom = viewerDockInset()), onOpenNext) }
         }
+    }
+}
+
+/**
+ * The column's gestures, and the selected page's TalkBack actions that reach them, as on a horizontal page. Zoom
+ * without a tap centres on the selected page.
+ */
+@Composable
+private fun verticalGalleryActions(
+    gallery: ViewerVerticalGalleryState,
+    frame: ViewerFrame,
+    controls: ViewerControls,
+    host: ViewerScreenHost,
+): Pair<ViewerMediaGestureActions, SemanticsPropertyReceiver.() -> Unit> {
+    val scope = rememberCoroutineScope()
+    val selected = frame.selection.mediaIndex
+    val actions = ViewerMediaGestureActions(
+        seek = {},
+        zoom = { tap -> scope.launch { gallery.animateZoomToggle(tap ?: gallery.zoomAnchor(selected)) } },
+        toggleControls = { controls.toggleChrome() },
+        showInfo = { host.onAction(ViewerAction.ShowPanel(ViewerPanel.INFO)) },
+    )
+    // Read here so the zoom action's label follows, without recomposing on every step of a pinch.
+    val zoomed by remember(gallery) { derivedStateOf { gallery.zoomed } }
+    return actions to {
+        onClick(label = "Media information") { actions.showInfo(); true }
+        customActions = mediaAccessibilityActions(seekable = false, zoomed, frame.chromeVisible, frame.touchExplorationEnabled, actions)
     }
 }
 
@@ -301,6 +342,8 @@ private fun VerticalGalleryPage(
     onRetry: () -> Unit,
     onPainted: (Float, Float) -> Unit,
     onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
+    /** The gallery's TalkBack actions, given to the selected page only. */
+    assistive: SemanticsPropertyReceiver.() -> Unit,
 ) {
     val media = pageState.media[index]
     val key = ViewerMediaKey(post.id, index)
@@ -325,7 +368,10 @@ private fun VerticalGalleryPage(
                 val placeable = measurable.measure(Constraints.fixedWidth(width))
                 layout(constraints.maxWidth, placeable.height) { placeable.place(-gallery.panX.roundToInt(), 0) }
             }
-            .semantics { contentDescription = "Page ${index + 1}" },
+            .semantics {
+                contentDescription = "Page ${index + 1}"
+                if (active) assistive()
+            },
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(shape), contentAlignment = Alignment.Center) {
             key(attempt) {
@@ -337,6 +383,8 @@ private fun VerticalGalleryPage(
                     onRequestMediaRecovery = onRequestMediaRecovery,
                     onPainted = { size -> onPainted(size.width, size.height) },
                     spinnerModifier = Modifier.onVisiblePart(gallery.list, index),
+                    // Laid out in a borrowed shape until it paints; sizing the decode from that would blur a tall strip.
+                    fillWidth = true,
                 )
             }
             (sharedError ?: failed?.let { ViewerMediaError.Recoverable(key, it) })?.let { error ->
@@ -426,21 +474,24 @@ private fun Modifier.verticalGalleryZoom(gallery: ViewerVerticalGalleryState, co
     }
 }
 
-/** Tap toggles the chrome, double tap zooms in to twice the width or back out, and a long press opens info. */
+/**
+ * Tap toggles the chrome (not while TalkBack explores by touch, which keeps the chrome up), double tap zooms in to
+ * twice the width or back out, and a long press opens info.
+ */
 private fun Modifier.verticalGalleryTaps(
     gallery: ViewerVerticalGalleryState,
     controls: ViewerControls,
-    scope: CoroutineScope,
-    onAction: (ViewerAction) -> Unit,
-) = pointerInput(gallery) {
+    touchExplorationEnabled: Boolean,
+    actions: ViewerMediaGestureActions,
+) = pointerInput(gallery, touchExplorationEnabled) {
     detectTapGestures(
-        onTap = { controls.toggleChrome() },
+        onTap = { if (!touchExplorationEnabled) actions.toggleControls() },
         onDoubleTap = { tap ->
-            scope.launch { gallery.animateZoomToggle(tap) }
+            actions.zoom(tap)
             controls.markPassiveInteraction()
         },
         onLongPress = {
-            onAction(ViewerAction.ShowPanel(ViewerPanel.INFO))
+            actions.showInfo()
             controls.markInteraction()
         },
     )

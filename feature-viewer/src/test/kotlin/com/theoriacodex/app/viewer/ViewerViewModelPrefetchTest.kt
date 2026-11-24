@@ -68,9 +68,9 @@ class ViewerViewModelPrefetchTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
-            mediaPrefetcher = ViewerMediaPrefetcher { _, media, distance ->
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, request ->
                 started += media.key
-                if (media.key.mediaIndex == 3) ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, decoded = distance <= 1) else awaitCancellation()
+                if (media.key.mediaIndex == 3) ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, decoded = request.distance <= 1) else awaitCancellation()
             },
             scopeOverride = this,
         )

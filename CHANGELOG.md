@@ -17,7 +17,7 @@
 - Codices found from the search box show their cover and how many posts they hold.
 - Swiping the collapsed search bar sideways steps back and forward through earlier searches, each at the place you left it.
 - When you open the app it checks followed creators and your most recently saved searches for new posts, at most every three hours. Library and its Saved section show a dot, and each row shows how many are new, until you open them. A saved search keeps its count until its results load, and posts its results leave out stay new.
-- Galleries can be read left to right, right to left, or as one vertical scroll. Choose the mode at the top of a gallery's page overview; each gallery keeps its own choice, and the others follow Invert Scroll Direction. In vertical mode, swipe sideways to change post, pull down at the top to close, and the controls hide as you scroll down and return as you scroll up. The mode switch in the overview does the same as you scroll its pages. Vertical is offered for galleries of still images.
+- Galleries can be read left to right, right to left, or as one vertical scroll. Choose the mode at the top of a gallery's page overview; each gallery keeps its own choice, and the others follow Invert Scroll Direction. In vertical mode, swipe sideways to change post, pull down at the top to close, and the controls hide as you scroll down and return as you scroll up. The mode switch in the overview does the same as you scroll its pages. Vertical is offered for galleries of still images. Tall webtoon pages show sharp from the first page, the next six pages load ahead as you read, and with TalkBack the page in view offers Zoom and Media information.
 - Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
 - A Codex's name is editable in place: tap it at the top of the Codex, type, and press Done.
 - A Codex has a row of chips under its name. Filter by tag lists every tag in the Codex (type to narrow the list) and shows only posts that have all the tags you choose; the most common tags are one-tap shortcuts; the sort is a chip; Triage opens the deck. Search sites, in the tag list, searches the sites with the chosen tags.
@@ -74,6 +74,7 @@
 
 ### Changed
 
+- Opening a post in the Viewer loads its first page before looking up the posts next to it, so the first page appears sooner on a slow connection.
 - Viewer subtitles now render as outlined white text with no dark box behind them (unless Android's system caption style is turned on) and sit closer to the bottom of the picture when controls are hidden, moving clear of the timeline when controls appear.
 - Episode playback in the Viewer now shows the series and episode on two lines at the top left, puts Subtitles, Audio, Servers and More (with Start over) at the top right, centers Previous, Play/Pause and Next over the picture, and places Lock, Rotate, Speed, Picture-in-picture and landscape Fit/Fill cleanly above the timeline. Server, subtitle, audio and speed pickers now open as spacious bottom sheets.
 - Locking an episode hides controls and blocks accidental taps, swipes, pinches and Back; tapping or pressing Back reveals only the lock icon to unlock, and lock stays active across automatic moves to the next episode.

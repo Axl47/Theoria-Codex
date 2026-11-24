@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -98,6 +99,27 @@ class ViewerPrefetchPlannerTest {
         assertEquals(listOf(flattened[4], flattened[5], flattened[2], flattened[1], flattened[0]), action.requests.map { it.key })
         assertEquals(listOf(flattened[2]), action.requests.filter { it.decode }.map { it.key })
         assertEquals(listOf(1, 2, 1, 2, 3), action.requests.map { it.distance })
+    }
+
+    @Test
+    fun `vertical reading looks further ahead, decodes full-width pages, and keeps videos to the next one`() {
+        val pages = pages(mediaCounts = listOf(9, 1, 1), videoPosts = setOf(2))
+        val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
+        // Only the first post reads vertically.
+        val widths = { page: ViewerPageState -> 1080.takeIf { page == pages[0] } }
+
+        val vertical = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null, verticalPageWidthPx = widths)
+        val paged = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null)
+
+        assertEquals((3..8).map(flattened::get) + listOf(flattened[1], flattened[0]), vertical.requests.map { it.key })
+        assertEquals((3..5).map(flattened::get) + listOf(flattened[1], flattened[0]), paged.requests.map { it.key })
+        assertEquals(setOf(1080), vertical.requests.map { it.pageWidthPx }.toSet())
+        assertEquals(setOf(null), paged.requests.map { it.pageWidthPx }.toSet())
+        val atEnd = viewerPrefetchAction(pages, current = flattened[8], swipeTarget = null, verticalPageWidthPx = widths).requests
+        assertEquals(listOf(flattened[9]), atEnd.take(1).map { it.key })
+        // The next post reads paged, so its page warms at the size it shows.
+        assertEquals(null, atEnd.first().pageWidthPx)
+        assertFalse(flattened[10] in atEnd.map { it.key })
     }
 
     private fun pages(

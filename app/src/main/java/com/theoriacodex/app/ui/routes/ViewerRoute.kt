@@ -256,8 +256,8 @@ private fun rememberViewerOwner(
                     latestDependencies.value.postResolver.resolve(session, postId)
                 override fun requiresResolution(post: Post) = latestDependencies.value.postResolver.requiresResolution(post)
             },
-            mediaPrefetcher = ViewerMediaPrefetcher { session, media, distance ->
-                latestDependencies.value.mediaPrefetcher.prefetch(session, media, distance)
+            mediaPrefetcher = ViewerMediaPrefetcher { session, media, request ->
+                latestDependencies.value.mediaPrefetcher.prefetch(session, media, request)
             },
             commentsLoader = latestDependencies.value.commentsLoader,
         )

@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.createViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -232,6 +235,19 @@ class ViewerVerticalGalleryTest {
         compose.waitForIdle()
         assertEquals(emptyList<ViewerAction>(), actions.filterIsInstance<ViewerAction.SelectMedia>())
         assertEquals(3, state.value.currentPage?.selectedMediaIndex)
+    }
+
+    @Test fun `the selected page offers TalkBack the gallery's zoom and information`() {
+        show()
+        fun zoomLabels() = compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].map { it.label }.filter { "zoom" in it.lowercase() }
+        assertEquals(listOf("Zoom in"), zoomLabels())
+        compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .single { it.label == "Zoom in" }.action()
+        compose.waitForIdle()
+        assertEquals(listOf("Reset zoom"), zoomLabels())
+        compose.onNodeWithContentDescription("Page 1").performSemanticsAction(SemanticsActions.OnClick)
+        assertTrue(ViewerAction.ShowPanel(ViewerPanel.INFO) in actions)
     }
 
     @Test fun `a narrower screen pulls a zoomed pan back inside the pages`() {

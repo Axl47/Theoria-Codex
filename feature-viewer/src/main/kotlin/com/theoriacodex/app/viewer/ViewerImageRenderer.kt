@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,8 +65,12 @@ internal fun ViewerImageRenderer(
     onPainted: ((Size) -> Unit)? = null,
     /** Places the loading spinner, which otherwise sits in the middle of [modifier]'s area. */
     spinnerModifier: Modifier = Modifier,
+    /** Decodes for the window's width whatever the slot's size ([buildViewerPageRequest]), for pages laid out before their shape is known. */
+    fillWidth: Boolean = false,
 ) {
     val context = LocalContext.current
+    // The width a full-width page decodes for, which its prefetch uses too (ViewerFrameEffects); other pages size from their slot.
+    val pageWidthPx = if (fillWidth) LocalWindowInfo.current.containerSize.width else null
     val generation = controls.loadGeneration
     val candidates = remember(post, media, generation) { viewerMediaDeliveryPlan(post, media).candidates }
     // Readiness belongs to one media: a lazily resolved gallery swaps its cover for page one in place.
@@ -73,13 +79,13 @@ internal fun ViewerImageRenderer(
     val painted = remember(key) { mutableStateOf<MemoryCache.Key?>(null) }
     val candidate = candidates.getOrNull(state.index)
     val location = candidate?.location
-    val model = remember(context, location, post.id.source, generation) {
+    val model = remember(context, location, post.id.source, generation, pageWidthPx) {
         location?.let {
-            buildViewerImageRequest(context, it, post.id.source).newBuilder()
+            viewerRendererRequest(context, it, post.id.source, pageWidthPx).newBuilder()
                 .placeholderMemoryCacheKey(painted.value).build()
         }
     }
-    ViewerImageUpgrade(candidates, state, post.id.source, imageSession)
+    ViewerImageUpgrade(candidates, state, post.id.source, imageSession, pageWidthPx)
     val onReady = { state.ready(location, imageSession, events) }
     val onRecovery = onRequestMediaRecovery?.let { recovery -> recovery::ask }
     val onError = { error: Throwable -> state.failed(error, post, key, candidate, candidates.size, imageSession, onRecovery, events) }
@@ -147,15 +153,21 @@ private class ViewerImageState {
 }
 
 @Composable
-private fun ViewerImageUpgrade(candidates: List<MediaDeliveryCandidate>, state: ViewerImageState, source: SourceKey, session: ViewerImageSession) {
+private fun ViewerImageUpgrade(
+    candidates: List<MediaDeliveryCandidate>, state: ViewerImageState, source: SourceKey, session: ViewerImageSession, pageWidthPx: Int?,
+) {
     val context = LocalContext.current
-    LaunchedEffect(candidates, state.index, state.visible, source) {
+    LaunchedEffect(candidates, state.index, state.visible, source, pageWidthPx) {
         if (!state.visible) return@LaunchedEffect
         val next = candidates.getOrNull(state.index + 1) ?: return@LaunchedEffect
         if (next.activation != MediaDeliveryActivation.QUALITY_UPGRADE) return@LaunchedEffect
         val prepared = next.location in session.loadedLocations || runCatchingPreservingCancellation {
-            context.imageLoader.execute(buildViewerImageRequest(context, next.location, source)) is SuccessResult
+            context.imageLoader.execute(viewerRendererRequest(context, next.location, source, pageWidthPx)) is SuccessResult
         }.getOrDefault(false)
         if (prepared) { session.loadedLocations += next.location; state.index += 1 }
     }
 }
+
+/** A full-width page's request when [pageWidthPx] is given, or one Coil sizes from the slot it is drawn in. */
+private fun viewerRendererRequest(context: Context, location: String, source: SourceKey, pageWidthPx: Int?) =
+    pageWidthPx?.let { buildViewerPageRequest(context, location, source, it) } ?: buildViewerImageRequest(context, location, source)

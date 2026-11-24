@@ -133,8 +133,11 @@ sealed interface ViewerAction {
     data object Dismiss : ViewerAction
 }
 
-/** One media item to warm, [distance] media items from the one on screen; [decode] keeps an image decoded in memory. */
-data class ViewerPrefetchRequest(val key: ViewerMediaKey, val distance: Int, val decode: Boolean)
+/**
+ * One media item to warm, [distance] media items from the one on screen; [decode] keeps an image decoded in memory.
+ * [pageWidthPx] is set while reading vertically: an image then decodes as a full-width page of that width.
+ */
+data class ViewerPrefetchRequest(val key: ViewerMediaKey, val distance: Int, val decode: Boolean, val pageWidthPx: Int? = null)
 
 sealed interface ViewerEffect {
     val session: ViewerSessionIdentity

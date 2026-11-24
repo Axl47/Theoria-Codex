@@ -26,11 +26,12 @@ fun viewerMediaPrefetcher(
     context: Context,
     ugoiraClient: PixivUgoiraClient? = null,
     videoQuality: () -> VideoQuality,
-) = ViewerMediaPrefetcher { _, media, distance ->
+) = ViewerMediaPrefetcher { _, media, request ->
     prefetchViewerMedia(
         context, media, videoQuality(),
-        keepDecodedInMemory = distance <= VIEWER_MEMORY_PREFETCH_DISTANCE,
+        keepDecodedInMemory = request.distance <= VIEWER_MEMORY_PREFETCH_DISTANCE,
         ugoiraClient = ugoiraClient,
+        pageWidthPx = request.pageWidthPx,
     )
 }
 
@@ -38,6 +39,7 @@ fun viewerMediaPrefetcher(
  * Android transport/cache seam injected into the route owner; no platform handle enters state.
  * [keepDecodedInMemory] keeps a prefetched image in Coil's memory cache; otherwise only its disk copy is warmed.
  * A Pixiv ugoira warms its archive through [ugoiraClient]; on a metered network only its still image is warmed.
+ * With [pageWidthPx] (vertical reading), a still decodes as a full-width page of that width, as the page does.
  */
 suspend fun prefetchViewerMedia(
     context: Context,
@@ -45,6 +47,7 @@ suspend fun prefetchViewerMedia(
     videoQuality: VideoQuality,
     keepDecodedInMemory: Boolean = true,
     ugoiraClient: PixivUgoiraClient? = null,
+    pageWidthPx: Int? = null,
 ): ViewerPrefetchResult {
     if (media.kind == ViewerMediaKind.UGOIRA && ugoiraClient != null && !context.isMediaNetworkMetered()) {
         val ready = ugoiraClient.warmArchive(media.key.postId.sourcePostId)
@@ -73,16 +76,7 @@ suspend fun prefetchViewerMedia(
             )
         }
     }
-    // The Viewer page's own request, so a decode kept in memory is the hardware bitmap the page then shows.
-    val request = buildViewerImageRequest(context, location, media.key.postId.source).let { request ->
-        when {
-            keepDecodedInMemory -> request
-            // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,
-            // so a static image decodes subsampled instead of as a full-size bitmap that is thrown away.
-            media.kind == ViewerMediaKind.IMAGE -> request.diskWarmOnly()
-            else -> request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
-        }
-    }
+    val request = viewerPrefetchImageRequest(context, media, location, keepDecodedInMemory, pageWidthPx)
     return if (context.imageLoader.execute(request) is SuccessResult) {
         ViewerPrefetchResult(
             ViewerPrefetchOutcome.WARMED,
@@ -90,6 +84,28 @@ suspend fun prefetchViewerMedia(
         )
     } else {
         ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
+    }
+}
+
+/**
+ * The Viewer page's own request, so a decode kept in memory is the hardware bitmap the page then shows; with
+ * [pageWidthPx], a still's is the vertical reader's full-width request.
+ */
+private fun viewerPrefetchImageRequest(
+    context: Context, media: ViewerMediaState, location: String, keepDecodedInMemory: Boolean, pageWidthPx: Int?,
+): ImageRequest {
+    val source = media.key.postId.source
+    val request = if (media.kind == ViewerMediaKind.IMAGE && pageWidthPx != null) {
+        buildViewerPageRequest(context, location, source, pageWidthPx)
+    } else {
+        buildViewerImageRequest(context, location, source)
+    }
+    return when {
+        keepDecodedInMemory -> request
+        // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,
+        // so a static image decodes subsampled instead of as a full-size bitmap that is thrown away.
+        media.kind == ViewerMediaKind.IMAGE -> request.diskWarmOnly()
+        else -> request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
     }
 }
 
