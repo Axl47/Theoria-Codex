@@ -29,6 +29,15 @@ class UndoSlotTest {
     private fun TestScope.owner(): CoroutineScope = CoroutineScope(backgroundScope.coroutineContext + Job())
 
     @Test
+    fun `an offer shows only at the surface it is anchored to`() {
+        val offer = recorded("removed", UndoAnchor("codex-detail", "a"))
+        assertSame(offer, offer.shownAt(UndoAnchor("codex-detail", "a")))
+        assertNull(offer.shownAt(UndoAnchor("codex-detail", "b")))
+        assertNull(offer.shownAt(UndoAnchor("history", "a")))
+        assertNull(null.shownAt(UndoAnchor("codex-detail", "a")))
+    }
+
+    @Test
     fun `a newer offer expires the one it replaces`() = runTest {
         val first = recorded("first")
         val second = recorded("second")

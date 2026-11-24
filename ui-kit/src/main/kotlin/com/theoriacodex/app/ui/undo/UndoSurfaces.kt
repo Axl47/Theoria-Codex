@@ -58,7 +58,7 @@ fun ProvideUndoSlot(slot: UndoSlot, content: @Composable () -> Unit) {
 @Composable
 fun rememberUndoOffer(anchor: UndoAnchor): UndoOffer? {
     val offer by LocalUndoSlot.current.offer.collectAsStateWithLifecycle()
-    return offer?.takeIf { it.anchor == anchor }
+    return offer.shownAt(anchor)
 }
 
 /** Expires any offer anchored in [anchorScope] when its surface is left (see [SurfaceLeaveEffect]). */
