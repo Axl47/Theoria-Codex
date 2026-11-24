@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.BackupPreview
+import com.theoriacodex.domain.series.languageName
 
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
@@ -180,6 +181,8 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
                 import.newRepos.reposNotice()?.let { Text(it) }
+                // Ones to turn on first, so a count of "other" missing extensions reads against them.
+                import.turnOnNotice()?.let { Text(it) }
                 import.missingNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
             }
@@ -199,11 +202,20 @@ internal fun List<String>.reposNotice(): String? = when (size) {
 /** "Needs these extensions: Comick, Gogoanime and 1 other.", naming what the backup names; null when nothing is missing. */
 internal fun BackupPreview.Series.missingNotice(): String? {
     val named = missingSources
-    if (named.isEmpty()) return "A series stays unavailable until its extension is on here.".takeIf { unnamedMissingSources > 0 }
+    if (named.isEmpty()) {
+        if (unnamedMissingSources == 0) return null
+        // Turning on the extensions named beside it would not cover these, so they are counted apart.
+        return if (turnOn.isEmpty()) "A series stays unavailable until its extension is on here." else "Needs ${countLabel(unnamedMissingSources, "other extension")}."
+    }
     val others = if (unnamedMissingSources > 0) " and ${countLabel(unnamedMissingSources, "other")}" else ""
     val subject = if (named.size + unnamedMissingSources == 1) "this extension" else "these extensions"
     return "Needs $subject: ${named.joinToString()}$others."
 }
+
+/** "Turn on in Extensions: Comix, Comix (Spanish).": installed extensions, and the language where only that is off; null when none. */
+internal fun BackupPreview.Series.turnOnNotice(): String? = turnOn.takeIf { it.isNotEmpty() }?.joinToString(
+    prefix = "Turn on in Extensions: ", postfix = ".",
+) { off -> off.language?.let { "${off.extension} (${languageName(it)})" } ?: off.extension }
 
 @Composable
 private fun BackupCheckbox(

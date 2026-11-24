@@ -49,6 +49,7 @@ import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.languageName
 
 /**
  * The Browse view: the browsed source's listing under one header, which picks the source (every source that is on,

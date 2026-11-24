@@ -11,6 +11,8 @@ import com.theoriacodex.domain.series.ExtensionSourceSettings
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesSource
+import com.theoriacodex.domain.series.SourceAvailability
+import com.theoriacodex.domain.series.SourceOff
 import com.theoriacodex.domain.series.defaultLanguages
 import com.theoriacodex.domain.series.trusts
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -124,6 +126,30 @@ class ExtensionRegistry(
     suspend fun sources(): List<SeriesSource> = offer?.takeIf { it.complete }?.sources ?: locked {
         loadEverything()
         offer?.sources.orEmpty()
+    }
+
+    /**
+     * Which sources are on, and for the others that an installed extension that can be turned on is known to offer,
+     * why not: its extension is off, judged by what it offered when last on ([ExtensionChoices.owners]), or it is on and
+     * the source's language is off. An extension that was never on is not known to offer anything. Loads every
+     * extension that is on, as [sources] does.
+     */
+    suspend fun availability(): SourceAvailability = locked {
+        loadEverything()
+        val choices = choices.choices()
+        val on = offer?.sources.orEmpty().mapTo(HashSet()) { it.key }
+        val off = HashMap<SourceKey, SourceOff>()
+        for (extension in offer?.packages.orEmpty()) {
+            if (extension.unsupported != null || extension.signer == null) continue
+            if (choices.trusts(extension.identity, extension.signer)) {
+                loaded[extension]?.sources.orEmpty().filter { it.key !in on }
+                    .forEach { off.putIfAbsent(it.key, SourceOff(extension.label, it.language)) }
+            } else {
+                choices.owners.filterValues { it == extension.identity }.keys.mapNotNull(SourceKey::parse).filter { it !in on }
+                    .forEach { off.putIfAbsent(it, SourceOff(extension.label)) }
+            }
+        }
+        SourceAvailability(on, off)
     }
 
     /**
@@ -273,8 +299,7 @@ class ExtensionRegistry(
             val trusted = choices.trusts(extension.identity, extension.signer)
             val listing = InstalledExtension(
                 id = extension.id,
-                // A file is told apart from the installed package of the same extension.
-                name = if (extension.origin == ExtensionOrigin.FILE) "${extension.name} (file)" else extension.name,
+                name = extension.label,
                 versionName = extension.versionName,
                 signer = extension.signer,
                 on = trusted,
@@ -349,6 +374,9 @@ class ExtensionRegistry(
         Diagnostics.report(LOG_AREA, "Skipped $what", failure)
         return Result.failure(failure)
     }
+
+    /** What the lists call this extension; a file is told apart from the installed package of the same extension. */
+    private val ExtensionPackage.label: String get() = if (origin == ExtensionOrigin.FILE) "$name (file)" else name
 
     private companion object {
         const val LIMIT_MS = 15_000L

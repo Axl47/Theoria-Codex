@@ -6,6 +6,8 @@ import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.SeriesStatus
+import com.theoriacodex.domain.series.SourceAvailability
+import com.theoriacodex.domain.series.SourceOff
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.zip.GZIPOutputStream
@@ -183,7 +185,7 @@ class TachiyomiBackupTest {
         // MangaDex is on here; the anime source numbered 3 is missing but the backup gives it no name.
         val service = ProfileBackupService(InMemorySettingsRepository(), RecordingStore(), InMemorySavedSearchRepository(),
             FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
-            extensionRepos = repos, extensionSources = { setOf(SourceKey.parseOrThrow("custom_mihon_1")) })
+            extensionRepos = repos, extensionSources = { SourceAvailability(on = setOf(SourceKey.parseOrThrow("custom_mihon_1"))) })
 
         val preview = service.preview(bytes) as BackupPreview.Series
         assertEquals("The manga repo is added already", listOf("Anime", "https://more.example/repo"), preview.newRepos)
@@ -200,6 +202,31 @@ class TachiyomiBackupTest {
         assertEquals(given, repos.given)
         assertEquals(1, result.reposAdded)
         assertEquals(mapOf("https://anime.example/repo" to "Names no signing key"), result.repoProblems)
+    }
+
+    @Test
+    fun `the preview tells a source no extension offers from an extension, or a language, that is off`() = runTest {
+        val bytes = backup {
+            message(1) { long(1, 1); string(2, "/on"); string(3, "On") }
+            message(1) { long(1, 2); string(2, "/ext"); string(3, "Ext") }
+            message(1) { long(1, 3); string(2, "/lang"); string(3, "Lang") }
+            message(1) { long(1, 4); string(2, "/gone"); string(3, "Gone") }
+            message(101) { string(1, "Mangadex"); long(2, 1) }
+            message(101) { string(1, "Comix"); long(2, 2) }
+            message(101) { string(1, "Comix"); long(2, 3) }
+            message(101) { string(1, "Vanished"); long(2, 4) }
+        }
+        fun key(id: Int) = SourceKey.parseOrThrow("custom_mihon_$id")
+        val directory = temporary.newFolder()
+        val service = ProfileBackupService(InMemorySettingsRepository(), RecordingStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
+            extensionSources = { SourceAvailability(on = setOf(key(1)), off = mapOf(key(2) to SourceOff("Comix"), key(3) to SourceOff("Comix", "es"))) })
+
+        val preview = service.preview(bytes) as BackupPreview.Series
+
+        // Only the source no installed extension offers is missing; the others name what to turn on.
+        assertEquals(listOf("Vanished"), preview.missingSources)
+        assertEquals(listOf(SourceOff("Comix"), SourceOff("Comix", "es")), preview.turnOn)
     }
 
     @Test

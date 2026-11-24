@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.series.ExtensionRepo
+import com.theoriacodex.domain.series.SourceOff
 import com.theoriacodex.domain.source.SiteProfile
 
 /** A logical transaction snapshot, independent of Room's tables and database version. */
@@ -69,7 +70,9 @@ sealed interface BackupPreview {
         val preview: SeriesImportPreview,
         /** The names (else addresses) of the extension repos the backup lists that are not added here yet; importing adds them. */
         val newRepos: List<String> = emptyList(),
-        /** The backup's names for the sources its series are on that are not on here, the one with the most series first. */
+        /** Installed extensions (and the language, where only that is off) that offer sources the backup's series are on, but are off here. */
+        val turnOn: List<SourceOff> = emptyList(),
+        /** The backup's names for the sources its series are on that no installed extension offers, the one with the most series first. */
         val missingSources: List<String> = emptyList(),
         /** How many more sources are missing that the backup gives no name. */
         val unnamedMissingSources: Int = 0,

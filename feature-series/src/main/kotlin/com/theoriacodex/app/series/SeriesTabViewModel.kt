@@ -19,6 +19,7 @@ import com.theoriacodex.domain.series.UnsupportedEntriesException
 import com.theoriacodex.domain.series.changedFrom
 import com.theoriacodex.domain.series.seriesKind
 import com.theoriacodex.domain.series.withChoices
+import com.theoriacodex.domain.series.languageName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive

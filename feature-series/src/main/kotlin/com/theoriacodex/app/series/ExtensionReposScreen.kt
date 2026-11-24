@@ -43,6 +43,7 @@ import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.focusOnOpen
 import com.theoriacodex.domain.series.RepoExtension
+import com.theoriacodex.domain.series.languageName
 
 internal const val REPOS_TITLE = "Repos"
 internal const val BROWSE_TITLE = "Get extensions"

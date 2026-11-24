@@ -6,6 +6,8 @@ import com.theoriacodex.data.repository.ProfileRestoreResult
 import com.theoriacodex.data.repository.SeriesImportPreview
 import com.theoriacodex.data.repository.SeriesImportResult
 import com.theoriacodex.data.repository.BackupPreview
+import com.theoriacodex.domain.series.SourceOff
+import com.theoriacodex.domain.series.languageName
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
@@ -123,6 +125,18 @@ class BackupViewModelTest {
             BackupPreview.Series(counts, missingSources = listOf("Comick", "Gogoanime"), unnamedMissingSources = 1).missingNotice(),
         )
         assertEquals("A series stays unavailable until its extension is on here.", BackupPreview.Series(counts, unnamedMissingSources = 2).missingNotice())
+        // Beside extensions to turn on, the unnamed ones must not read as covered by that.
+        assertEquals("Needs 2 other extensions.", BackupPreview.Series(counts, turnOn = listOf(SourceOff("Comix")), unnamedMissingSources = 2).missingNotice())
+    }
+
+    @Test
+    fun `the import preview names the extensions to turn on, with the language where only that is off`() {
+        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
+        assertNull(BackupPreview.Series(counts).turnOnNotice())
+        assertEquals(
+            "Turn on in Extensions: Comix, Comix (${languageName("es")}).",
+            BackupPreview.Series(counts, turnOn = listOf(SourceOff("Comix"), SourceOff("Comix", "es"))).turnOnNotice(),
+        )
     }
 
     @Test
