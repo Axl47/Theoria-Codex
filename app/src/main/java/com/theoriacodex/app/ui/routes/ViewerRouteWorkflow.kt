@@ -57,7 +57,7 @@ internal class ViewerRouteWorkflow(
     private val series: SeriesReader? = null,
 ) : ViewerPostResolver {
     override fun requiresResolution(post: Post): Boolean =
-        offlineMedia.store.snapshot.value?.availablePostIds.orEmpty().contains(post.id) && !offlineMedia.store.hasOfflineLocations(post)
+        offlineMedia.store.snapshot.value?.availablePostIds?.contains(post.id) != false && !offlineMedia.store.hasOfflineLocations(post)
 
     override suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post? {
         val source = ViewerStreamSource.entries.firstOrNull { it.name == session.streamKey } ?: ViewerStreamSource.SEARCH
