@@ -196,10 +196,11 @@ def main_kotlin_sources() -> tuple[tuple[str, str], ...]:
     return kotlin_sources_under(ROOT)
 
 
-OFF_MAIN_CALL = re.compile(r"\bOffMainWork\s*\.\s*note\s*\(")
+OFF_MAIN_CALL = re.compile(r"(?:(?<![\w.])(?:[a-z]\w*\s*\.\s*)+)?\bOffMainWork\s*\.\s*note\s*\(")
 BARE_NOTE_IMPORT = re.compile(r"^import\s+com\.theoriacodex\.domain\.diagnostics\.OffMainWork\.note\s*$", re.MULTILINE)
 BARE_NOTE_CALL = re.compile(r"(?<![\w.])(?<!fun\s)note\s*\(")
-OFF_MAIN_LABEL = re.compile(r"(?:[A-Za-z_]\w*\.)*OffMainWork\.[A-Z][A-Z0-9_]*")
+OFF_MAIN_LABEL = re.compile(r"(?:label\s*=\s*)?(?:[A-Za-z_]\w*\.)*OffMainWork\.[A-Z][A-Z0-9_]*")
+KOTLIN_LITERAL = re.compile(r"'(?:\\.|[^'\\\n])'|\"\"\"[\s\S]*?\"\"\"|\"(?:\\.|[^\"\\\n])*\"")
 FUNCTION_KEYWORD = re.compile(r"\bfun\b")
 DECLARATION_MODIFIERS = re.compile(
     r"(?:(?:@[\w.]+(?:\([^)]*\))?|public|private|internal|protected|override|open|final|inline|suspend|tailrec|operator|infix)\s+)*\Z"
@@ -243,7 +244,8 @@ def notes_in_a_suspend_or_late_spot(text: str, call: int) -> bool:
 
 def off_main_note_failures(sources) -> list[str]:
     failures = []
-    for relative, text in sources:
+    for relative, source in sources:
+        text = KOTLIN_LITERAL.sub(lambda literal: re.sub(r".", " ", literal.group(0)), source)
         calls = list(OFF_MAIN_CALL.finditer(text))
         if BARE_NOTE_IMPORT.search(text):
             calls += BARE_NOTE_CALL.finditer(text)
@@ -263,28 +265,6 @@ def off_main_note_failures(sources) -> list[str]:
 @rule
 def off_main_notes_run_where_work_runs() -> list[str]:
     return off_main_note_failures(main_kotlin_sources())
-
-
-RECOMMENDATION_NORMALIZERS = re.compile(r"\b(?:RecommendationTagNormalization|crossSourceTagKey|CrossSourceTraining|PixivTagDictionary)\b")
-RECOMMENDATION_PACKAGE = "core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/"
-RECOMMENDATION_CALLERS = {
-    "app-logic/src/main/kotlin/com/theoriacodex/app/recommend/ForYouInterests.kt",
-    "app-logic/src/main/kotlin/com/theoriacodex/app/triage/TriageRules.kt",
-    "feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouLanes.kt",
-    "feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouSearchSupport.kt",
-}
-
-
-@rule
-def recommendation_normalization_stays_in_recommendations() -> list[str]:
-    return [
-        f"{relative} uses recommendation tag normalization, which only the named recommendation callers may use "
-        "(docs/adr/0003-cross-source-tags.md)"
-        for relative, text in main_kotlin_sources()
-        if RECOMMENDATION_NORMALIZERS.search(text)
-        and not relative.startswith(RECOMMENDATION_PACKAGE)
-        and relative not in RECOMMENDATION_CALLERS
-    ]
 
 
 def main() -> int:

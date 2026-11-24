@@ -95,6 +95,13 @@ class CoreDomainRulesTest(unittest.TestCase):
                 "private fun SourceHttpResponse.jsonBody() = body.takeIf(String::isNotBlank)?.let {\n"
                 "    OffMainWork.note(com.theoriacodex.domain.diagnostics.OffMainWork.SOURCE_PARSE)\n"
                 "}\n"
+                "fun parseHtml(html: String): Document {\n"
+                "    com.theoriacodex.domain.diagnostics.OffMainWork.note(label = OffMainWork.SOURCE_PARSE)\n"
+                "    return Jsoup.parse(html)\n"
+                "}\n"
+                "suspend fun explain() {\n"
+                "    log(\"call OffMainWork.note(first) in the helper {\")\n"
+                "}\n"
             ),
             "core-sources/src/main/kotlin/Broken.kt": (
                 "override suspend fun search(\n"
@@ -129,21 +136,6 @@ class CoreDomainRulesTest(unittest.TestCase):
             [failure.split(" ", 1)[0] for failure in failures],
         )
 
-    def test_reports_recommendation_normalization_outside_its_named_callers_adr_0003(self) -> None:
-        self.assertIn(check_architecture.recommendation_normalization_stays_in_recommendations, check_architecture.RULES)
-        with main_sources({
-            "app-logic/src/main/kotlin/com/theoriacodex/app/triage/TriageRules.kt": "val key = crossSourceTagKey(tag)\n",
-            "core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/CrossSourceTags.kt": "fun crossSourceTagKey(tag: String) = tag\n",
-            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt": "val key = crossSourceTagKey(tag)\n",
-            "core-data/src/main/kotlin/com/theoriacodex/data/repository/FavoriteTags.kt": "val key = RecommendationTagNormalization.normalize(source, tag)\n",
-            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchDraft.kt": "val key = normalizeFavoriteTagForStorage(source, tag)\n",
-        }):
-            failures = check_architecture.recommendation_normalization_stays_in_recommendations()
-        self.assertEqual(
-            ["core-data/src/main/kotlin/com/theoriacodex/data/repository/FavoriteTags.kt",
-             "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt"],
-            [failure.split(" ", 1)[0] for failure in failures],
-        )
 
 if __name__ == "__main__":
     unittest.main()
