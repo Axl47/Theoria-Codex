@@ -5,6 +5,7 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.util.zip.GZIPInputStream
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -36,7 +37,7 @@ data class IndexedExtension(
  * - a legacy `repo.json` that names a newer index (`index_v2`), which is then read instead: Keiyoushi's `index.min.json`
  *   is now a stub and its catalog is only in that index;
  * - a newer index itself: protobuf, usually gzipped, holding the repo's name, key and extensions, or the address of
- *   the extension list.
+ *   the extension list. A store holds one kind of extension.
  *
  * [get] fetches an address's body and throws when it cannot.
  */
@@ -69,12 +70,26 @@ internal object RepoReader {
                 RepoIndex(repo.meta.name, repo.meta.signingKeyFingerprint.lowercase(), list.map { it.indexed(folder) })
             }
             else -> {
-                val store = protobuf.decodeFromByteArray(ProtoStore.serializer(), body)
-                val list = store.extensionList ?: store.extensionListUrl?.let { protobuf.decodeFromByteArray(ProtoList.serializer(), gunzipped(get(it))) }
-                    ?: throw SerializationException("The repo lists no extensions")
-                RepoIndex(store.name, store.signingKey.lowercase(), list.extensions.map(ProtoExtension::indexed))
+                // Anime stores number their fields differently from manga ones (field 8 is the torrent flag, not the
+                // sources), and a store says neither, so the anime layout is tried first: a manga store never fits it.
+                val store = try {
+                    protoStore(body, AnimeEntry.serializer(), get)
+                } catch (_: SerializationException) {
+                    protoStore(body, MangaEntry.serializer(), get)
+                } catch (_: IllegalArgumentException) {
+                    protoStore(body, MangaEntry.serializer(), get)
+                }
+                RepoIndex(store.first, store.second.lowercase(), store.third.map(ProtoEntry::indexed))
             }
         }
+    }
+
+    /** The store in [body] as its name, signing key and extensions, read with [entry]'s layout. */
+    private suspend fun <E : ProtoEntry> protoStore(body: ByteArray, entry: KSerializer<E>, get: suspend (String) -> ByteArray): Triple<String, String, List<E>> {
+        val store = protobuf.decodeFromByteArray(ProtoStore.serializer(entry), body)
+        val list = store.extensionList ?: store.extensionListUrl?.let { protobuf.decodeFromByteArray(ProtoList.serializer(entry), gunzipped(get(it))) }
+            ?: throw SerializationException("The repo lists no extensions")
+        return Triple(store.name, store.signingKey, list.extensions)
     }
 
     private fun gunzipped(body: ByteArray): ByteArray =
@@ -89,7 +104,6 @@ internal object RepoReader {
 }
 
 private const val ANIYOMI_LABEL = "Aniyomi: "
-private const val ANIME_PACKAGE = ".animeextension."
 
 @Serializable
 private class LegacyRepo(@SerialName("index_v2") val indexV2: String? = null, val meta: Meta) {
@@ -109,7 +123,7 @@ private class LegacyExtension(
     val sources: List<LegacySource>? = null,
 ) {
     fun indexed(folder: String): IndexedExtension {
-        val anime = name.startsWith(ANIYOMI_LABEL) || ANIME_PACKAGE in pkg
+        val anime = name.startsWith(ANIYOMI_LABEL)
         return IndexedExtension(
             name = name.removePrefix(ANIYOMI_LABEL).removePrefix(MihonKind.labelPrefix),
             packageName = pkg,
@@ -130,39 +144,53 @@ private class LegacySource(val lang: String = "")
 /** Mihon's `NetworkExtensionStore`, trimmed to what is read here; unknown fields are skipped. */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-private class ProtoStore(
+private class ProtoStore<E>(
     @ProtoNumber(1) val name: String = "",
     @ProtoNumber(3) val signingKey: String = "",
-    @ProtoNumber(101) val extensionList: ProtoList? = null,
+    @ProtoNumber(101) val extensionList: ProtoList<E>? = null,
     @ProtoNumber(102) val extensionListUrl: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-private class ProtoList(@ProtoNumber(1) val extensions: List<ProtoExtension> = emptyList())
+private class ProtoList<E>(@ProtoNumber(1) val extensions: List<E> = emptyList())
+
+/** One extension in a newer index; fields 1 to 6 are the same for both kinds. */
+private interface ProtoEntry {
+    fun indexed(): IndexedExtension
+}
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-private class ProtoExtension(
+private class MangaEntry(
     @ProtoNumber(1) val name: String = "",
     @ProtoNumber(2) val packageName: String = "",
     @ProtoNumber(3) val resources: ProtoResources = ProtoResources(),
     @ProtoNumber(4) val extensionLib: String = "",
     @ProtoNumber(5) val versionCode: Long = 0,
     @ProtoNumber(6) val versionName: String = "",
-    /** Manga sources; anime repos list theirs under [animeSources]. */
     @ProtoNumber(8) val sources: List<ProtoSource> = emptyList(),
-    @ProtoNumber(9) val animeSources: List<ProtoSource> = emptyList(),
-) {
-    fun indexed(): IndexedExtension = IndexedExtension(
-        name = name,
-        packageName = packageName,
-        apkUrl = resources.apkUrl,
-        libVersion = extensionLib,
-        versionCode = versionCode,
-        versionName = versionName,
-        languages = (sources + animeSources).map(ProtoSource::language).distinct(),
-        kind = if (animeSources.isNotEmpty() || ANIME_PACKAGE in packageName) SeriesKind.ANIME else SeriesKind.MANGA,
+) : ProtoEntry {
+    override fun indexed() = IndexedExtension(
+        name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.MANGA,
+    )
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+private class AnimeEntry(
+    @ProtoNumber(1) val name: String = "",
+    @ProtoNumber(2) val packageName: String = "",
+    @ProtoNumber(3) val resources: ProtoResources = ProtoResources(),
+    @ProtoNumber(4) val extensionLib: String = "",
+    @ProtoNumber(5) val versionCode: Long = 0,
+    @ProtoNumber(6) val versionName: String = "",
+    @ProtoNumber(8) val torrent: Int = 0,
+    @ProtoNumber(9) val sources: List<ProtoSource> = emptyList(),
+) : ProtoEntry {
+    override fun indexed() = IndexedExtension(
+        name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.ANIME,
+        torrent = torrent == 1,
     )
 }
 
