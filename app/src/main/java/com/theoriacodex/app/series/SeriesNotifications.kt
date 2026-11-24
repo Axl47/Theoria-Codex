@@ -15,6 +15,7 @@ import com.theoriacodex.data.repository.ChapterName
 import com.theoriacodex.data.repository.DrainProgress
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,15 +105,15 @@ internal fun notifyDownloadsFailed(context: Context, failed: List<ChapterName>) 
 }
 
 /**
- * Shows the [automatic] lane's chapters that wait for their extension to be on, or takes the notice away once none
- * wait: they stay queued and download once it is back.
+ * Shows how many of the [automatic] lane's chapters wait for their extension to be on, titled by their [series] when
+ * they share one, or takes the notice away once none wait: they stay queued and download once it is back.
  */
-internal fun showDownloadsWaiting(context: Context, automatic: Boolean, waiting: List<ChapterName>) {
+internal fun showDownloadsWaiting(context: Context, automatic: Boolean, waiting: Int, series: Series?) {
     val tag = if (automatic) "automatic" else "user"
-    if (waiting.isEmpty()) {
+    if (waiting == 0) {
         context.getSystemService(NotificationManager::class.java).cancel(tag, DOWNLOADS_WAITING_NOTIFICATION_ID)
     } else {
-        postChaptersNotice(context, tag, DOWNLOADS_WAITING_NOTIFICATION_ID, waitingNotice(waiting))
+        postChaptersNotice(context, tag, DOWNLOADS_WAITING_NOTIFICATION_ID, waitingNotice(waiting, series))
     }
 }
 
@@ -127,11 +128,11 @@ internal fun failedNotice(failed: List<ChapterName>): ChaptersNotice {
     return ChaptersNotice(series.series, one?.let { "$it could not be downloaded" } ?: counted, series.seriesId)
 }
 
-/** "3 chapters waiting · Extension unavailable" under their series' title, or across series "5 chapters waiting". */
-internal fun waitingNotice(waiting: List<ChapterName>): ChaptersNotice {
-    val counted = if (waiting.size == 1) "1 chapter waiting" else "${waiting.size} chapters waiting"
-    val series = waiting.sharedSeries() ?: return ChaptersNotice(counted, "Extensions unavailable", null)
-    return ChaptersNotice(series.series, "$counted · Extension unavailable", series.seriesId)
+/** "3 chapters waiting · Extension unavailable" under their [series]' title, or across series "5 chapters waiting". */
+internal fun waitingNotice(waiting: Int, series: Series?): ChaptersNotice {
+    val counted = if (waiting == 1) "1 chapter waiting" else "$waiting chapters waiting"
+    if (series == null) return ChaptersNotice(counted, "Extensions unavailable", null)
+    return ChaptersNotice(series.title, "$counted · Extension unavailable", series.id)
 }
 
 /** The first chapter, when every chapter is of its series and that series is stored. */

@@ -39,7 +39,7 @@ class SeriesTabRefreshTest {
     @Test
     fun theFailureSaysHowManySeriesFailedUnlessAllDid() {
         val failed = FollowedCheck(emptyList(), checked = 2, failed = 2)
-        assertEquals("Couldn't check for new chapters", failed.message(EntryWords.CHAPTERS))
-        assertEquals("Couldn't check 1 series", failed.copy(failed = 1).message(EntryWords.CHAPTERS))
+        assertEquals("Couldn't check for updates", failed.message)
+        assertEquals("Couldn't check 1 series", failed.copy(failed = 1).message)
     }
 }

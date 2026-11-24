@@ -108,9 +108,12 @@ class SeriesTabViewModelTest {
         assertEquals(emptyList<SeriesSourceListing>(), after.state.value.search)
         advanceUntilIdle()
 
-        assertEquals(offered[1].key, after.state.value.browse?.key)
         val found = after.state.value.search.orEmpty().map { (it.listing as SeriesListing.Loaded).series.single().title }
         assertEquals(listOf("one punch", "one punch"), found)
+        // The browsed source loads once the search no longer hides it.
+        after.clearSearch()
+        advanceUntilIdle()
+        assertEquals(offered[1].key, after.state.value.browse?.key)
     }
 
     @Test
@@ -386,6 +389,7 @@ class SeriesTabViewModelTest {
         assertEquals("Browse groups every source by kind instead", listOf(manga.key, anime.key), content.sources?.map { it.key })
         assertEquals(listOf(anime.key), content.search?.map { it.key })
         assertEquals(EntryWords.EPISODES, content.words)
+        viewModel.clearSearch()
         viewModel.chooseView(SeriesView.BROWSE)
         advanceUntilIdle()
         assertEquals(manga.key, viewModel.content.value.browse?.key)

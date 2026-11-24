@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
@@ -229,7 +230,8 @@ class SeriesPageViewModel(
         val failure = try {
             repository.series(id)?.let { stored ->
                 val added = repository.refresh(source, stored.series)
-                if (added.isNotEmpty()) changeDownloads { downloadNew(SeriesUpdate(stored.series, added)) }
+                // Once stored they are no longer new, so leaving the page must not stop them from being queued.
+                if (added.isNotEmpty()) withContext(NonCancellable) { queueNew(SeriesUpdate(stored.series, added)) }
             }
             null
         } catch (error: CancellationException) {
@@ -321,6 +323,15 @@ class SeriesPageViewModel(
     fun download(choice: DownloadChoice) = changeDownloads { download(id, choice) }
 
     fun deleteDownloads() = changeDownloads { deleteSeries(id) }
+
+    /** Queues [update]'s chapters where its series asks for that; a disk that refuses is reported. */
+    private suspend fun queueNew(update: SeriesUpdate) {
+        try {
+            downloads?.downloadNew(update)
+        } catch (error: IOException) {
+            Diagnostics.report("series", "New chapters could not be queued for download", error)
+        }
+    }
 
     /** Runs [change]; one the disk refuses, when it is full say, is reported and changes nothing on screen. */
     private fun changeDownloads(change: suspend SeriesDownloads.() -> Unit) {

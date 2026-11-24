@@ -100,7 +100,7 @@ class SeriesUpdateScheduleTest {
         assertEquals(id, seriesIdOfUri(checkNotNull(shadowOf(posted.contentIntent).savedIntent.data)))
         val across = listOf(ChapterName(id, "Title", "Chapter 5"), ChapterName(other, "Other", "Chapter 2"))
         assertEquals(ChaptersNotice("2 chapters could not be downloaded", null, null), failedNotice(across))
-        assertEquals(ChaptersNotice("Title", "2 chapters waiting · Extension unavailable", id), waitingNotice(List(2) { across.first() }))
+        assertEquals(ChaptersNotice("Title", "2 chapters waiting · Extension unavailable", id), waitingNotice(2, Series(id, "Title")))
     }
 
     @Test
