@@ -60,7 +60,7 @@ internal fun ViewerImageRenderer(
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     imageSession: ViewerImageSession,
-    onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
+    onImageRecovery: ((Post, ImageRef) -> Unit)?,
     /** Hears each painted image's own size, for layouts that size the page to its image. */
     onPainted: ((Size) -> Unit)? = null,
     /** Places the loading spinner, which otherwise sits in the middle of [modifier]'s area. */
@@ -87,8 +87,7 @@ internal fun ViewerImageRenderer(
     }
     ViewerImageUpgrade(candidates, state, post.id.source, imageSession, pageWidthPx)
     val onReady = { state.ready(location, imageSession, events) }
-    val onRecovery = onRequestMediaRecovery?.let { recovery -> recovery::ask }
-    val onError = { error: Throwable -> state.failed(error, post, key, candidate, candidates.size, imageSession, onRecovery, events) }
+    val onError = { error: Throwable -> state.failed(error, post, key, candidate, candidates.size, imageSession, onImageRecovery, events) }
     Box(modifier, contentAlignment = Alignment.Center) {
         if (!state.visible) ViewerLoadingPreview(post, media, mediaModifier)
         when {

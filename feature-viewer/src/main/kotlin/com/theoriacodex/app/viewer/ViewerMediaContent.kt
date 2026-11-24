@@ -70,7 +70,7 @@ internal fun ViewerMediaContent(
             post = post, media = media, key = key, animated = kind.animated,
             modifier = Modifier.fillMaxSize(), mediaModifier = modifier,
             controls = controls, events = events, imageSession = imageSession,
-            onRequestMediaRecovery = onRequestMediaRecovery,
+            onImageRecovery = onRequestMediaRecovery?.let { recovery -> recovery::ask },
         )
     }
 }

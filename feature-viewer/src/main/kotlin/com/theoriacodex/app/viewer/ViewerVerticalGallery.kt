@@ -380,7 +380,7 @@ private fun VerticalGalleryPage(
                     modifier = Modifier.fillMaxSize(), mediaModifier = Modifier,
                     controls = VERTICAL_PAGE_CONTROLS.copy(loadGeneration = generation),
                     events = events, imageSession = imageSession,
-                    onRequestMediaRecovery = onRequestMediaRecovery,
+                    onImageRecovery = onRequestMediaRecovery?.let { recovery -> recovery::ask },
                     onPainted = { size -> onPainted(size.width, size.height) },
                     spinnerModifier = Modifier.onVisiblePart(gallery.list, index),
                     // Laid out in a borrowed shape until it paints; sizing the decode from that would blur a tall strip.
