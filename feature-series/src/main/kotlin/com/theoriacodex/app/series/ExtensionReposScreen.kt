@@ -3,18 +3,22 @@ package com.theoriacodex.app.series
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -41,9 +45,12 @@ import com.theoriacodex.app.ui.components.SettingsHeader
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsRowDivider
+import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.components.focusOnOpen
 import com.theoriacodex.domain.series.RepoExtension
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.languageName
+import com.theoriacodex.domain.series.languagePart
 
 internal const val REPOS_TITLE = "Repos"
 internal const val BROWSE_TITLE = "Get extensions"
@@ -115,16 +122,23 @@ private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -
 }
 
 /**
- * Every extension the repos offer that this app can run. Without a search it shows those for the device's languages
- * and those covering every language; a search looks through all of them.
+ * Every extension the repos offer that this app can run, narrowed by kind when both are offered and by language (by
+ * default the device's languages), then by name with a search.
  */
 @Composable
 internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
+    var kind by rememberSaveable { mutableStateOf<SeriesKind?>(null) }
+    var language by rememberSaveable(stateSaver = LanguageFilter.Saver) { mutableStateOf<LanguageFilter>(LanguageFilter.Yours) }
     val deviceLanguages = LocalConfiguration.current.locales.toLanguageTags().split(',')
     val listing = state.listing
-    val rows = remember(listing, query, deviceLanguages) { listing?.extensions?.let { browseRows(it, query, deviceLanguages) } }
     val bothKinds = listing?.extensions.orEmpty().map { it.kind }.distinct().size > 1
+    val shownKind = kind.takeIf { bothKinds }
+    val rows = remember(listing, query, deviceLanguages, shownKind, language) {
+        listing?.extensions?.let { browseRows(it, query, deviceLanguages, language, shownKind) }
+    }
+    val elsewhere = remember(rows) { listing?.extensions?.let { otherLanguageMatches(it, rows, query, deviceLanguages, language, shownKind) } ?: 0 }
+    val languages = remember(listing) { listing?.extensions?.let(::offeredLanguages).orEmpty() }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier.widthIn(max = 800.dp).fillMaxSize(),
@@ -132,40 +146,145 @@ internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, 
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "header") { SettingsHeader(BROWSE_TITLE, onBack, parents = listOf(EXTENSIONS_TITLE)) }
-            item(key = "search") {
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = query,
-                    onValueChange = { query = it.replace("\n", "") },
-                    placeholder = { Text("Search") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                )
-            }
-            when {
-                rows == null -> item(key = "loading") { LoadingState() }
-                rows.isEmpty() -> item(key = "empty") { EmptyState(if (query.isBlank()) "No extensions" else "No matches") }
-                else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
-                    Card(Modifier.fillMaxWidth()) {
-                        RepoExtensionRow(extension, state, bothKinds, onInstall = viewModel::install)
+            item(key = "search") { BrowseSearchField(query) { query = it } }
+            if (listing != null) {
+                item(key = "filters") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (bothKinds) KindFilter(shownKind, onChoose = { kind = it })
+                        LanguageChip(language, languages) { language = it }
                     }
                 }
+            }
+            browseRowItems(rows, query, elsewhere, state, showKind = bothKinds && shownKind == null, onInstall = viewModel::install) {
+                language = LanguageFilter.Every
             }
         }
     }
 }
 
-/** What the browse page lists for [query]: name matches among all, or without one the device's languages and "all". */
-internal fun browseRows(extensions: List<RepoExtension>, query: String, deviceLanguages: List<String>): List<RepoExtension> {
-    val search = query.trim()
-    val device = deviceLanguages.mapTo(HashSet()) { it.substringBefore('-').lowercase() } + "all"
-    return extensions
-        .filter { extension ->
-            if (search.isNotEmpty()) extension.name.contains(search, ignoreCase = true)
-            else extension.languages.any { it.substringBefore('-').lowercase() in device }
+/** The extensions found, or why there are none yet; a search with matches only in [elsewhere] other languages offers them. */
+private fun LazyListScope.browseRowItems(
+    rows: List<RepoExtension>?,
+    query: String,
+    elsewhere: Int,
+    state: ExtensionsState,
+    showKind: Boolean,
+    onInstall: (RepoExtension) -> Unit,
+    onShowAllLanguages: () -> Unit,
+) {
+    when {
+        rows == null -> item(key = "loading") { LoadingState() }
+        rows.isEmpty() -> item(key = "empty") {
+            EmptyState(
+                if (query.isBlank()) "No extensions" else "No matches",
+                actionLabel = "Show $elsewhere in all languages".takeIf { elsewhere > 0 },
+                onAction = onShowAllLanguages.takeIf { elsewhere > 0 },
+            )
         }
+        else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
+            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall) }
+        }
+    }
+}
+
+@Composable
+private fun BrowseSearchField(query: String, onQueryChange: (String) -> Unit) {
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = query,
+        onValueChange = { onQueryChange(it.replace("\n", "")) },
+        placeholder = { Text("Search") },
+        leadingIcon = { Icon(Icons.Default.Search, null) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+    )
+}
+
+/**
+ * Which languages Get extensions lists: the device's, every one, or [Only] one (with those covering every language).
+ * Languages compare by [languagePart], so Spanish includes `es-419`.
+ */
+internal sealed interface LanguageFilter {
+    data object Yours : LanguageFilter
+    data object Every : LanguageFilter
+    data class Only(val code: String) : LanguageFilter
+
+    companion object {
+        val Saver = androidx.compose.runtime.saveable.Saver<LanguageFilter, String>(
+            save = { filter -> when (filter) { Yours -> ""; Every -> "*"; is Only -> filter.code } },
+            restore = { saved -> when (saved) { "" -> Yours; "*" -> Every; else -> Only(saved) } },
+        )
+    }
+}
+
+/**
+ * What the browse page lists: those of [kind] (any when null) in the [language] chosen, then name matches for [query].
+ * Extensions covering every language ("all") show under any language.
+ */
+internal fun browseRows(
+    extensions: List<RepoExtension>,
+    query: String,
+    deviceLanguages: List<String>,
+    language: LanguageFilter = LanguageFilter.Yours,
+    kind: SeriesKind? = null,
+): List<RepoExtension> {
+    val search = query.trim()
+    val device = deviceLanguages.mapTo(HashSet(), ::languagePart) + "all"
+    fun RepoExtension.inLanguage(): Boolean = when (language) {
+        LanguageFilter.Every -> true
+        LanguageFilter.Yours -> languages.any { languagePart(it) in device }
+        is LanguageFilter.Only -> languages.any { languagePart(it) == language.code || it == "all" }
+    }
+    return extensions
+        .filter { (kind == null || it.kind == kind) && it.inLanguage() && (search.isEmpty() || it.name.contains(search, ignoreCase = true)) }
         .sortedBy { it.name.lowercase() }
+}
+
+/**
+ * Every language some extension offers, by [languagePart] and sorted by name; "all" is left out, since those extensions
+ * show under each, as are blank codes.
+ */
+internal fun offeredLanguages(extensions: List<RepoExtension>): List<String> =
+    extensions.flatMap { it.languages }.map(::languagePart).filter { it.isNotBlank() && it != "all" }.distinct()
+        .sortedBy { languageName(it).lowercase() }
+
+/** How many extensions a search that found no [rows] would find in all languages; 0 when that would show nothing new. */
+internal fun otherLanguageMatches(
+    extensions: List<RepoExtension>,
+    rows: List<RepoExtension>?,
+    query: String,
+    deviceLanguages: List<String>,
+    language: LanguageFilter,
+    kind: SeriesKind?,
+): Int {
+    if (rows?.isEmpty() != true || query.isBlank() || language == LanguageFilter.Every) return 0
+    return browseRows(extensions, query, deviceLanguages, LanguageFilter.Every, kind).size
+}
+
+/** The chosen language as a chip; tapping it offers the device's languages, every language, or any one offered. */
+@Composable
+private fun LanguageChip(chosen: LanguageFilter, languages: List<String>, onChoose: (LanguageFilter) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    fun label(filter: LanguageFilter) = when (filter) {
+        LanguageFilter.Yours -> "Your languages"
+        LanguageFilter.Every -> "All languages"
+        is LanguageFilter.Only -> languageName(filter.code)
+    }
+    Box {
+        AssistChip(
+            onClick = { expanded = true },
+            label = { Text(label(chosen)) },
+            leadingIcon = { Icon(Icons.Default.Language, contentDescription = null, Modifier.size(18.dp)) },
+        )
+        SingleChoiceMenu(
+            expanded = expanded,
+            onDismiss = { expanded = false },
+            options = listOf(LanguageFilter.Yours, LanguageFilter.Every) + languages.map(LanguageFilter::Only),
+            selected = chosen,
+            label = ::label,
+            onSelect = onChoose,
+        )
+    }
 }
 
 /** The Updates group atop the Extensions list: each extension a repo has a newer version of, with a way to update all. */

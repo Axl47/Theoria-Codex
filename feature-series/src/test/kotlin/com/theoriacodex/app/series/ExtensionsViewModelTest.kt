@@ -118,10 +118,25 @@ class ExtensionsViewModelTest {
     }
 
     @Test
-    fun `browsing shows the device's languages and every-language extensions until a search looks through all`() {
+    fun `browsing shows the device's languages and every-language extensions, also while searching`() {
         val extensions = listOf(offered("pt", languages = listOf("pt-BR")), offered("all", languages = listOf("all")), offered("ja", languages = listOf("ja")), offered("En2", languages = listOf("en")))
         assertEquals(listOf("all", "En2", "pt"), browseRows(extensions, "", listOf("en-US", "pt-PT")).map { it.name })
-        assertEquals(listOf("ja"), browseRows(extensions, " J", listOf("en-US")).map { it.name })
+        assertEquals(emptyList<String>(), browseRows(extensions, " J", listOf("en-US")).map { it.name })
+        assertEquals(listOf("ja"), browseRows(extensions, " J", listOf("en-US"), LanguageFilter.Every).map { it.name })
+    }
+
+    @Test
+    fun `browsing narrows to a chosen language, every language, or one kind`() {
+        val manga = offered("es manga", languages = listOf("es-419")).copy(kind = SeriesKind.MANGA)
+        val extensions = listOf(offered("es", languages = listOf("es")), offered("all", languages = listOf("all")), offered("ja", languages = listOf("ja")), manga)
+        val english = listOf("en-US")
+        assertEquals(listOf("all", "es", "es manga"), browseRows(extensions, "", english, LanguageFilter.Only("es")).map { it.name })
+        assertEquals(listOf("es manga"), browseRows(extensions, "man", english, LanguageFilter.Only("es")).map { it.name })
+        assertEquals(listOf("all", "es", "ja"), browseRows(extensions, "", english, LanguageFilter.Every, SeriesKind.ANIME).map { it.name })
+        assertEquals(listOf("es", "ja"), offeredLanguages(extensions).sortedBy { it })
+        val noneHere = browseRows(extensions, "ja", english)
+        assertEquals(1, otherLanguageMatches(extensions, noneHere, "ja", english, LanguageFilter.Yours, null))
+        assertEquals(0, otherLanguageMatches(extensions, noneHere, "", english, LanguageFilter.Yours, null))
     }
 
     private fun offered(name: String, status: RepoExtension.Status = RepoExtension.Status.AVAILABLE, languages: List<String> = listOf("en")) =

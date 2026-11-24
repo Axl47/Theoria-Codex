@@ -99,7 +99,8 @@ fun defaultLanguages(offered: List<String>, deviceLanguages: List<String>): Set<
     return matching.ifEmpty { setOfNotNull(offered.firstOrNull { languagePart(it) == "en" } ?: offered.firstOrNull()) }
 }
 
-private fun languagePart(code: String): String = code.substringBefore('-').substringBefore('_').lowercase()
+/** A language code's language alone, without region or script: "es" for `es-419`, "pt" for `pt_BR`. */
+fun languagePart(code: String): String = code.substringBefore('-').substringBefore('_').lowercase()
 
 fun languageName(code: String): String = when (code) {
     "all" -> "All"
