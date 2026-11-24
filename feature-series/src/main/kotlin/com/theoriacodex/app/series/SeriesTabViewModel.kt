@@ -342,6 +342,7 @@ class SeriesTabViewModel(
             )
         }
         (searchListings.keys - sources.mapTo(HashSet()) { it.key }).forEach { searchListings.remove(it)?.cancel() }
+        if (state.value.browse == null) browseListing.cancel()
         if (hadDedicated && state.value.dedicated == null) closeDedicated()
         val currentDedicated = state.value.dedicated
         if (currentDedicated != null && fresh.any { it.key == currentDedicated.source.key }) {

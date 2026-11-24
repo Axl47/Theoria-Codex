@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -114,5 +115,37 @@ class SeriesTabStaleAnswerTest {
 
         assertEquals(listOf("popular"), browsed(viewModel))
         assertEquals(listOf("popular"), source.asked.filter { it == "popular" })
+    }
+
+    @Test
+    fun browseFollowsTheTabWhenTheMainDispatcherRunsInline() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val first = Answering()
+        var on = listOf(first)
+        val changed = MutableStateFlow(0)
+        val viewModel = SeriesTabViewModel(NothingStored, { on }, changed) { NOTHING_CHECKED }
+        advanceUntilIdle()
+        assertEquals(listOf("popular"), browsed(viewModel))
+
+        viewModel.search("one punch")
+        viewModel.clearSearch()
+        viewModel.chooseView(SeriesView.FOLLOWING)
+        viewModel.filterFollowing("blue")
+        viewModel.searchAllSources()
+        viewModel.clearSearch()
+        assertEquals(listOf("popular"), browsed(viewModel))
+        assertEquals(listOf("popular", "one punch", "blue"), first.asked)
+
+        viewModel.chooseView(SeriesView.FOLLOWING)
+        val second = Answering()
+        on = listOf(second)
+        changed.value = 1
+        advanceUntilIdle()
+        assertEquals(null, viewModel.state.value.browse)
+        assertEquals(emptyList<String>(), second.asked)
+
+        viewModel.chooseView(SeriesView.BROWSE)
+        assertEquals(listOf("popular"), browsed(viewModel))
+        assertEquals(listOf("popular"), second.asked)
     }
 }
