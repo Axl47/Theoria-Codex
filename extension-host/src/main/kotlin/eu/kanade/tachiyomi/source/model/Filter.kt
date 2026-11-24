@@ -1,8 +1,6 @@
 // Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 package eu.kanade.tachiyomi.source.model
 
-/** A search option a source offers. The host reads it into the app's filters and sets the values chosen back onto a fresh list (`ExtensionFilters.kt`). */
 sealed class Filter<T>(val name: String, var state: T) {
     open class Header(name: String) : Filter<Any>(name, 0)
 

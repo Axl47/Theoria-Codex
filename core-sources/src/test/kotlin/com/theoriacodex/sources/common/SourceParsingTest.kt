@@ -28,7 +28,6 @@ class SourceParsingTest {
 
     @Test
     fun `comment markup is read as a body fragment`() {
-        // A document parse would move the title into <head> and drop its words from the comment.
         val text = htmlFragmentToText("<title>Spoiler:</title> ending<br>second line")
 
         assertEquals("Spoiler: ending\nsecond line", text)

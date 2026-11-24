@@ -1,5 +1,4 @@
 // Derived from Aniyomi (https://github.com/aniyomiorg/aniyomi), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 package eu.kanade.tachiyomi.animesource.online
 
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -21,11 +20,6 @@ import okhttp3.Request
 import okhttp3.Response
 import uy.kohesive.injekt.Injekt
 
-/**
- * Base class of nearly every anime extension source. A source either overrides the suspend functions, or only the
- * request/parse pairs below, which the suspend functions here then drive. Aniyomi drives some of those pairs through
- * RxJava; this host calls them directly, so RxJava is not needed.
- */
 @Suppress("TooManyFunctions")
 abstract class AnimeHttpSource : AnimeCatalogueSource {
     protected val network: NetworkHelper by lazy { Injekt.getInstance(NetworkHelper::class.java) }
@@ -36,7 +30,6 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
 
     open val versionId: Int = 1
 
-    /** Stable across installs: the first eight bytes of MD5("name/lang/versionId"), as Aniyomi derives it. */
     override val id: Long by lazy { generateId(name, lang, versionId) }
 
     val headers: Headers by lazy { headersBuilder().build() }
@@ -105,16 +98,12 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
 
     protected open fun videoListParse(response: Response): List<Video> = unsupported()
 
-    /** Finishes a video before it plays, such as one found without its stream address; null when it cannot be played. */
     open suspend fun resolveVideo(video: Video): Video? = video
 
-    /** Puts servers in the order the source's settings prefer. */
     open fun List<Hoster>.sortHosters(): List<Hoster> = this
 
-    /** Puts videos in the order the source's settings prefer: the first is the one to play. */
     open fun List<Video>.sortVideos(): List<Video> = this
 
-    /** The stream address of a video found only by the page it is on ([Video.url]), as interface-14 sources name some. */
     open suspend fun getVideoUrl(video: Video): String = fetch(videoUrlRequest(video)).use { videoUrlParse(it) }
 
     protected open fun videoUrlRequest(video: Video): Request = GET(video.url, headers)
@@ -136,7 +125,6 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
     @Deprecated("All modifications should be done when constructing the episode")
     open fun prepareNewEpisode(episode: SEpisode, anime: SAnime) = Unit
 
-    /** A plain request for an image on the source's own client with its headers, as Aniyomi fetches covers. */
     internal fun imageCall(url: String): Call = client.newCall(GET(url, headers))
 
     private suspend fun fetch(request: Request): Response = client.newCall(request).awaitSuccess()

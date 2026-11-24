@@ -7,18 +7,11 @@ import com.theoriacodex.sources.http.SourceByteResponse
 import java.net.URI
 import java.net.URLDecoder
 
-/**
- * Serves the captured fixtures under `custom-sites/` (see its README) as a redirect-free transport,
- * keyed by host, path and exact query. Credential parameters are ignored when no route names them:
- * Gelbooru and rule34.xxx answer invalid keys exactly as they answer none. Any request no fixture
- * covers fails the test, so every probe request is backed by captured evidence.
- */
 internal class FixtureSiteTransport(vararg sites: String) {
     private val routes: Map<String, List<Route>> = sites.associate(::loadSite).let { loaded ->
         loaded.values.groupBy({ it.first }, { it.second }).mapValues { (_, lists) -> lists.flatten() }
     }
 
-    /** Every URL requested, in order. */
     val requested = mutableListOf<String>()
 
     suspend fun execute(spec: HttpRequestSpec): SourceByteResponse {

@@ -26,7 +26,6 @@ class NhentaiCreatorSourceAdapterTest {
                 return SourceHttpResponse(200, """[{"id":1,"type":"tag","name":"first","count":42}]""")
             }
         }
-        // The slow request must race the virtual timeout, so the lookup stays on the test dispatcher.
         val adapter = NhentaiSourceAdapter(http, minRequestIntervalMs = 0, callContext = EmptyCoroutineContext)
         val counts = mutableMapOf<String, Int>()
 

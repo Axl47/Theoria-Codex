@@ -27,7 +27,6 @@ class ExtensionCatalogTest {
     private val otherKey = "b".repeat(64)
     private val repoUrl = "https://repo.example/anime"
 
-    /** What the repo serves, by address; anything else answers 404. */
     private val site = mutableMapOf<String, ByteArray>()
 
     private val store = object : ExtensionChoiceStore {
@@ -42,7 +41,6 @@ class ExtensionCatalogTest {
 
     private val folder = Files.createTempDirectory("installed").toFile()
 
-    /** Packages Android installed, which a private copy of the same name stands in for, as [ExtensionPackages] lists them. */
     private val system = mutableListOf<ExtensionPackage>()
     private var changes = 0
 
@@ -52,7 +50,6 @@ class ExtensionCatalogTest {
             val url = chain.request().url.toString()
             val body = site[url]
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
-                // Of unknown length, as a streamed answer is, so size limits are enforced while reading.
                 .body(Buffer().write(body ?: ByteArray(0)).asResponseBody("application/octet-stream".toMediaType(), contentLength = -1)).build()
         }.build(),
         kinds = listOf(MihonKind, AniyomiKind),
@@ -65,7 +62,6 @@ class ExtensionCatalogTest {
         onChanged = { changes++ },
     )
 
-    /** A fake APK is its own description: `package|signer|versionCode`, read back as [ExtensionPackages.read] would. */
     private fun read(file: File, origin: ExtensionOrigin = ExtensionOrigin.FILE): ExtensionPackage? {
         val (name, signer, version) = file.readText().split('|').takeIf { it.size == 3 } ?: return null
         return extension(name, signer, version.toLong(), file, origin)
@@ -91,8 +87,6 @@ class ExtensionCatalogTest {
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/index.min.json"))))
         assertEquals(listOf(ExtensionRepo(repoUrl, "Anime", key)), catalog.repos())
 
-        // The same repo again, as a backup restored twice would give, and another repo its publisher signs with the
-        // same key and name, as Yūzōnō's manga and anime repos are.
         site["https://other.example/manga/repo.json"] = site.getValue("$repoUrl/repo.json")
         site["https://other.example/manga/index.min.json"] = "[]".encodeToByteArray()
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/"), NewExtensionRepo("https://other.example/manga/index.min.json"))))
@@ -160,14 +154,12 @@ class ExtensionCatalogTest {
         )
         assertEquals(emptyMap<String, String>(), listing.problems)
 
-        // A second address of the repo offers the same packages, which are listed once.
         site["https://mirror.example/anime/repo.json"] = site.getValue("$repoUrl/repo.json")
         site["https://mirror.example/anime/index.min.json"] = site.getValue("$repoUrl/index.min.json")
         catalog.add(listOf(NewExtensionRepo("https://mirror.example/anime")))
         assertEquals(listing.extensions, catalog.available().extensions)
         catalog.remove("https://mirror.example/anime")
 
-        // The repo turns to another key: nothing it offers is listed until the user adds it again.
         site["$repoUrl/repo.json"] = site.getValue("$repoUrl/repo.json").decodeToString().replace(key, otherKey).encodeToByteArray()
         val changed = catalog.available(refresh = true)
         assertEquals(emptyList<Any>(), changed.extensions)
@@ -181,7 +173,6 @@ class ExtensionCatalogTest {
 
         serve()
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
-        // A few kilobytes that expand past the limit.
         site["$repoUrl/index.min.json"] = ByteArrayOutputStream().also { out ->
             GZIPOutputStream(out).use { it.write(ByteArray(MAX_INDEX_BYTES.toInt() + 1)) }
         }.toByteArray()
@@ -218,7 +209,6 @@ class ExtensionCatalogTest {
         apk("unsigned", otherKey, 1)
         apk("older", key, 3)
         apk("foreign", key, 2)
-        // The index can lag behind an APK already installed from it.
         system += listOf(extension("older", key, 4), extension("foreign", otherKey, 1))
 
         assertEquals("The download is not swapped", catalog.install(repoUrl, "swapped"))

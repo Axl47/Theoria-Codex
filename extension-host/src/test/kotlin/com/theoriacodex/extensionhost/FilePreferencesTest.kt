@@ -26,7 +26,6 @@ class FilePreferencesTest {
         preferences.registerOnSharedPreferenceChangeListener(listener)
         preferences.edit().putString("address", "https://server.test").putBoolean("saver", true).putInt("quality", 2)
             .putLong("since", 5_000_000_000L).putFloat("scale", 1.5f).putStringSet("languages", setOf("en", "es")).apply()
-        // Posted to the main thread, not called by the writer.
         assertTrue(changed.isEmpty())
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(setOf("address", "saver", "quality", "since", "scale", "languages"), changed.toSet())
@@ -49,7 +48,6 @@ class FilePreferencesTest {
         val editor = preferences.edit().putString("kept", "first").clear()
         editor.apply()
         preferences.edit().putString("kept", "second").putString("added", "later").apply()
-        // Neither the staged value nor the clear is applied again.
         editor.apply()
         assertEquals(mapOf("kept" to "second", "added" to "later"), preferences.all)
     }
@@ -58,7 +56,6 @@ class FilePreferencesTest {
     fun anEditWhoseWriteFailsIsStillVisibleAndCommitSaysSo() {
         val preferences = FilePreferences(file)
         assertTrue(preferences.edit().putString("address", "old").commit())
-        // The directory can no longer take the new file.
         val directory = checkNotNull(file.parentFile)
         assertTrue(directory.setWritable(false))
         try {
@@ -68,7 +65,6 @@ class FilePreferencesTest {
             directory.setWritable(true)
         }
         assertEquals("old", FilePreferences(file).getString("address", null))
-        // Memory is ahead of the file, so a commit that changes nothing still writes, and says it did.
         assertTrue(preferences.edit().commit())
         assertEquals("new", FilePreferences(file).getString("address", null))
     }
@@ -106,7 +102,6 @@ class FilePreferencesTest {
 
     @Test
     fun preferencesLiveWhereAndroidDoesNotBackUpAndOldFilesAreDeletedNotImported() {
-        // What debug builds wrote before: a file in shared_prefs, which Android backs up.
         context.getSharedPreferences("mihon_source_9", Context.MODE_PRIVATE).edit().putString("password", "secret").commit()
         context.getSharedPreferences("theoria_other", Context.MODE_PRIVATE).edit().putString("kept", "yes").commit()
 
@@ -117,7 +112,6 @@ class FilePreferencesTest {
         val next = ExtensionHost.preferencesFile(context, "source_9")
         assertTrue(next.path.startsWith(context.noBackupFilesDir.path))
         assertTrue(FilePreferences(next).all.isEmpty())
-        // A name an extension chooses cannot leave the directory.
         assertEquals(next.parentFile, ExtensionHost.preferencesFile(context, "../../escape").parentFile)
     }
 }

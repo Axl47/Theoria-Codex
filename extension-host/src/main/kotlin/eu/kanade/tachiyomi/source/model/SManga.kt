@@ -1,5 +1,4 @@
 // Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 @file:Suppress("PropertyName", "VariableNaming")
 
 package eu.kanade.tachiyomi.source.model
@@ -7,7 +6,6 @@ package eu.kanade.tachiyomi.source.model
 import java.io.Serializable
 import kotlinx.serialization.json.JsonObject
 
-/** A series as a source describes it. [url] identifies it to that source. */
 interface SManga : Serializable {
     var url: String
     var title: String
@@ -20,7 +18,6 @@ interface SManga : Serializable {
     var update_strategy: UpdateStrategy
     var initialized: Boolean
 
-    /** Free-form data the source keeps with the series between calls. */
     var memo: JsonObject
 
     fun getGenres(): List<String>? =

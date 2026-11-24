@@ -18,7 +18,6 @@ import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.common.objects
 import java.time.Instant
 
-/** The posts in a response's `illusts` array, skipping records that are not illustrations. */
 internal fun JsonObject.pixivIllusts(): List<Post> =
     objects("illusts").mapNotNull(::parsePixivIllust)
 
@@ -67,7 +66,6 @@ internal fun parsePixivIllust(raw: JsonObject): Post? {
     )
 }
 
-/** Total playback time of a `/v1/ugoira/metadata` response, or null when it lists no frames. */
 internal fun parsePixivUgoiraDurationMs(root: JsonObject): Long? {
     val metadata = root.optionalJsonObject("ugoira_metadata") ?: return null
     return metadata.objects("frames").sumOf { frame ->
@@ -91,10 +89,6 @@ private fun normalizedUrl(url: String?): String? {
 
 
 private data class ParsedPixivMedia(val preview: ImageRef, val full: ImageRef?, val pages: List<ImageRef>)
-/**
- * [canonical] keeps each translation right after its native tag (Codex automatic tags and the
- * clipboard match English there); [taxonomy] pairs them so chips and learning see one tag.
- */
 private data class ParsedPixivTags(
     val raw: List<String>,
     val canonical: List<String>,

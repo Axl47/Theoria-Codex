@@ -10,11 +10,6 @@ import org.junit.Test
 class RepoReaderTest {
     private val signingKey = "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
 
-    /**
-     * Newer repos' indexes, a manga store and an anime one, built from `repos/store.txt` and `repos/anime.txt` with
-     * `protoc --encode=Store store.proto < store.txt | gzip -9` (and `--encode=AnimeStore` for the anime one). `quiet.txt`
-     * is a manga store whose extensions list no sources.
-     */
     private val store = resource("store.pb.gz")
     private val animeStore = resource("anime.pb.gz")
 
@@ -54,7 +49,6 @@ class RepoReaderTest {
         val stub = """{"index_v2":"https://repo.example/store/index.pb","meta":{"name":"Old","website":"w","signingKeyFingerprint":"$signingKey"}}"""
         val site = mapOf(
             "https://repo.example/store/repo.json" to stub.encodeToByteArray(),
-            // What old apps read: a stub telling them to update.
             "https://repo.example/store/index.min.json" to """[{"name":"Outdated App","pkg":"x","apk":"x.apk","code":1,"version":"1.4.1"}]""".encodeToByteArray(),
             "https://repo.example/store/index.pb" to store,
         )

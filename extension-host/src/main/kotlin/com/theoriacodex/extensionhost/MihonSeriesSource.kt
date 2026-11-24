@@ -17,26 +17,13 @@ import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 
-/**
- * One Mihon extension source as the app's [SeriesSource]: a Mihon manga is a series, a chapter an entry, and a
- * chapter's pages are image addresses [HostServices.images] can fetch through the source's own client. A host whose
- * browser check stopped one of its calls, which can be an API or image host besides its site's, is reported to
- * [HostServices.onChallenged].
- */
 class MihonSeriesSource(private val source: Source, host: HostServices) : SeriesSource {
     override val key: SourceKey = MihonKind.sourceKey(source.id)
     private val calls = ExtensionCalls(source.name) { challenged -> host.onChallenged(key, challenged) }
 
-    /**
-     * Series and chapters as the source listed them. Sources may keep data on them between calls, so a later call
-     * about one hands the source its own object back; one from an earlier run is rebuilt from what the app stored,
-     * memo included, and held from then on. A held one listed without a memo takes the stored memo, as an import or
-     * another call may have given one.
-     */
     private val listedSeries = recentlyListed<SManga>()
     private val listedChapters = recentlyListed<SChapter>()
 
-    /** Fetches its covers and pages through its own client; only an HTTP source has one. */
     internal val sourceImages: MihonImages? = (source as? HttpSource)?.let { MihonImages(it, key, host.images) { url -> listedChapters[url] } }
     override val name: String get() = source.name
     override val language: String get() = source.lang
@@ -56,22 +43,15 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
 
     override suspend fun details(series: Series): Series = calls.calling {
         val manga = manga(series)
-        // A source may change the series it is handed in place, so its memo is read before the call.
         val memo = manga.memo
         val details = source.getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = false).manga
         manga.withDetails(details).also { if (it.memo.isEmpty()) it.memo = memo }.also { listedSeries[it.url] = it }.toSeries()
     }
 
-    /**
-     * As Mihon does, the source is handed its [stored] chapters, memos included, and the memo of the series it returns
-     * is what it keeps from then on, also when it cleared it, since some sources record state there while listing. A
-     * chapter listed twice is the first, as the app stores it.
-     */
     override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = calls.calling {
         val manga = manga(series)
         val before = manga.memo
         val update = source.getMangaUpdate(manga, stored.map(::chapter), fetchDetails = false, fetchChapters = true)
-        // A source may change the series it was handed in place or return a copy; the held one takes the copy's memo.
         manga.memo = update.manga.memo
         val entries = update.chapters.distinctBy { it.url }.map { chapter ->
             listedChapters[chapter.url] = chapter
@@ -115,7 +95,6 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         }.also { listedSeries[it.url] = it }
     }
 
-    /** As [manga], for a chapter; [sourceImages] hands a held one back when it lists its pages again. */
     private fun chapter(entry: SeriesEntry): SChapter {
         listedChapters[entry.address]?.let { listed ->
             if (listed.memo.isEmpty()) listed.memo = sourceMemo(entry.memo)
@@ -131,12 +110,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         }.also { listedChapters[it.url] = it }
     }
 
-    /**
-     * This series with what its details page added. A source's details often leave out the address, the title or the
-     * cover it already listed, so, as Mihon does, they only add to the series the app asked about.
-     */
     private fun SManga.withDetails(details: SManga): SManga = copy().also { series ->
-        // The title has no value until the source sets one.
         runCatching { details.title }.getOrNull()?.takeIf(String::isNotBlank)?.let { series.title = it }
         details.thumbnail_url?.takeIf(String::isNotBlank)?.let { series.thumbnail_url = it }
         details.author?.takeIf(String::isNotBlank)?.let { series.author = it }
@@ -148,10 +122,6 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
 
     private fun SManga.toSeries() = extensionSeries(SeriesId(key, url), title, thumbnail_url, author, genre, source.lang, description, status, memo)
 
-    /**
-     * Nothing is requested here. Some sources name each image only on a page of its own; [sourceImages] asks for that when
-     * the image itself is requested, so a chapter shows at once and a page that fails is the only one that does.
-     */
     private fun pageImage(chapter: SChapter, page: Page): ImageRef? {
         val address = if (sourceImages != null) sourceImages.pageAddress(chapter, page) else page.imageUrl
         return address?.let { ImageRef(url = it, localPath = null, mime = null) }

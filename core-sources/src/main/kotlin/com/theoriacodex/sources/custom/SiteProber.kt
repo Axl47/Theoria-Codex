@@ -21,24 +21,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jsoup.nodes.Document
 
-/**
- * Finds which supported protocol family a typed address speaks (plan C3, "Probe algorithm"). Read
- * only and bounded: [deadlineMs] overall, at most [maxRequests] requests, no retries, nothing
- * persisted. Per-request timeouts and the redirect policy come from [http], a [CustomSiteHttpClient].
- */
 class SiteProber(
     private val registry: SiteFamilyRegistry,
     private val http: SourceHttpClient,
-    /** Host (without `www.`) → built-in source id. */
     private val builtInHosts: Map<String, String> = BUILT_IN_SITE_HOSTS,
     private val deadlineMs: Long = DEADLINE_MS,
     private val maxRequests: Int = MAX_REQUESTS,
 ) {
-    /**
-     * With [credentials] the keys are what get tested, so a key works even where anonymous access is closed
-     * and a bad one is reported instead of saved unseen. [knownFamily] is a saved site's: it is tried first,
-     * and no anonymous request is made, because only adding a site needs to know if it works without keys.
-     */
     suspend fun probe(
         input: String,
         credentials: SiteCredentials? = null,
@@ -88,7 +77,6 @@ class SiteProber(
             when (val result = family.probe(address, keyed)) {
                 is FamilyProbe.Match -> {
                     val withoutKeys = if (knownFamily == null) family.probe(address, anonymous) else null
-                    // An open site keeps its guest limits, which still hold if the key is later removed.
                     val match = withoutKeys as? FamilyProbe.Match ?: result
                     return supported(address, anonymous, family.family, match, keyed = withoutKeys?.refusesAnonymousUse() == true)
                 }
@@ -104,7 +92,6 @@ class SiteProber(
     private fun FamilyProbe.refusesAnonymousUse(): Boolean =
         this == FamilyProbe.NeedsCredentials || this == FamilyProbe.Failed(ProbeFailure.BLOCKED)
 
-    /** What a probe reports when no family matched. */
     private suspend fun unclaimedResult(
         address: SiteAddress,
         anonymous: SiteRequestContext,
@@ -139,13 +126,8 @@ class SiteProber(
     companion object {
         const val DEADLINE_MS = 30_000L
 
-        /**
-         * Worst case is 8: a keyed Danbooru match and its anonymous repeat (three requests each), the
-         * home page, and the conventional touch icon.
-         */
         const val MAX_REQUESTS = 8
 
-        /** Shipped booru sites, from the family presets, including separate API hosts. */
         val BUILT_IN_SITE_HOSTS: Map<String, String> = buildMap {
             listOf(DanbooruSite.DANBOORU, DanbooruSite.AIBOORU).forEach { put(hostOf(it.baseUrl), it.source.id) }
             listOf(GelbooruSite.GELBOORU, GelbooruSite.RULE34XXX).forEach { site ->
@@ -154,7 +136,6 @@ class SiteProber(
             }
         }
 
-        /** The host without `www.`, cut to the label limit: "safebooru.org". */
         fun defaultLabel(address: SiteAddress): String =
             address.host.removePrefix("www.").take(SiteProfile.MAX_LABEL_LENGTH).trimEnd('.', '-')
 
@@ -163,14 +144,8 @@ class SiteProber(
     }
 }
 
-/** What the home page says about the site; either part may be missing. [iconSize] is in pixels. */
 internal data class HomePage(val name: String?, val iconUrl: String?, val iconSize: Int = 0)
 
-/**
- * Best effort: any failure leaves the host as the label and `/favicon.ico` as the icon. When the
- * declared icon is small, tries the conventional `/apple-touch-icon.png` (180px), which many sites
- * serve without declaring it.
- */
 private suspend fun homePage(address: SiteAddress, context: SiteRequestContext): HomePage? {
     val home = runCatchingPreservingCancellation {
         val response = context.get(address, "/")
@@ -198,10 +173,6 @@ private const val APPLE_TOUCH_ICON_PATH = "/apple-touch-icon.png"
 private const val APPLE_TOUCH_ICON_PX = 180
 private const val LARGE_ICON_PX = 64
 
-/**
- * The largest declared raster icon over HTTPS. Apple touch icons are 180px when unsized; a sizeless
- * `icon` is assumed small. SVG is skipped because media loads don't decode it.
- */
 private fun siteIcon(document: Document): Pair<String, Int>? =
     document.select("link[rel~=(?i)^(icon|shortcut icon|apple-touch-icon|apple-touch-icon-precomposed)$][href]")
         .mapNotNull { link ->
@@ -215,10 +186,6 @@ private fun siteIcon(document: Document): Pair<String, Int>? =
         }
         .maxByOrNull { it.second }
 
-/**
- * `og:site_name` when present, else the `<title>` up to its first separator ("Gelbooru | Anime and
- * Hentai Imageboard" → "Gelbooru"). Null when neither gives a usable name.
- */
 internal fun siteNameFromHtml(html: String): String? = siteName(parseHtml(html))
 
 private fun siteName(document: Document): String? {
@@ -229,7 +196,6 @@ private fun siteName(document: Document): String? {
     }
 }
 
-/** Fails any request past [maxRequests], so a probe can never fan out. */
 private class BudgetedHttpClient(private val delegate: SourceHttpClient, private val maxRequests: Int) : SourceHttpClient {
     private val sent = AtomicInteger()
 

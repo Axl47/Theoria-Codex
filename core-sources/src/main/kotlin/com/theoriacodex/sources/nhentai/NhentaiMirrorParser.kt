@@ -9,7 +9,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.media.mimeFromFileExt
 
-/** One page of search results, from the API or a mirror; [totalPages] is null when the page did not say. */
 internal data class NhentaiSearchPage(
     val posts: List<Post>,
     val totalPages: Int?,
@@ -40,16 +39,11 @@ internal object NhentaiMirrorParser {
         )
     }
 
-    /** Search results carry only an ID, title and cover thumbnail; their media load when the post opens. */
     fun parseSearchPage(body: String): NhentaiSearchPage = NhentaiSearchPage(
         posts = body.lineSequence().mapNotNull(::parseSearchPost).toList(),
         totalPages = parsePageCount(body),
     )
 
-    /**
-     * A reader page names the first page's image and the page count; every page shares that image's media ID
-     * and extension, with the other extensions as fallbacks.
-     */
     fun parseReaderPage(galleryId: String, body: String): Post? {
         val firstPage = PAGE_IMAGE_REGEX.find(body) ?: return null
         val mediaId = firstPage.groupValues[1]

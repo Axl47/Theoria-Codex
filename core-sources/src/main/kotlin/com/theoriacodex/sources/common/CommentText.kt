@@ -2,10 +2,6 @@ package com.theoriacodex.sources.common
 
 import org.jsoup.nodes.TextNode
 
-/**
- * Reduces an HTML fragment to plain text: entities decoded, source whitespace collapsed as a browser
- * would, `<br>` turned into newlines and every other tag dropped. The result is trimmed.
- */
 internal fun htmlFragmentToText(html: String): String {
     val body = parseHtmlFragment(html).body()
     body.select("script, style").remove()

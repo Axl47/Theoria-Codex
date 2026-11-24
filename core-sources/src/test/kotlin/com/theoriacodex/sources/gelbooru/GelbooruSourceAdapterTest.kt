@@ -27,7 +27,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** One suite for the Gelbooru family: shared behavior runs on [GelbooruSite.GELBOORU], then per-preset cases. */
 class GelbooruSourceAdapterTest {
     @Test
     fun `related posts hydrate bounded ids with at most two requests and preserve order`() = runTest {
@@ -428,8 +427,6 @@ class GelbooruSourceAdapterTest {
         assertNull(counts["missing"])
     }
 
-    // Rule34.xxx preset: separate API host, required key, bare-array JSON, autocomplete.php.
-
     @Test
     fun `rule34 search attaches credentials and maps canonical post url`() = runTest {
         val httpClient = FakeHttpClient().apply {
@@ -657,7 +654,6 @@ private class RelatedGelbooruHttpClient(
     private val html: String,
     private val malformedIds: Set<String> = emptySet(),
 ) : SourceHttpClient {
-    // sourceCall runs hydrations on Dispatchers.Default, so this bookkeeping is shared across threads.
     private val lock = Any()
     val hydratedIds = mutableListOf<String>()
     var maxConcurrentHydrations: Int = 0

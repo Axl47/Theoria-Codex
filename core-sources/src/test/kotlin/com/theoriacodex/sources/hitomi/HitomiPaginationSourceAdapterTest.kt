@@ -294,7 +294,6 @@ internal class HitomiPaginationSourceAdapterTest : HitomiSourceAdapterTestFixtur
             binaryIndexes[english] = listOf(5, 4, 3)
             binaryIndexes[japanese] = listOf(2, 1)
         }
-        // runCurrent() must park the continuation on the in-flight load, which only the test dispatcher orders.
         val adapter = adapter(http, pageSize = 1, randomSnapshotCacheMaxBytes = 300L, callContext = EmptyCoroutineContext)
         val originalQuery = query(sort = SortMode.RANDOM)
         val first = adapter.search(originalQuery, null)

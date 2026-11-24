@@ -6,11 +6,6 @@ import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import java.io.IOException
 
-/**
- * The one error boundary of every Hitomi entry point: whatever [block] throws leaves as a
- * [SourceAdapterException]. Protocol and oversized-body failures are PARSE, transport failures NETWORK, and
- * gallery failures keep their own reason. [operation] names the entry point in messages ("search").
- */
 internal suspend fun <T> hitomiCall(operation: String, block: suspend () -> T): T = try {
     block()
 } catch (error: HitomiGalleryException) {

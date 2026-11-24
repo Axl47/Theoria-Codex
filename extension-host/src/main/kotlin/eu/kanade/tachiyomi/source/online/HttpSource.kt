@@ -1,5 +1,4 @@
 // Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 package eu.kanade.tachiyomi.source.online
 
 import eu.kanade.tachiyomi.network.GET
@@ -21,11 +20,6 @@ import okhttp3.Request
 import okhttp3.Response
 import uy.kohesive.injekt.Injekt
 
-/**
- * Base class of nearly every extension source. A source either overrides the suspend functions, or only the
- * request/parse pairs below, which the suspend functions here then drive. Mihon drives those pairs through RxJava;
- * this host calls them directly, so RxJava is not needed.
- */
 @Suppress("TooManyFunctions")
 abstract class HttpSource : CatalogueSource {
     protected val network: NetworkHelper by lazy { Injekt.getInstance(NetworkHelper::class.java) }
@@ -36,7 +30,6 @@ abstract class HttpSource : CatalogueSource {
 
     open val versionId: Int = 1
 
-    /** Stable across installs: the first eight bytes of MD5("name/lang/versionId"), as Mihon derives it. */
     override val id: Long by lazy { generateId(name, lang, versionId) }
 
     val headers: Headers by lazy { headersBuilder().build() }
@@ -93,22 +86,18 @@ abstract class HttpSource : CatalogueSource {
 
     protected open fun pageListParse(response: Response): List<Page> = unsupported()
 
-    /** The image address of a page whose [Page.imageUrl] the page list left empty. */
     open suspend fun getImageUrl(page: Page): String = fetch(imageUrlRequest(page)).use { imageUrlParse(it) }
 
     protected open fun imageUrlRequest(page: Page): Request = GET(page.url, headers)
 
     protected open fun imageUrlParse(response: Response): String = unsupported()
 
-    /** Mihon resumes a partly saved image from [existingSize]; this host always fetches the whole image. */
     suspend fun getImage(page: Page, @Suppress("UNUSED_PARAMETER") existingSize: Long = 0L): Response = imageCall(page).awaitSuccess()
 
     protected open fun imageRequest(page: Page): Request = GET(checkNotNull(page.imageUrl) { "Page ${page.index} has no image URL" }, headers)
 
-    /** The request for a page's image on the source's own client, which carries its headers, tokens and interceptors. */
     internal fun imageCall(page: Page): Call = client.newCall(imageRequest(page))
 
-    /** A plain request for an image on the source's own client with its headers, as Mihon fetches covers. */
     internal fun imageCall(url: String): Call = client.newCall(GET(url, headers))
 
     fun SChapter.setUrlWithoutDomain(url: String) {

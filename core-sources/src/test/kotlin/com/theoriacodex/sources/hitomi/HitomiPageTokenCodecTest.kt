@@ -6,7 +6,6 @@ import org.junit.Test
 class HitomiPageTokenCodecTest {
     private val codec = HitomiPageTokenCodec()
 
-    // v4-full.txt is the Gson encoder's output (HTML-escaped strings), which the current decoder still reads.
     @Test
     fun `tokens the Gson encoder issued decode the same`() {
         assertEquals(

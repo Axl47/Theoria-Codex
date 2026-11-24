@@ -40,7 +40,6 @@ class NhentaiCommentsTest {
             CreatorProfile(SourceKey.NHENTAI, "alice", "1", "https://nhentai.net/users/1/alice", uploadsQuery = null),
             page.comments[0].author,
         )
-        // Without a slug the profile link is the id alone.
         assertEquals("https://nhentai.net/users/2", page.comments[1].author?.profileUrl)
         assertNull(adapter.nativeCommentAnchor("9"))
         assertEquals(1_700_000_000_000L, page.comments[0].createdAtEpochMs)

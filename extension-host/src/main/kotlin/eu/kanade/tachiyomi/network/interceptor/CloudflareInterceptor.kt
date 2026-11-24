@@ -1,5 +1,4 @@
 // Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// The simple class name is fixed by extension binaries, which look for it in the client they rebuild.
 package eu.kanade.tachiyomi.network.interceptor
 
 import com.theoriacodex.domain.diagnostics.Diagnostics
@@ -16,20 +15,10 @@ import java.util.concurrent.ConcurrentHashMap
 import okhttp3.Interceptor
 import okhttp3.Response
 
-/**
- * The extensions' way through a Cloudflare browser check: [pass] tries it out of sight, as Mihon does, and a
- * challenge still standing after that is recorded in [outages] with the request and agent it refused, then fails the
- * request as [HostUnavailableException]. Extensions parse whatever answer they get, so a challenge page must never
- * reach them. The source then shows as needing browser verification, like any challenged source, and the app's check
- * page passes it with that agent. While the record lasts, [pass] tries no hidden browser for the host, and the record
- * is not renewed, so it still expires on time; a successful answer from the host passes it at once. A record another
- * client made without the refused request gains this one's, or the check page would have nothing to open.
- */
 class CloudflareInterceptor internal constructor(
     private val pass: ChallengePass,
     private val outages: HostOutageTracker,
 ) : Interceptor {
-    /** The hosts and statuses [reportRefusal] has logged: a site refusing every image would otherwise fill the log. */
     private val refusals = ConcurrentHashMap.newKeySet<String>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -42,11 +31,6 @@ class CloudflareInterceptor internal constructor(
         throw HostUnavailableException(HostOutageTracker.normalizeHost(challenged.url.host), HostOutageKind.CHALLENGE)
     }
 
-    /**
-     * Records a refusal that is not a challenge, which reaches the extension as a plain HTTP error: whether it carried a
-     * clearance tells a rejected clearance (such as one from a hidden pass) from a site that refuses outright. Once
-     * per host and status; the server is named only as Cloudflare or not, since the header is the site's free text.
-     */
     private fun reportRefusal(response: Response) {
         if (response.code != HTTP_FORBIDDEN && response.code != HTTP_UNAVAILABLE) return
         val sent = response.challengedRequest
@@ -56,7 +40,6 @@ class CloudflareInterceptor internal constructor(
         Diagnostics.report("extension-network", "${sent.url.host} refused ${response.code} $clearance a clearance, no challenge, from $server")
     }
 
-    /** Ends the challenge record of a host that answered [response] successfully; looks only while records exist. */
     private fun clearRecovered(response: Response) {
         val recorded = outages.outages.value
         if (recorded.isEmpty() || !response.isSuccessful) return

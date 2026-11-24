@@ -20,20 +20,11 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.parser.Parser
 
-/**
- * Runs a source entry point on a background dispatcher so it is safe to call from any thread, the main thread
- * included. Every function on the source boundary is written as `= sourceCall { … }`; a few adapters accept a
- * `callContext` so their tests can keep virtual time. SourceEntryPointCompletenessTest enforces both forms.
- */
 internal suspend fun <T> sourceCall(
     context: CoroutineContext = Dispatchers.Default,
     block: suspend () -> T,
 ): T = withContext(context) { block() }
 
-/**
- * A booru's `source` field as a page that can be opened, or null when it is empty or free text. Direct Pixiv image
- * addresses only load with a Pixiv referer, so they and a known [pixivId] become the artwork's own page.
- */
 internal fun originUrlOrNull(source: String?, pixivId: Long? = null): String? {
     pixivId?.takeIf { it > 0 }?.let { return PIXIV_ARTWORK_URL + it }
     val url = source?.trim()?.split(BOORU_WHITESPACE_REGEX)?.firstOrNull()
@@ -44,9 +35,6 @@ internal fun originUrlOrNull(source: String?, pixivId: Long? = null): String? {
 
 private const val PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/"
 private val PXIMG_ARTWORK_ID_REGEX = Regex("""^https?://i\d*\.pximg\.net/.*/(\d+)_(?:p\d+|ugoira)""")
-
-// Every parse of a provider response goes through these helpers, which mark it as background-only work so the
-// app reports any that runs on the main thread (see OffMainWork).
 
 internal fun parseJsonArray(body: String, gson: Gson, errorLabel: String): JsonArray {
     OffMainWork.note(OffMainWork.SOURCE_PARSE)
@@ -85,7 +73,6 @@ internal fun parseXml(xml: String, baseUri: String = ""): Document {
     return Jsoup.parse(xml, baseUri, Parser.xmlParser())
 }
 
-/** Parses [html] as the contents of a body element, as a browser treats a fragment. */
 internal fun parseHtmlFragment(html: String): Document {
     OffMainWork.note(OffMainWork.SOURCE_PARSE)
     return Jsoup.parseBodyFragment(html)
@@ -94,7 +81,6 @@ internal fun parseHtmlFragment(html: String): Document {
 internal fun sourceNetworkFailure(siteLabel: String, error: IOException): Nothing {
     throw SourceAdapterException(
         reason = SourceFailureReason.NETWORK,
-        // A known outage says what to do (wait, verify, re-add) instead of a bare failure.
         message = (error as? HostUnavailableException)?.message ?: "$siteLabel request failed",
         cause = error,
     )
@@ -228,7 +214,6 @@ internal fun JsonElement.objectList(vararg envelopeKeys: String): List<JsonObjec
         .orEmpty()
 }
 
-/** Booru tags are lowercase and never contain spaces, so typed words join with underscores. */
 internal fun normalizeBooruTag(raw: String): String = raw.trim().replace(BOORU_WHITESPACE_REGEX, "_").lowercase()
 
 private val BOORU_WHITESPACE_REGEX = Regex("\\s+")
@@ -237,11 +222,9 @@ internal fun mimeFromUrlOrExt(url: String?, ext: String?): String? {
     return inferMimeFromUrl(url) ?: mimeFromFileExt(ext)
 }
 
-/** A booru card preview; its mime falls back to the original's ([fullMime]) when the URL names none. */
 internal fun booruPreview(url: String?, fullMime: String?): ImageRef =
     ImageRef(url = url, localPath = null, mime = mimeFromUrlOrExt(url, null) ?: fullMime)
 
-/** A booru original. A distinct [sampleUrl] is a lighter rendition on every booru, so it loads first. */
 internal fun booruFull(url: String, mime: String?, sampleUrl: String?): ImageRef =
     ImageRef(url = url, localPath = null, mime = mime, progressiveUrls = listOfNotNull(sampleUrl).filter { it != url })
 
@@ -304,10 +287,6 @@ private fun scaleDurationMs(value: Double, multiplier: Long): Long? {
     return scaled.toLong().takeIf { it > 0L }
 }
 
-/**
- * Trims a provider media URL and loads it over HTTPS: protocol-relative (`//cdn…`) and `http://`
- * URLs are rewritten, never fetched in cleartext. Blank input is null.
- */
 internal fun httpsMediaUrl(rawUrl: String?): String? {
     val url = rawUrl?.trim()?.takeIf(String::isNotBlank) ?: return null
     return when {

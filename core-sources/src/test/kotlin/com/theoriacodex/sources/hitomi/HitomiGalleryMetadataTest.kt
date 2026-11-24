@@ -9,10 +9,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Hitomi's gallery records are loose: numbers arrive as strings, flags as "1"/"" or 1/0, and lists can be null.
- * These cases pin what the parser tolerates so a change of JSON library cannot quietly turn them into failures.
- */
 class HitomiGalleryMetadataTest {
     @Test
     fun `reads numbers sent as strings and ignores fields of the wrong type`() {

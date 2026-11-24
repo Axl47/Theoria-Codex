@@ -20,7 +20,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
-/** What extensions rely on from the settings screen they fill, checked through the holders they call. */
 @RunWith(RobolectricTestRunner::class)
 class SourceSettingsTest {
     private val context: Context = RuntimeEnvironment.getApplication()
@@ -100,7 +99,6 @@ class SourceSettingsTest {
         }
         val (_, host) = settings.list()
 
-        // A default is stored once the screen is built, so the source's own read of its preferences finds it.
         assertEquals(true, store.all["data"])
         assertEquals("https://stored.test", (host as ExtensionSetting.Text).value)
 

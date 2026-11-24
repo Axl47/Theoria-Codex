@@ -6,7 +6,6 @@ import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.objects
 
-/** Collects the strongest count per case-insensitive tag while preserving first-wins ties. */
 internal fun collectNhentaiTagSuggestions(
     galleries: List<JsonObject>,
     prefix: String?,

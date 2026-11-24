@@ -16,7 +16,6 @@ import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.media.mimeFromFileExt
 import com.theoriacodex.sources.common.objects
 
-/** Pure mapping of one API gallery record to a post. */
 internal fun parseNhentaiGallery(raw: JsonObject): Post? {
     val galleryId = raw.get("id").asLongOrNull()?.toString()
         ?: raw.get("id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
@@ -55,7 +54,6 @@ internal fun parseNhentaiGallery(raw: JsonObject): Post? {
         createdAtEpochMs = createdAtEpochMs,
         title = cleanNhentaiTitle(title),
         mediaCount = images.count,
-        // A listing with no pages, cover or page count is still a gallery; its pages arrive with the lookup.
         galleryLengthUnknown = images.media.isEmpty() && images.count == null,
         taxonomy = taxonomy,
         creatorProfile = creators.firstOrNull(),
@@ -143,7 +141,6 @@ private fun parseNhentaiPages(pages: List<JsonElement>, mediaId: String): List<I
             url = url,
             localPath = null,
             mime = mimeFromFileExt(ext),
-            // API-provided paths win: about half of real thumbnails use irregular names.
             thumbnailUrl = sourceImageUrl(NHENTAI_THUMBS_BASE, page.get("thumbnail").asStringOrNull())
                 ?: "$NHENTAI_THUMBS_BASE/galleries/$mediaId/${index + 1}t.$ext",
         )

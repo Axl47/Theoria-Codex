@@ -112,7 +112,6 @@ class GelbooruCommentsTest {
         assertEquals("10", first.nextPageToken)
         assertNull(first.total)
 
-        // The DAPI is not asked again once it has answered something other than comments.
         http.enqueueGet(api, viewQuery + ("pid" to "10"), body = gelbooruPostPage.replace("""<a href="?page=post&amp;s=view&amp;id=77&amp;pid=10">2</a>""", ""))
         val second = adapter.comments(gelbooruPost, pageToken = first.nextPageToken)
         assertEquals("20", second.nextPageToken)

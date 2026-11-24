@@ -17,12 +17,6 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 
-/**
- * One Aniyomi extension source as the app's [SeriesSource]: an anime is a series, an episode an entry, and an
- * episode's media is the streams its servers offer, which [AniyomiStreams] resolves. Covers load through the source's
- * own client ([sourceImages]), once [ExtensionImages.address] tags them; a host whose browser check stopped one of its calls is reported to
- * [HostServices.onChallenged].
- */
 class AniyomiSeriesSource internal constructor(
     private val source: AnimeSource,
     host: HostServices,
@@ -35,15 +29,10 @@ class AniyomiSeriesSource internal constructor(
     private val http = source as? AnimeHttpSource
     private val streams = AniyomiStreams(source, host, calls, limits)
 
-    /** Fetches its covers through its own client, with its headers; only an HTTP source has one. */
     internal val sourceImages: SourceImages? = http?.let { SourceImages { _, url, _ -> it.imageCall(url.toString()).execute() } }
     override val name: String get() = source.name
     override val language: String get() = source.lang
 
-    /**
-     * Anime and episodes as the source listed them. Sources may keep data on them between calls, so a later call
-     * about one hands the source its own object back; one from an earlier run is rebuilt from what the app stored.
-     */
     private val listedAnime = recentlyListed<SAnime>()
     private val listedEpisodes = recentlyListed<SEpisode>()
     private val searches = FilterSearch(source::getFilterList) { it.nodes() }
@@ -62,11 +51,6 @@ class AniyomiSeriesSource internal constructor(
 
     override suspend fun details(series: Series): Series = calls.calling { opened(anime(series)).toSeries() }
 
-    /**
-     * An anime whose source groups its episodes into seasons is refused, in words the series page shows as they are.
-     * Only its details tell: sources leave a listing at episodes. So an anime not opened in this process, as a search
-     * or the new-episode check asks about, has them asked for first: one more request, for such an anime only.
-     */
     override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries {
         val anime = listedAnime[series.id.address]?.takeIf { it.initialized } ?: calls.calling { opened(anime(series)) }
         if (anime.fetch_type == FetchType.Seasons) throw UnsupportedEntriesException(SEASONS_UNSUPPORTED)
@@ -93,7 +77,6 @@ class AniyomiSeriesSource internal constructor(
     override fun webUrl(series: Series): String? =
         extensionWebUrl(series, super.webUrl(series), http?.baseUrl, http?.let { { it.getAnimeUrl(anime(series)) } })
 
-    /** Kept as listed, except an anime already opened, which keeps what its details said (about seasons, too). */
     private fun AnimesPage.listed() = SeriesPage(
         series = animes.map { anime ->
             if (listedAnime[anime.url]?.initialized != true) listedAnime[anime.url] = anime
@@ -102,7 +85,6 @@ class AniyomiSeriesSource internal constructor(
         hasNextPage = hasNextPage,
     )
 
-    /** [anime] with its details, kept as listed and marked as opened. */
     private suspend fun opened(anime: SAnime): SAnime = anime.withDetails(source.getAnimeDetails(anime)).also {
         it.initialized = true
         listedAnime[it.url] = it
@@ -116,12 +98,7 @@ class AniyomiSeriesSource internal constructor(
         genre = series.genres.joinToString().takeIf(String::isNotBlank)
     }
 
-    /**
-     * This anime with what its details page added. Details often leave out what the source already listed, so, as
-     * Aniyomi does, they only add to the anime the app asked about, grouping into seasons included.
-     */
     private fun SAnime.withDetails(details: SAnime): SAnime = copy().also { anime ->
-        // The title has no value until the source sets one.
         runCatching { details.title }.getOrNull()?.takeIf(String::isNotBlank)?.let { anime.title = it }
         details.thumbnail_url?.takeIf(String::isNotBlank)?.let { anime.thumbnail_url = it }
         details.author?.takeIf(String::isNotBlank)?.let { anime.author = it }

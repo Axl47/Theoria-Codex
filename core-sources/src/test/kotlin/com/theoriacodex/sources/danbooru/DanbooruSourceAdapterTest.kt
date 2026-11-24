@@ -36,7 +36,6 @@ class DanbooruSourceAdapterTest {
         assertEquals("2", page.nextPageToken)
         assertEquals("https://danbooru.donmai.us/posts.json", http.lastGet?.url)
         assertEquals("landscape -comic order:score", http.lastGet?.query?.get("tags"))
-        // Cloudflare challenges generic browser agents, so the request identifies the app.
         assertEquals(THEORIA_SOURCE_USER_AGENT, http.lastGet?.headers?.get("User-Agent"))
     }
 
@@ -172,7 +171,6 @@ class DanbooruSourceAdapterTest {
 
     private fun danbooru(http: FakeHttpClient) = DanbooruSourceAdapter(DanbooruSite.DANBOORU, http)
 
-    /** A full provider page with ids 40 down to 1, so a next page exists. */
     private fun fullPage(): String = (40 downTo 1).joinToString(",", "[", "]") { id ->
         """{"id":$id,"file_url":"$CDN/original/$id.jpg","tag_string":"tag$id"}"""
     }

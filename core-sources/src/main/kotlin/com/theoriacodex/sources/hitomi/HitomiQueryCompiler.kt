@@ -12,7 +12,6 @@ import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 
-/** Compiles typed terms into provider indexes while retaining the global-index version binding. */
 internal class HitomiQueryCompiler(
     httpClient: SourceHttpClient,
     private val globalIndexCache: HitomiGlobalIndexCache,
