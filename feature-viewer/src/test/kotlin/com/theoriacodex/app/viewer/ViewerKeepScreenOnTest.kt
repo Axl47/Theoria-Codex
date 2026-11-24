@@ -226,6 +226,15 @@ class ViewerKeepScreenOnTest {
         assertFalse(view.keepScreenOn)
     }
 
+    @Test fun `a looping clip that stalls and recovers keeps its idle clock`() {
+        show(reading = false, loopingClipPlaying = true)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
+        change { loopingClipPlaying.value = false }
+        change { loopingClipPlaying.value = true }
+        idleFor(120_000L)
+        assertFalse(view.keepScreenOn)
+    }
+
     @Test fun `a non-looping video or episode beside an idle looping clip still holds the screen`() {
         show(reading = false, videoPlaying = true, loopingClipPlaying = true)
         idleFor(VIEWER_IDLE_RELEASE_MS * 3)

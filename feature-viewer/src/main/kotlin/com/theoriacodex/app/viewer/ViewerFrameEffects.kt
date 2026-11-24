@@ -192,9 +192,9 @@ internal fun viewerKeepsScreenOn(
     val clipHeld = loopingClipPlaying && visible
     var idle by remember { mutableStateOf(false) }
     val currentActivity by rememberUpdatedState(activity)
-    LaunchedEffect(readingHeld || clipHeld) {
+    LaunchedEffect(readingHeld, visible) {
         idle = false
-        if (!readingHeld && !clipHeld) return@LaunchedEffect
+        if (!visible) return@LaunchedEffect
         snapshotFlow { currentActivity() }.collectLatest {
             idle = false
             delay(VIEWER_IDLE_RELEASE_MS)
