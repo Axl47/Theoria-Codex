@@ -55,6 +55,19 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(listOf("1"), verdicts.verdicts("b").map { it.postId.sourcePostId })
     }
 
+    @Test fun `recent skips are read newest first, only the profile's skips since the cutoff, up to the limit`() = runTest {
+        val verdicts = RoomForYouVerdictRepository(database)
+        verdicts.record(verdict("a", "old", ForYouVerdictKind.SKIPPED, at = 9))
+        verdicts.record(verdict("a", "liked", ForYouVerdictKind.LIKED, at = 10))
+        verdicts.record(verdict("a", "1", ForYouVerdictKind.SKIPPED, at = 11))
+        verdicts.record(verdict("a", "2", ForYouVerdictKind.SKIPPED, at = 12))
+        verdicts.record(verdict("a", "3", ForYouVerdictKind.SKIPPED, at = 13))
+        verdicts.record(verdict("b", "4", ForYouVerdictKind.SKIPPED, at = 14))
+
+        assertEquals(listOf(id("3"), id("2")), verdicts.skippedSince("a", sinceEpochMs = 10, limit = 2).toList())
+        assertEquals(setOf(id("3"), id("2"), id("1")), verdicts.skippedSince("a", sinceEpochMs = 10, limit = 10))
+    }
+
     @Test fun `signatures exist only for stored posts and list the library posts still missing one`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)

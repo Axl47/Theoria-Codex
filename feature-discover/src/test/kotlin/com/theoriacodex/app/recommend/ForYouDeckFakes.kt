@@ -206,9 +206,10 @@ internal fun deckWiring(
     verdicts: ForYouVerdictRepository = InMemoryForYouVerdictRepository(),
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
     pictures: PictureTags = PictureTags.None,
+    clock: () -> Long = AtomicLong()::incrementAndGet,
 ) = ForYouDeckWiring(
     actions, quickSave, trails::open, NoRelatedPosts, scope, fetchContext = EmptyCoroutineContext, verdicts = verdicts,
-    copiesOf = copiesOf, clock = AtomicLong()::incrementAndGet, pictures = pictures,
+    copiesOf = copiesOf, clock = clock, pictures = pictures,
 )
 
 /**

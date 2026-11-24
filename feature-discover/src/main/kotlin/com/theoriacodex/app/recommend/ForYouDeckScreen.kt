@@ -95,7 +95,7 @@ fun ForYouDeckScreen(
 
     // The shell's scaffold already insets its content for the system bars.
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ForYouBar(state, level, config, callbacks, onShowFilters = { showFilters = true })
+        ForYouBar(state, level, config, callbacks, onRefresh = owner::rebuild, onShowFilters = { showFilters = true })
         if (onTrail) {
             val query = level.query
             ForYouCrumbs(

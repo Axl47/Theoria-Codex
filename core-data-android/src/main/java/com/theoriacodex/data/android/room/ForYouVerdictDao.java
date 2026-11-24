@@ -28,4 +28,12 @@ public interface ForYouVerdictDao {
     @Query("SELECT * FROM for_you_verdicts WHERE profile_id = :profileId "
             + "ORDER BY decided_at_epoch_ms DESC, source ASC, source_post_id ASC")
     List<ForYouVerdictEntity> forProfile(String profileId);
+
+    /**
+     * The profile's newest {@code limit} verdicts of {@code decision} decided at or after {@code sinceEpochMs}; uses the
+     * (profile_id, decided_at_epoch_ms) index.
+     */
+    @Query("SELECT * FROM for_you_verdicts WHERE profile_id = :profileId AND decision = :decision "
+            + "AND decided_at_epoch_ms >= :sinceEpochMs ORDER BY decided_at_epoch_ms DESC LIMIT :limit")
+    List<ForYouVerdictEntity> since(String profileId, String decision, long sinceEpochMs, int limit);
 }
