@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Rejects a push in seconds when the checked-out code breaks a line budget or the module layering, or, once
-# scripts/detekt_changed.sh exists, a Detekt rule in changed Kotlin files. It checks the working tree,
-# not each pushed commit. scripts/check.sh installs it through core.hooksPath; bypass with --no-verify.
+# Rejects a push in seconds when the checked-out code breaks a line budget, the module layering or the
+# comment ratchet, or, once scripts/detekt_changed.sh exists, a Detekt rule in changed Kotlin files. It
+# checks the working tree, not each pushed commit. scripts/check.sh installs it through core.hooksPath; bypass with --no-verify.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -23,6 +23,7 @@ fail() {
 
 line_budgets "$(diff_base 2>/dev/null || true)" > /dev/null || fail 'Line budget check'
 module_layering || fail 'Module layering check'
+comment_ratchet || fail 'Comment ratchet'
 module_registration || fail 'Module registration check'
 if [[ -x scripts/detekt_changed.sh ]]; then
   scripts/detekt_changed.sh || fail 'Detekt on changed files'
