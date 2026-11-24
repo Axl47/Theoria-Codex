@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -94,7 +95,7 @@ data class FilterSheetState(
 
 /**
  * One source's dedicated search, opened from a global search section header. [run] counts listings shown here so
- * answers from an earlier query or source are dropped.
+ * the screen can tell a new one from the last.
  */
 data class DedicatedSourceState(
     val source: SeriesSourceListing,
@@ -104,7 +105,7 @@ data class DedicatedSourceState(
 
 /**
  * The Series tab. [sources] is null until the extensions that are on have loaded; [browse] is the chosen source's
- * [browseKind] listing, and [browseRun] counts the listings browsed, so what belongs to an earlier one can tell;
+ * [browseKind] listing, and [browseRun] counts the listings browsed, so the screen can tell a new one from the last;
  * [filterSheet] is the filter sheet while it is open; [search] is one listing per source while a search shows, and
  * null otherwise; a search sent before the extensions have loaded is empty until they have, and then runs.
  * [dedicated] is a single source's search opened from [search], keeping [search] intact underneath until Back.
@@ -205,12 +206,6 @@ class SeriesTabViewModel(
 ) : ViewModel() {
     private var searchText: String? = saved[SAVED_SEARCH]
 
-    /** Counts submitted searches; a result asked for under an earlier one is dropped, even when its text is the same. */
-    private var searchRun = 0
-
-    /** Counts listings shown in [SeriesTabState.dedicated], across open/close cycles. */
-    private var dedicatedRun = 0
-
     /** A genre search requested before sources finished loading. */
     private var pendingGenre: Pair<SourceKey, String>? = null
 
@@ -229,6 +224,14 @@ class SeriesTabViewModel(
     )
     val state: StateFlow<SeriesTabState> = mutableState
 
+    private val browseListing = PagedListing(viewModelScope, { state.value.browse?.listing }) { listing ->
+        mutableState.update { it.copy(browse = it.browse?.copy(listing = listing)) }
+    }
+    private val dedicatedListing = PagedListing(viewModelScope, { state.value.dedicated?.source?.listing }) { listing ->
+        mutableState.update { state -> state.copy(dedicated = state.dedicated?.let { it.copy(source = it.source.copy(listing = listing)) }) }
+    }
+    private val searchListings = mutableMapOf<SourceKey, PagedListing>()
+
     /**
      * What the screen shows: [state] with the followed series, under the kind filter while it applies. The rest shows
      * before the followed series have been read.
@@ -243,6 +246,16 @@ class SeriesTabViewModel(
 
     init {
         viewModelScope.launch { sourcesChanged.collectLatest { showSources(loadSources()) } }
+        viewModelScope.launch {
+            mutableState
+                .map { state -> state.sources?.takeIf { state.view == SeriesView.BROWSE && state.search == null && state.browse == null } }
+                .distinctUntilChanged()
+                .filterNotNull()
+                .collect { sources ->
+                    val browsed = saved.get<String>(SAVED_BROWSE)
+                    (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
+                }
+        }
         // Nothing shows until the view is chosen, so the saved sort and filter arrive with it.
         viewModelScope.launch {
             val options = library.read()
@@ -250,14 +263,12 @@ class SeriesTabViewModel(
             val opening = state.value.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE
             saved[SAVED_VIEW] = opening.name
             mutableState.update { it.copy(view = it.view ?: opening, library = options, libraryLoaded = true) }
-            browseWhenShown()
         }
     }
 
     fun chooseView(view: SeriesView) {
         saved[SAVED_VIEW] = view.name
         mutableState.update { it.copy(view = view) }
-        browseWhenShown()
     }
 
     /** Orders and narrows the Following grid by [options], and remembers them. */
@@ -315,7 +326,7 @@ class SeriesTabViewModel(
                 sources = sources,
                 // Labels are taken again: a source turned on can share a name with one already listed.
                 browse = state.browse?.let { browse ->
-                    sources.firstOrNull { it.key == browse.key }?.toListing(sources, browse.listing)
+                    sources.firstOrNull { it.key == browse.key }?.takeIf { it !in fresh }?.toListing(sources, browse.listing)
                 },
                 search = query?.let {
                     sources.map { source ->
@@ -330,19 +341,13 @@ class SeriesTabViewModel(
                 },
             )
         }
-        if (hadDedicated && state.value.dedicated == null) closeFilters()
+        (searchListings.keys - sources.mapTo(HashSet()) { it.key }).forEach { searchListings.remove(it)?.cancel() }
+        if (state.value.browse == null) browseListing.cancel()
+        if (hadDedicated && state.value.dedicated == null) closeDedicated()
         val currentDedicated = state.value.dedicated
         if (currentDedicated != null && fresh.any { it.key == currentDedicated.source.key }) {
             closeFilters()
-            source(currentDedicated.source.key)?.let { showIn(ListingSlot.Dedicated, it, currentDedicated.kind) }
-        }
-        val browsedKey = state.value.browse?.key
-        if (browsedKey != null && fresh.any { it.key == browsedKey }) {
-            // A replaced source is browsed afresh, or dropped until its listing shows again.
-            val shown = state.value.view == SeriesView.BROWSE && state.value.search == null
-            if (shown) browse(browsedKey) else mutableState.update { it.copy(browse = null) }
-        } else {
-            browseWhenShown()
+            source(currentDedicated.source.key)?.let { showDedicated(it, currentDedicated.kind) }
         }
         if (query != null) fresh.forEach { searchIn(it, query) }
         pendingGenre?.let { (genreSource, genre) ->
@@ -351,24 +356,12 @@ class SeriesTabViewModel(
         }
     }
 
-    /**
-     * Browses the source browsed before process death, else the first, once Browse shows its listing with nothing
-     * browsed and the sources have loaded. Following and a search never ask a source for a listing they hide.
-     */
-    private fun browseWhenShown() {
-        val current = state.value
-        if (current.view != SeriesView.BROWSE || current.browse != null || current.search != null) return
-        val sources = current.sources ?: return
-        val browsed = saved.get<String>(SAVED_BROWSE)
-        (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
-    }
-
     /** Shows [key]'s popular series from the first page; the filters chosen before are dropped. */
     fun browse(key: SourceKey) {
         val source = source(key) ?: return
         saved[SAVED_BROWSE] = key.id
         closeFilters()
-        showIn(ListingSlot.Browse, source, BrowseKind.Popular)
+        showBrowse(source, BrowseKind.Popular)
     }
 
     /** Narrows the Following grid and search results to [kind], or shows both with null. */
@@ -378,7 +371,7 @@ class SeriesTabViewModel(
 
     /** Shows the browsed source's [kind] listing from the first page. */
     fun choose(kind: BrowseKind) {
-        showIn(ListingSlot.Browse, browsedSource() ?: return, kind)
+        showBrowse(browsedSource() ?: return, kind)
     }
 
     fun retryBrowse() = choose(state.value.browseKind)
@@ -388,20 +381,12 @@ class SeriesTabViewModel(
      * global search for [key] when available so the transition is immediate; otherwise fetches page 1.
      */
     fun openDedicatedSearch(key: SourceKey) {
-        val sources = state.value.sources.orEmpty()
         val source = source(key) ?: return
         val query = searchText.orEmpty().trim()
         closeFilters()
         val kind = if (query.isNotEmpty()) BrowseKind.Filtered(query, emptyList(), changed = 0) else BrowseKind.Popular
         val existing = state.value.search?.firstOrNull { it.key == key }?.listing as? SeriesListing.Loaded
-        if (query.isNotEmpty() && existing != null) {
-            dedicatedRun++
-            val run = dedicatedRun
-            val seeded = existing.copy(loadingMore = false, moreFailed = false)
-            mutableState.update { it.copy(dedicated = DedicatedSourceState(source.toListing(sources, seeded), kind, run)) }
-        } else {
-            showIn(ListingSlot.Dedicated, source, kind)
-        }
+        showDedicated(source, kind, existing?.takeIf { query.isNotEmpty() }?.copy(loadingMore = false, moreFailed = false))
     }
 
     /**
@@ -417,33 +402,26 @@ class SeriesTabViewModel(
         }
         val source = source(key) ?: return
         closeFilters()
-        dedicatedRun++
-        val run = dedicatedRun
         mutableState.update {
-            it.copy(dedicated = DedicatedSourceState(source.toListing(it.sources.orEmpty(), SeriesListing.Loading), BrowseKind.Popular, run))
+            it.copy(dedicated = DedicatedSourceState(source.toListing(it.sources.orEmpty(), SeriesListing.Loading), BrowseKind.Popular, it.nextDedicatedRun))
         }
-        viewModelScope.launch {
-            val defaults = runCatchingExceptionsPreservingCancellation {
-                source.filters()
-            }.getOrElse {
-                emptyList()
-            }
-            if (state.value.dedicated?.run != run) return@launch
+        dedicatedListing.launch {
+            val defaults = runCatchingExceptionsPreservingCancellation { source.filters() }.getOrElse { emptyList() }
+            ensureActive()
             val matched = defaults.selectingGenre(needle)
             val kind = if (matched != null) {
                 BrowseKind.Filtered("", matched, matched.changedFrom(defaults))
             } else {
                 BrowseKind.Filtered(needle, emptyList(), changed = 0)
             }
-            showIn(ListingSlot.Dedicated, source, kind)
+            showDedicated(source, kind)
         }
     }
 
     /** Leaves dedicated source search and returns to the global search results underneath. */
     fun closeDedicatedSearch() {
         if (state.value.dedicated == null) return
-        closeFilters()
-        dedicatedRun++
+        closeDedicated()
         mutableState.update { it.copy(dedicated = null) }
     }
 
@@ -458,12 +436,12 @@ class SeriesTabViewModel(
         } else {
             BrowseKind.Filtered(query, applied?.filters.orEmpty(), applied?.changed ?: 0)
         }
-        showIn(ListingSlot.Dedicated, source, nextKind)
+        showDedicated(source, nextKind)
     }
 
     /** Shows the dedicated source's [kind] listing from the first page. */
     fun chooseDedicated(kind: BrowseKind) {
-        showIn(ListingSlot.Dedicated, dedicatedSource() ?: return, kind)
+        showDedicated(dedicatedSource() ?: return, kind)
     }
 
     fun retryDedicated() {
@@ -471,7 +449,7 @@ class SeriesTabViewModel(
     }
 
     /** Loads the dedicated listing's next page, unless one is loading or none is left. */
-    fun dedicatedMore() = loadMoreIn(ListingSlot.Dedicated)
+    fun dedicatedMore() = dedicatedListing.more()
 
     /**
      * Closes the filter sheet and lists the active source's search for what it holds. Sent before the source's
@@ -545,20 +523,11 @@ class SeriesTabViewModel(
     }
 
     /** Loads the browsed listing's next page, unless one is loading or none is left. */
-    fun browseMore() = loadMoreIn(ListingSlot.Browse)
+    fun browseMore() = browseListing.more()
 
     /** Loads [key]'s next page of search results, unless one is loading or none is left. */
     fun searchMore(key: SourceKey) {
-        val query = searchText ?: return
-        val loaded = state.value.search?.firstOrNull { it.key == key }?.listing as? SeriesListing.Loaded ?: return
-        val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
-        val source = source(key) ?: return
-        val run = searchRun
-        updateSearch(key, run, loaded.copy(loadingMore = true, moreFailed = false))
-        viewModelScope.launch {
-            val next = loaded.withPage(page) { source.search(query, it) }
-            if (source(key) === source) updateSearch(key, run, next)
-        }
+        searchListings[key]?.more()
     }
 
     /** Searches every source for [text] at once; blank text ends the search. */
@@ -566,9 +535,8 @@ class SeriesTabViewModel(
         val query = text.trim().ifEmpty { return clearSearch() }
         val sources = state.value.sources.orEmpty()
         searchText = query
-        searchRun++
         saved[SAVED_SEARCH] = query
-        if (state.value.dedicated != null) closeFilters()
+        if (state.value.dedicated != null) closeDedicated()
         mutableState.update {
             it.copy(
                 search = sources.map { source -> source.toListing(sources, SeriesListing.Loading) },
@@ -582,17 +550,16 @@ class SeriesTabViewModel(
     fun retrySearch(key: SourceKey) {
         val query = searchText ?: return
         val source = source(key) ?: return
-        updateSearch(key, searchRun, SeriesListing.Loading)
+        showSearch(key, SeriesListing.Loading)
         searchIn(source, query)
     }
 
     fun clearSearch() {
         searchText = null
-        searchRun++
+        searchListings.values.forEach(PagedListing::cancel)
         saved.remove<String>(SAVED_SEARCH)
-        if (state.value.dedicated != null) closeFilters()
+        if (state.value.dedicated != null) closeDedicated()
         mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
-        browseWhenShown()
     }
 
     /** Stores [series], so its page has something to show at once, then reports it stored. */
@@ -604,83 +571,37 @@ class SeriesTabViewModel(
     }
 
     private fun searchIn(source: SeriesSource, query: String) {
-        val run = searchRun
-        viewModelScope.launch {
-            val listing = firstPage { source.search(query, 1) }
-            // An answer from a source that was switched off or replaced meanwhile is dropped.
-            if (source(source.key) === source) updateSearch(source.key, run, listing)
+        val key = source.key
+        val listing = searchListings.getOrPut(key) {
+            PagedListing(viewModelScope, { state.value.search?.firstOrNull { it.key == key }?.listing }) { showSearch(key, it) }
         }
+        listing.start { source.search(query, it) }
     }
 
-    private fun updateSearch(key: SourceKey, run: Int, listing: SeriesListing) {
-        if (searchRun != run) return
+    private fun closeDedicated() {
+        closeFilters()
+        dedicatedListing.cancel()
+    }
+
+    private fun showSearch(key: SourceKey, listing: SeriesListing) {
         mutableState.update { state ->
             state.copy(search = state.search?.map { if (it.key == key) it.copy(listing = listing) else it })
         }
     }
 
-    private enum class ListingSlot { Browse, Dedicated }
-
-    private fun showIn(slot: ListingSlot, source: SeriesSource, kind: BrowseKind) {
-        val run = when (slot) {
-            ListingSlot.Browse -> {
-                mutableState.update {
-                    it.copy(browse = source.toListing(it.sources.orEmpty(), SeriesListing.Loading), browseKind = kind, browseRun = it.browseRun + 1)
-                }
-                state.value.browseRun
-            }
-            ListingSlot.Dedicated -> {
-                dedicatedRun++
-                val nextRun = dedicatedRun
-                mutableState.update {
-                    it.copy(dedicated = DedicatedSourceState(source.toListing(it.sources.orEmpty(), SeriesListing.Loading), kind, nextRun))
-                }
-                nextRun
-            }
+    private fun showBrowse(source: SeriesSource, kind: BrowseKind) {
+        mutableState.update {
+            it.copy(browse = source.toListing(it.sources.orEmpty(), SeriesListing.Loading), browseKind = kind, browseRun = it.browseRun + 1)
         }
-        viewModelScope.launch {
-            val listing = firstPage { source.list(kind, 1) }
-            updateIn(slot, run, listing)
-        }
+        browseListing.start { source.list(kind, it) }
     }
 
-    private fun loadMoreIn(slot: ListingSlot) {
-        val current = state.value
-        val sourceListing = when (slot) {
-            ListingSlot.Browse -> current.browse
-            ListingSlot.Dedicated -> current.dedicated?.source
-        } ?: return
-        val loaded = sourceListing.listing as? SeriesListing.Loaded ?: return
-        val page = loaded.nextPage?.takeUnless { loaded.loadingMore } ?: return
-        val source = source(sourceListing.key) ?: return
-        val kind = when (slot) {
-            ListingSlot.Browse -> current.browseKind
-            ListingSlot.Dedicated -> current.dedicated?.kind ?: return
+    private fun showDedicated(source: SeriesSource, kind: BrowseKind, seeded: SeriesListing.Loaded? = null) {
+        mutableState.update {
+            it.copy(dedicated = DedicatedSourceState(source.toListing(it.sources.orEmpty(), seeded ?: SeriesListing.Loading), kind, it.nextDedicatedRun))
         }
-        val run = when (slot) {
-            ListingSlot.Browse -> current.browseRun
-            ListingSlot.Dedicated -> current.dedicated?.run ?: return
-        }
-        updateIn(slot, run, loaded.copy(loadingMore = true, moreFailed = false))
-        viewModelScope.launch {
-            val next = loaded.withPage(page) { source.list(kind, it) }
-            updateIn(slot, run, next)
-        }
-    }
-
-    private fun updateIn(slot: ListingSlot, run: Int, listing: SeriesListing) {
-        when (slot) {
-            ListingSlot.Browse -> {
-                if (state.value.browseRun != run) return
-                mutableState.update { state -> state.copy(browse = state.browse?.copy(listing = listing)) }
-            }
-            ListingSlot.Dedicated -> {
-                if (state.value.dedicated?.run != run) return
-                mutableState.update { state ->
-                    state.copy(dedicated = state.dedicated?.let { it.copy(source = it.source.copy(listing = listing)) })
-                }
-            }
-        }
+        val pages: suspend (Int) -> SeriesPage = { source.list(kind, it) }
+        if (seeded == null) dedicatedListing.start(pages) else dedicatedListing.resume(pages)
     }
 
     private fun source(key: SourceKey) = state.value.sources?.firstOrNull { it.key == key }
@@ -718,31 +639,12 @@ private fun matchGenreFilter(
 private fun SeriesSource.toListing(sources: List<SeriesSource>, listing: SeriesListing) =
     SeriesSourceListing(key, label(sources), listing, sourceName = name, language = language)
 
+private val SeriesTabState.nextDedicatedRun: Int get() = (dedicated?.run ?: 0) + 1
+
 private suspend fun SeriesSource.list(kind: BrowseKind, page: Int): SeriesPage = when (kind) {
     BrowseKind.Popular -> popular(page)
     BrowseKind.Latest -> latest(page)
     is BrowseKind.Filtered -> search(kind.text, page, kind.filters)
-}
-
-/** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. Also the Switch source sheet's search. */
-internal suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = runCatchingExceptionsPreservingCancellation {
-    load().let { SeriesListing.Loaded(it.series, nextPage = 2.takeIf { _ -> it.hasNextPage }) }
-}.getOrElse { error ->
-    SeriesListing.Failed(failureLine(error))
-}
-
-/** [this] with page [page] from [load] added; a failure keeps what is loaded and holds that page back until Retry. */
-private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int) -> SeriesPage): SeriesListing.Loaded = runCatchingExceptionsPreservingCancellation {
-    val more = load(page)
-    copy(
-        series = (series + more.series).distinctBy(Series::id),
-        nextPage = (page + 1).takeIf { more.hasNextPage },
-        loadingMore = false,
-        moreFailed = false,
-    )
-}.getOrElse {
-    // The loaded series stay on screen; the row's end offers the page again.
-    copy(loadingMore = false, moreFailed = true)
 }
 
 /**
