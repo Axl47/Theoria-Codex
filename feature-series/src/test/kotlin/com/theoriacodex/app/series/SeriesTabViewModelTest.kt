@@ -26,6 +26,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -678,10 +680,13 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
 
 private class Following(private val followed: Flow<List<FollowedSeries>>) : SeriesRepository by NothingStored {
     override fun observeFollowed() = followed
+
+    // Delegation would answer from NothingStored's own followed list.
+    override fun observeHasFollowed() = followed.map { it.isNotEmpty() }
 }
 
 internal object NothingStored : SeriesRepository {
-    override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
+    override fun observeFollowed(): Flow<List<FollowedSeries>> = flowOf(emptyList())
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
     override suspend fun series(id: SeriesId): StoredSeries? = null

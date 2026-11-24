@@ -112,4 +112,20 @@ class RoomUpgradeJourneyTest {
             }
         }
     }
+
+    @Test fun `a stored series counts as never listed after the listed column arrives`() {
+        val name = "series-listed.db"
+        helper.createDatabase(name, 21).use {
+            it.execSQL(
+                "INSERT INTO series (source, address, title, genres, language, followed, memo) " +
+                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, '{}')",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 22, true, TheoriaRoomDatabase.MIGRATION_21_22).use { database ->
+            database.query("SELECT title, followed, memo, listed FROM series").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(listOf("A", "1", "{}", "0"), (0..3).map(it::getString))
+            }
+        }
+    }
 }
