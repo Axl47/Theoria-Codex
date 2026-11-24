@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
-import com.theoriacodex.app.media.awaitsVideoStream
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.Post
@@ -102,7 +101,7 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
 
 /** Videos qualify for rotation, including ones whose stream has not resolved yet. */
 private fun ViewerSelection.isVideoForRotation(): Boolean =
-    media?.let(::isVideoMediaRef) == true || (mediaIndex == 0 && post.awaitsVideoStream)
+    media?.let(::isVideoMediaRef) == true || (mediaIndex == 0 && post.awaitsMotion)
 
 /** What the current media fills: its decoded frames when known, else the post's dimensions, which describe its first item. */
 private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): ViewerOrientation? = when {
