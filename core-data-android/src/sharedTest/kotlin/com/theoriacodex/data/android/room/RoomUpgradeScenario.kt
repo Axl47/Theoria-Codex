@@ -68,7 +68,7 @@ object RoomUpgradeScenario {
                 recents.recordSearch(query(), "new-search", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV))
                 RoomMediaDurationRepository(database).put(durationKey, duration)
                 RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
-                RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
+                RoomVisualSignatureRepository(database).putHashes(mapOf(shared.id to PICTURE_HASH))
                 RoomSeriesRepository(database, clock = { 100L }).run {
                     store(Series(seriesId, "Title"), listOf(SeriesEntry("/c/2", "Ch.2"), SeriesEntry("/c/1", "Ch.1")))
                     setFollowed(seriesId, true)

@@ -31,8 +31,14 @@ class RoomVisualSignatureRepository(
         }.toMap()
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
-    override suspend fun put(postId: PostId, hash: Long?) {
-        withContext(Dispatchers.IO) { dao.put(postId.source.id, postId.sourcePostId, hash, clock()) }
+    override suspend fun putHashes(hashes: Map<PostId, Long?>) {
+        if (hashes.isEmpty()) return
+        val now = clock()
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                hashes.forEach { (postId, hash) -> dao.put(postId.source.id, postId.sourcePostId, hash, now) }
+            }
+        }
     }
 
     override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = withContext(Dispatchers.IO) {

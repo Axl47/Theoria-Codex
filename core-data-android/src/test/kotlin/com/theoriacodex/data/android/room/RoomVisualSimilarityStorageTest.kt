@@ -77,9 +77,9 @@ class RoomVisualSimilarityStorageTest {
         val codex = library.ensureCodex("saved", "Saved")
         library.addItems(codex.codexId, listOf(post("hashed"), post("flat"), post("waiting")))
 
-        signatures.put(id("hashed"), 94L)
-        signatures.put(id("flat"), null)
-        signatures.put(id("never-stored"), 7L)
+        signatures.putHashes(mapOf(id("hashed") to 94L))
+        signatures.putHashes(mapOf(id("flat") to null))
+        signatures.putHashes(mapOf(id("never-stored") to 7L))
 
         assertEquals(mapOf(id("hashed") to 94L), signatures.observePictureHashes().first())
         assertEquals(listOf(id("waiting")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
@@ -94,8 +94,8 @@ class RoomVisualSimilarityStorageTest {
         library.addItems(codex.codexId, listOf(post("a"), post("b")))
 
         signatures.putVision(listOf(vision("a", "m1", tags = listOf(tag("sky", 0.9f)))))
-        signatures.put(id("a"), 5L)
-        signatures.put(id("b"), 6L)
+        signatures.putHashes(mapOf(id("a") to 5L))
+        signatures.putHashes(mapOf(id("b") to 6L))
         signatures.putVision(listOf(vision("b", "m1", tags = listOf(tag("sea", 0.5f)))))
 
         assertEquals(mapOf(id("a") to 5L, id("b") to 6L), signatures.observePictureHashes().first())
@@ -117,7 +117,7 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(listOf(id("new")), signatures.libraryPostsWithoutVision("m1", limit = 10).map(Post::id))
         assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutVision("m2", limit = 10).map(Post::id).toSet())
         assertEquals(1, signatures.libraryPostsWithoutVision("m2", limit = 1).size)
-        signatures.put(id("seen"), 1L)
+        signatures.putHashes(mapOf(id("seen") to 1L))
         assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
     }
 
@@ -194,7 +194,7 @@ class RoomVisualSimilarityStorageTest {
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
         library.addItems(codex.codexId, listOf(post("hashed"), post("visionOnly")))
-        signatures.put(id("hashed"), 3L)
+        signatures.putHashes(mapOf(id("hashed") to 3L))
         signatures.putVision(listOf(vision("hashed", "m1", tags = listOf(tag("x", 0.5f))), vision("visionOnly", "m1", tags = listOf(tag("x", 0.5f)))))
 
         signatures.clearVision()

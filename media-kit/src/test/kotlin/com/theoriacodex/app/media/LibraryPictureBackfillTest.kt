@@ -30,6 +30,7 @@ class LibraryPictureBackfillTest {
 
         assertEquals(mapOf(id("hashed") to 94L, id("flat") to null), library.records)
         assertEquals(listOf("hashed", "flat", "offline"), hashed)
+        assertEquals(listOf(2), library.writes)
     }
 
     @Test fun `ADR 0111 a Library that cannot be reached is read once, a batch at a time`() = runTest {
@@ -45,8 +46,10 @@ class LibraryPictureBackfillTest {
     private class FakeSignatures(private val library: List<Post>) : VisualSignatureRepository {
         val records = LinkedHashMap<PostId, Long?>()
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = emptyFlow()
-        override suspend fun put(postId: PostId, hash: Long?) {
-            records[postId] = hash
+        val writes = mutableListOf<Int>()
+        override suspend fun putHashes(hashes: Map<PostId, Long?>) {
+            writes += hashes.size
+            records += hashes
         }
         val listed = mutableListOf<Int>()
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> =

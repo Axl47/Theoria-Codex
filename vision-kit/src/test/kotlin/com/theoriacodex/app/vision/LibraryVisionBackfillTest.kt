@@ -56,7 +56,7 @@ class LibraryVisionBackfillTest {
         private val changes = MutableStateFlow(0)
         var tagReads = 0
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
-        override suspend fun put(postId: PostId, hash: Long?) = Unit
+        override suspend fun putHashes(hashes: Map<PostId, Long?>) = Unit
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) {
             for (entry in entries) {

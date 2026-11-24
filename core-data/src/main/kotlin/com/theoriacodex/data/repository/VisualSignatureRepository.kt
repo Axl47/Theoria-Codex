@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 interface VisualSignatureRepository {
     fun observePictureHashes(): Flow<Map<PostId, Long>>
 
-    suspend fun put(postId: PostId, hash: Long?)
+    suspend fun putHashes(hashes: Map<PostId, Long?>)
 
     suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int = 0): List<Post>
 

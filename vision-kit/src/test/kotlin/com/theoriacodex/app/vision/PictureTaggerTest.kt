@@ -36,7 +36,7 @@ class PictureTaggerTest {
 
     private object EmptySignatures : VisualSignatureRepository {
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
-        override suspend fun put(postId: PostId, hash: Long?) = Unit
+        override suspend fun putHashes(hashes: Map<PostId, Long?>) = Unit
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) = Unit
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()

@@ -16,13 +16,15 @@ class LibraryPictureBackfill(
         while (true) {
             val batch = signatures.libraryPostsWithoutSignature(BATCH, skip = unavailable.size).filterNot { it.id in unavailable }
             if (batch.isEmpty()) return
+            val hashes = HashMap<PostId, Long?>()
             coroutineScope { batch.map { post -> async { post to hash(post) } }.awaitAll() }.forEach { (post, result) ->
                 when (result) {
-                    is PictureHashResult.Hashed -> signatures.put(post.id, result.hash)
-                    PictureHashResult.Unhashable -> signatures.put(post.id, null)
+                    is PictureHashResult.Hashed -> hashes[post.id] = result.hash
+                    PictureHashResult.Unhashable -> hashes[post.id] = null
                     PictureHashResult.Unavailable -> unavailable += post.id
                 }
             }
+            signatures.putHashes(hashes)
         }
     }
 
