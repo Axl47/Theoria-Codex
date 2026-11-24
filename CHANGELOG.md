@@ -152,6 +152,7 @@
 
 ### Fixed
 
+- Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - The notification saying chapters wait for their extension no longer stays up after chapter downloads fail. It comes back once downloads get through if those chapters are still waiting.
 - Saved searches and Followed show their new posts first when you open them after the count says there are some. They used to show the posts from your last visit, and the new ones only turned up while scrolling, some jumping to the top.
