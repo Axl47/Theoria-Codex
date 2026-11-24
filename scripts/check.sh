@@ -3,7 +3,7 @@
 # fail in seconds (the Python unittests only once, in the static part), then the chosen part:
 #   tests    unit tests, coverage, and changed-code coverage for every module
 #   static   Detekt with type resolution, duplicate code, configuration cache
-#   lint     Android lint
+#   lint     the debug APK and instrumented test classes, then Android lint
 #   release  R8 builds: release, releaseAcceptance, and benchmark builds when the change can affect them
 #   screenshots  Compose screenshot tests against their reference images. References are Linux renders, so
 #            this part runs only on Linux (GitHub) and is recorded as its own result. See scripts/screenshots.sh.
@@ -221,19 +221,15 @@ lint_tasks=(:app:lint :core-data-android:lintDebug :extension-host:lintDebug :ui
 # run at the same time without writing the same output or reading sources mid-generation.
 # `./gradlew <tasks> --dry-run` on each side lists the graphs if this needs rechecking.
 shared_tasks=(
-  :app:assembleDebug
+  "${apk_tasks[@]}"
   :app:compileDebugUnitTestKotlin
   :app:compileDebugUnitTestJavaWithJavac
-  :app:compileDebugAndroidTestKotlin
   :core-data-android:compileDebugUnitTestKotlin
   :core-data-android:compileDebugUnitTestJavaWithJavac
-  :core-data-android:compileDebugAndroidTestKotlin
   :core-data-android:bundleLibRuntimeToJarDebug
   :extension-host:compileDebugUnitTestKotlin
   :extension-host:compileDebugUnitTestJavaWithJavac
-  :extension-host:compileDebugAndroidTestKotlin
   :extension-host:bundleLibRuntimeToJarDebug
-  :media-kit:compileDebugAndroidTestKotlin
   :ui-kit:compileDebugUnitTestKotlin
   :ui-kit:compileDebugUnitTestJavaWithJavac
   :ui-kit:bundleLibRuntimeToJarDebug
@@ -343,9 +339,10 @@ run_lint() {
     :feature-discover:compileDebugKotlin \
     :feature-series:compileDebugKotlin \
     :feature-settings:compileDebugKotlin \
-    "${apk_tasks[@]}" \
     --warning-mode=all \
     --console=plain
+  phase 'Gradle: debug APK and instrumented test classes' ./gradlew "${task_timings[@]}" "${apk_tasks[@]}" \
+    --warning-mode=all --console=plain
 
   # Offline lint cannot download its own tool on a fresh machine. A dry run fetches it.
   phase 'Gradle: lint dry run' ./gradlew "${task_timings[@]}" "${lint_tasks[@]}" --dry-run --console=plain
