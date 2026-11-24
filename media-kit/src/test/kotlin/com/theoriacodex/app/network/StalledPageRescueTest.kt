@@ -2,10 +2,12 @@ package com.theoriacodex.app.network
 
 import com.sun.net.httpserver.HttpServer
 import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.Buffer
@@ -43,7 +45,7 @@ class StalledPageRescueTest {
     fun stop() = server.stop(0)
 
     @Test
-    fun `a page that goes quiet carries on from its last byte`() {
+    fun `a page that goes quiet carries on from its last byte (ADR 0102)`() {
         val client = OkHttpClient.Builder()
             .addInterceptor(StalledPageRescue(rescue = { OkHttpClient() }, stallMs = 200, appliesTo = { true }))
             .build()
@@ -68,15 +70,35 @@ class StalledPageRescueTest {
     }
 
     @Test
-    fun `a rescue stops reading once the original call is cancelled`() {
+    fun `a rescue stops reading once the original call is cancelled (ADR 0102)`() {
         val original = OkHttpClient().newCall(Request.Builder().url("http://127.0.0.1/").build())
-        val source = StopsWithCall(Buffer().writeUtf8("page"), original).buffer()
-        assertEquals('p'.code.toByte(), source.readByte())
+        val source = StopsWithCall(Buffer().writeUtf8("page"), original)
+        val sink = Buffer()
+        assertEquals(1L, source.read(sink, 1))
 
         original.cancel()
-        source.buffer.clear()
 
-        assertThrows(IOException::class.java) { source.readByte() }
+        assertThrows(IOException::class.java) { source.read(sink, 1) }
+        assertEquals("p", sink.readUtf8())
+    }
+
+    @Test
+    fun `only nhentai page hosts are rescued unless told otherwise (ADR 0102)`() {
+        val local = Dns { listOf(InetAddress.getByName("127.0.0.1")) }
+        val rescuer = OkHttpClient.Builder().dns(local).build()
+        val client = OkHttpClient.Builder().dns(local)
+            .addInterceptor(StalledPageRescue(rescue = { rescuer }, stallMs = 200))
+            .build()
+        fun fetch(host: String) = runCatching {
+            client.newCall(Request.Builder().url("http://$host:${server.address.port}/page").build()).execute().use { it.body.bytes() }
+        }
+
+        fetch("img.example.org")
+        assertEquals(listOf<String?>(null), requests.toList())
+
+        requests.clear()
+        assertEquals(page.toList(), fetch("i3.nhentai.net").getOrThrow().toList())
+        assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
     }
 
     private companion object {

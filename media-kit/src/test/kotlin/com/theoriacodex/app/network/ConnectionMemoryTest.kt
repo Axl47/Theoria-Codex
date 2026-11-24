@@ -39,19 +39,22 @@ class ConnectionMemoryTest {
     private fun families(host: String) = memory.lookup(host).map { it.address.size }
 
     @Test
-    fun `IPv6 is set aside once IPv4 keeps winning, then gets another chance`() {
+    fun `IPv6 is set aside once IPv4 keeps winning, then gets another chance (ADR 0102)`() {
         ipv4Beats("a.example")
         assertEquals("One lost race proves nothing", listOf(16, 4), families("c.example"))
 
         ipv4Beats("b.example")
         assertEquals(listOf(4), families("c.example"))
 
-        now += 10 * 60 * 1000L
+        now += 10 * 60 * 1000L - 1
+        assertEquals(listOf(4), families("c.example"))
+
+        now += 1
         assertEquals(listOf(16, 4), families("c.example"))
     }
 
     @Test
-    fun `a site reached over IPv6 proves it works`() {
+    fun `a site reached over IPv6 proves it works (ADR 0102)`() {
         ipv4Beats("a.example")
         memory.connectEnd(call, InetSocketAddress(v6("a.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2)
         ipv4Beats("b.example")
@@ -60,7 +63,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `sites with nothing but IPv6 stay reachable`() {
+    fun `sites with nothing but IPv6 stay reachable (ADR 0102)`() {
         ipv4Beats("a.example")
         ipv4Beats("b.example")
 
@@ -68,7 +71,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `another network is judged on its own`() {
+    fun `another network is judged on its own (ADR 0102)`() {
         ipv4Beats("a.example")
         ipv4Beats("b.example")
 
@@ -78,7 +81,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `IPv4 failing while IPv6 is set aside brings IPv6 back`() {
+    fun `IPv4 failing while IPv6 is set aside brings IPv6 back (ADR 0102)`() {
         ipv4Beats("a.example")
         ipv4Beats("b.example")
 
@@ -88,7 +91,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `recent hosts stay newest first and bounded`() {
+    fun `recent hosts stay newest first and bounded (ADR 0102)`() {
         repeat(14) { memory.connectEnd(call, InetSocketAddress(v4("host$it.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2) }
         memory.connectEnd(call, InetSocketAddress(v4("host5.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2)
 
@@ -96,5 +99,22 @@ class ConnectionMemoryTest {
         assertEquals("host5.example", hosts.first())
         assertEquals(12, hosts.size)
         assertEquals(hosts, saved.last())
+    }
+
+    @Test
+    fun `the host list is not read from the store until it is asked for (ADR 0102)`() {
+        var loads = 0
+        val counting = object : RecentHostStore {
+            override fun load(): List<String> {
+                loads++
+                return listOf("earlier.example")
+            }
+            override fun save(hosts: List<String>) = Unit
+        }
+        val unread = ConnectionMemory(counting, activeNetwork = { network })
+        assertEquals(0, loads)
+
+        assertEquals(listOf("earlier.example"), unread.recentHosts())
+        assertEquals(1, loads)
     }
 }

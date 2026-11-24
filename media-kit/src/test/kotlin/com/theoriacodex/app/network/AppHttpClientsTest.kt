@@ -39,7 +39,7 @@ class AppHttpClientsTest {
     }
 
     @Test
-    fun `media sends a verified site's browser agent while provider requests keep their own`() {
+    fun `media sends a verified site's browser agent while provider requests keep their own (ADR 0102)`() {
         val clients = AppHttpClients(CookieJar.NO_COOKIES, verifiedUserAgent = { url -> "browser".takeIf { "verified" in url } })
 
         listOf(clients.images, clients.downloads, clients.video).forEach { get(it, "verified.jpg") }

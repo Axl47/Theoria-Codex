@@ -86,7 +86,6 @@
 0099-ui-test-fixtures.md
 0100-undo-offers-and-deferred-removals.md
 0101-visual-model-files.md
-0102-app-http-clients.md
 0103-diagnostics-log-and-usage.md
 0104-duration-lookups.md
 0105-feed-media-delivery.md

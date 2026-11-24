@@ -39,7 +39,7 @@ class NetworkUsageTest {
     fun stop() = server.stop(0)
 
     @Test
-    fun `each client counts only its own traffic`() {
+    fun `each client counts only its own traffic (ADR 0102)`() {
         val clients = AppHttpClients(CookieJar.NO_COOKIES)
 
         read(clients.images, times = 2)
