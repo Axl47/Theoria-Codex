@@ -50,6 +50,7 @@ class SeriesUpdateScheduleTest {
         assertEquals(12.hours.inWholeMilliseconds, scheduled.intervalMillis)
         assertTrue(scheduled.isPersisted)
         assertEquals(JobInfo.NETWORK_TYPE_ANY, scheduled.networkType)
+        assertTrue(scheduled.isRequireBatteryNotLow)
 
         settings.value = AppSettings(seriesUpdateInterval = SeriesUpdateInterval.HOURS_6)
         assertEquals(6.hours.inWholeMilliseconds, job()!!.intervalMillis)
@@ -61,6 +62,19 @@ class SeriesUpdateScheduleTest {
         followed.value = false
         assertNull(job())
         keeping.cancel()
+    }
+
+    @Test
+    fun `a check scheduled before it waited for a healthy battery is scheduled again with that condition`() {
+        scheduler.schedule(
+            AppJob.SERIES_UPDATE.builder(context).setPeriodic(12.hours.inWholeMilliseconds)
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true).build(),
+        )
+
+        scheduleSeriesUpdates(context, 12)
+
+        assertTrue(job()!!.isRequireBatteryNotLow)
+        assertEquals(12.hours.inWholeMilliseconds, job()!!.intervalMillis)
     }
 
     @Test
