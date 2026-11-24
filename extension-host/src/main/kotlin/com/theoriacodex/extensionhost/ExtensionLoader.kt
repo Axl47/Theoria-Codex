@@ -7,7 +7,7 @@ import java.lang.reflect.InvocationTargetException
 
 class ExtensionRejectedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-class ExtensionLoader(private val context: Context, private val packages: ExtensionPackages) {
+class ExtensionLoader internal constructor(private val context: Context, private val packages: ExtensionPackages) {
     private val copies by lazy {
         File(context.codeCacheDir, "mihon-extensions").apply {
             deleteRecursively()
