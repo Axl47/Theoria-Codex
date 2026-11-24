@@ -13,7 +13,7 @@ Saved data was written by Gson before kotlinx.serialization replaced it. Older b
   - `encodeDefaults`: backup validation requires defaulted keys to be present, as Gson wrote them.
   - `explicitNulls = false`: Gson omits nulls, and some readers treat a present key as data.
   - `coerceInputValues`: a stored null on a defaulted field repairs to the default instead of resetting the store.
-  - `isLenient`: Gson accepted quoted primitives such as "5" for an Int and "true" for a Boolean.
+  - `isLenient`: the reason first given, that Gson accepted quoted primitives such as "5" for an Int, was wrong, because kotlinx accepts quoted primitives without it. The flag stays only because removing it could reject stored files not yet seen; issue #486 tracks deciding whether any written or shipped file relies on it.
 - `decodeEachOrSkip` drops list elements whose decoding throws `SerializationException`, so one malformed entry never hides well-formed neighbours; any other exception propagates.
 - `storedVersion` reads a top-level integer version without decoding the rest, so the DataStore-backed stores refuse a newer build's file whatever its shape.
 
@@ -33,4 +33,4 @@ Changing a flag changes how every stored file loads; the golden-file tests pin t
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionRepositoryTest.kt`: `malformed entries do not discard valid positions (ADR 0021, 0033)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/storage/DurableJsonTest.kt`: `a record check that fails while decoding a list element is not skipped (ADR 0033)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `newer settings schema fails closed without corruption replacement (ADR 0032, 0033)`
-- Left to prose: `isLenient` has no guard, because kotlinx reads quoted numbers and booleans without it and no stored file depends on what it adds; the policy rule misses a `Json` imported under another name and a `Json(base) { }` built from a base other than `DurableJson`; it covers every module except `:app`, whose `extension_choices.json` exception is the app batch's call, and `:core-sources` and `:extension-host`, whose own `Json` instances for provider and repository formats are left to their batches.
+- Left to prose: `isLenient` has no guard, because what it would protect is stored files not yet seen, which no test can hold, and issue #486 decides whether it stays; the policy rule misses a `Json` imported under another name and a `Json(base) { }` built from a base other than `DurableJson`; it covers every module except `:app`, whose `extension_choices.json` exception is the app batch's call, and `:core-sources` and `:extension-host`, whose own `Json` instances for provider and repository formats are left to their batches.
