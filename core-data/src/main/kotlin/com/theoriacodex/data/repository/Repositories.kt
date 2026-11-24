@@ -9,7 +9,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.series.ExtensionChoices
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -453,21 +452,12 @@ data class AppSettings(
     val cache: CacheSettings = CacheSettings(),
     val contentFilters: ContentFilterSettings = ContentFilterSettings(),
     val viewer: ViewerSettings = ViewerSettings(),
-    val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
     val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
     val providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
-    val extensions: ExtensionChoices = ExtensionChoices(),
 )
-
-enum class ScenarioPreset {
-    NORMAL,
-    PARTIAL_FAILURE,
-    EMPTY_RESULTS,
-    SLOW_NETWORK,
-}
 
 interface SettingsRepository {
     fun observeSettings(): Flow<AppSettings>
@@ -476,7 +466,6 @@ interface SettingsRepository {
     suspend fun setCacheFullImageOnSave(enabled: Boolean)
     suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean)
     suspend fun setInvertMultiImageScrollDirection(enabled: Boolean)
-    suspend fun setScenarioPreset(preset: ScenarioPreset)
     suspend fun setActiveProfile(profileId: String)
     suspend fun addRecommendationProfile(name: String): RecommendationProfile
     suspend fun renameRecommendationProfile(profileId: String, name: String): Boolean

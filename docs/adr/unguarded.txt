@@ -9,7 +9,6 @@
 0020-for-you-retired-searches.md
 0021-local-state-files.md
 0023-post-snapshots.md
-0024-profile-backup-format.md
 0025-profile-backup-restore.md
 0026-profile-deletion-journal.md
 0027-series-download-queue.md
@@ -170,7 +169,6 @@
 0186-app-container-startup-and-wiring.md
 0187-app-lock.md
 0188-custom-source-runtime.md
-0189-extension-host-wiring.md
 0190-home-pager-and-tab-navigation.md
 0191-series-background-work.md
 0192-series-reader-session.md

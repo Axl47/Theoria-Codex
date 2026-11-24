@@ -121,7 +121,7 @@ class DataStoreRepositoriesTest {
         val proofs = """[{"sourceFileName":"settings_store.json","sourceSchemaVersion":2,""" +
             """"destinationSchemaVersion":9,"sourceSha256":"not-a-hash","importedCounts":{"profiles":1}}]"""
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
-            """{"schemaVersion":3,"settings":{"scenarioPreset":"SLOW_NETWORK"},"legacyImports":$proofs}"""
+            """{"schemaVersion":3,"settings":{"oldSearchBar":true},"legacyImports":$proofs}"""
         )
         directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText(
             """{"schemaVersion":2,"state":{"lastTab":"search"},"legacyImports":$proofs}"""
@@ -136,7 +136,7 @@ class DataStoreRepositoriesTest {
         val settings = DataStoreSettingsRepository(directory, scope)
         val uiRestore = DataStoreUiRestoreRepository(directory, scope)
 
-        assertEquals(ScenarioPreset.SLOW_NETWORK, settings.observeSettings().first().scenarioPreset)
+        assertTrue(settings.observeSettings().first().oldSearchBar)
         assertEquals("search", uiRestore.getLastTab())
         assertNull(uiRestore.getSearchScrollState("legacy"))
         listOf(settings.storageStatus.value, uiRestore.storageStatus.value).forEach { status ->
@@ -180,7 +180,7 @@ class DataStoreRepositoriesTest {
         val recovered = DataStoreSettingsRepository(directory, scope, recoveries)
         val settings = recovered.observeSettings().first()
 
-        assertEquals(AppSettings().scenarioPreset, settings.scenarioPreset)
+        assertEquals(SettingsDataStoreFile().toDomain(), settings)
         assertRecorded(recoveries, "Settings", directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).single())
         scope.closeDataStores()
     }

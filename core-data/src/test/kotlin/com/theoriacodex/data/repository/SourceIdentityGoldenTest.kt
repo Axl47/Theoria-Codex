@@ -15,6 +15,7 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -38,7 +39,10 @@ class SourceIdentityGoldenTest {
         DurableJson.encodeToString(SettingsDataStoreFile.serializer(), SettingsDataStoreFile.fromDomain(settings))
 
     private fun assertGolden(name: String, actual: String) {
-        val expected = javaClass.classLoader.getResource("golden/source-identity/$name")?.readText()
+        val expected = javaClass.classLoader.getResource("golden/source-identity/$name")?.readText()?.let { golden ->
+            assertTrue("$name lacks its retired keys", RETIRED_SETTING.containsMatchIn(golden))
+            golden.replace(RETIRED_SETTING, "")
+        }
         if (expected != actual) {
             val written = File("build/golden-actual/source-identity/$name").apply {
                 parentFile.mkdirs()
@@ -48,6 +52,8 @@ class SourceIdentityGoldenTest {
         }
     }
 }
+
+private val RETIRED_SETTING = Regex(""""scenarioPreset":"[A-Z_]+",""")
 
 private val pixivCreator = CreatorProfile(SourceKey.PIXIV, "Artist", "3", "https://www.pixiv.net/users/3", "user:3")
 private val gelbooruCreator = CreatorProfile(SourceKey.GELBOORU, "uploader", "uploader", null, "user:uploader")

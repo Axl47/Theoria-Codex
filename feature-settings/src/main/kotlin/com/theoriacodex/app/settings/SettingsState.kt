@@ -8,7 +8,6 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
-import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SettingChoice
 import com.theoriacodex.data.repository.SettingToggle
 import com.theoriacodex.data.storage.CorruptionRecovery
@@ -69,7 +68,6 @@ data class SettingsUiState(
     val activeProfileBlacklist: List<ForYouBlacklistEntry> = emptyList(),
     val availableSources: List<SourceKey> = emptyList(),
     val cacheSnapshot: CacheSnapshot = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
-    val showDeveloperScenarios: Boolean = false,
     val page: SettingsPage = SettingsPage.HOME,
     val sheet: SettingsSheet? = null,
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
@@ -98,7 +96,6 @@ sealed interface SettingsAction {
     }
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
-    data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
     data object ClearThumbnailCache : SettingsAction
     data object ClearFullImageCache : SettingsAction
     data object OpenChangelog : SettingsAction

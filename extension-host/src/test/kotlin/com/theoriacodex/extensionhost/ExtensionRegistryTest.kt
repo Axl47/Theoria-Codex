@@ -162,7 +162,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `an extension that is off is listed without running its code (ADR 0007)`() = runBlocking {
+    fun `an extension that is off is listed without running its code (ADR 0007, 0189)`() = runBlocking {
         val listed = registry.installed().single()
 
         assertEquals(listOf("a 1.0 key-1", false), listOf("${listed.name} ${listed.versionName} ${listed.signer}", listed.on))
