@@ -30,6 +30,7 @@ import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -221,20 +222,11 @@ private fun ViewerPostPage(
                 frame, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
                 expectedDurationMs = knownDurationMs?.takeIf { carriesPostDuration(post, media) },
             ),
-            events = remember(frame.uiState.session, key, loadGeneration, host, controls, post, media, frame.uiState.series) {
-                viewerRendererEvents(
-                    session = frame.uiState.session, key = key, generation = loadGeneration,
-                    onAction = host.onAction, onPlaybackProgress = host.episodeProgress(frame.uiState.series, post),
-                    onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
-                    onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
-                )
-            },
+            events = host.rememberPageEvents(frame, key, loadGeneration, controls, post, media),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = remember(key, pageState, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config, host) {
-                host.videoOptions(key, pageState, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config)
-            },
+            videoOptions = host.rememberVideoOptions(key, pageState, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -249,7 +241,29 @@ private fun ViewerPostPage(
     }
 }
 
-private fun ViewerScreenHost.videoOptions(
+@Composable
+private fun ViewerScreenHost.rememberPageEvents(
+    frame: ViewerFrame,
+    key: ViewerMediaKey,
+    loadGeneration: Long,
+    controls: ViewerControls,
+    post: Post,
+    media: ImageRef,
+): ViewerRendererEvents {
+    val session = frame.uiState.session
+    val series = frame.uiState.series
+    return remember(session, key, loadGeneration, this, controls, post, media, series) {
+        viewerRendererEvents(
+            session = session, key = key, generation = loadGeneration,
+            onAction = onAction, onPlaybackProgress = episodeProgress(series, post),
+            onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
+            onDurationKnown = { duration -> if (carriesPostDuration(post, media)) durations.onPlayerDuration(post, duration) },
+        )
+    }
+}
+
+@Composable
+private fun ViewerScreenHost.rememberVideoOptions(
     key: ViewerMediaKey,
     pageState: ViewerPageState,
     episode: ViewerEpisodeChoice,
@@ -258,8 +272,8 @@ private fun ViewerScreenHost.videoOptions(
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
     config: ViewerScreenConfig,
-): ViewerVideoOptions {
-    return ViewerVideoOptions(
+): ViewerVideoOptions = remember(key, pageState, episode, session, screen, quality, qualityHeight, config, this) {
+    ViewerVideoOptions(
         quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
         ViewerEpisodeOptions(screen.streamAttempts.forSession(session), episode.pickedStream(key), pageState.resolution.resolvedAtMs) { label ->
             onAction(ViewerAction.FallBackToStream(key, label))
