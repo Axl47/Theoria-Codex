@@ -84,5 +84,6 @@ and link the record that replaces it.
 | [0063](0063-extension-repos-and-install.md) | Extensions install only from a repo's named key, into a private folder, and load only from verified read-only copies |
 | [0064](0064-extension-source-state.md) | Adapters hand sources back their own objects, memos and filters, and merge details additively |
 | [0065](0065-extension-source-ids.md) | Source ids are the first eight bytes of MD5 of name/lang/versionId, as Mihon and Aniyomi derive them |
+| [0066](0066-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |

@@ -53,7 +53,7 @@ internal fun ForYouBody(
 ) {
     val feed by level.feed.collectAsStateWithLifecycle()
     val end: @Composable () -> Unit = {
-        ForYouEnd(state.mix.takeIf { level.fork == null }, feed.posts.isEmpty(), owner::rebuild, callbacks.onGoToSearch, callbacks.onOpenSourceAccounts)
+        ForYouEnd(state.mix.takeIf { level.fork == null }, feed.posts.isEmpty(), owner::startOver, callbacks.onGoToSearch, callbacks.onOpenSourceAccounts)
     }
     when {
         feed.posts.isEmpty() && feed.pageFailed && !feed.loadingMore -> Column(Modifier.padding(16.dp)) {
