@@ -32,10 +32,10 @@ fun PixivUgoiraPlayer(
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     contentDescription: String?,
+    sizeBucket: UgoiraSizeBucket,
     modifier: Modifier = Modifier,
     mediaModifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit,
-    sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
     loadingPreview: (@Composable () -> Unit)? = null,
 ) {
     val load = remember(postId, client, sizeBucket, controls.loadGeneration) { UgoiraLoad(client.cached(postId, sizeBucket)) }

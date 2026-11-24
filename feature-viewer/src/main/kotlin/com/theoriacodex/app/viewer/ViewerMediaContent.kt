@@ -34,7 +34,7 @@ internal fun ViewerMediaContent(
     when (kind) {
         ViewerMediaKind.UGOIRA -> if (pixivUgoiraClient != null) PixivUgoiraPlayer(
             postId = post.id.sourcePostId, client = pixivUgoiraClient, controls = controls, events = events,
-            contentDescription = post.title ?: post.id.sourcePostId,
+            contentDescription = post.title ?: post.id.sourcePostId, sizeBucket = UgoiraSizeBucket.VIEWER,
             modifier = Modifier.fillMaxSize(), mediaModifier = modifier,
             loadingPreview = { ViewerLoadingPreview(post, media) },
         )
