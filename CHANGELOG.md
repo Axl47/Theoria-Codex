@@ -135,6 +135,7 @@
 
 ### Fixed
 
+- Saved searches and Followed show their new posts first when you open them after the count says there are some. They used to show the posts from your last visit, and the new ones only turned up while scrolling, some jumping to the top.
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
 - Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.
 - A turned-off or removed extension no longer holds up other chapter downloads: chapters from other sources keep downloading, and a notification says how many chapters wait for their extension.

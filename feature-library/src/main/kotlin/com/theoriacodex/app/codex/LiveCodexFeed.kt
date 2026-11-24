@@ -1,5 +1,8 @@
 package com.theoriacodex.app.codex
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -7,6 +10,7 @@ import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.NewPostMarks
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.distinctByFile
@@ -40,7 +44,21 @@ data class LiveCodexFeedState(
     val canLoadMore: Boolean = false,
     val errors: Map<String, String> = emptyMap(),
     val generation: Long = 0,
+    val loadedAtEpochMs: Long? = null,
 )
+
+fun LiveCodexFeedState.predates(marks: Collection<NewPostMarks>): Boolean {
+    val loadedAt = loadedAtEpochMs ?: return false
+    return marks.any { it.newPostCount > 0 && (it.checkedAtEpochMs ?: 0) > loadedAt }
+}
+
+@Composable
+fun rememberNewPostsReload(owner: LiveCodexFeedOwner, feed: LiveCodexFeedState, marks: Collection<NewPostMarks>): Boolean {
+    val opened = remember(owner) { marks }
+    val stale = feed.predates(opened)
+    LaunchedEffect(owner, stale) { if (stale) owner.refresh() }
+    return stale
+}
 
 interface LiveCodexFeedOwner {
     val state: StateFlow<LiveCodexFeedState>
@@ -75,6 +93,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var job: Job? = null
     private var generation = 0L
     private var coverPostId: PostId? = null
+    private var loadedAt: Long? = null
     private var coverSort = CodexSortMode.NEWEST_SAVED
     private var coverUsage = emptyMap<String, CodexUsage>()
     private var coverDurations = emptyMap<PostId, Long>()
@@ -108,9 +127,10 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         related.clear("live codex reset")
         generation++
         coverPostId = null
+        loadedAt = System.currentTimeMillis()
         branches.clear()
         initial.associateByTo(branches) { it.id }
-        mutableState.value = LiveCodexFeedState(generation = generation)
+        mutableState.value = LiveCodexFeedState(generation = generation, loadedAtEpochMs = loadedAt)
         load(branches.keys.toList(), retry = false, cacheInitialCover = true)
     }
 
@@ -161,6 +181,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
             canLoadMore = branches.values.any { it.canLoadMore },
             errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap(),
             generation = generation,
+            loadedAtEpochMs = loadedAt,
         )
     }
 }
