@@ -40,15 +40,15 @@ internal class SeriesLiveDriver {
     }
 
     /**
-     * Launches the app afresh on the Series tab, which also proves the tab is in the bar, switches to [view] (the tab
-     * opens on Following when anything is followed), and waits for [shown].
+     * Launches the app afresh on the Series tab, which also proves the tab is in the bar, switches to [view] unless it is
+     * null (the tab opens on Following when anything is followed), and waits for [shown].
      */
-    fun openSeriesTab(shown: BySelector = By.text(BROWSE), view: String = BROWSE) {
+    fun openSeriesTab(shown: BySelector = By.text(BROWSE), view: String? = BROWSE) {
         // A task of its own, cleared: the app opens on its first screen. The shell can start another package's activity.
         val flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         device.executeShellCommand("am start -W -n $targetPackage/$MAIN_ACTIVITY -f $flags")
         tap("the Series tab", By.desc(TopLevelDestination.Series.label), LAUNCH_TIMEOUT_MS)
-        tap("the $view view", By.text(view), RESULTS_TIMEOUT_MS)
+        if (view != null) tap("the $view view", By.text(view), RESULTS_TIMEOUT_MS)
         waitFor("the Series tab's content", shown, RESULTS_TIMEOUT_MS)
     }
 
