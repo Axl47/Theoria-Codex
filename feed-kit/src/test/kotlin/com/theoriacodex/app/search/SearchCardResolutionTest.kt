@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.ui.components.ProvideFeedViewport
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -81,18 +82,20 @@ class SearchCardResolutionTest {
     ) {
         compose.setContent {
             MaterialTheme {
-                Box(Modifier.size(width = 200.dp, height = viewportHeight).clipToBounds()) {
-                    Column(Modifier.verticalScroll(scroll)) {
-                        Box(Modifier.size(width = 200.dp, height = spacerAbove))
-                        SearchResultCard(
-                            post = post,
-                            pixivUgoiraClient = null,
-                            resolvePostById = { id ->
-                                resolveCalls += id
-                                null
-                            },
-                            onClick = {},
-                        )
+                ProvideFeedViewport {
+                    Box(Modifier.size(width = 200.dp, height = viewportHeight).clipToBounds()) {
+                        Column(Modifier.verticalScroll(scroll)) {
+                            Box(Modifier.size(width = 200.dp, height = spacerAbove))
+                            SearchResultCard(
+                                post = post,
+                                pixivUgoiraClient = null,
+                                resolvePostById = { id ->
+                                    resolveCalls += id
+                                    null
+                                },
+                                onClick = {},
+                            )
+                        }
                     }
                 }
             }
