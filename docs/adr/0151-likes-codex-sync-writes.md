@@ -8,7 +8,7 @@ A post can exist under several sites' IDs (mirrors of the same file), and likes 
 
 ## Decision
 
-- `LikesCodexSyncService` serializes `toggle`, `likeIfAbsent` and `removeLike` with one mutex, so each one's check and change see no other of those writes in between. The bulk operations (`clearProfile`, `restoreClearedLikes`, `removeProfileCodex`) are single transactions and do not take the mutex.
+- `LikesCodexSyncService` serializes `toggle`, `likeIfAbsent` and `removeLike` with one mutex, so each one's check and change see no other of those writes in between. The bulk operations (`clearProfile`, `restoreClearedLikes`) are single transactions and do not take the mutex.
 - `toggle` likes the post, or, when its file is already liked under any site's ID (`FileMirrorIndex`), removes every one of those likes, so a heart filled by another site's copy empties.
 - When removing the copies, the removal reads only the ID; the stored copy is passed to the write (the given post for its own ID, otherwise `codexRepository.getPost`) so a concurrent change can never like the wrong post.
 - `likeIfAbsent` likes only when neither the post nor another site's copy of its file is liked, and returns the like it added.
@@ -20,4 +20,4 @@ Likes are consistent across mirror sites, and Undo of a like is safe against lat
 
 ## Applies to
 
-- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/LikesCodexSyncService.kt`: `LikesCodexSyncService`, `toggle`, `likeIfAbsent`, `removeLike`, `clearProfile`, `restoreClearedLikes`, `removeProfileCodex`
+- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/LikesCodexSyncService.kt`: `LikesCodexSyncService`, `toggle`, `likeIfAbsent`, `removeLike`, `clearProfile`, `restoreClearedLikes`
