@@ -29,6 +29,7 @@ internal data class FeedViewerLaunch(
  * - [singleTop] lets a launch reuse a Viewer already on top instead of stacking another.
  */
 internal suspend fun TheoriaShell.launchViewer(session: ViewerSession, saveContext: Boolean, singleTop: Boolean) {
+    features.offlineMedia.store.load()
     viewerSessions.retain(session)
     if (saveContext) data.uiRestoreRepository.setViewerLaunchContext(session.context)
     navController.navigate(AppRoute.Viewer) { launchSingleTop = singleTop }

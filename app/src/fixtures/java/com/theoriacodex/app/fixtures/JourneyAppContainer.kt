@@ -218,7 +218,6 @@ class JourneyAppContainer(
         statistics.awaitReady()
         workflows.profileBackup.recoverPendingRestore()
         workflows.profileDeletion.recoverPendingDeletion()
-        offline.store.refresh()
         settings.setEnabledSources(registry.availableSources())
         settings.setResolveUnknownAnimatedDurations(false)
         ready.complete(Unit)
