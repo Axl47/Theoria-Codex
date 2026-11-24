@@ -181,7 +181,6 @@
 0186-app-container-startup-and-wiring.md
 0187-app-lock.md
 0188-custom-source-runtime.md
-0189-extension-host-wiring.md
 0190-home-pager-and-tab-navigation.md
 0191-series-background-work.md
 0192-series-reader-session.md

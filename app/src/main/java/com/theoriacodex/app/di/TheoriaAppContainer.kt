@@ -43,6 +43,7 @@ import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.AndroidPixivPkceSessionStore
 import com.theoriacodex.app.sourceauth.ObservableSourceAccountStore
 import com.theoriacodex.app.sourceauth.PixivPkceController
+import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.app.sourceauth.SourceAccountStore
 import com.theoriacodex.app.update.AndroidApkInstaller
 import com.theoriacodex.app.update.ApkDownloadManager
@@ -643,7 +644,7 @@ internal class DefaultTheoriaAppContainer(
         if (series != null) {
             durableStoreScope.launch {
                 File(appContext.noBackupFilesDir, "series_downloads").deleteRecursively()
-                runCatchingPreservingCancellation { forgetLegacyExtensionData(appContext, settingsRepository) }
+                runCatchingPreservingCancellation { ExtensionHost.deleteLegacyPreferences(appContext) }
                     .onFailure { Diagnostics.report("extensions", "Old extension data could not be removed", it) }
             }
         }

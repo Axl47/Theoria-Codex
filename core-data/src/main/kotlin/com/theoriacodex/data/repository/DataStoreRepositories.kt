@@ -83,9 +83,6 @@ internal class CellSettingsRepository(
         }
     }
 
-    override suspend fun setScenarioPreset(preset: ScenarioPreset) {
-        updateSettings { current -> current.copy(scenarioPreset = preset) }
-    }
 
     override suspend fun setActiveProfile(profileId: String) {
         updateSettings { current ->
