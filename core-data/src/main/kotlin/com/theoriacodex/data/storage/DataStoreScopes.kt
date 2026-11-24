@@ -21,16 +21,13 @@ suspend fun CoroutineScope.closeDataStores(timeout: Duration = DATASTORE_CLOSE_T
 
 suspend fun <T> withDataStoreScope(block: suspend (CoroutineScope) -> T): T {
     val scope = newDataStoreScope()
-    val outcome = try {
-        block(scope)
-    } catch (failure: Throwable) {
-        if (!scope.tryCloseDataStores(DATASTORE_CLOSE_TIMEOUT)) {
-            failure.addSuppressed(IllegalStateException("DataStore scope did not close within $DATASTORE_CLOSE_TIMEOUT"))
-        }
-        throw failure
+    var completed = false
+    try {
+        return block(scope).also { completed = true }
+    } finally {
+        val released = scope.tryCloseDataStores(DATASTORE_CLOSE_TIMEOUT)
+        check(released || !completed) { "DataStore scope did not close within $DATASTORE_CLOSE_TIMEOUT" }
     }
-    scope.closeDataStores()
-    return outcome
 }
 
 private suspend fun CoroutineScope.tryCloseDataStores(timeout: Duration): Boolean {
