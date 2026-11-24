@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.media.isLikelyImageLocation
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
+import com.theoriacodex.app.viewer.ViewerPageFraction
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerStripMark
 import com.theoriacodex.app.viewer.decodeViewerPostId
@@ -84,9 +85,9 @@ class SeriesReaderTest {
         val picked = checkNotNull(reader.session(id, "/c2", pageIndex = 3)).series as ViewerSeries.Reading
         val restored = checkNotNull(reader.session(id, "/c2", pageIndex = 6)).series as ViewerSeries.Reading
 
-        assertEquals(mapOf(PostId(source, "/c3") to 0.25f, PostId(source, "/c2") to 0.6f), resumed.pageOffsets)
-        assertEquals(mapOf(PostId(source, "/c3") to 0.25f), picked.pageOffsets)
-        assertEquals(resumed.pageOffsets, restored.pageOffsets)
+        assertEquals(mapOf(PostId(source, "/c3") to ViewerPageFraction(1, 0.25f), PostId(source, "/c2") to ViewerPageFraction(6, 0.6f)), resumed.pageFractions)
+        assertEquals(mapOf(PostId(source, "/c3") to ViewerPageFraction(1, 0.25f)), picked.pageFractions)
+        assertEquals(resumed.pageFractions, restored.pageFractions)
     }
 
     @Test

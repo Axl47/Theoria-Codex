@@ -28,8 +28,10 @@ data class ViewerSession(
     val stripMarks: Map<com.theoriacodex.domain.model.PostId, ViewerStripMark> = emptyMap(),
 )
 
+data class ViewerPageFraction(val page: Int, val fraction: Float)
+
 sealed interface ViewerSeries {
-    data class Reading(val mode: GalleryReadingMode, val pageOffsets: Map<PostId, Float> = emptyMap()) : ViewerSeries
+    data class Reading(val mode: GalleryReadingMode, val pageFractions: Map<PostId, ViewerPageFraction> = emptyMap()) : ViewerSeries
 
     data class Watching(
         val startPositionsMs: Map<PostId, Long> = emptyMap(),

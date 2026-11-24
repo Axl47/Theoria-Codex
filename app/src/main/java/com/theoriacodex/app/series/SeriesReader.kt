@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.app.di.SeriesDependencies
+import com.theoriacodex.app.viewer.ViewerPageFraction
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
 import com.theoriacodex.app.viewer.ViewerSession
@@ -63,9 +64,11 @@ internal class SeriesReader(private val series: SeriesDependencies) {
                 }.toMap()
                 val marks = withPictures(numbered, posts, series.downloads.leadPages(id).first(), stored.chapterLeadPage())
                 val picked = pageIndex?.takeIf { it != entries[start].resumePageIndex() }?.let { posts[start].id }
-                val offsets = entries.mapNotNull { entry -> entry.resumePageOffset()?.let { postId(entry) to it } }.toMap() - setOfNotNull(picked)
+                val fractions = entries.mapNotNull { entry ->
+                    entry.resumePageOffset()?.let { postId(entry) to ViewerPageFraction(entry.resumePageIndex(), it) }
+                }.toMap() - setOfNotNull(picked)
                 ViewerSession(
-                    posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess(), offsets),
+                    posts, context, initialMediaIndices = resume, series = ViewerSeries.Reading(stored.readingModeOrGuess(), fractions),
                     stripMarks = marks,
                 )
             }

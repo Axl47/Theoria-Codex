@@ -182,7 +182,7 @@ class ViewerVerticalGalleryTest {
         val land = installGatedLoader(width = 100, height = 400)
         state.value = createViewerUiState(
             ViewerSessionIdentity("offset"), listOf(gallery, next), initialMediaIndices = mapOf(gallery.id to 2),
-            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.5f)),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageFractions = mapOf(gallery.id to ViewerPageFraction(2, 0.5f))),
         )
         show()
         compose.runOnIdle { land() }
@@ -201,7 +201,7 @@ class ViewerVerticalGalleryTest {
         state.value = createViewerUiState(
             session, listOf(gallery.copy(media = listOf(page)), next), requiresResolution = { it.id == gallery.id },
             initialMediaIndices = mapOf(gallery.id to 2),
-            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.5f)),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageFractions = mapOf(gallery.id to ViewerPageFraction(2, 0.5f))),
         )
         show()
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
@@ -221,7 +221,7 @@ class ViewerVerticalGalleryTest {
         state.value = createViewerUiState(
             session, listOf(gallery.copy(media = emptyList(), full = null, galleryLengthUnknown = true), next),
             requiresResolution = { it.id == gallery.id },
-            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.5f)),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageFractions = mapOf(gallery.id to ViewerPageFraction(0, 0.5f))),
         )
         show()
         compose.runOnIdle { land() }
@@ -241,13 +241,43 @@ class ViewerVerticalGalleryTest {
         val land = installGatedLoader(width = 100, height = 400)
         state.value = createViewerUiState(
             ViewerSessionIdentity("near-top"), listOf(gallery, next), initialMediaIndices = mapOf(gallery.id to 2),
-            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageOffsets = mapOf(gallery.id to 0.05f)),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageFractions = mapOf(gallery.id to ViewerPageFraction(2, 0.05f))),
         )
         show()
         compose.runOnIdle { land() }
         compose.waitForIdle()
 
         assertEquals(0f, compose.onNodeWithContentDescription("Page 3").fetchSemanticsNode().positionInRoot.y, 1f)
+    }
+
+    @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a saved fraction for another page is dropped and the page shown reports at once (ADR 0192)`() {
+        val reported = mutableListOf<Pair<Int, Float?>>()
+        state.value = createViewerUiState(
+            ViewerSessionIdentity("other-page"), listOf(gallery, next), initialMediaIndices = mapOf(gallery.id to 3),
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL, pageFractions = mapOf(gallery.id to ViewerPageFraction(2, 0.5f))),
+        )
+        compose.setContent {
+            MaterialTheme {
+                ViewerScreen(
+                    uiState = state.value,
+                    host = ViewerScreenHost(
+                        onAction = { state.value = reduceViewerState(state.value, it).state },
+                        onVisibleMediaChanged = { post, number, offset -> if (post.id == gallery.id) reported += number to offset },
+                    ),
+                    config = ViewerScreenConfig(galleryReadingModes = mapOf(gallery.id to GalleryReadingMode.VERTICAL)),
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().performTouchInput {
+            down(Offset(centerX, centerY))
+            repeat(12) { moveBy(Offset(0f, -height / 10f)) }
+        }
+        compose.waitForIdle()
+
+        assertTrue("reported $reported", reported.first() == (4 to null) && reported.any { it.first == 5 })
+        compose.onRoot().performTouchInput { up() }
     }
 
     @Config(qualifiers = "w411dp-h891dp")

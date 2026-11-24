@@ -80,7 +80,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Stable
-internal class ViewerVerticalGalleryState(val list: LazyListState, pendingPageFraction: Pair<Int, Float>? = null) {
+internal class ViewerVerticalGalleryState(val list: LazyListState, pendingPageFraction: ViewerPageFraction? = null) {
     var pendingPageFraction by mutableStateOf(pendingPageFraction)
     var scale by mutableFloatStateOf(1f)
         private set
@@ -194,7 +194,7 @@ private fun rememberVerticalGalleryState(pageState: ViewerPageState, series: Vie
     screen.verticalGalleryPositions.getOrPut(pageState.post.id) {
         ViewerVerticalGalleryState(
             LazyListState(pageState.selectedMediaIndex.coerceIn(0, maxOf(0, pageState.media.lastIndex))),
-            (series as? ViewerSeries.Reading)?.pageOffsets?.get(pageState.post.id)?.let { pageState.targetMediaIndex to it },
+            (series as? ViewerSeries.Reading)?.pageFractions?.get(pageState.post.id),
         )
     }
 }
@@ -264,7 +264,8 @@ private fun VerticalGalleryPageReport(
     val list = gallery.list
     LaunchedEffect(post, selected, enabled, reportsPageOffset) {
         val report = host.onVisibleMediaChanged?.takeIf { enabled } ?: return@LaunchedEffect
-        if (!reportsPageOffset) return@LaunchedEffect report(post, selected + 1, null)
+        report(post, selected + 1, null)
+        if (!reportsPageOffset) return@LaunchedEffect
         snapshotFlow { list.isScrollInProgress || gallery.pendingPageFraction != null }
             .filter { busy -> !busy }
             .collect { report(post, selected + 1, list.pageFraction(selected).takeUnless { it.isNaN() || !painted(selected) }) }
@@ -274,13 +275,17 @@ private fun VerticalGalleryPageReport(
 @Composable
 private fun VerticalGalleryOffsetRestore(gallery: ViewerVerticalGalleryState, selected: Int, ready: Boolean, painted: (Int) -> Boolean) {
     val list = gallery.list
-    LaunchedEffect(gallery, ready) {
+    LaunchedEffect(gallery, ready, selected) {
         val (target, fraction) = gallery.pendingPageFraction?.takeIf { ready } ?: return@LaunchedEffect
+        if (target != selected) {
+            gallery.pendingPageFraction = null
+            return@LaunchedEffect
+        }
         fun position() = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
         val start = position()
-        if (target == selected) snapshotFlow { painted(target) || list.isScrollInProgress }.first { it }
+        snapshotFlow { painted(target) || list.isScrollInProgress }.first { it }
         repeat(LAYOUT_FRAMES) { withFrameNanos { } }
-        if (target == selected && painted(target) && !list.isScrollInProgress && start == position()) list.scrollToPageFraction(target, fraction)
+        if (painted(target) && !list.isScrollInProgress && start == position()) list.scrollToPageFraction(target, fraction)
         gallery.pendingPageFraction = null
     }
 }
