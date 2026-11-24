@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.update
 
 data class MutationNotice(val id: Long, val message: String)
 
-/** Notices stay with their retained command owner until the UI finishes displaying them. */
 class MutationFeedback {
     private val sequence = AtomicLong()
     private val pending = MutableStateFlow<List<MutationNotice>>(emptyList())

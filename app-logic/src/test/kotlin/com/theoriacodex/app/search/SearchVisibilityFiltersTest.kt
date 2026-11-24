@@ -47,7 +47,6 @@ class SearchVisibilityFiltersTest {
         fun visible(retainedIds: Set<PostId>) = filterSearchResults(
             results = listOf(pending, saved),
             filters = filters,
-            // The saved-membership observer can emit before the likes observer.
             likedPostIds = emptySet(),
             savedPostIds = setOf(pending.id, saved.id),
             retainedLikedPostIds = retainedIds,

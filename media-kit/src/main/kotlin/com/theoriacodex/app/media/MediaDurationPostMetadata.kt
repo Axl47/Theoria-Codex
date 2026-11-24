@@ -7,7 +7,6 @@ import com.theoriacodex.domain.model.PostId
 internal data class MediaDurationPostSnapshot(
     val postsById: Map<PostId, Post>,
     val keysByPostId: Map<PostId, MediaDurationKey>,
-    /** Animated posts whose feed carries no duration, so a lookup must decide one. */
     val candidatesByKey: Map<MediaDurationKey, Post>,
 ) {
     val observedKeys: Set<MediaDurationKey> = keysByPostId.values.toSet()
@@ -52,27 +51,19 @@ data class DurationFilterMetadata(
     val stateByPostId: Map<PostId, MediaDurationState>,
     val readiness: DurationFilterReadiness = DurationFilterReadiness(0, 0),
     val isPrepared: Boolean = true,
-    /** Revealed posts in stable order; null means a feed has nothing to hold back. */
     val presentedPosts: List<Post>? = null,
     val revealFrontier: Int = Int.MAX_VALUE,
-    /**
-     * Stands for [knownDurationMsByPostId] in a filter over exactly [presentedPosts]. Frames of one projection share it
-     * while every presented post that stays in place keeps its length, so such a filter skips a length that changed
-     * nothing shown and may filter just the posts a length newly revealed.
-     */
     val presentedDurationsKey: Any = UNSCOPED_DURATIONS,
 ) {
     val blocksPaging: Boolean
         get() = !isPrepared || readiness.blocksPaging
 
-    /** A hidden anchor is final once it is decided and revealed, or probing is disabled. */
     fun isVisibilityResolved(post: Post?, resolveInBackground: Boolean, canonicalIndex: Int? = null): Boolean {
         if (!isPrepared) return false
         if (post == null || !resolveInBackground || !isAnimatedPost(post) || animatedDurationMs(post) != null) return true
         return !stateByPostId[post.id].isUndecided && (canonicalIndex == null || canonicalIndex < revealFrontier)
     }
 
-    /** New posts appended to this frame are being prepared, while its shown posts stay put. */
     fun stillPreparing(): DurationFilterMetadata = copy(
         isPrepared = false,
         readiness = readiness.copy(pendingCount = readiness.pendingCount.coerceAtLeast(1)),
@@ -88,16 +79,11 @@ data class DurationFilterMetadata(
     }
 }
 
-/**
- * A route's duration decisions by post. Each decision belongs to the post version the route synchronized, so a post
- * with the same id but other media (a related shelf's copy, say) gets none: its own media was never looked up.
- */
 class MediaDurationStates internal constructor(
     private val byPostId: Map<PostId, MediaDurationState>,
     private val decidedPosts: Map<PostId, Post>,
     private val decidedKeys: Map<PostId, MediaDurationKey>,
 ) {
-    /** The decision for [post]'s media, or null while none was made for it. Only another post version is hashed. */
     operator fun get(post: Post): MediaDurationState? {
         val state = byPostId[post.id] ?: return null
         return state.takeIf { decidedPosts[post.id] === post || decidedKeys[post.id] == mediaDurationKey(post) }
@@ -108,7 +94,6 @@ class MediaDurationStates internal constructor(
     }
 }
 
-/** [decisions] by post for a route that synchronized [postsById] and keyed its animated posts as [keysByPostId]. */
 internal fun routeDurationStates(
     postsById: Map<PostId, Post>,
     keysByPostId: Map<PostId, MediaDurationKey>,
@@ -118,10 +103,6 @@ internal fun routeDurationStates(
     return MediaDurationStates(byPostId, postsById, keysByPostId)
 }
 
-/**
- * [states] for [posts], hashing each animated post's media once. Routes publish their own; this serves screens that read
- * the coordinator directly, such as the benchmark fixture.
- */
 fun mediaDurationStates(posts: List<Post>, states: Map<MediaDurationKey, MediaDurationState>): MediaDurationStates {
     val snapshot = mediaDurationPostSnapshot(posts)
     return routeDurationStates(snapshot.postsById, snapshot.keysByPostId, states)
@@ -172,7 +153,6 @@ fun mediaDurationKey(post: Post): MediaDurationKey {
     )
 }
 
-/** Each post's length: the feed's own, else a decided lookup's. */
 fun knownMediaDurations(
     posts: List<Post>,
     states: MediaDurationStates,

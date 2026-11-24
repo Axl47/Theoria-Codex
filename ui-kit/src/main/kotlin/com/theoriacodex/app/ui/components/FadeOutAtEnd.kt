@@ -12,7 +12,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Fades the last [width] of a clipped one-line row to transparent, so a peek reads as "more continues". */
 fun Modifier.fadeOutAtEnd(width: Dp = 40.dp): Modifier = graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
     .drawWithContent {
         drawContent()

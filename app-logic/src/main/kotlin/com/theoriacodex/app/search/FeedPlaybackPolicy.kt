@@ -17,10 +17,8 @@ fun feedPreviewDecodeSize(
     return FeedPreviewDecodeSize(width, height)
 }
 
-/** How long a card stays visible before it starts costly work: binding a player, loading an animation. */
 const val FEED_PLAYER_ACTIVATION_DELAY_MS = 180L
 
-/** Long enough for an opening Viewer to cover a paused card, which keeps its last frame until then. */
 const val FEED_PLAYER_RELEASE_GRACE_MS = 1_000L
 
 private const val FEED_PREVIEW_MAX_WIDTH_PX = 1_600

@@ -5,11 +5,6 @@ import java.nio.ByteOrder
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * Stores a picture embedding in [bytesFor] bytes: one signed byte per dimension, scaled so the largest magnitude is 127,
- * followed by that scale as a little-endian float. The spike measured int8 storage of WD-ViT embeddings at cosine
- * 0.9997 to float, and it keeps 10,000 library posts under 8 MB.
- */
 object PictureEmbedding {
     fun bytesFor(dimensions: Int): Int = dimensions + Float.SIZE_BYTES
 

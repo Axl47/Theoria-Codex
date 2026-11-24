@@ -31,7 +31,6 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.theoriacodex.domain.model.SourceKey
 
-/** Renders the logo decision owned by [SourcePresentationCatalog]. */
 @Composable
 fun SourceLogo(
     source: SourceKey,
@@ -85,10 +84,6 @@ private fun SourceLabelText(source: SourceKey, label: String, modifier: Modifier
     )
 }
 
-/**
- * A letter that fills a [size] box exactly: no font padding and a line box trimmed to the glyph, so
- * it centers on the same line as neighboring icons instead of sitting low.
- */
 @Composable
 private fun FittedLetter(mark: String, size: Dp) {
     val fontSize = with(LocalDensity.current) { (size * 0.9f).toSp() }
@@ -106,10 +101,6 @@ private fun FittedLetter(mark: String, size: Dp) {
     )
 }
 
-/**
- * A site icon; [fallback] shows while it loads and when the site has none. It is requested with the
- * site's media headers, so a browser-verified site's clearance (bound to its User-Agent) applies.
- */
 @Composable
 private fun FaviconImage(
     logo: SourceLogoAsset.Favicon,
@@ -130,13 +121,11 @@ private fun FaviconImage(
         contentDescription = presentation.label,
         modifier = modifier,
         contentScale = ContentScale.Fit,
-        // The slots don't center their content, so a letter fallback would sit at the top start.
         loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } },
         error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } },
     )
 }
 
-/** Compact source selector mark; sources without a legible small logo use a letter mark. */
 @Composable
 fun SourceIcon(source: SourceKey) {
     val presentation = source.presentation()
@@ -151,7 +140,6 @@ fun SourceIcon(source: SourceKey) {
     }
 }
 
-/** Letter marks share the white, bold treatment of Hitomi's icon. */
 @Composable
 fun SourceLetterIcon(label: String) {
     Text(

@@ -160,11 +160,11 @@ def host_tests_wait_settled() -> list[str]:
         relative = source.relative_to(ROOT).as_posix()
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
             if is_bare_compose_wait(line):
-                failures.append(f"{relative}:{number} uses a bare waitUntil; use waitUntilSettled (docs/adr/0040-host-test-compose-waits.md)")
+                failures.append(f"{relative}:{number} uses a bare waitUntil; use waitUntilSettled (docs/adr/0210-host-test-compose-waits.md)")
             if NON_IDLING_WAIT.search(line) and relative not in NON_IDLING_WAIT_FILES:
                 failures.append(
                     f"{relative}:{number} uses waitUntilWithoutIdling, which only the screens listed in "
-                    "docs/adr/0040-host-test-compose-waits.md and NON_IDLING_WAIT_FILES may use"
+                    "docs/adr/0210-host-test-compose-waits.md and NON_IDLING_WAIT_FILES may use"
                 )
     return failures
 

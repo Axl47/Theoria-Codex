@@ -17,7 +17,6 @@ enum class ViewerPrefetchOutcome {
     FAILED,
 }
 
-/** [decoded]: the image now sits decoded in memory, not only on disk. */
 data class ViewerPrefetchResult(
     val outcome: ViewerPrefetchOutcome,
     val bytesCached: Long = 0L,

@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** The tallest timeline footer (portrait's two lines): gestures on an animated page leave this much to scrubbing, plus the dock below it. */
 val VIEWER_TIMELINE_HEIGHT = 72.dp
 
 @Composable

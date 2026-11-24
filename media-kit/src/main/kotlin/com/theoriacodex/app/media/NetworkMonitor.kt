@@ -10,10 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 
-/**
- * Process-lifetime view of whether the default network has confirmed internet. It decides when to
- * retry and how to word a failure; requests are never blocked on it, so a wrong reading costs no feed.
- */
 class NetworkMonitor(context: Context) {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val mutableOnline = MutableStateFlow(connectivity.getNetworkCapabilities(connectivity.activeNetwork).hasInternet())
@@ -36,7 +32,6 @@ class NetworkMonitor(context: Context) {
             hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }
 
-/** Emits once each time the network comes back, and never for the first reading. */
 fun Flow<Boolean>.reconnections(): Flow<Unit> = flow {
     var wasOnline: Boolean? = null
     collect { online ->

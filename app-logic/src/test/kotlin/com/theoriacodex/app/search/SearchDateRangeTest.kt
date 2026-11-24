@@ -24,7 +24,7 @@ class SearchDateRangeTest {
     }
 
     @Test fun `custom range covers its whole last day and labels in UTC`() {
-        val from = 1_767_225_600_000L // 2026-01-01T00:00Z
+        val from = 1_767_225_600_000L
         val range = customDateRange(from, from + 7 * day)
         assertEquals(from + 8 * day - 1, range.toEpochMs)
         assertEquals("Jan 1, 2026 – Jan 8, 2026", dateRangeLabel(range, now))

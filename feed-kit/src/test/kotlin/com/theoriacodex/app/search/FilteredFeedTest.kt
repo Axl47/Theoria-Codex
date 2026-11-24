@@ -22,11 +22,6 @@ class FilteredFeedTest {
     private fun filter(posts: List<Post>, durations: Map<PostId, Long>) =
         filterSearchResults(posts, filters, emptySet(), emptySet(), knownDurationMsByPostId = durations)
 
-    /**
-     * Lengths arrive in random order over a feed of videos and stills, as the length step presents them. After every
-     * arrival the carried-over result must equal a whole pass over the presented list, and most arrivals (reveals and
-     * waiting posts moving to the end) must carry over, filtering only the appended posts.
-     */
     @Test fun `a carried-over result equals a whole pass after every arriving length`() {
         repeat(20) { seed ->
             val random = Random(seed)
@@ -35,11 +30,9 @@ class FilteredFeedTest {
             }
             val projection = DurationFilterProjection()
             val states = posts.filter { it.id.source == SourceKey.RULE34VIDEO }.shuffled(random).map { post ->
-                // About half inside the 0-10 s range the filter keeps.
                 val ms = if (random.nextBoolean()) 4_000L else 30_000L
                 mediaDurationKey(post) to MediaDurationState.Known(ms, MediaDurationProvenance.CONTAINER_PROBE)
             }
-            // As the feed keys its pass: the presented list and the projection's key, and a key change refilters whole.
             var frame: ListFrame<Post, FilteredPosts>? = null
             var key: Any? = null
             var carried = 0

@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.filter
 
-/** The bottom bar's tabs, in pager order. [route] is what the last-tab preference stores. */
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
     ForYou("for_you", "For You"),
@@ -26,12 +25,10 @@ enum class TopLevelDestination(val route: String, val label: String) {
     Series("series", "Series"),
 }
 
-/** Lets a Codex tile and its detail screen morph into each other across navigation. */
 class CodexMorphScope(val shared: SharedTransitionScope, val visibility: AnimatedVisibilityScope)
 
 val LocalCodexMorph = staticCompositionLocalOf<CodexMorphScope?> { null }
 
-/** Marks a Codex tile or detail screen; a Codex opened from anywhere else simply fades in. */
 @Composable
 fun Modifier.codexMorph(codexId: String, morph: CodexMorphScope? = LocalCodexMorph.current): Modifier {
     if (morph == null) return this
@@ -45,13 +42,10 @@ fun Modifier.codexMorph(codexId: String, morph: CodexMorphScope? = LocalCodexMor
     }
 }
 
-/** Tapping the tab that is already showing; each tab's scrolling content listens for its own. */
-/** Ambient connectivity for failure wording and for the feed owners that retry on reconnect. */
 val LocalNetworkOnline = staticCompositionLocalOf<StateFlow<Boolean>> { MutableStateFlow(true) }
 
 val LocalTabReselects = staticCompositionLocalOf<SharedFlow<TopLevelDestination>> { MutableSharedFlow() }
 
-/** Returns [destination]'s content to its top when its tab is tapped again. */
 @Composable
 fun ScrollToTopOnTabReselect(destination: TopLevelDestination, scrollToTop: suspend () -> Unit) {
     val reselects = LocalTabReselects.current

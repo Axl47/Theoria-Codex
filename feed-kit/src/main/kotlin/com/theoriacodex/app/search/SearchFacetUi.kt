@@ -52,7 +52,6 @@ internal fun searchFacetLabel(facet: SearchFacet, sourceNamespace: String?): Str
     }
 }
 
-/** The type a tag shows beside its value; general tags need none. */
 fun searchTermTypeLabel(term: SearchTerm): String? =
     if (term.isPortableGeneralTag) null else searchFacetLabel(term.facet, term.sourceNamespace)
 

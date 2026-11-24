@@ -1,6 +1,5 @@
 package com.theoriacodex.app.media
 
-/** Inspect the bounded coordinator snapshot, retaining settled route values beyond its LRU. */
 fun reconcileDurationDecisions(
     previous: Map<MediaDurationKey, MediaDurationState>,
     incoming: Map<MediaDurationKey, MediaDurationState>,

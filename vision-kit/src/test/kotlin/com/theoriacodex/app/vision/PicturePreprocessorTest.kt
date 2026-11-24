@@ -14,7 +14,6 @@ class PicturePreprocessorTest {
 
         argbToBgrPlanes(pixels, out)
 
-        // 51 / 127.5 - 1 = -0.6; alpha does not matter.
         assertArrayEquals(floatArrayOf(-0.6f, -1f, -1f, 1f, 1f, -1f), out, 1e-6f)
     }
 

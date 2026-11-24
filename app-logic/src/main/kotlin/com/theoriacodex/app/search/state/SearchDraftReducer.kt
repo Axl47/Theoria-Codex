@@ -30,9 +30,7 @@ data class SearchDraftReduction(
     val accepted: Boolean = true,
 )
 
-/** Pure route-input reducer. SearchViewModel is the only holder of the returned state. */
 object SearchDraftReducer {
-    /** Applies one draft edit; [nowEpochMs] anchors a date-range preset. A rejected edit returns its reduction's state. */
     fun edit(state: SearchUiState, edit: SearchAction.DraftEdit, nowEpochMs: Long): SearchUiState = when (edit) {
         is SearchAction.SelectSort -> mutateQuery(state) { it.copy(sort = edit.sort) }
         is SearchAction.SetMedia -> mutateQuery(state) { it.copy(media = edit.media) }
@@ -96,16 +94,11 @@ object SearchDraftReducer {
                 sanitized.query,
                 nextScope,
                 validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE.takeIf { sanitized.removedSourceOwnedTerms },
-                // The typed input stays for the new sources, so its error stays until their suggestions answer.
                 suggestions = state.suggestions.withoutMatches(),
             ),
         )
     }
 
-    /**
-     * Fits the draft and the applied search to the sources available now, and takes what the engine reports about
-     * them. A picked suggestion scope the draft's source no longer offers falls back to All.
-     */
     fun reconcileEnvironment(
         state: SearchUiState,
         availableSources: List<SourceKey>,
@@ -251,10 +244,6 @@ object SearchDraftReducer {
         return mutateQuery(state) { query -> query.withIncludeTermGroups(replacement) }
     }
 
-    /**
-     * Adds general [terms] as one new group of alternatives, leaving out any the draft already
-     * requires. Only general tags are accepted, so the group suits every source.
-     */
     fun addIncludeGroup(state: SearchUiState, terms: List<SearchTerm>): SearchDraftReduction {
         val fresh = terms.mapNotNull { it.normalizedOrNull() }
             .filter(SearchTerm::isPortableGeneralTag)
@@ -313,20 +302,12 @@ object SearchDraftReducer {
         return addTerm(prepared, normalized, excluded)
     }
 
-    /**
-     * What [addPostTerm] would discard: a typed tag moves the draft to the post's [source], and the
-     * typed terms of any other source cannot come along.
-     */
     fun termsLostToPostTerm(query: Query, source: SourceKey, term: SearchTerm): List<SearchTerm> {
         val normalized = term.normalizedOrNull() ?: return emptyList()
         if (normalized.isPortableGeneralTag || query.mode == QueryMode.Source(source)) return emptyList()
         return (query.includeTerms + query.excludeTerms).filterNot(SearchTerm::isPortableGeneralTag)
     }
 
-    /**
-     * The form a post's [term] takes to join group [groupIndex], or null when it cannot join.
-     * A source's general tags may carry a "tag" namespace, so they adopt the group's own.
-     */
     fun postTermForGroup(query: Query, source: SourceKey, groupIndex: Int, term: SearchTerm): SearchTerm? {
         val normalized = term.normalizedOrNull() ?: return null
         val group = query.effectiveIncludeTermGroups.getOrNull(groupIndex) ?: return null
@@ -341,7 +322,6 @@ object SearchDraftReducer {
         return joined.takeUnless { wrongSource || it in query.includeTerms }
     }
 
-    /** Post and saved tags come from the source itself, so they skip the check that typed Gelbooru input needs. */
     fun addKnownIncludeAlternative(
         state: SearchUiState,
         source: SourceKey,
@@ -378,7 +358,6 @@ object SearchDraftReducer {
         val sanitized = query.normalizedForMode(query.mode)
         val validationMessage = when {
             sanitized.removedSourceOwnedTerms -> UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-            // Restoring the draft already on screen (the route re-reads the one it saved) keeps its notice.
             sanitized.query == state.query.draft -> state.query.validationMessage
             else -> null
         }
@@ -389,7 +368,6 @@ object SearchDraftReducer {
 
     fun clearDraft(state: SearchUiState): SearchDraftReduction {
         val scope = state.query.draftSourceScope
-        // "Animated only" outlives the terms, as it did when it was a screen setting; only the filter reset clears it.
         val cleared = emptySearchQuery(scope.queryMode()).copy(media = state.query.draft.media)
         return SearchDraftReduction(state.switchDraft(cleared, scope))
     }
@@ -483,7 +461,6 @@ object SearchDraftReducer {
         }
         val source = state.query.draftExactTagSource ?: return true
         val normalized = sourceAutocompletePrefix(source, parsed.value)
-        // A tag searched before on the source is as confirmed as one its autocomplete returned.
         return (state.suggestions.autocomplete.map(TagSuggestion::text) + state.suggestions.searchedTags.map(SearchTerm::value)).any { tag ->
             sourceTagsMatch(source, tag, normalized)
         }
@@ -491,10 +468,6 @@ object SearchDraftReducer {
 
     fun directNhentaiGalleryIdCandidate(query: Query): String? = query.directNhentaiGalleryIdCandidate()
 
-    /**
-     * Replaces the draft with [draft] searched over [scope]. [selectedScope] stays picked when [draft]'s source offers
-     * it, and the suggestions shown for the old draft go unless [suggestions] says what remains.
-     */
     private fun SearchUiState.switchDraft(
         draft: Query,
         scope: SearchSourceScope = SearchSourceScope.fromQuery(draft),
@@ -514,7 +487,6 @@ object SearchDraftReducer {
     private fun SearchQueryUiState.validSelectedScope(selected: FacetedSearchScope, draft: Query): FacetedSearchScope =
         selected.takeIf { it in scopesFor(draft.mode) } ?: FacetedSearchScope.All
 
-    /** Keeps the typed input and its error, dropping the matches found for it. */
     private fun SearchSuggestionsUiState.withoutMatches() =
         copy(autocomplete = emptyList(), facetedAutocomplete = emptyList(), searchedTags = emptyList())
 
@@ -524,7 +496,6 @@ object SearchDraftReducer {
         if (state.query.supportedScopes.isNotEmpty()) return trimmed
         val parsed = parseScopedInput(trimmed)
         if (parsed.explicitScope != null) return trimmed
-        // A typed translation ("Hatsune Miku") commits the native tag it labels (初音ミク).
         val matched = state.suggestions.autocomplete.firstOrNull { suggestion ->
             sourceTagsMatch(source, suggestion.text, parsed.value)
         }?.text ?: state.suggestions.autocomplete.firstOrNull { suggestion ->
@@ -619,6 +590,5 @@ private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
 private const val NHENTAI_LANGUAGE_NAMESPACE = "language"
 private const val NHENTAI_TAG_NAMESPACE = "tag"
 private const val NHENTAI_FULL_COLOR_TAG = "full color"
-/** Asks for a suggested tag on the draft's source, which matches only exactly spelled tags. */
 private fun SearchQueryUiState.exactTagInputError(): String =
     "For ${exactTagSources[draftExactTagSource]}, pick a suggested tag from autocomplete."

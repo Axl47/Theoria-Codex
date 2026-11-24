@@ -5,10 +5,6 @@ import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.mediakit.R
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
-/**
- * Product-facing grouping used to keep source ordering and presentation out of route code. A group
- * with a [folderLabel] folds its sources behind one source-picker chip so they don't crowd it.
- */
 enum class SourcePresentationGroup(val folderLabel: String? = null) {
     ILLUSTRATION,
     GALLERY,
@@ -16,11 +12,9 @@ enum class SourcePresentationGroup(val folderLabel: String? = null) {
     RULE34(folderLabel = "R34"),
     DANBOORU(folderLabel = "Booru"),
 
-    /** User-added sites. */
     CUSTOM(folderLabel = "Custom"),
 }
 
-/** Whether a live adapter is exposed as a user-selectable source. */
 enum class SourceExposure {
     USER_VISIBLE,
     CREDENTIAL_GATED,
@@ -33,20 +27,12 @@ sealed interface SourceLogoAsset {
 
     data object Text : SourceLogoAsset
 
-    /** A user-added site's own icon (declared on its home page, else `/favicon.ico`); a fallback shows while it loads or if it fails. */
     data class Favicon(val url: String) : SourceLogoAsset
 }
 
-/**
- * How duration lookups treat a source's hosts. Lookups share a host and an IP with video playback, so tripping a
- * host's limit would also break the videos on screen.
- */
 data class DurationLookupPolicy(
-    /** Minimum gap between lookup starts; zero leaves lookups unpaced. */
     val startIntervalMs: Long = 0L,
-    /** Lookups that may run at once, so one slow or rate-limited host never holds up the others. */
     val maxConcurrent: Int = 4,
-    /** The media host answers an overloaded client with 404, even for files it can serve. */
     val notFoundMeansThrottled: Boolean = false,
 )
 
@@ -58,11 +44,8 @@ data class SourcePresentation(
     val group: SourcePresentationGroup,
     val order: Int,
     val logo: SourceLogoAsset,
-    /** Short letter mark for compact source icons, used when the logo is unreadable at that size. */
     val mark: String? = null,
-    /** Media requests' User-Agent; Danbooru's CDN challenges generic browser agents. */
     val userAgent: String = BROWSER_USER_AGENT,
-    /** Feed cards never step up from the preview to a lighter rendition; the Viewer still does. */
     val cardsStayOnPreview: Boolean = false,
     val durationLookup: DurationLookupPolicy = DurationLookupPolicy(),
 ) {
@@ -74,7 +57,6 @@ data class SourcePresentation(
     }
 }
 
-/** The single app-layer catalog for labels, headers, exposure, ordering, grouping, and logos. */
 object SourcePresentationCatalog {
     private val entries = listOf(
         SourcePresentation(
@@ -85,7 +67,6 @@ object SourcePresentationCatalog {
             group = SourcePresentationGroup.ILLUSTRATION,
             order = 1,
             logo = SourceLogoAsset.Drawable(R.drawable.pixiv_logo),
-            // Pixiv durations cost a rate-limited API call; the others are ranged reads from a media CDN.
             durationLookup = DurationLookupPolicy(startIntervalMs = 500L, maxConcurrent = 2),
         ),
         SourcePresentation(
@@ -156,7 +137,6 @@ object SourcePresentationCatalog {
             order = 5,
             logo = SourceLogoAsset.Text,
             mark = "R34",
-            // A sample on every card would download far more than the previews the feed was tuned around.
             cardsStayOnPreview = true,
         ),
         SourcePresentation(
@@ -193,7 +173,6 @@ object SourcePresentationCatalog {
 
     private val bySource = entries.associateBy(SourcePresentation::source)
 
-    /** User-added sites, replaced as a whole by [installCustom]; read without locking. */
     @Volatile
     private var custom: CustomPresentations = CustomPresentations(emptyList())
 
@@ -206,25 +185,15 @@ object SourcePresentationCatalog {
         }
     }
 
-    /**
-     * Built-in, then installed custom, then a fallback for a custom id with no profile (a removed or
-     * not-yet-restored site), so data from such a site still renders with a readable label.
-     */
     fun presentation(source: SourceKey): SourcePresentation =
         bySource[source] ?: custom.bySource[source] ?: customSourcePresentation(source, CustomSourceIds.hostLabel(source.id))
 
-    /** Built-ins in presentation order, followed by installed custom sites. */
     fun orderedPresentations(): List<SourcePresentation> = entries + custom.ordered
 
     fun orderedSources(): List<SourceKey> = orderedPresentations().map(SourcePresentation::source)
 
-    /** Installed custom sites in their presentation order. */
     fun customSources(): List<SourceKey> = custom.ordered.map(SourcePresentation::source)
 
-    /**
-     * Replaces every custom entry in one write. Called only by the custom-site runtime, which installs
-     * presentations before their adapters become visible and withdraws them after.
-     */
     fun installCustom(presentations: List<SourcePresentation>) {
         require(presentations.all { it.source.isCustom }) { "Only custom sources can be installed" }
         require(presentations.map(SourcePresentation::source).distinct().size == presentations.size) {
@@ -251,13 +220,8 @@ object SourcePresentationCatalog {
 
 fun SourceKey.presentation(): SourcePresentation = SourcePresentationCatalog.presentation(this)
 
-/** First presentation order for custom sites; built-ins use 0 through 10. */
 const val CUSTOM_PRESENTATION_ORDER_START = 100
 
-/**
- * Presentation for a user-added site. A null [referer] uses the site root ([baseUrl], or the host
- * encoded in the id); a null [userAgent] uses the browser agent media requests already send.
- */
 fun customSourcePresentation(
     source: SourceKey,
     label: String,
@@ -278,7 +242,6 @@ fun customSourcePresentation(
         logo = SourceLogoAsset.Favicon(iconUrl ?: "${baseUrl ?: "https://${CustomSourceIds.hostLabel(source.id)}"}/favicon.ico"),
         mark = label.firstOrNull(Char::isLetterOrDigit)?.uppercase() ?: "?",
         userAgent = userAgent ?: BROWSER_USER_AGENT,
-        // A user-added site's rate limits are unknown; pace it like Gelbooru.
         durationLookup = DurationLookupPolicy(startIntervalMs = 500L),
     )
 }

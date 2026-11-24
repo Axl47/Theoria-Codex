@@ -37,10 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.time.Duration.Companion.milliseconds
 
-/** The app's one [UndoSlot]. The default is a standalone slot, so previews and tests work unprovided. */
 val LocalUndoSlot = staticCompositionLocalOf { UndoSlot() }
 
-/** Provides [slot] to [content] and stretches undo timers to what the accessibility services recommend. */
 @Composable
 fun ProvideUndoSlot(slot: UndoSlot, content: @Composable () -> Unit) {
     val accessibility = LocalAccessibilityManager.current
@@ -54,24 +52,18 @@ fun ProvideUndoSlot(slot: UndoSlot, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalUndoSlot provides slot, content = content)
 }
 
-/** The live offer when it is anchored at [anchor], else null; for surfaces that lay out around an offer. */
 @Composable
 fun rememberUndoOffer(anchor: UndoAnchor): UndoOffer? {
     val offer by LocalUndoSlot.current.offer.collectAsStateWithLifecycle()
     return offer.shownAt(anchor)
 }
 
-/** Expires any offer anchored in [anchorScope] when its surface is left (see [SurfaceLeaveEffect]). */
 @Composable
 fun UndoLeaveEffect(anchorScope: String) {
     val slot = LocalUndoSlot.current
     SurfaceLeaveEffect(slot, anchorScope) { slot.expire(anchorScope) }
 }
 
-/**
- * Runs [onLeave] when this leaves composition because its surface was left (navigation, a closed sheet, a finished
- * Activity), but not when the Activity is only recreated for a configuration change. [keys] restart the effect.
- */
 @Composable
 fun SurfaceLeaveEffect(vararg keys: Any?, onLeave: () -> Unit) {
     val activity = LocalContext.current.findActivity()
@@ -81,7 +73,6 @@ fun SurfaceLeaveEffect(vararg keys: Any?, onLeave: () -> Unit) {
     }
 }
 
-/** A floating pill a screen or sheet places (usually bottom-centre); it shows only offers anchored at [anchor]. */
 @Composable
 fun UndoPill(anchor: UndoAnchor, modifier: Modifier = Modifier) {
     UndoOfferVisibility(anchor, modifier) { offer, act -> UndoPillSurface(offer.label, offer.action.label, act) }
@@ -100,26 +91,16 @@ private fun UndoPillSurface(label: String, actionLabel: String?, act: () -> Unit
     }
 }
 
-/** A row-shaped offer drawn in the place a removed row or tile vacated; it shows only offers anchored at [anchor]. */
 @Composable
 fun UndoRow(anchor: UndoAnchor, modifier: Modifier = Modifier) {
     UndoOfferVisibility(anchor, modifier.fillMaxWidth()) { offer, act -> UndoRowSurface(offer.label, offer.action.label, act) }
 }
 
-/**
- * The row a removed item leaves while [DeferredRemovals] holds its [removal]: "label · Undo", then "Could not remove ·
- * Retry" after a failed commit. [onAct] is [DeferredRemovals.act] for the item's key. Downloads, offline copies,
- * Custom Sites and deleted Codices all draw their vacated place with it.
- */
 @Composable
 fun DeferredRemovalRow(removal: PendingRemoval, onAct: () -> Unit, modifier: Modifier = Modifier) {
     UndoRowSurface(removal.shownLabel, removal.actionLabel, onAct, modifier)
 }
 
-/**
- * [DeferredRemovalRow] as a floating pill, for a removal whose item stays on screen (an offline copy, whose Codex
- * is still listed). The caller places it, usually bottom-centre.
- */
 @Composable
 fun DeferredRemovalPill(removal: PendingRemoval, onAct: () -> Unit, modifier: Modifier = Modifier) {
     UndoPillSurface(removal.shownLabel, removal.actionLabel, onAct, modifier)
@@ -148,7 +129,6 @@ private fun UndoRowSurface(label: String, actionLabel: String?, act: () -> Unit,
 
 private const val REMOVAL_FAILED_LABEL = "Could not remove"
 
-/** Keeps the last matching offer drawn while it animates out, so the exit does not flash empty. */
 @Composable
 private fun UndoOfferVisibility(
     anchor: UndoAnchor,

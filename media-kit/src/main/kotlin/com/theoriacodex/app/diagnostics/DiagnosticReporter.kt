@@ -11,7 +11,6 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The parts of a report a person can include or leave out before sharing it. */
 enum class DiagnosticSection(val label: String, val summary: String) {
     DEVICE("Device and app", "App version, Android version and phone model"),
     CRASHES("Crashes", "Where the app crashed, from the last 5 crashes"),
@@ -25,10 +24,6 @@ private const val MAX_TRACE_CHARS = 64 * 1024
 private const val MAX_SYSTEM_LOG_CHARS = 256 * 1024
 private const val SYSTEM_LOG_TIMEOUT_SECONDS = 5L
 
-/**
- * Assembles the plain-text report meant to be read on a computer. Everything passes through redaction here.
- * [appVersion] is :app's "name (code) build type", which this module's BuildConfig does not carry.
- */
 class DiagnosticReporter(
     private val context: Context,
     private val store: DiagnosticLogStore,
@@ -69,7 +64,6 @@ class DiagnosticReporter(
                 "importance=${exit.importance} rss=${exit.rss}KB ${exit.description.orEmpty()}$trace"
         }.ifBlank { "None recorded." }
 
-    /** Apps can read only their own lines, so this needs no permission and cannot expose other apps. */
     private fun systemLog(): String = runCatching {
         val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "2000").redirectErrorStream(true).start()
         try {

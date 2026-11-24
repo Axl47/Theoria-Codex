@@ -16,13 +16,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * Records posts a search returned as available for statistics and their tags as SEEN suggestions.
- *
- * Search results are returned without waiting for this bookkeeping: [record] queues the page in [scope] and
- * pages are applied one at a time, in the order they were recorded. Work outlives the request that produced
- * it, because the posts were already received.
- */
 internal class SeenTagRecorder(
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore,
@@ -33,9 +26,7 @@ internal class SeenTagRecorder(
 
     fun record(posts: List<Post>) {
         if (posts.isEmpty()) return
-        // Undispatched start queues on the fair mutex in call order before the first suspension.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            // Bookkeeping failures must not escape into the scope, where they would crash the process.
             order.withLock { runCatchingPreservingCancellation { withContext(computationDispatcher) { remember(posts) } } }
         }
     }

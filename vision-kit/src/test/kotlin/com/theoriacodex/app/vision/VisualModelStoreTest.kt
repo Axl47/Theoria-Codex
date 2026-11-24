@@ -54,7 +54,6 @@ class VisualModelStoreTest {
 
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    /** A client whose every request is answered by [serve] from the file name asked for, never touching the network. */
     private fun client(serve: (name: String) -> Response.Builder): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(
             Interceptor { chain ->
@@ -174,7 +173,6 @@ class VisualModelStoreTest {
     @Test
     fun `delete during a download stops it and nothing is left or restored`() = runBlocking {
         val reading = CountDownLatch(1)
-        // A body that trickles 1 KB at a time, so the download is mid-file until it is cancelled.
         val slowModel = object : InputStream() {
             private val chunk = ByteArray(1024)
             override fun read(): Int = error("unused")

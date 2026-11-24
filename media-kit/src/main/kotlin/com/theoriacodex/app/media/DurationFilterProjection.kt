@@ -11,18 +11,15 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.withContext
 
-/** Turns a route's duration decisions into the filter's reveal order and presented list. */
 class DurationFilterProjection {
     private var reveal = DurationReveal()
     private var presented: List<Post>? = null
     private var presentedDurations = emptyMap<PostId, Long>()
     private var presentedDurationsKey = Any()
 
-    /** The last frame this projection answered. A feed returning from the Viewer starts from it instead of nothing. */
     @Volatile var lastFrame: DurationFilterFrame? = null
         private set
 
-    /** [project] as a frame. The posts, states and switch of [lastFrame] answer with [lastFrame] itself. */
     @Synchronized fun frame(posts: List<Post>, states: MediaDurationStates, active: Boolean): DurationFilterFrame =
         lastFrame?.takeIf { it.posts === posts && it.active == active && it.states == states }
             ?: DurationFilterFrame(posts, states, active, project(posts, states, active)).also { lastFrame = it }
@@ -41,11 +38,6 @@ class DurationFilterProjection {
         )
     }
 
-    /**
-     * Keeps the previous presented list when nothing in it changed, so a length that changes nothing shown is no new
-     * list downstream, and starts a new [DurationFilterMetadata.presentedDurationsKey] when a post that stayed in place
-     * changed length. An arrival that moves a post to the end counts as removed and appended.
-     */
     private fun stablePresented(next: List<Post>, known: Map<PostId, Long>): List<Post> {
         val previous = presented
         val keptLengths = previous != null &&
@@ -66,7 +58,6 @@ data class DurationFilterFrame(
     val metadata: DurationFilterMetadata,
 )
 
-/** The last frame stays valid while [posts] only appended to it; a replacement waits with resolving feedback. */
 private fun DurationFilterFrame.covers(posts: List<Post>): Boolean {
     if (posts === this.posts) return true
     val shown = this.posts
@@ -74,12 +65,6 @@ private fun DurationFilterFrame.covers(posts: List<Post>): Boolean {
         shown.first().id == posts.first().id && shown.last().id == posts[shown.lastIndex].id
 }
 
-/**
- * Presents duration metadata for [posts]. Pass [retainKey] so the projection survives the Viewer: a
- * feed's main list keeps its reveal order (the projection then owns which posts may appear, and in
- * what order), and a related shelf keeps the lengths it resolved. Coming back from the Viewer, the first frame shows the projection's last frame while it still
- * covers [posts], and the background answer replaces it as usual.
- */
 @Composable
 fun rememberDurationFilterMetadata(
     posts: List<Post>,

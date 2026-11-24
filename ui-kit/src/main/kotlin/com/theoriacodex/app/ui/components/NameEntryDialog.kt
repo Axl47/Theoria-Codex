@@ -18,10 +18,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 
-/**
- * Asks for one trimmed name; shared by everything the user can name. A name is required unless
- * [optional], where saving a blank field passes an empty name and [hint] says what that means.
- */
 @Composable
 fun NameEntryDialog(
     title: String,
@@ -31,7 +27,6 @@ fun NameEntryDialog(
     optional: Boolean = false,
     hint: String? = null,
 ) {
-    // An existing name opens selected, so typing replaces it.
     var value by remember(initialName) { mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length))) }
     fun saveIfValid() {
         val trimmed = value.text.trim()

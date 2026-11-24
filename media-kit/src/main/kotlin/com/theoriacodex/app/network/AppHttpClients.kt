@@ -18,23 +18,13 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * Every HTTP client in the app, derived from one so they share a connection pool. OkHttp 5 races IPv6 against IPv4
- * on each new connection, so a network with broken IPv6 costs a quarter of a second instead of a whole connect
- * timeout per address, and [memory] removes even that once it has seen the pattern. A host whose requests carry a
- * browser identity connects as the WebView would ([BrowserAddressDns]), where its clearance cookie is accepted. Each
- * client below differs only in how it queues requests and how long it waits.
- */
 class AppHttpClients(
     cookieJar: CookieJar,
     private val memory: ConnectionMemory = ConnectionMemory(NoRecentHosts, activeNetwork = { null }),
     private val verifiedUserAgent: (url: String) -> String? = { null },
-    /** Hosts whose requests carry a browser identity, which a warm-up's fixed agent would misrepresent. */
     private val sharesBrowserIdentity: (host: String) -> Boolean = { false },
     private val siteAuthorization: (url: String) -> String? = { null },
-    /** Answers media requests only loaded extension code can fetch and passes the rest on; null where no extension host exists. */
     private val extensionMedia: Interceptor? = null,
-    /** Passes a site's browser check out of sight before a source request fails on it (`ChallengePass`). */
     private val challengePass: Interceptor? = null,
 ) {
     private val warmed = AtomicBoolean(false)
@@ -50,10 +40,6 @@ class AppHttpClients(
             .build()
     }
 
-    /**
-     * The media clients' common base. A site's clearance cookie only counts with the browser agent that earned it.
-     * Provider requests choose their own agent, and a browser check must keep the one it is testing.
-     */
     private val media: OkHttpClient by lazy {
         val keyRetry = RefusedMediaKeyRetry(siteAuthorization)
         shared.newBuilder()
@@ -68,10 +54,8 @@ class AppHttpClients(
             .build()
     }
 
-    /** Video playback. */
     val video: OkHttpClient by lazy { media.newBuilder().countedAs(NetworkUsage.Stack.VIDEO).build() }
 
-    /** Provider APIs and indexes. */
     val sources: OkHttpClient by lazy {
         shared.newBuilder().dispatcher(unqueuedSourceDispatcher())
             .apply { challengePass?.let(::addInterceptor) }
@@ -79,7 +63,6 @@ class AppHttpClients(
             .build()
     }
 
-    /** Coil. OkHttp's default of five per host lets a few large GIFs stall every thumbnail behind them. */
     val images: OkHttpClient by lazy {
         media.newBuilder()
             .dispatcher(Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST })
@@ -88,14 +71,12 @@ class AppHttpClients(
             .build()
     }
 
-    /** A pool of its own, because a stalled page's connection is the one thing a rescue must not reuse. */
     private val stalledPageRescue: OkHttpClient by lazy {
         shared.newBuilder().connectionPool(ConnectionPool(1, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .countedAs(NetworkUsage.Stack.IMAGE)
             .build()
     }
 
-    /** Whole-file downloads: GIFs, Pixiv animations and offline saves. */
     val downloads: OkHttpClient by lazy {
         media.newBuilder()
             .dispatcher(unqueuedSourceDispatcher())
@@ -106,11 +87,6 @@ class AppHttpClients(
             .build()
     }
 
-    /**
-     * Connects to the hosts used most recently, once per launch, so the first search finds its connections open
-     * instead of waiting on DNS, TCP and TLS for each. Only the pooled connection matters, so any answer will do.
-     * A clearance cookie only counts with the agent that earned it, so hosts holding one are left alone.
-     */
     suspend fun warmRecentHosts() {
         if (!warmed.compareAndSet(false, true)) return
         val client = shared.newBuilder().followRedirects(false).followSslRedirects(false)
@@ -129,16 +105,10 @@ class AppHttpClients(
     }
 }
 
-/** Debug builds count each client's traffic for the live data-usage session; derived clients copy interceptors, so
- *  only the final clients count. */
 private fun OkHttpClient.Builder.countedAs(stack: NetworkUsage.Stack) = apply {
     if (NetworkUsage.enabled) addNetworkInterceptor(NetworkUsage.counting(stack))
 }
 
-/**
- * OkHttp's default of five idle connections across all hosts discards most of a burst, so the next scroll pays for
- * new handshakes. Simultaneous HTTP/1.1 feed previews need one connection each, and a single search touches many hosts.
- */
 private const val MAX_IDLE_CONNECTIONS = 32
 private const val IDLE_KEEP_ALIVE_MINUTES = 5L
 private const val IMAGE_MAX_REQUESTS_PER_HOST = 16
@@ -147,14 +117,11 @@ private const val DOWNLOAD_READ_TIMEOUT_MS = 30_000L
 private const val WARM_UP_TIMEOUT_MS = 8_000L
 private const val WARM_UP_USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36"
 
-/** Only a plain test application reaches this; the real one owns clients that carry its cookies. */
 private val cookielessHttpClients by lazy { AppHttpClients(CookieJar.NO_COOKIES) }
 
-/** Implemented by the application, which owns the clients that carry its cookies. */
 interface AppHttpClientsOwner {
     val httpClients: AppHttpClients
 }
 
-/** The application's clients, for code that reaches them through a [Context]. */
 internal val Context.appHttpClients: AppHttpClients
     get() = (applicationContext as? AppHttpClientsOwner)?.httpClients ?: cookielessHttpClients

@@ -3,7 +3,6 @@ package com.theoriacodex.app.search.state
 import com.theoriacodex.domain.model.keepingListingDataOf
 import com.theoriacodex.domain.model.Post
 
-/** Refreshes known posts without changing the applied search, canonical order, or pagination. */
 fun SearchUiState.withResolvedPosts(queryHash: String, posts: List<Post>): SearchUiState {
     if (query.appliedQueryHash != queryHash) return this
     val replacements = posts.associateBy(Post::id)

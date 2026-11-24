@@ -18,13 +18,8 @@ import androidx.media3.extractor.text.Subtitle
 import androidx.media3.extractor.text.SubtitleDecoder
 import androidx.media3.extractor.text.SubtitleDecoderException
 
-/** How much of a subtitle file [sniffedSubtitleMimeType] reads. */
 private const val SUBTITLE_SNIFF_BYTES = 512
 
-/**
- * The subtitle format the extension of [location]'s path names (the query is ignored), or null. Only a fallback for
- * [sniffedSubtitleMimeType]: extension streams serve subtitles at addresses with no extension or the wrong one.
- */
 internal fun subtitleMimeType(location: String): String? =
     when (location.toUri().lastPathSegment.orEmpty().substringAfterLast('.', "").lowercase()) {
         "vtt", "webvtt" -> MimeTypes.TEXT_VTT
@@ -34,10 +29,6 @@ internal fun subtitleMimeType(location: String): String? =
         else -> null
     }
 
-/**
- * The subtitle format a file's first bytes show (a WebVTT header, an SSA/ASS script, a TTML document, an SRT cue), or
- * null. The text may be UTF-8 or UTF-16, as its byte order mark says.
- */
 internal fun sniffedSubtitleMimeType(data: ByteArray, length: Int = data.size): String? {
     val size = minOf(length, SUBTITLE_SNIFF_BYTES)
     val charset = when {
@@ -57,11 +48,6 @@ internal fun sniffedSubtitleMimeType(data: ByteArray, length: Int = data.size): 
 
 private val SRT_FIRST_CUE = Regex("""^\d+[ \t]*\R\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}[ \t]*-->""")
 
-/**
- * Media3's renderers, with a text renderer that decodes whole subtitle files as they arrive. Side-loaded subtitles
- * ([StreamMediaSourceFactory]) reach it undecoded, so they load only once chosen; Media3's renderer fails playback on
- * those unless told to decode them.
- */
 internal class SideLoadedSubtitleRenderersFactory(context: Context) : DefaultRenderersFactory(context) {
     override fun buildTextRenderers(
         context: Context,
@@ -74,10 +60,6 @@ internal class SideLoadedSubtitleRenderersFactory(context: Context) : DefaultRen
     }
 }
 
-/**
- * Media3's caption decoders for the closed captions a stream carries sample by sample, and [SniffingSubtitleDecoder]
- * for every subtitle file, including one whose address showed no format ([MimeTypes.TEXT_UNKNOWN]).
- */
 private object SideLoadedSubtitleDecoders : SubtitleDecoderFactory {
     private val captions = setOf(MimeTypes.APPLICATION_CEA608, MimeTypes.APPLICATION_MP4CEA608, MimeTypes.APPLICATION_CEA708)
 
@@ -88,11 +70,6 @@ private object SideLoadedSubtitleDecoders : SubtitleDecoderFactory {
         if (format.sampleMimeType in captions) SubtitleDecoderFactory.DEFAULT.createDecoder(format) else SniffingSubtitleDecoder(format)
 }
 
-/**
- * Decodes a subtitle file in the format its first bytes show, else the one its [format] names. A side-loaded file is
- * one sample, so this runs on the renderer's decoder thread once it arrives, and again after a seek. A file it cannot
- * place or parse shows no subtitles: the text renderer logs the decode error and playback goes on.
- */
 private class SniffingSubtitleDecoder(private val format: Format) : SimpleSubtitleDecoder("SniffingSubtitleDecoder") {
     private val parsers = DefaultSubtitleParserFactory()
 

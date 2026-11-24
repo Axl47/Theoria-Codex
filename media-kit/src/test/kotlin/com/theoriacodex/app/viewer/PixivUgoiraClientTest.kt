@@ -166,7 +166,6 @@ class PixivUgoiraClientTest {
         val first = async { client.load("returning", UgoiraSizeBucket.CARD) }
         started.await()
         first.cancelAndJoin()
-        // IO work has its own dispatcher; wait for actual cancellation, not just the caller's completion.
         interrupted.await()
         assertTrue(client.load("returning", UgoiraSizeBucket.CARD).isSuccess)
         assertEquals(2, calls.get())
@@ -213,7 +212,6 @@ class PixivUgoiraClientTest {
         val refused = fixtureClient(download = { _, _, _ -> BinaryResponse(404) })
         assertEquals(FrameSample.Refused, refused.sampleFrames("gone", count = 6, sizePx = 2, budget))
 
-        // Still refused after a token refresh: signed out or rate limited, which a later run may get past.
         val forbidden = fixtureClient(
             credentials = SavingCredentialsProvider(),
             httpClient = RefreshingHttpClient,
@@ -221,7 +219,6 @@ class PixivUgoiraClientTest {
         )
         assertEquals(FrameSample.Unreachable, forbidden.sampleFrames("locked", count = 6, sizePx = 2, budget))
 
-        // An archive past the post's budget is left alone: its still stands.
         assertEquals(FrameSample.Unreadable, fixtureClient().sampleFrames("large", count = 6, sizePx = 2, NetworkBudget(maxBytes = 16)))
     }
 
@@ -374,7 +371,6 @@ class PixivUgoiraClientTest {
         ): SourceHttpResponse = error("HTTP should not be reached after credential cancellation")
     }
 
-    /** Keeps the tokens it is given, as the app's credential store does. */
     private class SavingCredentialsProvider : SourceCredentialsProvider {
         private var tokens: PixivAuthTokens? = FixedCredentialsProvider.getTokens()
         override suspend fun getPixivTokens(): PixivAuthTokens? = tokens
@@ -390,7 +386,6 @@ class PixivUgoiraClientTest {
         }
     }
 
-    /** Answers Pixiv's token refresh with fresh tokens; nothing else. */
     private object RefreshingHttpClient : SourceHttpClient by UnusedHttpClient {
         override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>) =
             SourceHttpResponse(200, """{"access_token":"fresh","refresh_token":"refresh","expires_in":3600}""")

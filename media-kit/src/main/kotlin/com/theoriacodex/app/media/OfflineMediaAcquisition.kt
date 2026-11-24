@@ -23,10 +23,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * Provider resolution and network policy are shared by automatic saves and explicit collection downloads.
- * [copyCachedVideo] copies a video the player already cached in full, so saving a watched video skips the download.
- */
 class OfflineMediaAcquisition(
     private val context: Context,
     private val registry: SourceAdapterRegistry,
@@ -69,7 +65,6 @@ class OfflineMediaAcquisition(
         }
     }
 
-    /** Reuses the exact bytes Coil or the video player already downloaded for this URL; no network policy applies. */
     private suspend fun copyFromMediaCaches(post: Post, media: ImageRef, destination: File): Boolean {
         val url = media.url?.takeIf(String::isNotBlank) ?: return false
         return withContext(Dispatchers.IO) {
@@ -89,10 +84,6 @@ class OfflineMediaAcquisition(
     }
 }
 
-/**
- * Streams a media response to a staging file with bounded memory; callers publish only a complete,
- * recognized media file. Offline saves use the 2 GiB default; caches pass their own [maxBytes].
- */
 suspend fun downloadMediaFile(
     url: String,
     headers: Map<String, String>,
@@ -145,20 +136,16 @@ private fun mediaTooLarge(maxBytes: Long) = IOException(
     if (maxBytes == MAX_OFFLINE_MEDIA_BYTES) "This file exceeds the 2 GiB offline limit" else "Media exceeds its byte limit",
 )
 
-/** A media response other than 200, with its [code]. */
 class MediaHttpException(val code: Int) : IOException("Media download returned HTTP $code")
 
-/** A whole response that is not image or video media. */
 class UnsupportedMediaException : IOException("The downloaded file is not supported image or video media")
 
-/** The image type [file] decodes as, reading only its header; null when the platform cannot decode it as an image. */
 fun decodableImageType(file: File): String? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(file.path, bounds)
     return bounds.outMimeType?.takeIf { bounds.outWidth > 0 && bounds.outHeight > 0 }
 }
 
-/** A successful HTML/error response must never become an apparently available offline image. */
 fun validateOfflineMediaFile(file: File) {
     val header = file.inputStream().use { input ->
         val bytes = ByteArray(16)
@@ -166,17 +153,17 @@ fun validateOfflineMediaFile(file: File) {
         bytes.take(length.coerceAtLeast(0)).map { it.toInt() and 0xff }
     }
     val imageSignatures = listOf(
-        listOf(0xff, 0xd8, 0xff), // JPEG
-        listOf(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a), // PNG/APNG
-        listOf(0x47, 0x49, 0x46, 0x38), // GIF
-        listOf(0x42, 0x4d), // BMP
-        listOf(0x1a, 0x45, 0xdf, 0xa3), // WebM/Matroska
-        listOf(0x46, 0x4c, 0x56), // FLV
+        listOf(0xff, 0xd8, 0xff),
+        listOf(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a),
+        listOf(0x47, 0x49, 0x46, 0x38),
+        listOf(0x42, 0x4d),
+        listOf(0x1a, 0x45, 0xdf, 0xa3),
+        listOf(0x46, 0x4c, 0x56),
     )
     val recognized = imageSignatures.any { header.take(it.size) == it } ||
-        header.drop(4).take(4) == listOf(0x66, 0x74, 0x79, 0x70) || // MP4/AVIF/HEIF
+        header.drop(4).take(4) == listOf(0x66, 0x74, 0x79, 0x70) ||
         header.take(4) == listOf(0x52, 0x49, 0x46, 0x46) &&
-        header.drop(8).take(4) == listOf(0x57, 0x45, 0x42, 0x50) // WebP
+        header.drop(8).take(4) == listOf(0x57, 0x45, 0x42, 0x50)
     if (!recognized) throw UnsupportedMediaException()
 }
 

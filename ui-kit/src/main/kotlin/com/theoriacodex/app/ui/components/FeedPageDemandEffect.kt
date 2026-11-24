@@ -25,7 +25,6 @@ class FeedPageDemandControl internal constructor(
     val onContinue: () -> Unit,
 )
 
-/** Observe the same canonical mapping used by feed navigation without making presentation rows anchors. */
 @Composable
 fun rememberFeedPageDemand(
     input: FeedPageDemandInput,
@@ -67,7 +66,6 @@ fun rememberFeedPageDemand(
     }
 }
 
-/** The grid's visible item indices, reallocated only when they change rather than on every scrolled frame. */
 private class VisibleItemIndices {
     private var cached: List<Int> = emptyList()
 

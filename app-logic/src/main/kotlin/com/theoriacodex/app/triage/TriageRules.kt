@@ -15,15 +15,8 @@ import com.theoriacodex.domain.vision.PredictedTagUse
 import com.theoriacodex.domain.vision.tokens
 import kotlin.math.abs
 
-/** The way a triage card was thrown. */
 enum class SwipeDirection { Right, Left, Up, Down }
 
-/**
- * Where a drag of the triage card ends up: the direction it commits to, or null when it springs back. Offsets
- * are in pixels with y growing downward, velocities in pixels per second. The axis the card travelled further
- * on, counting what its speed would add, decides the direction; it commits once pulled [commitDistance] or
- * flung at [flingVelocity], and a fling against the pull cancels it.
- */
 fun swipeDirection(
     offsetX: Float,
     offsetY: Float,
@@ -49,13 +42,6 @@ fun swipeDirection(
     }
 }
 
-/**
- * The tags the deck offers to hide for [post], at most [limit]: the ones the profile shows least interest in first,
- * never a universal tag (see [tagAffinities]), since hiding one would hide nearly everything. Among equals, which on an unfamiliar post is every tag, a content tag comes before one the post's taxonomy marks
- * as an artist, character, series, group, type, language, meta or rating tag, or one for text on the image
- * ([isImageTextTag]), and then the post's own order holds.
- * [excluded] holds tags that must not be offered (the deck's own query and tags already hidden), in any spelling.
- */
 fun hideCandidates(
     post: Post,
     affinity: TagAffinityInputs,
@@ -79,23 +65,14 @@ fun hideCandidates(
         .map { it.tag }
 }
 
-/** A general tag about what the post shows, rather than who made it, what it is from, or how it is filed. */
 private fun PostTaxonomyTerm.isContentTag(): Boolean =
     facet == SearchFacet.TAG && sourceNamespace?.lowercase() !in NON_CONTENT_NAMESPACES
 
-/** Tag namespaces sources use for tags that say nothing about the content. */
 private val NON_CONTENT_NAMESPACES =
     setOf("artist", "character", "copyright", "parody", "group", "language", "category", "meta", "rating")
 
 const val HIDE_CANDIDATE_LIMIT = 3
 
-/**
- * Whether [hidden] (hidden tags by source) hides [this] post. One rule for both kinds of tag: a tag meets the hidden
- * tags written in its vocabulary, its own source's and, for booru vocabulary, every booru source's, compared by
- * [crossSourceTagKey]. A tag its provider gave it is in its source's vocabulary and always counts. A tag the picture
- * tagger predicted with [PredictedTagUse.HIDE] confidence ([pictures]) is in Danbooru's, and counts only when
- * [needsPictureCheck]: on a richly tagged post the provider's tags are better evidence than the model.
- */
 fun Post.hiddenBy(hidden: Map<SourceKey, Set<String>>, pictures: PictureTags = PictureTags.None): Boolean {
     if (hidden.isEmpty()) return false
     fun meets(tags: Iterable<String>, booru: Boolean): Boolean {
@@ -108,17 +85,9 @@ fun Post.hiddenBy(hidden: Map<SourceKey, Set<String>>, pictures: PictureTags = P
     return meets(pictures.known(id)?.tokens(PredictedTagUse.HIDE)?.keys ?: return false, booru = true)
 }
 
-/**
- * Whether the picture tagger judges [this] post for hiding: its provider gave it fewer than [WELL_TAGGED] tags in
- * Danbooru's words ([vocabulary], as [normalizeMatchToken] spells them), as for a post tagged in another language or
- * vocabulary, a gallery or video with few tags, or one nobody has tagged yet. Until the vocabulary is known (empty),
- * every post counts as sparsely tagged, so nothing slips through while it loads.
- */
 fun Post.needsPictureCheck(vocabulary: Set<String>): Boolean = vocabulary.isEmpty() ||
     (canonicalTags + rawTags).mapTo(HashSet(), ::normalizeMatchToken).count { it in vocabulary } < WELL_TAGGED
 
-/** Booru posts carry about 25 tags; one with fewer than this many of Danbooru's words is tagged too sparsely to trust. */
 const val WELL_TAGGED = 10
 
-/** A drag's speed counts as this much extra travel per px/s when picking its axis. */
 private const val VELOCITY_REACH_SECONDS = 0.1f

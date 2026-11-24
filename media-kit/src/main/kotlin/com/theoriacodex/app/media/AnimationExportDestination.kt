@@ -17,7 +17,6 @@ import java.nio.file.StandardOpenOption.READ
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 
-/** The queue journals its marker before preparation; both destinations preserve that identity. */
 internal class AnimationExportDestination(private val context: Context) {
     private val resolver get() = context.contentResolver
 
@@ -30,7 +29,6 @@ internal class AnimationExportDestination(private val context: Context) {
             savePublic(fileName, key, encode)
         } catch (error: Exception) {
             if (error is CancellationException) throw error
-            // A publish may have committed before its caller lost the acknowledgement.
             key?.let { findCompletedKey(it)?.let { uri -> return uri } }
             savePrivate(fileName, key, encode)
         }

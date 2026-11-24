@@ -7,7 +7,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Spaces duration lookups per source ([DurationLookupPolicy.startIntervalMs]) and pauses a source that pushed back. */
 class DurationRequestPacer(
     private val clock: () -> Long = System::currentTimeMillis,
     private val startIntervalMs: (SourceKey) -> Long = { source -> source.presentation().durationLookup.startIntervalMs },
@@ -16,7 +15,6 @@ class DurationRequestPacer(
     private val lock = Mutex()
     private val nextStartBySource = mutableMapOf<SourceKey, Long>()
 
-    /** Suspends until [source] may start another lookup. Waking re-checks, so a new cooldown holds waiters too. */
     suspend fun awaitTurn(source: SourceKey) {
         while (true) {
             val waitMs = lock.withLock {
@@ -30,7 +28,6 @@ class DurationRequestPacer(
         }
     }
 
-    /** Holds every later lookup for [source] until the host has had time to recover. */
     suspend fun onThrottled(source: SourceKey) {
         lock.withLock {
             val resumeAt = clock() + cooldownMs

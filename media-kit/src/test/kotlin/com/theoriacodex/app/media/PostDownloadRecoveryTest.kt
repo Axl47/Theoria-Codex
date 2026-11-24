@@ -173,7 +173,6 @@ class PostDownloadRecoveryTest {
             val first = PostDownloadQueue(firstScope, backend, pollIntervalMs = 10, jobStore = store)
             first.submit("Gallery", listOf(PostDownloadRequest(gallery)))
             first.batches.first { it.single().items.count { item -> item.downloadId != null } == 2 }
-            // Wait for the enqueue checkpoint before simulating departure.
             while (store.load().single().items.count { it.downloadId != null } < 2) kotlinx.coroutines.yield()
             assertFalse(file.readText().contains("never-persist"))
             assertFalse(file.readText().contains("/private/device/path"))

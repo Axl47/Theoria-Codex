@@ -3,7 +3,6 @@ package com.theoriacodex.app.related
 import com.theoriacodex.domain.model.Post
 
 sealed interface RelatedFeedEntry {
-    /** [post] at [canonicalIndex] in the feed's own list and [visibleIndex] in its filtered list, the one the Viewer opens. */
     data class PostEntry(
         val post: Post,
         val canonicalIndex: Int,
@@ -37,7 +36,6 @@ data class RelatedFeedProjection(
             ?: 0
     }
 
-    /** Only canonical post entries can replace the last persisted scroll position. */
     fun canonicalPositionForGridIndex(gridIndex: Int, offsetPx: Int): CanonicalFeedPosition? {
         if (entries.isEmpty()) return null
         val boundedIndex = gridIndex.coerceIn(0, entries.lastIndex)
@@ -54,10 +52,6 @@ data class RelatedFeedProjection(
     }
 }
 
-/**
- * The position of the post closest to, and not after, a canonical index, or -1. Late duration
- * arrivals sit below posts with higher canonical indices, so position order is not canonical order.
- */
 private fun List<RelatedFeedEntry>.nearestAtOrBefore(canonicalIndex: Int): Int {
     return indices
         .filter { index ->
@@ -79,7 +73,6 @@ fun buildRelatedFeedProjection(
         canonicalIndexById[post.id]?.let { index -> RelatedFeedEntry.PostEntry(post, index, visibleIndex) }
     }
     val request = relatedState.requestOrNull ?: return RelatedFeedProjection(postEntries)
-    // Follows the seed when the canonical order changes under an open shelf, as a length sort does.
     val anchor = request.anchorIndexIn(canonicalPosts.map(Post::id))
     val insertionIndex = postEntries.nearestAtOrBefore(anchor) + 1
     val entries = postEntries.toMutableList<RelatedFeedEntry>().apply {

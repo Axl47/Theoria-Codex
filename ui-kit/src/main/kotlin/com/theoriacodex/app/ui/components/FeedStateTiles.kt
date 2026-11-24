@@ -24,13 +24,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** A feed's first load, centred on the whole screen; see [LoadingState] for the rest of the state kit. */
 @Composable
 fun FeedLoadingState(modifier: Modifier = Modifier) {
     LoadingState(modifier.fillMaxSize())
 }
 
-/** A failure card. [onDismiss] adds a way to set aside a failure that doesn't stop the screen. */
 @Composable
 fun FeedErrorTile(
     message: String,
@@ -66,10 +64,6 @@ fun FeedErrorTile(
     }
 }
 
-/**
- * Shows a failure that sits beside posts the user can keep browsing until its Dismiss is pressed.
- * A different [key] (a new failure) shows it again, as does the failure clearing and returning.
- */
 @Composable
 fun DismissibleFailure(key: Any, content: @Composable (onDismiss: () -> Unit) -> Unit) {
     var dismissed by rememberSaveable(key) { mutableStateOf(false) }
@@ -141,10 +135,6 @@ fun FeedPagingTile(
     }
 }
 
-/**
- * The footer message for a grid that pages from providers: resolving durations wins, then the end message once
- * posts are visible, no refresh or page is running, nothing failed and the feed has no further page.
- */
 fun pagedFeedFooterMessage(
     resolvingDurations: Boolean,
     hasVisibleResults: Boolean,
@@ -157,5 +147,4 @@ fun pagedFeedFooterMessage(
     else -> null
 }
 
-/** The only footer message that reports a settled state, so its tile shows no progress indicator. */
 private const val FEED_END_MESSAGE = "No more results"

@@ -17,17 +17,12 @@ import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.SourceWeightSettings
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * The Source mix sheet's content, which Search's source picker opens for a Unified search: the relative weights of
- * [sources], each change sent to [onWeightsChanged]. The picker owns which sources are in the group.
- */
 @Composable
 fun UnifiedSourceSettings(
     sources: Set<SourceKey>,
     runtime: SourceRuntimeSettings,
     onWeightsChanged: (Map<SourceKey, Double>) -> Unit,
 ) {
-    // Keep the entire slider group responsive while repository writes complete asynchronously.
     var weights by remember(sources) { mutableStateOf(SourceWeightSettings.weightsFor(runtime, sources)) }
     Text(SettingDestinations.SourceMix.title, style = MaterialTheme.typography.titleMedium)
     if (sources.size < 2) {

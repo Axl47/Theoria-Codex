@@ -14,7 +14,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Counts use an explicit provider capability; unavailable decisions prevent repeated sheet requests. */
 class TagCountCoordinator(
     private val registry: SourceAdapterRegistry,
     private val store: TagSuggestionStore,

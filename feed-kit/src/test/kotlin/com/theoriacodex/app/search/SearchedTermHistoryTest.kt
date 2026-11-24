@@ -17,7 +17,6 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Searched-term history from a completed search to the suggestions Search offers for a scope. */
 class SearchedTermHistoryTest {
     @Test
     fun `typed searched terms are counted and suggested only in their own scope`() = runTest {
@@ -35,12 +34,10 @@ class SearchedTermHistoryTest {
         assertEquals(setOf(SearchTerm("nature"), artist), statistics.observeStatistics().first().searchesByTag.keys.mapTo(mutableSetOf()) { it.term })
         suspend fun searched(query: Query, sourceScope: SearchSourceScope, scope: FacetedSearchScope) =
             coordinator.fetchAutocomplete(query, sourceScope, scope, "na").searchedTags
-        // Counts reach the coordinator through a flow collected off the test dispatcher.
         withContext(Dispatchers.Default) {
             withTimeout(5_000) { while (searched(query, hitomi, FacetedSearchScope.All).size < 2) delay(10) }
         }
         assertEquals(listOf(artist), searched(query, hitomi, artistScope))
-        // Unified runs only portable general tags, so it never offers the artist.
         assertEquals(
             listOf(SearchTerm("nature")),
             searched(query.copy(mode = QueryMode.Unified), SearchSourceScope.Temporary(listOf(SourceKey.HITOMI, SourceKey.PIXIV)), FacetedSearchScope.All),

@@ -14,7 +14,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Boundary rules of the download queue: counting, validation, scoping of cancel and retry, polling and gallery expansion. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PostDownloadQueueRulesTest {
     @Test
@@ -27,7 +26,6 @@ class PostDownloadQueueRulesTest {
         assertEquals(1, batch.savedCount)
         assertEquals(1, batch.existingCount)
         assertEquals(1, batch.failedCount)
-        // Everything except QUEUED, PREPARING, DOWNLOADING and WAITING is settled.
         assertEquals(4, batch.settledCount)
         assertFalse(PostDownloadBatch(101, "Done", items.filterNot { it.active }).active)
         assertFalse(request(1).restored)
@@ -112,7 +110,6 @@ class PostDownloadQueueRulesTest {
         val (firstBatch, secondBatch) = queue.batches.value
         assertEquals(listOf(PostDownloadStatus.FAILED, PostDownloadStatus.SAVED), firstBatch.items.map { it.status })
         assertEquals(PostDownloadStatus.DOWNLOADING, secondBatch.items.single().status)
-        // Finished items keep their status and are never cancelled, so a failed one can still be retried.
         assertTrue(backend.cancelled.isEmpty())
     }
 
@@ -136,7 +133,6 @@ class PostDownloadQueueRulesTest {
 
         val items = queue.batches.value.single().items
         assertEquals(listOf(PostDownloadStatus.SAVED, PostDownloadStatus.ALREADY_EXISTS, PostDownloadStatus.QUEUED,
-            // A transfer Android cannot identify stays failed rather than being duplicated.
             PostDownloadStatus.FAILED), items.map { it.status })
         assertEquals(listOf<Long?>(20, 30, 40, null), items.map { it.downloadId })
         assertTrue(backend.cancelled.isEmpty())
@@ -155,7 +151,6 @@ class PostDownloadQueueRulesTest {
 
         queue.removeItems(setOf(ids[0], ids[1]), deleteFiles = true)
         assertEquals(listOf("1", "2"), backend.deleted)
-        // The sibling that is still downloading is untouched.
         assertEquals(listOf(ids[2]), queue.batches.value.single().items.map { it.id })
         assertEquals(PostDownloadStatus.DOWNLOADING, queue.batches.value.single().items.single().status)
 
@@ -177,7 +172,6 @@ class PostDownloadQueueRulesTest {
         }
         val queue = PostDownloadQueue(backgroundScope, backend, jobStore = store)
         queue.restore()
-        // Markers are random per request, so the lookup is keyed on the restored item's own marker.
         backend.found = mapOf(queue.batches.value.single().items[1].request.marker to 77L)
         queue.removeItems(setOf(2, 3), deleteFiles = true)
 
@@ -275,7 +269,6 @@ class PostDownloadQueueRulesTest {
         ))
         runCurrent()
         val items = queue.batches.value.single().items
-        // The explicitly queued page 1 keeps its slot; the gallery adds only pages 0 and 2.
         assertEquals(listOf(0, 2, 1), items.map { it.request.selectedMedia?.pageIndex })
         assertEquals(3, items.size)
         assertEquals(setOf("Favorites", "Downloads"), items.map { it.request.originLabel }.toSet())
@@ -289,7 +282,6 @@ class PostDownloadQueueRulesTest {
         assertEquals(3, galleryDownloadPages(three).first().selectedMedia?.totalPages)
         val two = request(1).post.copy(media = List(2) { MEDIA }, mediaCount = null)
         assertEquals(2, galleryDownloadPages(two).size)
-        // A single image, or no list at all, is not a gallery.
         assertTrue(galleryDownloadPages(request(1).post.copy(media = listOf(MEDIA), mediaCount = 1)).isEmpty())
         assertTrue(galleryDownloadPages(request(1).post.copy(media = emptyList(), mediaCount = null)).isEmpty())
         val incomplete = request(1).post.copy(media = List(2) { MEDIA }, mediaCount = 3)

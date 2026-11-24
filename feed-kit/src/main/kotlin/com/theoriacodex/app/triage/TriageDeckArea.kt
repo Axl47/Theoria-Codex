@@ -60,7 +60,6 @@ import com.theoriacodex.domain.model.Query
 import kotlin.math.abs
 import kotlin.math.max
 
-/** The deck's card, its drag, and the edge targets a drag reveals. */
 @Composable
 internal fun TriageDeckArea(
     state: TriageDeckState,
@@ -82,15 +81,12 @@ internal fun TriageDeckArea(
         haptics.performHapticFeedback(TheoriaHaptics.ToggleOn)
         deck.decide(choice, card)
     }
-    // A release that outlives its card (a save waiting for targets, then Undo) must not decide for the next one.
     DisposableEffect(drag) { onDispose(drag::cancelRelease) }
     BoxWithConstraints(Modifier.fillMaxSize().testTag(TRIAGE_DECK_TAG)) {
         val density = LocalDensity.current
         val thresholds = with(density) { SwipeThresholds(maxWidth.toPx() * COMMIT_FRACTION, FLING_SPEED.toPx(), CUE_DISTANCE.toPx()) }
         val ratioFloor = maxWidth / (maxHeight - CAPTION_ALLOWANCE - if (cardFooter != null) TRIAGE_CARD_FOOTER_HEIGHT else 0.dp)
         val area = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
-        // The gesture outlives recompositions that bring new targets, so it calls through the latest release. The targets
-        // the finger let go on are read now, before the lifted pointer clears them.
         val release by rememberUpdatedState { velocity: Velocity? ->
             val released = ReleasedOn(saveState.hovered?.payload, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload)
             drag.releaseIn(scope) {
@@ -120,12 +116,7 @@ internal fun TriageDeckArea(
     }
 }
 
-/** The save and hide targets a drag was let go on, if any; [hide] falls back to the first tag offered. */
 private class ReleasedOn(val save: SaveTarget?, val hide: String?) {
-    /**
-     * What a release in [direction] chooses. A save swiped before the card's targets load waits for them rather than
-     * reading "none"; let go on New or More, it names no Codex, so the card springs back for [saveElsewhere].
-     */
     suspend fun choice(direction: SwipeDirection, post: Post, suggestions: TriageSuggestions, removes: Boolean): TriageChoice? {
         val saveTarget = if (direction != SwipeDirection.Up) null else when (save) {
             SaveTarget.New, SaveTarget.More -> null
@@ -136,14 +127,9 @@ private class ReleasedOn(val save: SaveTarget?, val hide: String?) {
     }
 }
 
-/** A save that names no Codex: New asks for a new one's name, anything else opens the picker. */
 private fun TriageDeckCallbacks.saveElsewhere(post: Post, target: SaveTarget?) =
     if (target == SaveTarget.New) onNewCodex(post) else onOpenSavePicker(post)
 
-/**
- * The edge targets for the current card: the shared save menu ([saveMenuTargets]) once its suggestions have loaded, even
- * when there are none, and tags to hide (least liked first).
- */
 private class TriageTargets(val save: List<CollectTarget<SaveTarget>>, val hide: List<CollectTarget<String>>)
 
 @Composable
@@ -168,11 +154,6 @@ private fun rememberTriageTargets(
     }
 }
 
-/**
- * The card, with the next one behind it while the card is away from rest. The next card is the same feed card, so it
- * plays like any visible one for as long as it shows; at rest it is not composed, so it holds no player. Both carry
- * [footer] under their media, so the next card looks the same once it is on top.
- */
 @Composable
 internal fun TriageCards(
     deck: TriageDeckState,
@@ -203,7 +184,6 @@ internal fun TriageCards(
     }
 }
 
-/** One deck card, centred in the deck, with [footer] in a fixed band under it. */
 @Composable
 private fun TriageCard(
     post: Post,
@@ -235,10 +215,6 @@ private fun TriageCard(
     }
 }
 
-/**
- * Lets TalkBack users decide without dragging; when the deck [removes], right is Keep and left Remove. New Codex and
- * Choose Codex do what dropping on New and More do, through [onSaveElsewhere].
- */
 private fun triageActions(
     targets: TriageTargets,
     removes: Boolean,
@@ -259,10 +235,6 @@ private fun triageActions(
     },
 )
 
-/**
- * Edge targets for a vertical pull, and the like and skip (or, when the deck [removes], keep and remove) cues for a
- * horizontal one; none of it takes touches.
- */
 @Composable
 private fun TriageDragOverlays(
     drag: TriageDrag,
@@ -301,15 +273,12 @@ private fun TriageDragOverlays(
 internal const val TRIAGE_DECK_TAG = "triage-deck"
 internal const val TRIAGE_CARD_FOOTER_TAG = "triage-card-footer"
 
-/** The height of the band a deck's card footer is drawn in, under the card; its content must fit it. */
 val TRIAGE_CARD_FOOTER_HEIGHT: Dp = 72.dp
 
-/** The card commits once dragged this far across the deck's width. */
 private const val COMMIT_FRACTION = 0.3f
 private val FLING_SPEED: Dp = 700.dp
 private val CUE_DISTANCE: Dp = 48.dp
 
-/** Room the card's caption takes below its media. */
 private val CAPTION_ALLOWANCE: Dp = 72.dp
 private const val PEEK_SCALE = 0.94f
 private const val MAX_TILT_DEGREES = 10f

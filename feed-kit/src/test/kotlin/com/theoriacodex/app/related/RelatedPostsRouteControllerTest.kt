@@ -121,7 +121,6 @@ class RelatedPostsRouteControllerTest {
             runCurrent()
             controller.onLikeCommitted(promoted, LikeToggleOutcome.LIKED)
             runCurrent()
-            // Viewer still presents its original ordered page after the shelf advances underneath it.
             controller.onLikeCommitted(sibling, LikeToggleOutcome.LIKED)
             runCurrent()
             assertEquals(listOf(seed.id, promoted.id, sibling.id), loader.requests)

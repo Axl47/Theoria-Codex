@@ -5,7 +5,6 @@ import java.io.File
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Cache only the timing needed to reuse this exact ZIP; never persist credentials or Kotlin models. */
 internal fun readUgoiraFrameMetadata(archive: File): List<UgoiraFrameSpec>? = runCatching {
     val sidecar = ugoiraMetadataFile(archive)
     if (!archive.isFile || !sidecar.isFile || sidecar.length() !in 1L..UGOIRA_METADATA_MAX_BYTES) {
@@ -22,7 +21,6 @@ internal fun readUgoiraFrameMetadata(archive: File): List<UgoiraFrameSpec>? = ru
 internal fun writeUgoiraFrameMetadata(archive: File, frames: List<UgoiraFrameSpec>) {
     val destination = ugoiraMetadataFile(archive)
     val temporary = File(destination.parentFile, ".${destination.name}.${System.nanoTime()}.tmp")
-    // Persistence is optional; a later miss simply re-fetches metadata.
     runCatching {
         val root = UgoiraCacheIndex(
             version = 1,
@@ -38,7 +36,6 @@ internal fun writeUgoiraFrameMetadata(archive: File, frames: List<UgoiraFrameSpe
 
 internal fun ugoiraMetadataFile(archive: File): File = File(archive.parentFile, "${archive.name}.json")
 
-/** The `<archive>.zip.json` sidecar; it only counts while its archive's size and timestamp still match. */
 @Serializable
 internal data class UgoiraCacheIndex(
     @SerialName("version")

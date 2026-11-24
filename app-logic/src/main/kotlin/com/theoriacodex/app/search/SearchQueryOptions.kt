@@ -7,7 +7,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 
-/** Quick date choices; [days] of null with [NONE] means any time. */
 enum class DateRangePreset(val label: String, val days: Int?) {
     NONE("Any time", null),
     TODAY("Today", 1),
@@ -25,10 +24,6 @@ private const val PRESET_TOLERANCE_MS = 2L * 60L * 60L * 1000L
 fun DateRangePreset.rangeEndingAt(nowEpochMs: Long): DateRange? =
     days?.let { DateRange(nowEpochMs - it * DAY_MS, nowEpochMs) }
 
-/**
- * The preset [range] matches, or null when it is a custom range. Preset ranges are fixed when
- * chosen, so one that no longer ends now reads as the custom dates it has become.
- */
 fun presetFor(range: DateRange?, nowEpochMs: Long): DateRangePreset? {
     if (range == null) return DateRangePreset.NONE
     val from = range.fromEpochMs ?: return null
@@ -39,10 +34,8 @@ fun presetFor(range: DateRange?, nowEpochMs: Long): DateRangePreset? {
     }
 }
 
-/** Builds a range from picker dates, which mark the start of a UTC day, so [toDayMs]'s whole day counts. */
 fun customDateRange(fromDayMs: Long, toDayMs: Long): DateRange = DateRange(fromDayMs, toDayMs + DAY_MS - 1)
 
-/** Dates read in UTC to match both the date picker's values and the date sent to the source. */
 fun dateRangeLabel(range: DateRange, nowEpochMs: Long): String {
     presetFor(range, nowEpochMs)?.let { return it.label }
     val format = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault()).withZone(ZoneOffset.UTC)

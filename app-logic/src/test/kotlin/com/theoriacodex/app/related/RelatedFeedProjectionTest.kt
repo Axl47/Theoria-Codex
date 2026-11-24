@@ -75,7 +75,6 @@ class RelatedFeedProjectionTest {
     @Test
     fun `each post entry carries its index in the filtered list, past posts the feed no longer has`() {
         val posts = listOf(post("0"), post("2"))
-        // The filtered list lags the feed: "1" was just removed from it.
         val visible = listOf(post("0"), post("1"), post("2"))
 
         val projection = buildRelatedFeedProjection(posts, visible, RelatedPostsUiState.Idle)

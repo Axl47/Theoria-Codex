@@ -26,11 +26,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/**
- * A chip that forks a trail, as the Viewer's trail row and For You's cards draw them: a capsule of [container] holding
- * [icon] (a spinner instead while [busy], when it takes no taps) and a one-line [label] in [content]. Rows of these
- * scroll, so a long label shortens only past a cap.
- */
 @Composable
 fun TrailChip(
     label: String,
@@ -67,11 +62,9 @@ fun TrailChip(
     }
 }
 
-/** The icons trail chips lead with; a tag chip has none. */
 object TrailChipIcons {
     val Creator: ImageVector get() = Icons.Outlined.Person
     val Similar: ImageVector get() = Icons.Outlined.GridView
 }
 
-/** Space between trail chips in a row. */
 val TrailChipGap = 6.dp

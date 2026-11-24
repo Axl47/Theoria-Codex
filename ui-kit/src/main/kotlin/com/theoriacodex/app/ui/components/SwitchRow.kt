@@ -22,13 +22,8 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SettingToggle
 
-/** The padding a [SwitchRow] uses inside a Settings group; sheets that already pad their content pass their own. */
 val SwitchRowPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
 
-/**
- * The app's one labelled switch: the whole row toggles, with an optional [description] under the [title] and
- * an optional [icon] before it, for rows in a group of icon rows.
- */
 @Composable
 fun SwitchRow(
     title: String,
@@ -60,7 +55,6 @@ fun SwitchRow(
     }
 }
 
-/** [toggle]'s row as [settings] hold it, titled and described by its definition. */
 @Composable
 fun SwitchRow(
     toggle: SettingToggle,

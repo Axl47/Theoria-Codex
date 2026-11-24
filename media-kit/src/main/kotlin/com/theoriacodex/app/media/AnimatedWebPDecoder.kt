@@ -21,10 +21,6 @@ import okio.Buffer
 import okio.BufferedSource
 import kotlin.math.roundToInt
 
-/**
- * Bounded animated WebP decoding for requests that opt out of Coil's default animated path: a controllable
- * drawable for the Viewer's WebP player, or a still first frame for thumbnails, covers and accents.
- */
 class AnimatedWebPDecoder(
     private val source: ImageSource,
     private val options: Options,

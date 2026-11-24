@@ -31,11 +31,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 
-/**
- * What a deck does beyond swiping: the app opens a post's Viewer, the save picker, and the Create Codex dialog (both
- * hand the chosen Codex back to the deck as a [TriageChoice.Save], so Undo covers the save and any Codex it created),
- * and closes the deck.
- */
 class TriageDeckCallbacks(
     val onOpenPost: (posts: List<Post>, index: Int) -> Unit,
     val onOpenSavePicker: (Post) -> Unit,
@@ -43,22 +38,12 @@ class TriageDeckCallbacks(
     val onClose: () -> Unit,
 )
 
-/** What the deck's cards need to render and resolve media, as the other feeds pass to their cards. */
 class TriageCardSupport(
     val environment: FeedCardEnvironment,
     val resolvePostById: (suspend (PostId) -> Post?)?,
     val recoverPostMedia: (suspend (Post, ImageRef) -> Post?)?,
 )
 
-/**
- * The triage deck: one full-width feed card at a time under a bar with a close control, the position ("14 / 60")
- * and Undo. Drag the card right to like, left to skip (on a Codex: right keeps, left removes), up to save, down to hide;
- * [query] is the origin feed's search, which ranks Codices and keeps its own tags out of what the deck offers to hide.
- *
- * An owner that dresses the deck differently draws its own bar above it ([showTopBar] false), draws [cardFooter] under
- * each card's media (in a band [TRIAGE_CARD_FOOTER_HEIGHT] tall, so cards keep their size), and replaces "No more
- * posts" with [endContent]. Without them the deck closes through [TriageDeckCallbacks.onClose].
- */
 @Composable
 fun TriageDeckScreen(
     deck: TriageDeck,
@@ -71,7 +56,6 @@ fun TriageDeckScreen(
     endContent: (@Composable () -> Unit)? = null,
 ) {
     val state by deck.state.collectAsStateWithLifecycle()
-    // The shell's scaffold already insets its content for the system bars.
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (showTopBar) TriageTopBar(state, callbacks.onClose, deck::undo)
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -102,7 +86,6 @@ private fun TriageTopBar(deck: TriageDeckState, onClose: () -> Unit, onUndo: () 
     }
 }
 
-/** "14 / 60": the card on screen over the posts the deck has so far, with a plus while the feed has more. */
 internal fun progressLabel(deck: TriageDeckState): String {
     val position = (deck.index + 1).coerceAtMost(deck.posts.size)
     return "$position / ${deck.posts.size}${if (deck.canLoadMore) "+" else ""}"
