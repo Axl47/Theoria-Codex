@@ -27,10 +27,11 @@ Changing the hidden tags is cheap and never loses Undo, but the owner carries se
 
 ## Applies to
 
-- `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckViewModel.kt`: `ForYouDeckViewModel`, `synchronize`, `rebuild`, `dropHidden`, `restoreLanes`, `restartMixLevel`, `push`, `level`, `fork`, `onTrailDecision`, `onMixDecision`, `writeVerdict`, `askForMore`, `retryAfterReconnect`
+- `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckViewModel.kt`: `ForYouDeckViewModel`, `synchronize`, `rebuild`, `dropHidden`, `restoreLanes`, `restartMixLevel`, `push`, `level`, `fork`, `onTrailDecision`, `onMixDecision`, `askForMore`, `retryAfterReconnect`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckModel.kt`: `ForYouDeckWiring`, `ForYouEnvironment`, `ForYouLevel`, `MixInputs`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouCoordinator.kt`: `ForYouCoordinator`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouCardFooter.kt`: `ForYouCardFooter`, `ForYouForkRow`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckBody.kt`: `ForYouBody`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckScreen.kt`: `ForYouDeckScreen`
 - `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/navigation/TrailFork.kt`: `trailForks`, `MAX_TAG_FORKS`
+- `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouVerdictLog.kt`: `ForYouVerdictLog`, `record`, `revert`
