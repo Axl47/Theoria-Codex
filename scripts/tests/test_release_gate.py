@@ -42,6 +42,21 @@ class ParseReleaseTest(unittest.TestCase):
             gate.parse_release(build_text(name="1.100.0", code="1_500_020_000"))
 
 
+class PrepareTest(unittest.TestCase):
+    def test_declares_the_version_and_its_code_and_keeps_the_overrides(self) -> None:
+        bumped = gate.bump_build(build_text(), gate.Release((1, 10, 0)))
+        self.assertEqual("1.10.0", gate.parse_release(bumped).name)
+        self.assertIn("versionCode = 1_500_011_000", bumped)
+        self.assertIn("versionCode = versionCodeOverride", bumped)
+
+    def test_dates_the_unreleased_entries_and_leaves_it_empty(self) -> None:
+        changelog = "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A fix.\n"
+        dated = gate.date_changelog(changelog, gate.Release((1, 4, 1)), gate.datetime.date(2026, 11, 23))
+        self.assertEqual(
+            "# Changelog\n\n## [Unreleased]\n\n## [1.4.1] - 2026-11-23\n\n### Fixed\n\n- A fix.\n", dated
+        )
+
+
 class PublishedVersionTest(unittest.TestCase):
     def test_compares_numerically_and_ignores_other_tags(self) -> None:
         release = gate.Release((1, 10, 0))
@@ -60,14 +75,13 @@ class ReleaseOnlyCommitTest(unittest.TestCase):
         '-        versionName = "1.4.0"\n+        versionName = "1.4.1"\n'
     )
 
-    def test_version_notes_changelog_and_profiles_keep_the_earlier_result(self) -> None:
-        paths = [
-            gate.APP_BUILD,
-            "CHANGELOG.md",
-            "release-notes/v1.4.1.md",
-            "app/src/release/generated/baselineProfiles/baseline-prof.txt",
-        ]
+    def test_version_notes_and_changelog_keep_the_earlier_result(self) -> None:
+        paths = [gate.APP_BUILD, "CHANGELOG.md", "release-notes/v1.4.1.md"]
         self.assertTrue(gate.is_release_only(paths, self.version_bump))
+
+    def test_a_baseline_profile_needs_a_new_check(self) -> None:
+        profile = "app/src/release/generated/baselineProfiles/baseline-prof.txt"
+        self.assertFalse(gate.is_release_only([profile], ""))
 
     def test_any_other_build_file_change_needs_a_new_check(self) -> None:
         diff = self.version_bump + "+        minSdk = 30\n"

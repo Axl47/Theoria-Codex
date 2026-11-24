@@ -76,7 +76,7 @@ t3 workflow start theoria-release --key "vX.Y.Z/$(date +%s)" --input "$input" --
 - If T3 says workflows are off, ask the user to turn on Settings → Labs → Workflows. If it doesn't know `theoria-release`, link `~/.t3/workflows/theoria-release.ts` to the main checkout's copy of this skill's `theoria-release.ts` and start again.
 - Add `dryRun: true` to rehearse: the run makes and gates the release commit, returns its diff, and pushes nothing.
 
-The workflow writes `versionName`, `versionCode`, and `release-notes/vX.Y.Z.md`, moves `[Unreleased]` under a dated `[X.Y.Z]` heading in `CHANGELOG.md`, runs `scripts/release_gate.py`, and pushes `chore(release): prepare vX.Y.Z` straight to `main` from a worktree of its own, so your checkout stays as it is. It then dispatches Release, which signs, builds, and publishes in about 6 minutes, or about 15 when a Main result is still missing and runs inside it. Last, it checks that the prerelease is not a draft, has the tag on the release commit, has the approved notes, and has `theoria-codex-main.apk`.
+The workflow writes the release files with `scripts/release_gate.py prepare` (`versionName`, `versionCode`, `release-notes/vX.Y.Z.md`, and `[Unreleased]` moved under a dated `[X.Y.Z]` heading in `CHANGELOG.md`), runs the release gate, and pushes `chore(release): prepare vX.Y.Z` straight to `main` from a worktree of its own, so your checkout stays as it is. It then dispatches Release with `expected-sha` set to that commit, so a PR merged in between can't ship in it. Release signs, builds, and publishes in about 6 minutes, or about 15 when a Main result is still missing and runs inside it. Last, it checks that the prerelease is not a draft, has the tag on the release commit, has the approved notes, and has `theoria-codex-main.apk`.
 
 Wait until `t3 workflow show <run> --json` reports `.run.status` as `completed`, `stopped`, `cancelled`, or `paused`: poll it from a background command and wait on that with the tool built for it. Then report the release URL, or the reason the run gives.
 
@@ -86,3 +86,7 @@ No tag exists until Release succeeds, so a failure never uses up the version.
 
 - **Stopped:** the reason says what to do. Runner or emulator trouble was already rerun once; another failure there can be retried by starting the workflow again. A real failure (a failing test, a release acceptance error) needs a fix through a PR; once it is on `main`, run this skill again, and step 2.1 picks the release back up. If main moved before the release commit, draft again.
 - **Paused:** a step hit an error, such as GitHub being unreachable, and retries on its own after 5, 20, and 80 minutes. Read the failing step with `t3 workflow show <run>`, fix the cause, and `t3 workflow resume <run>`.
+
+## Without T3 Workflows
+
+If the workflow can't run, do its steps by hand from a clean checkout of `origin/main`: `python3 scripts/release_gate.py prepare X.Y.Z <notes file>`, `python3 scripts/release_gate.py`, commit the three files as `chore(release): prepare vX.Y.Z`, push to `main`, run `gh workflow run release.yml --ref main -f expected-sha=<that commit>`, watch the run, rerun runner trouble once with `gh run rerun <run-id> --failed`, and check the prerelease as above.
