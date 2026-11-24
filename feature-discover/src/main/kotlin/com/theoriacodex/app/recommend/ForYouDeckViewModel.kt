@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.media.isAnimatedPost
-import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.ViewerFeedOwner
@@ -13,7 +12,6 @@ import com.theoriacodex.app.search.retriesOnReconnect
 import com.theoriacodex.app.trails.TrailSpec
 import com.theoriacodex.app.trails.asTriageFeed
 import com.theoriacodex.app.trails.nextOrNull
-import com.theoriacodex.app.triage.TriageDecision
 import com.theoriacodex.app.triage.TriageDecisionEvent
 import com.theoriacodex.app.triage.TriageDeck
 import com.theoriacodex.app.triage.TriageFeed
@@ -23,9 +21,7 @@ import com.theoriacodex.app.triage.needsPictureCheck
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
-import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
-import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
@@ -35,7 +31,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PictureLook
-import java.util.IdentityHashMap
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -59,10 +54,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouDeckViewModel(
@@ -104,11 +96,7 @@ class ForYouDeckViewModel(
 
     private val seen = mutableSetOf<PostId>()
 
-    private var recentSkips: Set<PostId> = emptySet()
-    private var skipsReadFor: String? = null
-
-    private val logged = IdentityHashMap<TriageDecision, ForYouVerdict>()
-    private val verdictWrites = Mutex()
+    private val verdictLog = ForYouVerdictLog(wiring.verdicts, wiring.writeScope, workScope, wiring.clock)
 
     private var lastDecision: Pair<PostId, DeckSteering>? = null
     private val asking = mutableMapOf<PostId, Job>()
@@ -190,8 +178,7 @@ class ForYouDeckViewModel(
             previous != next -> {
                 if (previous?.profileId != next.profileId) {
                     seen.clear()
-                    recentSkips = emptySet()
-                    skipsReadFor = null
+                    verdictLog.reset(readFor = null)
                 }
                 rebuild()
             }
@@ -204,8 +191,7 @@ class ForYouDeckViewModel(
 
     fun startOver() {
         seen.clear()
-        recentSkips = emptySet()
-        skipsReadFor = inputs?.profileId
+        verdictLog.reset(readFor = inputs?.profileId)
         rebuild()
     }
 
@@ -223,12 +209,12 @@ class ForYouDeckViewModel(
         if (request.availableSources.isEmpty()) return settle(ForYouMixState.NoSources)
         if (vetsPictures) workScope.launch { wiring.pictures.prepare() }
         workScope.launch {
-            val skips = if (skipsReadFor == profileId) null else async { readRecentSkips(profileId) }
+            val skips = async { verdictLog.readSkips(profileId) }
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
                 return@launch settle(ForYouMixState.Failed, error.message)
             }
-            skips?.await()
+            skips.await()
             if (lanes.isEmpty()) return@launch settle(ForYouMixState.NoLanes)
             val built = ForYouMix(lanes, wiring.copiesOf)
             mix = built
@@ -238,19 +224,6 @@ class ForYouDeckViewModel(
             if (built.wanted) makeUp(built)
             vet(built)
         }
-    }
-
-    private suspend fun readRecentSkips(profileId: String) {
-        val until = wiring.clock()
-        val since = until - SKIP_MEMORY_MS
-        val read = workScope.launch {
-            verdictWrites.withLock {}
-            recentSkips = runCatchingPreservingCancellation { wiring.verdicts.skippedBetween(profileId, since, until, SKIP_READ_LIMIT) }
-                .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
-                .getOrNull() ?: return@launch
-            skipsReadFor = profileId
-        }
-        withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) { read.join() }
     }
 
     private fun request(): ForYouFeedRequest? {
@@ -505,32 +478,18 @@ class ForYouDeckViewModel(
         when (event) {
             is TriageDecisionEvent.Decided -> {
                 seen += post.id
-                val kind = event.decision.signal()?.verdictKind() ?: return
-                val profileId = inputs?.profileId ?: return
-                val verdict = ForYouVerdict(profileId, post.id, kind, wiring.clock(), postPreviewImageCandidate(post)?.url)
-                logged[event.decision] = verdict
-                writeVerdict { record(verdict) }
+                verdictLog.record(event.decision, inputs?.profileId ?: return)
             }
             is TriageDecisionEvent.Reverted -> {
                 seen -= post.id
-                val verdict = logged.remove(event.decision) ?: return
-                writeVerdict { remove(verdict) }
-            }
-        }
-    }
-
-    private fun writeVerdict(write: suspend ForYouVerdictRepository.() -> Unit) {
-        wiring.writeScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            verdictWrites.withLock {
-                runCatchingPreservingCancellation { wiring.verdicts.write() }
-                    .onFailure { Diagnostics.report("for-you", "A For You verdict could not be logged", it) }
+                verdictLog.revert(event.decision)
             }
         }
     }
 
     private fun Post.copyOfAny(ids: (PostId) -> Boolean): Boolean = ids(id) || wiring.copiesOf(this).any(ids)
 
-    private fun isKnown(id: PostId): Boolean = id in seen || id in recentSkips || id in kept
+    private fun isKnown(id: PostId): Boolean = id in seen || id in verdictLog || id in kept
 
     private fun onMixDecision(level: Int, event: TriageDecisionEvent) {
         onTrailDecision(event)
@@ -538,11 +497,11 @@ class ForYouDeckViewModel(
         val post = event.decision.post
         when (event) {
             is TriageDecisionEvent.Decided -> {
-                val signal = event.decision.signal() ?: return
+                val signal = event.decision.verdictKind() ?: return
                 val origin = mix.origins[post.id] ?: return
                 lastDecision = post.id to mix.steering
                 mix.steering = mix.steering.after(signal, origin)
-                if (signal == DeckSignal.Liked || signal == DeckSignal.Saved) askForMore(mix, post, saved = signal == DeckSignal.Saved)
+                if (signal == ForYouVerdictKind.LIKED || signal == ForYouVerdictKind.SAVED) askForMore(mix, post, saved = signal == ForYouVerdictKind.SAVED)
             }
             is TriageDecisionEvent.Reverted -> {
                 asking.remove(post.id)?.cancel()
@@ -599,26 +558,7 @@ class ForYouDeckViewModel(
         const val INJECTED = 2
 
         const val VET_AHEAD = 3
-
-        const val SKIP_MEMORY_MS = 30L * 24 * 60 * 60 * 1000
-        const val SKIP_READ_LIMIT = 5_000
-        const val SKIP_READ_TIMEOUT_MS = 1_500L
     }
-}
-
-private fun TriageDecision.signal(): DeckSignal? = when (this) {
-    is TriageDecision.Liked -> DeckSignal.Liked
-    is TriageDecision.Saved -> DeckSignal.Saved
-    is TriageDecision.Skipped -> DeckSignal.Skipped
-    is TriageDecision.Hid -> DeckSignal.Hid
-    is TriageDecision.Kept, is TriageDecision.Removed -> null
-}
-
-private fun DeckSignal.verdictKind(): ForYouVerdictKind = when (this) {
-    DeckSignal.Liked -> ForYouVerdictKind.LIKED
-    DeckSignal.Saved -> ForYouVerdictKind.SAVED
-    DeckSignal.Skipped -> ForYouVerdictKind.SKIPPED
-    DeckSignal.Hid -> ForYouVerdictKind.HID
 }
 
 private fun TrailRequest.name(): String = when (this) {
