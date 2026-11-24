@@ -3,6 +3,7 @@ package com.theoriacodex.data.android.room
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.domain.model.SourceKey
@@ -55,7 +56,7 @@ class SeriesUpdateCheckTest {
         follow(series)
         source.chapters[series.id] = listOf(second, first)
 
-        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)))
+        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)).updates)
         assertEquals(2, repository.observeFollowed().first().single().unreadCount)
     }
 
@@ -66,8 +67,8 @@ class SeriesUpdateCheckTest {
         repository.checkFollowed(sourcesOn(source))
 
         source.chapters[series.id] = listOf(second, first.copy(name = "Chapter 1, renamed"))
-        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed(sourcesOn(source)))
-        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)))
+        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed(sourcesOn(source)).updates)
+        assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)).updates)
     }
 
     @Test
@@ -100,7 +101,11 @@ class SeriesUpdateCheckTest {
         repository.checkFollowed(sourcesOn(failing, source))
 
         source.chapters[series.id] = listOf(second, first)
-        assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed(sourcesOn(failing, source)))
+        // The uninstalled source's series is not counted as checked; the failing one's is, and as failed.
+        assertEquals(
+            FollowedCheck(listOf(SeriesUpdate(series, listOf(second))), checked = 2, failed = 1),
+            repository.checkFollowed(sourcesOn(failing, source)),
+        )
     }
 
     @Test

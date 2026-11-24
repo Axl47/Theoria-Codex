@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.ui.sourceFailureDetail
+import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -107,7 +108,8 @@ data class DedicatedSourceState(
  * [filterSheet] is the filter sheet while it is open; [search] is one listing per source while a search shows, and
  * null otherwise; a search sent before the extensions have loaded is empty until they have, and then runs.
  * [dedicated] is a single source's search opened from [search], keeping [search] intact underneath until Back.
- * [refreshing] is true while a refresh by hand checks the followed series for new entries. [kind] is the kind filter's
+ * [refreshing] is true while a refresh by hand checks the followed series for new entries, and [failedCheck] is the
+ * last such check while some of its series failed, until the next starts. [kind] is the kind filter's
  * choice, null for both; [SeriesTabContent] says when it applies. [view] is null until the followed series are first
  * read, then Following when there are any; after that it changes only when chosen. [library] orders and narrows the
  * Following grid once [libraryLoaded] says the saved choice has arrived, and [followingQuery] narrows it to titles
@@ -123,6 +125,7 @@ data class SeriesTabState(
     val searchQuery: String = "",
     val dedicated: DedicatedSourceState? = null,
     val refreshing: Boolean = false,
+    val failedCheck: FollowedCheck? = null,
     val kind: SeriesKind? = null,
     val view: SeriesView? = null,
     val library: LibraryOptions = LibraryOptions(),
@@ -193,7 +196,7 @@ class SeriesTabViewModel(
     private val saved: SavedStateHandle = SavedStateHandle(),
     private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
     /** Stores the followed series' new entries, which changes the shelf's unread counts, and announces them. */
-    private val checkFollowed: suspend () -> Unit,
+    private val checkFollowed: suspend () -> FollowedCheck,
 ) : ViewModel() {
     private var searchText: String? = saved[SAVED_SEARCH]
 
@@ -242,12 +245,14 @@ class SeriesTabViewModel(
             val opening = state.value.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE
             saved[SAVED_VIEW] = opening.name
             mutableState.update { it.copy(view = it.view ?: opening, library = options, libraryLoaded = true) }
+            browseWhenShown()
         }
     }
 
     fun chooseView(view: SeriesView) {
         saved[SAVED_VIEW] = view.name
         mutableState.update { it.copy(view = view) }
+        browseWhenShown()
     }
 
     /** Orders and narrows the Following grid by [options], and remembers them. */
@@ -278,20 +283,21 @@ class SeriesTabViewModel(
     /** Checks the followed series for new entries, unless a check is already running. */
     fun refresh() {
         if (state.value.refreshing) return
-        mutableState.update { it.copy(refreshing = true) }
+        mutableState.update { it.copy(refreshing = true, failedCheck = null) }
         viewModelScope.launch {
+            var check: FollowedCheck? = null
             try {
-                checkFollowed()
+                check = checkFollowed()
             } finally {
-                mutableState.update { it.copy(refreshing = false) }
+                mutableState.update { it.copy(refreshing = false, failedCheck = check?.takeIf { it.failed > 0 }) }
             }
         }
     }
 
     /**
-     * Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. A browsed source that was replaced (its extension updated) is
-     * browsed afresh, as if chosen again. A search on screen, or one sent while the extensions were loading, runs in
-     * every source that is new or replaced.
+     * Keeps what is on screen for the sources still on offer, and while Browse shows, browses the first when the browsed
+     * one is gone. A browsed source that was replaced (its extension updated) is browsed afresh, as if chosen again. A
+     * search on screen, or one sent while the extensions were loading, runs in every source that is new or replaced.
      */
     private fun showSources(sources: List<SeriesSource>) {
         val before = state.value.sources.orEmpty()
@@ -325,18 +331,24 @@ class SeriesTabViewModel(
             source(currentDedicated.source.key)?.let { showIn(ListingSlot.Dedicated, it, currentDedicated.kind) }
         }
         val browsedKey = state.value.browse?.key
-        when {
-            browsedKey != null && fresh.any { it.key == browsedKey } -> browse(browsedKey)
-            browsedKey == null -> {
-                val browsed = saved.get<String>(SAVED_BROWSE)
-                (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
-            }
-        }
+        if (browsedKey != null && fresh.any { it.key == browsedKey }) browse(browsedKey) else browseWhenShown()
         if (query != null) fresh.forEach { searchIn(it, query) }
         pendingGenre?.let { (genreSource, genre) ->
             pendingGenre = null
             openGenreSearch(genreSource, genre)
         }
+    }
+
+    /**
+     * Browses the source browsed before process death, else the first, once Browse shows with nothing browsed and the
+     * sources have loaded. Following never asks a source for a listing it hides.
+     */
+    private fun browseWhenShown() {
+        val current = state.value
+        if (current.view != SeriesView.BROWSE || current.browse != null) return
+        val sources = current.sources ?: return
+        val browsed = saved.get<String>(SAVED_BROWSE)
+        (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
     }
 
     /** Shows [key]'s popular series from the first page; the filters chosen before are dropped. */

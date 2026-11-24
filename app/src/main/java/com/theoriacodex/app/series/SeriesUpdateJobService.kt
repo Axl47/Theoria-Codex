@@ -25,8 +25,13 @@ class SeriesUpdateJobService : JobService() {
         check = scope.launch {
             try {
                 val series = (application as TheoriaAppContainerOwner).awaitAppContainer().series
-                val updates = series?.checkFollowed { notifySeriesUpdate(this@SeriesUpdateJobService, it) }.orEmpty()
-                Diagnostics.report("series", "Checked followed series: ${updates.size} with new chapters or episodes")
+                val check = series?.checkFollowed { notifySeriesUpdate(this@SeriesUpdateJobService, it) }
+                if (check != null) {
+                    Diagnostics.report(
+                        "series",
+                        "Checked ${check.checked} followed series: ${check.updates.size} with new chapters or episodes, ${check.failed} failed",
+                    )
+                }
             } catch (error: CancellationException) {
                 // onStopJob ended this run; the job is not reported finished a second time.
                 throw error
