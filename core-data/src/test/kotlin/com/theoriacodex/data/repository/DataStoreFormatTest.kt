@@ -108,8 +108,6 @@ class DataStoreFormatTest {
             forYouSaveCount = 9L,
             postUrlCopyCount = 10L,
             codexEntryCounts = mapOf("codex" to 11L),
-            translatedPhraseCount = 12L,
-            translatedSourceCharacterCount = 13L,
         )
         val full = StatisticsDataStoreFile(statistics = statistics)
         val series = StatisticsDataStoreFile(

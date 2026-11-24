@@ -248,8 +248,6 @@ data class LifetimeStatistics(
     val forYouSaveCount: Long = 0L,
     val postUrlCopyCount: Long = 0L,
     val codexEntryCounts: Map<String, Long> = emptyMap(),
-    val translatedPhraseCount: Long = 0L,
-    val translatedSourceCharacterCount: Long = 0L,
 )
 
 data class CodexPostOpen(val codexId: String, val postKey: String, val label: String)
@@ -267,7 +265,6 @@ interface StatisticsRepository {
     suspend fun recordForYouSave()
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
-    suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long)
     suspend fun mergeRestored(imported: LifetimeStatistics)
 }
 

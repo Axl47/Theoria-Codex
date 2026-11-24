@@ -63,9 +63,6 @@ internal data class StatisticsStoreRecord(
     @SerialName("forYouSaveCount") val forYouSaveCount: Long = 0L,
     @SerialName("postUrlCopyCount") val postUrlCopyCount: Long = 0L,
     @SerialName("codexEntryCounts") val codexEntryCounts: Map<String, Long> = emptyMap(),
-    @SerialName("translatedPhraseCount") val translatedPhraseCount: Long = 0L,
-    @SerialName("translatedSourceCharacterCount")
-    val translatedSourceCharacterCount: Long = 0L,
 ) {
     fun toDomain(): LifetimeStatistics {
         return StatisticsPolicies.normalize(
@@ -91,8 +88,6 @@ internal data class StatisticsStoreRecord(
                 forYouSaveCount = forYouSaveCount,
                 postUrlCopyCount = postUrlCopyCount,
                 codexEntryCounts = codexEntryCounts,
-                translatedPhraseCount = translatedPhraseCount,
-                translatedSourceCharacterCount = translatedSourceCharacterCount,
             )
         )
     }
@@ -112,8 +107,6 @@ internal data class StatisticsStoreRecord(
                 forYouSearchCount,
                 forYouSaveCount,
                 postUrlCopyCount,
-                translatedPhraseCount,
-                translatedSourceCharacterCount,
             ).all { value -> value >= 0L }
         ) { "Statistics totals must be non-negative" }
         require(watchedBySource.values.all { value -> value >= 0L }) {
@@ -161,8 +154,6 @@ internal data class StatisticsStoreRecord(
                 forYouSaveCount = normalized.forYouSaveCount,
                 postUrlCopyCount = normalized.postUrlCopyCount,
                 codexEntryCounts = normalized.codexEntryCounts.toSortedMap(),
-                translatedPhraseCount = normalized.translatedPhraseCount,
-                translatedSourceCharacterCount = normalized.translatedSourceCharacterCount,
             )
         }
     }
@@ -236,8 +227,6 @@ internal object StatisticsPolicies {
         forYouSaveCount = maxOf(current.forYouSaveCount, imported.forYouSaveCount),
         postUrlCopyCount = maxOf(current.postUrlCopyCount, imported.postUrlCopyCount),
         codexEntryCounts = current.codexEntryCounts.mergeWith(imported.codexEntryCounts, ::maxOf),
-        translatedPhraseCount = maxOf(current.translatedPhraseCount, imported.translatedPhraseCount),
-        translatedSourceCharacterCount = maxOf(current.translatedSourceCharacterCount, imported.translatedSourceCharacterCount),
     )
 
     private fun <K, V> Map<K, V>.mergeWith(other: Map<K, V>, combine: (V, V) -> V): Map<K, V> =
@@ -265,8 +254,6 @@ internal object StatisticsPolicies {
             forYouSearchCount = statistics.forYouSearchCount.coerceAtLeast(0L),
             forYouSaveCount = statistics.forYouSaveCount.coerceAtLeast(0L),
             postUrlCopyCount = statistics.postUrlCopyCount.coerceAtLeast(0L),
-            translatedPhraseCount = statistics.translatedPhraseCount.coerceAtLeast(0L),
-            translatedSourceCharacterCount = statistics.translatedSourceCharacterCount.coerceAtLeast(0L),
             codexEntryCounts = statistics.codexEntryCounts.entries.mapNotNull { (codexId, count) ->
                 val normalizedId = codexId.trim().takeIf(String::isNotBlank) ?: return@mapNotNull null
                 val normalizedCount = count.coerceAtLeast(0L).takeIf { it > 0L } ?: return@mapNotNull null
@@ -379,18 +366,6 @@ internal object StatisticsPolicies {
         if (normalized.isBlank()) return current
         return current.copy(codexEntryCounts = current.codexEntryCounts.increment(normalized))
     }
-
-    fun recordTranslationUsage(
-        current: LifetimeStatistics,
-        phraseCount: Long,
-        sourceCharacterCount: Long,
-    ): LifetimeStatistics {
-        return current.copy(
-            translatedPhraseCount = current.translatedPhraseCount.saturatingAdd(phraseCount),
-            translatedSourceCharacterCount = current.translatedSourceCharacterCount
-                .saturatingAdd(sourceCharacterCount),
-        )
-    }
 }
 
 class DataStoreStatisticsRepository private constructor(
@@ -461,11 +436,6 @@ internal class CellStatisticsRepository(
     override suspend fun recordCodexEntry(codexId: String) = mutate { current ->
         StatisticsPolicies.recordCodexEntry(current, codexId)
     }
-
-    override suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long) =
-        mutate { current ->
-            StatisticsPolicies.recordTranslationUsage(current, phraseCount, sourceCharacterCount)
-        }
 
     override suspend fun mergeRestored(imported: LifetimeStatistics) = mutate { current ->
         StatisticsPolicies.mergeRestored(current, imported)
