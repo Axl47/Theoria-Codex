@@ -25,14 +25,14 @@ class SettingFromSearchJourneyTest : AppJourneyFixture() {
         activate(input)
         input.performTextInput("instant seek")
         activate(compose.onNode(hasText(toggle.title) and isToggleable() and hasAnyAncestor(hasTestTag("Search composer"))))
-        compose.waitUntil(10_000) { io { toggle.read(container.settings.observeSettings().first()) } }
+        waitFor("setting ${toggle.title} is on in settings") { io { toggle.read(container.settings.observeSettings().first()) } }
 
         // The composer is its own Dialog window, so system Back (not the Activity's dispatcher) closes it; the
         // first press may only hide the keyboard.
         val composer = compose.onNodeWithTag("Search composer")
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         repeat(2) { if (composer.isDisplayed()) device.pressBack().also { compose.waitForIdle() } }
-        compose.waitUntil(10_000) { !composer.isDisplayed() }
+        waitFor("search composer is closed") { !composer.isDisplayed() }
         openSettings()
         activate(compose.onNodeWithText("Controls"))
         compose.onNode(hasText(toggle.title) and isToggleable()).assertIsOn()

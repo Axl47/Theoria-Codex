@@ -40,7 +40,7 @@ class SourceParsingThreadJourneyTest : AppJourneyFixture() {
         submitSearch()
         val client = container.registry.providerShaped.getValue(SOURCE)
         val firstCard = searchCardTestTag(posts.getValue(SOURCE).first().id)
-        compose.waitUntil(conditionDescription = "First provider page is shown", timeoutMillis = 10_000) {
+        waitFor("First provider page is shown") {
             compose.onNodeWithTag(firstCard).isDisplayed()
         }
         scrollToFirstVisibleCard(SOURCE, THIRD_PAGE_CARD, maxDrags = 80)

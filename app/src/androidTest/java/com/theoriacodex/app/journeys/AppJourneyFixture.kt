@@ -146,7 +146,7 @@ abstract class AppJourneyFixture {
     protected fun launch() {
         JourneyTestActivity.fixtureContainer = container
         scenario = ActivityScenario.launch(JourneyTestActivity::class.java)
-        compose.waitUntil(15_000) {
+        waitFor("app shows its Search tab after launch", timeoutMillis = 15_000) {
             compose.onNodeWithContentDescription("Search").isDisplayed()
         }
     }
@@ -197,19 +197,19 @@ abstract class AppJourneyFixture {
         openRecentsSection("Searches")
         activate(compose.onNodeWithTag("Recent search:$recentSearch"))
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(source)[index].id))
-        compose.waitUntil(10_000) { card.isDisplayed() }
+        waitFor("search result card $index for \"$recentSearch\" is displayed") { card.isDisplayed() }
         activate(card)
     }
 
     /** Exercise the visible control's action without racing its animated touch coordinates. */
     protected fun activate(node: SemanticsNodeInteraction) {
-        compose.waitUntil(10_000) { node.isDisplayed() && isEnabled().matches(node.fetchSemanticsNode()) }
+        waitForNode(node, "displayed and enabled") { node.isDisplayed() && isEnabled().matches(node.fetchSemanticsNode()) }
         node.performSemanticsAction(SemanticsActions.OnClick)
     }
 
     /** Long-press a control once it has loaded, through its semantics action rather than injected touch. */
     protected fun longPress(node: SemanticsNodeInteraction) {
-        compose.waitUntil(10_000) { node.isDisplayed() }
+        waitForNode(node, "displayed for a long press") { node.isDisplayed() }
         node.performSemanticsAction(SemanticsActions.OnLongClick)
     }
 
@@ -217,26 +217,26 @@ abstract class AppJourneyFixture {
     /** Runs the composer's query now and closes it, through the keyboard's Search action. */
     protected fun submitSearch() {
         val input = compose.onNodeWithTag("Search query input")
-        compose.waitUntil(10_000) { input.isDisplayed() }
+        waitFor("Search query input is displayed") { input.isDisplayed() }
         input.performImeAction()
     }
 
     protected fun addSearchTag(value: String) {
         val input = compose.onNodeWithTag("Search query input")
-        compose.waitUntil(10_000) {
+        waitFor("Search query input is empty before typing \"$value\"") {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty()
         }
         activate(input)
         input.performTextInput(value)
         val add = hasAnyDescendant(hasText("Add", substring = false)) and
             isEnabled() and hasClickAction() and !hasSetTextAction()
-        compose.waitUntil(10_000) {
+        waitFor("Search query input holds \"$value\" and an enabled Add button shows") {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
                 compose.onAllNodes(add, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         activate(compose.onNode(add, useUnmergedTree = true))
         try {
-            compose.waitUntil(10_000) {
+            waitFor("\"$value\" becomes a tag chip and the input clears") {
                 input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
                     compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
                         .fetchSemanticsNodes().isNotEmpty()
@@ -300,6 +300,18 @@ abstract class AppJourneyFixture {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val shots = checkNotNull(instrumentation.targetContext.getExternalFilesDir("journey-shots"))
         check(UiDevice.getInstance(instrumentation).takeScreenshot(shots.resolve("$name.png"))) { "No screenshot for $name" }
+    }
+
+    protected fun waitFor(what: String, timeoutMillis: Long = 10_000, condition: () -> Boolean) =
+        compose.waitUntil(conditionDescription = what, timeoutMillis = timeoutMillis, condition = condition)
+
+    private fun waitForNode(node: SemanticsNodeInteraction, what: String, condition: () -> Boolean) {
+        try {
+            waitFor("control is $what", condition = condition)
+        } catch (timeout: ComposeTimeoutException) {
+            val state = runCatching { node.printToString() }.getOrElse { it.message.orEmpty() }
+            throw AssertionError("Control never became $what:\n$state", timeout)
+        }
     }
 
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }

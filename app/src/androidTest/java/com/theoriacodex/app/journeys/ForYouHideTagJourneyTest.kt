@@ -18,14 +18,14 @@ class ForYouHideTagJourneyTest : AppJourneyFixture() {
         val offersHide = SemanticsMatcher("offers to hide a tag") { node ->
             node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label.startsWith("Hide ") }
         }
-        compose.waitUntil(15_000) { compose.onAllNodes(offersHide).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("For You offers a Hide tag action", timeoutMillis = 15_000) { compose.onAllNodes(offersHide).fetchSemanticsNodes().isNotEmpty() }
         val hide = compose.onNode(offersHide).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label.startsWith("Hide ") }
         compose.runOnUiThread { hide.action() }
-        compose.waitUntil(10_000) { hidden().size == 1 }
+        waitFor("one tag is hidden in settings") { hidden().size == 1 }
         assertEquals(1, hidden().single().tags.size)
 
         activate(compose.onNodeWithTag(FOR_YOU_UNDO_TAG))
-        compose.waitUntil(10_000) { hidden().isEmpty() }
+        waitFor("the hidden tag is restored after Undo") { hidden().isEmpty() }
     }
 
     private fun hidden() = io {

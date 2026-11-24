@@ -38,11 +38,11 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         // The grid shows the Mix's posts; the first lane's first post is among its first cards.
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
         val card = searchCardTestTag(first.id)
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("For You card for ${first.id} is displayed", timeoutMillis = 15_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }
         val rootsBeforeLike = container.registry.requests.count { it.pageToken == null }
         compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(card)), useUnmergedTree = true)
             .performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("More like this shelf appears after Like") { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
         // Whichever lane answered first leads the grid, so the liked card's shelf may open below the fold.
         val grid = hasScrollToNodeAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange) and
             hasAnyDescendant(hasTestTag(card))
@@ -56,11 +56,11 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("Dismiss").performClick()
         longPress(compose.onNodeWithTag(card))
         activate(compose.onNodeWithText("Save to Codex"))
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("FYP saved").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("FYP saved collection is offered as a save destination") { compose.onAllNodesWithText("FYP saved").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("FYP saved").performClick()
-        compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }
+        waitFor("collection holds a saved post") { io { container.content.observeCodexItems(collection.codexId).first().isNotEmpty() } }
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(collection.codexId).first().map { it.postId } })
-        compose.waitUntil(10_000) { io { container.data.statisticsRepository.observeStatistics().first().forYouSaveCount == 1L } }
+        waitFor("For You save count is 1") { io { container.data.statisticsRepository.observeStatistics().first().forYouSaveCount == 1L } }
         longPress(compose.onNodeWithTag(card))
         activate(compose.onNodeWithContentDescription("Open Journey artist's profile"))
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()

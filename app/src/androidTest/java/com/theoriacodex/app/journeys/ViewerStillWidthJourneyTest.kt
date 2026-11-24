@@ -52,7 +52,7 @@ class ViewerStillWidthJourneyTest : AppJourneyFixture() {
     /** Bounds of the on-screen node described as [description], and of the media pager that pages it. */
     private fun shown(description: String): Pair<Rect, Rect> {
         val onScreen = { compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().filter { it.boundsInRoot.left == 0f } }
-        compose.waitUntil(10_000) { onScreen().isNotEmpty() }
+        waitFor("Viewer shows $description at the left edge") { onScreen().isNotEmpty() }
         compose.waitForIdle()
         val node = onScreen().single()
         val pager = generateSequence(node.parent, SemanticsNode::parent).first { SemanticsProperties.IndexForKey in it.config }

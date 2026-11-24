@@ -31,7 +31,7 @@ class ViewerMultiPageJourneyTest : AppJourneyFixture() {
     fun aPageDragTurnsThePageAndTheStripKeepsTheNextPostInReach() {
         openSearchPost(MULTI_PAGE_POST, RECENT_SEARCH)
         val scrubber = compose.onNodeWithTag("viewer-page-scrubber")
-        compose.waitUntil(10_000) { scrubber.isDisplayed() }
+        waitFor("page scrubber is displayed") { scrubber.isDisplayed() }
 
         // The open post unfolds between its neighbours; a multi-page neighbour is marked before it is opened.
         compose.onNodeWithContentDescription("Go to page 1 of 12").assertIsDisplayed()
@@ -40,17 +40,17 @@ class ViewerMultiPageJourneyTest : AppJourneyFixture() {
         compose.onNodeWithContentDescription("Open post journey-$STACKED_POST").assert(hasStateDescription("3 pages"))
 
         scrubber.performTouchInput { down(percentOffset(0.04f, 0.5f)); moveTo(percentOffset(0.55f, 0.5f)) }
-        compose.waitUntil(5_000) { compose.onNodeWithTag("viewer-scrub-preview").isDisplayed() }
+        waitFor("scrub preview is displayed", timeoutMillis = 5_000) { compose.onNodeWithTag("viewer-scrub-preview").isDisplayed() }
         compose.onNodeWithText("+6").assertIsDisplayed()
         scrubber.performTouchInput { up() }
 
         compose.onNodeWithTag("viewer-scrub-preview").assertDoesNotExist()
-        compose.waitUntil(5_000) { compose.onNodeWithText("7 / 12", substring = true).isDisplayed() }
+        waitFor("scrubber shows page 7 / 12", timeoutMillis = 5_000) { compose.onNodeWithText("7 / 12", substring = true).isDisplayed() }
         scrubber.assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Page 7 of 12")))
-        compose.waitUntil(5_000) { compose.onNodeWithContentDescription("Go to page 7 of 12").isDisplayed() }
+        waitFor("Viewer neighbour strip shows Go to page 7 of 12", timeoutMillis = 5_000) { compose.onNodeWithContentDescription("Go to page 7 of 12").isDisplayed() }
 
         activate(compose.onNodeWithContentDescription("Open post journey-$NEXT_POST"))
-        compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Open post journey-$MULTI_PAGE_POST").isDisplayed() }
+        waitFor("Viewer shows post journey-$MULTI_PAGE_POST in the strip") { compose.onNodeWithContentDescription("Open post journey-$MULTI_PAGE_POST").isDisplayed() }
         compose.onNodeWithContentDescription("Open post journey-$MULTI_PAGE_POST").assert(hasStateDescription("12 pages"))
         scrubber.assertDoesNotExist()
     }

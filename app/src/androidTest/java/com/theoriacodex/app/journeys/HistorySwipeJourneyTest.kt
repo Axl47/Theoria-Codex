@@ -30,18 +30,18 @@ class HistorySwipeJourneyTest : AppJourneyFixture() {
         library(LibrarySection.History)
         openRecentsSection("Searches")
         val gone = compose.onNodeWithTag("Recent search:swipe-gone")
-        compose.waitUntil(10_000) { gone.isDisplayed() }
+        waitFor("swipe-gone recent search is displayed") { gone.isDisplayed() }
 
         gone.performTouchInput { swipeLeft() }
-        compose.waitUntil(10_000) { searches() == listOf("swipe-kept") }
+        waitFor("only swipe-kept remains in recent searches after the swipe") { searches() == listOf("swipe-kept") }
         activate(compose.onNodeWithText("Undo"))
-        compose.waitUntil(10_000) { searches().toSet() == setOf("swipe-kept", "swipe-gone") }
+        waitFor("swipe-gone is restored to recent searches after Undo") { searches().toSet() == setOf("swipe-kept", "swipe-gone") }
 
         val kept = compose.onNodeWithTag("Recent search:swipe-kept")
-        compose.waitUntil(10_000) { kept.isDisplayed() }
+        waitFor("swipe-kept recent search is displayed") { kept.isDisplayed() }
         kept.performTouchInput { swipeRight() }
         // The pager moved to For You; a rightward drag never removes an entry.
-        compose.waitUntil(10_000) { !kept.isDisplayed() }
+        waitFor("swipe-kept is no longer displayed after the pager moved to For You") { !kept.isDisplayed() }
         assertEquals(setOf("swipe-kept", "swipe-gone"), searches().toSet())
     }
 
