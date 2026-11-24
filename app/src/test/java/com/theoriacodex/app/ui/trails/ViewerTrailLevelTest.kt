@@ -81,7 +81,7 @@ class ViewerTrailLevelTest {
 
     private fun context(source: ViewerStreamSource) = ViewerLaunchContext("q", 0, source, 0)
 
-    private fun callbacks(onDismiss: suspend () -> Unit, onLoadMore: (ViewerStreamSource) -> Unit) = ViewerRouteEffectCallbacks(
+    private fun callbacks(onDismiss: () -> Unit, onLoadMore: (ViewerStreamSource) -> Unit) = ViewerRouteEffectCallbacks(
         onSavePost = { _, _ -> },
         onDownloadMedia = {},
         onToggleLike = {},

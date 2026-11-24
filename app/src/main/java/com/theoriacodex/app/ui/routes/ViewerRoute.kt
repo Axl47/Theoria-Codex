@@ -152,7 +152,7 @@ internal data class ViewerRouteEffectCallbacks(
     /** Working media for a post whose media failed, asked for in the session's launch context; null when there is none. */
     val onRecoverMedia: suspend (Post, ImageRef, ViewerLaunchContext, () -> Boolean) -> Post?,
     val onLoadMore: (ViewerStreamSource) -> Unit,
-    val onDismiss: suspend () -> Unit,
+    val onDismiss: () -> Unit,
     val onRestorationUnavailable: suspend () -> Unit,
 )
 
