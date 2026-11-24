@@ -104,6 +104,8 @@ interface SeriesRepository {
     /** The entry of [id] at [address], as [entries] has it: null when the source does not list it, or it is not stored. */
     suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? = entries(id).firstOrNull { it.entry.address == address }
 
+    suspend fun storedEntry(id: SeriesId, address: String): StoredSeriesEntry? = listedEntry(id, address)
+
     /**
      * Stores what the source says about [series], keeping what the user did with it, and the stored description,
      * status and memo when [series] has none. With [entries], the source's current list replaces the stored one:
@@ -115,7 +117,9 @@ interface SeriesRepository {
      * dropped entry at a new address. That takes both to be the only release of their chapter number by their
      * translator group, among the dropped entries and among the listed ones; the new address then starts with the
      * dropped one's progress. A series with no stored entries gets none from its first list, because nothing was there
-     * to compare it with; one imported with its entries compares against those. A list in which no entry is stored or
+     * to compare it with, except, when it is followed, those its source dates after it was followed (less a day, for
+     * sources that date by day), so a series followed before its first chapter hears of it; one imported with its
+     * entries compares against those. A list in which no entry is stored or
      * plainly moved gets none either: the source most likely changed its addresses, so the list becomes the new
      * baseline.
      */

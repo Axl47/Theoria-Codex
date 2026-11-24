@@ -270,6 +270,7 @@ private fun SeriesTabViewBody(
             onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
+            onOpenExtensions = onOpenExtensions,
         )
         search != null -> GlobalSearchBody(
             sourcesLoaded = state.sources != null,

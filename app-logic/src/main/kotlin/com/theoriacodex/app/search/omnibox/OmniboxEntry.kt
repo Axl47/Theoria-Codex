@@ -3,7 +3,7 @@ package com.theoriacodex.app.search.omnibox
 import com.theoriacodex.app.codex.CodexCoverCandidate
 
 /** What an omnibox row leads to; its icon tells the kinds apart, and each kind has its own cap. */
-enum class OmniboxKind { CODEX, CREATOR, SAVED_SEARCH, RECENT_SEARCH, COMMAND }
+enum class OmniboxKind { CODEX, SERIES, CREATOR, SAVED_SEARCH, RECENT_SEARCH, COMMAND }
 
 /**
  * Something besides a tag that the Search composer's typed text can reach. The app assembles the entries from

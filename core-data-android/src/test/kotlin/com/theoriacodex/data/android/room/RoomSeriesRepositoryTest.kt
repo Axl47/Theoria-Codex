@@ -63,6 +63,7 @@ class RoomSeriesRepositoryTest {
         assertNull(repository.listedEntry(id, "/c/9"))
         repository.storeEntries(id, listOf(SeriesEntry("/c/2", "Chapter 2")))
         assertNull("Dropped by its source", repository.listedEntry(id, "/c/1"))
+        assertEquals("Still stored", "Chapter 1", repository.storedEntry(id, "/c/1")?.entry?.name)
     }
 
     @Test
@@ -242,6 +243,24 @@ class RoomSeriesRepositoryTest {
         assertEquals(listOf(second), repository.storeEntries(id, listOf(second, SeriesEntry("/c/1", "Chapter 1"))))
         assertEquals(series.copy(title = "Renamed", description = "A synopsis."), repository.series(id)!!.series)
         assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(id.copy(address = "/series/unknown"), listOf(second)))
+    }
+
+    @Test
+    fun `a followed series' first listing reports only chapters dated after it was followed, less a day`() = runTest {
+        val day = 24 * 60 * 60 * 1_000L
+        val fresh = SeriesEntry("/c/3", "Chapter 3", uploadedAtEpochMs = 10 * day)
+        val sameDay = SeriesEntry("/c/2", "Chapter 2", uploadedAtEpochMs = 9 * day + 1)
+        val old = listOf(SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = day), SeriesEntry("/c/0", "Chapter 0"))
+        repository.store(series)
+        now = 10 * day
+        repository.setFollowed(id, true)
+        repository.storeEntries(id, emptyList())
+
+        assertEquals(listOf(fresh, sameDay), repository.storeEntries(id, listOf(fresh, sameDay) + old))
+
+        val unfollowed = Series(SeriesId(id.source, "/series/b"), "Unfollowed", language = "en")
+        repository.store(unfollowed)
+        assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(unfollowed.id, listOf(fresh)))
     }
 
     @Test

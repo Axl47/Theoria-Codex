@@ -205,6 +205,8 @@ internal class ExtensionSourceHost : ExtensionSites {
         return registry.sources()
     }
 
+    fun loadedSources(): List<SeriesSource> = registry.loadedSources()
+
     /** Which sources are on and which an installed extension offers but is off; loads every extension that is on, as [sources] does. */
     suspend fun availability(): SourceAvailability {
         watching.value

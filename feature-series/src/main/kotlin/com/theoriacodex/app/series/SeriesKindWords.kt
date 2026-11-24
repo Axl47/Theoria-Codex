@@ -38,7 +38,7 @@ val SeriesKind.words: EntryWords
         SeriesKind.ANIME -> EntryWords.EPISODES
     }
 
-internal val SeriesKind.label: String
+val SeriesKind.label: String
     get() = when (this) {
         SeriesKind.MANGA -> "Manga"
         SeriesKind.ANIME -> "Anime"

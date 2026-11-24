@@ -1,13 +1,8 @@
 package com.theoriacodex.app.series
 
-import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
-import com.theoriacodex.data.repository.SeriesRepository
-import com.theoriacodex.data.repository.StoredSeries
-import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Inclusion
@@ -23,9 +18,7 @@ import com.theoriacodex.domain.series.languageName
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -37,7 +30,6 @@ import androidx.lifecycle.SavedStateHandle
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -674,27 +666,4 @@ private class Answering(id: String = "custom_mihon_7", private val pages: Int = 
     override suspend fun details(series: Series) = series
     override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
-}
-
-private class Following(private val followed: Flow<List<FollowedSeries>>) : SeriesRepository by NothingStored {
-    override fun observeFollowed() = followed
-}
-
-internal object NothingStored : SeriesRepository {
-    override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
-    override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
-    override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
-    override suspend fun series(id: SeriesId): StoredSeries? = null
-    override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = emptyList()
-    override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
-    override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
-    override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
-    override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
-    override suspend fun setChaptersShareFirstPage(id: SeriesId) = Unit
-    override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
-    override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
-    override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
-    override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }
