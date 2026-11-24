@@ -57,7 +57,7 @@ class FollowedCodexViewModel(
 
     override fun refresh() = feed.reload(follows.map(::CreatorBranch))
     override fun loadMore() = feed.loadMore()
-    override fun retry() = feed.retry()
+    override fun retry() = feed.retry(follows.map(::CreatorBranch))
 
     private suspend fun fetch(branch: CreatorBranch): CreatorBranch {
         return runCatchingExceptionsPreservingCancellation {

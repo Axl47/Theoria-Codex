@@ -252,11 +252,11 @@ class SavedSearchesCodexViewModelTest {
 
             owner.loadMore()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2", "new3", "old1", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(listOf("new1", "new2", "dog", "new3", "old1"), owner.state.value.posts.map { it.id.sourcePostId })
         }
     }
 
-    @Test fun `load more on one newest-first saved search appends below the posts already shown (ADR 0152)`() = runTest {
+    @Test fun `load more on one newest-first saved search appends below the posts already shown, also when an explicit sort ties (ADR 0152)`() = runTest {
         val edited = mapOf("p1" to 50L, "p2" to 90L, "p3" to 40L, "p4" to 95L, "p5" to 30L, "p6" to 99L)
         val pages = listOf(listOf("p1", "p2", "p3"), listOf("p4", "p5", "p6"))
         val source = adapter(SourceKey.GELBOORU) { _, token ->
@@ -268,13 +268,42 @@ class SavedSearchesCodexViewModelTest {
                 RecentSearchEntry(query("tag", QueryMode.Source(SourceKey.GELBOORU)), "gel", 1), 1)
             owner.synchronize(listOf(saved), AppSettings(), setOf(SourceKey.GELBOORU))
             advanceUntilIdle()
-            val shown = { owner.state.value.run { sortLiveCodexPosts(posts, CodexSortMode.NEWEST_SAVED, batches = batches) }.map { it.id.sourcePostId } }
-            val firstScreen = shown()
+            val sorts = listOf(CodexSortMode.NEWEST_SAVED, CodexSortMode.BY_SOURCE)
+            val shown = { sort: CodexSortMode ->
+                owner.state.value.run { sortLiveCodexPosts(posts, sort, batches = batches) }.map { it.id.sourcePostId }
+            }
+            val firstScreens = sorts.map(shown)
 
             owner.loadMore()
             advanceUntilIdle()
 
-            assertEquals(firstScreen, shown().take(firstScreen.size))
+            assertEquals(firstScreens, sorts.map { sort -> shown(sort).take(3) })
+        }
+    }
+
+    @Test fun `load more after a failed refresh still appends below the restored posts (ADR 0152)`() = runTest {
+        var offline = false
+        val source = adapter(SourceKey.GELBOORU) { _, token ->
+            check(!offline) { "offline" }
+            val page = token?.toInt() ?: 0
+            Page(listOf(testPost(SourceKey.GELBOORU, "p$page", createdAtEpochMs = page * 10L)), "${page + 1}".takeIf { page < 3 })
+        }
+        withOwner(listOf(source)) { owner ->
+            val saved = SavedSearchEntry("gel", "gel",
+                RecentSearchEntry(query("tag", QueryMode.Source(SourceKey.GELBOORU)), "gel", 1), 1)
+            owner.synchronize(listOf(saved), AppSettings(), setOf(SourceKey.GELBOORU))
+            advanceUntilIdle()
+            repeat(2) { owner.loadMore(); advanceUntilIdle() }
+            val shown = { owner.state.value.run { sortLiveCodexPosts(posts, CodexSortMode.NEWEST_SAVED, batches = batches) }.map { it.id.sourcePostId } }
+            offline = true
+            owner.refresh()
+            advanceUntilIdle()
+            offline = false
+
+            owner.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(listOf("p0", "p1", "p2", "p3"), shown())
         }
     }
 

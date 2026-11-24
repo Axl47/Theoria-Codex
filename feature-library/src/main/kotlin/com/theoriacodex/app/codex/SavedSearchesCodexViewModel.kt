@@ -49,7 +49,7 @@ class SavedSearchesCodexViewModel(
 
     override fun refresh() = feed.reload(entries.map(::SavedSearchBranch))
     override fun loadMore() = feed.loadMore()
-    override fun retry() = feed.retry()
+    override fun retry() = feed.retry(entries.map(::SavedSearchBranch))
 
     companion object {
         fun factory(coordinator: SearchCoordinator, cache: CacheRepository, relatedPostsLoader: RelatedPostsLoading) =

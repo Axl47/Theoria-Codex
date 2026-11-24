@@ -46,7 +46,8 @@ private fun liveCodexOrder(
     } else {
         compareByDescending { it.createdAtEpochMs }
     }
-    return codexPostRefinement(sort, usage, durations)?.then(date) ?: compareBy<Post> { batches[it.id] ?: 0 }.then(date)
+    val appended = compareBy<Post> { batches[it.id] ?: 0 }.then(date)
+    return codexPostRefinement(sort, usage, durations)?.then(appended) ?: appended
 }
 
 data class LiveCodexFeedState(
@@ -108,7 +109,6 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var loadedAt: Long? = null
     private var keptBranches: Map<String, B>? = null
     private var keptLoadedAt: Long? = null
-    private var reloadSeed: List<B> = emptyList()
     private var refreshErrors = emptyMap<String, String>()
     private val batchOf = HashMap<PostId, Int>()
     private var batch = 0
@@ -155,7 +155,6 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
 
     fun reload(initial: List<B>) {
         if (keptBranches != null || initial.isEmpty()) return
-        reloadSeed = initial
         keptBranches = LinkedHashMap(branches)
         keptLoadedAt = loadedAt
         job?.cancel()
@@ -171,16 +170,16 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         if (!state.value.loading) load(branches.values.filter { it.canLoadMore }.map { it.id }, retry = false)
     }
 
-    fun retry() {
+    fun retry(initial: List<B>) {
         if (state.value.loading) return
-        if (refreshErrors.isNotEmpty()) reload(reloadSeed)
+        if (refreshErrors.isNotEmpty()) reload(initial)
         else load(branches.values.filter { it.error != null }.map { it.id }, retry = true)
     }
 
     private fun load(ids: List<String>, retry: Boolean, cacheInitialCover: Boolean = false, reloading: Boolean = false) {
         if (ids.isEmpty()) return
         val admitted = ++generation
-        batch = if (batchOf.isEmpty()) 0 else batch + 1
+        batch = batchOf.values.maxOrNull()?.plus(1) ?: 0
         mutableState.value = state.value.copy(loading = true, generation = generation)
         job = scope.launch {
             try {
@@ -228,13 +227,13 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     }
 
     private fun publish(loading: Boolean) {
-        val posts = branches.values.flatMap { it.posts }.distinctByFile()
+        val posts = branches.values.flatMap { it.posts }.sortedBy { batchOf[it.id] ?: Int.MAX_VALUE }.distinctByFile()
         mutableState.value = LiveCodexFeedState(
             posts = posts,
             loading = loading,
             canLoadMore = branches.values.any { it.canLoadMore },
-            errors = refreshErrors.filterKeys { it in branches } +
-                branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } },
+            errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap() +
+                refreshErrors.filterKeys { it in branches },
             batches = posts.associate { post -> post.id to batchOf.getOrPut(post.id) { batch } },
             generation = generation,
             loadedAtEpochMs = loadedAt,
