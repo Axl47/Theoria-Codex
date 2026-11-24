@@ -11,6 +11,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Mihon's 16 KB-aligned build of QuickJS (same `app.cash.quickjs` API as 0.9.2), published only on JitPack.
+        // Nothing else resolves from there.
+        exclusiveContent {
+            forRepository { maven("https://jitpack.io") }
+            filter { includeGroup("com.github.zhanghai.quickjs-java") }
+        }
     }
 }
 

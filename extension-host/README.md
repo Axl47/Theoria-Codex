@@ -138,8 +138,10 @@ allows cleartext to `127.0.0.1` and `localhost`.
 an anime not listed in this process, as the background new-episode check asks about, has them asked for first.
 
 **QuickJS.** About a third of anime extensions (and some manga ones) evaluate scripts with QuickJS
-(`app.cash.quickjs`), so the host has a JavaScript engine, as Mihon and Aniyomi do. Its last release is from 2021; its
-native library is aligned for 4 KB pages, so on a device with 16 KB pages an extension that starts it may fail to.
+(`app.cash.quickjs`), so the host has a JavaScript engine, as Mihon and Aniyomi do. Cash App's last release (0.9.2,
+2021) has a native library aligned for 4 KB pages, which Android flags and devices with 16 KB pages may refuse to load,
+so the host uses the fork Mihon ships (`com.github.zhanghai.quickjs-java`, from JitPack): the same classes and public
+API, built with an NDK that aligns for 16 KB.
 
 ## Release builds
 
@@ -151,8 +153,8 @@ kotlinx.serialization, kotlinx.coroutines and the Kotlin standard library. Inter
 members one extension each used.
 
 Size. `:app:assembleRelease` (the APK the Release workflow ships, unsigned here) grows from 10,917,004 bytes on `main`
-at `d2490c40` to 15,252,345 bytes, +4.34 MB (+40%), before anime extensions. QuickJS adds an 854 KB native library
-for `arm64-v8a` (370 KB compressed); the release build was not measured again.
+at `d2490c40` to 15,252,345 bytes, +4.34 MB (+40%), before anime extensions. QuickJS adds a 988 KB native library
+for `arm64-v8a` (854 KB before the 16 KB-aligned fork); the release build was not measured again.
 
 Why whole packages. Three rule sets were built and measured before the feature merged (at `f17caecf`), and each APK was
 checked symbol by symbol against the 300 manga extensions (anime extensions came later):
@@ -327,7 +329,8 @@ Delete `extension-host/`, `app/src/main/java/com/theoriacodex/app/extensions/` a
 `ExtensionSourceLiveTest`. Then remove the module's lines from
 `settings.gradle.kts`, `app/build.gradle.kts` (the `abiFilters` line too), the root `build.gradle.kts`, `scripts/check.sh`,
 `scripts/verify_device_apk.py`, `scripts/detekt_changed.sh`, `config/quality/hotspot-budgets.json` and its Detekt
-baseline, the four library aliases and the `quickjs` version in `gradle/libs.versions.toml`, the cleartext rule for
+baseline, the four library aliases and the `quickjs` version in `gradle/libs.versions.toml` (and the JitPack
+repository it alone resolves from in `settings.gradle.kts`), the cleartext rule for
 `127.0.0.1` and `localhost` in `app/src/main/res/xml/network_security_config.xml`, and the permissions, service and activity it added to the manifest. The seam
 in `:app` and `:media-kit` (`SeriesDependencies`, `AppHttpClients`' `extensionMedia`) does nothing without a host, but the Series tab then has nothing to show, so it goes too (`TopLevelDestination.Series`); `feature-series` and the
 series tables depend only on `SeriesSource`, not on this module.
