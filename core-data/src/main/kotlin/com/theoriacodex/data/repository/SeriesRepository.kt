@@ -27,7 +27,6 @@ data class StoredSeries(
     val chaptersShareFirstPage: Boolean = false,
     /** When the user last followed it; null while not followed, and for some followed before the time was kept. */
     val followedAtEpochMs: Long? = null,
-    /** Whether its source has listed its entries since it was stored, also when it listed none. */
     val listed: Boolean = false,
 )
 
@@ -106,10 +105,6 @@ interface SeriesRepository {
     /** The entry of [id] at [address], as [entries] has it: null when the source does not list it, or it is not stored. */
     suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? = entries(id).firstOrNull { it.entry.address == address }
 
-    /**
-     * The entry of [id] at [address] as stored, also one its source no longer lists. The default, for stores that keep
-     * no dropped entries, is [listedEntry].
-     */
     suspend fun storedEntry(id: SeriesId, address: String): StoredSeriesEntry? = listedEntry(id, address)
 
     /**

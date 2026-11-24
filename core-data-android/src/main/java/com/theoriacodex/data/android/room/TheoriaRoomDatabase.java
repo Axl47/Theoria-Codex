@@ -234,8 +234,6 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
-    // Whether a series was ever listed, so one listed empty, and so with no entries stored, still learns of its first.
-    // Series stored before count as never listed until their next listing; ones with entries compare against those.
     public static final Migration MIGRATION_21_22 = new Migration(21, 22) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `series` ADD COLUMN `listed` INTEGER NOT NULL DEFAULT 0");

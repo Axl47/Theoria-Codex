@@ -91,11 +91,6 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
     }
 }
 
-/**
- * The followed series, read from the device alone, each opening its page. A row names its source, as the Series tab
- * does, once that source's extension has loaded, which only the extensions of followed series do; until then, or when
- * the source is not on or fails to load, it names only the kind.
- */
 @Composable
 private fun rememberFollowedSeriesEntries(shell: TheoriaShell): List<OmniboxEntry> {
     val dependencies = shell.container.series ?: return emptyList()
@@ -112,7 +107,6 @@ private fun rememberFollowedSeriesEntries(shell: TheoriaShell): List<OmniboxEntr
     }
 }
 
-/** A row per series in [series]: its kind and, when [sourceNames] has it, source under the title, and its cover. */
 internal fun followedSeriesEntries(
     series: List<Series>,
     sourceNames: Map<SourceKey, String>,

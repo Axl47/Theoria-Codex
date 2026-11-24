@@ -156,7 +156,6 @@ data class SeriesTabContent(
     val sources: List<SeriesSource>?,
     val browse: SeriesSourceListing?,
     val search: List<SeriesSourceListing>?,
-    /** How many followed series' sources are not on, so none of them can be checked or opened; 0 until sources load. */
     val missingExtensions: Int = 0,
 ) {
     val offersFilter: Boolean get() = kinds.size > 1
