@@ -19,9 +19,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -49,17 +53,18 @@ class LibraryVisionBackfillTest {
     private class Library(val posts: List<Post>) : VisualSignatureRepository {
         val stored = mutableListOf<PictureVision>()
         private val attempts = HashMap<PostId, Int>()
-        private val tags = MutableStateFlow<Map<PostId, List<PredictedTag>>>(emptyMap())
+        private val changes = MutableStateFlow(0)
+        var tagReads = 0
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
         override suspend fun put(postId: PostId, hash: Long?) = Unit
-        override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = emptyList()
+        override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) {
             for (entry in entries) {
                 val at = stored.indexOfFirst { it.postId == entry.postId }
                 if (at >= 0) stored[at] = entry else stored += entry
                 attempts.remove(entry.postId)
             }
-            tags.value = stored.mapNotNull { vision -> vision.tags?.let { vision.postId to it } }.toMap()
+            changes.value += 1
         }
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
             posts.filter { post -> stored.none { it.postId == post.id } }.take(limit)
@@ -71,8 +76,13 @@ class LibraryVisionBackfillTest {
         override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) {
             stored.replaceAll { if (it.postId in postIds) it.copy(frames = VisionFrames.NONE) else it }
         }
-        override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = tags
+        override fun observeVisionChanges(): Flow<Unit> = changes.map { }
+        override suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>> {
+            tagReads += 1
+            return stored.mapNotNull { vision -> vision.tags?.let { vision.postId to it } }.toMap()
+        }
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
+        override fun observeLibraryTotal(): Flow<Int> = flowOf(posts.size)
         override suspend fun clearVision() = stored.clear()
 
         fun vision(id: String) = stored.single { it.postId.sourcePostId == id }
@@ -103,6 +113,24 @@ class LibraryVisionBackfillTest {
         full = null, pageUrl = null, width = null, height = null, canonicalTags = emptyList(), rawTags = emptyList(),
         authorName = null, createdAtEpochMs = null,
     )
+
+    @Test
+    fun `ADR 0097 stored tags are read once the Library settles, not once per write`() = runTest {
+        val library = Library(List(10) { post("p$it") })
+        PictureTagger(readyStore(), library, Pictures(), backgroundScope)
+        runCurrent()
+        assertEquals(1, library.tagReads)
+
+        repeat(10) { index ->
+            library.putVision(listOf(PictureVision(post("p$index").id, spec.id, null, emptyList())))
+            advanceTimeBy(100)
+        }
+        assertEquals(1, library.tagReads)
+
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(2, library.tagReads)
+    }
 
     @Test
     fun `previews that fail to load are skipped, so the older Library is still indexed, and a later run tries them again`() = runBlocking {

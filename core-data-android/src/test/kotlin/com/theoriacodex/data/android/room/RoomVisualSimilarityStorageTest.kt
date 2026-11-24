@@ -15,7 +15,11 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.vision.PredictedTag
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -95,7 +99,7 @@ class RoomVisualSimilarityStorageTest {
         signatures.putVision(listOf(vision("b", "m1", tags = listOf(tag("sea", 0.5f)))))
 
         assertEquals(mapOf(id("a") to 5L, id("b") to 6L), signatures.observePictureHashes().first())
-        assertEquals(mapOf(id("a") to listOf(tag("sky", 0.9f)), id("b") to listOf(tag("sea", 0.5f))), signatures.observePredictedTags("m1").first())
+        assertEquals(mapOf(id("a") to listOf(tag("sky", 0.9f)), id("b") to listOf(tag("sea", 0.5f))), signatures.predictedTags("m1"))
         assertTrue(signatures.libraryPostsWithoutSignature(limit = 10).isEmpty())
     }
 
@@ -109,7 +113,7 @@ class RoomVisualSimilarityStorageTest {
 
         assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
         assertTrue(signatures.observePictureHashes().first().isEmpty())
-        assertEquals(mapOf(id("seen") to emptyList<PredictedTag>()), signatures.observePredictedTags("m1").first())
+        assertEquals(mapOf(id("seen") to emptyList<PredictedTag>()), signatures.predictedTags("m1"))
         assertEquals(listOf(id("new")), signatures.libraryPostsWithoutVision("m1", limit = 10).map(Post::id))
         assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutVision("m2", limit = 10).map(Post::id).toSet())
         assertEquals(1, signatures.libraryPostsWithoutVision("m2", limit = 1).size)
@@ -145,6 +149,27 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(awaiting().isEmpty())
     }
 
+    @Test fun `ADR 0094 the library total follows saves and likes, and vision writes are announced`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        val signatures = RoomVisualSignatureRepository(database)
+        val totals = Channel<Int>(Channel.UNLIMITED)
+        val changes = Channel<Unit>(Channel.UNLIMITED)
+        val watching = launch(Dispatchers.Default) {
+            launch { signatures.observeLibraryTotal().collect(totals::send) }
+            launch { signatures.observeVisionChanges().collect(changes::send) }
+        }
+        assertEquals(0, totals.receive())
+        changes.receive()
+
+        library.addItems(library.ensureCodex("saved", "Saved").codexId, listOf(post("a"), post("b")))
+        assertEquals(2, totals.receiveAsFlow().first { it == 2 })
+        library.toggleLikeAndSyncSystemCodex("p", "likes-p", "Likes", post("c"), emptyList())
+        assertEquals(3, totals.receiveAsFlow().first { it == 3 })
+        signatures.putVision(listOf(vision("a", "m1")))
+        changes.receive()
+        watching.cancel()
+    }
+
     @Test fun `a newer model replaces what an older one stored and progress counts each library post once`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
@@ -159,8 +184,8 @@ class RoomVisualSimilarityStorageTest {
         signatures.putVision(listOf(vision("a", "m2", embedding = byteArrayOf(9), tags = listOf(tag("y", 0.6f)))))
 
         assertEquals(VisionProgress(analysed = 1, total = 3), signatures.observeVisionProgress("m2").first())
-        assertTrue(signatures.observePredictedTags("m1").first().keys == setOf<PostId>())
-        assertEquals(mapOf(id("a") to listOf(tag("y", 0.6f))), signatures.observePredictedTags("m2").first())
+        assertTrue(signatures.predictedTags("m1").keys == setOf<PostId>())
+        assertEquals(mapOf(id("a") to listOf(tag("y", 0.6f))), signatures.predictedTags("m2"))
         assertArrayEquals(byteArrayOf(9), database.openHelper.readableDatabase.query("SELECT embedding FROM post_visual_signatures WHERE source_post_id = 'a'").use { it.moveToFirst(); it.getBlob(0) })
     }
 
@@ -175,7 +200,7 @@ class RoomVisualSimilarityStorageTest {
         signatures.clearVision()
 
         assertEquals(mapOf(id("hashed") to 3L), signatures.observePictureHashes().first())
-        assertTrue(signatures.observePredictedTags("m1").first().isEmpty())
+        assertTrue(signatures.predictedTags("m1").isEmpty())
         assertEquals(VisionProgress(analysed = 0, total = 2), signatures.observeVisionProgress("m1").first())
         assertEquals(listOf(id("visionOnly")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
         database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM post_visual_signatures").use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
@@ -190,7 +215,7 @@ class RoomVisualSimilarityStorageTest {
 
         library.removeItems(codex.codexId, setOf(id("gone")))
 
-        assertTrue(signatures.observePredictedTags("m1").first().isEmpty())
+        assertTrue(signatures.predictedTags("m1").isEmpty())
         assertNull(database.openHelper.readableDatabase.query("SELECT 1 FROM post_visual_signatures").use { if (it.moveToFirst()) 1 else null })
     }
 

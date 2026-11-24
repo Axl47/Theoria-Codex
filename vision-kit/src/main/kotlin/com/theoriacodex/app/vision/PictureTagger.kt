@@ -87,7 +87,8 @@ class PictureTagger(
 
     private fun stored(): Flow<Map<PostId, List<PredictedTag>>> {
         var first = true
-        return signatures.observePredictedTags(store.id).debounce { if (first.also { first = false }) 0L else LIBRARY_SETTLE_MS }
+        return signatures.observeVisionChanges().debounce { if (first.also { first = false }) 0L else LIBRARY_SETTLE_MS }
+            .map { signatures.predictedTags(store.id) }.distinctUntilChanged()
     }
 
     suspend fun analyze(post: Post, remember: Boolean = true): PictureResult {
