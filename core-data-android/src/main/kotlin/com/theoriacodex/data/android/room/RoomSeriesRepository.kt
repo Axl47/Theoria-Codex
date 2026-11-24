@@ -50,6 +50,8 @@ class RoomSeriesRepository(
         }
         .distinctUntilChanged().flowOn(Dispatchers.Default)
 
+    override fun observeHasFollowed(): Flow<Boolean> = dao.observeHasFollowed().distinctUntilChanged()
+
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = dao.observeSeries(id.source.id, id.address)
         // Room emits null while no row matches, whatever the Java signature says.
         .map<SeriesEntity?, StoredSeries?> { it?.toStored() }
@@ -64,6 +66,9 @@ class RoomSeriesRepository(
 
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> =
         withContext(Dispatchers.IO) { dao.entries(id.source.id, id.address) }.map(SeriesEntryEntity::toStored)
+
+    override suspend fun entry(id: SeriesId, address: String): StoredSeriesEntry? =
+        withContext(Dispatchers.IO) { dao.listedEntry(id.source.id, id.address, address) }?.toStored()
 
     override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> =
         database.withTransaction { write(series, entries) }

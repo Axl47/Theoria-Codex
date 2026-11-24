@@ -28,6 +28,10 @@ public interface SeriesDao {
             + "title COLLATE NOCASE ASC, source ASC, address ASC")
     Flow<List<FollowedSeriesRow>> observeFollowed();
 
+    /** Whether any series is followed; it reads only `series`, so progress written to entries never wakes it. */
+    @Query("SELECT EXISTS (SELECT 1 FROM series WHERE followed = 1)")
+    Flow<Boolean> observeHasFollowed();
+
     @Query("SELECT * FROM series WHERE source = :source AND address = :address LIMIT 1")
     Flow<SeriesEntity> observeSeries(String source, String address);
 
@@ -48,6 +52,11 @@ public interface SeriesDao {
 
     @Query("SELECT * FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND address = :address LIMIT 1")
     SeriesEntryEntity entry(String source, String seriesAddress, String address);
+
+    /** As [entry], but only while the source lists it, as [entries] returns it. */
+    @Query("SELECT * FROM series_entries WHERE source = :source AND series_address = :seriesAddress AND address = :address "
+            + "AND source_order >= 0 LIMIT 1")
+    SeriesEntryEntity listedEntry(String source, String seriesAddress, String address);
 
     /** What a profile backup holds: the series the user follows, started reading, or chose a reading mode for. */
     @Query("SELECT * FROM series WHERE followed = 1 OR reading_mode IS NOT NULL OR last_opened_entry IS NOT NULL "

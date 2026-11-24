@@ -681,7 +681,7 @@ internal class DefaultTheoriaAppContainer(
                         .onFailure { Diagnostics.report("series", "Chapter downloads stopped following source and network changes", it) }
                 }
                 durableStoreScope.launch {
-                    keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())
+                    keepSeriesUpdatesScheduled(appContext, series.repository.observeHasFollowed(), settingsRepository.observeSettings())
                 }
             }
         }

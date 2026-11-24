@@ -7,6 +7,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** A series as stored: what its source said, and what the user did with it. */
 data class StoredSeries(
@@ -81,6 +83,9 @@ interface SeriesRepository {
     /** Series with unread chapters first (most unread first), then by title. */
     fun observeFollowed(): Flow<List<FollowedSeries>>
 
+    /** Whether any series is followed. Cheaper than [observeFollowed] where only that matters. */
+    fun observeHasFollowed(): Flow<Boolean> = observeFollowed().map { it.isNotEmpty() }.distinctUntilChanged()
+
     fun observeSeries(id: SeriesId): Flow<StoredSeries?>
 
     /** In the source's order, newest first. */
@@ -89,6 +94,9 @@ interface SeriesRepository {
     suspend fun series(id: SeriesId): StoredSeries?
 
     suspend fun entries(id: SeriesId): List<StoredSeriesEntry>
+
+    /** The entry of [id] at [address], as [entries] has it: null when the source does not list it, or it is not stored. */
+    suspend fun entry(id: SeriesId, address: String): StoredSeriesEntry? = entries(id).firstOrNull { it.entry.address == address }
 
     /**
      * Stores what the source says about [series], keeping what the user did with it, and the stored description,
