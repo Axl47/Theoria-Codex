@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.sources.common.FacetNamespaces
 
 internal fun compileNhentaiQuery(query: Query): String {
@@ -64,7 +65,7 @@ internal fun Query.singleIncludeTagCandidate(): String? {
 }
 
 private fun SearchTerm.isNhentaiDirectLookupFilter(): Boolean {
-    val normalized = normalizeNhentaiFilterTag(value)
+    val normalized = normalizeMatchToken(value)
     val isLanguage = normalized in NHENTAI_LANGUAGE_FILTER_TAGS && (
         isPortableGeneralTag ||
             (facet == SearchFacet.LANGUAGE && sourceNamespace in setOf(null, NHENTAI_LANGUAGE_NAMESPACE))
@@ -74,10 +75,6 @@ private fun SearchTerm.isNhentaiDirectLookupFilter(): Boolean {
             (facet == SearchFacet.TAG && sourceNamespace == NHENTAI_TAG_NAMESPACE)
         )
     return isLanguage || isFullColor
-}
-
-private fun normalizeNhentaiFilterTag(value: String): String {
-    return value.trim().lowercase().replace('_', ' ').replace(NHENTAI_WHITESPACE_REGEX, " ")
 }
 
 internal fun mapSortParam(sortMode: SortMode): String? = when (sortMode) {
