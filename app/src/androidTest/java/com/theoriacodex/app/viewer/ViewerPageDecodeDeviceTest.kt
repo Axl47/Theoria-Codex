@@ -65,7 +65,8 @@ class ViewerPageDecodeDeviceTest {
         compose.waitUntil(DECODE_TIMEOUT_MS) { slotSized != null && pageSized != null }
         Log.i(TAG, "viewport=${viewport}px strip=${STRIP_WIDTH}x$STRIP_HEIGHT slotSized=${slotSized.px()} pageSized=${pageSized.px()}")
         val page = requireNotNull(pageSized)
-        assertTrue("page decoded ${page.px()} for a ${viewport}px screen", page.width >= viewport)
+        // Full width, unless the strip is taller than this GPU draws at that width (4096px at the least).
+        assertTrue("page decoded ${page.px()} for a ${viewport}px screen", page.width >= viewport || page.height >= MIN_TEXTURE_EDGE_PX)
         assertEquals(STRIP_HEIGHT.toFloat() / STRIP_WIDTH, page.height / page.width, 0.01f)
     }
 
@@ -116,6 +117,7 @@ class ViewerPageDecodeDeviceTest {
         const val STRIP_HEIGHT = 9_600
         const val BAND_PX = 400
         const val UNTHROTTLED = 1L shl 40
+        const val MIN_TEXTURE_EDGE_PX = 4096
         const val DECODE_TIMEOUT_MS = 20_000L
         val SOURCE = SourceKey.RULE34VIDEO
     }
