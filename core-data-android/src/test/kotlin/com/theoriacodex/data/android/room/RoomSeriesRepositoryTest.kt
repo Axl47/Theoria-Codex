@@ -3,6 +3,8 @@ package com.theoriacodex.data.android.room
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.READ_STAMP_INTERVAL_MS
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -261,5 +263,36 @@ class RoomSeriesRepositoryTest {
         repository.setAllRead(caughtUpId, read = true)
 
         assertEquals(listOf("Zeta", "Alpha"), repository.observeFollowed().first().map { it.series.title })
+    }
+
+    @Test
+    fun `the Following list says when a series was followed, read, last updated and whether it was started`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", uploadedAtEpochMs = 50L), SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = 20L)))
+        now = 200L
+        repository.setFollowed(id, true)
+        repository.setFollowed(id, true)
+        assertEquals(FollowedSeries(series, 2, followedAtEpochMs = 200L, lastUpdatedAtEpochMs = 50L), repository.observeFollowed().first().single())
+
+        now = 300L
+        repository.recordProgress(id, "/c/1", position = 1, length = 4)
+        now = 300L + READ_STAMP_INTERVAL_MS - 1
+        repository.recordProgress(id, "/c/1", position = 2, length = 4)
+        assertEquals(300L to true, repository.observeFollowed().first().single().let { it.lastReadAtEpochMs to it.started })
+        now = 300L + READ_STAMP_INTERVAL_MS
+        repository.recordProgress(id, "/c/1", position = 3, length = 4)
+        assertEquals(now, repository.series(id)!!.lastReadAtEpochMs)
+
+        repository.setFollowed(id, false)
+        assertNull(repository.series(id)!!.followedAtEpochMs)
+    }
+
+    @Test
+    fun `a source without upload dates is last updated when its newest entry was first seen`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        repository.setFollowed(id, true)
+        now = 500L
+        repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
+
+        assertEquals(500L, repository.observeFollowed().first().single().lastUpdatedAtEpochMs)
     }
 }
