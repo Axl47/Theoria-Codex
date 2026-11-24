@@ -33,7 +33,6 @@ class ViewerScreenImagePipelineTest {
         val post = samplePost(SourceKey.NHENTAI, cover, first, listOf(first, second))
 
         assertEquals(second.thumbnailUrl, viewerLoadingPreviewLocation(post, second))
-        // The first page still shows the cover.
         assertEquals(cover.url, viewerLoadingPreviewLocation(post, first))
     }
 

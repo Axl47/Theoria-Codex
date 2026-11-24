@@ -89,7 +89,6 @@ class SeriesPageScreenTest {
         assertEquals(listOf("https://inkharbor.example/series/1"), openedUrls)
         assertEquals(listOf("https://inkharbor.example/series/1"), sharedUrls)
 
-        // Tapping cover opens the full-screen lightbox and Close dismisses it.
         compose.onNodeWithTag(COVER_LIGHTBOX_TAG).assertDoesNotExist()
         compose.onNodeWithTag(HERO_COVER_TAG).performClick()
         compose.waitForIdle()
@@ -98,7 +97,6 @@ class SeriesPageScreenTest {
         compose.waitForIdle()
         compose.onNodeWithTag(COVER_LIGHTBOX_TAG).assertDoesNotExist()
 
-        // Genres reveal when expanding About, and tapping a genre invokes onSearchGenre.
         compose.onNodeWithText("Fantasy").assertDoesNotExist()
         compose.onNodeWithText("More").performClick()
         compose.waitForIdle()
@@ -131,7 +129,6 @@ class SeriesPageScreenTest {
         }
         compose.waitForIdle()
 
-        // Search icon filters the chapter list inline.
         compose.onNodeWithContentDescription("Search chapters").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag(CHAPTER_SEARCH_INPUT_TAG).performTextInput("3")
@@ -141,7 +138,6 @@ class SeriesPageScreenTest {
         compose.onNodeWithContentDescription("Close chapter search").performClick()
         compose.waitForIdle()
 
-        // Filter sheet switches to Unread and Chapter number; active pills appear below the header and clear cleanly.
         compose.onNodeWithContentDescription("Sort and filter chapters").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Unread").performClick()
@@ -155,7 +151,6 @@ class SeriesPageScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("4 chapters").assertIsDisplayed()
 
-        // Long-pressing Chapter 3 offers "Mark previous as read" with Undo pill.
         compose.onNodeWithText("Chapter 3").performTouchInput { longClick() }
         compose.waitForIdle()
         compose.onNodeWithText("Mark previous as read").performClick()
@@ -165,7 +160,6 @@ class SeriesPageScreenTest {
         compose.waitForIdle()
         assertFalse(harness.page.state.value.entries.last().read)
 
-        // Overflow menu lists Mark all as read, Mark all as unread, Refresh, and Switch source.
         compose.onNodeWithContentDescription("More options").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Mark all as read").assertIsDisplayed()

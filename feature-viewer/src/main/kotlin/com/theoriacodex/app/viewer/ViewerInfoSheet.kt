@@ -75,13 +75,8 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 
-/** How long a comment stays tinted after a link led to it, before the tint fades. */
 private const val COMMENT_HIGHLIGHT_MS = 1400L
 
-/**
- * The comment a link led to, while it is to be scrolled to and tinted. It is taken from the post's comments
- * state, which clears it so that it acts once, and held for [COMMENT_HIGHLIGHT_MS]. Null at other times.
- */
 @Composable
 private fun rememberHighlightedComment(post: Post, comments: ViewerComments): String? {
     var highlighted by remember(post.id) { mutableStateOf<String?>(null) }
@@ -101,7 +96,6 @@ private fun rememberHighlightedComment(post: Post, comments: ViewerComments): St
     return highlighted
 }
 
-/** The comments section as the info sheet shows it; an author's creator page replaces the Viewer, a profile on the site opens beside it. */
 private fun commentsView(
     comments: ViewerComments,
     collapsed: Boolean,
@@ -116,7 +110,6 @@ private fun commentsView(
     creatorBrowsingSources = creatorBrowsingSources,
     onOpenAuthor = { destination ->
         when (destination) {
-            // Playback pauses and the sheet closes, as for the post's own creator.
             is AuthorDestination.CreatorPage -> {
                 controls.setPlaybackEnabled(false)
                 onAction(ViewerAction.OpenCreator(destination.profile))
@@ -128,7 +121,6 @@ private fun commentsView(
     onOpenUrl = comments.onOpenUrl,
 )
 
-/** When a comment link's target is found, shows the comments; the info sheet scrolls to it and clears the focus. */
 @Composable
 internal fun OpenInfoSheetForFocusedComment(comments: ViewerComments, post: Post, infoSheetVisible: Boolean, controls: ViewerControls) {
     val focusKey = comments.stateOf(post)?.focusKey
@@ -154,7 +146,6 @@ internal fun ViewerInfoSheet(
         AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
             ViewerChapterActions(post) {
                 if (series is ViewerSeries.Watching) {
-                    // An episode is one video: starting over plays it from its start, which the sheet would hide.
                     restartViewerEpisode(post, controls, host.onAction)
                 } else {
                     controls.jumpToMedia(post.id, 0)
@@ -167,7 +158,6 @@ internal fun ViewerInfoSheet(
     }
 }
 
-/** A post's sheet: its actions, tags and comments. A series entry has none of these, so it never gets this sheet. */
 @Composable
 private fun PostInfoSheet(
     selection: ViewerSelection,
@@ -182,7 +172,6 @@ private fun PostInfoSheet(
     val onAction = host.onAction
     val searchActions = LocalPostTagSearchActions.current
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
-    // Both settle as the sheet opens: whatever opened it, and whether the post has comments then. Neither moves later.
     val openedAtComments = remember(post.id) { controls.infoSheetTarget == InfoSheetTarget.Comments }
     val tagsStartCollapsed = remember(post.id) { comments.countOf(post) != null }
     DisposableEffect(Unit) { onDispose { controls.resetInfoSheetTarget() } }
@@ -238,18 +227,12 @@ private fun PostInfoSheet(
     }
 }
 
-/** Post actions that depend on where the Viewer was opened from; each is null where that place has none. */
 @Immutable
 class ViewerContextActions(
     val showRelated: ((Post) -> Unit)? = null,
     val removeFromCodex: ((Post) -> Unit)? = null,
 )
 
-/**
- * Identifies the post, links its creator, and offers a compact action row, so its tags stay near the
- * top of the sheet. The row's More menu holds the rest of the feed post menu's actions. Liking stays
- * in the sheet; the other actions close it.
- */
 @Composable
 private fun ViewerInfoActions(
     selection: ViewerSelection,
@@ -302,11 +285,6 @@ private fun ViewerInfoActions(
     }
 }
 
-/**
- * All a series entry's sheet holds: its title, without the address that stands in for a post id, and Start over. A
- * chapter or episode is not a post to collect, share or search from: it has no link, tags or creator, its media loads
- * only through its extension, and Search cannot reach its source.
- */
 @Composable
 private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {
     Column {
@@ -317,7 +295,6 @@ private fun ViewerChapterActions(post: Post, onStartOver: () -> Unit) {
     }
 }
 
-/** Like stays in the sheet, so its label and heart follow the post's liked state. */
 @Composable
 private fun ViewerLikeAction(liked: Boolean, onToggle: () -> Unit) {
     if (liked) {
@@ -327,7 +304,6 @@ private fun ViewerLikeAction(liked: Boolean, onToggle: () -> Unit) {
     }
 }
 
-/** Marks a post already in a Codex of its own (Likes aside); opening the sheet still adds it to more. */
 @Composable
 private fun ViewerCodexAction(inCodex: Boolean, onClick: () -> Unit) {
     if (inCodex) {
@@ -337,7 +313,6 @@ private fun ViewerCodexAction(inCodex: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** The feed post menu's remaining actions, with Remove from Codex last and marked as destructive. */
 @Composable
 private fun ViewerInfoMoreActions(actions: List<PostMenuAction>, removeFromCodex: (() -> Unit)?, closeThen: (() -> Unit) -> Unit) {
     var expanded by remember { mutableStateOf(false) }

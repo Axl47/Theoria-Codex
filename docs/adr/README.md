@@ -177,6 +177,28 @@ and link the record that replaces it.
 | [0157](0157-site-cookie-bridge.md) | Browser cookies and site keys reach requests only for the hosts the user set up or verified |
 | [0158](0158-source-credential-storage.md) | Source credentials are encrypted in one envelope, never leak into errors or logs, and are cleared only on the user's request |
 | [0159](0159-stats-sharing.md) | Shared Stats files hold only what was left in, are validated on import, and are compared without being stored |
+| [0160](0160-extensions-page-flow.md) | The Extensions page asks before turning an extension on, hides text-setting values, and lists only what it has just compared |
+| [0161](0161-series-page-refresh.md) | A series page refreshes from its source without losing stored data and stops refreshing while the series moves |
+| [0162](0162-series-source-listing-and-filters.md) | Series listings and filters tell sources apart by language only when needed, keep loaded pages on failure, and virtualise filter groups |
+| [0163](0163-series-switch-source-sheet.md) | The Switch source sheet searches other sources with bounded concurrency and locks while a switch runs |
+| [0164](0164-series-tab-state.md) | The Series tab keeps some state across process death, holds the grid until saved options arrive, and drops stale answers |
+| [0165](0165-viewer-back-hold-and-return-transition.md) | Back during a return is held and replayed, and the Viewer keeps both destinations alive while media returns to its card |
+| [0166](0166-viewer-chrome-layout-and-selection.md) | Viewer chrome composes in stages, floating controls follow the footer, and the selected media drives layout |
+| [0167](0167-viewer-episode-playback.md) | Episode playback keeps the user's track choice across players, reports progress often, and recovers media at most once per ask |
+| [0168](0168-viewer-gesture-recognizer.md) | One Viewer recognizer owns every one-finger gesture, with a fixed order of direction-lock rules |
+| [0169](0169-viewer-gif-frame-rendering.md) | GIFs render off the main thread through android.graphics.Movie into two alternating bitmaps |
+| [0170](0170-viewer-image-loading-and-prefetch.md) | Viewer prefetch warms the page's own cache entries, keeps only near neighbours decoded, and gates heavy originals |
+| [0171](0171-viewer-level-controls.md) | Viewer brightness persists across Viewers in a session and volume is restored only for video |
+| [0172](0172-viewer-page-strip-and-scrubber.md) | The post strip and page scrubber animate as one eased motion, hold the touched page, and load previews only once the finger rests |
+| [0173](0173-viewer-reading-modes-and-navigation.md) | Reading mode, entry page and recommendation branches follow fixed rules, and the info sheet opens where it was asked to |
+| [0174](0174-viewer-rotation-pip-and-system-controls.md) | The Viewer rotates once on opening, shares one rotation across trail levels, and sizes picture-in-picture from the displayed frame |
+| [0175](0175-viewer-save-button.md) | The Viewer's Save button saves to the top suggestion, never to a stale post's target, and cleans up its fan with the dock |
+| [0176](0176-viewer-scrub-preview-player.md) | Scrub previews come from a paused, video-only player that seeks to keyframes and stops between drags |
+| [0177](0177-viewer-episode-resume-positions.md) | Episode positions are kept for the whole session and only reported once a player has reached its start |
+| [0178](0178-viewer-session-state-rules.md) | Viewer session state survives live updates of the same session, and series entries follow their own rules |
+| [0179](0179-viewer-swipe-and-vertical-gallery.md) | Swipes commit by velocity and distance with a catchable settle, and vertical galleries select only on reader scrolls |
+| [0180](0180-viewer-trail-forks.md) | A Viewer level runs at most one trail fork and cancels it when the user pages away |
+| [0181](0181-viewer-video-surface-rules.md) | Viewer video pages pick their stream once, preload only cache-backed streams, and render subtitles outside the video frame |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
 | [0209](0209-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |

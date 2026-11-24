@@ -3,9 +3,7 @@ package com.theoriacodex.app.viewer
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** A 3000 px page in a 1000 px screen; the status sits [REACH] inside the page's edges. */
 class VisiblePartShiftTest {
-    /** Where the status's middle lands on screen with the page's top at [pageOffset]. */
     private fun statusOnScreen(pageOffset: Int, pageSize: Int = 3000): Float =
         pageOffset + pageSize / 2f + visiblePartShift(pageOffset, pageSize, viewportStart = 0, viewportEnd = 1000, reach = REACH)
 

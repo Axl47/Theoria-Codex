@@ -18,14 +18,9 @@ import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.VideoQuality
 import kotlinx.coroutines.flow.drop
 
-/** The dock's full height including the navigation bar under it: what the timeline, scrubber and strip sit above. */
 @Composable
 internal fun viewerDockInset(): Dp = VIEWER_DOCK_HEIGHT + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-/**
- * The quality videos play at, starting from the saved [default]. A quality picked from the playback menu
- * becomes the new default through [onDefaultChanged]; a height picked there stays with that video.
- */
 @Composable
 internal fun rememberViewerVideoQuality(default: VideoQuality, onDefaultChanged: (VideoQuality) -> Unit): MutableState<VideoQuality> {
     val quality = remember(default) { mutableStateOf(default) }
@@ -34,7 +29,6 @@ internal fun rememberViewerVideoQuality(default: VideoQuality, onDefaultChanged:
     return quality
 }
 
-/** Binds the frame's state and controls to the dock's buttons and menus. */
 @Composable
 internal fun viewerDockActions(
     frame: ViewerFrame,
@@ -46,7 +40,6 @@ internal fun viewerDockActions(
     commentCount: CommentCount?,
     onAction: (ViewerAction) -> Unit,
     moreExtras: List<ViewerMenuItem> = emptyList(),
-    /** The series the post is an entry of, if any; an entry cannot be liked or saved, and an episode always plays on. */
     series: ViewerSeries? = null,
 ): ViewerDockActions {
     val collectable = series == null
@@ -105,7 +98,6 @@ private fun ViewerPlaybackSettings(
             onAction(ViewerAction.SetPlaybackRate(selectedRate.speed))
             controls.markInteraction()
         },
-        // An episode always goes on to the next one, so it offers no choice of mode.
         playbackMode = uiState.controls.playbackMode.takeUnless { watching },
         onPlaybackModeSelected = { onAction(ViewerAction.SetPlaybackMode(it)) },
         quality = quality.value,

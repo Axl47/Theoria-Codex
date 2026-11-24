@@ -59,17 +59,12 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 
-/** The reading modes a gallery offers, the one it uses, and where a new choice goes. */
 internal class ViewerReadingModeChoice(
     val selected: GalleryReadingMode,
     val available: List<GalleryReadingMode>,
     val onSelect: (GalleryReadingMode) -> Unit,
 )
 
-/**
- * The gallery's page grid. With [readingModes], a mode switch sits above the pages: shown when the grid opens, it
- * slides away while the grid scrolls down and returns when it scrolls back up.
- */
 @Composable
 internal fun ViewerMediaOverviewGrid(
     post: Post,
@@ -144,7 +139,6 @@ private fun ViewerOverviewCell(source: SourceKey, item: ViewerMediaOverviewItem,
     }
 }
 
-/** The thumbnail at once, then the original over it, since the thumbnail is soft at this tile size. */
 @Composable
 private fun ViewerOverviewPoster(source: SourceKey, item: ViewerMediaOverviewItem) {
     val thumbnail = rememberViewerThumbnailRequest(source, item)
@@ -157,7 +151,6 @@ private fun ViewerOverviewPoster(source: SourceKey, item: ViewerMediaOverviewIte
     if (item.posterLocation != item.thumbnailLocation) ViewerOverviewOriginal(source, item, imageModifier)
 }
 
-/** Waits for the tile to stay on screen, so a fast scroll starts no heavy downloads, then fades in over the thumbnail. */
 @Composable
 private fun ViewerOverviewOriginal(source: SourceKey, item: ViewerMediaOverviewItem, modifier: Modifier) {
     var rested by remember(item.posterLocation) { mutableStateOf(false) }
@@ -170,14 +163,8 @@ private fun ViewerOverviewOriginal(source: SourceKey, item: ViewerMediaOverviewI
     if (rested && fadingIn != null) AsyncImage(fadingIn, null, modifier, contentScale = ContentScale.Fit)
 }
 
-/** How long a page must stay put before its heavy original replaces its thumbnail. */
 internal const val VIEWER_SHARP_SETTLE_MS = 250L
 
-/**
- * Once the Viewer rests on a multi-page post, warms all its page thumbnails into the disk cache, nearest pages
- * first, so the page grid, page strip, seek preview and loading pages paint from disk instead of the network.
- * Leaving the post cancels the warm; turning pages within it does not restart it.
- */
 @Composable
 internal fun WarmViewerPageThumbnails(postId: PostId, items: List<ViewerMediaOverviewItem>, mediaIndex: Int) {
     val context = LocalContext.current
@@ -189,12 +176,10 @@ internal fun WarmViewerPageThumbnails(postId: PostId, items: List<ViewerMediaOve
     }
 }
 
-/** The still that stands for one page wherever the Viewer lists a post's pages; null when the page has none. */
 @Composable
 internal fun rememberViewerPosterRequest(source: SourceKey, item: ViewerMediaOverviewItem): ImageRequest? =
     rememberViewerOverviewRequest(source, item, item.posterLocation)
 
-/** The small stand-in for page pickers (strip, seek preview, gallery grid); falls back to the poster when the provider has none. */
 @Composable
 internal fun rememberViewerThumbnailRequest(source: SourceKey, item: ViewerMediaOverviewItem, decodeEdgePx: Int? = null): ImageRequest? =
     rememberViewerOverviewRequest(source, item, item.thumbnailLocation, decodeEdgePx)
@@ -234,7 +219,6 @@ internal fun shouldDecodeStaticOverviewFrame(kind: ViewerMediaKind): Boolean = !
 private val ViewerMediaKind.isAnimatedImage
     get() = this == ViewerMediaKind.ANIMATED_IMAGE || this == ViewerMediaKind.ANIMATED_WEBP
 
-/** The overview tile's corner badge; a still image has none. */
 internal val ViewerMediaKind.overviewBadgeLabel: String?
     get() = when (this) {
         ViewerMediaKind.IMAGE -> null
@@ -260,18 +244,15 @@ data class ViewerMediaOverviewItem(
     val media: ImageRef,
     val kind: ViewerMediaKind,
     val posterLocation: String?,
-    // A smaller stand-in for pickers; equals the poster when the provider has none.
     val thumbnailLocation: String? = posterLocation,
 )
 
-/** The overview's tiles for [page], from the media its state already lists and classifies. */
 fun viewerMediaOverviewItems(page: ViewerPageState): List<ViewerMediaOverviewItem> {
     val post = page.post
     return page.media.mapIndexed { index, state ->
         val media = state.ref
         val kind = state.kind
         val posterLocation = viewerMediaOverviewPosterLocation(post, media, kind)
-        // A locally saved page keeps using its local file.
         val thumbnail = media.thumbnailUrl?.takeIf {
             kind == ViewerMediaKind.IMAGE && media.localPath.isNullOrBlank() && it.isNotBlank()
         }
@@ -317,10 +298,6 @@ private fun staticOverviewImageLocation(ref: ImageRef): String? {
         ?: locations.firstOrNull(::isStaticOverviewImageLocation)
 }
 
-/**
- * The page's own image, except that a remote AVIF gives way to an equivalent WebP copy when the page lists one: WebP
- * decodes faster, and the overview decodes many tiles together.
- */
 private fun overviewStillImageLocation(post: Post, media: ImageRef): String? {
     val primary = viewerPrefetchImageLocation(post, media)
     if (primary == null || primary == media.localPath || !isAvifLocation(media, primary)) return primary

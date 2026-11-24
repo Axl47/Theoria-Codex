@@ -1,6 +1,5 @@
 package com.theoriacodex.app.viewer
 
-/** Pixel sizes of the page and its fitted media, which decide how far zoomed media may pan. */
 internal data class ViewerTransformBounds(
     val viewportWidth: Float,
     val viewportHeight: Float,
@@ -13,17 +12,12 @@ internal data class ViewerTransformBounds(
     private fun overflow(content: Float, viewport: Float, zoom: Float) = ((content * zoom - viewport) / 2f).coerceAtLeast(0f)
 }
 
-/** Fits media of [aspectRatio] inside the viewport; unknown ratios fill it. */
 internal fun viewerTransformBounds(width: Float, height: Float, aspectRatio: Float?): ViewerTransformBounds {
     val ratio = aspectRatio?.takeIf { it.isFinite() && it > 0f } ?: return ViewerTransformBounds(width, height, width, height)
     val contentWidth = minOf(width, height * ratio)
     return ViewerTransformBounds(width, height, contentWidth, contentWidth / ratio)
 }
 
-/**
- * Zoom and pan for one authoritative Viewer media identity. Pan is measured from the page centre,
- * as are the focus points, which stay under the fingers or tap while the zoom changes.
- */
 internal data class ViewerTransformState(
     val zoom: Float = FIT_SCALE,
     val panX: Float = 0f,
@@ -48,7 +42,6 @@ internal data class ViewerTransformState(
         return copy(panX = panX + panChangeX, panY = panY + panChangeY).zoomedAround(nextZoom, focusX, focusY, bounds)
     }
 
-    /** Linear zoom and pan keep the focus point fixed for the whole animation. */
     fun lerpTo(target: ViewerTransformState, fraction: Float) = ViewerTransformState(
         zoom = zoom + (target.zoom - zoom) * fraction,
         panX = panX + (target.panX - panX) * fraction,

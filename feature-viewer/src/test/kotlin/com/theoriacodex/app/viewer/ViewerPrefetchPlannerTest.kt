@@ -105,7 +105,6 @@ class ViewerPrefetchPlannerTest {
     fun `vertical reading looks further ahead, decodes full-width pages, and keeps videos to the next one`() {
         val pages = pages(mediaCounts = listOf(9, 1, 1), videoPosts = setOf(2))
         val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
-        // Only the first post reads vertically.
         val widths = { page: ViewerPageState -> 1080.takeIf { page == pages[0] } }
 
         val vertical = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null, verticalPageWidthPx = widths)
@@ -117,7 +116,6 @@ class ViewerPrefetchPlannerTest {
         assertEquals(setOf(null), paged.requests.map { it.pageWidthPx }.toSet())
         val atEnd = viewerPrefetchAction(pages, current = flattened[8], swipeTarget = null, verticalPageWidthPx = widths).requests
         assertEquals(listOf(flattened[9]), atEnd.take(1).map { it.key })
-        // The next post reads paged, so its page warms at the size it shows.
         assertEquals(null, atEnd.first().pageWidthPx)
         assertFalse(flattened[10] in atEnd.map { it.key })
     }

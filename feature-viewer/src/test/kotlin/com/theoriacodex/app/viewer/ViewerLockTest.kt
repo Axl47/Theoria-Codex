@@ -69,17 +69,14 @@ class ViewerLockTest {
         assertTrue(state.controls.locked)
         assertTrue(state.controls.fillScreen)
         assertNull(state.controls.panel)
-        // Locking does not mutate chromeVisible (viewerChromeVisible gates on !locked).
         assertTrue(state.controls.chromeVisible)
 
-        // Automatic episode advance keeps lock and fillScreen.
         val key0 = requireNotNull(state.currentMedia).key
         state = reduceViewerState(state, ViewerAction.PlaybackCompleted(identity, key0, 0L)).state
         assertEquals(1, state.currentPageIndex)
         assertTrue(state.controls.locked)
         assertTrue(state.controls.fillScreen)
 
-        // Live same-session ReplaceSession preserves lock and fillScreen.
         state = reduceViewerState(
             state,
             ViewerAction.ReplaceSession(identity, resolvedEpisodes, initialPageIndex = 1, series = ViewerSeries.Watching(seriesTitle = "Series")),
@@ -87,11 +84,9 @@ class ViewerLockTest {
         assertTrue(state.controls.locked)
         assertTrue(state.controls.fillScreen)
 
-        // PrepareDismiss clears lock.
         val dismissed = reduceViewerState(state, ViewerAction.PrepareDismiss).state
         assertFalse(dismissed.controls.locked)
 
-        // New session clears lock and fillScreen.
         val fresh = reduceViewerState(
             state,
             ViewerAction.ReplaceSession(ViewerSessionIdentity("other"), resolvedEpisodes, series = ViewerSeries.Watching(seriesTitle = "Series")),
@@ -112,7 +107,6 @@ class ViewerLockTest {
         compose.onNodeWithTag(VIEWER_LOCK_OVERLAY_TAG).assertExists()
         compose.onNodeWithTag(VIEWER_UNLOCK_TAG).assertDoesNotExist()
 
-        // Swipe and pinch on the locked overlay do not change episodes or reveal chrome.
         compose.onNodeWithTag(VIEWER_LOCK_OVERLAY_TAG).performTouchInput { swipeLeft() }
         compose.onNodeWithTag(VIEWER_LOCK_OVERLAY_TAG).performTouchInput {
             pinch(Offset(width * 0.4f, centerY), Offset(width * 0.2f, centerY), Offset(width * 0.6f, centerY), Offset(width * 0.8f, centerY))
@@ -121,18 +115,15 @@ class ViewerLockTest {
         assertEquals(0, state.value.currentPageIndex)
         compose.onNodeWithTag(VIEWER_EPISODE_CONTROLS_TAG).assertDoesNotExist()
 
-        // Single tap reveals only the icon-only Unlock button (no "Unlock" text label).
         compose.onNodeWithTag(VIEWER_LOCK_OVERLAY_TAG).performClick()
         settleFrames()
         compose.onNodeWithTag(VIEWER_UNLOCK_TAG).assertIsDisplayed()
         compose.onNodeWithText("Unlock").assertDoesNotExist()
 
-        // Unlock auto-hides after the timeout.
         compose.mainClock.advanceTimeBy(VIEWER_UNLOCK_PEEK_MS + 500L)
         settleFrames()
         compose.onNodeWithTag(VIEWER_UNLOCK_TAG).assertDoesNotExist()
 
-        // Tap again and click Unlock to exit lock mode and restore chrome.
         compose.onNodeWithTag(VIEWER_LOCK_OVERLAY_TAG).performClick()
         settleFrames()
         compose.onNodeWithContentDescription("Unlock controls").performClick()
@@ -171,7 +162,6 @@ class ViewerLockTest {
         compose.onNodeWithContentDescription("Media actions").assertDoesNotExist()
         compose.onNodeWithTag(VIEWER_UNLOCK_TAG).assertIsDisplayed()
 
-        // Unlock stays visible past the timeout while TalkBack is active.
         compose.mainClock.advanceTimeBy(VIEWER_UNLOCK_PEEK_MS + 5_000L)
         settleFrames()
         compose.onNodeWithTag(VIEWER_UNLOCK_TAG).assertIsDisplayed()

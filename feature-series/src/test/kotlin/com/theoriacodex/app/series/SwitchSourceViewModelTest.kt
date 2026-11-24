@@ -197,7 +197,6 @@ class SwitchSourceViewModelTest {
     }
 }
 
-/** Finds [titles] for any search, in that order, and lists [chapters] chapters for each. */
 private class Finding(
     id: String,
     private val titles: List<String> = emptyList(),
@@ -208,12 +207,10 @@ private class Finding(
     var chapters = 1
     var fails = false
 
-    /** What a search throws, when set. */
     var failure: Exception? = null
     var counted = 0
     val searched = mutableListOf<String>()
 
-    /** What a search waits for, when set; [cancelled] says whether a waiting search was cancelled. */
     var wait: CompletableDeferred<Unit>? = null
     var cancelled = false
 

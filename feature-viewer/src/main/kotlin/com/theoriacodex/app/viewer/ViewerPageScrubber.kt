@@ -49,12 +49,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-/**
- * Seeks a multi-page post in whole-page steps, the way the video timeline seeks time. A drag floats the target
- * page and its neighbours and turns the page once, on release; with instant seek each step turns the page instead,
- * and only the page number floats. [mirrored] matches a right-to-left media pager, so dragging follows the direction
- * pages swipe.
- */
 @Composable
 internal fun ViewerPageScrubber(
     source: SourceKey,
@@ -110,12 +104,6 @@ internal fun ViewerPageScrubber(
     }
 }
 
-/**
- * The page a touch at [x] on a track [widthPx] wide stands for: each page owns an equal share of the track. A
- * [held] page keeps the touch until it is [holdPx] (at most half a share) past that page's share, so a finger resting
- * on a boundary, or rolling as it lifts, does not flip between two pages. Long posts give each page a sliver, so this
- * matters most there.
- */
 internal fun viewerPageAt(x: Float, widthPx: Float, pageCount: Int, mirrored: Boolean, held: Int? = null, holdPx: Float = 0f): Int {
     if (held != null) {
         val slot = widthPx / pageCount
@@ -127,10 +115,8 @@ internal fun viewerPageAt(x: Float, widthPx: Float, pageCount: Int, mirrored: Bo
     return if (mirrored) pageCount - 1 - page else page
 }
 
-/** What the scrubber tells the screen about a drag. */
 private class PageScrubCallbacks(val onPageSelected: (Int) -> Unit, val onActiveChanged: (Boolean) -> Unit)
 
-/** A drag in progress: the page it rests on, the page it began from, and the track width that maps touches to pages. */
 private class PageScrubState(private val callbacks: State<PageScrubCallbacks>) {
     var target by mutableStateOf<Int?>(null)
         private set
@@ -150,7 +136,6 @@ private class PageScrubState(private val callbacks: State<PageScrubCallbacks>) {
         if (instantSeek && moved) callbacks.value.onPageSelected(page)
     }
 
-    /** A released drag turns to its page; anything else leaves the post where it was. */
     fun end(released: Boolean, instantSeek: Boolean) {
         val landed = target
         if (landed != null) {
@@ -160,11 +145,9 @@ private class PageScrubState(private val callbacks: State<PageScrubCallbacks>) {
         }
     }
 
-    /** The scrubber left composition, so a held drag cannot complete. */
     fun abandon() = end(released = false, instantSeek = false)
 }
 
-/** Filled through [page] with one segment per page. Long galleries become one continuous bar, since segments would vanish. */
 @Composable
 private fun ViewerPageTrack(page: Int, pageCount: Int, emphasized: Boolean, modifier: Modifier) {
     if (pageCount > MAX_PAGE_SEGMENTS) {
@@ -184,7 +167,6 @@ private fun ViewerPageTrack(page: Int, pageCount: Int, emphasized: Boolean, modi
     }
 }
 
-/** Instant seek's float: the page already turns underneath, so only its number and the distance from the start show. */
 @Composable
 private fun ViewerPageReadout(target: Int, startPage: Int, pageCount: Int, mirrored: Boolean) {
     val centre = (target + 0.5f) / pageCount
@@ -198,7 +180,6 @@ private fun viewerPageDelta(target: Int, startPage: Int): String {
     return "${if (delta < 0) "-" else "+"}${abs(delta)}"
 }
 
-/** The floating target page between its neighbours. The readout follows the finger; images wait for it to rest, sparing providers a fast drag. */
 @Composable
 private fun ViewerPagePreview(
     source: SourceKey,
@@ -213,14 +194,11 @@ private fun ViewerPagePreview(
         delay(SCRUB_FRAME_SETTLE_MS)
         settled = target
     }
-    // The original is heavy and waits for the finger to stay put longer than the thumbnails do. Compared with
-    // [settled] rather than reset, so the sharp page never flashes back to the thumbnail between pages.
     var sharpPage by remember { mutableIntStateOf(-1) }
     LaunchedEffect(settled) {
         delay(VIEWER_SHARP_SETTLE_MS)
         sharpPage = settled
     }
-    // A jump that replaces all three frames would leave the centre empty; its new frame starts from this instead.
     var lastCentre by remember { mutableStateOf<MemoryCache.Key?>(null) }
     val frame = viewerPagePreviewFrame(aspectRatio, LocalConfiguration.current.screenWidthDp.dp - 16.dp)
     val sideFrame = frame * SIDE_FRAME_SCALE
@@ -231,7 +209,6 @@ private fun ViewerPagePreview(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PREVIEW_FRAME_GAP)) {
             for (slot in -1..1) {
                 val item = items.getOrNull(settled + slot * step)
-                // Keyed by page, not position, so a frame sliding from the side to the centre keeps its load.
                 key(item?.mediaIndex ?: (-1 - slot)) {
                     val look = if (slot == 0) {
                         PreviewFrameLook(frame, ContentScale.Fit, 1f, CentreFrame(sharpPage == settled, lastCentre) { lastCentre = it })
@@ -245,19 +222,10 @@ private fun ViewerPagePreview(
     }
 }
 
-/** How a preview frame is drawn; [centre] is set only for the target page. */
 private class PreviewFrameLook(val size: DpSize, val scale: ContentScale, val opacity: Float, val centre: CentreFrame?)
 
-/**
- * What only the target page's frame does: lay the original over its thumbnail once [sharp], start from [placeholder]
- * (the last thumbnail that loaded there) while its own is loading, and report each thumbnail that loads.
- */
 private class CentreFrame(val sharp: Boolean, val placeholder: MemoryCache.Key?, val onLoaded: (MemoryCache.Key?) -> Unit)
 
-/**
- * A past-the-end neighbour still holds its space, so the target page stays centred over the finger. Every frame
- * decodes at [decodeEdgePx], so a frame keeps the same request when it moves from one slot to another.
- */
 @Composable
 private fun ViewerPagePreviewFrame(source: SourceKey, item: ViewerMediaOverviewItem?, look: PreviewFrameLook, decodeEdgePx: Int) {
     if (item == null) {
@@ -267,7 +235,6 @@ private fun ViewerPagePreviewFrame(source: SourceKey, item: ViewerMediaOverviewI
     val centre = look.centre
     Box(Modifier.alpha(look.opacity).viewerScrubFrame(look.size)) {
         val thumbnail = rememberViewerThumbnailRequest(source, item, decodeEdgePx)
-        // The placeholder is taken once, when the frame appears: rebuilding the request later would restart its load.
         val request = remember(thumbnail) { thumbnail?.newBuilder()?.placeholderMemoryCacheKey(centre?.placeholder)?.build() }
         request?.let {
             AsyncImage(
@@ -275,14 +242,12 @@ private fun ViewerPagePreviewFrame(source: SourceKey, item: ViewerMediaOverviewI
                 onSuccess = centre?.let { c -> { success -> c.onLoaded(success.result.memoryCacheKey) } },
             )
         }
-        // The original goes over the thumbnail, which stays underneath until it has loaded.
         if (centre?.sharp == true && item.posterLocation != item.thumbnailLocation) {
             rememberViewerPosterRequest(source, item)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = look.scale) }
         }
     }
 }
 
-/** The target frame in the media's shape, shrunk only as far as it takes for it and both neighbours to fit [availableWidth]. */
 internal fun viewerPagePreviewFrame(aspectRatio: Float?, availableWidth: Dp): DpSize {
     val frame = viewerScrubFrameSize(aspectRatio)
     val framesWidth = availableWidth - PREVIEW_FRAME_GAP * 2
@@ -290,7 +255,6 @@ internal fun viewerPagePreviewFrame(aspectRatio: Float?, availableWidth: Dp): Dp
 }
 
 private const val MAX_PAGE_SEGMENTS = 24
-/** About a fingertip's roll as it lifts. */
 private val PAGE_HOLD = 6.dp
 private const val SIDE_FRAME_SCALE = 0.55f
 private const val SIDE_FRAME_ALPHA = 0.5f

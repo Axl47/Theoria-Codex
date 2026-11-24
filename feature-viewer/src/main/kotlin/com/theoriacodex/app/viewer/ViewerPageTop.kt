@@ -9,10 +9,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/**
- * Crops a page to its thumbnail's shape from the top, past the blank margin a page usually opens with, so a long strip
- * shows where it starts rather than a slice of its middle. A page no taller than that shape is left to the tile's crop.
- */
 internal object PageTopCrop : Transformation {
     override val cacheKey = "viewer-page-top"
 
@@ -28,12 +24,6 @@ internal object PageTopCrop : Transformation {
     }
 }
 
-/**
- * The first row of a [window]-row crop of a [width]×[height] page (ARGB pixels, row by row) that starts a little above
- * its first row of content: the first that differs from the margin's colour across enough of its width. The margin's
- * colour is the one most of the top row shares, so a speck in a corner does not stand for it. A page with no content
- * keeps its top; content starting lower than the last full window keeps that window.
- */
 internal fun pageTopStart(pixels: IntArray, width: Int, height: Int, window: Int): Int {
     val step = max(1, width / ROW_SAMPLES)
     val samples = (width + step - 1) / step
@@ -50,14 +40,10 @@ private fun differs(a: Int, b: Int) = CHANNEL_SHIFTS.any { shift -> abs((a shr s
 
 private val CHANNEL_SHIFTS = intArrayOf(16, 8, 0)
 
-/** Pixels compared across a row. */
 private const val ROW_SAMPLES = 64
 
-/** A row is content once one in this many of its samples differs, and never fewer than two, so a lone speck stays blank. */
 private const val CONTENT_SHARE = 32
 
-/** Beyond JPEG noise on a flat margin. */
 private const val CHANNEL_TOLERANCE = 40
 
-/** How much of the page's width is kept above its first content, so it does not start flush with the tile's edge. */
 private const val MARGIN_FRACTION = 16

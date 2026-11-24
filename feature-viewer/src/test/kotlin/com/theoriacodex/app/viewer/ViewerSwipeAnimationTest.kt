@@ -91,14 +91,12 @@ class ViewerSwipeAnimationTest {
             down(Offset(width * 0.8f, height * 0.5f))
             moveTo(Offset(width * 0.72f, height * 0.5f))
             moveTo(Offset(width * 0.72f, height * 0.5f))
-            // Holding still removes the release velocity, so only distance decides.
             advanceEventTime(200)
             up()
         }
         compose.waitForIdle()
 
         compose.runOnIdle { assertEquals(1, state.value.currentPageIndex) }
-        // Only the selected page exposes these actions, so a mismatched pager leaves no such node.
         assertEquals(0, compose.onNodeWithContentDescription("Media actions").fetchSemanticsNode().positionInRoot.x.toInt())
     }
 
@@ -115,7 +113,6 @@ class ViewerSwipeAnimationTest {
         compose.mainClock.advanceTimeBy(64)
         compose.runOnIdle { assertEquals(0, state.value.currentPageIndex) }
 
-        // The first page is still sliding away, and the gesture must survive it leaving the screen.
         compose.onRoot().performTouchInput { down(Offset(bounds.width * 0.9f, bounds.height * 0.5f)) }
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle { assertEquals(1, state.value.currentPageIndex) }

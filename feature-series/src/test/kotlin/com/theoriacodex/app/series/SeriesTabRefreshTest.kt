@@ -13,7 +13,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** A check of the followed series that found nothing and failed nowhere. */
 internal val NOTHING_CHECKED = FollowedCheck(emptyList(), checked = 0, failed = 0)
 
 @OptIn(ExperimentalCoroutinesApi::class)

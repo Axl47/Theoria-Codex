@@ -60,7 +60,6 @@ class ViewerViewModelTest {
         assertEquals(preference, owner.state.value.controls.playbackMode)
         owner.onAction(ViewerAction.SetPlaybackRate(2f))
         owner.onAction(ViewerAction.SetPlaybackMode(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT))
-        // A live payload update must retain the selection while its settings write is still pending.
         owner.appendSessionPosts(requireNotNull(owner.session.value), owner.state.value.pages, listOf(post("more")))
         assertEquals(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT, owner.state.value.controls.playbackMode)
         preference = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT
@@ -81,7 +80,6 @@ class ViewerViewModelTest {
         }, scopeOverride = this)
         owner.replaceSession(session("exit", listOf(gallery, post("next", SourceKey.HITOMI, emptyList()))))
         owner.onAction(ViewerAction.SelectMedia(1))
-        // The neighbour's lookup starts once the current media shows, or after the wait for it.
         advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS)
         runCurrent()
         val previous = owner.state.value
@@ -200,7 +198,6 @@ class ViewerViewModelTest {
             try { awaitCancellation() } finally { cancelled += id }
         }, scopeOverride = this)
         owner.replaceSession(session("jump", posts))
-        // A sparse current post shows no media, so its neighbour's lookup starts after the wait for it.
         advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS)
         runCurrent()
         owner.onAction(ViewerAction.SelectPage(3))
@@ -286,7 +283,6 @@ class ViewerViewModelTest {
         assertEquals(session.posts[1].id, request.selectedPostId)
         assertEquals(1, request.selectedMediaIndex)
 
-        // The route's restoration rebuilds the session on its saved post and media.
         recreated.replaceSession(
             session.copy(
                 context = session.context.copy(startIndex = 1),

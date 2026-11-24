@@ -83,21 +83,17 @@ import kotlin.math.sign
 
 internal const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 
-/** Room above a thumbnail for the cards stacked behind it, grown with the selection. */
 private val STRIP_TOP_PADDING = 13.dp
 private val STRIP_BOTTOM_PADDING = 5.dp
 private val STRIP_MAX_CELL = 46.dp
 private val STRIP_MIN_GAP = 12.dp
 private const val STRIP_MIN_SLOTS = 7
 
-/** The strip's height, which the player and its gestures keep clear of. */
 internal val VIEWER_POST_STRIP_HEIGHT = STRIP_TOP_PADDING + STRIP_MAX_CELL + STRIP_BOTTOM_PADDING
 
-/** Small enough that a grown thumbnail never overlaps its neighbours, in the strip or in the related shelf. */
 private const val SELECTED_THUMBNAIL_GROWTH = 0.13f
 private const val RESTING_THUMBNAIL_DIM = 0.28f
 
-/** A number over a thumbnail; the scrim keeps it legible on a bright cover. */
 private val BADGE_STYLE = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum", shadow = TextOverMediaShadow)
 private const val BADGE_SCRIM = 0.3f
 
@@ -105,7 +101,6 @@ private val UNFOLDED_PAGE_GAP = 4.dp
 private val UNFOLDED_PADDING = 4.dp
 private val UNFOLDED_BACKDROP = Color.White.copy(alpha = 0.1f)
 
-/** The post on screen and its pages, which the strip unfolds in that post's place. */
 internal class ViewerStripPages(
     val postId: PostId,
     val items: List<ViewerMediaOverviewItem>,
@@ -114,11 +109,6 @@ internal class ViewerStripPages(
     val onSelect: (Int) -> Unit,
 )
 
-/**
- * An odd number of centered slots, as many as fit (at least seven), share equal gaps between thumbnails and at
- * both viewport edges. When [openPages] belongs to the selected post, that post unfolds in place, and its pages
- * scroll inside all but the outermost slots so the neighbouring posts stay in reach at both ends.
- */
 @Composable
 internal fun ViewerPostStrip(
     posts: List<Post>,
@@ -128,12 +118,7 @@ internal fun ViewerPostStrip(
     onLoadMore: () -> Unit = {},
     onInteraction: () -> Unit = {},
     openPages: ViewerStripPages? = null,
-    /**
-     * Whether the posts are a series' chapters, which are named by their titles (their ids are addresses) and, once
-     * the Viewer has their pages, pictured by one of them ([ViewerStripMark.page]) rather than the cover they all share.
-     */
     chapters: Boolean = false,
-    /** How particular posts are shown, such as chapters' numbers and downloaded pages in place of a shared cover. */
     stripMarks: Map<PostId, ViewerStripMark> = emptyMap(),
 ) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
@@ -193,10 +178,6 @@ private fun ReportUserScroll(list: LazyListState, onInteraction: () -> Unit) {
     }
 }
 
-/**
- * Every change of post as one eased motion: each slot's width and the centering read the same progress, so the row
- * never jumps as one post folds and another unfolds, and a new tap carries on from wherever the last one had reached.
- */
 private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
     private var selected by mutableIntStateOf(selected)
     private var selectedWidth by mutableFloatStateOf(selectedWidth)
@@ -215,7 +196,6 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
     }
 }
 
-/** Centers the selected post, easing there from wherever it stands. Works per frame so widths and scroll land in the same layout; a finger on the strip wins. */
 @Composable
 private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float) {
     LaunchedEffect(list, index, width) {
@@ -234,13 +214,11 @@ private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, i
     }
 }
 
-/** How far [index]'s center stands past the strip's; an item out of view counts as one viewport away on its side. */
 private fun LazyListState.distanceFromCenter(index: Int, cell: Float): Float {
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
     return if (item != null) item.offset + item.size / 2f - cell / 2f else (index - firstVisibleItemIndex).sign * layoutInfo.viewportSize.width.toFloat()
 }
 
-/** [pages] while the post is open, and its last pages for as long as it is still folding shut. */
 @Composable
 private fun rememberPagesWhileOpen(pages: ViewerStripPages?, isOpen: () -> Boolean): ViewerStripPages? {
     val last = remember { arrayOfNulls<ViewerStripPages>(1) }
@@ -250,7 +228,6 @@ private fun rememberPagesWhileOpen(pages: ViewerStripPages?, isOpen: () -> Boole
     return pages ?: last[0].takeIf { open }
 }
 
-/** A slot [width] pixels wide, read at layout so folding does not recompose. Its backdrop fades over the last cell of folding. */
 private fun Modifier.stripSlot(width: () -> Float, cell: Dp, clipPages: Boolean): Modifier = this
     .layout { measurable, constraints ->
         val widthPx = width().roundToInt()
@@ -265,10 +242,8 @@ private fun Modifier.stripSlot(width: () -> Float, cell: Dp, clipPages: Boolean)
             drawRoundRect(UNFOLDED_BACKDROP.copy(alpha = UNFOLDED_BACKDROP.alpha * opened), Offset(0f, -bleed), Size(size.width, size.height + bleed * 2), CornerRadius(12.dp.toPx()))
         }
     }
-    // Pages are always laid out at full width and revealed by this clip, so opening never disturbs their own scroller.
     .then(if (clipPages) Modifier.drawWithContent { clipRect(top = -size.height, bottom = size.height * 2) { this@drawWithContent.drawContent() } } else Modifier)
 
-/** Brings [index] to [offset] from the list's start: at once on first composition, animated after that. */
 @Composable
 private fun CenterItem(list: LazyListState, index: Int, offset: Int) {
     var centered by remember(list) { mutableStateOf(false) }
@@ -278,26 +253,22 @@ private fun CenterItem(list: LazyListState, index: Int, offset: Int) {
     }
 }
 
-/** The most odd-numbered slots full-size thumbnails fit across [width] with comfortable gaps, never fewer than seven. */
 internal fun viewerStripSlotCount(width: Dp): Int {
     val fitting = ((width - STRIP_MIN_GAP) / (STRIP_MAX_CELL + STRIP_MIN_GAP)).toInt()
     val odd = if (fitting % 2 == 0) fitting - 1 else fitting
     return odd.coerceAtLeast(STRIP_MIN_SLOTS)
 }
 
-/** An unfolded post's width: enough for its pages, but never past the outermost of the strip's [slots]. */
 internal fun viewerStripUnfoldedWidth(pageCount: Int, cell: Dp, gap: Dp, slots: Int): Dp {
     val pages = cell * pageCount + UNFOLDED_PAGE_GAP * (pageCount - 1) + UNFOLDED_PADDING * 2
     return minOf(pages, cell * (slots - 2) + gap * (slots - 3))
 }
 
-/** One post's pages as a scroller of its own, holding the current page centered. Past either end, a drag carries on into the strip. */
 @Composable
 private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell: Dp, onInteraction: () -> Unit, modifier: Modifier) {
     val list = rememberLazyListState(initialFirstVisibleItemIndex = pages.selectedIndex)
     ReportUserScroll(list, onInteraction)
     BoxWithConstraints(modifier) {
-        // A negative offset leaves the current page short of the viewport's start, which is what centers it.
         CenterItem(list, pages.selectedIndex, with(LocalDensity.current) { -((maxWidth - cell) / 2 - UNFOLDED_PADDING).roundToPx() })
         LazyRow(
             state = list,
@@ -318,11 +289,6 @@ private fun ViewerUnfoldedPages(source: SourceKey, pages: ViewerStripPages, cell
     }
 }
 
-/**
- * [pageCount] above one stacks cards behind the thumbnail, so a multi-page post reads as one before it is opened.
- * [image] is the post's own preview unless the caller pictures it by one of its pages, which shows from its top
- * ([PageTopCrop]); if that fails to load (a chapter's page addresses expire), the preview stands in.
- */
 @Composable
 internal fun ViewerPostThumbnail(
     post: Post,
@@ -349,7 +315,6 @@ internal fun ViewerPostThumbnail(
 
 private fun viewerPostLabel(post: Post) = "Open post ${post.id.sourcePostId}"
 
-/** One tappable image in the Viewer's strips, whether it stands for a post or for one of a post's pages. [badge] is drawn over the image. */
 @Composable
 private fun ViewerThumbnailTile(
     model: Any?,
@@ -388,11 +353,9 @@ private fun ViewerThumbnailTile(
     }
 }
 
-/** A number over a whole thumbnail. The tile's label already names what it stands for, so the number is only drawn. */
 @Composable
 private fun ThumbnailBadge(text: String) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = BADGE_SCRIM)).semantics { hideFromAccessibility() }, contentAlignment = Alignment.Center) {
-        // Long part-chapter numbers ("105.5") shrink to fit the tile rather than clip.
         BasicText(
             text, Modifier.padding(horizontal = 3.dp), style = BADGE_STYLE, maxLines = 1, softWrap = false,
             autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 15.sp),
@@ -400,7 +363,6 @@ private fun ThumbnailBadge(text: String) {
     }
 }
 
-/** Emphasis is drawn, not laid out: the strip's slots and its centering stay put as the selection moves. */
 private fun Modifier.thumbnailSurface(emphasis: State<Float>, pageCount: Int, shape: Shape): Modifier = this
     .graphicsLayer {
         val scale = 1f + SELECTED_THUMBNAIL_GROWTH * emphasis.value
@@ -409,14 +371,12 @@ private fun Modifier.thumbnailSurface(emphasis: State<Float>, pageCount: Int, sh
     }
     .then(if (pageCount > 1) Modifier.drawBehind { drawPageStack(pageCount) } else Modifier)
     .clip(shape)
-    // A dim rather than transparency, so the cards stacked behind never show through the thumbnail.
     .drawWithContent {
         drawContent()
         drawRect(Color.Black.copy(alpha = RESTING_THUMBNAIL_DIM * (1f - emphasis.value)))
     }
     .background(Color.White.copy(alpha = 0.12f))
 
-/** Blank cards peeking above a thumbnail: one for two pages, two for more. They rise rather than spread, since the gaps between slots are too narrow. */
 private fun DrawScope.drawPageStack(pageCount: Int) {
     val radius = CornerRadius(8.dp.toPx())
     fun card(inset: Dp, rise: Dp, alpha: Float) = drawRoundRect(

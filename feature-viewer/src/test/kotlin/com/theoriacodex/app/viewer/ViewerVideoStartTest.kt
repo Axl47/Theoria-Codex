@@ -17,14 +17,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** Where a Viewer player starts, and when it has been somewhere worth reporting as it lets go. */
 @RunWith(RobolectricTestRunner::class)
 class ViewerVideoStartTest {
     @Test fun `a player that plays without ever rendering a frame has been at its position`() {
         val start = ViewerVideoStart({ 600_000L }) { _, _ -> false }
         val started = start.applyTo(EpisodePlayer())
         assertFalse(started.atPosition)
-        // An audio-only stream plays without a frame.
         started.onIsPlayingChanged(true)
         assertTrue(started.atPosition)
     }
@@ -33,11 +31,9 @@ class ViewerVideoStartTest {
         var stored = 1_438_000L
         val start = ViewerVideoStart({ stored }) { positionMs, durationMs -> positionMs >= durationMs - 5_000L }
         val opening = EpisodePlayer()
-        // Opened two seconds from the end, the episode was watched to its end: it begins again.
         start.applyTo(opening).onIsPlayingChanged(true)
         assertEquals(0L, opening.currentPosition)
 
-        // It then plays through the episode, and its stream fails five seconds from the end.
         stored = 1_437_000L
         val replacement = EpisodePlayer()
         start.applyTo(replacement)
@@ -47,7 +43,6 @@ class ViewerVideoStartTest {
     @Test fun `what showed before the start-over seek does not count as being at the start`() {
         val player = EpisodePlayer(durationMs = C.TIME_UNSET)
         val started = ViewerVideoStart({ 1_438_000L }) { positionMs, durationMs -> positionMs >= durationMs - 5_000L }.applyTo(player)
-        // A frame at the resume position, before the duration is known.
         started.onRenderedFirstFrame()
         player.know(1_440_000L)
         assertEquals(0L, player.currentPosition)
@@ -61,9 +56,7 @@ class ViewerVideoStartTest {
         val started = ViewerVideoStart({ 1_438_000L }) { positionMs, durationMs -> positionMs >= durationMs - 5_000L }.applyTo(player)
         val reports = mutableListOf<ViewerPlaybackProgress>()
         player.addListener(ViewerSeekReports(started, { false }) { reports += it })
-        // The duration starts the episode over: a seek to 0 that the player has not played from yet.
         player.know(1_440_000L)
-        // A replay or a controller's seek before it got to its start.
         player.seekTo(30_000L)
         assertEquals(emptyList<ViewerPlaybackProgress>(), reports)
         assertNull(started.progress())
@@ -80,7 +73,6 @@ class ViewerVideoStartTest {
         var scrubbing = false
         val reports = mutableListOf<ViewerPlaybackProgress>()
         player.addListener(ViewerSeekReports(started, { scrubbing }) { reports += it })
-        // A paused player that the media session seeks reports the new position, though nothing on screen polled it yet.
         player.seekTo(60_000L)
         scrubbing = true
         repeat(3) { player.seekTo(70_000L + it) }
@@ -94,16 +86,13 @@ class ViewerVideoStartTest {
         val player = EpisodePlayer(durationMs = C.TIME_UNSET)
         val started = ViewerVideoStart({ 0L }) { _, _ -> false }.applyTo(player).apply { onRenderedFirstFrame() }
         player.seekTo(12_000L)
-        // Its place is kept for the Viewer and the feed, though there is no progress to report without a duration.
         assertEquals(12_000L, started.resumeMs())
         assertNull(started.releaseProgress())
     }
 
-    /** A player of one episode [durationMs] long (unset until [know] gives it) that only seeks. */
     private class EpisodePlayer(private var durationMs: Long = 1_440_000L) : SimpleBasePlayer(Looper.getMainLooper()) {
         private var positionMs = 0L
 
-        /** The timeline arrives, [durationMs] long. */
         fun know(durationMs: Long) {
             this.durationMs = durationMs
             invalidateState()

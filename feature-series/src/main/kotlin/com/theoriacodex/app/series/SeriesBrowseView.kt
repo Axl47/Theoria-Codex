@@ -51,10 +51,6 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.languageName
 
-/**
- * The Browse view: the browsed source's listing under one header, which picks the source (every source that is on,
- * grouped by kind) and its listing. [supportsLatest] says whether the source has a Latest listing.
- */
 @Composable
 internal fun BrowseBody(
     state: SeriesTabState,
@@ -104,7 +100,6 @@ internal fun BrowseBody(
     }
 }
 
-/** The browsed source, which opens the source picker, then its listing's controls. */
 @Composable
 private fun BrowseHeader(
     browse: SeriesSourceListing,
@@ -120,7 +115,6 @@ private fun BrowseHeader(
     }
 }
 
-/** The browsed source's name as a chip that opens the source picker; a long name is cut short. */
 @Composable
 private fun SourceChip(name: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shape = MaterialTheme.shapes.small
@@ -140,11 +134,6 @@ private fun SourceChip(name: String, onClick: () -> Unit, modifier: Modifier = M
     }
 }
 
-/**
- * [leading] (Browse's source), Popular and Latest when the source has Latest, then the source's filters at the end,
- * counting the [filterCount] changed. Neither listing is chosen while a filtered search shows, and Popular stays to
- * leave it. Browse and a source's dedicated search share them.
- */
 @Composable
 internal fun ListingControls(
     kind: BrowseKind,
@@ -173,11 +162,9 @@ internal fun ListingControls(
     }
 }
 
-/** Every source that is on, under its kind when both kinds are on, with its language when they differ; [selected] is checked. */
 @Composable
 private fun SourcePickerSheet(sources: List<SeriesSource>, selected: SourceKey?, onPick: (SourceKey) -> Unit, onDismiss: () -> Unit) {
     val groups = sources.groupBy { it.kind }.toSortedMap()
-    // A language tells sources apart only when they do not all share one.
     val languages = sources.distinctBy { it.language }.size > 1
     ExpandedBottomSheet(onDismiss = onDismiss) {
         SheetHeader("Source", closeDescription = "Close", onDismiss = onDismiss)

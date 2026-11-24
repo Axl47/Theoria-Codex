@@ -6,7 +6,6 @@ import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Display order can visit a recommendation branch; backing indices and the original feed stay stable. */
 data class ViewerPostNavigation(
     val originalPosts: List<Post>,
     val pages: List<ViewerPageState>,
@@ -15,7 +14,6 @@ data class ViewerPostNavigation(
     val stripAnchorIndex: Int,
     val branchAnchor: PostId?,
 ) {
-    /** The pages one swipe away, next before previous: where speculative work goes after the current page. */
     val neighbours: List<ViewerPageState>
         get() = listOfNotNull(pages.getOrNull(currentIndex + 1), pages.getOrNull(currentIndex - 1))
 }
@@ -48,7 +46,6 @@ private fun branchDisplayOrder(originals: List<Post>, branch: ViewerRelatedNavig
     }.distinct()
 }
 
-/** Recommendation branches are transient: cold recovery resumes the original feed at its liked anchor. */
 internal fun ViewerUiState.forOriginalNavigation(): ViewerUiState {
     val extras = related.extraPostIds
     if (extras.isEmpty()) return this

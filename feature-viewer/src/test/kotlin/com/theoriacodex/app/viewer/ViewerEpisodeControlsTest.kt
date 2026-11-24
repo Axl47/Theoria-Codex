@@ -60,7 +60,6 @@ class ViewerEpisodeControlsTest {
     @Test fun `the stream button names the stream playing and switches via the server sheet`() {
         val state = episodeState(ViewerEpisodeChoice(streamLabel = "gone"))
         setControls(state)
-        // A remembered label the episode no longer offers falls back to its source's first stream.
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).assert(hasText("1080p · A")).assert(hasContentDescription("Stream"))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).performClick()
@@ -107,7 +106,6 @@ class ViewerEpisodeControlsTest {
         compose.onNodeWithText("Episode 1").assertExists()
         compose.onNodeWithTag("viewer-episode-previous").assertIsNotEnabled()
         compose.onNodeWithTag("viewer-episode-next").assertIsEnabled()
-        // Before a stream resolves, playback is unavailable so center Play/Pause is hidden and the speed pill is disabled.
         compose.onNodeWithTag(VIEWER_EPISODE_CENTER_PLAY_TAG).assertDoesNotExist()
         compose.onNodeWithTag(VIEWER_EPISODE_SPEED_TAG).assertIsNotEnabled()
 
@@ -128,7 +126,6 @@ class ViewerEpisodeControlsTest {
         val firstOverlay = bindViewerSubtitleOverlay(playerView, firstState, bottomOverlapPx = 24)
         assertEquals(24, firstOverlay.paddingBottom)
 
-        // Simulate in-place retry disposal clearing state.subtitleView and re-updating on the same PlayerView.
         firstState.subtitleView = null
         firstState.setCues(listOf(Cue.Builder().setText("After retry").build()))
         val afterRetry = bindViewerSubtitleOverlay(playerView, firstState, bottomOverlapPx = 48)
@@ -136,7 +133,6 @@ class ViewerEpisodeControlsTest {
         assertEquals(48, afterRetry.paddingBottom)
         assertTrue(firstState.subtitleView === afterRetry)
 
-        // Simulate server switch creating a fresh ViewerVideoState bound to the reused PlayerView.
         val switchedState = ViewerVideoState(pending = null).apply {
             setCues(listOf(Cue.Builder().setText("After switch").build()))
         }
@@ -179,12 +175,10 @@ class ViewerEpisodeControlsTest {
     @Test fun `an open episode sheet holds the chrome past its auto-hide, while an emptied track panel closes itself`() {
         compose.mainClock.autoAdvance = false
         val state = watchingScreen()
-        // An open track panel whose tracks disappeared auto-dismisses instead of wedging chrome auto-hide.
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ShowPanel(ViewerPanel.EPISODE_SUBTITLES)).state }
         settleFrames()
         compose.runOnIdle { assertNull(state.value.controls.panel) }
 
-        // A valid open panel (More / Actions menu) holds the chrome past auto-hide until dismissed.
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ShowPanel(ViewerPanel.ACTIONS_MENU)).state }
         settleFrames()
         compose.mainClock.advanceTimeBy(6_500)
@@ -212,7 +206,6 @@ class ViewerEpisodeControlsTest {
         compose.onNodeWithTag(VIEWER_EPISODE_CENTER_TAG).assertDoesNotExist()
     }
 
-    /** A Viewer state for one episode, whose controls dispatch to the reducer as the screen's do. */
     private fun episodeState(choice: ViewerEpisodeChoice = ViewerEpisodeChoice()) = mutableStateOf(
         createViewerUiState(identity, listOf(post("episode", media = listOf(episode))), series = ViewerSeries.Watching())
             .let { it.copy(controls = it.controls.copy(episode = choice)) },
@@ -264,7 +257,6 @@ class ViewerEpisodeControlsTest {
         }
     }
 
-    /** Two unresolved episodes of a watched series, on the full screen. */
     private fun watchingScreen(seriesTitle: String? = null): androidx.compose.runtime.MutableState<ViewerUiState> {
         val prefix = seriesTitle?.let { "$it · " }.orEmpty()
         val episodes = (1..2).map { post("episode-$it", SourceKey.HITOMI, emptyList(), title = "${prefix}Episode $it") }

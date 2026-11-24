@@ -48,7 +48,6 @@ class ViewerTransformStateTest {
         assertEquals(-100f, tapped.panX, 0.0001f)
         assertEquals(50f, tapped.panY, 0.0001f)
 
-        // A content point under the focus before the pinch must still be under it afterwards.
         val before = ViewerTransformState(zoom = 2f, panX = 30f, panY = 0f)
         val after = before.transform(1.5f, 0f, 0f, focusX = 60f, focusY = 0f)
         val contentPoint = (60f - before.panX) / before.zoom
@@ -62,7 +61,6 @@ class ViewerTransformStateTest {
         val zoomed = ViewerTransformState().doubleTap(bounds = bounds)
             .transform(1f, panChangeX = 10_000f, panChangeY = 10_000f, bounds = bounds)
 
-        // 2x makes 800 square media: 200 of width overflows per side and height just fits.
         assertEquals(200f, zoomed.panX, 0.0001f)
         assertEquals(0f, zoomed.panY, 0.0001f)
     }
@@ -78,17 +76,12 @@ class ViewerTransformStateTest {
         fun decide(displacement: Float, velocity: Float, movement: Float = displacement) =
             viewerSwipeDecision(displacement, movement, velocity, pageExtent = 1000f, flingVelocity = 400f)
 
-        // A short, fast flick commits; the same distance held still does not.
         assertEquals(ViewerHorizontalSwipeDirection.Next, decide(-60f, -2000f))
         assertEquals(null, decide(-60f, 0f))
-        // A slow drag commits only past 16% of the page.
         assertEquals(null, decide(-150f, -100f))
         assertEquals(ViewerHorizontalSwipeDirection.Previous, decide(170f, 0f))
-        // Landscape commits sooner.
         assertEquals(ViewerHorizontalSwipeDirection.Next, viewerSwipeDecision(-70f, -70f, 0f, 1000f, 400f, VIEWER_LANDSCAPE_COMMIT_FRACTION))
-        // Flicking back against a long drag cancels it.
         assertEquals(null, decide(-700f, 2000f))
-        // Pages still settling from a caught swipe do not make a new flick look like flicking back.
         assertEquals(ViewerHorizontalSwipeDirection.Next, decide(70f, -1900f, movement = -60f))
     }
 
@@ -96,11 +89,8 @@ class ViewerTransformStateTest {
     fun `a quick flick the tracker missed still reads at its average speed`() {
         val travel = androidx.compose.ui.geometry.Offset(-140f, 10f)
         val missed = androidx.compose.ui.unit.Velocity.Zero
-        // Delivered as little more than down and up: 140 px in 60 ms is a flick.
         assertEquals(-140f / 0.06f, viewerReleaseVelocity(missed, travel, durationMs = 60).x, 1f)
-        // A faster tracked reading is kept.
         assertEquals(-5000f, viewerReleaseVelocity(androidx.compose.ui.unit.Velocity(-5000f, 0f), travel, 60).x, 0.01f)
-        // A drag longer than the window keeps the tracker's answer, so holding still before release still cancels.
         assertEquals(0f, viewerReleaseVelocity(missed, travel, durationMs = 900).x, 0.01f)
     }
 

@@ -36,7 +36,6 @@ class ViewerScrubPreviewTest {
 
         runCurrent()
         assertEquals(listOf(1_000L), published)
-        // Passing over 2 s on the way to 3 s extracts only where the finger rests.
         targets.value = 2_000L
         advanceTimeBy(SCRUB_FRAME_SETTLE_MS / 2)
         targets.value = 3_000L

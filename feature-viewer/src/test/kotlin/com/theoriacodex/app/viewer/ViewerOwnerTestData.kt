@@ -10,7 +10,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-/** Sessions, posts and prefetch requests shared by the Viewer owner's tests. */
 internal object ViewerOwnerTestData {
     fun request(key: ViewerMediaKey, distance: Int = 2) =
         ViewerPrefetchRequest(key, distance, decode = false)

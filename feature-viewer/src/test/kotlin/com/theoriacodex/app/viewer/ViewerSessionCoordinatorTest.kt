@@ -249,7 +249,6 @@ class ViewerSessionCoordinatorTest {
             full = blank.copy(progressiveUrls = listOf("https://example.test/progressive.jpg")),
         )
         val preview = samplePost(SourceKey.PIXIV)
-        // An episode's media has no address of its own, only its streams'.
         val episode = samplePost(SourceKey.PIXIV, preview = blank, full = blank.copy(mime = "video/mp4", streams = listOf(MediaStream("https://example.test/e.m3u8", "A"))))
 
         assertTrue(listOf(local, remote, progressive, preview, episode).all(::hasUsableViewerMedia))

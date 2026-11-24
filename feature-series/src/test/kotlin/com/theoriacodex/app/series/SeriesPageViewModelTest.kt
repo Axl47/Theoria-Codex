@@ -54,7 +54,6 @@ class SeriesPageViewModelTest {
     @After
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
-    /** As after restoring a backup on a device without the series' extension: the page shows "Extension unavailable". */
     @Test
     fun aStoredSeriesWhoseExtensionIsNotInstalledShowsItsChaptersAndSaysSo() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -73,7 +72,6 @@ class SeriesPageViewModelTest {
         collecting.cancel()
     }
 
-    /** A refresh finishing after a move to another source would store the old series again. */
     @Test
     fun noRefreshStartsWhileTheSeriesMovesOrOnceItMoved() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -110,13 +108,11 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("/c/extra", "/c/10", "/c/2"), viewModel.state.value.visibleEntries.map { it.entry.address })
 
-        // Source order toggled to ascending.
         viewModel.setChapterSort(ChapterSort.SOURCE_ORDER)
         advanceUntilIdle()
         assertEquals(listOf("/c/2", "/c/10", "/c/extra"), viewModel.state.value.visibleEntries.map { it.entry.address })
         assertTrue(viewModel.state.value.hasActiveChapterOptions)
 
-        // Chapter number descending puts unnumbered entries at the end; tapping again flips ascending.
         viewModel.setChapterSort(ChapterSort.CHAPTER_NUMBER)
         advanceUntilIdle()
         assertEquals(listOf("/c/10", "/c/2", "/c/extra"), viewModel.state.value.visibleEntries.map { it.entry.address })
@@ -124,12 +120,10 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("/c/2", "/c/10", "/c/extra"), viewModel.state.value.visibleEntries.map { it.entry.address })
 
-        // Upload date descending.
         viewModel.setChapterSort(ChapterSort.UPLOAD_DATE)
         advanceUntilIdle()
         assertEquals(listOf("/c/extra", "/c/2", "/c/10"), viewModel.state.value.visibleEntries.map { it.entry.address })
 
-        // Unread and Downloaded filters.
         viewModel.setChapterFilter(ChapterFilter.UNREAD)
         advanceUntilIdle()
         assertEquals(listOf("/c/extra", "/c/2"), viewModel.state.value.visibleEntries.map { it.entry.address })
@@ -137,7 +131,6 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("/c/2"), viewModel.state.value.visibleEntries.map { it.entry.address })
 
-        // Reset restores default sort & filter; search filters by chapter name or translator group.
         viewModel.resetChapterOptions()
         viewModel.setChapterQuery("beta")
         advanceUntilIdle()
@@ -164,19 +157,16 @@ class SeriesPageViewModelTest {
         advanceUntilIdle()
         assertEquals("https://site.example/title/1", viewModel.state.value.webUrl)
 
-        // Single chapter mark read.
         viewModel.setEntryRead("/c/2", true)
         advanceUntilIdle()
         assertEquals(listOf(false, true, false), viewModel.state.value.entries.map { it.read })
 
-        // Mark previous chapters from Chapter 3 marks only unread chapters earlier in reading order (/c/1).
         var prevUndo: BulkReadUndo? = null
         viewModel.markPreviousRead("/c/3") { prevUndo = it }
         advanceUntilIdle()
         assertNotNull(prevUndo)
         assertEquals(listOf(false, true, true), viewModel.state.value.entries.map { it.read })
 
-        // Separate edit to Chapter 3 must survive undoing the earlier Mark previous action.
         viewModel.setEntryRead("/c/3", true)
         advanceUntilIdle()
         viewModel.undoBulkRead(prevUndo!!)
@@ -184,7 +174,6 @@ class SeriesPageViewModelTest {
         assertEquals(listOf(true, true, false), viewModel.state.value.entries.map { it.read })
         assertEquals(4, viewModel.state.value.entries.last().position)
 
-        // Mark all read + undo.
         var allUndo: BulkReadUndo? = null
         viewModel.markAllRead(true) { allUndo = it }
         advanceUntilIdle()
@@ -212,7 +201,7 @@ class SeriesPageViewModelTest {
 
         val first = SeriesPageViewModel(id, Restored(stored, entries), loadSources = { emptyList() }, chapterPreferences = prefs, ioDispatcher = StandardTestDispatcher(testScheduler))
         first.setChapterSort(ChapterSort.CHAPTER_NUMBER)
-        first.setChapterSort(ChapterSort.CHAPTER_NUMBER) // ascending
+        first.setChapterSort(ChapterSort.CHAPTER_NUMBER)
         first.setChapterFilter(ChapterFilter.UNREAD)
         first.setChapterQuery("boss")
 
@@ -255,7 +244,6 @@ class SeriesPageViewModelTest {
         assertFalse(page("custom_aniyomi_7").canDownload)
     }
 
-    /** The undo bar names what happened in the kind's own words. */
     @Test
     fun markingAnAnimeSaysWatched() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -278,7 +266,6 @@ class SeriesPageViewModelTest {
         collecting.cancel()
     }
 
-    /** As an Aniyomi source that groups an anime's episodes into seasons reports it. */
     @Test
     fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWordsWithoutRetry() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -288,7 +275,6 @@ class SeriesPageViewModelTest {
         val collecting = launch { viewModel.state.collect {} }
 
         advanceUntilIdle()
-        // Trying again cannot help, so the page offers no Retry.
         assertEquals(RefreshFailure(Seasons.MESSAGE, retryable = false), viewModel.state.value.failure)
         collecting.cancel()
     }
@@ -307,7 +293,6 @@ class SeriesPageViewModelTest {
         assertEquals(mapOf("/c/2" to ChapterDownload.Queued(null)), downloads.states(id).first())
     }
 
-    /** Downloads over this test's folder that never run: the page asks whether it offers them, and queues chapters. */
     private fun downloads(
         repository: SeriesRepository = Restored(StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/"), "")), emptyList()),
         io: CoroutineDispatcher = Dispatchers.IO,
@@ -327,7 +312,6 @@ class SeriesPageViewModelTest {
     )
 }
 
-/** Fails every entry list the way a source that groups episodes into seasons does. */
 private class Seasons(override val key: SourceKey) : SeriesSource {
     override val name = "Fake"
     override val language = "en"
@@ -350,12 +334,10 @@ private class MemoryChapterPreferences : SeriesChapterPreferences {
     }
 }
 
-/** Holds what a restore stored and tracks progress mutations. */
 private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) : SeriesRepository {
     private val storedFlow = MutableStateFlow<StoredSeries?>(stored)
     private val entryFlow = MutableStateFlow(entries)
 
-    /** What [store] says is new. */
     var added = emptyList<SeriesEntry>()
 
     override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()

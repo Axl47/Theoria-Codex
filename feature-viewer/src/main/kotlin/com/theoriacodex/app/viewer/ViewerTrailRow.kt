@@ -47,12 +47,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * The row under the Viewer's top bar: the trail's crumbs (when this level is a fork), then chips that fork a new trail
- * from [post]: its creator, Similar, and its most characteristic tags. A fork opens only once its first page is in; until
- * then its chip spins, and an empty or failed fork says so on the chip. [forks] are the level's, so a fork started from
- * the info sheet spins here too, on a chip of its own when it is not one of these.
- */
 @Composable
 internal fun ViewerTrailRow(
     post: Post,
@@ -66,7 +60,6 @@ internal fun ViewerTrailRow(
     val opener = LocalTrailOpener.current
     val similarSupported = LocalRelatedPostsSupport.current(post.id.source)
     val affinity by LocalTagAffinityInputs.current.collectAsStateWithLifecycle()
-    // A tag on nearly every post of this level narrows nothing here, such as a trail's own filter tag.
     val feedShare = remember(levelPosts) { feedTagShare(levelPosts) }
     val chips = remember(post, affinity, feedShare, trail, similarSupported, creatorBrowsingSources, opener) {
         if (opener == TrailOpener.None) emptyList() else viewerTrailChips(
@@ -140,11 +133,6 @@ private fun ViewerTrailChip.icon(): ImageVector? = when (this) {
     is ViewerTrailChip.Tag -> null
 }
 
-/**
- * Forks a trail from a tag tapped in [post]'s info sheet, searched like [levelQuery], through the level's [forks]. A
- * started fork calls [onStarted], which closes the sheet so the fork's chip in the trail row shows its progress; while
- * another fork loads the tap does nothing. Null where no trail can open.
- */
 @Composable
 internal fun rememberViewerTagFork(forks: ViewerTrailForks, post: Post, levelQuery: Query?, onStarted: () -> Unit): ((SearchTerm) -> Unit)? {
     val opener = LocalTrailOpener.current

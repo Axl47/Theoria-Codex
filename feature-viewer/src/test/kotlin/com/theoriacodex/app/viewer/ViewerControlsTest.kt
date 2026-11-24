@@ -61,7 +61,6 @@ class ViewerControlsTest {
         fun controls(chromeVisible: Boolean) =
             ViewerControls({ actions += it }, screen, overviewVisible = false, chromeVisible = chromeVisible, opening = false, returning = false)
 
-        // A quick scrub can begin and end before recomposition replaces the controls.
         controls(chromeVisible = false).run { beginScrub(); endScrub() }
         assertEquals(listOf(ViewerAction.ToggleChrome, ViewerAction.SetChromeVisible(false)), actions)
 

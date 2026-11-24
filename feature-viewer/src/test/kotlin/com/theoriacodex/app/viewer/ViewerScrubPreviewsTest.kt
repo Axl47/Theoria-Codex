@@ -27,7 +27,6 @@ class ViewerScrubPreviewsTest {
         setMediaItem(MediaItem.fromUri("https://example.org/video.mp4"))
         setSeekParameters(SeekParameters.EXACT)
     }
-    /** The player's position each time the preview stopped. */
     private val previewStops = mutableListOf<Long>()
     private val previews = ViewerScrubPreviews(player) { KeyframesEveryTwoSeconds { previewStops += player.currentPosition } }
 
@@ -51,7 +50,6 @@ class ViewerScrubPreviewsTest {
         val targets = MutableStateFlow(9_000L)
         val drag = launch { previews.follow(targets) { _, _ -> } }
         runCurrent()
-        // The finger moved on; its frame waits until the finger rests there.
         targets.value = 13_000L
         assertEquals(13_000L, previews.seekReleased(13_000L))
 
@@ -61,7 +59,6 @@ class ViewerScrubPreviewsTest {
     }
 }
 
-/** Frames of the keyframe at or before each target, on a 2 s keyframe interval; [onIdle] runs at each stop. */
 private class KeyframesEveryTwoSeconds(private val onIdle: () -> Unit) : ScrubFrameSource {
     override suspend fun frameAt(positionMs: Long) =
         ScrubFrame(positionMs - positionMs % 2_000L, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))

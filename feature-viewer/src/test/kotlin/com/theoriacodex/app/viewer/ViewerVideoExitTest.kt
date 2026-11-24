@@ -24,10 +24,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * What leaving the Viewer does to an episode's player, through the real screen and player pool. The episode's file is
- * missing, so each player bound to it fails once and never gets a duration or renders a frame.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = ViewerVideoExitTest.PlayerApplication::class)
 class ViewerVideoExitTest {
@@ -45,10 +41,8 @@ class ViewerVideoExitTest {
     private val owner = testViewerOwner()
     private val shown = mutableStateOf(true)
 
-    /** One per player that failed, so one per player bound. */
     private val playerErrors = mutableListOf<String>()
 
-    /** Every position a released player hands on. */
     private val releases = mutableListOf<Long>()
 
     @Before fun recordPlayers() {
@@ -65,7 +59,6 @@ class ViewerVideoExitTest {
         showEpisode(ViewerSeries.Watching())
 
         compose.runOnIdle { owner.clearSession(retainPresentation = true) }
-        // A rebuilt player would fail on the missing file too.
         runCatching { compose.waitUntilSettled(1_000) { playerErrors.size > 1 } }
         assertEquals("Closing replaced the player", 1, playerErrors.size)
     }
@@ -78,7 +71,6 @@ class ViewerVideoExitTest {
         assertEquals("A player that never got to its start reported a position", emptyList<Long>(), releases)
     }
 
-    /** Shows [episode] as a series' entry and waits for its player to fail. */
     private fun showEpisode(series: ViewerSeries.Watching) {
         owner.replaceSession(session("watching", listOf(episode)).copy(series = series))
         compose.setContent {

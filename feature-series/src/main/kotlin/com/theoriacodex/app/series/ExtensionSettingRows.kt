@@ -30,10 +30,6 @@ import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.domain.series.ExtensionSetting
 
-/**
- * One source's settings as the app's own rows. A switch changes at once; text and choices open a dialog. [onChange]
- * gets the setting with its new value.
- */
 @Composable
 internal fun ExtensionSettingRows(settings: List<ExtensionSetting>, onChange: (ExtensionSetting) -> Unit) {
     var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -43,7 +39,6 @@ internal fun ExtensionSettingRows(settings: List<ExtensionSetting>, onChange: (E
         when (setting) {
             is ExtensionSetting.Toggle ->
                 SwitchRow(title, setting.on, description = setting.summary, enabled = setting.enabled) { onChange(setting.copy(on = it)) }
-            // A text setting can hold a password or a token, so its value shows only in its dialog.
             is ExtensionSetting.Text -> SettingsRow(title, setting.summary, enabled = setting.enabled, onClick = { editingKey = setting.key })
             is ExtensionSetting.Choice -> SettingsRow(
                 title, setting.summary ?: setting.options.firstOrNull { it.value == setting.value }?.label,
@@ -103,7 +98,6 @@ private fun TextSettingDialog(setting: ExtensionSetting.Text, onDismiss: () -> U
     )
 }
 
-/** A dialog of options; with [onSave] the choice waits for Save, without it picking an option is the choice. */
 @Composable
 private fun ChoiceDialog(title: String, onDismiss: () -> Unit, onSave: (() -> Unit)? = null, options: @Composable () -> Unit) {
     AlertDialog(

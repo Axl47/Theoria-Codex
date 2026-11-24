@@ -31,7 +31,6 @@ import org.robolectric.annotation.Config
 class ExtensionsScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    /** A first run leads from the empty page to adding a repo, and from a repo to Get extensions. */
     @Test fun `the empty page offers Add repo until a repo exists, which then leads to Get extensions`() {
         val repos = object : ExtensionRepos {
             val added = mutableListOf<ExtensionRepo>()
@@ -63,7 +62,6 @@ class ExtensionsScreenTest {
         compose.onNodeWithText("Add repo").performClick()
         assertEquals(ExtensionsSubpage.REPOS, vm.state.value.subpage)
         assertEquals(AddRepo(), vm.state.value.addRepo)
-        // The open dialog's cursor keeps Compose busy, so the repo is added without it.
         vm.askForRepo(false)
         vm.addRepo("https://repo.example")
         compose.waitUntilSettled { vm.state.value.repos?.isNotEmpty() == true }

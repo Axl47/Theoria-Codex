@@ -21,7 +21,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** The Viewer route's prefetcher: how far from the current media a prefetch may stay decoded is decided here. */
 fun viewerMediaPrefetcher(
     context: Context,
     ugoiraClient: PixivUgoiraClient? = null,
@@ -35,12 +34,6 @@ fun viewerMediaPrefetcher(
     )
 }
 
-/**
- * Android transport/cache seam injected into the route owner; no platform handle enters state.
- * [keepDecodedInMemory] keeps a prefetched image in Coil's memory cache; otherwise only its disk copy is warmed.
- * A Pixiv ugoira warms its archive through [ugoiraClient]; on a metered network only its still image is warmed.
- * With [pageWidthPx] (vertical reading), a still decodes as a full-width page of that width, as the page does.
- */
 suspend fun prefetchViewerMedia(
     context: Context,
     media: ViewerMediaState,
@@ -54,8 +47,6 @@ suspend fun prefetchViewerMedia(
         return ViewerPrefetchResult(if (ready) ViewerPrefetchOutcome.WARMED else ViewerPrefetchOutcome.FAILED)
     }
     if (media.kind == ViewerMediaKind.VIDEO) {
-        // The page's own request, so what is warmed is the cache entry its player reads. A neighbour has no height
-        // chosen for it yet, so it gets the rendition its player starts with.
         val playback = media.ref.viewerPlayback(media.key.postId.source, videoQuality, context.isMediaNetworkMetered())
         return prefetchViewerVideoMedia(context, playback, maxBytes = VIEWER_VIDEO_PREFETCH_BYTES)
     }
@@ -69,7 +60,6 @@ suspend fun prefetchViewerMedia(
         return ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytes)
     }
     if (media.kind == ViewerMediaKind.IMAGE) {
-        // The page's small thumbnail lands first: it is what the page shows while its original downloads.
         viewerPrefetchThumbnailLocation(media.ref, location)?.let { thumbnail ->
             context.imageLoader.execute(
                 MediaRequestFactory.imageRequest(context, thumbnail, media.key.postId.source, crossfade = false).diskWarmOnly(),
@@ -87,10 +77,6 @@ suspend fun prefetchViewerMedia(
     }
 }
 
-/**
- * The Viewer page's own request, so a decode kept in memory is the hardware bitmap the page then shows; with
- * [pageWidthPx], a still's is the vertical reader's full-width request.
- */
 private fun viewerPrefetchImageRequest(
     context: Context, media: ViewerMediaState, location: String, keepDecodedInMemory: Boolean, pageWidthPx: Int?,
 ): ImageRequest {
@@ -102,30 +88,21 @@ private fun viewerPrefetchImageRequest(
     }
     return when {
         keepDecodedInMemory -> request
-        // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,
-        // so a static image decodes subsampled instead of as a full-size bitmap that is thrown away.
         media.kind == ViewerMediaKind.IMAGE -> request.diskWarmOnly()
         else -> request.newBuilder().memoryCachePolicy(CachePolicy.READ_ONLY).build()
     }
 }
 
-/** A disk-only image warm decodes to about this edge; the decode is discarded. */
 private const val DISK_WARM_DECODE_PX = 64
 
-/** Pages of one post warmed at the same time. */
 private const val PAGE_THUMBNAIL_WARM_PARALLELISM = 8
 
-/** Reuses an existing memory entry but never adds one, and decodes subsampled: only the download matters. */
 private fun ImageRequest.diskWarmOnly() = newBuilder()
     .memoryCachePolicy(CachePolicy.READ_ONLY)
     .size(DISK_WARM_DECODE_PX)
     .precision(Precision.INEXACT)
     .build()
 
-/**
- * Warms the disk cache with the dedicated page thumbnails of one post, pages nearest [fromPage] first.
- * Pages whose thumbnail is just their poster are skipped, since posters can be heavy. Failed loads are ignored.
- */
 internal suspend fun warmViewerPageThumbnails(context: Context, source: SourceKey, items: List<ViewerMediaOverviewItem>, fromPage: Int) {
     val urls = items
         .filter { it.thumbnailLocation != null && it.thumbnailLocation != it.posterLocation }
@@ -149,7 +126,6 @@ private suspend fun prefetchViewerVideoMedia(
     maxBytes: Long,
 ): ViewerPrefetchResult {
     if (playback == null) return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
-    // Only a web stream that playback reads through the shared cache is worth warming there.
     if (playback.usesSharedCache()) return context.videoPlaybackInfrastructure().prefetch(playback, maxBytes)
     val location = playback.location
     if (!playback.readsAheadFreely() || !playback.cache || location.startsWith("content://", true)) {

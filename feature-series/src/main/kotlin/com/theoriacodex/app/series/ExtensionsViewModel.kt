@@ -16,19 +16,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** The pages of the Extensions area besides the list and one extension's page. */
 enum class ExtensionsSubpage { REPOS, BROWSE }
 
-/** The Add repo question: [busy] while the repo is read, [problem] why the last address was refused. */
 data class AddRepo(val busy: Boolean = false, val problem: String? = null)
 
-/**
- * The Extensions page. [extensions] is every extension on the device, null until they are first listed. [openId] is
- * the extension whose own page shows and [settings] that extension's settings, null while they load. [asking] is the
- * extension the user is being asked to turn on, with the signer the question shows. [repos] and [listing] are the
- * user's repos and what they offer, null until read; [installing] the packages being installed and [failures] why an
- * install failed, by package.
- */
 data class ExtensionsState(
     val extensions: List<InstalledExtension>? = null,
     val openId: String? = null,
@@ -41,7 +32,6 @@ data class ExtensionsState(
     val failures: Map<String, String> = emptyMap(),
     val addRepo: AddRepo? = null,
 ) {
-    /** Extensions the repos have a newer version of. */
     val updates: List<RepoExtension> get() = listing?.extensions.orEmpty().filter { it.status == RepoExtension.Status.UPDATE }
 }
 
@@ -50,30 +40,21 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
     val state: StateFlow<ExtensionsState> = mutableState
 
     init {
-        // Lists the extensions now and again whenever one is installed, removed or switched while the page shows; what
-        // the repos offer is compared with the device again each time.
         viewModelScope.launch {
             extensions.revision.collect {
                 show(extensions.installed())
                 if (mutableState.value.listing != null) showListing(refresh = false)
             }
         }
-        // Opening the page checks the repos for updates.
         viewModelScope.launch { showListing(refresh = true) }
     }
 
-    /** Lists the extensions again on return to the page: a file put in the debug folder sends no signal. */
     fun refresh() {
         viewModelScope.launch { show(extensions.installed()) }
     }
 
-    /** Asks before turning [extension] on; null withdraws the question. */
     fun ask(extension: InstalledExtension?) = mutableState.update { it.copy(asking = extension) }
 
-    /**
-     * Turns [extension] alone on or off, as the signer the user saw. When its file was replaced while the question was open
-     * it stays off, and the question is asked again about what is there now.
-     */
     fun setOn(extension: InstalledExtension, on: Boolean) {
         val shown = extension.signer ?: return
         mutableState.update { it.copy(asking = null) }
@@ -92,7 +73,6 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
         }
     }
 
-    /** Opens [id]'s own page, or with null goes back to the list; only that extension's settings are read. */
     fun open(id: String?) {
         mutableState.update { it.copy(openId = id, settings = null) }
         if (id != null) viewModelScope.launch { showSettings(id) { extensions.settings(id) } }
@@ -102,10 +82,8 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
         viewModelScope.launch { showSettings(id) { extensions.change(id, sourceId, setting) } }
     }
 
-    /** Shows [subpage], or with null goes back to the list. */
     fun openSubpage(subpage: ExtensionsSubpage?) = mutableState.update { it.copy(subpage = subpage) }
 
-    /** Opens the Add repo question; null withdraws it. */
     fun askForRepo(open: Boolean) = mutableState.update { it.copy(addRepo = if (open) AddRepo() else null) }
 
     fun addRepo(url: String) {
@@ -128,13 +106,11 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
         viewModelScope.launch { installOne(extension) }
     }
 
-    /** Updates every extension the repos have a newer version of, one after another. */
     fun updateAll() {
         val updates = mutableState.value.updates
         viewModelScope.launch { updates.forEach { installOne(it) } }
     }
 
-    /** Removes [extension], which this app installed, and goes back to the list. */
     fun uninstall(extension: InstalledExtension) {
         open(null)
         viewModelScope.launch { repos.uninstall(extension.id) }
@@ -151,10 +127,6 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
         showListing(refresh = false)
     }
 
-    /**
-     * The latest [showListing]; an earlier one still reading the repos, such as the first refresh, is not shown, so one
-     * that supersedes a refresh refreshes too.
-     */
     private var listingRequest = 0
     private var refreshing = false
 

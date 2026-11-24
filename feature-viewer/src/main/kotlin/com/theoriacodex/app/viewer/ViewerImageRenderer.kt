@@ -40,20 +40,16 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 
-/** Process-local hints scoped to one open Viewer, shared by its image pages. */
 internal class ViewerImageSession {
     val loadedLocations = mutableSetOf<String>()
-    /** Image recovery asked for while the screen lives, so each failure asks once. */
     val recoveryRequests = mutableSetOf<String>()
 }
 
-/** Owns image candidates, quality upgrades, and the shared static/WebP recovery path. */
 @Composable
 internal fun ViewerImageRenderer(
     post: Post,
     media: ImageRef,
     key: ViewerMediaKey,
-    /** True for animated stills (animated WebP), which play through [ViewerAnimatedWebPPlayer]. */
     animated: Boolean,
     modifier: Modifier,
     mediaModifier: Modifier,
@@ -61,21 +57,15 @@ internal fun ViewerImageRenderer(
     events: ViewerRendererEvents,
     imageSession: ViewerImageSession,
     onImageRecovery: ((Post, ImageRef) -> Unit)?,
-    /** Hears each painted image's own size, for layouts that size the page to its image. */
     onPainted: ((Size) -> Unit)? = null,
-    /** Places the loading spinner, which otherwise sits in the middle of [modifier]'s area. */
     spinnerModifier: Modifier = Modifier,
-    /** Decodes for the window's width whatever the slot's size ([buildViewerPageRequest]), for pages laid out before their shape is known. */
     fillWidth: Boolean = false,
 ) {
     val context = LocalContext.current
-    // The width a full-width page decodes for, which its prefetch uses too (ViewerFrameEffects); other pages size from their slot.
     val pageWidthPx = if (fillWidth) LocalWindowInfo.current.containerSize.width else null
     val generation = controls.loadGeneration
     val candidates = remember(post, media, generation) { viewerMediaDeliveryPlan(post, media).candidates }
-    // Readiness belongs to one media: a lazily resolved gallery swaps its cover for page one in place.
     val state = remember(key, generation, candidates) { ViewerImageState() }
-    // Outlives media swaps so the slot keeps its last painted image until the next one paints.
     val painted = remember(key) { mutableStateOf<MemoryCache.Key?>(null) }
     val candidate = candidates.getOrNull(state.index)
     val location = candidate?.location
@@ -167,6 +157,5 @@ private fun ViewerImageUpgrade(
     }
 }
 
-/** A full-width page's request when [pageWidthPx] is given, or one Coil sizes from the slot it is drawn in. */
 private fun viewerRendererRequest(context: Context, location: String, source: SourceKey, pageWidthPx: Int?) =
     pageWidthPx?.let { buildViewerPageRequest(context, location, source, it) } ?: buildViewerImageRequest(context, location, source)

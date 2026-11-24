@@ -15,18 +15,14 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-/** The screen's latest navigation facts; rebuilt each composition and read when a gesture needs them. */
 internal class ViewerSwipeContext(
     val postPager: PagerState,
     val selection: ViewerHorizontalSwipeTarget,
     val mediaPager: (postIndex: Int) -> PagerState?,
     val postIdAt: (postIndex: Int) -> PostId?,
     val postIndexOf: (PostId) -> Int,
-    /** The destination one step from [origin], or null at an end. */
     val target: (origin: ViewerHorizontalSwipeTarget, ViewerHorizontalSwipeDirection) -> ViewerHorizontalSwipeTarget?,
-    /** -1 when the post at this index lays its pages out in reverse. */
     val swipeSign: (postIndex: Int) -> Float,
-    /** Tells a destination post which media page to show before it slides in. */
     val prepareDestination: (ViewerHorizontalSwipeTarget) -> Unit,
     val commit: (PostId, mediaIndex: Int) -> Unit,
     val onInteraction: () -> Unit,
@@ -34,12 +30,6 @@ internal class ViewerSwipeContext(
     val flingVelocity: Float,
 )
 
-/**
- * Drives the Viewer's post and media pagers from one finger. Selection commits after the settle,
- * or immediately when a new press catches the settle, so a fast flick continues from wherever the
- * pages are instead of being dropped. All displacement is signed like the pager: negative moves
- * towards Next, whichever way the layout runs.
- */
 internal class ViewerSwipeController(
     private val scope: CoroutineScope,
     contextState: State<ViewerSwipeContext>,
@@ -52,10 +42,8 @@ internal class ViewerSwipeController(
         private set
     var settling by mutableStateOf(false)
         private set
-    /** The page worth preparing because it is about to appear. */
     var loadTarget by mutableStateOf<ViewerHorizontalSwipeTarget?>(null)
         private set
-    /** Visual stretch applied past the last page, in pixels. */
     var edgeOffset by mutableFloatStateOf(0f)
         private set
 
@@ -64,7 +52,6 @@ internal class ViewerSwipeController(
     private var recoilJob: Job? = null
     private var baseline = 0f
     private var limitReported = false
-    /** A committed selection that screen state has not delivered yet. */
     private var pendingOrigin: Origin? = null
 
     private fun origin(): ViewerHorizontalSwipeTarget {
@@ -76,7 +63,6 @@ internal class ViewerSwipeController(
         return if (index < 0) current.selection else origin
     }
 
-    /** A finger landed: catch a running settle so the gesture continues from the current position. */
     fun press() {
         val caught = settle
         limitReported = false
@@ -137,15 +123,12 @@ internal class ViewerSwipeController(
         settleTo(target ?: origin, -velocity, commits = target != null)
     }
 
-    /** The gesture ended without a swipe decision, so a caught or dragged page returns to rest. */
     fun cancel() {
         if (dragging) settleTo(origin(), 0f, commits = false)
     }
 
-    /** Slides to a post chosen elsewhere, such as a thumbnail. */
     fun navigateTo(target: ViewerHorizontalSwipeTarget) = settleTo(target, 0f, commits = true)
 
-    /** Forgets everything when the Viewer session is replaced. */
     fun reset() {
         settleJob?.cancel()
         recoilJob?.cancel()

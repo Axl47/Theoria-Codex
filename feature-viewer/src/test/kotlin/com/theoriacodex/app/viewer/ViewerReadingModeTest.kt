@@ -50,7 +50,6 @@ class ViewerReadingModeTest {
         assertEquals(0, config.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2), series))
         assertEquals(2, config.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2), series, back = true))
         assertEquals(1, config.entryMediaIndex(page(pages).copy(selectedMediaIndex = 1), series))
-        // A chapter whose pages have not arrived is still on its way to the page it resumes at.
         assertEquals(2, config.entryMediaIndex(page(listOf(image)).copy(pendingMediaIndex = 2), series))
         assertEquals(2, config.entryMediaIndex(page(pages).copy(selectedMediaIndex = 2), null))
     }

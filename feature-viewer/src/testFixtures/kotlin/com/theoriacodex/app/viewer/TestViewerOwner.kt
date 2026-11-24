@@ -8,7 +8,6 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.model.ViewerPlaybackMode
 import kotlinx.coroutines.CoroutineScope
 
-/** A Viewer owner for tests: it resolves no post, warms no media and plays in a loop unless a test passes its own. */
 fun testViewerOwner(
     savedStateHandle: SavedStateHandle = SavedStateHandle(),
     postResolver: ViewerPostResolver = ViewerPostResolver { _, _ -> null },

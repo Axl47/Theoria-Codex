@@ -24,10 +24,6 @@ internal data class ViewerLevelFeedback(
     val available: Boolean = true,
 )
 
-/**
- * Levels set in the fullscreen Viewer. [App] lives as long as the app process, so every Viewer opened
- * in the same app session starts where the last one left off.
- */
 internal class ViewerSessionLevels {
     var brightness: Float? = null
     var volume: Int? = null
@@ -37,11 +33,6 @@ internal class ViewerSessionLevels {
     }
 }
 
-/**
- * Owns real display/media levels while the Viewer is fullscreen, independently of player lifetimes.
- * Entering applies this app session's Viewer levels. Leaving restores the display brightness; the
- * media volume stays where the user put it, as the system volume always does.
- */
 internal class ViewerLevelControls(
     context: Context,
     private val window: Window?,
@@ -70,7 +61,6 @@ internal class ViewerLevelControls(
         }
     }
 
-    /** Puts the media volume back where the Viewer last left it; only video playback should touch it. */
     fun restoreVolume() {
         if (!enabled) return
         session.volume?.let { remembered ->
@@ -91,7 +81,6 @@ internal class ViewerLevelControls(
         }.onFailure { unavailable(control) }
     }
 
-    /** Incremental deltas preserve small volume movements and reverse immediately at either limit. */
     fun drag(delta: Float) {
         val current = gesture ?: return
         val fraction = (current.fraction + delta).coerceIn(0f, 1f)
@@ -110,7 +99,6 @@ internal class ViewerLevelControls(
                     val target = (min + fraction * (max - min)).roundToInt().coerceIn(min, max)
                     if (target != audio.getStreamVolume(AudioManager.STREAM_MUSIC)) {
                         audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-                        // Respect safe-volume caps and device policies instead of displaying a fictitious level.
                         val actual = readVolume()
                         if (actual.label != target.toString()) current.fraction = actual.fraction
                         session.volume = currentVolume()

@@ -31,11 +31,6 @@ import com.theoriacodex.domain.series.languageName
 
 internal const val EXTENSIONS_TITLE = "Extensions"
 
-/**
- * Every extension on the device with its switch, the updates the repos offer, and the page of one extension: its
- * languages and its own settings. An extension runs only once it is switched on here, or installed from a repo here.
- * The user's repos and what they offer are pages of their own.
- */
 @Composable
 fun ExtensionsScreen(viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -62,7 +57,6 @@ private fun ExtensionsList(state: ExtensionsState, viewModel: ExtensionsViewMode
         UpdatesGroup(state, viewModel)
         when {
             extensions == null -> LoadingState()
-            // With no repo yet, the empty page offers the first step; once one exists, Get extensions is the row below.
             extensions.isEmpty() -> if (state.repos?.isEmpty() == true) {
                 EmptyState("No extensions installed", actionLabel = ADD_REPO_LABEL) {
                     viewModel.openSubpage(ExtensionsSubpage.REPOS)
@@ -72,7 +66,6 @@ private fun ExtensionsList(state: ExtensionsState, viewModel: ExtensionsViewMode
                 EmptyState("No extensions installed")
             }
             else -> {
-                // With extensions of both kinds installed, each kind is a group headed by its name.
                 val kinds = extensions.groupBy(InstalledExtension::kind).toSortedMap()
                 kinds.forEach { (kind, group) ->
                     ExtensionGroup(kind.label.takeIf { kinds.size > 1 }, group, viewModel::open, viewModel::ask) { viewModel.setOn(it, false) }
@@ -113,8 +106,6 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
         summaryIsError = extension.problem != null,
         onClick = if (extension.hasPage) ({ onOpen(extension.id) }) else null,
         trailing = {
-            // The toggle is this box, not the Switch, so it carries the extension's name instead of being a bare switch.
-            // One with no signing certificate can never be on; one that is on can always be turned off.
             val enabled = extension.signer != null
             Box(
                 Modifier
@@ -128,7 +119,6 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
     )
 }
 
-/** The one place a mistake is costly: what turning an extension on lets it do, and who signed it. */
 @Composable
 private fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     ConfirmDialog(
@@ -152,8 +142,6 @@ private fun ExtensionPage(extension: InstalledExtension, settings: List<Extensio
             )
         }
         settings.forEach { source ->
-            // Settings come before the languages, which can run to dozens of rows. Each language is a source with
-            // settings of its own, so with several on, each group says whose it is.
             SettingsGroup(if (settings.size > 1) "${source.sourceName} · ${languageName(source.language)}" else "Settings") {
                 ExtensionSettingRows(source.settings) { setting -> viewModel.change(extension.id, source.sourceId, setting) }
             }
@@ -169,13 +157,8 @@ private fun ExtensionPage(extension: InstalledExtension, settings: List<Extensio
     }
 }
 
-/**
- * Whether tapping the row leads anywhere: an extension that is on and loaded has languages and settings to show, and
- * one this app installed can be removed there.
- */
 private val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty() || removable
 
-/** Its version, then why it offers nothing or, once on, the languages it offers. Who signed it is in the question asked before it is turned on. */
 internal fun extensionSummary(extension: InstalledExtension): String = when {
     extension.problem != null -> listOf(extension.versionName, extension.problem).joinToString(SEPARATOR)
     !extension.on -> extension.versionName

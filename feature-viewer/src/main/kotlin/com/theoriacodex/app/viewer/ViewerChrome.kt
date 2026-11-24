@@ -65,7 +65,6 @@ internal fun closestViewerPlaybackRate(rate: Float): ViewerPlaybackRate {
     return ViewerPlaybackRate.entries.minBy { option -> abs(option.speed - rate) }
 }
 
-/** The Viewer's top bar: Back, the source/title (with optional [subtitle] and [trailing] actions), and [below] (the trail row) under it. */
 @Composable
 internal fun ViewerChrome(
     source: String,
@@ -79,7 +78,6 @@ internal fun ViewerChrome(
     ViewerTopBar(source, subtitle, indexLabel, onBack, modifier, trailing, below)
 }
 
-/** Floats over the media on a scrim, unlike the solid bars of secondary screens. */
 @Composable
 private fun ViewerTopBar(
     source: String,
@@ -143,7 +141,6 @@ private val VIEWER_TOP_SCRIM_HEIGHT = 170.dp
 @Composable
 internal fun PlaybackSettingsMenu(
     playbackRateEnabled: Boolean,
-    /** The mode the choices mark; null leaves them out. */
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode?,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
     quality: com.theoriacodex.domain.model.VideoQuality,

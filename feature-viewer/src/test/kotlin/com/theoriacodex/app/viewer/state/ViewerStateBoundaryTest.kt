@@ -12,7 +12,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Boundaries and guards of [reduceViewerState]: which page or media a request lands on, and what is left alone. */
 class ViewerStateBoundaryTest {
     private val session = ViewerSessionIdentity(value = "boundary", queryHash = "query-boundary")
 

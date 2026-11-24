@@ -9,12 +9,6 @@ import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.ErrorState
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * A source's failed load, where a Series screen shows one: [message] with Retry or, while [source] needs browser
- * verification, a line saying so with the action that opens the app's browser check. Once that need clears, by a
- * check passed here or anywhere else, the load runs again by itself. Without [onRetry], when trying again cannot help,
- * [message] shows alone. [compact] is the one-line form that sits among other rows; otherwise it is the full-width one.
- */
 @Composable
 internal fun SourceLoadFailure(
     message: String,

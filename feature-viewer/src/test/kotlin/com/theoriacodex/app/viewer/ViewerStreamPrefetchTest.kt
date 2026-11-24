@@ -31,7 +31,6 @@ class ViewerStreamPrefetchTest {
             displayLocation = stream.url,
         )
 
-        // This application owns no playback infrastructure, so reaching the cache would throw.
         val result = prefetchViewerMedia(ApplicationProvider.getApplicationContext(), episode, VideoQuality.AUTO)
 
         assertEquals(ViewerPrefetchOutcome.SKIPPED, result.outcome)

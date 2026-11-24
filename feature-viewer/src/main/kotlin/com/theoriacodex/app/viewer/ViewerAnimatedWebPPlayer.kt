@@ -120,7 +120,6 @@ private fun ViewerWebPProgress(state: ViewerWebPState, controls: ViewerRendererC
     }
 }
 
-/** Playback buttons, the frame counter and a track, laid out like the other timelines; see [viewerTimelineOnOneLine]. */
 @Composable
 private fun ViewerWebPFooter(state: ViewerWebPState, controls: ViewerRendererControls, events: ViewerRendererEvents) {
     val buttons: @Composable () -> Unit = {

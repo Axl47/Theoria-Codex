@@ -20,43 +20,32 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/** Where the info sheet opens: at its top, or scrolled to the comments. */
 internal enum class InfoSheetTarget { Top, Comments }
 
-/** State the screen's parts share for as long as the Viewer stays composed. */
 @Stable
 internal class ViewerScreenState {
     val imageSession = ViewerImageSession()
-    /** The selected video's tracks, for the episode controls. */
     val activeTracks = ViewerActiveTracks()
     val streamAttempts = ViewerStreamAttempts()
     val mediaPagers = mutableMapOf<PostId, PagerState>()
-    /** Galleries shown as one vertical column, by post; observed, so the screen's gestures follow a new one at once. */
     val verticalGalleries = mutableStateMapOf<PostId, ViewerVerticalGalleryState>()
-    /** Each vertical gallery's scroll and zoom, kept while its column leaves composition (the page overview replaces it). */
     val verticalGalleryPositions = mutableMapOf<PostId, ViewerVerticalGalleryState>()
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var touchSerial by mutableIntStateOf(0)
     val playingVideos = mutableIntStateOf(0)
     var timelineInteractionActive by mutableStateOf(false)
-    /** Set while a hold-scrub has shown chrome that was hidden, so the scrub's end can hide it again. */
     var chromeShownForScrub = false
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
-    /** A Back pressed while this Viewer was already leaving, run once it has left (see [ViewerHeldBackHandler]). */
     var heldBack = false
 
-    /** The dock's Save fan; lives here so the auto-hide can see when the Save button holds the chrome. */
     val saveFan = ViewerSaveFanState()
 
-    /** This level's trail forks; closed when the screen leaves. */
     val trailForks = ViewerTrailForks()
 
-    /** Read when the info sheet opens; the sheet resets it on close, so any other way of opening it starts at the top. */
     var infoSheetTarget by mutableStateOf(InfoSheetTarget.Top)
 
-    /** Whether tapping or pressing Back while locked is currently showing the Unlock icon button. */
     var unlockPeekVisible by mutableStateOf(false)
     var unlockPeekSerial by mutableIntStateOf(0)
 
@@ -70,7 +59,6 @@ internal class ViewerScreenState {
     }
 }
 
-/** Restarts an episode from the beginning and closes any open panel. Shared by More -> Start over and the info sheet. */
 internal fun restartViewerEpisode(post: Post, controls: ViewerControls, onAction: (ViewerAction) -> Unit) {
     controls.jumpToMedia(post.id, 0)
     onAction(ViewerAction.RestartPlayback)
@@ -78,11 +66,6 @@ internal fun restartViewerEpisode(post: Post, controls: ViewerControls, onAction
     controls.setPanelOpen(ViewerPanel.ACTIONS_MENU, false)
 }
 
-/**
- * What the user can toggle, judged against the frame these values came from. Use
- * [rememberViewerControls], which replaces the instance when any of them change; an instance held
- * across that change would toggle chrome or dismiss against a state that has passed.
- */
 internal class ViewerControls(
     private val onAction: (ViewerAction) -> Unit,
     private val screen: ViewerScreenState,
@@ -93,16 +76,13 @@ internal class ViewerControls(
 ) {
     fun setInfoSheetVisible(visible: Boolean) = setPanelOpen(ViewerPanel.INFO, visible)
 
-    /** Opens the info sheet scrolled to the post's comments. */
     fun openInfoSheetAtComments() {
         screen.infoSheetTarget = InfoSheetTarget.Comments
         setInfoSheetVisible(true)
     }
 
-    /** What the open info sheet was asked to show; consumed once as the sheet opens. */
     val infoSheetTarget: InfoSheetTarget get() = screen.infoSheetTarget
 
-    /** The level's trail forks, for the info sheet's tags. */
     val trailForks: ViewerTrailForks get() = screen.trailForks
 
     fun resetInfoSheetTarget() {
@@ -117,7 +97,6 @@ internal class ViewerControls(
 
     fun setPlaybackSettingsExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.PLAYBACK_SETTINGS, expanded)
 
-    /** Opening a panel closes the one that was open. */
     fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
         onAction(if (open) ViewerAction.ShowPanel(panel) else ViewerAction.HidePanel(panel))
     }
@@ -135,18 +114,15 @@ internal class ViewerControls(
         if (!chromeVisible && !opening && !returning) onAction(ViewerAction.ToggleChrome)
     }
 
-    /** For seeking, zooming, and navigation: keeps open controls alive but never opens them; only a tap does. */
     fun markPassiveInteraction() {
         screen.interactionSerial += 1
     }
 
-    /** A hold-scrub needs the timeline on screen; chrome it had to show is hidden again by [endScrub]. */
     fun beginScrub() {
         screen.chromeShownForScrub = !chromeVisible && !opening && !returning
         markInteraction()
     }
 
-    /** Hides by value rather than toggling: begin and end can share one frame's controls, whose visibility is stale. */
     fun endScrub() {
         if (screen.chromeShownForScrub) onAction(ViewerAction.SetChromeVisible(false))
         screen.chromeShownForScrub = false
@@ -157,7 +133,6 @@ internal class ViewerControls(
         screen.interactionSerial += 1
     }
 
-    /** Moves the open post to one of its pages at once, for controls that pick a page directly. */
     fun jumpToMedia(postId: PostId, mediaIndex: Int) {
         onAction(ViewerAction.SelectMedia(mediaIndex))
         screen.pendingMediaJumpByPost[postId] = mediaIndex
@@ -169,7 +144,6 @@ internal class ViewerControls(
         if (isActive) markInteraction()
     }
 
-    /** Back from the top bar or the system: it leaves an open page overview before it closes the Viewer. */
     fun back() {
         if (!overviewVisible) return requestDismiss()
         setOverviewVisible(false)
@@ -195,7 +169,6 @@ internal fun rememberViewerControls(
     ViewerControls(onAction, screen, overviewVisible, chromeVisible, opening, returning)
 }
 
-/** The selected post's media, and what that media allows. */
 internal class ViewerSelection(
     val post: Post,
     val mediaItems: List<ImageRef>,
@@ -214,7 +187,6 @@ internal class ViewerSelection(
 @Composable
 internal fun rememberViewerSelection(uiState: ViewerUiState, page: ViewerPageState, canPlayUgoira: Boolean): ViewerSelection {
     val post = page.post
-    // The page's media and its kinds follow its post, so a readiness change rebuilds neither list.
     val mediaItems = remember(post) { page.media.map(ViewerMediaState::ref) }
     val mediaIndex = uiState.currentPage?.selectedMediaIndex?.coerceIn(0, mediaItems.lastIndex) ?: 0
     val overviewItems = remember(post) { viewerMediaOverviewItems(page) }
@@ -223,7 +195,6 @@ internal fun rememberViewerSelection(uiState: ViewerUiState, page: ViewerPageSta
     }
 }
 
-/** One composition's view of the screen, kept as one instance while none of these values change. */
 internal class ViewerFrame(
     val uiState: ViewerUiState,
     val navigation: ViewerPostNavigation,
@@ -239,24 +210,13 @@ internal class ViewerFrame(
 ) {
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 
-    /** Whether the current session is watching long-form episodes. */
     val watching = uiState.series is ViewerSeries.Watching
 
-    /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
     val locked = uiState.controls.locked && watching && !inPictureInPicture
 
     val reading = uiState.series is ViewerSeries.Reading
 
-    /**
-     * Whether animated and video pages drop their portrait top gap: in landscape and in PiP, where it would frame the
-     * media in black bars, and while reading a chapter. Still images always fill the page; see [ViewerMediaLayout].
-     */
     val mediaEdgeToEdge = isLandscape || inPictureInPicture || reading
 
-    /**
-     * Whether the selected video may take the system's media controls and picture-in-picture: not while the Viewer
-     * opens (connecting them costs frames), nor once its session ended, while a closing Viewer's paused pages stay
-     * for the return transition (a system Play would start the closed Viewer's player).
-     */
     val systemControlsReady = !opening && uiState.session != null
 }

@@ -13,7 +13,6 @@ import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 
-/** Tracks service changes while Viewer is open, without making playback depend on accessibility. */
 @Composable
 internal fun rememberViewerTouchExploration(): Boolean {
     val context = LocalContext.current

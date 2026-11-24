@@ -23,7 +23,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** How the Viewer owner schedules neighbor prefetch: waiting, decoding, skipping and concurrency. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelPrefetchTest {
     @Test
@@ -46,7 +45,6 @@ class ViewerViewModelPrefetchTest {
         owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), keys[0], 0L))
         runCurrent()
         assertEquals(listOf(keys[1]), started)
-        // Later pages do not wait for the page on screen.
         owner.onAction(ViewerAction.SelectMedia(2))
         owner.onAction(queue(keys[3]))
         runCurrent()
@@ -80,7 +78,6 @@ class ViewerViewModelPrefetchTest {
         owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
         owner.onAction(queue(keys[3], distance = 3))
         runCurrent()
-        // Downloaded while far away, it is done until it comes close enough to decode.
         owner.onAction(queue(keys[3], distance = 3))
         runCurrent()
         assertEquals(listOf(keys[3]), started)

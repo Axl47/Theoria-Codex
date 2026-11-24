@@ -71,14 +71,12 @@ class SeriesTabScreenTest {
         compose.onNodeWithText(languageName("en")).assertIsDisplayed()
         compose.onNodeWithText(languageName("es-419")).assertIsDisplayed()
 
-        // Tapping a source header opens its dedicated search with the query and the listing's controls.
         compose.onNodeWithText(languageName("en")).performClick()
         compose.waitForIdle()
 
         compose.onNodeWithTag(LISTING_CONTROLS_TAG).assertIsDisplayed()
         compose.onNodeWithText("reincarnation").assertIsDisplayed()
 
-        // Navigating back returns to the global search results.
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitForIdle()
         compose.onNodeWithText(languageName("es-419")).assertIsDisplayed()
@@ -141,7 +139,6 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         assertEquals(LibraryShow.NOT_STARTED, viewModel.content.value.library.show)
         assertEquals(listOf("Beta Tale"), viewModel.content.value.following?.map { it.series.title })
-        // The filter's dot is heard as well as seen.
         compose.onNodeWithContentDescription(SORT_AND_FILTER).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Filtered"))
     }
 
@@ -152,7 +149,6 @@ class SeriesTabScreenTest {
         compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
 
-        // Nothing followed: the tab opens on Browse.
         compose.onNodeWithTag(seriesViewTag(SeriesView.BROWSE)).assertIsSelected()
         compose.onNodeWithTag(BROWSED_SOURCE_TAG).assert(hasText("Ink Harbor", substring = true))
         compose.onNodeWithText("Latest").performClick()

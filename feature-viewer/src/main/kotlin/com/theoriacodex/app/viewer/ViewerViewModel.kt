@@ -49,30 +49,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** Resolves a post without exposing a provider, repository, or Android handle to Viewer state. */
 fun interface ViewerPostResolver {
     suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post?
     fun requiresResolution(post: Post): Boolean = false
 }
 
-/** Performs bounded media prefetch outside immutable state and platform playback ownership. */
-/** Warms one media item as [request] asks: how far it sits from the one on screen, and how a page decodes. */
 fun interface ViewerMediaPrefetcher {
     suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState, request: ViewerPrefetchRequest): ViewerPrefetchResult
 }
 
-/**
- * Route-scoped Viewer owner.
- *
- * Posts remain process-local. Saved state contains only the compact identity and current selection
- * needed to ask the shell/repository layer to reconstruct the session after process recreation.
- * ExoPlayer, animated decoders, launchers, and other Android handles remain in renderers/holders.
- */
 class ViewerViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val postResolver: ViewerPostResolver,
     private val mediaPrefetcher: ViewerMediaPrefetcher,
-    /** The app's playback setting, which every launched or restored session starts in. */
     private val playbackModeProvider: () -> ViewerPlaybackMode,
     scopeOverride: CoroutineScope? = null,
     commentsLoader: CommentsLoading = UnsupportedCommentsLoader,
@@ -85,31 +74,19 @@ class ViewerViewModel(
     private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
     private val prefetchLedger = ViewerPrefetchLedger()
-    /** Whether this session has shown its first media; speculative loads wait for it (see [awaitFirstMediaShown]). */
     private val firstMediaShown = MutableStateFlow(false)
-    /** The page the last lookahead saw as current; a different one means the user arrived on a page. */
     private var lastCurrentPostId: PostId? = null
 
     private val mutableState = MutableStateFlow(restoredViewerState(savedStateHandle))
     override val state: StateFlow<ViewerUiState> = mutableState.asStateFlow()
     override val effects: Flow<ViewerEffect.Route> = effectChannel.receiveAsFlow()
     private val mutableSession = MutableStateFlow<ViewerSession?>(null)
-    /**
-     * The session progress reports belong to: the current one, or after [clearSession] the one that just closed, whose
-     * retained pages still report as their players let go. The next [replaceSession] replaces it.
-     */
     @Volatile private var reportingSession: ViewerSession? = null
-    /** The watched episode that passed its watched point ([noteWatchedPoint]); its next one may resolve. */
     @Volatile private var watchedThrough: PostId? = null
     val session: StateFlow<ViewerSession?> = mutableSession.asStateFlow()
 
-    /**
-     * Each shown post's comments; the current and adjacent posts' first pages load once the media is up
-     * (see [awaitFirstMediaShown]).
-     */
     val comments = PostCommentsController(commentsLoader, workScope, beforeFirstFetch = ::awaitFirstMediaShown)
 
-    /** Compact identity awaiting a process-restoration payload, or null for a live/empty session. */
     val pendingRestoration: ViewerSessionIdentity?
         get() = state.value.takeIf { current -> current.pages.isEmpty() }?.session
 
@@ -156,28 +133,17 @@ class ViewerViewModel(
         }
     }
 
-    /**
-     * While a series is watched only the episode on screen resolves, and the next one once this one passed its watched
-     * point ([watchedThrough]): an episode's lookup scrapes third-party sites for links that soon expire, so a drag
-     * toward a neighbour (which asks for it as the swipe's target) must not start one.
-     */
     private fun mayResolve(postId: PostId): Boolean {
         val current = mutableState.value
         return current.series !is ViewerSeries.Watching || postId == current.currentPage?.post?.id || postId == current.nextEpisodeId()
     }
 
-    /** The episode after the current one, while the current one is past its watched point; null otherwise. */
     private fun ViewerUiState.nextEpisodeId(): PostId? {
         if (watchedThrough == null || currentPage?.post?.id != watchedThrough) return null
         val navigation = viewerPostNavigation(this)
         return navigation.pages.getOrNull(navigation.currentIndex + 1)?.post?.id
     }
 
-    /**
-     * Notes the watched episode [post] at [progress]: once the current one passes [ANIME_FINISHED_PERCENT], the next
-     * one is looked up, so going on to it does not wait on a lookup. Its links age meanwhile; an episode whose links are
-     * old asks for fresh ones when they fail ([ViewerVideoRecovery]).
-     */
     private fun noteWatchedPoint(post: Post, progress: ViewerPlaybackProgress) {
         val current = state.value
         if (current.series !is ViewerSeries.Watching || current.currentPage?.post?.id != post.id || watchedThrough == post.id) return
@@ -186,18 +152,15 @@ class ViewerViewModel(
         reconcileResolutionLookahead()
     }
 
-    /** The app's playback setting, except while a series is watched: an episode goes on to the next one, never loops. */
     private fun startingPlaybackMode(series: ViewerSeries?): ViewerPlaybackMode =
         if (series is ViewerSeries.Watching) ViewerPlaybackMode.NEXT else playbackModeProvider()
 
-    /** The current post's first comment page, then its neighbours', so a swipe lands on a known count. */
     private fun showComments() {
         val current = state.value
         current.currentPage?.post?.let(comments::show)
         viewerPostNavigation(current).neighbours.forEach { page -> comments.show(page.post) }
     }
 
-    /** A replacement cancels the old session's work; a new session also waits again for its first media. */
     private fun resetSessionWork(action: ViewerAction.ReplaceSession) {
         if (action.session != mutableState.value.session) {
             recordedVisiblePosts.clear()
@@ -209,15 +172,10 @@ class ViewerViewModel(
         cancelSessionJobs()
     }
 
-    /** The current media became ready, or failed: speculative loads may start (see [awaitFirstMediaShown]). */
     private fun noteFirstMediaShown(state: ViewerUiState) {
         if (state.currentMedia?.ready == true || state.mediaError != null) firstMediaShown.value = true
     }
 
-    /**
-     * Bridges the existing process-local shell handoff into the route contract. A cold restoration arrives here too,
-     * already starting on its saved post and media.
-     */
     fun replaceSession(session: ViewerSession) {
         val isNewLaunch = state.value.session != session.toViewerSessionIdentity()
         mutableSession.value = session
@@ -230,11 +188,6 @@ class ViewerViewModel(
         }
     }
 
-    /**
-     * Appends to [session] the [posts] its pages lacked when they were [basis]. It builds pages for the new posts
-     * only and keeps the session's work, selection and playback, so a feed page costs what it adds. Ignored once
-     * another session replaced [session]; posts the pages gained since [basis] are not repeated.
-     */
     fun appendSessionPosts(session: ViewerSession, basis: List<ViewerPageState>, posts: List<Post>) {
         val current = mutableSession.value ?: return
         if (current.sessionId != session.sessionId) return
@@ -251,7 +204,6 @@ class ViewerViewModel(
         )
     }
 
-    /** Enters the related shelf's recommendation branch from [seedId], keeping every page the session already has. */
     fun includeRelatedPosts(seedId: PostId, posts: List<Post>) {
         val current = mutableSession.value ?: return
         onAction(
@@ -267,7 +219,6 @@ class ViewerViewModel(
 
     private fun requiresResolution(post: Post): Boolean = postResolver.requiresResolution(post)
 
-    /** Replaces a page's post with its [resolved] form, keeping what only its listing knew; see [ViewerAction.ResolutionCompleted.recovered]. */
     fun applyResolvedPost(resolved: Post, recovered: Boolean = false) {
         if (mutableSession.value == null) return
         val listed = state.value.pages.firstOrNull { page -> page.post.id == resolved.id }?.post ?: return
@@ -275,7 +226,6 @@ class ViewerViewModel(
         synchronized(lock) {
             sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
                 .forEach { key -> sessionJobs.remove(key)?.cancel() }
-            // The resolved post's media may differ, so what was warmed for the listed one no longer counts.
             prefetchLedger.forget(post.id)
         }
         state.value.session?.let { identity ->
@@ -283,7 +233,6 @@ class ViewerViewModel(
         }
     }
 
-    /** Retains one-shot visibility admission and its write across renderer/Activity reattachment. */
     fun recordVisiblePost(
         identity: ViewerSessionIdentity,
         post: Post,
@@ -298,12 +247,10 @@ class ViewerViewModel(
             active
         }
         workScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            // A partial best-effort write must not become a duplicate lifetime event on reattachment.
             runCatchingPreservingCancellation { record(post, viewedMediaNumber, current) }
         }
     }
 
-    /** Media-position writes belong to the retained route, not an Activity composition. */
     fun recordVisibleMedia(
         post: Post,
         viewedMediaNumber: Int,
@@ -316,10 +263,6 @@ class ViewerViewModel(
         }
     }
 
-    /**
-     * An episode's playback position, written by the retained route like [recordVisibleMedia]. Unlike it, a post that
-     * is no longer the current one still reports: its player's last report comes as it is swiped away.
-     */
     fun recordPlaybackProgress(
         post: Post,
         progress: ViewerPlaybackProgress,
@@ -333,7 +276,6 @@ class ViewerViewModel(
         }
     }
 
-    /** Exit may retain paused render pages until navigation disposes the outgoing destination. */
     fun clearSession(retainPresentation: Boolean = false) {
         synchronized(lock) {
             cancelSessionJobs()
@@ -345,12 +287,9 @@ class ViewerViewModel(
             mutableSession.value = null
             val current = mutableState.value
             mutableState.value = if (retainPresentation) ViewerUiState(
-                // The closing player still reports where the episode stopped, which needs the series' kind.
                 series = current.series,
                 pages = current.pages,
                 currentPageIndex = current.currentPageIndex,
-                // The closing player only pauses: its controls otherwise stay as they were, since it reads any change
-                // as a command (a stream label dropped rebinds it; a replay count reset seeks it to the start).
                 controls = current.controls.copy(
                     chromeVisible = false,
                     panel = null,
@@ -370,12 +309,6 @@ class ViewerViewModel(
         }
     }
 
-    /**
-     * Current-page work wins; only the immediately adjacent posts (next first, then previous) resolve speculatively,
-     * once the session's first media is up ([awaitResolutionTurn]), except while a series is watched: an episode's
-     * lookup scrapes third-party sites for links that soon expire, so only the episode on screen resolves, and the
-     * next one once it passed its watched point ([noteWatchedPoint]).
-     */
     private fun reconcileResolutionLookahead() {
         val current = state.value
         val session = current.session ?: return
@@ -397,10 +330,6 @@ class ViewerViewModel(
             .forEach { onAction(ViewerAction.RequestPageResolution(it.post.id)) }
     }
 
-    /**
-     * Resolves the current page once, as soon as it becomes current. A recoverable failure retries only when the user
-     * returns to the page, or through Retry; nothing retries it on its own.
-     */
     private fun requestCurrentPageResolution(current: ViewerUiState) {
         val page = current.currentPage ?: return
         val postId = page.post.id
@@ -431,7 +360,6 @@ class ViewerViewModel(
                         )
                     )
                 } else if (resolved.id != effect.postId) {
-                    // A provider that ignores the requested id would otherwise leave the page requesting forever.
                     onAction(
                         ViewerAction.ResolutionFailed(
                             session = effect.session,
@@ -461,7 +389,6 @@ class ViewerViewModel(
         request: ViewerPrefetchRequest,
         media: ViewerMediaState,
     ) {
-        // Decoding an image that is already downloaded reads the disk, so it never holds a download slot.
         val downloaded = prefetchLedger.isDownloaded(request.key)
         launchSessionJob(ViewerWorkKey.Prefetch(request.key)) {
             awaitFirstMediaShown()
@@ -492,30 +419,16 @@ class ViewerViewModel(
         }
     }
 
-    /**
-     * Speculative loads wait until the session's first media is on screen, so opening the Viewer never splits
-     * the link between what was tapped (a gallery's first page, a video's first frame) and its neighbours. A
-     * failed or slow first media releases them after [VIEWER_PREFETCH_READY_WAIT_MS]. Later pages do not wait:
-     * someone skimming faster than pages load is better served by neighbours loading ahead.
-     */
     private suspend fun awaitFirstMediaShown() {
         withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) { firstMediaShown.first { shown -> shown } }
     }
 
-    /**
-     * A neighbour's lookup waits as a prefetch does ([awaitFirstMediaShown]), so it never competes with the page
-     * opened; it starts at once if its post is, or becomes, the current page.
-     */
     private suspend fun awaitResolutionTurn(postId: PostId) {
         fun ready(shown: Boolean, current: ViewerUiState) = shown || current.currentPage?.post?.id == postId
         if (ready(firstMediaShown.value, mutableState.value)) return
         withTimeoutOrNull(VIEWER_PREFETCH_READY_WAIT_MS) { combine(firstMediaShown, mutableState, ::ready).first { it } }
     }
 
-    /**
-     * Warms the [requests] this session's media still needs, most wanted first, and cancels prefetch work no longer
-     * requested. Runs on the main thread for every selection, so it looks up only the few requested keys.
-     */
     private fun queuePrefetch(requests: List<ViewerPrefetchRequest>) {
         synchronized(lock) {
             val current = state.value
@@ -629,7 +542,6 @@ class ViewerViewModel(
     }
 }
 
-/** What this session's prefetch has finished, kept out of UI state so prefetch progress recomposes nothing. */
 private class ViewerPrefetchLedger {
     private val downloaded = mutableSetOf<ViewerMediaKey>()
     private val decoded = mutableSetOf<ViewerMediaKey>()
@@ -637,7 +549,6 @@ private class ViewerPrefetchLedger {
 
     fun isDownloaded(key: ViewerMediaKey) = key in downloaded
 
-    /** Skipped and failed media stay done; a downloaded image is done unless it now wants decoding and is not decoded. */
     fun isDone(request: ViewerPrefetchRequest) = request.key in settled ||
         (request.key in downloaded && !(request.decode && request.key !in decoded))
 
@@ -658,10 +569,6 @@ private class ViewerPrefetchLedger {
     }
 }
 
-/**
- * How long a post lookup may take, the first one or one asked again to recover expired media. An episode is looked up
- * by its extension, which can take half a minute to find its streams; a chapter keeps a post's limit.
- */
 internal fun viewerResolutionTimeoutMs(series: ViewerSeries?): Long =
     if (series is ViewerSeries.Watching) VIEWER_SERIES_RESOLUTION_TIMEOUT_MS else VIEWER_RESOLUTION_TIMEOUT_MS
 
@@ -700,7 +607,6 @@ internal fun ViewerSession.toReplaceViewerSessionAction(
     )
 }
 
-/** Which of [candidates] must resolve before the Viewer can show their media. */
 private fun ViewerSession.resolutionRequiredPostIds(
     candidates: List<Post>,
     requiresResolution: (Post) -> Boolean,

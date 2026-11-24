@@ -54,7 +54,6 @@ class ViewerUgoiraReadyTest {
         assertTrue(ready > whilePreloading)
     }
 
-    // Paused: a playing, looping animation keeps Compose from ever going idle, so setContent could time out.
     private fun showUgoira(active: State<Boolean>, onReady: () -> Unit) {
         val media = ImageRef(url = null, localPath = null, mime = PIXIV_UGOIRA_MIME)
         val post = testPost(sourcePostId = "77").copy(full = media, media = listOf(media))

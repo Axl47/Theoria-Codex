@@ -30,15 +30,12 @@ import kotlin.math.abs
 
 internal data class ViewerMediaGestureActions(
     val seek: (Long) -> Unit,
-    /** Zooms around a tap in the gesture area's coordinates, or the centre when there is none. */
     val zoom: (Offset?) -> Unit,
     val toggleControls: () -> Unit,
     val showInfo: () -> Unit,
-    /** When present, a long press holds this until release instead of opening information. */
     val hold: ((Boolean) -> Unit)? = null,
 )
 
-/** Pointer gestures and assistive actions dispatch to the same renderer commands. */
 @Composable
 internal fun Modifier.viewerMediaGestures(
     mediaKey: ViewerMediaKey,
@@ -70,10 +67,8 @@ internal fun Modifier.viewerMediaGestures(
     }
 }
 
-/** The Viewer's one spatial map: double-tap and vertical swipes both read these columns. */
 internal enum class ViewerGestureColumn { Leading, Center, Trailing }
 
-/** A wide area keeps its outer columns to a thumb's reach, so most of a landscape screen stays centre. */
 internal fun viewerGestureColumn(x: Float, size: IntSize): ViewerGestureColumn {
     val ratio = if (size.width > 0) x / size.width.toFloat() else 0.5f
     val outer = if (size.width > size.height) 0.22f else 0.35f
@@ -84,7 +79,6 @@ internal fun viewerGestureColumn(x: Float, size: IntSize): ViewerGestureColumn {
     }
 }
 
-/** Only seekable media reserves the outer columns; zoomed media always double-taps back to fit. */
 private fun ViewerMediaGestureActions.doubleTap(offset: Offset, size: IntSize, seekable: Boolean, zoomed: Boolean) {
     if (zoomed || !seekable) return zoom(offset)
     when (viewerGestureColumn(offset.x, size)) {
@@ -94,7 +88,6 @@ private fun ViewerMediaGestureActions.doubleTap(offset: Offset, size: IntSize, s
     }
 }
 
-/** TalkBack's equivalents of the media gestures, for the selected media of a horizontal page or vertical gallery. */
 internal fun mediaAccessibilityActions(
     seekable: Boolean,
     zoomed: Boolean,
@@ -114,50 +107,30 @@ internal fun mediaAccessibilityActions(
     }
 }
 
-/** What the Viewer's recognizer may do for the gesture that is starting. */
 internal data class ViewerGestureConfig(
     val enabled: Boolean,
-    /** Brightness on the leading column, for every kind of media. */
     val levels: ViewerLevelControls? = null,
-    /** Whether the trailing column adjusts volume; media without sound keeps it for closing and info. */
     val volumeAdjustable: Boolean = false,
-    /** While a hold-to-speed-up lasts, a horizontal drag scrubs the timeline instead of navigating. */
     val holdScrub: ViewerHoldScrub? = null,
-    /** Height kept free at the bottom for the timeline and post strip, which handle their own drags. */
     val reservedBottomPx: Float = 0f,
-    /** Set while the selected post is a vertical gallery, whose own list takes vertical drags. */
     val verticalScroll: ViewerVerticalScroll? = null,
 )
 
-/**
- * A vertical gallery's ends, read when a vertical drag locks: the list scrolls, except that a pull down at its top
- * closes the Viewer and a push up at its end opens info. Level adjustments are off, since every vertical drag scrolls.
- */
 internal class ViewerVerticalScroll(val atTop: () -> Boolean, val atEnd: () -> Boolean)
 
-/** Receives one-finger gestures; pager and level ownership stay with the screen. */
 internal interface ViewerGestureHandler {
     fun onPress()
     fun onHorizontalDrag(displacement: Float)
     fun onHorizontalRelease(displacement: Float, velocity: Float)
-    /** Downward pull from a column that is not adjusting a level. */
     fun onDismissDrag(x: Float, y: Float, height: Float)
     fun onDismissRelease(velocityY: Float)
     fun onInfoSwipe()
-    /** The gesture ended without a horizontal release: a tap, a vertical drag, or a second finger. */
     fun onGestureEnd()
     fun onLevelLimit()
-    /** A held press became a timeline scrub; the timeline has to be on screen to follow it. */
     fun onScrubStart()
-    /** The scrub ended, by a lift or a cancelled gesture. */
     fun onScrubEnd()
 }
 
-/**
- * The Viewer's single recognizer. It sits above the pagers so a finger keeps its gesture even when
- * the page it landed on slides away, and one direction lock keeps level adjustments, navigation,
- * taps, and pinches separate. It reads [config] per gesture, so selection changes cannot restart it.
- */
 @Composable
 internal fun Modifier.viewerGestures(config: ViewerGestureConfig, handler: ViewerGestureHandler): Modifier {
     val currentConfig by rememberUpdatedState(config)
@@ -169,7 +142,6 @@ internal fun Modifier.viewerGestures(config: ViewerGestureConfig, handler: Viewe
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val gesture = currentConfig
             if (!gesture.enabled || down.position.y > size.height - gesture.reservedBottomPx) return@awaitEachGesture
-            // A horizontal swipe from a system gesture edge is Back, which takes the touch after it starts.
             val onBackEdge = down.position.x < systemGestures.getLeft(this, layoutDirection) ||
                 down.position.x > size.width - systemGestures.getRight(this, layoutDirection)
             currentHandler.onPress()
@@ -190,13 +162,8 @@ private sealed interface ViewerGestureEnd {
     data object None : ViewerGestureEnd
 }
 
-/**
- * [Held]: the rest of the drag does nothing, because a long press already acted or the system owns the swipe.
- * [Scroll]: a vertical gallery's list owns the drag, so the recognizer leaves its events unconsumed.
- */
 private enum class ViewerGestureMode { Pending, Horizontal, Scrub, Level, Dismiss, Info, Held, Scroll }
 
-/** The level a vertical drag from [this] column adjusts, if any. */
 private fun ViewerGestureColumn.levelControl(config: ViewerGestureConfig): ViewerLevelControl? = when {
     config.levels == null -> null
     this == ViewerGestureColumn.Leading -> ViewerLevelControl.Brightness
@@ -204,15 +171,12 @@ private fun ViewerGestureColumn.levelControl(config: ViewerGestureConfig): Viewe
     else -> null
 }
 
-/** Follows one finger until it lifts and reports how the gesture ended. */
 private suspend fun AwaitPointerEventScope.readViewerGesture(
     down: PointerInputChange,
     config: ViewerGestureConfig,
     onBackEdge: Boolean,
     handler: () -> ViewerGestureHandler,
 ): ViewerGestureEnd {
-    // Frames batch touch samples; the tracker needs the historical ones too, or a flick that arrives
-    // during a busy frame reads as slow and falls back to distance.
     val tracker = VelocityTracker().apply { addPointerInputChange(down) }
     val gesture = ViewerGestureTracker(
         column = viewerGestureColumn(down.position.x, size),
@@ -229,8 +193,6 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
         while (true) {
             val change = awaitPointerEvent(PointerEventPass.Initial).changes.singleOrNull()
                 ?.takeIf { it.id == down.id } ?: return ViewerGestureEnd.None
-            // The system took the touch (the Back gesture does, mid-swipe): Compose reports a lift that
-            // arrives already consumed, which must not read as a flick to another post.
             if (!change.pressed && change.isConsumed) return ViewerGestureEnd.None
             tracker.addPointerInputChange(change)
             gesture.follow(change)
@@ -248,7 +210,6 @@ private suspend fun AwaitPointerEventScope.readViewerGesture(
     }
 }
 
-/** One gesture's direction lock and the handler calls that follow from it. */
 private class ViewerGestureTracker(
     private val column: ViewerGestureColumn,
     private val config: ViewerGestureConfig,
@@ -266,7 +227,6 @@ private class ViewerGestureTracker(
     private var y = 0f
     private var atLimit = false
     val scrubbing: Boolean get() = mode == ViewerGestureMode.Scrub
-    /** How far the finger has moved since it landed. */
     val travel: Offset get() = Offset(x, y)
 
     fun follow(change: PointerInputChange) {
@@ -289,12 +249,6 @@ private class ViewerGestureTracker(
         change.consume()
     }
 
-    /**
-     * Outer columns adjust their level; everywhere else a pull closes and a push opens info. In a vertical gallery
-     * the list scrolls instead, except at its ends ([ViewerVerticalScroll]). A finger that
-     * locks only after the long-press timeout has already sped playback up or opened info under itself
-     * (an unlocked drag stays unconsumed, so the media's long press fires), and then may only scrub.
-     */
     private fun lockedMode(pressedForMs: Long): ViewerGestureMode {
         val horizontal = abs(x) > touchSlop && abs(x) > abs(y) * 1.25f
         val vertical = abs(y) > touchSlop && abs(y) > abs(x) * 1.25f
@@ -341,14 +295,8 @@ private class ViewerGestureTracker(
 
 private val VIEWER_INFO_SWIPE_DISTANCE = 64.dp
 
-/** A gesture this short is a flick, even when the tracker saw too few of its samples to say so. */
 internal const val VIEWER_FLICK_WINDOW_MS = 150L
 
-/**
- * The release velocity for a gesture that moved [travel] in [durationMs]. When the main thread is
- * busy, Android can deliver a quick flick as little more than its down and up, and the tracker then
- * reads it as slow; within [VIEWER_FLICK_WINDOW_MS] the gesture's average speed is a floor.
- */
 internal fun viewerReleaseVelocity(tracked: Velocity, travel: Offset, durationMs: Long): Velocity {
     if (durationMs !in 1..VIEWER_FLICK_WINDOW_MS) return tracked
     val perSecond = 1000f / durationMs

@@ -18,7 +18,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** What asking the source again for an episode's expired links comes to, as the route asks through the Viewer's owner. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerMediaRecoveryTest {
     private fun episode(link: String) = ImageRef(url = null, localPath = null, mime = "video/mp4", streams = listOf(MediaStream(link, "1080p")))
@@ -69,7 +68,6 @@ class ViewerMediaRecoveryTest {
         owner.clearSession()
     }
 
-    /** A watched series of one episode whose links expired, and the post its page lists. */
     private fun TestScope.watching(): Pair<ViewerViewModel, Post> {
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
         owner.replaceSession(session("watching", listOf(post("episode", SourceKey.HITOMI, listOf(expired)))).copy(series = ViewerSeries.Watching()))

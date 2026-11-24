@@ -45,19 +45,6 @@ import androidx.media3.exoplayer.video.VideoRendererEventListener
 import java.nio.ByteBuffer
 import kotlinx.coroutines.CompletableDeferred
 
-/**
- * A Viewer page's scrub preview player: a paused, video-only player on the page's stream that seeks to each target's
- * nearest keyframe and returns that frame at the popup's size. Use it on the main thread; [close] releases it.
- *
- * It replaces Media3's `FrameExtractor`, which a drag had to build anew (its one process-wide player refuses a
- * request while a cancelled one still decodes) and which always prepares and decodes 0:00 before its first seek:
- * about 340 ms before a drag's first request. This player seeks as soon as the stream's index is read, and keeps
- * its decoder and GL pipeline across drags. Its renderer, software decoder, HDR and rotation handling and pixel read
- * follow `FrameExtractor`'s.
- *
- * Between drags it is [idle]: stopped, so no request stays open (a paused request keeps filling socket buffers,
- * about 2 MB, on the link the next seek needs), while foreground mode keeps its decoder for the next drag.
- */
 internal class ScrubPreviewPlayer(
     context: Context,
     request: BoundVideoPlaybackRequest,
@@ -75,7 +62,6 @@ internal class ScrubPreviewPlayer(
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             if (timeline.isEmpty) return
             val window = timeline.getWindow(0, Timeline.Window())
-            // The index is read and the period prepared, so a seek now resolves to a keyframe.
             if (!window.isPlaceholder && window.durationUs != C.TIME_UNSET) act(frames.onIndexed())
         }
 
@@ -107,7 +93,6 @@ internal class ScrubPreviewPlayer(
             setVideoEffects(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
-                    // glReadPixels reads rows bottom-up.
                     MatrixTransformation { Matrix().apply { setScale(1f, -1f) } },
                     FrameGrabber { frameMs, bitmap ->
                         main.post { if (!released) frames.onFrame(frameMs, ScrubFrame(frameMs, bitmap))?.let(::deliver) }
@@ -127,7 +112,6 @@ internal class ScrubPreviewPlayer(
         if (!attached) {
             attached = true
             frames.attach()
-            // A new media item re-reads the stream's index, which signals when seeks resolve to keyframes again.
             player.setMediaItem(mediaItem)
             player.prepare()
         }
@@ -139,7 +123,6 @@ internal class ScrubPreviewPlayer(
         }
     }
 
-    /** Stops loading until the next [frameAt], keeping the decoder; the shown frame is gone with the stream. */
     override fun idle() {
         if (released || !attached) return
         pending?.cancel()
@@ -169,30 +152,20 @@ internal class ScrubPreviewPlayer(
     }
 }
 
-/** A preview frame and the position, in whole milliseconds, of the keyframe it shows. */
 class ScrubFrame(val positionMs: Long, val bitmap: Bitmap)
 
-/** Where a Viewer page's scrub previews come from ([ScrubPreviewPlayer]); use it on the main thread. */
 interface ScrubFrameSource : AutoCloseable {
-    /** The frame of the keyframe nearest [positionMs]. A newer call replaces a pending one, which is cancelled. */
     suspend fun frameAt(positionMs: Long): ScrubFrame
 
-    /** Stops loading between drags; the next [frameAt] resumes. */
     fun idle()
 }
 
-/** A keyframe needs little more than itself; a second covers decoders that hold frames for reordering. */
 private fun previewLoadControl() = DefaultLoadControl.Builder()
     .setBufferDurationsMs(PREVIEW_BUFFER_MS, PREVIEW_BUFFER_MS, 0, 0)
     .build()
 
 private const val PREVIEW_BUFFER_MS = 1_000
 
-/**
- * Renders one frame per position reset into the effect chain, and is ready once it has: a paused player then
- * holds the frame of its latest seek. As in `FrameExtractor`, HDR input is read as SDR and rotation is applied as
- * an effect, because the frame never reaches a display surface that would apply it.
- */
 private class PreviewFrameRenderer(context: Context, handler: Handler, listener: VideoRendererEventListener) :
     MediaCodecVideoRenderer(
         Builder(context)
@@ -207,9 +180,6 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
     private var effects: List<Effect> = emptyList()
     private var rotation: Effect? = null
 
-    // Media3 marks this wrapper library-internal. It is the same setup Media3's FrameExtractor uses to render
-    // decoded frames into an effect chain; the pinned media3 version keeps it stable, and a changed signature
-    // fails compilation on upgrade.
     @SuppressLint("RestrictedApi")
     @androidx.annotation.OptIn(ExperimentalApi::class)
     override fun createPlaybackVideoGraphWrapper(context: Context, releaseControl: VideoFrameReleaseControl): PlaybackVideoGraphWrapper =
@@ -274,7 +244,6 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
 
 private const val FULL_TURN = 360f
 
-/** The last effect: reads each frame it receives into a bitmap and hands it on with its time in milliseconds. */
 private class FrameGrabber(private val onFrame: (Long, Bitmap) -> Unit) : GlEffect {
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = object : PassthroughShaderProgram() {
         private var pixels: ByteBuffer = ByteBuffer.allocateDirect(0)

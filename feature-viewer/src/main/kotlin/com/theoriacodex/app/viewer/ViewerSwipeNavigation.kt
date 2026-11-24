@@ -8,7 +8,6 @@ import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import kotlin.math.abs
 
-/** A sparse cover is not the gallery's last page, even when its page count is still unknown. */
 internal fun ViewerPageState.hasPendingGalleryMedia(): Boolean {
     if (resolution.status == ViewerResolutionStatus.RESOLVED ||
         resolution.status == ViewerResolutionStatus.NOT_REQUIRED
@@ -54,25 +53,17 @@ internal fun viewerHorizontalSwipeTarget(
 
 internal fun PagerState.viewerPageExtent(): Float = (layoutInfo.pageSize + layoutInfo.pageSpacing).toFloat()
 
-/** A release this fast counts as a fling whatever distance it covered. */
 internal val VIEWER_FLING_VELOCITY = 400.dp
 
 private const val EDGE_STRETCH_FRACTION = 0.18f
 
-/** Landscape pages are about twice as wide, so a slow drag commits after a shorter share of one. */
 internal const val VIEWER_LANDSCAPE_COMMIT_FRACTION = 0.06f
 
-/** How far a slow drag must travel, as a fraction of a page, to change page in this pager's shape. */
 internal fun PagerState.viewerCommitFraction(): Float {
     val viewport = layoutInfo.viewportSize
     return if (viewport.width > viewport.height) VIEWER_LANDSCAPE_COMMIT_FRACTION else TheoriaMotion.PAGE_COMMIT_FRACTION
 }
 
-/**
- * Decides a released swipe. A fling goes where it is moving, and one moving back against this
- * gesture's own [movement] cancels it; a slow release commits only past [commitFraction] of a page. [displacement] also counts any offset left from a
- * settle this gesture caught, so it says how far the pages are, not which way the finger went.
- */
 internal fun viewerSwipeDecision(
     displacement: Float,
     movement: Float,
@@ -89,14 +80,12 @@ internal fun viewerSwipeDecision(
     return if (deciding < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous
 }
 
-/** Diminishing resistance: the page follows the finger less the further it is pulled past the end. */
 internal fun viewerEdgeStretch(displacement: Float, pageExtent: Float): Float {
     val limit = pageExtent * EDGE_STRETCH_FRACTION
     if (limit <= 0f) return 0f
     return displacement * limit / (limit + abs(displacement))
 }
 
-/** Lands on [page] from the finger's velocity; distant jumps use the pager's own long-distance scroll. */
 internal suspend fun PagerState.settleViewerPage(page: Int, velocity: Float) {
     val extent = viewerPageExtent()
     if (extent <= 0f || abs(page - currentPage) > 1) {
@@ -114,7 +103,6 @@ internal suspend fun PagerState.settleViewerPage(page: Int, velocity: Float) {
     scrollToPage(page)
 }
 
-/** Raw deltas expose finger progress without committing the selected post before settling. */
 internal fun PagerState.dragViewerPage(origin: Int, target: Int?, displacement: Float) {
     val width = viewerPageExtent()
     if (width <= 0f) return
