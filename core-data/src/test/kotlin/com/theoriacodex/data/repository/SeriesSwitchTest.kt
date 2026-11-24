@@ -110,6 +110,22 @@ class SeriesSwitchTest {
         assertEquals(to.copy(followed = true, lastOpenedEntry = "/n2"), series)
     }
 
+    @Test
+    fun `each read time goes to the chapter it matches, also with no chapter opened last`() {
+        val old = listOf(
+            stored(SeriesEntry("/o2", "2", 2f), order = 0).copy(lastReadAtEpochMs = 20L),
+            stored(SeriesEntry("/o1", "1", 1f), order = 1).copy(lastReadAtEpochMs = 10L),
+        )
+        val new = listOf(
+            stored(SeriesEntry("/n2", "2", 2f), order = 0).copy(lastReadAtEpochMs = 30L),
+            stored(SeriesEntry("/n1", "1", 1f), order = 1),
+        )
+
+        val (_, changed) = carryProgress(from, old, to, new)
+
+        assertEquals(listOf("/n1" to 10L), changed.map { it.entry.address to it.lastReadAtEpochMs })
+    }
+
     private fun stored(entry: SeriesEntry, order: Int, read: Boolean = false, position: Long = 0, length: Long? = null) =
         StoredSeriesEntry(entry, order, firstSeenAtEpochMs = 0, read = read, position = position, length = length)
 }

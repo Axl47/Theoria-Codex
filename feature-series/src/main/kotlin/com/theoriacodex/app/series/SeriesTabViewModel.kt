@@ -211,7 +211,12 @@ class SeriesTabViewModel(
     /** Follows whether the tab shows; see [followShown]. */
     private var shownWatch: Job? = null
     private val mutableState = MutableStateFlow(
-        SeriesTabState(search = searchText?.let { emptyList() }, searchQuery = searchText.orEmpty()),
+        SeriesTabState(
+            search = searchText?.let { emptyList() },
+            searchQuery = searchText.orEmpty(),
+            // Kept across process death with the search, which shows only on Browse.
+            view = saved.get<String>(SAVED_VIEW)?.let { name -> SeriesView.entries.firstOrNull { it.name == name } },
+        ),
     )
     val state: StateFlow<SeriesTabState> = mutableState
 
@@ -233,13 +238,14 @@ class SeriesTabViewModel(
         viewModelScope.launch {
             val options = library.read()
             val following = repository.observeFollowed().firstOrNull().orEmpty().isNotEmpty()
-            mutableState.update {
-                it.copy(view = it.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE, library = options, libraryLoaded = true)
-            }
+            val opening = state.value.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE
+            saved[SAVED_VIEW] = opening.name
+            mutableState.update { it.copy(view = it.view ?: opening, library = options, libraryLoaded = true) }
         }
     }
 
     fun chooseView(view: SeriesView) {
+        saved[SAVED_VIEW] = view.name
         mutableState.update { it.copy(view = view) }
     }
 
@@ -260,10 +266,11 @@ class SeriesTabViewModel(
         mutableState.update { it.copy(followingQuery = query) }
     }
 
-    /** Takes the Following title query to Browse and searches every source for it. */
+    /** Takes the Following title query to Browse and searches every source, of both kinds, for it. */
     fun searchAllSources() {
         val query = state.value.followingQuery
-        mutableState.update { it.copy(view = SeriesView.BROWSE, followingQuery = "") }
+        chooseView(SeriesView.BROWSE)
+        mutableState.update { it.copy(followingQuery = "", kind = null) }
         search(query)
     }
 
@@ -731,5 +738,6 @@ internal fun failureLine(error: Exception): String = when (error) {
 
 private const val SAVED_SEARCH = "search"
 private const val SAVED_BROWSE = "browse"
+private const val SAVED_VIEW = "view"
 
 internal const val LOAD_FAILED = "Couldn't load"
