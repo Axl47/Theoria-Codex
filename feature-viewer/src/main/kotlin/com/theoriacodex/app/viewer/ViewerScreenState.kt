@@ -33,7 +33,7 @@ internal class ViewerScreenState {
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var touchSerial by mutableIntStateOf(0)
-    val playingVideos = mutableIntStateOf(0)
+    val playingVideos = ViewerPlayingVideos()
     var timelineInteractionActive by mutableStateOf(false)
     var chromeShownForScrub = false
     var relatedStripExpanded by mutableStateOf(false)

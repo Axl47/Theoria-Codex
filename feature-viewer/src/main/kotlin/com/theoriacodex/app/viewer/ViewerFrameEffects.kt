@@ -7,7 +7,8 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -154,38 +155,53 @@ internal fun viewerKeepsScreenOn(frame: ViewerFrame, screen: ViewerScreenState):
     viewerKeepsScreenOn(
         slideshow = frame.uiState.controls.slideshow,
         reading = frame.reading,
-        videoPlaying = screen.playingVideos.intValue > 0,
+        videoPlaying = screen.playingVideos.held.intValue > 0,
+        loopingClipPlaying = screen.playingVideos.looping.intValue > 0,
         activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
     )
 
-internal val LocalViewerPlayingVideos = staticCompositionLocalOf<MutableIntState?> { null }
+@Stable
+internal class ViewerPlayingVideos {
+    val held = mutableIntStateOf(0)
+    val looping = mutableIntStateOf(0)
+}
+
+internal val LocalViewerPlayingVideos = staticCompositionLocalOf<ViewerPlayingVideos?> { null }
 
 @Composable
-internal fun CountViewerPlayingVideo(playing: Boolean) {
-    val playingVideos = LocalViewerPlayingVideos.current
-    DisposableEffect(playingVideos, playing) {
-        if (playing) playingVideos?.let { it.intValue += 1 }
-        onDispose { if (playing) playingVideos?.let { it.intValue -= 1 } }
+internal fun CountViewerPlayingVideo(playing: Boolean, looping: Boolean) {
+    val count = LocalViewerPlayingVideos.current?.let { if (looping) it.looping else it.held }
+    DisposableEffect(count, playing) {
+        if (playing) count?.let { it.intValue += 1 }
+        onDispose { if (playing) count?.let { it.intValue -= 1 } }
     }
 }
 
 @Composable
-internal fun viewerKeepsScreenOn(slideshow: Boolean, reading: Boolean, videoPlaying: Boolean, activity: () -> Any): Boolean {
+internal fun viewerKeepsScreenOn(
+    slideshow: Boolean,
+    reading: Boolean,
+    videoPlaying: Boolean,
+    loopingClipPlaying: Boolean,
+    activity: () -> Any,
+): Boolean {
     val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
     val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
     val visible = lifecycle.isAtLeast(Lifecycle.State.STARTED)
-    var readingIdle by remember { mutableStateOf(false) }
+    val readingHeld = reading && resumed
+    val clipHeld = loopingClipPlaying && visible
+    var idle by remember { mutableStateOf(false) }
     val currentActivity by rememberUpdatedState(activity)
-    LaunchedEffect(reading, resumed) {
-        readingIdle = false
-        if (!reading || !resumed) return@LaunchedEffect
+    LaunchedEffect(readingHeld, visible) {
+        idle = false
+        if (!visible) return@LaunchedEffect
         snapshotFlow { currentActivity() }.collectLatest {
-            readingIdle = false
-            delay(VIEWER_READING_IDLE_MS)
-            readingIdle = true
+            idle = false
+            delay(VIEWER_IDLE_RELEASE_MS)
+            idle = true
         }
     }
-    return visible && videoPlaying || resumed && (slideshow || reading && !readingIdle)
+    return visible && videoPlaying || (readingHeld || clipHeld) && !idle || resumed && slideshow
 }
 
 @Composable
@@ -386,4 +402,4 @@ private fun advanceToPendingPost(
 private val VIEWER_BACK_DISTANCE = 48.dp
 internal const val VIEWER_UNLOCK_PEEK_MS = 3_000L
 
-internal const val VIEWER_READING_IDLE_MS = 10 * 60_000L
+internal const val VIEWER_IDLE_RELEASE_MS = 10 * 60_000L

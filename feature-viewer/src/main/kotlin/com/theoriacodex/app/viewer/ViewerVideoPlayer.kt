@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.text.Cue
@@ -113,7 +114,7 @@ internal fun ViewerVideoPlayer(
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
-    CountViewerPlayingVideo(state.actuallyPlaying)
+    CountViewerPlayingVideo(state.actuallyPlaying, looping = controls.loopPlayback && state.looped)
     FollowViewerActiveTracks(state.player, controls.isActive, loading = state.loading && !state.failed)
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
@@ -130,6 +131,7 @@ internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     var cues: List<Cue> = emptyList()
     var loading by mutableStateOf(true)
     var hasRenderedFirstFrame by mutableStateOf(false)
+    var looped by mutableStateOf(false)
     var pending by mutableStateOf(pending)
     var bindings by mutableIntStateOf(0)
     val failed get() = pending == ViewerRecoveryDecision.Fail
@@ -294,6 +296,10 @@ private fun viewerVideoListener(
             if (state.pending != null) return
             val decision = recovery.decide(ViewerRecoveryEvent.PlayerError(error.errorCode, player.currentPosition.coerceAtLeast(0L)))
             state.follow(decision, viewerVideoFailureMessage(error.errorCode, error.message), events)
+        }
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (state.player !== player) return
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) state.looped = true
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return

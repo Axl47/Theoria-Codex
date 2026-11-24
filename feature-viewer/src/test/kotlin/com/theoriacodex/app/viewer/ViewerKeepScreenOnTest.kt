@@ -47,6 +47,7 @@ class ViewerKeepScreenOnTest {
     @get:Rule val compose = createComposeRule()
     private val slideshow = mutableStateOf(false)
     private val videoPlaying = mutableStateOf(false)
+    private val loopingClipPlaying = mutableStateOf(false)
     private val reading = mutableStateOf(false)
     private val present = mutableStateOf(true)
     private val overlapping = mutableStateOf(false)
@@ -57,16 +58,19 @@ class ViewerKeepScreenOnTest {
     }
     private lateinit var view: View
 
-    private fun show(reading: Boolean, slideshow: Boolean = false, videoPlaying: Boolean = false) {
+    private fun show(reading: Boolean, slideshow: Boolean = false, videoPlaying: Boolean = false, loopingClipPlaying: Boolean = false) {
         this.reading.value = reading
         this.slideshow.value = slideshow
         this.videoPlaying.value = videoPlaying
+        this.loopingClipPlaying.value = loopingClipPlaying
         compose.mainClock.autoAdvance = false
         compose.setContent {
             view = LocalView.current
             CompositionLocalProvider(LocalLifecycleOwner provides lifecycle) {
                 if (present.value) {
-                    val on = viewerKeepsScreenOn(this.slideshow.value, this.reading.value, this.videoPlaying.value) { activity.intValue }
+                    val on = viewerKeepsScreenOn(
+                        this.slideshow.value, this.reading.value, this.videoPlaying.value, this.loopingClipPlaying.value,
+                    ) { activity.intValue }
                     Box(if (on) Modifier.keepScreenOn() else Modifier)
                 }
                 if (overlapping.value) Box(Modifier.keepScreenOn())
@@ -100,9 +104,9 @@ class ViewerKeepScreenOnTest {
     @Test fun `an open chapter lets the screen sleep after a long idle and wakes it on interaction`() {
         show(reading = true)
         assertTrue(view.keepScreenOn)
-        idleFor(VIEWER_READING_IDLE_MS - 60_000L)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
         interact()
-        idleFor(VIEWER_READING_IDLE_MS - 60_000L)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
         assertTrue(view.keepScreenOn)
         idleFor(120_000L)
         assertFalse(view.keepScreenOn)
@@ -149,7 +153,7 @@ class ViewerKeepScreenOnTest {
         try {
             showChapter()
             assertTrue(view.keepScreenOn)
-            idleFor(VIEWER_READING_IDLE_MS + 1_000L)
+            idleFor(VIEWER_IDLE_RELEASE_MS + 1_000L)
             assertFalse(view.keepScreenOn)
             compose.onNodeWithText("Retry").performTouchInput { click() }
             compose.mainClock.advanceTimeBy(1_000L)
@@ -163,9 +167,9 @@ class ViewerKeepScreenOnTest {
         installFailingLoader()
         try {
             val state = showChapter()
-            idleFor(VIEWER_READING_IDLE_MS - 60_000L)
+            idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
             change { state.value = reduceViewerState(state.value, ViewerAction.SelectMedia(1)).state }
-            idleFor(VIEWER_READING_IDLE_MS - 60_000L)
+            idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
             assertTrue(view.keepScreenOn)
             idleFor(120_000L)
             assertFalse(view.keepScreenOn)
@@ -190,16 +194,51 @@ class ViewerKeepScreenOnTest {
 
     @Test fun `a slideshow keeps the screen on however long it runs`() {
         show(reading = true, slideshow = true)
-        idleFor(VIEWER_READING_IDLE_MS * 3)
+        idleFor(VIEWER_IDLE_RELEASE_MS * 3)
         assertTrue(view.keepScreenOn)
     }
 
     @Test fun `a playing video keeps the screen on past the reading idle, and a paused one lets it sleep`() {
         show(reading = false, videoPlaying = true)
-        idleFor(VIEWER_READING_IDLE_MS * 3)
+        idleFor(VIEWER_IDLE_RELEASE_MS * 3)
         assertTrue(view.keepScreenOn)
         setVideoPlaying(false)
         assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `a looping clip lets the screen sleep after a long idle, and a touch restarts the clock`() {
+        show(reading = false, loopingClipPlaying = true)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
+        interact()
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
+        assertTrue(view.keepScreenOn)
+        idleFor(120_000L)
+        assertFalse(view.keepScreenOn)
+        interact()
+        repeat(2) { compose.mainClock.advanceTimeByFrame() }
+        assertTrue(view.keepScreenOn)
+    }
+
+    @Test fun `pausing a looping clip releases the screen at once`() {
+        show(reading = false, loopingClipPlaying = true)
+        assertTrue(view.keepScreenOn)
+        change { loopingClipPlaying.value = false }
+        assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `a looping clip that stalls and recovers keeps its idle clock`() {
+        show(reading = false, loopingClipPlaying = true)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
+        change { loopingClipPlaying.value = false }
+        change { loopingClipPlaying.value = true }
+        idleFor(120_000L)
+        assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `a non-looping video or episode beside an idle looping clip still holds the screen`() {
+        show(reading = false, videoPlaying = true, loopingClipPlaying = true)
+        idleFor(VIEWER_IDLE_RELEASE_MS * 3)
+        assertTrue(view.keepScreenOn)
     }
 
     @Test fun `a video playing in picture-in-picture keeps the screen on while reading and slideshows release it`() {
@@ -231,12 +270,12 @@ class ViewerKeepScreenOnTest {
 
     @Test fun `leaving a chapter releases the screen, and reading again restarts the idle clock`() {
         show(reading = true)
-        idleFor(VIEWER_READING_IDLE_MS - 60_000L)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
         change { reading.value = false }
         assertFalse(view.keepScreenOn)
         change { reading.value = true }
         assertTrue(view.keepScreenOn)
-        idleFor(VIEWER_READING_IDLE_MS - 60_000L)
+        idleFor(VIEWER_IDLE_RELEASE_MS - 60_000L)
         assertTrue(view.keepScreenOn)
     }
 
@@ -257,19 +296,22 @@ class ViewerKeepScreenOnTest {
     }
 
     @Test fun `a Viewer video counts toward keep-screen-on only while its player plays`() {
-        val playingVideos = mutableIntStateOf(0)
+        val playingVideos = ViewerPlayingVideos()
         val playing = mutableStateOf(true)
+        val looping = mutableStateOf(false)
         compose.setContent {
             CompositionLocalProvider(LocalViewerPlayingVideos provides playingVideos) {
-                if (present.value) CountViewerPlayingVideo(playing.value)
+                if (present.value) CountViewerPlayingVideo(playing.value, looping.value)
             }
         }
         compose.waitForIdle()
-        assertEquals(1, playingVideos.intValue)
+        assertEquals(1 to 0, playingVideos.held.intValue to playingVideos.looping.intValue)
+        change { looping.value = true }
+        assertEquals(0 to 1, playingVideos.held.intValue to playingVideos.looping.intValue)
         change { playing.value = false }
-        assertEquals(0, playingVideos.intValue)
+        assertEquals(0 to 0, playingVideos.held.intValue to playingVideos.looping.intValue)
         change { playing.value = true }
         change { present.value = false }
-        assertEquals(0, playingVideos.intValue)
+        assertEquals(0 to 0, playingVideos.held.intValue to playingVideos.looping.intValue)
     }
 }
