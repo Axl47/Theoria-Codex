@@ -24,28 +24,20 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-/** Large enough that small vivid details survive downscaling instead of averaging into their surroundings. */
 private const val ACCENT_SAMPLE_SIZE = 48
 private const val HUE_BUCKETS = 24
 private const val MIN_SATURATION = 0.25f
 
-/** Skin tones: warm and muted. They fill most character art, and would give nearly every post the same peach. */
 private const val SKIN_HUE_MIN = 10f
 private const val SKIN_HUE_MAX = 50f
 private const val SKIN_SATURATION_MAX = 0.7f
 private const val SKIN_WEIGHT = 0.15f
 private const val MIN_BRIGHTNESS = 0.2f
 
-/** Below this share of colorful pixels the art counts as monochrome, such as manga, and keeps white. */
 private const val MIN_COLORFUL_SHARE = 0.06f
 private const val ACCENT_SATURATION = 0.85f
 private const val ACCENT_LIGHTNESS = 0.72f
 
-/**
- * Picks the artwork's most vivid prominent hue, then fixes saturation and lightness so the accent always
- * reads over the dark scrims, however dark or pale the art is. Vividness counts for more than area, and
- * skin counts for little, so hair, clothes and backgrounds set the color. Returns null for art without a clear color.
- */
 internal fun viewerAccentFromPixels(pixels: IntArray): Int? {
     if (pixels.isEmpty()) return null
     val weights = FloatArray(HUE_BUCKETS)
@@ -92,7 +84,6 @@ private fun accentFromHue(hue: Float): Int {
     return Color(r + floor, g + floor, b + floor).toArgb()
 }
 
-/** Samples the post's thumbnail, which the feed has normally already cached, as a tiny software bitmap. */
 private suspend fun loadViewerAccent(context: Context, post: Post): Int? {
     val location = post.preview.localPath ?: post.preview.url ?: return null
     val request = buildViewerImageRequest(context, location, post.id.source, staticAnimatedWebPFrame = true)
@@ -106,10 +97,6 @@ private suspend fun loadViewerAccent(context: Context, post: Post): Int? {
     }
 }
 
-/**
- * The selected post's accent, cross-fading between posts. Sampling waits on [enabled] so it never
- * competes with the Viewer's opening animation, and swiping past a post cancels its sample.
- */
 @Composable
 internal fun rememberViewerAccent(post: Post, enabled: Boolean): Color {
     val context = LocalContext.current

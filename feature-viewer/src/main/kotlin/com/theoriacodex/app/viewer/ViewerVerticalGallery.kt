@@ -75,12 +75,10 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** One vertical gallery's list and zoom; the screen reads these to route gestures while it is the selected post. */
 @Stable
 internal class ViewerVerticalGalleryState(val list: LazyListState) {
     var scale by mutableFloatStateOf(1f)
         private set
-    /** How far the zoomed pages are shifted left, in pixels; 0 shows their left edge. */
     var panX by mutableFloatStateOf(0f)
         private set
     var viewportWidth by mutableIntStateOf(0)
@@ -88,10 +86,6 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
 
     val zoomed: Boolean get() = scale > 1.01f
 
-    /**
-     * Where a zoom asked for without a tap (a TalkBack action) centres: the middle of page [index]'s part on screen,
-     * so that page stays in view and keeps its actions. The screen's middle when it is not laid out.
-     */
     fun zoomAnchor(index: Int): Offset {
         val info = list.layoutInfo
         val page = info.visibleItemsInfo.firstOrNull { it.index == index }
@@ -99,17 +93,11 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
         return Offset(viewportWidth / 2f, y ?: (info.viewportSize.height / 2f))
     }
 
-    /** Returns the pages to fit, as starting a slideshow does for horizontal media. */
     fun resetZoom() {
         scale = 1f
         panX = 0f
     }
 
-    /**
-     * Scales around ([focusX], [focusY]) and pans by [panBy], keeping the pages inside the screen's width. Every page
-     * grows by the same factor, so moving the list's offset in its first visible page by that factor keeps the row
-     * under the fingers in place.
-     */
     fun transform(zoomBy: Float, focusX: Float, focusY: Float, panBy: Float) {
         val next = (scale * zoomBy).coerceIn(1f, MAX_ZOOM)
         val factor = next / scale
@@ -122,7 +110,6 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
         scale = next
     }
 
-    /** A narrower screen (rotation keeps this state) pulls the pan back inside the pages' new width. */
     fun resize(width: Int) {
         viewportWidth = width
         panX = panX.coerceIn(0f, width * (scale - 1f))
@@ -131,11 +118,6 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
     val scrollGesture = ViewerVerticalScroll(atTop = { !list.canScrollBackward }, atEnd = { !list.canScrollForward })
 }
 
-/**
- * A still-image gallery as one column. Pages fill the width (wider when zoomed), the page crossing the top third of
- * the screen is the selection, scrolling down hides the chrome and scrolling up brings it back, and a card after the
- * last page opens the next post. The screen-wide recognizer keeps horizontal swipes, which here change post.
- */
 @Composable
 internal fun ViewerVerticalGallery(
     postPage: Int,
@@ -161,13 +143,10 @@ internal fun ViewerVerticalGallery(
         screen.verticalGalleries[post.id] = gallery
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }
     }
-    // Width over height per page once painted; unpainted pages borrow the latest known shape, then the post's, and
-    // keep the one they first laid out with, so a neighbour painting does not shift the pages on screen.
     val shapes = remember(post.id) { mutableStateMapOf<Int, Float>() }
     var latestShape by remember(post.id) { mutableFloatStateOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
     val session = frame.uiState.session
-    // The selected page reports readiness and failure to the Viewer, as a horizontal page does (slideshow holds wait on it).
     val selectedEvents = { key: ViewerMediaKey, generation: Long ->
         viewerRendererEvents(session, key, generation, host.onAction, onTimelineInteractionActiveChanged = {}, onDurationKnown = {})
     }
@@ -202,16 +181,11 @@ internal fun ViewerVerticalGallery(
             )
         }
         if (onOpenNext != null) {
-            // Clear of the dock, which shows again as the list is scrolled back up.
             item(key = "next") { VerticalGalleryNextCard(frame.posts.getOrNull(postPage + 1), Modifier.padding(bottom = viewerDockInset()), onOpenNext) }
         }
     }
 }
 
-/**
- * The column's gestures, and the selected page's TalkBack actions that reach them, as on a horizontal page. Zoom
- * without a tap centres on the selected page.
- */
 @Composable
 private fun verticalGalleryActions(
     gallery: ViewerVerticalGalleryState,
@@ -227,7 +201,6 @@ private fun verticalGalleryActions(
         toggleControls = { controls.toggleChrome() },
         showInfo = { host.onAction(ViewerAction.ShowPanel(ViewerPanel.INFO)) },
     )
-    // Read here so the zoom action's label follows, without recomposing on every step of a pinch.
     val zoomed by remember(gallery) { derivedStateOf { gallery.zoomed } }
     return actions to {
         onClick(label = "Media information") { actions.showInfo(); true }
@@ -235,7 +208,6 @@ private fun verticalGalleryActions(
     }
 }
 
-/** Keeps the selection and the list in step: scrolling selects, and a page picked elsewhere scrolls into place. */
 @Composable
 private fun VerticalGalleryEffects(
     post: Post,
@@ -249,15 +221,11 @@ private fun VerticalGalleryEffects(
     val pageCount = pageState.media.size
     val selected = pageState.selectedMediaIndex
     val resuming = pageState.pendingMediaIndex != null
-    // The list's position counts as the reader's choice only once it shows the selection; until then (a resume
-    // still resolving, or a restored page not yet scrolled to) publishing it would overwrite the saved page.
     var aligned by remember(list) { mutableStateOf(false) }
     VerticalGalleryScrollSelection(list, pageCount, selected, enabled = isCurrentPost && aligned, host)
-    // Keyed by the post too, so a chapter whose pages arrive while it shows is reported again, now with its pages.
     LaunchedEffect(post, selected, isCurrentPost, aligned) {
         if (isCurrentPost && aligned) host.onVisibleMediaChanged?.invoke(post, selected + 1)
     }
-    // A page bar, overview or strip pick, or a resumed page, moves the list to the selection.
     LaunchedEffect(selected, pageCount, resuming) {
         if (resuming || selected !in 0 until pageCount) {
             aligned = false
@@ -269,11 +237,6 @@ private fun VerticalGalleryEffects(
     VerticalGalleryPendingJump(post, list, pageCount, resuming, screen)
 }
 
-/**
- * Selects the page under the line as the reader scrolls, including the one a fling comes to rest on. Pages also slide
- * under the line when loading pages resize or the Viewer moves the list itself; selecting those would answer the jump
- * that moved them, and the two would trade pages back and forth.
- */
 @Composable
 private fun VerticalGalleryScrollSelection(list: LazyListState, pageCount: Int, selected: Int, enabled: Boolean, host: ViewerScreenHost) {
     val focusedPage by remember(list, pageCount) { derivedStateOf { list.focusedPage(pageCount) } }
@@ -287,7 +250,6 @@ private fun VerticalGalleryScrollSelection(list: LazyListState, pageCount: Int, 
     }
 }
 
-/** A swipe that lands on this gallery at a chosen page (going back lands on its last page) scrolls there once. */
 @Composable
 private fun VerticalGalleryPendingJump(post: Post, list: LazyListState, pageCount: Int, resuming: Boolean, screen: ViewerScreenState) {
     val pendingJump = screen.pendingMediaJumpByPost[post.id]
@@ -298,14 +260,9 @@ private fun VerticalGalleryPendingJump(post: Post, list: LazyListState, pageCoun
     }
 }
 
-/**
- * The page under the selection line (a third down the screen); at either end of the list, the first or last page,
- * so pages shorter than that third can still be selected there.
- */
 private fun LazyListState.focusedPage(pageCount: Int): Int {
     if (pageCount <= 0) return 0
     val info = layoutInfo
-    // Before its first layout the list cannot scroll either way, which must not read as the last page.
     if (info.totalItemsCount == 0) return firstVisibleItemIndex.coerceIn(0, pageCount - 1)
     if (!canScrollBackward) return 0
     if (!canScrollForward) return pageCount - 1
@@ -316,10 +273,6 @@ private fun LazyListState.focusedPage(pageCount: Int): Int {
 
 private fun LazyListState.selectionLine(): Int = with(layoutInfo) { viewportStartOffset + (viewportEndOffset - viewportStartOffset) / 3 }
 
-/**
- * Scrolls [index] to the top, then, if it ends above the selection line, down until it crosses it. Both moves are
- * instant, so composition never sees them as a scroll in progress, which would count them as the reader's.
- */
 private suspend fun LazyListState.scrollToSelection(index: Int) {
     scrollToItem(index)
     val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
@@ -337,22 +290,18 @@ private fun VerticalGalleryPage(
     imageSession: ViewerImageSession,
     active: Boolean,
     selectedEvents: (ViewerMediaKey, Long) -> ViewerRendererEvents,
-    /** The Viewer's error for this page while it is selected, such as a failed gallery lookup, retried through [onRetry]. */
     sharedError: ViewerMediaError?,
     onRetry: () -> Unit,
     onPainted: (Float, Float) -> Unit,
     onRequestMediaRecovery: ViewerMediaRecoveryRequest?,
-    /** The gallery's TalkBack actions, given to the selected page only. */
     assistive: SemanticsPropertyReceiver.() -> Unit,
 ) {
     val media = pageState.media[index]
     val key = ViewerMediaKey(post.id, index)
     val generation = media.loadGeneration
-    // Resolution can swap a cover for the full page under the same key and generation, so the image keys these too.
     var painted by remember(key, generation, media.ref) { mutableStateOf(false) }
     var failed by remember(key, generation, media.ref) { mutableStateOf<String?>(null) }
     var attempt by remember(key, generation, media.ref) { mutableIntStateOf(0) }
-    // Readiness and failure are reported for the selected page only, and again when a settled page becomes selected.
     val events = viewerRendererEvents(
         session = null, key = key, generation = generation, onAction = {}, onTimelineInteractionActiveChanged = {}, onDurationKnown = {},
     ).copy(onReady = { painted = true; failed = null }, onError = { failed = it })
@@ -383,7 +332,6 @@ private fun VerticalGalleryPage(
                     onImageRecovery = onRequestMediaRecovery?.let { recovery -> recovery::ask },
                     onPainted = { size -> onPainted(size.width, size.height) },
                     spinnerModifier = Modifier.onVisiblePart(gallery.list, index),
-                    // Laid out in a borrowed shape until it paints; sizing the decode from that would blur a tall strip.
                     fillWidth = true,
                 )
             }
@@ -396,11 +344,6 @@ private fun VerticalGalleryPage(
     }
 }
 
-/**
- * Moves a status centered on page [index] of [list] (its spinner or error) to the middle of the part of that page on
- * screen, so a page taller than the screen never looks blank while it loads. Read while drawing, so scrolling moves it
- * without recomposing.
- */
 private fun Modifier.onVisiblePart(list: LazyListState, index: Int) = graphicsLayer {
     val viewport = list.layoutInfo
     val page = viewport.visibleItemsInfo.firstOrNull { it.index == index } ?: return@graphicsLayer
@@ -410,12 +353,6 @@ private fun Modifier.onVisiblePart(list: LazyListState, index: Int) = graphicsLa
     )
 }
 
-/**
- * How far to move a status from the middle of a page at [pageOffset] and [pageSize] in a viewport from [viewportStart]
- * to [viewportEnd] so it sits in the middle of the page's part on screen: it rises with a page coming in at the bottom,
- * holds the screen's middle while the page fills it, and leaves with the page at the top. It stays [reach] inside the
- * page's edges, and does not move on a page too short for that.
- */
 internal fun visiblePartShift(pageOffset: Int, pageSize: Int, viewportStart: Int, viewportEnd: Int, reach: Float): Float {
     if (pageSize <= reach * 2) return 0f
     val shownTop = maxOf(viewportStart, pageOffset) - pageOffset
@@ -447,10 +384,6 @@ private fun VerticalGalleryNextCard(next: Post?, modifier: Modifier, onOpen: () 
     }
 }
 
-/**
- * Pinch zooms the column around the fingers and, while zoomed, a sideways drag pans it. Both read the Initial pass so
- * the list never scrolls under a pinch; vertical drags stay with the list, at the same speed as the finger.
- */
 private fun Modifier.verticalGalleryZoom(gallery: ViewerVerticalGalleryState, controls: ViewerControls) = pointerInput(gallery) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -474,10 +407,6 @@ private fun Modifier.verticalGalleryZoom(gallery: ViewerVerticalGalleryState, co
     }
 }
 
-/**
- * Tap toggles the chrome (not while TalkBack explores by touch, which keeps the chrome up), double tap zooms in to
- * twice the width or back out, and a long press opens info.
- */
 private fun Modifier.verticalGalleryTaps(
     gallery: ViewerVerticalGalleryState,
     controls: ViewerControls,
@@ -497,7 +426,6 @@ private fun Modifier.verticalGalleryTaps(
     )
 }
 
-/** Zooms to twice the width around [tap], or back to fit. */
 private suspend fun ViewerVerticalGalleryState.animateZoomToggle(tap: Offset) {
     var current = scale
     animate(current, if (zoomed) 1f else DOUBLE_TAP_ZOOM, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ ->
@@ -515,5 +443,4 @@ private const val DEFAULT_PAGE_SHAPE = 0.7f
 private const val MAX_ZOOM = 4f
 private const val DOUBLE_TAP_ZOOM = 2f
 
-/** How close a page's spinner or error comes to the page's top and bottom edges. */
 private val STATUS_EDGE_MARGIN = 24.dp

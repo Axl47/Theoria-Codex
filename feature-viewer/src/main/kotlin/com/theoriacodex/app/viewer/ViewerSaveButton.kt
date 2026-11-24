@@ -78,36 +78,22 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Where the Viewer's posts are saved from: the search they came from and whether that was For You. */
 data class ViewerSaveContext(val query: Query? = null, val fromForYou: Boolean = false)
 
-/**
- * The hold fan's live gesture, shared by the Save button that drives it and [ViewerSaveFanOverlay] that draws it,
- * whether the button needs the chrome to stay up ([holdsChrome]), and the button's latest [suggestions].
- */
 @Stable
 internal class ViewerSaveFanState {
-    /** The finger in window coordinates while the fan is open, else null. */
     var pointer by mutableStateOf<Offset?>(null)
     var anchor by mutableStateOf(Offset.Zero)
     var targets by mutableStateOf<List<CollectTarget<SaveTarget>>>(emptyList())
     val collect = CollectTargetsState<SaveTarget>()
 
-    /** The latest suggestions; kept here, outside the dock, so hiding and showing the controls does not reload them. */
     var suggestions by mutableStateOf<ViewerPostSuggestions?>(null)
 
-    /** Whether the button shows a save that just landed, with its Undo. */
     var showingSaved by mutableStateOf(false)
 
-    /** The chrome must not hide while the fan is open or the button offers Undo. */
     val holdsChrome: Boolean get() = pointer != null || showingSaved
 }
 
-/**
- * The dock's Save button for [post]. Tap saves to the top suggested Codex and then offers Undo for a few seconds; hold
- * opens [fan], where sliding onto a Codex saves there, New names a new Codex, and More or releasing anywhere else opens
- * the full picker ([onOpenPicker]). With no Codex at all, a tap names a new one. Taps and holds report [onInteraction].
- */
 @Composable
 internal fun ViewerSaveButton(
     post: Post,
@@ -125,11 +111,9 @@ internal fun ViewerSaveButton(
     val run: (ViewerSaveCommand) -> Unit = { command ->
         onInteraction()
         when (command) {
-            // A failed save falls back to the picker, which reports its own errors.
             is ViewerSaveCommand.QuickSave -> scope.launch {
                 if (quickSave.quickSave(post, command.codexId, context.query, context.fromForYou) == null) onOpenPicker()
             }
-            // Undispatched: the removal is under way before the dock can leave and cancel this scope.
             is ViewerSaveCommand.Undo -> scope.launch(start = CoroutineStart.UNDISPATCHED) { quickSave.undoQuickSave(command.record) }
             ViewerSaveCommand.OpenPicker -> onOpenPicker()
             ViewerSaveCommand.NewCodex -> newCodex.openNewCodex { codex ->
@@ -140,7 +124,6 @@ internal fun ViewerSaveButton(
     val haptics = LocalHapticFeedback.current
     val hold = remember(fan) { ViewerSaveHold(fan, haptics) }
     SideEffect { fan.showingSaved = state is ViewerSaveButtonState.Saved }
-    // The dock can still leave (a tap on the media, PiP): nothing it opened may outlive it.
     DisposableEffect(fan) { onDispose { fan.pointer = null; fan.showingSaved = false } }
     hold.onStart = onInteraction
     hold.onTap = { run(state.tapCommand()) }
@@ -157,7 +140,6 @@ internal fun ViewerSaveButton(
                 contentDescription = state.description()
                 onClick { run(state.tapCommand()); true }
                 customActions = listOf(CustomAccessibilityAction("Choose Codex") { onOpenPicker(); true })
-                // Inside the cleared semantics, or clearing would drop it.
                 testTag = "viewer-dock-save"
             }
             .height(40.dp)
@@ -171,7 +153,6 @@ internal fun ViewerSaveButton(
     }
 }
 
-/** Draws the Save button's fan over the screen while a hold is open. */
 @Composable
 internal fun ViewerSaveFanOverlay(fan: ViewerSaveFanState) {
     val pointer = fan.pointer ?: return
@@ -180,18 +161,15 @@ internal fun ViewerSaveFanOverlay(fan: ViewerSaveFanState) {
     }
 }
 
-/** Suggestions for the settled post; the previous post's stay until the new ones arrive, since scoring walks the library. */
 @Composable
 private fun rememberSettledSaveSuggestions(quickSave: QuickSave, post: Post, query: Query?, fan: ViewerSaveFanState): ViewerPostSuggestions? {
     LaunchedEffect(quickSave, post.id, query, fan) {
         delay(SUGGESTION_SETTLE_MS)
-        // The button saves to the top one; the fan shows the next ones.
         quickSave.suggestions(post, query, SAVE_MENU_CODICES + 1).collect { fan.suggestions = ViewerPostSuggestions(post.id, it) }
     }
     return fan.suggestions
 }
 
-/** The time, re-read when [lastSave] lands and again when its Undo window closes. */
 @Composable
 private fun rememberSavedUndoClock(lastSave: QuickSaveRecord?): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -206,7 +184,6 @@ private fun rememberSavedUndoClock(lastSave: QuickSaveRecord?): Long {
     return now
 }
 
-/** Links the button's long-lived pointer input to the latest callbacks and to the fan. */
 private class ViewerSaveHold(private val fan: ViewerSaveFanState, private val haptics: HapticFeedback) {
     var coordinates: LayoutCoordinates? = null
     var targets: () -> List<CollectTarget<SaveTarget>> = { emptyList() }
@@ -236,10 +213,6 @@ private class ViewerSaveHold(private val fan: ViewerSaveFanState, private val ha
     }
 }
 
-/**
- * Tap, or hold then slide: the button's own pointer input, so the media's gestures are untouched. Keyed to [postId], so
- * paging mid-hold cancels the gesture and closes the fan instead of saving the next post to a target ranked for this one.
- */
 private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold, postId: PostId): Modifier = pointerInput(hold, postId) {
     awaitEachGesture {
         val down = awaitFirstDown()
@@ -250,7 +223,6 @@ private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold, postId: PostId): M
         }
         hold.start(down.position)
         var released = false
-        // Also when the button leaves or the post changes mid-hold and cancels this gesture, so the fan never stays open.
         try {
             while (true) {
                 val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break

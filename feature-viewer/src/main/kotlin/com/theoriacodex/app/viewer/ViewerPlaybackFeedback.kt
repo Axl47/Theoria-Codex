@@ -56,7 +56,6 @@ internal fun FittedSeekJumpFeedbackOverlay(
     }
 }
 
-/** Overlay coordinates follow the fitted media rather than the full screen's letterboxing. */
 @Composable
 internal fun FittedViewerMediaOverlay(
     aspectRatio: Float?,
@@ -146,7 +145,6 @@ private fun SeekFeedbackLabel(label: String, direction: SeekJumpDirection, casca
     }
 }
 
-/** Three chevrons light up in the direction of travel, ending brightest at the leading one. */
 @Composable
 private fun SeekFeedbackChevrons(direction: SeekJumpDirection, cascade: () -> Float) {
     Canvas(Modifier.size(width = 54.dp, height = 28.dp)) {

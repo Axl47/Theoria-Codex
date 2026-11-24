@@ -8,11 +8,6 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.domain.model.PostId
 
-/**
- * Session-local timestamps for the current post and five neighboring posts in either direction. A [watching] session
- * keeps every episode's position however far the user goes, seeded with [ViewerSeries.Watching.startPositionsMs], so an
- * episode outside the retained window resumes where it was left rather than at the start it opened at.
- */
 internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
     private var retainedPosts = emptySet<PostId>()
     private val positions = mutableMapOf<ViewerMediaKey, Long>()
@@ -33,29 +28,16 @@ internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
         if (key.postId in retainedPosts) positions[key] = position
     }
 
-    /**
-     * Whether a start at [positionMs] of a video [durationMs] long begins again instead: in a watched session, within
-     * [VIEWER_EPISODE_END_MARGIN_MS] of the end, the episode was watched to its end. Any other video resumes anywhere.
-     */
     fun startsOver(positionMs: Long, durationMs: Long): Boolean =
         episodes != null && positionMs >= durationMs - VIEWER_EPISODE_END_MARGIN_MS
 }
 
-/** How close to an episode's end a saved position counts as watched to the end. */
 internal const val VIEWER_EPISODE_END_MARGIN_MS = 5_000L
 
-/**
- * Holds the current session's [ViewerVideoPositions] in the screen's ViewModel store (the Viewer's navigation entry), so
- * a Viewer level covered by a trail fork resumes its videos where they were when it returns.
- */
 internal class ViewerVideoPositionStore : ViewModel() {
     private var session: ViewerSessionIdentity? = null
     private var positions = ViewerVideoPositions()
 
-    /**
-     * [watching] applies only when [identity] starts a new session. The Viewer's state carries a session's series with
-     * its identity, so the first call for a session already has its seeds.
-     */
     fun forSession(identity: ViewerSessionIdentity?, watching: ViewerSeries.Watching? = null): ViewerVideoPositions {
         if (identity != session) {
             session = identity
@@ -65,10 +47,6 @@ internal class ViewerVideoPositionStore : ViewModel() {
     }
 }
 
-/**
- * The positions for [session], kept across the screen leaving composition while its entry stays on the back stack. A
- * [ViewerSeries.Watching] [series] keeps its episodes' positions; see [ViewerVideoPositions].
- */
 @Composable
 internal fun rememberViewerVideoPositions(session: ViewerSessionIdentity?, series: ViewerSeries? = null): ViewerVideoPositions {
     val store = viewModel<ViewerVideoPositionStore>()

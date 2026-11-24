@@ -146,7 +146,6 @@ class ViewerReturnTransitionTest {
     }
 
     @Test fun `a card reached by scrolling rests on the edge it entered from`() {
-        // Two viewports below at the start, now in view after one step forward: its end meets the bottom.
         assertEquals(-100f, viewerReturnRevealScroll(600, 300, 0, 1000, arrivedFrom = 1f))
         assertEquals(400f, viewerReturnRevealScroll(400, 300, 0, 1000, arrivedFrom = -1f))
     }
@@ -158,7 +157,6 @@ class ViewerReturnTransitionTest {
     }
 
     @Test fun `a card under chrome padding is not visible`() {
-        // 120 px bar over the top and 200 px over the bottom of a 1000 px list.
         assertEquals(-70f, viewerReturnRevealScroll(50, 300, 120, 800))
         assertEquals(50f, viewerReturnRevealScroll(550, 300, 120, 800))
         assertEquals(0f, viewerReturnRevealScroll(120, 300, 120, 800))
@@ -197,7 +195,6 @@ class ViewerReturnTransitionTest {
         assertEquals(result.before, result.target)
     }
 
-    // Rows sit every 146 px in a 600 px grid: row 4 (index 8) spans 584 to 724.
     @Test fun `grid return scrolls a card cut off at the bottom just on screen`() {
         val result = gridReturn(target = 8, scrolledPx = 0f)
         assertEquals(result.viewport.bottom, result.target.bottom, 2f)
@@ -225,7 +222,6 @@ class ViewerReturnTransitionTest {
 
     private data class GridReturn(val viewport: Rect, val before: Rect?, val target: Rect)
 
-    /** Returns to post [target] of a 600 px grid of 140 px cards first scrolled by [scrolledPx]. */
     private fun gridReturn(target: Int, scrolledPx: Float, projected: Boolean = false): GridReturn {
         val transition = ViewerReturnTransition()
         val posts = (0..60).map { index -> post(index.toString()) }

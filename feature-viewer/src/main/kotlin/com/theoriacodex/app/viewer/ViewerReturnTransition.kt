@@ -45,10 +45,6 @@ internal const val VIEWER_RETURN_DURATION_MS = TheoriaMotion.SCREEN_MS
 internal const val VIEWER_RETURN_HOLD_MS = 700
 private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 
-/**
- * Keep both destinations alive while the media moves between its card and fullscreen bounds. [holdsExit] is read as an
- * exit starts; false (an exit to another Viewer level, which has no card to return to) skips the hold.
- */
 @Composable
 fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolean) {
     scope.transition.animateFloat(
@@ -64,10 +60,6 @@ fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolea
     ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
 }
 
-/**
- * Gives [content] its host's lifecycle, but stopped while [covered]: a Viewer level that another level covers stops its
- * playback the moment that level opens, instead of when the transition between them ends.
- */
 @Composable
 fun ViewerCoveredLifecycle(covered: Boolean, content: @Composable () -> Unit) {
     val host = LocalLifecycleOwner.current
@@ -80,7 +72,6 @@ fun ViewerCoveredLifecycle(covered: Boolean, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalLifecycleOwner provides owner, content = content)
 }
 
-/** Follows [host]'s state, capped at CREATED while [covered]. */
 private class CoveredLifecycleOwner(private val host: LifecycleOwner) : LifecycleOwner {
     private val registry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = registry
@@ -98,7 +89,6 @@ private class CoveredLifecycleOwner(private val host: LifecycleOwner) : Lifecycl
 
     private fun sync() {
         val hostState = host.lifecycle.currentState
-        // The registry cannot return to INITIALIZED, and a destroyed host ends it whatever the cap.
         if (hostState == Lifecycle.State.INITIALIZED || registry.currentState == Lifecycle.State.DESTROYED) return
         registry.currentState = if (covered && hostState != Lifecycle.State.DESTROYED) minOf(hostState, Lifecycle.State.CREATED) else hostState
     }
@@ -109,18 +99,12 @@ private const val DISMISS_COMMIT_PROGRESS = 0.25f
 private const val DISMISS_MIN_SCALE = 0.7f
 private const val DISMISS_BACK_RANGE_FRACTION = 0.5f
 
-/** A pull commits past a quarter of its range or on a downward fling; flicking back up cancels it. */
 internal fun viewerDismissCommits(progress: Float, velocityY: Float, flingVelocity: Float): Boolean = when {
     velocityY <= -flingVelocity -> false
     velocityY >= flingVelocity -> true
     else -> progress >= DISMISS_COMMIT_PROGRESS
 }
 
-/**
- * The finger's hold on the media before the Viewer closes. The feed is not composed behind the
- * Viewer, so this only shrinks the media over its dimming background; once released, the return
- * transition takes over from wherever the media was left.
- */
 internal class ViewerDismissDrag {
     var progress by mutableFloatStateOf(0f)
         private set
@@ -139,7 +123,6 @@ internal class ViewerDismissDrag {
         translationY = pull
     }
 
-    /** System back reports its own progress and which edge it began from. */
     fun followBack(backProgress: Float, fromLeftEdge: Boolean, backDistance: Float) {
         progress = (backProgress * DISMISS_BACK_RANGE_FRACTION).coerceIn(0f, 1f)
         translationX = backProgress * backDistance * if (fromLeftEdge) 1f else -1f
@@ -158,7 +141,6 @@ internal class ViewerDismissDrag {
     }
 }
 
-/** Applies the held pose, handing off to the return transition as its progress advances. */
 internal fun Modifier.viewerDismissDrag(drag: ViewerDismissDrag?, returnProgress: () -> Float): Modifier {
     if (drag == null) return this
     return graphicsLayer {
@@ -171,10 +153,6 @@ internal fun Modifier.viewerDismissDrag(drag: ViewerDismissDrag?, returnProgress
     }
 }
 
-/**
- * One progress value describes both directions: zero is fullscreen and one is the feed card. Read it
- * only while drawing, because reading it in composition recomposes the whole Viewer on every frame.
- */
 @Composable
 internal fun rememberViewerReturnProgress(): State<Float> {
     val transition = LocalViewerReturnTransition.current
@@ -198,7 +176,6 @@ internal fun rememberViewerReturnProgress(): State<Float> {
     return progress.asState()
 }
 
-/** Chosen when the media starts moving, so a card that appears later cannot make it jump. */
 private class ViewerLandingTarget {
     private var chosen = false
     private var target: Rect? = null
@@ -213,7 +190,6 @@ private class ViewerLandingTarget {
     }
 }
 
-/** Uniform scale plus an animated crop preserves media proportions when the card has a different aspect ratio. */
 @Composable
 internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Float?): Modifier {
     val transition = LocalViewerReturnTransition.current ?: return this
@@ -246,10 +222,6 @@ internal fun Modifier.viewerReturnMedia(progress: () -> Float, aspectRatio: Floa
         }
 }
 
-/**
- * Per-frame state reused across animation frames: the layer and draw passes share one geometry per progress
- * value, and the clip path is rewound rather than reallocated.
- */
 private class ViewerReturnFrame {
     val clip = Path()
     private var progress = Float.NaN

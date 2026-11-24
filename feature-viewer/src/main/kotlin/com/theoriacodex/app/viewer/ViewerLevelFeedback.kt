@@ -62,7 +62,6 @@ internal fun ViewerLevelFeedbackOverlay(controls: ViewerLevelControls, modifier:
     Box(modifier) { ViewerLevelSurface(shown) { this.alpha = alpha } }
 }
 
-/** Each level appears on the edge its gesture starts from: brightness leading, volume trailing. */
 @Composable
 private fun BoxScope.ViewerLevelSurface(shown: ViewerLevelFeedback, layer: GraphicsLayerScope.() -> Unit) {
     val brightness = shown.control == ViewerLevelControl.Brightness
@@ -86,7 +85,6 @@ private fun ViewerLevelUnavailable(shown: ViewerLevelFeedback) {
     }
 }
 
-/** The icon flips to black once the white fill rises behind it, and stays white below that. */
 @Composable
 private fun ViewerLevelRail(shown: ViewerLevelFeedback) {
     Column(
@@ -107,7 +105,6 @@ private fun ViewerLevelRail(shown: ViewerLevelFeedback) {
 
 private const val LEVEL_ICON_COVERED_FRACTION = 0.14f
 
-/** Drawn from the actual level: a filling sun, or a speaker with up to three bars and a mute slash. */
 @Composable
 private fun ViewerLevelIcon(control: ViewerLevelControl, fraction: Float, tint: Color, modifier: Modifier) {
     Canvas(modifier) {

@@ -142,11 +142,6 @@ class ExtensionsViewModelTest {
     private fun offered(name: String, status: RepoExtension.Status = RepoExtension.Status.AVAILABLE, languages: List<String> = listOf("en")) =
         RepoExtension("https://repo.example", name, name, languages, "1.0", SeriesKind.ANIME, status)
 
-    /**
-     * A repo that offers [offered], refuses to install what [refusing] names, and adds only `https://repo.example`. A
-     * refreshed listing takes [refreshDelay] and holds what was offered when it was asked for; one not refreshed holds
-     * [cached] when set, as a repo read earlier in the process would.
-     */
     private class Repos : ExtensionRepos {
         var offered = emptyList<RepoExtension>()
         var refusing = emptyMap<String, String>()
@@ -187,7 +182,6 @@ class ExtensionsViewModelTest {
         override suspend fun uninstall(id: String) = Unit
     }
 
-    /** Lists [listed]; the test moves [revision] as the host does when a package changes. */
     private class OnDevice(var listed: List<InstalledExtension>) : SeriesExtensions {
         override val revision = MutableStateFlow(0)
 

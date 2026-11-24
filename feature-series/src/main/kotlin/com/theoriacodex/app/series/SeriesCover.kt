@@ -42,10 +42,8 @@ import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.seriesKind
 
-/** What turns a stored cover into the address to load; the app provides its extension host's. */
 val LocalSeriesCovers = staticCompositionLocalOf { SeriesCovers.Stored }
 
-/** Builds the Coil request for [series]' cover; null when the series has none. */
 @Composable
 internal fun rememberSeriesCoverRequest(
     series: Series,
@@ -68,7 +66,6 @@ internal fun rememberSeriesCoverRequest(
     }
 }
 
-/** A series' cover at book proportions; a plain tile while it loads or when the series has none. */
 @Composable
 internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
     val request = rememberSeriesCoverRequest(series)
@@ -82,11 +79,6 @@ internal fun SeriesCover(series: Series, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * A cover card with the title overlaid at the bottom over a scrim; [unread] above zero shows as a badge at top right,
- * and [followed] marks series already in the user's Following list with a subtle pill at top left. [marked] puts a
- * play pill there on an anime's cover, where manga and anime show together.
- */
 @Composable
 internal fun SeriesCard(
     series: Series,
@@ -119,7 +111,6 @@ internal fun SeriesCard(
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 6.dp),
-            // Hyphenated, so a word wider than the card breaks at a syllable rather than at any letter.
             style = MaterialTheme.typography.labelMedium.copy(
                 color = Color.White,
                 shadow = TextOverMediaShadow,
@@ -131,7 +122,6 @@ internal fun SeriesCard(
     }
 }
 
-/** The pills at a card's top left: the anime mark, then Following. */
 @Composable
 private fun CardMarks(anime: Boolean, followed: Boolean, modifier: Modifier) {
     Row(modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -178,10 +168,8 @@ private val TITLE_SCRIM = Brush.verticalGradient(
     1f to Color.Black.copy(alpha = 0.85f),
 )
 
-/** Wide enough for the series page's cover on a dense phone; grid tiles scale it down. */
 private const val COVER_WIDTH_PX = 480
 private const val COVER_HEIGHT_PX = 720
 
-/** High resolution target for the full-screen cover viewer. */
 internal const val FULL_COVER_WIDTH_PX = 1600
 internal const val FULL_COVER_HEIGHT_PX = 2400

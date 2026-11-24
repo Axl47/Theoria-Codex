@@ -34,14 +34,8 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.SheetHeader
 
-/** One choice a [SortFilterSheet] offers: its [value] and what it is called. */
 internal data class SheetChoice<T>(val value: T, val label: String)
 
-/**
- * A "Sort & filter" sheet: one filter chosen among [filters] as chips, then one order among [sorts] as rows, the
- * chosen one marked by [sortMark] (with [sortMarkDescription] for accessibility). Reset shows when [onReset] is given.
- * The chapter list and the Following grid share it.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun <F, S> SortFilterSheet(
@@ -61,7 +55,6 @@ internal fun <F, S> SortFilterSheet(
             if (onReset != null) TextButton(onClick = onReset) { Text("Reset") }
         }
         Column(
-            // Scrolls when the chips wrap tall, as in landscape or with large text.
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

@@ -25,7 +25,6 @@ class ViewerPageThumbnailWarmTest {
     @get:Rule val compose = createComposeRule()
 
     private val items = List(12) { index ->
-        // Page 5 has no dedicated thumbnail: its poster stands in and is not warmed.
         val thumbnail = if (index == 5) "/poster/5.jpg" else "/thumb/$index.jpg"
         ViewerMediaOverviewItem(index, ImageRef(null, "/poster/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/poster/$index.jpg", thumbnail)
     }

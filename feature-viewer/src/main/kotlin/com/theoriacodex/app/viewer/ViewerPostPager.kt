@@ -32,7 +32,6 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** The swipeable post pager, under the screen-wide gesture recognizer. */
 @Composable
 internal fun ViewerPostPagerSurface(
     frame: ViewerFrame,
@@ -55,11 +54,9 @@ internal fun ViewerPostPagerSurface(
 ) {
     val haptics = LocalHapticFeedback.current
     val selection = frame.selection
-    // Pinches write the transform every pointer event; only crossing the zoomed boundary changes the pager.
     val zoomed by remember(viewerTransform) { derivedStateOf { viewerTransform.value.isZoomed } }
     val vertical = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series) == GalleryReadingMode.VERTICAL
     val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
-    // Only the shown layout's zoom holds the gestures: a horizontal zoom left over from before a switch to Vertical must not.
     val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
     val reservedBottom = if (frame.chromeVisible && selection.isAnimated) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerTimelineInset.current).toPx() }
@@ -109,10 +106,8 @@ private fun viewerGestureHandler(
     flingVelocity: Float,
     scope: CoroutineScope,
     slideshowRunning: Boolean,
-    /** Set in a series chapter read vertically: a push up past its last page goes on reading instead of opening info. */
     openNextChapter: (() -> Unit)?,
 ) = object : ViewerGestureHandler {
-    // Any touch on the media stops a slideshow; a tap then shows the controls as usual.
     override fun onPress() {
         if (slideshowRunning) controls.stopSlideshow()
         swipe.press()
@@ -141,19 +136,16 @@ private fun viewerGestureHandler(
     override fun onScrubEnd() = controls.endScrub()
 }
 
-/** Opens the post before [index] at its [entryMediaIndex]; null on the first post. */
 internal fun previousPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val previous = frame.navigation.pages.getOrNull(index - 1) ?: return null
     return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index - 1, config.entryMediaIndex(previous, frame.uiState.series, back = true))) }
 }
 
-/** Opens the post after [index] at its [entryMediaIndex]; null on the last post. */
 internal fun nextPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val next = frame.navigation.pages.getOrNull(index + 1) ?: return null
     return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index + 1, config.entryMediaIndex(next, frame.uiState.series))) }
 }
 
-/** A gallery read as one vertical strip; its end card opens the next post. */
 @Composable
 private fun ViewerVerticalPostPage(
     postPage: Int,
@@ -175,7 +167,6 @@ private fun ViewerVerticalPostPage(
     )
 }
 
-/** One post's media pager, with the effects that keep it in step with the selection. */
 @Composable
 private fun ViewerPostPage(
     postPage: Int,
@@ -252,7 +243,6 @@ private fun ViewerPostPage(
     }
 }
 
-/** How the video [key] on [pageState] plays: its quality and, for an episode, the stream it plays and falls back from. */
 private fun ViewerScreenHost.videoOptions(
     key: ViewerMediaKey,
     pageState: ViewerPageState,
@@ -271,10 +261,6 @@ private fun ViewerScreenHost.videoOptions(
     )
 }
 
-/**
- * Where [post]'s playback goes while a series is watched: its series records it. Null for every other video. [series]
- * outlives a closing session, so the closing player's last report still goes out.
- */
 internal fun ViewerScreenHost.episodeProgress(series: ViewerSeries?, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
     onPlaybackProgress?.takeIf { series is ViewerSeries.Watching }?.let { report -> { progress -> report(post, progress) } }
 
@@ -291,7 +277,6 @@ private fun viewerRendererControls(
         isActive = active,
         isPlaying = controls.playback.playing,
         isPreloading = preloading,
-        // The page a swipe heads to shows its timeline too: the swipe only selects it once the slide settles.
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
         showPassiveProgress = !frame.chromeVisible && active && !frame.inPictureInPicture,
         loopPlayback = controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP && !controls.slideshow,
@@ -307,7 +292,6 @@ private fun viewerRendererControls(
     )
 }
 
-/** Keeps one post's media pager and the selection in step; their order and keys are load-bearing. */
 @Composable
 private fun ViewerPostPageEffects(
     postPage: Int,
@@ -340,7 +324,6 @@ private fun ViewerPostPageEffects(
             screen.pendingMediaJumpByPost.remove(post.id)
         }
     }
-    // [mediaCount] is a key so a post whose pages arrive while it shows is reported again, now with its pages.
     LaunchedEffect(mediaPagerState.settledPage, currentPostIndex, pageState.pendingMediaIndex, swipe.dragging, swipe.settling, mediaCount) {
         if (swipeActive || pageState.pendingMediaIndex != null) return@LaunchedEffect
         reportSettledMedia(isCurrentPost, mediaPagerState.settledPage, selectedMediaIndex, post, onAction, onVisibleMediaChanged)

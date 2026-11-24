@@ -29,7 +29,6 @@ class ViewerMediaOverviewGridTest {
 
     @Test fun `tiles load thumbnails at once and originals only after resting on screen`() {
         val loads = installHangingLoader()
-        // Page 1 has no separate thumbnail, so its one image is the original.
         val items = List(4) { index ->
             val thumbnail = if (index == 1) "/full/1.jpg" else "/thumb/$index.jpg"
             ViewerMediaOverviewItem(index, ImageRef(null, "/full/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/full/$index.jpg", thumbnail)

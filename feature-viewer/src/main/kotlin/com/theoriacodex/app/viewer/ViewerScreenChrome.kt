@@ -44,7 +44,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlin.math.hypot
 
-/** Top bar primary title and optional episode subtitle: a watched series splits series and episode cleanly when both are non-blank. */
 internal fun ViewerSeries?.topBarTitles(post: Post): Pair<String, String?> {
     if (this is ViewerSeries.Watching && !seriesTitle.isNullOrBlank()) {
         val prefix = "$seriesTitle · "
@@ -57,7 +56,6 @@ internal fun ViewerSeries?.topBarTitles(post: Post): Pair<String, String?> {
     return (post.title?.takeIf { this != null } ?: post.id.source.displayName()) to null
 }
 
-/** The dock's Save button; a series entry is not a post to save, so its dock has none. */
 @Composable
 private fun ViewerDockSave(
     series: ViewerSeries?,
@@ -71,7 +69,6 @@ private fun ViewerDockSave(
     ViewerSaveButton(post, saveContext, screen.saveFan, controls::markInteraction) { host.onAction(ViewerAction.Save) }
 }
 
-/** Everything drawn over the media: top bar and trail row, center controls (episodes), dock, post strip or episode bar, footer buttons, lock overlay, sheets and save fan. */
 @Composable
 internal fun BoxScope.ViewerChromeOverlays(
     frame: ViewerFrame,
@@ -96,10 +93,8 @@ internal fun BoxScope.ViewerChromeOverlays(
     val watching = frame.watching
     OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.panel == ViewerPanel.INFO, controls)
     LaunchedEffect(selection.post.id) { screen.trailForks.follow(selection.post.id) }
-    // The selection changes only once a swipe lands; a fork that came back during the slide would open over the post being left.
     val swipingToAnotherPost = swipe.loadTarget?.let { it.postIndex != navigation.currentIndex } == true
     LaunchedEffect(swipingToAnotherPost) { if (swipingToAnotherPost) screen.trailForks.leave() }
-    // While scrubbing everything but the timeline steps back. Only its alpha changes, so the strip keeps its scroll position.
     val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
     val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
     val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture)
@@ -229,7 +224,6 @@ private fun BoxScope.ViewerTopBarOverlay(
     }
 }
 
-/** The trail row, left out while the page overview is open: its reading-mode switch sits where the row would. */
 @Composable
 private fun ViewerTopBarTrail(frame: ViewerFrame, trail: ViewerTrail, config: ViewerScreenConfig, screen: ViewerScreenState, controls: ViewerControls) {
     if (frame.mediaOverviewVisible) return
@@ -266,10 +260,6 @@ private fun BoxScope.ViewerRelatedStripOverlay(
     }
 }
 
-/**
- * Single-switch lock layer over the entire pager surface. Consumes every pointer event so no media gesture,
- * pinch, swipe, or retry tap leaks through; a single tap reveals only the blue closed-padlock Unlock icon button.
- */
 @Composable
 private fun BoxScope.ViewerLockOverlay(
     unlockVisible: Boolean,
@@ -305,7 +295,6 @@ private fun BoxScope.ViewerLockOverlay(
     }
 }
 
-/** Consumes one complete touch sequence while locked, calling [onTap] only for a clean single-finger tap. */
 private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.consumeLockedGesture(onTap: () -> Unit) {
     val slop = viewConfiguration.touchSlop
     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -327,10 +316,6 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.con
     }
 }
 
-/**
- * The post strip and, on multi-page posts, the page scrubber below it, lifted above the dock and any timeline. While a
- * series is watched, [episodeControls] take the strip's place: every episode shows the same cover.
- */
 @Composable
 private fun ViewerBottomStack(
     frame: ViewerFrame,
@@ -353,7 +338,6 @@ private fun ViewerBottomStack(
         lift = LocalViewerTimelineInset.current + if (selection.isAnimated) viewerTimelineFooterHeight() else 0.dp,
         pageBar = {
             if (selection.overviewItems.size > 1) {
-                // Keyed by post so a drag held across a post change is cancelled instead of landing on the new post.
                 key(selection.post.id) {
                     ViewerPageScrubber(
                         source = selection.post.id.source,
@@ -382,10 +366,6 @@ private fun ViewerBottomStack(
     }
 }
 
-/**
- * The rotate button on the left and the slideshow button on the right, hidden while another surface owns the bottom.
- * A watched series places Rotate inline when chrome is visible (keeping only the hidden-chrome hint floating) and offers no slideshow.
- */
 @Composable
 private fun BoxScope.ViewerFooterButtons(
     frame: ViewerFrame,
@@ -396,7 +376,6 @@ private fun BoxScope.ViewerFooterButtons(
 ) {
     val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
     val watching = frame.watching
-    // A running slideshow, active lock, or visible episode bar (which has Rotate inline) suppresses the floating rotate button.
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
     val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
     ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow, existingOffer = rotationOffer)

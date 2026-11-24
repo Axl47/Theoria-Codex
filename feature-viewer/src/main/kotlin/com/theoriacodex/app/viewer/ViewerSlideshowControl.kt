@@ -23,21 +23,14 @@ import com.theoriacodex.app.viewer.state.holdViewerSlideshowImage
 import com.theoriacodex.app.viewer.state.slideshowImageHold
 import kotlinx.coroutines.launch
 
-/**
- * The slideshow's button, lower right opposite the rotate button, offered on still images and kept while a slideshow
- * runs. While a still image is held it times the hold and draws the time left along the bottom edge; videos and
- * animated posts move on when they end. [suppressed] hides the button while another surface owns the bottom.
- */
 @Composable
 internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boolean, onAction: (ViewerAction) -> Unit) {
     val state = frame.uiState
     val running = state.controls.slideshow
-    // Time spent in the background or with the screen off does not count: the hold starts over on return.
     val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
     val hold = state.slideshowImageHold().takeIf { resumed }
     val currentState by rememberUpdatedState(state)
     val currentOnAction by rememberUpdatedState(onAction)
-    // Drawn only; the hold itself is timed by delay, so disabled system animations cannot shorten it.
     val elapsed = remember { Animatable(0f) }
     LaunchedEffect(hold) {
         elapsed.snapTo(0f)

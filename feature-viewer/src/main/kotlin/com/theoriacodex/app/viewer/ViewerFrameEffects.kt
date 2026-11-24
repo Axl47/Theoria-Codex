@@ -85,7 +85,6 @@ internal fun rememberViewerSwipe(
     return swipe
 }
 
-/** Where a swipe from [origin] lands. A vertical gallery scrolls its own pages, so a swipe always changes post. */
 private fun swipeTargetFrom(
     origin: ViewerHorizontalSwipeTarget,
     direction: ViewerHorizontalSwipeDirection,
@@ -110,7 +109,6 @@ private fun swipeTargetFrom(
     )
 }
 
-/** Every effect that follows the frame, in the order they must start. Per-page effects live in the page. */
 @Composable
 internal fun ViewerFrameEffects(
     frame: ViewerFrame,
@@ -190,7 +188,6 @@ internal fun viewerKeepsScreenOn(slideshow: Boolean, reading: Boolean, videoPlay
     return visible && videoPlaying || resumed && (slideshow || reading && !readingIdle)
 }
 
-/** Auto-hides the revealed Unlock button after the accessibility-adjusted timeout; clears immediately when unlocked. */
 @Composable
 private fun ViewerUnlockPeekEffect(frame: ViewerFrame, screen: ViewerScreenState) {
     val accessibilityManager = LocalAccessibilityManager.current
@@ -253,8 +250,6 @@ private fun ViewerBackHandlers(
             events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }
             committed = true
         } finally {
-            // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope. A second Back can
-            // commit here before the frame that enables the hold, so it is held like one the hold caught.
             when {
                 !committed -> scope.launch { dismissDrag.recoil() }
                 screen.pendingDismiss -> screen.heldBack = true
@@ -264,15 +259,6 @@ private fun ViewerBackHandlers(
     }
 }
 
-/**
- * Nothing may pop the route underneath a return that is already moving, so a Back pressed while [holding] is kept in
- * [ViewerScreenState.heldBack] and runs when the Viewer leaves composition at the end of its return, so two quick Backs
- * still mean two steps back. At most one held Back runs. A hold that ends while the Viewer stays, such as a new Viewer
- * opening and clearing the return, drops it: the screen on top is no longer the one that Back was meant for.
- *
- * The hold is an overlay: it outranks every ordinary Back handler, including those the screen underneath registers as
- * it returns, and no lifecycle turns it off, since popping the Viewer stops its destination before the return ends.
- */
 @Composable
 internal fun ViewerHeldBackHandler(holding: Boolean, screen: ViewerScreenState) {
     val owner = LocalOnBackPressedDispatcherOwner.current ?: return
@@ -295,7 +281,6 @@ internal fun ViewerHeldBackHandler(holding: Boolean, screen: ViewerScreenState) 
             hold.remove()
             if (!screen.heldBack) return@onDispose
             screen.heldBack = false
-            // Posted so every handler leaving with the Viewer is gone first; a Viewer leaving with its activity drops it.
             view.post { if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) owner.onBackPressedDispatcher.onBackPressed() }
         }
     }
@@ -324,7 +309,6 @@ private fun ViewerNavigationEffects(
     LaunchedEffect(swipeLoadPost?.id) {
         swipeLoadPost?.let { onAction(ViewerAction.RequestPageResolution(it.id)) }
     }
-    // A vertical gallery fills the window's width, as its pages' own requests assume (ViewerImageRenderer).
     val windowWidth = LocalWindowInfo.current.containerSize.width
     LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget, windowWidth, config, uiState.series) {
         val targetKey = swipeLoadTarget?.let { target ->
@@ -343,14 +327,12 @@ private fun ViewerNavigationEffects(
             .coerceAtLeast(0)
         if (navigation.stripAnchorIndex >= triggerIndex) loadMoreFromStrip()
     }
-    // A caught swipe commits while its pages are still moving, so only a resting pager follows selection.
     val swipeActive = swipe.settling || swipe.dragging
     LaunchedEffect(uiState.currentPageIndex, posts.size, postPagerState, swipeActive) {
         if (!swipeActive && postPagerState.currentPage != currentPostIndex) {
             postPagerState.scrollToPage(currentPostIndex)
         }
     }
-    // Selecting another page already closes the overview in the reducer; a feed page arriving must not.
     LaunchedEffect(uiState.currentPageIndex, posts.size, postPagerState) {
         controls.markPassiveInteraction()
     }
@@ -361,7 +343,6 @@ private fun ViewerNavigationEffects(
     }
 }
 
-/** Moves to the post a strip or drawer tap asked for, once nothing else is moving the pager. */
 @Composable
 private fun ViewerPendingPostEffect(
     frame: ViewerFrame,

@@ -63,8 +63,6 @@ class ViewerVerticalGalleryTest {
     private val actions = mutableListOf<ViewerAction>()
     private val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("vertical"), listOf(gallery, next)))
 
-    // Pages fail at once on the main thread; on Coil's background thread they could land after idling, and a Retry
-    // tapped before the Viewer holds page 1's error only reloads that page locally.
     @Before fun failImageLoads() { installFailingLoader() }
     @After fun resetCoil() = Coil.reset()
 
@@ -100,7 +98,6 @@ class ViewerVerticalGalleryTest {
                 Offset(centerX - width * 0.4f, centerY), Offset(centerX + width * 0.4f, centerY))
         }
         compose.waitForIdle()
-        // Hold the clock so the slideshow cannot run to its end on its own before the touch.
         compose.mainClock.autoAdvance = false
         state.value = reduceViewerState(state.value, ViewerAction.SetSlideshow(true)).state
         Snapshot.sendApplyNotifications()
@@ -177,7 +174,6 @@ class ViewerVerticalGalleryTest {
         }
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
         compose.waitForIdle()
-        // Series progress ignores a chapter without pages, so the resolved one has to be reported too.
         compose.runOnIdle { assertEquals("reported page counts $reported", gallery.media.size, reported.lastOrNull()) }
     }
 
@@ -194,7 +190,6 @@ class ViewerVerticalGalleryTest {
         assertEquals(before, pagePosition())
     }
 
-    /** The first page on screen and how far its top sits from the screen's top. */
     private fun pagePosition(): Pair<Int, Float> {
         val page = (1..gallery.media.size).first { runCatching { compose.onNodeWithContentDescription("Page $it").assertIsDisplayed() }.isSuccess }
         return page to compose.onNodeWithContentDescription("Page $page").fetchSemanticsNode().positionInRoot.y
@@ -225,7 +220,6 @@ class ViewerVerticalGalleryTest {
     }
 
     @Test fun `pages resizing as they load leave the selected page alone`() {
-        // Unloaded pages borrow the post's tall shape; once loaded they are wide, which slides another page under the line.
         val land = installGatedLoader(width = 300, height = 100)
         show()
         compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.SelectMedia(3)).state }

@@ -49,7 +49,6 @@ class ViewerSaveButtonTest {
         compose.onNodeWithContentDescription("Save to Cats").assertExists()
     }
 
-    /** Scores the post once; a later load never finishes, as if scoring were still walking the library. */
     private class SuggestsCatsOnce : QuickSave {
         private var scored = false
         override val lastQuickSave: StateFlow<QuickSaveRecord?> = MutableStateFlow(null)

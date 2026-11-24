@@ -33,7 +33,7 @@ class ViewerGifFrameRendererTest {
 
         assertNotSame(red, blue)
         assertSame(red, redAgain)
-        assertEquals(Color.BLUE, blue.getPixel(0, 0)) // Red was drawn into the spare buffer, not the one on screen.
+        assertEquals(Color.BLUE, blue.getPixel(0, 0))
     }
 
     @Test
@@ -59,7 +59,6 @@ class ViewerGifFrameRendererTest {
         assertNull(renderer.frame)
     }
 
-    /** Idles the main looper (where publishes land) until the shown frame's pixels are [color]. */
     private fun awaitFrame(renderer: ViewerGifFrameRenderer, color: Int): Bitmap {
         repeat(400) {
             idleMain()
@@ -71,7 +70,6 @@ class ViewerGifFrameRendererTest {
 
     private fun idleMain() = shadowOf(Looper.getMainLooper()).idle()
 
-    // A 4x4 animation that is red for its first 100 ms and blue after.
     private fun twoFrameRenderer() = ViewerGifFrameRenderer(4, 4) { canvas, positionMs ->
         canvas.drawColor(if (positionMs < 100) Color.RED else Color.BLUE)
     }

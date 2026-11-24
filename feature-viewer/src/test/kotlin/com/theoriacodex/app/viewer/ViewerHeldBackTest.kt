@@ -29,12 +29,10 @@ class ViewerHeldBackTest {
     private val viewerShown = mutableStateOf(true)
     private var backsBehind = 0
 
-    /** A popped Viewer destination is stopped while its return still runs. */
     private val poppedDestination = object : LifecycleOwner {
         override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.CREATED }
     }
 
-    /** The screen behind registers its Back handler after the Viewer's, as one returning to composition does. */
     private fun showReturningViewer() {
         compose.setContent {
             if (viewerShown.value) {

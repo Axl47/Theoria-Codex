@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION") // Movie is kept because it seeks to any time, which drives scrubbing and speed control.
+@file:Suppress("DEPRECATION")
 
 package com.theoriacodex.app.viewer
 
@@ -17,18 +17,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Renders GIF frames off the main thread into two alternating [width] x [height] bitmaps, so a frame is
- * decoded on [gifRenderThread] instead of in the draw pass. [drawFrame] draws the frame at a position
- * into a cleared canvas; [of] adapts a [Movie]. Call [request] on the main thread with each position;
- * only the newest request is rendered, so scrubbing never builds a backlog. [frame] holds the newest
- * finished bitmap. Call [close] when the caller leaves composition.
- *
- * Every Viewer GIF shares one render thread, so all `setTime`/`draw` calls on a [Movie], which is not
- * thread-safe, are serialized even when the page and its scrub preview render the same instance.
- * A bitmap is drawn into only after the main thread has replaced it with a newer frame, so the
- * bitmap on screen is never written while it is displayed.
- */
 internal class ViewerGifFrameRenderer(
     private val width: Int,
     private val height: Int,
@@ -41,10 +29,10 @@ internal class ViewerGifFrameRenderer(
     private val scheduled = AtomicBoolean(false)
     private val renderTask = Runnable(::renderLatest)
     @Volatile private var closed = false
-    private var shown: Bitmap? = null // main thread
-    private var spare: Bitmap? = null // render thread
-    private var renderedPosition = -1 // render thread
-    private var buffersCreated = 0 // render thread
+    private var shown: Bitmap? = null
+    private var spare: Bitmap? = null
+    private var renderedPosition = -1
+    private var buffersCreated = 0
 
     fun request(positionMs: Int) {
         requested.set(positionMs.coerceAtLeast(0))
@@ -67,7 +55,7 @@ internal class ViewerGifFrameRenderer(
         if (closed) return
         val position = requested.get()
         if (position < 0 || position == renderedPosition) return
-        val target = spare ?: newBuffer() ?: return // Both buffers are out; publish() reschedules.
+        val target = spare ?: newBuffer() ?: return
         spare = null
         renderedPosition = position
         traceMediaSection(MediaTraceSections.VIEWER_GIF_RENDER) {
@@ -88,7 +76,6 @@ internal class ViewerGifFrameRenderer(
         val previous = shown
         shown = bitmap
         frame = bitmap.asImageBitmap()
-        // Draws only happen in the next frame, which now reads [bitmap], so [previous] is free to reuse.
         gifRenderThread.execute { if (previous != null) spare = previous; schedule() }
     }
 

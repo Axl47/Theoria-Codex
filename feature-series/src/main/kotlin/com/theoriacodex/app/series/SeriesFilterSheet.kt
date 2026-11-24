@@ -56,10 +56,6 @@ import com.theoriacodex.domain.series.Inclusion
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.changedFrom
 
-/**
- * Searches one source: a text field, then the source's own filters, which load while a spinner shows. [sheet] holds
- * what is chosen until Search; [onEdit] changes it.
- */
 @Composable
 internal fun SeriesFilterSheet(
     sourceName: String,
@@ -70,7 +66,6 @@ internal fun SeriesFilterSheet(
 ) {
     ExpandedBottomSheet(onDismiss) {
         SheetHeader(FILTER, "Close filter", onDismiss) {
-            // Off until the filters have loaded: a reset before that would be undone when they arrive.
             TextButton(onClick = { onEdit { it.copy(text = "", draft = it.defaults) } }, enabled = sheet.draft != null) { Text("Reset") }
         }
         LazyColumn(Modifier.weight(1f, fill = false).padding(horizontal = 16.dp)) {
@@ -98,11 +93,6 @@ internal fun SeriesFilterSheet(
     }
 }
 
-/**
- * One lazy item per filter, with a group's members as items of their own while it is open, so a group of hundreds
- * of tags composes only what shows. [path] keys each item by its place in the tree; [onChange] takes [filters] with
- * one of them changed.
- */
 private fun LazyListScope.filterItems(
     filters: List<SeriesFilter>,
     defaults: List<SeriesFilter>,
@@ -146,12 +136,10 @@ private fun FilterRow(filter: SeriesFilter, onChange: (SeriesFilter) -> Unit) {
         is SeriesFilter.TriState -> TriStateRow(filter, onChange)
         is SeriesFilter.Select -> SelectRow(filter, onChange)
         is SeriesFilter.Sort -> SortRows(filter, onChange)
-        // Groups are drawn by filterItems, which gives each member a lazy item of its own.
         is SeriesFilter.Group -> Unit
     }
 }
 
-/** A box that cycles ignored → included → excluded; excluded shows the error color's dash. */
 @Composable
 private fun TriStateRow(filter: SeriesFilter.TriState, onChange: (SeriesFilter) -> Unit) {
     val state = when (filter.state) {
@@ -164,7 +152,6 @@ private fun TriStateRow(filter: SeriesFilter.TriState, onChange: (SeriesFilter) 
         filter.name,
         Modifier
             .triStateToggleable(state, role = Role.Checkbox) { onChange(filter.copy(state = next)) }
-            // TalkBack would call the excluded dash "partially checked".
             .semantics {
                 stateDescription = when (filter.state) {
                     Inclusion.IGNORE -> "Ignored"
@@ -178,7 +165,6 @@ private fun TriStateRow(filter: SeriesFilter.TriState, onChange: (SeriesFilter) 
     }
 }
 
-/** The filter's name and its current option; the options open in a menu. */
 @Composable
 private fun SelectRow(filter: SeriesFilter.Select, onChange: (SeriesFilter) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -204,13 +190,11 @@ private fun SelectRow(filter: SeriesFilter.Select, onChange: (SeriesFilter) -> U
     }
 }
 
-/** A row per order; tapping the chosen one flips its direction, shown by an arrow. */
 @Composable
 private fun SortRows(filter: SeriesFilter.Sort, onChange: (SeriesFilter) -> Unit) {
     Column {
         FilterLabel(filter.name)
         filter.options.forEachIndexed { index, option ->
-            // The chosen order's direction, null for the others; a newly chosen order starts descending.
             val ascending = filter.selection?.takeIf { it.index == index }?.ascending
             SortOption(option, ascending) {
                 onChange(filter.copy(selection = SeriesFilter.Sort.Selection(index, ascending = ascending == false)))
@@ -236,7 +220,6 @@ private fun SortOption(label: String, ascending: Boolean?, onClick: () -> Unit) 
     }
 }
 
-/** A group's title, how many of its members are changed, and whether it is open. */
 @Composable
 private fun GroupRow(name: String, changed: Int, open: Boolean, onToggle: () -> Unit) {
     Row(
@@ -266,7 +249,6 @@ private fun FilterLabel(name: String) {
     )
 }
 
-/** A control in a touch-sized slot at the start, then its label; [modifier] makes the whole row the control. */
 @Composable
 private fun OptionRow(label: String, modifier: Modifier, control: @Composable () -> Unit) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -151,7 +151,6 @@ class ViewerLevelGesturesTest {
             assertNull(levels.feedback)
             layout.value = layout.value.copy(touchExploration = false, pictureInPicture = true)
         }
-        // PiP has no active media accessibility node; touch the retained underlying gesture surface.
         compose.onNodeWithContentDescription("Media actions").assertDoesNotExist()
         compose.runOnIdle { assertEquals(0.5f, activity.window.attributes.screenBrightness, 0f) }
     }

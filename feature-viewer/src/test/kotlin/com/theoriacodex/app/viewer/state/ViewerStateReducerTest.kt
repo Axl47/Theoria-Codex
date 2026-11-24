@@ -283,7 +283,6 @@ class ViewerStateReducerTest {
         ).state
 
         assertEquals("https://media.example/new.m3u8", refreshed.currentMedia?.ref?.streams?.single()?.url)
-        // The next Retry starts a load of its own rather than the one whose lookup and streams are spent.
         assertEquals(1L, refreshed.currentMedia?.loadGeneration)
         assertFalse(refreshed.controls.playback.playing)
     }

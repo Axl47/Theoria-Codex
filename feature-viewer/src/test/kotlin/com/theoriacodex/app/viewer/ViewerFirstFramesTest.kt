@@ -44,7 +44,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** Samples real rendered pixels frame by frame, because these defects last only a frame or two. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, qualifiers = "w400dp-h800dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -52,7 +51,6 @@ class ViewerFirstFramesTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var state: androidx.compose.runtime.MutableState<com.theoriacodex.app.viewer.state.ViewerUiState>
 
-    /** Requests for [STALLED] never finish, so media can stay loading for as long as a test watches. */
     @Before fun stallImages() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         Coil.setImageLoader(ImageLoader.Builder(context).components {
@@ -70,7 +68,6 @@ class ViewerFirstFramesTest {
         return file.absolutePath
     }
 
-    /** All posts are 2:1, so on this 400x800 screen their media is a band across the middle. */
     private fun post(id: String, preview: String, full: String): Post {
         val fullRef = ImageRef(null, full, "image/png")
         return Post(
@@ -94,7 +91,6 @@ class ViewerFirstFramesTest {
         }
     }
 
-    /** Frames advance on the test clock, while decoding needs real time to finish between them. */
     private fun nextFrame(): PixelMap {
         compose.mainClock.advanceTimeByFrame()
         Thread.sleep(25)
@@ -121,7 +117,6 @@ class ViewerFirstFramesTest {
         compose.onNodeWithTag("root").performTouchInput { moveTo(Offset(width * 0.4f, height * 0.75f)) }
         var painted = false
         repeat(40) {
-            // Sampled where the incoming page shows once it covers the right of the screen.
             val pixel = nextFrame()[320, 400]
             val visible = pixel == Color.Blue || pixel == Color.Green
             if (painted) assertTrue("The incoming page dipped to $pixel after it had painted", visible)
@@ -146,7 +141,6 @@ class ViewerFirstFramesTest {
     private companion object {
         val SESSION = ViewerSessionIdentity("frames")
         const val STALLED = "https://stalled.test/full.png"
-        // Inside the 2:1 media band, clear of the centered loading indicator.
         const val SAMPLE_X = 80
         const val SAMPLE_Y = 400
     }

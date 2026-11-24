@@ -33,7 +33,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
 
-/** The rules a series being watched follows: one episode at a time, played through, its progress reported. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerWatchingTest {
     private val episodes = (1..3).map { post("episode-$it", SourceKey.HITOMI, emptyList()) }
@@ -108,7 +107,6 @@ class ViewerWatchingTest {
         }, scopeOverride = this)
         owner.replaceSession(session("watching", episodes).copy(series = ViewerSeries.Watching()))
         advanceUntilIdle()
-        // A horizontal drag asks for its target's page as the swipe's load target.
         owner.onAction(ViewerAction.RequestPageResolution(episodes[1].id))
         advanceUntilIdle()
         assertEquals(listOf(episodes[0].id), started)
@@ -133,7 +131,6 @@ class ViewerWatchingTest {
         owner.recordPlaybackProgress(episodes[0], ViewerPlaybackProgress(1_224_000, 1_440_000), report)
         advanceUntilIdle()
         assertEquals(listOf(episodes[0].id, episodes[1].id), started)
-        // The one after it stays refused, even as a drag's target.
         owner.onAction(ViewerAction.RequestPageResolution(episodes[2].id))
         advanceUntilIdle()
         assertEquals(listOf(episodes[0].id, episodes[1].id), started)
@@ -160,11 +157,9 @@ class ViewerWatchingTest {
             recorded += session.sessionId to progress.positionMs
         }
         val owner = testViewerOwner(SavedStateHandle(), scopeOverride = this)
-        // The screen's host, wired as the route wires it; each page's player reports through episodeProgress.
         val host = ViewerScreenHost(onAction = owner::onAction, onPlaybackProgress = { post, progress -> owner.recordPlaybackProgress(post, progress, record) })
         owner.replaceSession(session("watching", listOf(episode)).copy(series = ViewerSeries.Watching()))
         requireNotNull(host.episodeProgress(owner.state.value.series, episode))(ViewerPlaybackProgress(4_000, 1_440_000))
-        // Closing retains the paused pages, and the series with them; their players report as they pause and let go.
         owner.clearSession(retainPresentation = true)
         requireNotNull(host.episodeProgress(owner.state.value.series, episode))(ViewerPlaybackProgress(6_000, 1_440_000))
         advanceUntilIdle()
@@ -180,7 +175,6 @@ class ViewerWatchingTest {
         val playing = owner.state.value.controls.playback
         owner.clearSession(retainPresentation = true)
         assertEquals(1L, playing.restartRequest)
-        // A replay count back at 0 would read as another replay, seeking the closing player to the start it then saves.
         assertEquals(playing.copy(playing = false), owner.state.value.controls.playback)
     }
 
@@ -210,7 +204,6 @@ class ViewerWatchingTest {
         owner.replaceSession(session("watching", episodes).copy(series = seeds))
         collecting.cancel()
         assertTrue(states.filter { it.session != null }.all { it.series == seeds })
-        // So the screen's positions, made for the session's first state, start from its seeds.
         val positions = ViewerVideoPositionStore().forSession(states.last().session, states.last().series as? ViewerSeries.Watching)
         positions.retainAround(episodes.map(Post::id), 0)
         assertEquals(90_000L, positions.position(com.theoriacodex.app.viewer.state.ViewerMediaKey(episodes[0].id, 0)))
@@ -239,20 +232,17 @@ class ViewerWatchingTest {
     @Test
     fun `the next player gets the subtitles and audio chosen on the last, by label`() {
         val choice = ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Track("English"), audioLabel = "Japanese")
-        // A new stream or episode: other ids, Media3's own picks.
         val next = PlaybackTracks(
             subtitles = listOf(PlaybackTrack("0:1/0", "Español", selected = false), PlaybackTrack("0:2/0", "English", selected = false)),
             audio = listOf(PlaybackTrack("1:0/0", "English", selected = true), PlaybackTrack("2:0/0", "Japanese", selected = false)),
         )
         assertEquals(listOf(ViewerTrackChange.Subtitle("0:2/0"), ViewerTrackChange.Audio("2:0/0")), choice.trackChanges(next))
-        // Once applied, nothing more changes; a label the episode lacks keeps the episode's own choice.
         val applied = next.copy(
             subtitles = next.subtitles.map { it.copy(selected = it.label == "English") },
             audio = next.audio.map { it.copy(selected = it.label == "Japanese") },
         )
         assertEquals(emptyList<ViewerTrackChange>(), choice.trackChanges(applied))
         assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(audioLabel = "Korean").trackChanges(applied))
-        // Off turns off a track Media3 picked by itself.
         val defaulted = next.copy(subtitles = next.subtitles.map { it.copy(selected = it.label == "Español") })
         assertEquals(listOf(ViewerTrackChange.Subtitle(null)), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(defaulted))
     }
@@ -264,9 +254,7 @@ class ViewerWatchingTest {
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "English [CC]"), Locale.US))
         assertEquals(listOf(ViewerTrackChange.Subtitle("2:/0")), none.trackChanges(subtitles("English", "Signs", "ESPAÑOL"), Locale.forLanguageTag("es-PR")))
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), none.trackChanges(subtitles("Signs", "pt-BR", "Portugal"), Locale.forLanguageTag("pt")))
-        // A word that only contains the name is not it.
         assertEquals(listOf(ViewerTrackChange.Subtitle("0:/0")), none.trackChanges(subtitles("Signs", "Englishman"), Locale.US))
-        // Whether a file beside the stream or inside it, one Media3 shows stays; only Off turns subtitles off.
         val shownByMedia3 = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:/0", "English", selected = false), PlaybackTrack("subtitle:0/0", "Signs", selected = true)))
         assertEquals(emptyList<ViewerTrackChange>(), none.trackChanges(shownByMedia3, Locale.US))
         assertEquals(emptyList<ViewerTrackChange>(), ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Off).trackChanges(subtitles("English"), Locale.US))
@@ -277,7 +265,6 @@ class ViewerWatchingTest {
         val english = ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Track("English"))
         val next = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:/0", "Español", selected = false), PlaybackTrack("1:/0", "English [CC]", selected = false)))
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), english.trackChanges(next, Locale.US))
-        // The choice holds: an episode offering "English" again shows it.
         val later = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:/0", "English [CC]", selected = true), PlaybackTrack("1:/0", "English", selected = false)))
         assertEquals(listOf(ViewerTrackChange.Subtitle("1:/0")), english.trackChanges(later, Locale.US))
     }
@@ -331,7 +318,6 @@ class ViewerWatchingTest {
         assertNull(state.controls.episode.streamLabelFor(second))
         assertNull(state.controls.episode.pickedStream(first))
 
-        // Another episode falling back leaves this one on the stream it fell back to.
         state = reduceViewerState(state, ViewerAction.FallBackToStream(second, "A")).state
         assertEquals("B", state.controls.episode.streamLabelFor(first))
         assertEquals("A", state.controls.episode.streamLabelFor(second))

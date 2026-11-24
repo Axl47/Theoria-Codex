@@ -10,7 +10,6 @@ import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 
-/** Bind asynchronous renderer events to the producing session, media, and retry generation. */
 internal fun viewerRendererEvents(
     session: ViewerSessionIdentity?,
     key: ViewerMediaKey,
@@ -33,11 +32,6 @@ internal fun viewerRendererEvents(
     onPlaybackProgress = onPlaybackProgress,
 )
 
-/**
- * Runs [play] while [playing] and the host is at least started and [pause] otherwise, following its lifecycle;
- * [pause] also runs when [key] or [playing] changes and on disposal. For self-animating drawables (the GIF fallback,
- * animated WebP), keyed by the drawable.
- */
 @Composable
 internal fun ViewerPlayWhileStarted(key: Any?, playing: Boolean, play: () -> Unit, pause: () -> Unit) {
     val owner = LocalLifecycleOwner.current

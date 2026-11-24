@@ -52,7 +52,6 @@ class ViewerCommentsTest {
         owner.replaceSession(session(posts))
         openFirstMedia(owner)
 
-        // The neighbours are not asked for until they are current.
         assertEquals(listOf("first"), loader.requested)
         listOf(1, 2, 3, 0).forEach { owner.onAction(ViewerAction.SelectPage(it)) }
         runCurrent()
@@ -104,7 +103,6 @@ class ViewerCommentsTest {
         assertEquals("https://example.test/p.jpg", prepared.single().full?.url)
     }
 
-    /** The current post's media is up, which is what lets background requests start. */
     private fun TestScope.openFirstMedia(owner: ViewerViewModel) {
         val state = owner.state.value
         val key = requireNotNull(state.currentMedia).key

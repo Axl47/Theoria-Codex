@@ -136,7 +136,6 @@ class ViewerPostStripTest {
         compose.onAllNodesWithText("3", useUnmergedTree = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("Open Chapter 9").assertExists()
         compose.onNodeWithContentDescription("Open Series · Chapter 3").assertExists()
-        // The drawn number stays out of TalkBack, which reads the mark's label instead.
         compose.onNodeWithText("9", useUnmergedTree = true).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility).or(hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))))
     }
 

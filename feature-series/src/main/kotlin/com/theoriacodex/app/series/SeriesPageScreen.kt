@@ -94,12 +94,6 @@ import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.coroutines.flow.collectLatest
 
-/**
- * One series: blurred cover backdrop, cover and metadata, Follow / open-in-browser / Share actions, expandable
- * description with clickable genre pills, Continue button, entry search and sort/filter controls, and entry cards
- * with long-press read actions, undo support, and downloads. Entries are chapters or episodes by the series' kind;
- * episodes do not download.
- */
 @Composable
 fun SeriesPageScreen(
     viewModel: SeriesPageViewModel,
@@ -317,7 +311,6 @@ private fun LazyListScope.statusRows(
     }
 }
 
-/** The entry count with sort/filter controls, active filter pills, and every visible entry card. */
 private fun LazyListScope.chapterList(
     state: SeriesPageState,
     viewModel: SeriesPageViewModel,
@@ -370,7 +363,6 @@ private fun LazyListScope.chapterList(
     }
 }
 
-/** Hero section: blurred cover backdrop behind the floating top bar, cover + metadata, and action buttons. */
 @Composable
 private fun SeriesHeroHeader(
     stored: StoredSeries,
@@ -538,10 +530,6 @@ private fun HeroCircleAction(icon: ImageVector, contentDescription: String, onCl
     }
 }
 
-/**
- * Expandable synopsis and genres: 3 lines with a bottom-right "More" fade when collapsed; full synopsis, wrapped
- * genre pills, and "Less" when expanded.
- */
 @Composable
 private fun SeriesAbout(series: Series, onSearchGenre: ((String) -> Unit)?) {
     val description = series.description
@@ -663,7 +651,6 @@ private fun ContinueReadingButton(label: String, enabled: Boolean, onClick: () -
     }
 }
 
-/** Says the series' extension cannot be used, which is why its entries cannot be opened, and leads to where to fix it. */
 @Composable
 private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
     Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -672,7 +659,6 @@ private fun MissingSourceRow(onOpenExtensions: () -> Unit) {
     }
 }
 
-/** "Continue reading Chapter 4" or "Start watching", by the series' [kind]. */
 internal fun continueLabel(started: Boolean, entry: StoredSeriesEntry, kind: SeriesKind): String =
     if (started) "Continue ${kind.words.doing} ${entry.entry.name}" else "Start ${kind.words.doing}"
 

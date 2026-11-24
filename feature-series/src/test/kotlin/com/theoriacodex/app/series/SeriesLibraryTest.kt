@@ -11,7 +11,6 @@ import org.junit.Test
 class SeriesLibraryTest {
     private val source = SourceKey.parseOrThrow("custom_mihon_1")
 
-    // In the stored order: unread first.
     private val library = listOf(
         followed("Zeta", unread = 4, started = true, updated = 10, read = 30, added = 1),
         followed("alpha", unread = 1, started = false, updated = 40, read = null, added = 3),

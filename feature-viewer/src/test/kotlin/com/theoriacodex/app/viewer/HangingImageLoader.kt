@@ -20,10 +20,6 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 
-/**
- * Replaces Coil's loader with one whose requests never finish, except the one ending in [loadsImmediately],
- * recording which requests started and were cancelled. Call `Coil.reset()` after the test.
- */
 internal fun installHangingLoader(loadsImmediately: String? = null): ImageLoadLog {
     val log = ImageLoadLog()
     val image = BitmapDrawable(context().resources, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
@@ -34,10 +30,6 @@ internal fun installHangingLoader(loadsImmediately: String? = null): ImageLoadLo
     return log
 }
 
-/**
- * Replaces Coil's loader with one whose requests all wait until the returned function is called, then finish as
- * [width] by [height] images. Call `Coil.reset()` after the test.
- */
 internal fun installGatedLoader(width: Int, height: Int): () -> Unit {
     val gate = CompletableDeferred<Unit>()
     val image = BitmapDrawable(context().resources, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888))
@@ -48,10 +40,6 @@ internal fun installGatedLoader(width: Int, height: Int): () -> Unit {
     return { gate.complete(Unit) }
 }
 
-/**
- * Replaces Coil's loader with one whose every request fails at once, on the calling thread, so a test's idling
- * sees each failure land, recording which requests started. Call `Coil.reset()` after the test.
- */
 internal fun installFailingLoader(): ImageLoadLog {
     val log = ImageLoadLog()
     installTestLoader(log) { data -> error("No image in tests: $data") }
@@ -63,7 +51,6 @@ internal fun installNotFoundLoader() = installTestLoader(EventListener.NONE) { d
     throw HttpException(Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(404).message("Not Found").build())
 }
 
-/** Unconfined, so loads finish on the main thread, where Compose's idling tracks them. */
 private fun installTestLoader(listener: EventListener, fetch: suspend (Any) -> FetchResult) {
     Coil.setImageLoader(
         ImageLoader.Builder(context())
@@ -76,10 +63,6 @@ private fun installTestLoader(listener: EventListener, fetch: suspend (Any) -> F
 
 private fun context() = ApplicationProvider.getApplicationContext<Application>()
 
-/**
- * [requests], [started] and [cancelled] cover only what is shown on screen. Disk-only warm requests, which never
- * write the memory cache (`memoryCachePolicy.writeEnabled == false`), are kept apart in [warmed].
- */
 internal class ImageLoadLog : EventListener {
     val requests = mutableListOf<ImageRequest>()
     val warmed = mutableListOf<ImageRequest>()

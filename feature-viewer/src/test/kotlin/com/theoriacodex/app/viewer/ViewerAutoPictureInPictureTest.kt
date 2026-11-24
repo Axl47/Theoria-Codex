@@ -71,11 +71,9 @@ class ViewerAutoPictureInPictureTest {
         withController { _, controller ->
             val player = TestVideoPlayer()
             val binding = controller.bind(player) { null }
-            // Before the player knows its frame, post metadata is the only shape available.
             assertEquals(1.0, controller.params(1000, 1000).aspectRatio!!.toDouble(), 0.001)
             player.update(true, Player.STATE_READY)
             assertEquals(9.0 / 16, controller.params(1000, 1000).aspectRatio!!.toDouble(), 0.001)
-            // Non-square pixels: 1440x1080 stored at 0.75 pixel aspect displays as a square.
             player.update(true, Player.STATE_READY, size = VideoSize(1440, 1080, 0.75f))
             assertEquals(1.0, controller.params(1600, 900).aspectRatio!!.toDouble(), 0.001)
             binding.close()

@@ -57,7 +57,6 @@ class ViewerAccessibilityTest {
         }
         compose.mainClock.advanceTimeBy(6_500)
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
-        // Robolectric delivers service events to the listeners on this exact context's manager.
         compose.runOnIdle { actions.clear(); shadowOf(viewerManager).setTouchExplorationEnabled(true) }
         repeat(VIEWER_CHROME_STAGE_STRIPS + 1) { settleFrame() }
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
@@ -66,7 +65,6 @@ class ViewerAccessibilityTest {
         compose.runOnIdle { assertFalse(ViewerAction.ToggleChrome in actions) }
         compose.runOnIdle { shadowOf(viewerManager).setTouchExplorationEnabled(false) }
         settleFrame()
-        // The controls fade out rather than cutting.
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
     }

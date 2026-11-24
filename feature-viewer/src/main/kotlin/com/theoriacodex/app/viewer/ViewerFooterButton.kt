@@ -22,12 +22,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 
-/**
- * A round button in a lower corner of the Viewer ([alignment] picks the side), floating [VIEWER_FOOTER_BUTTON_GAP] above
- * the footer the current media shows (dock, timeline or page scrubber, post strip). As the chrome hides and shows, the footer fades out of and into place, so the button
- * glides between the footer's edge and the screen's edge over the same span instead of jumping. Shared by rotation and
- * the slideshow.
- */
 @Composable
 internal fun BoxScope.ViewerFooterButton(
     selection: ViewerSelection,
@@ -37,11 +31,9 @@ internal fun BoxScope.ViewerFooterButton(
     icon: ImageVector,
     contentDescription: String,
     testTag: String,
-    /** The row at the footer's top: the post strip, or a watched episode's controls in its place. */
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
     onClick: () -> Unit,
 ) {
-    // The dock's inset already follows the chrome; the timeline or page scrubber and the row above it hide with it too.
     val footer = viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
     val lift by animateDpAsState(footer, tween(TheoriaMotion.SHORT_MS), label = "Viewer footer button lift")
     ViewerChromeVisibility(
@@ -57,13 +49,8 @@ internal fun BoxScope.ViewerFooterButton(
     }
 }
 
-/** Total bottom chrome height (dock/nav bar + timeline + episode/strip bar) that Viewer subtitles stay clear of while chrome is visible. */
 internal val LocalViewerSubtitleBottomLift = staticCompositionLocalOf { 0.dp }
 
-/**
- * Total height of the Viewer's bottom chrome stack (dock/nav-bar inset + timeline or page bar + strip/episode bar).
- * Shared by floating footer buttons and Viewer subtitle bottom clearance.
- */
 @Composable
 internal fun viewerFooterHeight(
     selection: ViewerSelection,
@@ -72,7 +59,6 @@ internal fun viewerFooterHeight(
     timelineInset: Dp = LocalViewerTimelineInset.current,
 ): Dp = timelineInset + if (chromeVisible) viewerFooterBarHeight(selection) + bottomRowHeight else 0.dp
 
-/** The bar the current media shows between the dock and the post strip: its timeline, or the page scrubber's track on multi-page posts. */
 @Composable
 internal fun viewerFooterBarHeight(selection: ViewerSelection): Dp = when {
     selection.isAnimated -> viewerTimelineFooterHeight()
@@ -80,5 +66,4 @@ internal fun viewerFooterBarHeight(selection: ViewerSelection): Dp = when {
     else -> 0.dp
 }
 
-/** The gap from the footer's edge, or the screen's when the footer is gone, and from the side. */
 private val VIEWER_FOOTER_BUTTON_GAP = 12.dp

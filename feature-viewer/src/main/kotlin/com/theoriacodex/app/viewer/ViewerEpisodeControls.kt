@@ -67,12 +67,6 @@ import com.theoriacodex.app.viewer.state.ViewerSubtitleChoice
 import com.theoriacodex.domain.model.MediaStream
 import java.util.Locale
 
-/**
- * The subtitle and audio tracks, and active loading state, of the episode on screen. Its player publishes them
- * ([FollowViewerActiveTracks]) for the episode controls, which live in the screen's chrome rather than in the player,
- * and every player followed gets the user's [choice] as its tracks arrive: Media3 never shows an external subtitle by
- * itself, so without it subtitles would need turning on again for every stream, recovery and episode.
- */
 @Stable
 internal class ViewerActiveTracks {
     private var player: Player? = null
@@ -89,7 +83,6 @@ internal class ViewerActiveTracks {
             player?.let(::apply)
         }
 
-    /** Follows [player]'s tracks until the returned handle closes; a later call takes over from it. */
     fun follow(player: Player): AutoCloseable {
         this.player = player
         apply(player)
@@ -108,7 +101,6 @@ internal class ViewerActiveTracks {
         }
     }
 
-    /** Publishes whether the active episode player is loading/buffering, guarded by [owner] so stale disposes never clear a newer page. */
     fun publishLoading(owner: Any, isLoading: Boolean): AutoCloseable {
         loadingOwner = owner
         loading = isLoading
@@ -132,18 +124,11 @@ internal class ViewerActiveTracks {
     }
 }
 
-/** A selection to make on a player so it plays the user's [ViewerEpisodeChoice]. */
 internal sealed interface ViewerTrackChange {
-    /** Shows subtitle track [id]; null turns subtitles off. */
     data class Subtitle(val id: String?) : ViewerTrackChange
     data class Audio(val id: String) : ViewerTrackChange
 }
 
-/**
- * What a player offering [tracks] must change to play this choice: nothing it already plays. Audio this episode does
- * not offer keeps the episode's own. Subtitles it does not offer, or none chosen, show what Media3 picked, else the
- * [defaultSubtitle]; only Off turns them off.
- */
 internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks, locale: Locale = Locale.getDefault()): List<ViewerTrackChange> = buildList {
     val subtitles = tracks.subtitles
     if (subtitle == ViewerSubtitleChoice.Off) {
@@ -156,10 +141,8 @@ internal fun ViewerEpisodeChoice.trackChanges(tracks: PlaybackTracks, locale: Lo
     audioLabel?.let { label -> tracks.audio.labelled(label)?.takeUnless { it.selected }?.let { add(ViewerTrackChange.Audio(it.id)) } }
 }
 
-/** The screen's [ViewerActiveTracks] while a series is watched; null otherwise, so no player is followed. */
 internal val LocalViewerActiveTracks = staticCompositionLocalOf<ViewerActiveTracks?> { null }
 
-/** Publishes [player]'s tracks and loading state to the screen while it plays the selected episode. */
 @Composable
 internal fun FollowViewerActiveTracks(player: Player?, active: Boolean, loading: Boolean = false) {
     val activeTracks = LocalViewerActiveTracks.current ?: return
@@ -168,14 +151,12 @@ internal fun FollowViewerActiveTracks(player: Player?, active: Boolean, loading:
         val following = player?.takeIf { active }?.let(activeTracks::follow)
         onDispose { following?.close() }
     }
-    // Separate from track following so buffering flips never re-apply track choices, and loading publishes even while player is null.
     DisposableEffect(activeTracks, active, loading) {
         val handle = if (active) activeTracks.publishLoading(loadingToken, loading) else null
         onDispose { handle?.close() }
     }
 }
 
-/** Top-right actions for a watched series: Subtitles, Audio (when >1), Server/Stream, and More (Start over). */
 @Composable
 internal fun RowScope.ViewerEpisodeTopActions(
     currentStream: MediaStream?,
@@ -219,11 +200,6 @@ internal fun RowScope.ViewerEpisodeTopActions(
     }
 }
 
-/**
- * Tight center playback controls for long-form episodes: Previous, Play/Pause, Next.
- * Touch targets stay tight (56–64 dp) so double-tapping around them in the center column still zooms.
- * When [hideCenterPlayback] is true (buffering or media error), the center Play/Pause slot leaves room for the spinner/error.
- */
 @Composable
 internal fun ViewerEpisodeCenterControls(
     isPlaying: Boolean,
@@ -296,10 +272,6 @@ private fun CenterTransportButton(
     }
 }
 
-/**
- * Lower utility bar sitting above the timeline while a series is watched:
- * Lock (white open padlock), Rotate (inline), Speed pill (`1.0×`), and at the trailing end PiP and landscape Fit/Fill.
- */
 @Composable
 internal fun ViewerEpisodeBar(
     frame: ViewerFrame,
@@ -333,7 +305,6 @@ internal fun ViewerEpisodeBar(
     )
 }
 
-/** The episode utility row above the timeline. */
 @Composable
 internal fun ViewerEpisodeControls(
     playbackRate: ViewerPlaybackRate,
@@ -420,14 +391,9 @@ private fun formatEpisodeSpeed(speed: Float): String {
     return "$formatted×"
 }
 
-/**
- * The top-right server/stream icon button. Keeps one accessibility node described `Stream` whose text and state
- * both name [label], matching TalkBack and the live anime viewer tests.
- */
 @Composable
 private fun ViewerStreamButton(label: String, onClick: () -> Unit) {
     Box(
-        // The tag and clickable come before clearAndSetSemantics so click actions and the test tag remain intact.
         modifier = Modifier
             .size(48.dp)
             .testTag(VIEWER_EPISODE_STREAM_TAG)
@@ -445,7 +411,6 @@ private fun ViewerStreamButton(label: String, onClick: () -> Unit) {
     }
 }
 
-/** An icon button that opens a list of tracks; its state reads as the selected track's label. */
 @Composable
 private fun ViewerTrackButton(icon: ImageVector, description: String, selectedLabel: String, tag: String, tint: Color, open: () -> Unit) {
     IconButton(onClick = open, modifier = Modifier.testTag(tag).semantics { stateDescription = selectedLabel }) {
@@ -453,18 +418,12 @@ private fun ViewerTrackButton(icon: ImageVector, description: String, selectedLa
     }
 }
 
-/**
- * The subtitle shown when none was chosen and Media3 picked none, whether a side-loaded file or one inside the stream:
- * the first whose label names [locale]'s language, in English, in itself or by its code, as a whole word and ignoring
- * case (`English [CC]`, `español`, `en`); else the first.
- */
 internal fun List<PlaybackTrack>.defaultSubtitle(locale: Locale): PlaybackTrack? {
     val names = listOf(locale.getDisplayLanguage(Locale.ENGLISH), locale.getDisplayLanguage(locale), locale.language).filter(String::isNotBlank)
     val language = Regex(names.joinToString("|", "(?<!\\p{L})(?:", ")(?!\\p{L})") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
     return firstOrNull { language.containsMatchIn(it.label) } ?: firstOrNull()
 }
 
-/** The track a choice names, by its label. */
 private fun List<PlaybackTrack>.labelled(label: String): PlaybackTrack? = firstOrNull { it.label == label }
 
 internal val VIEWER_EPISODE_CONTROLS_HEIGHT = 48.dp

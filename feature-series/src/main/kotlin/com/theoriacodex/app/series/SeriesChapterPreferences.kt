@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.core.content.edit
 import com.theoriacodex.domain.series.SeriesId
 
-/** Remembered display options for one series' chapter list (search query is never persisted). */
 data class ChapterDisplayPreferences(
     val sort: ChapterSort = ChapterSort.SOURCE_ORDER,
     val descending: Boolean = true,
@@ -14,19 +13,16 @@ data class ChapterDisplayPreferences(
         get() = sort == ChapterSort.SOURCE_ORDER && descending && filter == ChapterFilter.ALL
 }
 
-/** Reads and writes per-series chapter sort and filter choices across visits. */
 interface SeriesChapterPreferences {
     fun read(id: SeriesId): ChapterDisplayPreferences
     fun write(id: SeriesId, preferences: ChapterDisplayPreferences)
 }
 
-/** Default in-memory no-op store for tests and previews that do not persist preferences. */
 object NoOpSeriesChapterPreferences : SeriesChapterPreferences {
     override fun read(id: SeriesId): ChapterDisplayPreferences = ChapterDisplayPreferences()
     override fun write(id: SeriesId, preferences: ChapterDisplayPreferences) = Unit
 }
 
-/** SharedPreferences-backed per-series store for chapter sort and filter choices. */
 class SharedPreferencesSeriesChapterPreferences(context: Context) : SeriesChapterPreferences {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

@@ -7,13 +7,11 @@ import com.theoriacodex.domain.series.SeriesStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The Series tab's two views: the followed series, and one source's series to browse. */
 enum class SeriesView(val label: String) {
     FOLLOWING("Following"),
     BROWSE("Browse"),
 }
 
-/** How the Following grid is ordered. Unread is the stored order: series with unread entries first, most first. */
 enum class LibrarySort {
     UNREAD,
     LAST_UPDATED,
@@ -31,7 +29,6 @@ enum class LibrarySort {
     }
 }
 
-/** Which followed series the Following grid shows. */
 enum class LibraryShow {
     ALL,
     UNREAD,
@@ -64,10 +61,6 @@ data class LibraryOptions(val sort: LibrarySort = LibrarySort.UNREAD, val show: 
     val isDefault: Boolean get() = this == LibraryOptions()
 }
 
-/**
- * The followed series [options] show, in their order, whose title holds [query]. Ties, and series a time sort has no
- * time for (placed last), keep the stored order.
- */
 internal fun List<FollowedSeries>.arranged(options: LibraryOptions, query: String): List<FollowedSeries> {
     val needle = query.trim()
     val shown = filter { options.show.admits(it) && (needle.isEmpty() || it.series.title.contains(needle, ignoreCase = true)) }
@@ -80,20 +73,17 @@ internal fun List<FollowedSeries>.arranged(options: LibraryOptions, query: Strin
     }
 }
 
-/** Remembers the Following grid's sort and filter across launches. Reading may touch the disk. */
 interface SeriesLibraryPreferences {
     suspend fun read(): LibraryOptions
     fun write(options: LibraryOptions)
 }
 
-/** For tests and previews: always the defaults, and nothing kept. */
 object NoOpSeriesLibraryPreferences : SeriesLibraryPreferences {
     override suspend fun read(): LibraryOptions = LibraryOptions()
     override fun write(options: LibraryOptions) = Unit
 }
 
 class SharedPreferencesSeriesLibraryPreferences(context: Context) : SeriesLibraryPreferences {
-    // Opened by the first read, off the main thread; a write comes after it.
     private val prefs by lazy { context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     override suspend fun read(): LibraryOptions = withContext(Dispatchers.IO) {

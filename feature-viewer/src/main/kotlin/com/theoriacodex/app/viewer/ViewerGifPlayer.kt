@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION") // Movie is kept because it seeks to any time, which drives scrubbing and speed control.
+@file:Suppress("DEPRECATION")
 
 package com.theoriacodex.app.viewer
 
@@ -135,7 +135,6 @@ private fun ViewerGifMovie(
     }
 }
 
-/** Draws the newest frame [ViewerGifFrameRenderer] finished for [positionMs]; decoding stays off the main thread. */
 @Composable
 private fun ViewerGifCanvas(movie: Movie, positionMs: () -> Long, modifier: Modifier) {
     val renderer = remember(movie) { ViewerGifFrameRenderer.of(movie) }

@@ -19,7 +19,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-/** Equal-spaced stops select the supported rates, including the non-uniform 0.2x stop. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PlaybackRateSlider(

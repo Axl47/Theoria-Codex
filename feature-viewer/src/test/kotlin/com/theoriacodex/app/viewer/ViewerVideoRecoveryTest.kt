@@ -19,7 +19,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** [ViewerVideoRecovery.decide] as a table: each row is the situation, the event, and what the player does next. */
 class ViewerVideoRecoveryTest {
     private val episode = ViewerMediaKey(PostId(SourceKey.HITOMI, "episode"), 0)
     private val labels = listOf("A", "B", "C", "D", "E")
@@ -29,7 +28,6 @@ class ViewerVideoRecoveryTest {
     private val unknown = PlaybackException.ERROR_CODE_UNSPECIFIED
     private val cleartext = PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED
 
-    /** One load's situation: how it got here, then the event. */
     private data class Row(
         val name: String,
         val played: Boolean = false,
@@ -76,7 +74,6 @@ class ViewerVideoRecoveryTest {
         val attempts = ViewerStreamAttempts()
         val first = recovery(attempts).apply { onPlayed() }
         assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus, positionMs = 600_000)))
-        // The fresh links play on well past where the old ones died, then expire in their turn.
         val recovered = recovery(attempts).apply { onPlayed(); onProgress(600_000 + VIEWER_RECOVERED_PROGRESS_MS) }
         assertEquals(AskForFreshLinks, recovered.decide(PlayerError(errorPage, positionMs = 1_200_000)))
     }
@@ -87,7 +84,6 @@ class ViewerVideoRecoveryTest {
         val labels = listOf("A", "B")
         val first = recovery(attempts, labels).apply { onPlayed() }
         assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus, positionMs = 600_000)))
-        // The fresh links resume just before the bad point and render a frame there: that is not progress.
         val recovered = recovery(attempts, labels).apply { onPlayed(); onProgress(598_000); onProgress(601_000) }
         assertEquals(FallBack("B"), recovered.decide(PlayerError(badStatus, positionMs = 601_000)))
         val fallback = recovery(attempts, labels, playing = "B").apply { onPlayed(); onProgress(601_000) }
@@ -97,12 +93,10 @@ class ViewerVideoRecoveryTest {
     @Test
     fun `a lookup cancelled before it ended gives the ask back`() {
         val attempts = ViewerStreamAttempts()
-        // Swiped away while the expired links were looked up: back on the page, the old links fail again and ask again.
         val first = recovery(attempts).apply { onPlayed() }
         assertEquals(AskForFreshLinks, first.decide(PlayerError(badStatus)))
         first.onAskCancelled()
         assertEquals(AskForFreshLinks, recovery(attempts).decide(PlayerError(badStatus)))
-        // Left during Retry's opening lookup: the Retry still opens with the ask on return.
         val retried = ViewerStreamAttempts()
         recovery(retried, loadGeneration = 1).apply { assertEquals(AskForFreshLinks, opening(0)) }.onAskCancelled()
         assertEquals(AskForFreshLinks, recovery(retried, loadGeneration = 1).opening(0))
@@ -129,7 +123,6 @@ class ViewerVideoRecoveryTest {
         assertEquals(FallBack("B"), recovery(two, labels = listOf("A", "B"), playing = "A").decide(PlayerError(badStatus)))
         assertEquals(Fail, recovery(two, labels = listOf("A", "B"), playing = "B").decide(PlayerError(badStatus)))
 
-        // Fresh links dropped B, the stream fallen back to, and A plays again: its failures still count.
         val dropped = ViewerStreamAttempts()
         val refreshed = listOf("A", "C", "D", "E")
         assertEquals(FallBack("B"), recovery(dropped, playing = "A").decide(PlayerError(badStatus)))
@@ -153,15 +146,12 @@ class ViewerVideoRecoveryTest {
         val retried = recovery(attempts, loadGeneration = 1)
         assertEquals(AskForFreshLinks, retried.opening(0))
         assertEquals(RetryInPlace, retried.decide(NothingNew))
-        // The replayed player, with the ask spent, moves on to the next stream when it fails.
         assertEquals(FallBack("B"), retried.decide(PlayerError(badStatus)))
-        // Another player of the Retry (a stream picked meanwhile) plays at once.
         assertNull(recovery(attempts, loadGeneration = 1, playing = "C").opening(0))
     }
 
     @Test
     fun `a stream with the same request as the one that failed is still a new player`() {
-        // Two servers offering one address under two labels.
         val streams = listOf(MediaStream("https://cdn.test/e.m3u8", "Server A"), MediaStream("https://cdn.test/e.m3u8", "Server B"))
         val media = ImageRef(url = null, localPath = null, mime = "video/mp4", streams = streams)
         val load = ViewerMediaLoad(episode, 0)

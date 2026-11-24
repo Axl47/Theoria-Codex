@@ -49,7 +49,6 @@ import com.theoriacodex.domain.series.SeriesKind
 import java.text.DateFormat
 import java.util.Date
 
-/** The entry count ("12 episodes", or "3 of 12 episodes" while narrowed) and the sort and filter button. */
 @Composable
 internal fun ChapterListHeader(
     words: EntryWords,
@@ -91,10 +90,6 @@ internal fun EmptyFilteredChapters(words: EntryWords, onClear: () -> Unit) {
     }
 }
 
-/**
- * An entry card: title, upload date / scanlator / progress line, optional download mark, and long-press quick actions,
- * worded for the series' [kind].
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun EntryRow(
@@ -194,7 +189,6 @@ private fun EntryContextMenu(
     onMarkPreviousRead: () -> Unit,
     onToggleDownload: () -> Unit,
 ) {
-    // Composed only while open: a long chapter list would otherwise hold a closed menu per row.
     if (!expanded) return
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         DropdownMenuItem(
@@ -221,7 +215,6 @@ private fun EntryContextMenu(
     }
 }
 
-/** A chapter row's download state, which a tap moves on: download, stop the download, or delete it from the device. */
 @Composable
 private fun DownloadMark(download: ChapterDownload?, onClick: () -> Unit) {
     IconButton(onClick = onClick) {
@@ -247,11 +240,6 @@ private fun DownloadMark(download: ChapterDownload?, onClick: () -> Unit) {
     }
 }
 
-/**
- * Date, translator group, and progress joined on one subtitle line. Progress is how far the user is in an entry left
- * unfinished ("Page 7 of 18", or "8:12 / 23:40" as the Viewer's timeline writes it), or what a finished one is ("Read",
- * "Watched").
- */
 internal fun entryDetail(
     entry: StoredSeriesEntry,
     kind: SeriesKind,

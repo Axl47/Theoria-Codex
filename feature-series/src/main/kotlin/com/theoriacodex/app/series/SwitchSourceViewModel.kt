@@ -23,10 +23,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** A series found on another source; [entries] is null while its count loads, or when that failed. */
 data class SwitchMatch(val series: Series, val entries: Int? = null)
 
-/** What one other source found: still searching, failed, or its best matches, none when it found nothing. */
 sealed interface SwitchListing {
     data object Loading : SwitchListing
 
@@ -37,11 +35,6 @@ sealed interface SwitchListing {
 
 data class SwitchSourceResult(val key: SourceKey, val name: String, val listing: SwitchListing)
 
-/**
- * The open Switch source sheet: one result per other source, in the order the sources are offered, for [query], which
- * starts as the series' title and the user can edit and search again. [confirming] is the match awaiting confirmation;
- * [failure] says why the last switch did not happen.
- */
 data class SwitchSourceSheet(
     val results: List<SwitchSourceResult>,
     val query: String = "",
@@ -52,18 +45,8 @@ data class SwitchSourceSheet(
     fun sourceName(key: SourceKey): String = results.firstOrNull { it.key == key }?.name.orEmpty()
 }
 
-/**
- * [others] are the sources that are on besides the series' own, of its kind: progress moves only between lists of the
- * same kind of entry. [sheet] is null while the sheet is closed.
- */
 data class SwitchSourceState(val others: List<SeriesSource> = emptyList(), val sheet: SwitchSourceSheet? = null)
 
-/**
- * Finds the series [from] on every other source that is on, and moves it to the one the user picks. [sourcesChanged]
- * emits once at the start and again whenever [loadSources] may answer differently. [store] stores a match before its
- * page opens; [switch] moves [from] to a match on its source, returns whether this call moved it, and throws what the
- * source throws. While a switch runs, the sheet stays open and ignores everything but its outcome.
- */
 class SwitchSourceViewModel(
     private val from: SeriesId,
     private val loadSources: suspend () -> List<SeriesSource>,
@@ -75,16 +58,13 @@ class SwitchSourceViewModel(
     val state: StateFlow<SwitchSourceState> = mutableState
     private val others get() = state.value.others
 
-    /** Every source that is on, the series' own too, which the labels tell apart. */
     private var sources = emptyList<SeriesSource>()
 
     private var searched = ""
     private val switching get() = state.value.sheet?.switching == true
 
-    /** Parent of every source call the open sheet makes; closing the sheet cancels them all. */
     private var searching: Job? = null
 
-    /** Sources answer slowly and share rate limits, so only a few calls run at once. */
     private val calls = Semaphore(MAX_SOURCE_CALLS)
 
     init {
@@ -96,7 +76,6 @@ class SwitchSourceViewModel(
         }
     }
 
-    /** Opens the sheet and searches every other source for [title]. */
     fun open(title: String) {
         if (switching) return
         closeSheet()
@@ -139,10 +118,8 @@ class SwitchSourceViewModel(
         mutableState.update { it.copy(sheet = null) }
     }
 
-    /** Asks to confirm switching to [match]; null dismisses the question. */
     fun confirm(match: SwitchMatch?) = updateSheet { if (it.switching) it else it.copy(confirming = match) }
 
-    /** Stores [match] and closes the sheet, then hands its id to [opened] to show its page; nothing is moved. */
     fun openMatch(match: SwitchMatch, opened: (SeriesId) -> Unit) {
         if (switching) return
         viewModelScope.launch {
@@ -152,10 +129,6 @@ class SwitchSourceViewModel(
         }
     }
 
-    /**
-     * Moves the series to [match]. Once moved, closes the sheet and hands the new id to [switched]; when another switch
-     * moved it first, only closes the sheet.
-     */
     fun switchTo(match: SwitchMatch, switched: (SeriesId) -> Unit) {
         if (switching) return
         val source = others.firstOrNull { it.key == match.series.id.source } ?: return
@@ -175,7 +148,6 @@ class SwitchSourceViewModel(
         }
     }
 
-    /** Searches [source] for the query, then counts the entries of each match shown, each as its own call. */
     private fun search(source: SeriesSource, job: Job) {
         val query = searched
         viewModelScope.launch(job) {
@@ -190,7 +162,6 @@ class SwitchSourceViewModel(
 
     private suspend fun entryCount(source: SeriesSource, series: Series): Int? = calls.withPermit {
         runCatchingExceptionsPreservingCancellation {
-            // Counted as the source lists it from scratch: only the count is shown, and nothing is stored.
             source.entries(series, stored = emptyList()).entries.size
         }.getOrNull()
     }
@@ -207,7 +178,6 @@ class SwitchSourceViewModel(
         mutableState.update { state -> state.copy(sheet = state.sheet?.let(change)) }
 }
 
-/** The [MAX_MATCHES] of [found] most likely to be [title]: the same title by [matchKey] first, then the source's order. */
 internal fun bestMatches(title: String, found: List<Series>): List<Series> {
     val key = matchKey(title)
     return found.sortedByDescending { matchKey(it.title) == key }.take(MAX_MATCHES)

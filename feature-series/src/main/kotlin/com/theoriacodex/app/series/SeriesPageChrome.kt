@@ -81,10 +81,6 @@ import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.domain.series.Series
 
-/**
- * Floating top bar for a series page: transparent over the hero cover at the top, surface-backed when scrolled or
- * searching, sliding away on downward scroll and returning on upward scroll.
- */
 @Composable
 internal fun SeriesPageTopBar(
     state: SeriesPageState,
@@ -333,7 +329,6 @@ private fun SeriesOverflowMenu(
     }
 }
 
-/** Checked as other menus show their choice, and said as checked or not to accessibility services. */
 @Composable
 private fun DownloadNewChaptersItem(on: Boolean, onChange: (Boolean) -> Unit) {
     DropdownMenuItem(
@@ -344,7 +339,6 @@ private fun DownloadNewChaptersItem(on: Boolean, onChange: (Boolean) -> Unit) {
     )
 }
 
-/** Bottom sheet for sorting and filtering the series' entry list. */
 @Composable
 internal fun ChapterOptionsSheet(
     sort: ChapterSort,
@@ -376,7 +370,6 @@ internal fun ChapterOptionsSheet(
     )
 }
 
-/** Removable pills below the entry header showing active filters, non-default sorts, or search text. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ActiveChapterOptionPills(
@@ -426,7 +419,6 @@ private fun ActiveOptionChip(label: String, clearDescription: String, onClear: (
     }
 }
 
-/** Full-screen pinch-to-zoom cover viewer opened by tapping a series' cover. */
 @Composable
 internal fun CoverLightboxDialog(series: Series, onDismiss: () -> Unit) {
     val request = rememberSeriesCoverRequest(series, targetWidthPx = FULL_COVER_WIDTH_PX, targetHeightPx = FULL_COVER_HEIGHT_PX)

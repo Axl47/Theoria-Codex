@@ -50,18 +50,15 @@ class ViewerPageScrubberTest {
     }
 
     @Test fun `a held page keeps a touch until it is clearly past the page`() {
-        // Pages own 10 px each; page 4 spans 40 to 50.
         assertEquals(4, viewerPageAt(53f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
         assertEquals(4, viewerPageAt(37f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
         assertEquals(5, viewerPageAt(54f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
         assertEquals(3, viewerPageAt(35f, 120f, 12, mirrored = false, held = 4, holdPx = 4f))
-        // Mirrored, page 4 spans 70 to 80.
         assertEquals(4, viewerPageAt(82f, 120f, 12, mirrored = true, held = 4, holdPx = 4f))
         assertEquals(3, viewerPageAt(85f, 120f, 12, mirrored = true, held = 4, holdPx = 4f))
     }
 
     @Test fun `pages slimmer than the hold still step one at a time, through to the last`() {
-        // 100 pages own 3.2 px each; a 6 px hold shrinks to half a page.
         assertEquals(51, viewerPageAt(165.5f, 320f, 100, mirrored = false, held = 50, holdPx = 6f))
         assertEquals(99, viewerPageAt(319f, 320f, 100, mirrored = false, held = 98, holdPx = 6f))
         assertEquals(0, viewerPageAt(319f, 320f, 100, mirrored = true, held = 1, holdPx = 6f))
@@ -69,7 +66,6 @@ class ViewerPageScrubberTest {
 
     @Test fun `a finger rolling across a boundary as it lifts lands on the page it rested on`() {
         setScrubber(pageIndex = 0)
-        // Page 6 of 12 spans 50% to 58.3% of the track; the finger rests near its end, then rolls a few pixels over.
         scrubber { down(at(0.1f)); moveTo(at(0.58f)); moveTo(at(0.59f)); moveTo(at(0.58f)); moveTo(at(0.59f)); up() }
         compose.runOnIdle { assertEquals(listOf(6), selected) }
     }
@@ -143,14 +139,12 @@ class ViewerPageScrubberTest {
         compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
         compose.runOnIdle { assertEquals(listOf(0, 1, 2), loads.started.pages("/thumb/")) }
 
-        // Page 2 was the right-hand neighbour and becomes the centre.
         scrubber { moveTo(at(0.2f)) }
         compose.onNodeWithText("3 / 12").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 20)
         compose.runOnIdle {
             assertEquals("started ${loads.started}", 1, loads.started.count { it.endsWith("/thumb/3.jpg") })
             assertEquals(1, loads.started.count { it.endsWith("/thumb/2.jpg") })
-            // Only page 0, which left the preview, is dropped.
             assertEquals(listOf("/thumb/0.jpg"), loads.cancelled.filter { "/thumb/" in it })
         }
     }
@@ -168,7 +162,6 @@ class ViewerPageScrubberTest {
         compose.mainClock.advanceTimeBy(250)
         compose.runOnIdle { assertEquals(listOf(1), loads.started.pages("/missing/")) }
 
-        // Page 5 has no separate thumbnail, so its poster is loaded once, as the thumbnail.
         scrubber { moveTo(at(0.45f)) }
         compose.onNodeWithText("6 / 12").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(SCRUB_FRAME_SETTLE_MS + 250 + 20)

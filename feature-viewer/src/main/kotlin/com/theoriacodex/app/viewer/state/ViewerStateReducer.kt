@@ -34,10 +34,6 @@ fun createViewerUiState(
     )
 }
 
-/**
- * A page entering a session: its launch media index, and idle until resolved when it [requiresResolution]. A launch
- * index past the listing's media, such as a gallery link opened from its cover, waits as pending for the resolution.
- */
 private fun Post.toNewViewerPageState(
     requiresResolution: (Post) -> Boolean,
     initialMediaIndices: Map<PostId, Int>,
@@ -142,7 +138,6 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.ResolutionStarted,
         is ViewerAction.ResolutionCompleted,
         is ViewerAction.ResolutionFailed -> state.reduceResolution(action)
-        // The ViewModel runs prefetch outside state; see ViewerViewModel.queuePrefetch.
         is ViewerAction.QueuePrefetch -> ViewerReduction(state)
         is ViewerAction.MediaFailed -> state.reduceMediaFailed(action)
         is ViewerAction.MediaReady -> state.reduceMediaReady(action)
@@ -188,7 +183,6 @@ private fun ViewerUiState.reduceEpisodeAction(action: ViewerAction): ViewerUiSta
 private fun ViewerUiState.chooseEpisodeTracks(change: ViewerEpisodeChoice.() -> ViewerEpisodeChoice): ViewerUiState =
     copy(controls = controls.copy(episode = controls.episode.change(), panel = controls.panel?.takeUnless(ViewerPanel::inChrome)))
 
-/** Locks episode controls without mutating chromeVisible; unlocking restores visible chrome. */
 private fun ViewerUiState.setLocked(locked: Boolean): ViewerUiState {
     if (locked && series !is ViewerSeries.Watching) return this
     return if (locked) {
@@ -198,9 +192,7 @@ private fun ViewerUiState.setLocked(locked: Boolean): ViewerUiState {
     }
 }
 
-/** A new stream replaces the player, and with it any failure the last one showed. */
 private fun ViewerUiState.chooseStream(label: String): ViewerUiState {
-    // The session's new choice replaces every episode's own stream; the episode playing keeps it as picked by hand.
     val picked = currentMedia?.key?.let { mapOf(it to ViewerEpisodeStream(label, pickedByHand = true)) }.orEmpty()
     val chosen = chooseEpisodeTracks { copy(streamLabel = label, episodeStreams = picked) }
     val failedHere = mediaError != null && mediaError.mediaKey.let { it == null || it == currentMedia?.key }
@@ -227,30 +219,24 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
             replacement.copy(
                 controls = replacement.controls.copy(
                     playbackMode = controls.playbackMode,
-                    // A live update of the same session, such as pagination, must not reopen hidden chrome.
                     chromeVisible = if (session == action.session) controls.chromeVisible else replacement.controls.chromeVisible,
-                    // Nor may it end a running slideshow; a new session starts without one.
                     slideshow = session == action.session && controls.slideshow,
-                    // Lock, fillScreen and episode track choices survive a live update of the same session.
                     locked = session == action.session && controls.locked && action.series is ViewerSeries.Watching,
                     fillScreen = session == action.session && controls.fillScreen && action.series is ViewerSeries.Watching,
                     episode = if (session == action.session) controls.episode else ViewerEpisodeChoice(),
                 ),
-                // A live update keeps the branch the user entered; a new session starts on its original feed.
                 related = if (session == action.session) related else ViewerRelatedBranch(),
             )
         },
     )
 }
 
-/** Builds pages only for the appended posts, so a live session's new feed page costs what it adds. */
 private fun ViewerUiState.appendPosts(action: ViewerAction.AppendPosts): ViewerUiState = copy(
     pages = pages + action.posts.map { post ->
         post.toNewViewerPageState({ it.id in action.resolutionRequiredPostIds }, action.initialMediaIndices)
     },
 )
 
-/** Adding branch posts never changes which pages belong to the original feed, which the bottom strip shows. */
 private fun ViewerUiState.includeRelatedPosts(action: ViewerAction.IncludeRelatedPosts): ViewerUiState {
     val originalIds = pages.mapNotNullTo(mutableSetOf()) { page -> page.post.id.takeUnless { it in related.extraPostIds } }
     val navigation = related.navigation
@@ -271,7 +257,6 @@ private fun ViewerUiState.includeRelatedPosts(action: ViewerAction.IncludeRelate
     )
 }
 
-/** Opening or closing the overview also closes the chrome's menus. */
 private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
     ViewerReduction(
         this.copy(
@@ -282,7 +267,6 @@ private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
         ),
     )
 
-/** Playback settings open only for media that plays. */
 private fun ViewerUiState.showPanel(panel: ViewerPanel): ViewerUiState {
     if (panel == ViewerPanel.PLAYBACK_SETTINGS && !controls.playback.available) return hidePanel(panel)
     return copy(controls = controls.copy(panel = panel))
@@ -291,7 +275,6 @@ private fun ViewerUiState.showPanel(panel: ViewerPanel): ViewerUiState {
 private fun ViewerUiState.hidePanel(panel: ViewerPanel): ViewerUiState =
     if (controls.panel == panel) copy(controls = controls.copy(panel = null)) else this
 
-/** The open panel, unless it is a chrome menu that closes with the chrome or a media change. */
 private fun ViewerControlsState.panelOutsideChrome(): ViewerPanel? = panel?.takeUnless(ViewerPanel::inChrome)
 
 private fun ViewerUiState.prepareDismiss(): ViewerUiState {
@@ -440,7 +423,6 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
     )))
 }
 
-/** Moves to the post's next page, else the queue's next post; null at the end of the queue. Shared by "Next in queue" and the slideshow. */
 private fun ViewerUiState.advanceInQueue(): ViewerReduction? {
     val page = currentPage ?: return null
     if (page.selectedMediaIndex < page.media.lastIndex) return selectMedia(page.selectedMediaIndex + 1)
@@ -449,7 +431,6 @@ private fun ViewerUiState.advanceInQueue(): ViewerReduction? {
     return selectPage(nextIndex).state.selectMedia(0)
 }
 
-/** Starting hides the chrome and plays the current video, so it can end and move on; stopping leaves everything else as it is. */
 private fun ViewerUiState.setSlideshow(running: Boolean): ViewerUiState {
     if (!running) return copy(controls = controls.copy(slideshow = false))
     val started = setPlaying(true)
@@ -512,7 +493,6 @@ private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity, post
     )
 }
 
-/** The page of [post] replaced by its lookup's answer; see [ViewerAction.ResolutionCompleted.recovered]. */
 private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?, recovered: Boolean): ViewerUiState {
     val pageIndex = pages.indexOfFirst { page -> page.post.id == post.id }
     if (pageIndex < 0) return this
@@ -564,7 +544,6 @@ private fun ViewerUiState.resolutionFailed(action: ViewerAction.ResolutionFailed
 
     val failedPage = updated.pages.firstOrNull { page -> page.post.id == action.postId }
     val mediaKey = failedPage?.selectedMedia?.key
-    // Post enrichment can fail independently of a working media URL.
     if (action.recoverable && failedPage?.selectedMedia?.ready == true) return updated
     val error = if (action.recoverable && mediaKey != null) {
         ViewerMediaError.Recoverable(
@@ -617,13 +596,9 @@ private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerRedu
         mediaError = null,
         controls = controls.copy(playback = controls.playback.copy(playing = controls.playback.available)),
     )
-    // Retry repeats what failed. A failed lookup, which nothing re-requests on its own (see ViewerViewModel), runs
-    // again alone: it brings fresh media too, and media recovery beside it could land either result over the other.
     if (page.resolution.status == ViewerResolutionStatus.FAILED && page.resolution.recoverable) {
         return retried.requestResolution(session, page.post.id)
     }
-    // An episode's next load asks for fresh links itself, and replays in place when none come
-    // (ViewerVideoRecovery.opening); a route recovery beside it would look the episode up twice.
     if (retriedMedia.ref.streams.isNotEmpty()) return ViewerReduction(retried)
     return ViewerReduction(retried, listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)))
 }

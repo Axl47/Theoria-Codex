@@ -45,13 +45,10 @@ import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.ui.motion.likePop
 import com.theoriacodex.app.ui.motion.rememberLikeFeedback
 
-/** The dock's height above the navigation bar; the timeline, page scrubber and post strip stack above it. */
 internal val VIEWER_DOCK_HEIGHT = 56.dp
 
-/** One entry of the dock's More menu. */
 internal data class ViewerMenuItem(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val onClick: () -> Unit)
 
-/** What the dock shows and does; the screen binds one per frame. Optional actions are null when they do not apply. */
 internal class ViewerDockActions(
     val liked: Boolean,
     val onToggleLike: (() -> Unit)?,
@@ -64,13 +61,8 @@ internal class ViewerDockActions(
     val playbackSettings: (@Composable () -> Unit)?,
 )
 
-/** The page overview button's state, offered on multi-page posts. */
 internal class ViewerOverviewToggle(val visible: Boolean, val onToggle: () -> Unit)
 
-/**
- * The Viewer's thumb dock along the bottom edge: Like, Info, the contextual playback settings and page overview, More,
- * and [save] at the trailing end. It shows and hides with the rest of the chrome.
- */
 @Composable
 internal fun ViewerDock(actions: ViewerDockActions, modifier: Modifier = Modifier, save: @Composable RowScope.() -> Unit) {
     CompositionLocalProvider(LocalContentColor provides Color.White) {
@@ -107,7 +99,6 @@ private fun ViewerLikeAction(liked: Boolean, onToggleLike: (() -> Unit)?) {
     }
 }
 
-/** Opens the info sheet; carries the post's comment count, since its comments live there. */
 @Composable
 private fun ViewerInfoAction(count: CommentCount?, onClick: () -> Unit) {
     val label = count?.label
@@ -158,7 +149,6 @@ private fun ViewerMoreMenu(expanded: Boolean, onExpandedChange: (Boolean) -> Uni
     }
 }
 
-/** The More menu's entries: the full Save-to-Codex picker for a post that can be saved, picture-in-picture when the media allows it. */
 internal fun viewerMoreItems(onChooseCodex: (() -> Unit)?, onPictureInPicture: (() -> Unit)?, extra: List<ViewerMenuItem>): List<ViewerMenuItem> =
     listOfNotNull(
         onChooseCodex?.let { ViewerMenuItem("Save to…", Icons.Outlined.BookmarkAdd, it) },

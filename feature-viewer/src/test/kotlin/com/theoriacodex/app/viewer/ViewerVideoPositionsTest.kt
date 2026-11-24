@@ -70,7 +70,6 @@ class ViewerVideoPositionsTest {
 
         positions.save(key(0), 120_000L)
         positions.save(key(1), 30_000L)
-        // Leaving the retained window drops a post's saved position, but not where an episode got to, seeded or not.
         positions.retainAround(posts, 7)
         positions.retainAround(posts, 0)
         assertEquals(120_000L, positions.position(key(0)))

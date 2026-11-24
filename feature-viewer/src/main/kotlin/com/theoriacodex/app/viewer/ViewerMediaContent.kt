@@ -15,7 +15,6 @@ import com.theoriacodex.app.viewer.state.viewerMediaKind
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
-/** Media implementations receive the same commands and identity-bound events. */
 @Composable
 internal fun ViewerMediaContent(
     post: Post,
@@ -75,9 +74,5 @@ internal fun ViewerMediaContent(
     }
 }
 
-/**
- * The kind of renderer [media] gets: [viewerMediaKind], except that an ugoira without a client to play it
- * shows its still image.
- */
 internal fun viewerRendererMediaKind(post: Post, media: ImageRef, hasUgoiraClient: Boolean): ViewerMediaKind =
     viewerMediaKind(post, media).takeUnless { it == ViewerMediaKind.UGOIRA && !hasUgoiraClient } ?: ViewerMediaKind.IMAGE

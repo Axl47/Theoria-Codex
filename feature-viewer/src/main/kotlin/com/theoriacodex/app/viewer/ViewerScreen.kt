@@ -55,10 +55,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 
-/**
- * The Viewer. [host] carries the callbacks bound to the screen's owner, and [config] the settings it renders with;
- * pass the same [host] across recompositions so the screen's controls stay put.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ViewerScreen(
@@ -104,11 +100,6 @@ fun ViewerScreen(
     }
 }
 
-/**
- * The session the screen presents: [current], or while a closing Viewer retains its presentation with none, the last
- * one. The pages, players and positions keyed on it stay as they were for the return transition; a player rebuilt
- * there would start over at 0 and report that as the episode's position.
- */
 @Composable
 private fun rememberPresentedSession(current: ViewerSessionIdentity?): ViewerSessionIdentity? {
     val presented = remember { object { var last = current } }
@@ -116,7 +107,6 @@ private fun rememberPresentedSession(current: ViewerSessionIdentity?): ViewerSes
     return presented.last
 }
 
-/** The screen once there is at least one post to show. */
 @Composable
 private fun ViewerLoadedScreen(
     uiState: ViewerUiState,
@@ -153,12 +143,10 @@ private fun ViewerLoadedScreen(
         rememberPagerState(initialPage = navigation.currentIndex, pageCount = { posts.size })
     }
     LaunchedEffect(posts, navigation.currentIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, navigation.currentIndex) }
-    // Starting a slideshow also returns zoomed media to fit, so the next touch reaches the gesture that stops it.
     val viewerTransform = remember(session, uiState.currentMedia?.key, uiState.controls.slideshow) { mutableStateOf(ViewerTransformState()) }
     LaunchedEffect(uiState.controls.slideshow) { if (uiState.controls.slideshow) screen.verticalGalleries.values.forEach { it.resetZoom() } }
     val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
-    // Brightness holds for every media and the overview (PiP hands it back); the remembered volume returns for video only.
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)
     val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
@@ -185,7 +173,6 @@ private fun ViewerLoadedScreen(
         LocalViewerSubtitleBottomLift provides subtitleBottomLift,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
-        // Only episodes offer their tracks; no other video's player is followed for them.
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
         LocalViewerPlayingVideos provides screen.playingVideos,
     ) {
@@ -255,7 +242,6 @@ private fun viewerChromeVisible(
     return wanted && !inPictureInPicture && !returning && !opening && !dismissDrag.active
 }
 
-/** Runs at most once per list size, and only while the source has more to give. */
 @Composable
 private fun rememberViewerLoadMore(
     postCount: Int,
@@ -272,7 +258,6 @@ private fun rememberViewerLoadMore(
     }
 }
 
-/** Dims what is behind the Viewer as it opens, returns, or is pulled away. */
 @Composable
 private fun ViewerBackdrop(
     returnProgress: State<Float>,
@@ -344,10 +329,6 @@ internal const val VIEWER_CHROME_STAGE_TOP_BAR = 1
 internal const val VIEWER_CHROME_STAGE_TIMELINE = 2
 internal const val VIEWER_CHROME_STAGE_STRIPS = 3
 
-/**
- * How much of the chrome may compose: parts arrive one frame apart, so showing it costs several
- * short frames instead of one long one while video plays. Hiding is immediate.
- */
 @Composable
 internal fun rememberViewerChromeStage(visible: Boolean): State<Int> {
     val revealed = remember { mutableIntStateOf(if (visible) VIEWER_CHROME_STAGE_STRIPS else 0) }

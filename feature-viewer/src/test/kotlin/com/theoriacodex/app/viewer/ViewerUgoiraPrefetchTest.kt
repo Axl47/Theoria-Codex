@@ -52,7 +52,6 @@ class ViewerUgoiraPrefetchTest {
 
         assertEquals(ViewerPrefetchOutcome.WARMED, result.outcome)
         assertEquals(1, archiveDownloads.get())
-        // Opening it later finds the archive on disk instead of downloading again.
         client.warmArchive("77")
         assertEquals(1, archiveDownloads.get())
     }
@@ -61,7 +60,6 @@ class ViewerUgoiraPrefetchTest {
     fun `a metered network leaves the archive alone`() = runTest {
         setMetered(true)
 
-        // Without a still location the metered fallback has nothing to warm, which keeps the test off the network.
         val result = prefetchViewerMedia(context, ugoiraMedia(), VideoQuality.AUTO, ugoiraClient = client())
 
         assertEquals(ViewerPrefetchOutcome.SKIPPED, result.outcome)

@@ -6,17 +6,14 @@ import android.view.View
 import androidx.media3.common.Player
 import java.io.Closeable
 
-/** Only the mounted Viewer video can arm automatic PiP; feed players never bind here. */
 class ViewerAutoPictureInPicture(private val activity: Activity) {
     private var currentPlayer: Player? = null
     private var currentView: () -> View? = { null }
     private var currentBinding: Any? = null
 
-    // The Activity can pause before Android reports its automatic PiP transition.
     val keepPlayingOnPause: Boolean
         get() = eligiblePlayer() != null
 
-    /** Binds the Viewer's active [player], drawn in [view], as the PiP source. */
     fun bind(player: Player, view: () -> View?): Closeable {
         val binding = Any()
         currentBinding = binding
@@ -40,10 +37,6 @@ class ViewerAutoPictureInPicture(private val activity: Activity) {
         }
     }
 
-    /**
-     * PiP params shaped like the bound video's displayed frame; [fallbackWidth] by [fallbackHeight]
-     * (post metadata, which can disagree with the stream) applies only until the player knows that frame.
-     */
     fun params(fallbackWidth: Int? = null, fallbackHeight: Int? = null): PictureInPictureParams {
         val frame = currentPlayer?.videoSize?.takeIf { it.displayWidth > 0 && it.height > 0 }
         return viewerPictureInPictureParams(

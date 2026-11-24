@@ -36,10 +36,6 @@ import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerSubtitleChoice
 import com.theoriacodex.domain.model.MediaStream
 
-/**
- * Modal bottom sheets for episode playback choices (servers, subtitles, audio, and playback speed).
- * Uses Material 3's [ExpandedBottomSheet], which caps width at 640 dp and centers itself in landscape.
- */
 @Composable
 internal fun ViewerEpisodeSheets(
     streams: List<MediaStream>,

@@ -25,23 +25,15 @@ import kotlinx.coroutines.delay
 
 val LocalViewerAutoRotateVideos = staticCompositionLocalOf { false }
 
-/**
- * The orientation the Viewer holds, which the app shell applies while the Viewer is open. Null leaves
- * rotation to the phone. Owned by the Activity so the shell and the mounted video can both reach it, and so
- * every level of a trail shares one rotation: the shell calls [release] once the last Viewer level leaves.
- */
 class ViewerRotationState {
     var held by mutableStateOf<ViewerOrientation?>(null)
 
-    /** What the mounted video's decoded frames fill; covers sources that report no dimensions. */
     var measured by mutableStateOf<MeasuredVideoShape?>(null)
 
     private var openingClaimed = false
 
-    /** The media the Viewer opened on while its one automatic rotation is still pending; null once settled. */
     internal var openingKey: ViewerMediaKey? = null
 
-    /** [openingKey], naming [key] as the opening media when this is the first level since [release]; trail levels never open. */
     internal fun openingFor(key: ViewerMediaKey): ViewerMediaKey? {
         if (!openingClaimed) {
             openingClaimed = true
@@ -50,7 +42,6 @@ class ViewerRotationState {
         return openingKey
     }
 
-    /** Returns rotation to the phone and lets the next Viewer opening rotate again. */
     fun release() {
         held = null
         measured = null
@@ -61,11 +52,6 @@ class ViewerRotationState {
 
 data class MeasuredVideoShape(val key: ViewerMediaKey, val fill: ViewerOrientation?)
 
-/**
- * Rotates once when the Viewer opens on a clearly wide or tall video, then holds that orientation while
- * swiping and through trail levels. Later rotations are the user's, through the rotate button, which always turns
- * to the other orientation (outside picture-in-picture).
- */
 @Composable
 internal fun rememberViewerRotation(selection: ViewerSelection, rotation: ViewerRotationState?, inPictureInPicture: Boolean): ViewerRotationOffer? {
     rotation ?: return null
@@ -86,38 +72,28 @@ internal fun rememberViewerRotation(selection: ViewerSelection, rotation: Viewer
                 if (fill != screen) rotation.held = fill
                 rotation.openingKey = null
             }
-            // Otherwise wait: a post without dimensions learns its size once the video decodes.
         }
     }
     if (inPictureInPicture) return null
     val fits = viewerOffersRotation(fill, screen, isVideo, holdingRotation = rotation.held != null)
     val target = screen.opposite
     return ViewerRotationOffer(fits) {
-        // The user's choice wins over an automatic rotation still waiting on the video's size.
         rotation.openingKey = null
         rotation.held = target
     }
 }
 
-/** Videos qualify for rotation, including ones whose stream has not resolved yet. */
 private fun ViewerSelection.isVideoForRotation(): Boolean =
     media?.let(::isVideoMediaRef) == true || (mediaIndex == 0 && post.awaitsMotion)
 
-/** What the current media fills: its decoded frames when known, else the post's dimensions, which describe its first item. */
 private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): ViewerOrientation? = when {
     measured != null -> measured.fill
     mediaIndex == 0 -> viewerFillOrientation(post.width, post.height)
     else -> null
 }
 
-/** The rotate button's action; [fits] when the other orientation suits the current media better. */
 internal class ViewerRotationOffer(val fits: Boolean, val rotate: () -> Unit)
 
-/**
- * The Viewer's rotation behavior and its button, in the lower left above whichever bar the current media shows. The button
- * follows the controls, and also shows for [VIEWER_ROTATE_HINT_MS] whenever rotating starts to fit a post,
- * since swiping to a post leaves the controls hidden. [suppressed] hides it while another surface owns the bottom.
- */
 @Composable
 internal fun BoxScope.ViewerRotationControl(
     selection: ViewerSelection,
@@ -126,7 +102,6 @@ internal fun BoxScope.ViewerRotationControl(
     chromeVisible: Boolean,
     suppressed: Boolean,
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
-    /** Pre-computed rotation offer when the caller also shows an inline rotate button. */
     existingOffer: ViewerRotationOffer? = null,
 ) {
     val offer = existingOffer ?: rememberViewerRotation(selection, rotation, inPictureInPicture)
@@ -148,7 +123,6 @@ internal fun BoxScope.ViewerRotationControl(
 
 internal const val VIEWER_ROTATE_HINT_MS = 3_000L
 
-/** Reports what the active video's frames fill, so posts without dimensions can still rotate. */
 @Composable
 internal fun ReportViewerVideoShape(player: Player?, active: Boolean, key: ViewerMediaKey) {
     val rotation = LocalContext.current.viewerActivity()?.viewerRotation ?: return

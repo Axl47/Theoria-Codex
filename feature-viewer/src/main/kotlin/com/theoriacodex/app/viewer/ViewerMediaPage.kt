@@ -58,10 +58,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 internal data class ViewerMediaLayout(
-    /**
-     * Whether animated and video media fill the page too; otherwise they sit below a portrait top gap. Still images
-     * always fill the page, so a gallery's pages fill the screen width whatever source it came from.
-     */
     val edgeToEdge: Boolean,
     val pictureInPicture: Boolean,
     val touchExploration: Boolean,
@@ -70,18 +66,12 @@ internal data class ViewerMediaLayout(
 internal data class ViewerVideoOptions(
     val quality: com.theoriacodex.domain.model.VideoQuality,
     val height: Int?,
-    /** The stream this media plays, for media with streams; see [com.theoriacodex.app.viewer.viewerPlayback]. */
     val streamLabel: String?,
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
-    /** What an episode's stream recovery needs from the screen; used only by media with streams. */
     val episode: ViewerEpisodeOptions? = null,
 )
 
-/**
- * The screen's side of an episode's stream recovery ([ViewerEpisodeStreams]): its [attempts], whether the stream
- * the user picked by hand there ([pickedLabel]), when the page's links were looked up, and how to [fallBack] to another stream.
- */
 internal class ViewerEpisodeOptions(
     val attempts: ViewerStreamAttempts,
     val pickedLabel: String?,
@@ -89,7 +79,6 @@ internal class ViewerEpisodeOptions(
     val fallBack: (label: String) -> Unit,
 )
 
-/** Owns taps and pinches and selects a renderer; swipes and route state stay in ViewerScreen. */
 @Composable
 internal fun ViewerMediaPage(
     post: Post,
@@ -119,9 +108,7 @@ internal fun ViewerMediaPage(
     val animated = kind.animated
     val interactions = remember(key) { ViewerMediaInteractions() }
     val holdScrub = LocalViewerHoldScrub.current?.takeIf { controls.isActive }
-    // A page that goes inactive or leaves mid-hold (NEXT mode advancing) never sees the release.
     DisposableEffect(holdScrub) { onDispose { holdScrub?.abandon() } }
-    // The transform changes every pinch event, so it is read only while drawing, never in composition.
     val transformModifier = remember(transform) {
         Modifier.graphicsLayer {
             val current = transform.value
@@ -190,19 +177,11 @@ private class ViewerMediaInteractions {
 
 private const val VIEWER_HOLD_PLAYBACK_RATE = 2f
 
-/**
- * Space above animated and video media in portrait, clear of the top bar; stills fill the page. A video still resolving
- * shows its poster as a still, and keeps the gap so it doesn't shift when the stream arrives.
- */
 private fun viewerMediaTopGap(post: Post, mediaIndex: Int, animated: Boolean, layout: ViewerMediaLayout): Dp {
     val playsMotion = animated || (mediaIndex == 0 && post.awaitsMotion)
     return if (playsMotion && !layout.edgeToEdge) 40.dp else 0.dp
 }
 
-/**
- * A post whose moving media resolves only after it opens, so its first page shows a still poster until then: a listing
- * that gave just a preview and a running time, or one from a source that only serves video.
- */
 internal val Post.awaitsMotion: Boolean
     get() = awaitsVideoStream || (full == null && media.isEmpty() && isAnimatedPost(this))
 
