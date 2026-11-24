@@ -11,10 +11,7 @@ internal class SharedPosts(
         val source = post.id.source.id
         val sourcePostId = post.id.sourcePostId
         val existingEntity = dao.post(source, sourcePostId)
-        if (existingEntity == null) {
-            val inserted = dao.insertPost(PostEntity(source, sourcePostId, LocalPostPayloadCodec.encode(post)))
-            if (inserted != -1L) return
-        }
+        if (existingEntity == null && insertIfMissing(post)) return
 
         val current = requireNotNull(existingEntity ?: dao.post(source, sourcePostId)) {
             "Shared Post disappeared while merging $source:$sourcePostId"
@@ -27,6 +24,9 @@ internal class SharedPosts(
             }
         }
     }
+
+    fun insertIfMissing(post: Post): Boolean =
+        dao.insertPost(PostEntity(post.id.source.id, post.id.sourcePostId, LocalPostPayloadCodec.encode(post))) != -1L
 
     fun releaseIfOrphaned(postIds: List<Pair<String, String>>) {
         postIds.distinct().forEach { (source, sourcePostId) -> dao.deleteOrphanPost(source, sourcePostId) }

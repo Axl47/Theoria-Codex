@@ -431,6 +431,8 @@ class RoomCodexLikesRepository(
 
     override suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) {
         database.withTransaction {
+            snapshot.likes.forEach { like -> writeGuard.requireProfileWritable(like.profileId) }
+            snapshot.posts.forEach(sharedPosts::insertIfMissing)
             restoreItems(snapshot.items, snapshot.posts)
             snapshot.likes.forEach { like -> dao.insertLike(like.toEntity()) }
         }

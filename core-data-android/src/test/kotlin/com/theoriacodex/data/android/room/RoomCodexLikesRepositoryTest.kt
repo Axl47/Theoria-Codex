@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -306,6 +307,59 @@ class RoomCodexLikesRepositoryTest {
             ),
             repository.observeCodex(codex.codexId).first()?.automaticTags,
         )
+    }
+
+    @Test
+    fun `undoing Likes clear restores the payload of a like outside the Likes codex`() = runTest {
+        val repository = repository()
+        val liked = post("liked")
+        repository.toggleLikeAndSyncSystemCodex(
+            profileId = "profile-main",
+            systemCodexId = "system_likes_codex",
+            systemCodexName = "Likes",
+            post = liked,
+            tags = listOf("tag"),
+        )
+        repository.removeItems("system_likes_codex", setOf(liked.id))
+
+        val cleared = repository.clearLikesAndLikedMemberships("profile-main", "system_likes_codex")
+        assertNull(repository.getPost(liked.id))
+        repository.restoreClearedLikes(requireNotNull(cleared.undo))
+
+        assertEquals(listOf(liked.id), repository.observeLikes("profile-main").first().map { it.postId })
+        assertEquals(liked, repository.getPost(liked.id))
+    }
+
+    @Test
+    fun `undoing Likes clear keeps a like's payload updated after the clear`() = runTest {
+        val repository = repository()
+        val liked = post("liked")
+        val other = repository.createCodex("Other")
+        repository.toggleLikeAndSyncSystemCodex("profile-main", "system_likes_codex", "Likes", liked, listOf("tag"))
+        repository.addItem(other.codexId, liked)
+        repository.removeItems("system_likes_codex", setOf(liked.id))
+        val cleared = repository.clearLikesAndLikedMemberships("profile-main", "system_likes_codex")
+        repository.updatePost(liked.copy(title = "Updated title"))
+
+        repository.restoreClearedLikes(requireNotNull(cleared.undo))
+
+        assertEquals("Updated title", repository.getPost(liked.id)?.title)
+    }
+
+    @Test
+    fun `undoing Likes clear for a retired profile restores nothing`() = runTest {
+        val guard = ProfileLibraryWriteGuard()
+        val repository = RoomCodexLikesRepository(database, clock = { now++ }, newId = { "codex-${id++}" }, writeGuard = guard)
+        val liked = post("liked")
+        repository.toggleLikeAndSyncSystemCodex("profile-main", "system_likes_codex", "Likes", liked, listOf("tag"))
+        repository.removeItems("system_likes_codex", setOf(liked.id))
+        val cleared = repository.clearLikesAndLikedMemberships("profile-main", "system_likes_codex")
+
+        guard.retire("profile-main")
+
+        assertTrue(runCatching { repository.restoreClearedLikes(requireNotNull(cleared.undo)) }.isFailure)
+        assertTrue(repository.observeLikes("profile-main").first().isEmpty())
+        assertNull(repository.getPost(liked.id))
     }
 
     @Test
