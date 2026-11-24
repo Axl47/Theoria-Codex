@@ -43,11 +43,13 @@ class ProfileBackupSiteProfilesTest {
     }
 
     @Test
-    fun `version 1 backups still decode and versions past 5 are refused (ADR 0024)`() {
+    fun `version 1 backups still decode and versions below 1 or past 5 are refused (ADR 0024)`() {
         val v2 = codec.encode(emptyBackup()).toString(Charsets.UTF_8)
 
         assertEquals(emptyList<SiteProfile>(), codec.decode(v2.replace("\"version\":2", "\"version\":1").toByteArray()).customSources)
-        assertTrue(runCatching { codec.decode(v2.replace("\"version\":2", "\"version\":6").toByteArray()) }.isFailure)
+        listOf(0, 6).forEach { version ->
+            assertTrue(runCatching { codec.decode(v2.replace("\"version\":2", "\"version\":$version").toByteArray()) }.isFailure)
+        }
     }
 
     @Test

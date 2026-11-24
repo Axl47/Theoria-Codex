@@ -29,6 +29,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -242,6 +243,28 @@ class SeriesDownloadsTest {
         assertEquals(DrainResult(downloaded = 1), Harness(this).downloads.drain(automatic = false))
     }
 
+    @Test fun `deleting a chapter, a series or the whole queue finishes even when its caller is cancelled (ADR 0027)`() = runTest {
+        val harness = Harness(this)
+        val other = SeriesId(source, "/title/2")
+        listOf(id to "/c1", id to "/c2", other to "/c1").forEach { (series, address) -> harness.store.saveChapter(series, address) }
+        fun cancelled(block: suspend () -> Unit) = launch(start = CoroutineStart.UNDISPATCHED) { block() }.cancel()
+
+        cancelled { harness.downloads.delete(id, "/c1") }
+        advanceUntilIdle()
+        assertEquals(setOf("/c2"), harness.downloads.downloaded(id))
+        cancelled { harness.downloads.deleteSeries(id) }
+        advanceUntilIdle()
+        assertEquals(emptySet<String>(), harness.downloads.downloaded(id))
+        harness.downloads.download(id, listOf("/c3"))
+        val reopened = Harness(this)
+        launch(start = CoroutineStart.UNDISPATCHED) { reopened.downloads.delete(other, "/c9") }
+        cancelled { reopened.downloads.cancelAll() }
+        advanceUntilIdle()
+        assertEquals(emptySet<Boolean>(), reopened.downloads.queuedLanes().first())
+        assertEquals(DrainResult(downloaded = 0), Harness(this).downloads.drain(automatic = false))
+        assertEquals(setOf("/c1"), harness.downloads.downloaded(other))
+    }
+
     @Test fun `a queued chapter whose source this build cannot read is dropped and the rest load (ADR 0027)`() = runTest {
         Harness(this).downloads.download(id, listOf("/c1"))
         val queue = folder.root.resolve("queue.json")
@@ -435,6 +458,7 @@ class SeriesDownloadsTest {
             },
             scheduler = object : DownloadScheduler {
                 override suspend fun schedule(automatic: Boolean) {
+                    yield()
                     scheduled += "schedule ${if (automatic) "automatic" else "user"}"
                 }
 

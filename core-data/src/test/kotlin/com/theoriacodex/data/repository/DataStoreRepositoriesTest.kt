@@ -6,16 +6,25 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.sha256
-import com.theoriacodex.domain.model.CommentOrder
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.model.ViewerPlaybackMode
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -61,14 +70,25 @@ class DataStoreRepositoriesTest {
     @Test
     fun `constructors perform no file reads or writes (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("constructor-no-io")
-        val scope = newDataStoreScope()
+        val names = listOf(DATASTORE_SETTINGS_FILE_NAME, DATASTORE_UI_RESTORE_FILE_NAME, DATASTORE_STATISTICS_FILE_NAME)
+        names.forEach { directory.resolve(it).writeText("{broken") }
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
 
-        DataStoreSettingsRepository(directory, scope)
+        val settings = DataStoreSettingsRepository(directory, scope)
         DataStoreUiRestoreRepository(directory, scope)
         DataStoreStatisticsRepository(directory, scope)
+        advanceUntilIdle()
 
-        assertTrue(directory.listFiles().orEmpty().isEmpty())
-        scope.closeDataStores()
+        assertEquals(names.sorted(), directory.list().orEmpty().sorted())
+        assertTrue(names.all { directory.resolve(it).readText() == "{broken" })
+        settings.observeSettings().first()
+        assertEquals(1, directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).size)
+        val unreadable = tempFolder.newFolder("constructor-no-read")
+        names.forEach { unreadable.resolve(it).apply { writeText("{}") }.setReadable(false) }
+        DataStoreSettingsRepository(unreadable, scope)
+        DataStoreUiRestoreRepository(unreadable, scope)
+        DataStoreStatisticsRepository(unreadable, scope)
+        scope.cancel()
     }
 
     @Test
@@ -119,17 +139,25 @@ class DataStoreRepositoriesTest {
 
     @Test
     fun `settings values this build does not know fall back without resetting the file (ADR 0038)`() = runTest {
-        val directory = tempFolder.newFolder("settings-unknown-values")
-        directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
-            """{"schemaVersion":3,"settings":{"invertMultiImageScrollDirection":true,""" +
-                """"viewerPlaybackMode":"FUTURE_MODE","viewerCommentOrder":"FUTURE_ORDER"}}""",
-        )
+        val record = SettingsStoreRecord.serializer().descriptor
+        val unknown = (0 until record.elementsCount).filter { record.getElementDescriptor(it).kind == PrimitiveKind.STRING }
+            .associate { record.getElementName(it) to JsonPrimitive("FUTURE_VALUE") }
+        val health = ProviderHealthSnapshotRecord("PIXIV", "FUTURE_VALUE", 1L, 2L, "timeout", "slow")
+        val known = mapOf("invertMultiImageScrollDirection" to JsonPrimitive(true))
         val scope = newDataStoreScope()
-        val settings = DataStoreSettingsRepository(directory, scope).observeSettings().first()
+        suspend fun load(name: String, stored: Map<String, JsonElement>): AppSettings {
+            val directory = tempFolder.newFolder(name)
+            directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("""{"schemaVersion":3,"settings":${JsonObject(stored)}}""")
+            return DataStoreSettingsRepository(directory, scope).observeSettings().first()
+                .also { assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isEmpty()) }
+        }
 
-        assertTrue(settings.viewer.invertMultiImageScrollDirection)
-        assertEquals(ViewerPlaybackMode.LOOP to CommentOrder.OLDEST, settings.viewer.playbackMode to settings.viewer.commentOrder)
-        assertTrue(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isEmpty())
+        val withUnknown = load("settings-unknown-values", known + unknown + ("providerHealth" to JsonArray(listOf(DurableJson.encodeToJsonElement(health)))))
+
+        assertTrue(unknown.keys.containsAll(listOf("codexLibrarySort", "seriesUpdateInterval", "videoQuality", "viewerPlaybackMode")))
+        assertTrue(withUnknown.viewer.invertMultiImageScrollDirection)
+        assertEquals(ProviderHealthSnapshotStatus.UNKNOWN, withUnknown.providerHealth.getValue(SourceKey.PIXIV).status)
+        assertEquals(load("settings-without-them", known), withUnknown.copy(providerHealth = emptyMap()))
         scope.closeDataStores()
     }
 

@@ -41,7 +41,7 @@ class GalleryReadingModeRepositoryTest {
     }
 
     @Test
-    fun `unreadable and extension-source entries are skipped and a newer schema fails without touching the file (ADR 0021)`() = runTest {
+    fun `unreadable and extension-source entries are skipped and any other schema fails without touching the file (ADR 0021)`() = runTest {
         val directory = temporary.newFolder()
         val file = directory.resolve(GALLERY_READING_MODES_FILE_NAME)
         file.writeText(
@@ -51,10 +51,12 @@ class GalleryReadingModeRepositoryTest {
         )
         assertEquals(mapOf(id("valid") to GalleryReadingMode.VERTICAL), FileBackedGalleryReadingModeRepository(directory).observe().first())
 
-        val newer = """{"schemaVersion":2,"choices":[]}"""
-        file.writeText(newer)
-        assertTrue(runCatching { FileBackedGalleryReadingModeRepository(directory).observe().first() }.isFailure)
-        assertEquals(newer, file.readText())
+        listOf(0, 2).forEach { version ->
+            val other = """{"schemaVersion":$version,"choices":[]}"""
+            file.writeText(other)
+            assertTrue(runCatching { FileBackedGalleryReadingModeRepository(directory).observe().first() }.isFailure)
+            assertEquals(other, file.readText())
+        }
     }
 
     @Test

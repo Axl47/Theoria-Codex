@@ -88,7 +88,9 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         val repository = FileBackedSavedSearchRepository(tempDir("pin-backup-replace"))
         val local = repository.save("Mine", execution())
 
-        repository.merge(listOf(local.copy(name = "From the backup", search = execution().copy(queryHash = "imported"))))
+        val older = local.copy(name = "From the backup", search = execution().copy(queryHash = "imported"), savedAtEpochMs = local.savedAtEpochMs - 1)
+
+        repository.merge(listOf(older))
 
         assertEquals(listOf("From the backup" to "imported"), repository.observeSavedSearches().first().map { it.name to it.search.queryHash })
     }

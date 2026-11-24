@@ -23,6 +23,9 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.source.SiteAddress
+import com.theoriacodex.domain.source.SiteAddressParse
+import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -105,6 +108,19 @@ class ProfileBackupServiceTest {
         assertEquals(5, encodedTree(written)["version"]?.toString()?.toInt())
         assertEquals(statistics.watchedTagFloors, codec.decode(codec.encode(written)).statistics?.watchedTagFloors)
         assertEquals(2, encodedTree(backup().copy(statistics = LifetimeStatistics()))["version"]?.toString()?.toInt())
+    }
+
+    @Test fun `a backup is written at the highest version any of its contents needs (ADR 0024)`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), emptyList()))
+        val repos = listOf(ExtensionRepo("https://r.example/repo", "R", "aa11"))
+        val floors = LifetimeStatistics(watchedTagFloors = mapOf(SourceKey.GELBOORU to 4L))
+        val plain = backup()
+        fun version(backup: ProfileBackup) = encodedTree(backup)["version"]?.toString()?.toInt()
+
+        assertEquals(4, version(plain.copy(extensionRepos = repos, library = plain.library.copy(series = series))))
+        assertEquals(5, version(plain.copy(extensionRepos = repos, statistics = floors)))
+        assertEquals(5, version(plain.copy(statistics = floors, library = plain.library.copy(series = series))))
     }
 
     @Test fun `exporting writes the device's repos, previewing names the new ones, and restoring stores them`() = runTest {
@@ -454,16 +470,20 @@ class ProfileBackupServiceTest {
         assertTrue(blankTitle.contains("\"title\":\" \"") && runCatching { codec.decode(blankTitle.toByteArray()) }.isFailure)
     }
 
-    @Test fun `decoding refuses a repo, site or series list one past its limit, and takes repos and series at it (ADR 0024)`() {
+    @Test fun `decoding refuses a repo, site or series list one past its limit, and takes each at it (ADR 0024)`() {
         val source = SourceKey.parseOrThrow("custom_mihon_7")
         val full = backup().let { plain ->
             plain.copy(
                 extensionRepos = List(256) { ExtensionRepo("https://r$it.example/repo", "R$it", "aa11") },
                 library = plain.library.copy(series = List(10_000) { BackupSeries(StoredSeries(Series(SeriesId(source, "/t/$it"), "T$it")), emptyList()) }),
+                customSources = List(256) {
+                    val address = (SiteAddress.parse("s$it.example") as SiteAddressParse.Valid).address
+                    SiteProfile(address.derivedSourceId, address, "S$it", "GELBOORU_02", addedAtEpochMs = 1L)
+                },
             )
         }
         val decoded = codec.decode(codec.encode(full))
-        assertEquals(256 to 10_000, decoded.extensionRepos.size to decoded.library.series.size)
+        assertEquals(listOf(256, 10_000, 256), listOf(decoded.extensionRepos.size, decoded.library.series.size, decoded.customSources.size))
 
         val root = DurableJson.parseToJsonElement(codec.encode(backup()).toString(Charsets.UTF_8)).jsonObject
         val library = root.getValue("library").jsonObject
@@ -493,16 +513,19 @@ class ProfileBackupServiceTest {
         val plain = codec.encode(backup())
         val root = DurableJson.parseToJsonElement(plain.toString(Charsets.UTF_8)).jsonObject
         val library = root.getValue("library").jsonObject
-        val forYou = JsonObject(mapOf("section" to JsonPrimitive("FYP")))
-        val withForYou = JsonObject(root + mapOf(
-            "readingPositions" to JsonArray(root.getValue("readingPositions").jsonArray + forYou),
-            "library" to JsonObject(library + ("watched" to JsonArray(library.getValue("watched").jsonArray + forYou))),
-        ))
+        fun inSection(section: String): JsonObject {
+            fun JsonArray.withRowIn() = JsonArray(this + JsonObject(single().jsonObject + ("section" to JsonPrimitive(section))))
+            return JsonObject(root + mapOf(
+                "readingPositions" to root.getValue("readingPositions").jsonArray.withRowIn(),
+                "library" to JsonObject(library + ("watched" to library.getValue("watched").jsonArray.withRowIn())),
+            ))
+        }
 
-        val restored = codec.decode(withForYou.toString().toByteArray())
+        val restored = codec.decode(inSection("FYP").toString().toByteArray())
 
         assertEquals(codec.decode(plain).readingPositions, restored.readingPositions)
         assertEquals(codec.decode(plain).library.watched, restored.library.watched)
+        assertTrue(runCatching { codec.decode(inSection("FUTURE").toString().toByteArray()) }.isFailure)
     }
 
     @Test fun `invalid versions malformed bytes unknown sources and deeply nested input are rejected`() {

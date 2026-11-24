@@ -109,6 +109,7 @@ class ApplicationDataReadinessTest {
         while (readiness.state.value !is ApplicationDataState.Loading) kotlinx.coroutines.yield()
 
         firstWaiter.cancel()
+        firstWaiter.join()
         release.complete(Unit)
 
         assertEquals(42, readiness.awaitReady())

@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -103,15 +104,28 @@ class FirstPageStoreTest {
         assertTrue(FirstPageStore(file(), StandardTestDispatcher(testScheduler)).load("key-a").isEmpty())
     }
 
+    private suspend fun FirstPageStore.loadWithMiddlePost(vararg changed: Pair<String, JsonElement>): List<String> {
+        save("key", listOf(post("1"), post("2"), post("3")))
+        val root = Json.parseToJsonElement(file().readText()).jsonObject
+        val posts = root.getValue("posts").jsonArray
+        val middle = JsonObject(posts[1].jsonObject + changed)
+        file().writeText(JsonObject(root + ("posts" to JsonArray(listOf(posts[0], middle, posts[2])))).toString())
+        return load("key").map { it.id.sourcePostId }
+    }
+
     @Test
     fun `one unreadable post leaves the rest of the cached page intact (ADR 0021)`() = runTest {
         val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
-        store.save("key", listOf(post("1"), post("2"), post("3")))
-        val root = Json.parseToJsonElement(file().readText()).jsonObject
-        val posts = root.getValue("posts").jsonArray
-        val unreadable = JsonObject(posts[1].jsonObject + ("source" to JsonPrimitive("no_such_source")))
-        file().writeText(JsonObject(root + ("posts" to JsonArray(listOf(posts[0], unreadable, posts[2])))).toString())
 
-        assertEquals(listOf("1", "3"), store.load("key").map { it.id.sourcePostId })
+        assertEquals(listOf("1", "3"), store.loadWithMiddlePost("source" to JsonPrimitive("no_such_source")))
+        assertEquals(listOf("1", "3"), store.loadWithMiddlePost("schemaVersion" to JsonPrimitive(99)))
+    }
+
+    @Test
+    fun `a cached post of valid JSON but the wrong shape empties the page (ADR 0021)`() = runTest {
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
+
+        assertEquals(emptyList<String>(), store.loadWithMiddlePost("schemaVersion" to JsonObject(emptyMap())))
+        assertEquals(emptyList<String>(), store.loadWithMiddlePost("commentHint" to JsonObject(emptyMap())))
     }
 }

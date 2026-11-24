@@ -22,6 +22,7 @@ class SeriesSwitchTest {
 
         assertEquals(target.copy(readingMode = GalleryReadingMode.VERTICAL, downloadNewChapters = true, followedAtEpochMs = 5L),
             target.withSettingsOf(old))
+        assertEquals(3L, target.copy(followedAtEpochMs = 3L).withSettingsOf(old).followedAtEpochMs)
     }
 
     @Test

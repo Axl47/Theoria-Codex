@@ -169,6 +169,7 @@ class PostStorageRecordsTest {
 
         assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse).contentHash)
         assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse.copy(full = null)).contentHash)
+        assertEquals(stored.contentHash, mergeSparsePost(existing = stored, incoming = sparse.copy(full = stored.full?.copy(url = null))).contentHash)
         assertNull(mergeSparsePost(existing = stored, incoming = replaced).contentHash)
     }
 
@@ -214,12 +215,15 @@ class PostStorageRecordsTest {
         assertEquals(renditions, mergeSparsePost(existing = stored, incoming = sparse).full!!.videoVariants)
         assertEquals(renditions, mergeSparsePost(existing = stored, incoming = sparse.copy(full = sparse.full!!.copy(url = null))).full!!.videoVariants)
         assertEquals(emptyList<VideoVariant>(), mergeSparsePost(existing = stored, incoming = moved).full!!.videoVariants)
+        val own = listOf(VideoVariant("https://example.com/480.mp4", height = 480))
+        assertEquals(own, mergeSparsePost(existing = stored, incoming = moved.copy(full = moved.full!!.copy(videoVariants = own))).full!!.videoVariants)
+        assertEquals(own, mergeSparsePost(existing = stored, incoming = sparse.copy(full = sparse.full!!.copy(videoVariants = own))).full!!.videoVariants)
     }
 
     @Test
     fun `a creator from another source replaces the stored profile whole (ADR 0023)`() {
         val stored = samplePost()
-        val other = CreatorProfile(source = SourceKey.GELBOORU, displayName = "artist", profileId = "7")
+        val other = CreatorProfile(source = SourceKey.GELBOORU, displayName = "someone", profileId = stored.creatorProfile!!.profileId)
 
         assertEquals(other, mergeSparsePost(existing = stored, incoming = stored.copy(creatorProfile = other)).creatorProfile)
     }
@@ -229,6 +233,11 @@ class PostStorageRecordsTest {
         val stored = samplePost().copy(canonicalTags = listOf("a", "b", "c"))
 
         assertEquals(listOf("c", "d", "a", "b"), mergeSparsePost(existing = stored, incoming = stored.copy(canonicalTags = listOf("c", "d"))).canonicalTags)
+        val mirrored = stored.copy(full = stored.full!!.copy(fallbackUrls = listOf("https://other.example.com/full.webp")))
+        assertEquals(
+            listOf("https://other.example.com/full.webp") + stored.full!!.fallbackUrls,
+            mergeSparsePost(existing = stored, incoming = mirrored).full!!.fallbackUrls,
+        )
     }
 
     @Test

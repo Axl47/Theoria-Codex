@@ -77,10 +77,12 @@ class DataStoreSiteProfileRepositoryTest {
     }
 
     @Test
-    fun `unreadable records are skipped but written back untouched (ADR 0021, 0031)`() = runBlocking {
+    fun `unreadable records are skipped and written back field for field, without keys this version does not know (ADR 0021, 0031)`() = runBlocking {
         val directory = temporary.newFolder()
-        val unreadable = """{"sourceId":"custom_future_example","baseUrl":"https://future.example","label":"","family":"X","addedAt":1}"""
-        directory.resolve(SITE_PROFILES_FILE_NAME).writeText("""{"schemaVersion":1,"sites":[$unreadable,null]}""")
+        val unreadable = """{"sourceId":"custom_future_example","baseUrl":"https://future.example","label":"","family":"X",""" +
+            """"searchTermLimit":3,"userAgent":"agent","referer":"https://future.example/","credentialsRequired":true,""" +
+            """"addedAt":1,"verifiedAt":2,"iconUrl":"https://future.example/icon.png""""
+        directory.resolve(SITE_PROFILES_FILE_NAME).writeText("""{"schemaVersion":1,"sites":[$unreadable,"future":1},null]}""")
 
         withRepository(directory) { repository ->
             assertEquals(emptyList<SiteProfile>(), repository.observeProfiles().first())
@@ -88,10 +90,8 @@ class DataStoreSiteProfileRepositoryTest {
         }
 
         val sites = Json.parseToJsonElement(directory.resolve(SITE_PROFILES_FILE_NAME).readText()).jsonObject.getValue("sites").jsonArray
-        assertEquals(
-            listOf("custom_booru_example", "custom_future_example"),
-            sites.map { it.jsonObject.getValue("sourceId").jsonPrimitive.content },
-        )
+        assertEquals(listOf("custom_booru_example", "custom_future_example"), sites.map { it.jsonObject.getValue("sourceId").jsonPrimitive.content })
+        assertEquals(Json.parseToJsonElement("$unreadable}"), sites[1])
     }
 
     @Test

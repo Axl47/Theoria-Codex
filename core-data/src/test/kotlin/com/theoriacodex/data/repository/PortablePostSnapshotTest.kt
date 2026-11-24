@@ -15,7 +15,7 @@ class PortablePostSnapshotTest {
         val dropped = listOf(
             "file:///sdcard/a.jpg", "content://media/external/1", "ftp://example.test/a.jpg", "/data/user/0/a.jpg",
             "https:///a.jpg", "https://user@example.test/a.jpg", "https://example.test/a.jpg?sig=1",
-            "https://example.test/a.jpg#t=1",
+            "https://example.test/a.jpg#t=1", "httpx://example.test/a.jpg",
         )
 
         assertEquals(kept, kept.mapNotNull(::portableMediaUrl))

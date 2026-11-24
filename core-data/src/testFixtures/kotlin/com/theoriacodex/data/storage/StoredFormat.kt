@@ -40,7 +40,7 @@ fun <T> assertStoredFormat(
     val missing = descriptor.declaredPaths() - held
     assertTrue("$type goldens never hold $missing; add a golden that sets them", missing.isEmpty())
     val stale = undeclared - retiredKeys
-    assertTrue("$type goldens hold $stale, which it does not declare; list a deliberately old golden's keys in retiredKeys", stale.isEmpty())
+    assertTrue("$type goldens hold $stale, which it does not declare; list a deliberately old golden's keys in retiredKeys, escaping . [ ] { } and \\ inside a key with \\", stale.isEmpty())
 }
 
 private fun SerialDescriptor.declaredPaths(prefix: String = "", visiting: Set<String> = emptySet()): Set<String> =
@@ -87,5 +87,10 @@ private fun SerialDescriptor.undeclaredPaths(element: JsonElement, prefix: Strin
     else -> emptySet()
 }
 
-private fun child(prefix: String, name: String) = if (prefix.isEmpty()) name else "$prefix.$name"
+private val PATH_SEPARATOR = Regex("""[.\[\]{}\\]""")
+
+private fun child(prefix: String, name: String): String {
+    val segment = name.replace(PATH_SEPARATOR) { "\\${it.value}" }
+    return if (prefix.isEmpty()) segment else "$prefix.$segment"
+}
 

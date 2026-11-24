@@ -44,10 +44,10 @@ class CreatorFollowsRepositoryTest {
 
     @Test fun `following marks the posts it was shown as seen, so only later posts count as new (ADR 0019)`() = runTest {
         val repository = CreatorFollowsRepository(InMemorySettingsRepository())
-        fun post(id: String) = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
-            com.theoriacodex.data.storage.PostStorageRecord(source = "PIXIV", sourcePostId = id)))
+        fun post(id: String, source: String = "PIXIV") = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
+            com.theoriacodex.data.storage.PostStorageRecord(source = source, sourcePostId = id)))
 
-        repository.follow(creator, listOf(post("shown"), post("also shown")))
+        repository.follow(creator, listOf(post("shown"), post("elsewhere", source = "GELBOORU"), post("also shown")))
         val follow = repository.observe().first().single()
         repository.recordChecks(mapOf(follow.membershipId to listOf(post("later"), post("shown"), post("also shown"))), 42L)
 

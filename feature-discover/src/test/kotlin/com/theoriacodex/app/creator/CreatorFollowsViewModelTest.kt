@@ -66,28 +66,31 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `a refresh of 60 follows records its checks in three settings writes (ADR 0019)`() = runTest {
+    @Test fun `a refresh of 60 follows records each batch of 25 checks before checking the next (ADR 0019)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
             val settings = InMemorySettingsRepository()
             val repository = CreatorFollowsRepository(settings)
             repeat(60) { repository.follow(CreatorProfile(SourceKey.PIXIV, "C$it", "$it", uploadsQuery = "user:$it"), emptyList()) }
-            var writes = 0
+            val events = mutableListOf<String>()
             val counting = object : SettingsRepository by settings {
                 override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
-                    writes++
+                    events += "write"
                     settings.updateSettings(transform)
                 }
             }
             val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
-                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> = Page(emptyList(), null)
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    events += "check"
+                    return Page(emptyList(), null)
+                }
             }
             val owner = CreatorFollowsViewModel(counting, TestRegistry(listOf(adapter)))
             store.put("follows", owner)
             owner.refresh()
             advanceUntilIdle()
-            assertEquals(3, writes)
+            assertEquals(listOf(25, 25, 10).flatMap { List(it) { "check" } + "write" }, events)
             assertTrue(repository.observe().first().all { it.checkedAtEpochMs != null })
         } finally { store.clear(); Dispatchers.resetMain() }
     }

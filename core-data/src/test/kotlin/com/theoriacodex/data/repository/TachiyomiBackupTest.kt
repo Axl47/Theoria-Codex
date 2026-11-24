@@ -268,13 +268,14 @@ class TachiyomiBackupTest {
             message(106) { string(1, "https://signed.example/repo"); string(2, "Signed"); string(5, "aa11") }
             message(106) { string(1, "http://plain.example/repo"); string(2, "Plain"); string(5, "bb22") }
             message(106) { string(1, "https://unsigned.example/repo"); string(2, "Unsigned") }
+            message(106) { string(1, "https://blank.example/repo"); string(2, "Blank"); string(5, "   ") }
         }
 
         assertEquals(listOf(ExtensionRepo("https://signed.example/repo", "Signed", "aa11")), decodeTachiyomiBackup(bytes, 0).repos)
     }
 
     @Test
-    fun `a backup that inflates past 64 MiB is refused as too large, and one at the limit imports (ADR 0039)`() {
+    fun `a backup that inflates past 64 MiB is refused as too large before the rest is read, and one at the limit imports (ADR 0039)`() {
         fun inflatingTo(size: Int): ByteArray {
             val series = Proto().apply { message(1) { long(1, 1); string(2, "/m"); string(3, "M") } }.bytes()
             val padding = size - series.size - 2 - 4
@@ -296,6 +297,9 @@ class TachiyomiBackupTest {
 
         assertEquals(1, decodeTachiyomiBackup(inflatingTo(limit), 0).series.size)
         assertEquals("This backup is too large to import.", runCatching { decodeTachiyomiBackup(inflatingTo(limit + 1), 0) }.exceptionOrNull()?.message)
+        val brokenTail = byteArrayOf(0x1f, 0x8b.toByte(), 8, 0, 0, 0, 0, 0, 0, 0xff.toByte()) + ByteArray(64) { 0xff.toByte() }
+        val overThenBroken = inflatingTo(limit + (1 shl 20)) + brokenTail
+        assertEquals("This backup is too large to import.", runCatching { decodeTachiyomiBackup(overThenBroken, 0) }.exceptionOrNull()?.message)
     }
 
     @Test

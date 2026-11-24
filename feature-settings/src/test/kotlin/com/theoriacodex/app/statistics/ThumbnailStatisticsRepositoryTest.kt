@@ -102,6 +102,27 @@ class ThumbnailStatisticsRepositoryTest {
         assertTrue(repository.observeStatistics().first().thumbnails.containsKey("PIXIV:42"))
     }
 
+    @Test fun `each fetch in a pass gets its own 15 seconds (ADR 0037)`() = runTest {
+        val delegate = InMemoryStatisticsRepository()
+        val started = mutableListOf<Long>()
+        val repository = ThumbnailStatisticsRepository(delegate, backgroundScope,
+            StatisticsThumbnailStore(temporary.newFolder())) { _, _ ->
+            started += testScheduler.currentTime
+            awaitCancellation()
+        }
+        runCurrent()
+        listOf("42", "43").forEach { repository.recordPostAvailable(post(it)) }
+        runCurrent()
+        listOf("42", "43").forEach { repository.recordCodexPostOpen("codex", "PIXIV:$it", "Post") }
+        runCurrent()
+        val first = started.single()
+
+        advanceTimeBy(30_001)
+        runCurrent()
+
+        assertEquals(listOf(first, first + 15_000), started)
+    }
+
     @Test fun `statistics updates outside Codex rankings skip the thumbnail directory pass (ADR 0037)`() = runTest {
         val delegate = InMemoryStatisticsRepository()
         val directory = temporary.newFolder()

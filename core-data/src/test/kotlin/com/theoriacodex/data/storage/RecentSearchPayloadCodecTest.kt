@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecentSearchPayloadCodecTest {
@@ -31,7 +32,7 @@ class RecentSearchPayloadCodecTest {
     }
 
     @Test
-    fun `normalize gives the entry storing would keep, sources once and tags only for searched sources (ADR 0038)`() {
+    fun `normalize gives the entry storing would keep, sources once and tags only for searched sources, and refuses what storing refuses (ADR 0038)`() {
         val entry = RecentSearchEntry(
             query = query(QueryMode.Unified),
             queryHash = "hash",
@@ -46,6 +47,7 @@ class RecentSearchPayloadCodecTest {
         assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), normalized.sources)
         assertEquals(mapOf(SourceKey.PIXIV to listOf("night")), normalized.sourceTags)
         assertEquals(normalized, RecentSearchPayloadCodec.normalize(normalized))
+        assertTrue(runCatching { RecentSearchPayloadCodec.normalize(entry.copy(sources = listOf(SourceKey.PIXIV, SourceKey.PIXIV))) }.isFailure)
     }
 
     @Test

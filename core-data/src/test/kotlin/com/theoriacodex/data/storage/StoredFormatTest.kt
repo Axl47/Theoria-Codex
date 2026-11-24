@@ -29,6 +29,7 @@ class StoredFormatTest {
     @Test
     fun `a key the model does not declare fails by path unless it is listed as retired (ADR 0034)`() {
         val stale = full.replace("""{"label":"x"}""", """{"label":"x","stale":true}""")
+            .replace("""{"label":"y"}""", """{"label":"y","stale":true}""")
         val failure = assertThrows(AssertionError::class.java) {
             assertStoredFormat(
                 stale to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
@@ -36,7 +37,20 @@ class StoredFormatTest {
             )
         }
 
-        assertTrue(failure.message, "[children[].stale]" in failure.message.orEmpty())
+        assertTrue(failure.message, "[children[].stale, byKey{}.stale]" in failure.message.orEmpty())
+    }
+
+    @Test
+    fun `a retired nested path never excuses a key spelled like it (ADR 0034)`() {
+        val literal = full.replace(""""retired":1""", """"retired":1,"children[].stale":true""")
+        val failure = assertThrows(AssertionError::class.java) {
+            assertStoredFormat(
+                literal to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
+                retiredKeys = setOf("retired", "children[].stale"),
+            )
+        }
+
+        assertTrue(failure.message, """[children\[\]\.stale]""" in failure.message.orEmpty())
     }
 
     @Test

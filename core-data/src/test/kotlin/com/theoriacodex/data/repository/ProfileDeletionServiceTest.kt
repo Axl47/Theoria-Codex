@@ -103,6 +103,37 @@ class ProfileDeletionServiceTest {
         } finally { directory.deleteRecursively() }
     }
 
+    @Test fun `a startup recovery whose caller leaves partway still finishes the removal (ADR 0026)`() = runTest {
+        val directory = Files.createTempDirectory("profile-deletion-recovery").toFile()
+        try {
+            val profileId = "p&<a>='b'"
+            val settings = InMemorySettingsRepository()
+            settings.updateSettings { it.copy(recommendationProfiles = it.recommendationProfiles + RecommendationProfile(profileId, "Removed")) }
+            val removing = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val stored = InMemoryCodexLikesTransactions()
+            val library = object : CodexLikesTransactions by stored {
+                override suspend fun removeProfileLibrary(profileId: String) {
+                    removing.complete(Unit)
+                    release.await()
+                    stored.removeProfileLibrary(profileId)
+                }
+            }
+            val journal = directory.resolve("intent.json")
+            journal.writeText(golden("gson-written.json"))
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val owner = ProfileDeletionService(settings, library, journal, ProfileLibraryWriteGuard(),
+                AtomicJsonFileStore(ioDispatcher = dispatcher), dispatcher)
+            val caller = launch { owner.recoverPendingDeletion() }
+            removing.await()
+            caller.cancel()
+            release.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profileId })
+            assertFalse(journal.exists())
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun `capacity preflight and invalid durable intent fail before library mutation (ADR 0026)`() = runTest {
         val directory = Files.createTempDirectory("profile-deletion").toFile()
         try {
