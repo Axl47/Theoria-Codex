@@ -49,7 +49,7 @@ class PostCommentsStateTest {
     }
 
     @Test
-    fun `an empty first page leaves no section while loading and failures keep one`() {
+    fun `an empty first page leaves no section while loading and failures keep one (ADR 0076)`() {
         assertTrue(PostCommentsState().hasSection)
         assertTrue(PostCommentsState(top = CommentList().failed()).hasSection)
         assertFalse(loaded(commentPage()).hasSection)
@@ -57,7 +57,7 @@ class PostCommentsStateTest {
     }
 
     @Test
-    fun `pages append without repeating a comment and a failure keeps what loaded`() {
+    fun `pages append without repeating a comment and a failure keeps what loaded (ADR 0076)`() {
         val first = CommentList().withPage(commentPage("a", "b", next = "p2"))
         val second = first.loading().withPage(commentPage("b", "c", total = 3))
         assertEquals(listOf("a", "b", "c"), second.comments.map { it.id })

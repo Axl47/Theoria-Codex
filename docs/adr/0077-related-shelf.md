@@ -24,3 +24,12 @@ Feed filters must keep retained seeds reachable.
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/related/RelatedPostsRouteController.kt`: `show`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/related/ViewerFeedOwner.kt`: `retryPage`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/related/RelatedPostsDiagnostics.kt`: `RelatedPostsDiagnostics`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsStateTest.kt`: `a shelf follows its seed, then its chain, when the list reorders under it (ADR 0077)`, `accumulated posts add new recommendations instead of replacing them (ADR 0077)`, `accumulated posts drop liked seeds and clear with the shelf (ADR 0077)`, `hide liked retains shelf seeds through loading results empty and failure until dismissal (ADR 0077)`, `promotion inserts once and removes the promoted card from retained pages (ADR 0077)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedFeedProjectionTest.kt`: `visible seed inserts shelf after seed without changing canonical indices (ADR 0077)`, `hidden seed anchors after nearest visible predecessor (ADR 0077)`, `shelf follows its seed when the canonical order changes under it (ADR 0077)`, `a late arrival below its neighbours does not pull the shelf away from its seed (ADR 0077)`, `each post entry carries its index in the filtered list, past posts the feed no longer has (ADR 0077)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchVisibilityFiltersTest.kt`: `watched liked seed stays visible until recommendations are dismissed (ADR 0077)`, `pending like retains its automatic save without retaining unrelated saved posts (ADR 0077)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsRouteControllerTest.kt`: `liking a shelf post promotes it and opens a retained next page (ADR 0077)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsDiagnosticsTest.kt`: `a lifecycle line names no post, tag, address or account (ADR 0077)`
+- Left to prose: that related streams are never restored is decided by the Viewer route in `:app`, and each feed owner's `retryPage` lives in its feature module; neither is guarded.

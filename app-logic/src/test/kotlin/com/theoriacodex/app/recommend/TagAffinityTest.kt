@@ -23,7 +23,7 @@ class TagAffinityTest {
     private val source = SourceKey.GELBOORU
 
     @Test
-    fun `a tag on most watched posts is universal, so specific liked tags lead`() {
+    fun `a tag on most watched posts is universal, so specific liked tags lead (ADR 0087)`() {
         val likes = List(10) { index -> like(if (index < 7) listOf("image", "fox") else listOf("fox_ears")) }
         val watched = statistics(watched = 100, "image" to 95, "fox" to 10, "fox_ears" to 4)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
@@ -32,10 +32,11 @@ class TagAffinityTest {
 
         assertEquals(listOf("fox", "fox_ears", "tree"), ranked.filterNot { it.universal }.map { it.tag })
         assertTrue(ranked.single { it.tag == "image" }.universal)
+        assertFalse(ranked.single { it.tag == "image" }.informative)
     }
 
     @Test
-    fun `saved tags, saved searches and repeated searches outrank incidental Likes`() {
+    fun `saved tags, saved searches and repeated searches outrank incidental Likes (ADR 0087)`() {
         val likes = listOf(like(listOf("sky")), like(listOf("sky")))
         val stats = LifetimeStatistics(searchesByTag = mapOf(SearchedTagKey(source, SearchTerm("Wolf")) to 2L))
         val saved = SavedSearchEntry("s", "Rivers", RecentSearchEntry(query("river"), "h", 0L), 0L)
@@ -47,7 +48,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `one search across several sources is not a repeated search`() {
+    fun `one search across several sources is not a repeated search (ADR 0085)`() {
         val stats = LifetimeStatistics(
             searchesByTag = mapOf(
                 SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf")) to 1L,
@@ -59,14 +60,14 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `Codex posts count as interest like Likes do`() {
+    fun `Codex posts count as interest like Likes do (ADR 0087)`() {
         val inputs = tagAffinityInputs(emptyList(), listOf(post("moth"), post("moth", "lamp")), emptyList(), emptyList(), LifetimeStatistics())
 
         assertEquals(listOf("moth", "lamp", "tree"), tagAffinities(post("tree", "lamp", "moth"), inputs).map { it.tag })
     }
 
     @Test
-    fun `a Like learns every tag of the Library's copy of its post, not only the ones it stored`() {
+    fun `a Like learns every tag of the Library's copy of its post, not only the ones it stored (ADR 0085)`() {
         val inputs = tagAffinityInputs(listOf(like(listOf("aardvark"), id = "aardvark-zebra")), listOf(post("aardvark", "zebra")),
             emptyList(), emptyList(), LifetimeStatistics())
 
@@ -79,7 +80,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a post both Liked and in a Codex is one point of interest`() {
+    fun `a post both Liked and in a Codex is one point of interest (ADR 0085, 0087)`() {
         val inputs = tagAffinityInputs(listOf(like(listOf("moth"))), listOf(post("moth")), emptyList(), emptyList(), LifetimeStatistics())
 
         assertEquals(1.0, inputs.interest.getValue("moth"), 0.0)
@@ -87,7 +88,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a tag on nearly every post of the feed at hand is universal there`() {
+    fun `a tag on nearly every post of the feed at hand is universal there (ADR 0087)`() {
         val feed = List(10) { index -> post("animated", "tag$index") }
         val share = feedTagShare(feed)
 
@@ -96,7 +97,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `before enough watched posts, Likes alone mark a tag universal unless it was chosen explicitly`() {
+    fun `before enough watched posts, Likes alone mark a tag universal unless it was chosen explicitly (ADR 0087)`() {
         val likes = List(5) { like(listOf("solo", "cat")) }
         val inputs = tagAffinityInputs(likes, emptyList(), listOf("cat"), emptyList(), statistics(watched = 19, "solo" to 19))
 
@@ -107,7 +108,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `with enough history a tag must be clearly more common in what was kept than in what was watched`() {
+    fun `with enough history a tag must be clearly more common in what was kept than in what was watched (ADR 0087)`() {
         val likes = List(40) { index ->
             like(listOfNotNull("blush".takeIf { index % 2 == 0 }, "miku".takeIf { index % 4 == 0 }, "tree"), "$index")
         }
@@ -122,7 +123,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a tag too rare in what was watched to judge is still offered, after the proven ones`() {
+    fun `a tag too rare in what was watched to judge is still offered, after the proven ones (ADR 0087)`() {
         val likes = List(40) { index -> like(listOfNotNull("miku".takeIf { index % 4 == 0 }, "tree"), "$index") }
         val watched = statistics(watched = 400, "miku" to 12, "tree" to 400, "fox" to 1, "dog" to 40, "owl" to 2)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
@@ -133,7 +134,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `text drawn on the image is never offered unless chosen, however specific`() {
+    fun `text drawn on the image is never offered unless chosen, however specific (ADR 0072)`() {
         val likes = List(40) { index -> like(listOfNotNull("artist_name".takeIf { index % 4 == 0 }, "tree"), "$index") }
         val watched = statistics(watched = 400, "artist_name" to 12, "tree" to 400, "watermark" to 1, "bluesky_username" to 1)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
@@ -145,7 +146,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a tag about the file is never offered unless chosen, however much more often it is kept`() {
+    fun `a tag about the file is never offered unless chosen, however much more often it is kept (ADR 0072)`() {
         val likes = List(40) { index -> like(listOfNotNull("audible_music".takeIf { index % 4 == 0 }, "tree"), "$index") }
         val watched = statistics(watched = 400, "audible_music" to 12, "tree" to 400, "3d" to 1, "longer_than_one_minute" to 1, "fox" to 1)
         val inputs = tagAffinityInputs(likes, emptyList(), emptyList(), emptyList(), watched)
@@ -157,7 +158,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal`() {
+    fun `lift compares each source with itself, and a chosen tag on most watched posts is still universal (ADR 0087)`() {
         val kept = List(30) { index -> like(listOf("tree", "moth"), "$index") }
         val watched = statistics(watched = 300, "tree" to 280, "moth" to 3)
         val inputs = tagAffinityInputs(kept, emptyList(), listOf("tree"), emptyList(), watched)
@@ -168,7 +169,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a tag dropped from a full source reads at most the source's floor, so its lift on kept posts cannot spike`() {
+    fun `a tag dropped from a full source reads at most the source's floor, so its lift on kept posts cannot spike (ADR 0087)`() {
         val kept = List(30) { index -> like(listOfNotNull("tree", "moth".takeIf { index < 3 }), "$index") }
         val exact = statistics(watched = 300, "tree" to 280, "moth" to 3)
         val dropped = statistics(watched = 300, "tree" to 280)
@@ -184,7 +185,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a count inherited from the floor never makes a tag universal or a picture tag proven`() {
+    fun `a count inherited from the floor never makes a tag universal or a picture tag proven (ADR 0087)`() {
         val floored = statistics(watched = 300, "tree" to 155).copy(watchedTagFloors = mapOf(source to 30L))
         val inputs = tagAffinityInputs(emptyList(), emptyList(), listOf("tree"), emptyList(), floored)
         val pictures = PictureEvidence(keptByTag = mapOf("fox" to 3.0), postsByTag = mapOf("fox" to 3), kept = 30)
@@ -196,7 +197,7 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a dropped tag kept once stays too rare to judge, so it can still be guessed`() {
+    fun `a dropped tag kept once stays too rare to judge, so it can still be guessed (ADR 0087)`() {
         val kept = List(30) { index -> like(listOfNotNull("tree", "moth".takeIf { index == 0 }), "$index") }
         val dropped = statistics(watched = 300, "tree" to 280).copy(watchedTagFloors = mapOf(source to 30L))
         val inputs = tagAffinityInputs(kept, emptyList(), emptyList(), emptyList(), dropped)
@@ -205,6 +206,16 @@ class TagAffinityTest {
 
         assertTrue(moth.informative)
         assertFalse(moth.proven)
+    }
+
+    @Test
+    fun `a chosen tag's weight moves to its spelling on the source For You fills (ADR 0085)`() {
+        val inputs = TagAffinityInputs(interest = mapOf("fox" to 4.0, "tree" to 3.0), explicit = setOf("fox", "tree", "cat"))
+
+        val spelled = inputs.respellChosen { tag -> mapOf("fox" to "Kitsune", "tree" to "tree")[tag] }
+
+        assertEquals(setOf("kitsune", "tree", "cat"), spelled.explicit)
+        assertEquals(mapOf("fox" to 1.0, "tree" to 3.0, "kitsune" to 3.0), spelled.interest)
     }
 
     private fun like(tags: List<String>, id: String = tags.joinToString("-")) = LikedPost("profile", PostId(source, id), 0L, tags)

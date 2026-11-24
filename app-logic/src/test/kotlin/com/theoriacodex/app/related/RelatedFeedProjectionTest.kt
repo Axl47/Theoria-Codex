@@ -9,7 +9,7 @@ import org.junit.Test
 
 class RelatedFeedProjectionTest {
     @Test
-    fun `visible seed inserts shelf after seed without changing canonical indices`() {
+    fun `visible seed inserts shelf after seed without changing canonical indices (ADR 0077)`() {
         val posts = listOf(post("0"), post("1"), post("2"))
         val related = RelatedPostsUiState.Idle.begin(posts[1], 1, 1)
 
@@ -25,7 +25,7 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
-    fun `hidden seed anchors after nearest visible predecessor`() {
+    fun `hidden seed anchors after nearest visible predecessor (ADR 0077)`() {
         val posts = listOf(post("0"), post("1"), post("2"), post("3"))
         val visible = listOf(posts[0], posts[3])
         val related = RelatedPostsUiState.Idle.begin(posts[2], 2, 1)
@@ -38,7 +38,7 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
-    fun `a late arrival below its neighbours does not pull the shelf away from its seed`() {
+    fun `a late arrival below its neighbours does not pull the shelf away from its seed (ADR 0077)`() {
         val posts = listOf(post("0"), post("1"), post("2"), post("3"))
         val related = RelatedPostsUiState.Idle.begin(posts[1], 1, 1)
         val lateFirst = listOf(posts[1], posts[2], posts[3], posts[0])
@@ -50,7 +50,7 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
-    fun `shelf follows its seed when the canonical order changes under it`() {
+    fun `shelf follows its seed when the canonical order changes under it (ADR 0077)`() {
         val posts = listOf(post("0"), post("1"), post("2"))
         val related = RelatedPostsUiState.Idle.begin(posts[2], 2, 1)
         val reordered = listOf(posts[2], posts[0], posts[1])
@@ -73,7 +73,7 @@ class RelatedFeedProjectionTest {
     }
 
     @Test
-    fun `each post entry carries its index in the filtered list, past posts the feed no longer has`() {
+    fun `each post entry carries its index in the filtered list, past posts the feed no longer has (ADR 0077)`() {
         val posts = listOf(post("0"), post("2"))
         val visible = listOf(post("0"), post("1"), post("2"))
 

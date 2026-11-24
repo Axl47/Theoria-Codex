@@ -30,14 +30,14 @@ class ForYouInterestsTest {
         assertEquals(listOf("zorro"), interests.first().tags)
     }
 
-    @Test fun `separate interests stay together rather than creating unrelated pairs`() {
+    @Test fun `separate interests stay together rather than creating unrelated pairs (ADR 0071)`() {
         val documents = List(4) { listOf("common", "night", "city") } +
             List(4) { listOf("common", "forest", "watercolor") }
         val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, likedOnly(documents)).pick()
         assertEquals(listOf(listOf("night", "city"), listOf("forest", "watercolor")), interests.map { it.tags })
     }
 
-    @Test fun `lanes rank by lift, skip watched-everywhere, unlifted and image-text tags, and explore a guess`() {
+    @Test fun `lanes rank by lift, skip watched-everywhere, unlifted and image-text tags, and explore a guess (ADR 0071)`() {
         val documents = List(15) { listOf("blush", "miku", "artist_name") } + List(3) { listOf("blush") } +
             List(6) { listOf("tree") } + listOf(listOf("moth"))
         val kept = mapOf("blush" to 18, "miku" to 15, "artist name" to 15, "tree" to 6, "moth" to 1)
@@ -48,7 +48,7 @@ class ForYouInterestsTest {
         assertEquals(listOf(listOf("miku"), listOf("moth")), interests.map { it.tags })
     }
 
-    @Test fun `a tag proven on Pixiv leads a lane on a booru that has history of its own`() {
+    @Test fun `a tag proven on Pixiv leads a lane on a booru that has history of its own (ADR 0071)`() {
         val affinity = history(SourceKey.GELBOORU, mapOf("cloud" to 3), watched = mapOf("cloud" to 3L))
             .merge(history(SourceKey.PIXIV, mapOf("初音ミク" to 15), watched = mapOf("初音ミク" to 5L)))
         val training = CrossSourceTraining(
@@ -60,18 +60,54 @@ class ForYouInterestsTest {
         assertEquals(listOf("hatsune_miku"), interests.first().tags)
     }
 
-    @Test fun `a liked tag and its kept spelling are one candidate`() {
+    @Test fun `with equal scores the most liked tag leads (ADR 0071)`() {
+        val documents = listOf(listOf("alpha"), listOf("beta"), listOf("beta"))
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty).pick()
+        assertEquals(listOf(listOf("beta"), listOf("alpha")), interests.map { it.tags })
+    }
+
+    @Test fun `tags the source cannot serve are never picked, as lead or as guess (ADR 0071)`() {
+        val documents = List(15) { listOf("blush", "miku", "artist_name") } + List(3) { listOf("blush") } +
+            List(6) { listOf("tree") } + listOf(listOf("moth"))
+        val kept = mapOf("blush" to 18, "miku" to 15, "artist name" to 15, "tree" to 6, "moth" to 1)
+        val affinity = history(
+            SourceKey.GELBOORU, kept, watched = mapOf("blush" to 60L, "miku" to 5L, "artist name" to 2L, "tree" to 20L),
+        )
+        val picker = ForYouInterests.prepare(SourceKey.GELBOORU, documents, affinity)
+        assertEquals(listOf(listOf("miku"), listOf("moth")), picker.pick().map { it.tags })
+
+        val tags = picker.pick(unavailable = setOf("miku", "moth")).flatMap { it.tags }
+
+        assertFalse(tags.toString(), "miku" in tags || "moth" in tags)
+    }
+
+    @Test fun `tags pair only when they share most of the more common one's Likes and at least two (ADR 0071)`() {
+        fun picked(documents: List<List<String>>) =
+            ForYouInterests.prepare(SourceKey.GELBOORU, documents, likedOnly(documents)).pick().map { it.tags }
+
+        assertEquals(listOf(listOf("x", "y")), picked(List(6) { listOf("x", "y") } + List(4) { listOf("x") } + List(4) { listOf("y") }))
+        assertEquals(listOf(listOf("x"), listOf("y")), picked(List(5) { listOf("x", "y") } + List(5) { listOf("x") } + List(5) { listOf("y") }))
+        assertEquals(listOf(listOf("x"), listOf("y")), picked(listOf(listOf("x", "y"))))
+    }
+
+    @Test fun `before any history, text on the image and tags about the file never lead (ADR 0071, 0072)`() {
+        val documents = List(3) { listOf("artist_name", "3d", "cat") }
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, likedOnly(documents)).pick()
+        assertEquals(listOf(listOf("cat")), interests.map { it.tags })
+    }
+
+    @Test fun `a liked tag and its kept spelling are one candidate (ADR 0071)`() {
         val affinity = TagAffinityInputs(keptByTag = mapOf(SourceKey.PIXIV to mapOf("blue hair" to 1)), keptBySource = mapOf(SourceKey.PIXIV to 1))
         val interests = ForYouInterests.prepare(SourceKey.PIXIV, listOf(listOf("blue_hair")), affinity).pick()
         assertEquals(listOf(listOf("blue_hair")), interests.map { it.tags })
     }
 
-    @Test fun `a saved tag leads a lane without any Like carrying it`() {
+    @Test fun `a saved tag leads a lane without any Like carrying it (ADR 0071)`() {
         val affinity = TagAffinityInputs(interest = mapOf("fox ears" to EXPLICIT_WEIGHT), explicit = setOf("fox ears"))
         assertEquals(listOf(listOf("fox_ears")), ForYouInterests.prepare(SourceKey.GELBOORU, emptyList(), affinity).pick().map { it.tags })
     }
 
-    @Test fun `interests are bounded and use source normalization`() {
+    @Test fun `interests are bounded and use source normalization (ADR 0071)`() {
         val interests = ForYouInterests.prepare(SourceKey.GELBOORU,
             (1..12).map { listOf("Interest $it") }, TagAffinityInputs.Empty).pick()
         assertEquals(4, interests.size)
@@ -84,7 +120,7 @@ class ForYouInterestsTest {
 class ForYouPictureInterestsTest {
     private val source = SourceKey.GELBOORU
 
-    @Test fun `a tag predicted on many kept pictures leads a lane, compared with what the profile watches`() {
+    @Test fun `a tag predicted on many kept pictures leads a lane, compared with what the profile watches (ADR 0071, 0087)`() {
         val affinity = history(source, mapOf("tree" to 3), watched = mapOf("tree" to 30L, "cat ears" to 2L))
             .copy(pictures = PictureEvidence(mapOf("cat ears" to 12.0, "solo" to 25.0), mapOf("cat ears" to 12, "solo" to 25), kept = 30, baseRates = mapOf("solo" to 0.6)))
         val interests = ForYouInterests.prepare(
@@ -93,21 +129,21 @@ class ForYouPictureInterestsTest {
         assertEquals(listOf(listOf("cat_ears")), interests.map { it.tags })
     }
 
-    @Test fun `before the source has watched enough, a predicted tag must beat its Danbooru share four times`() {
+    @Test fun `before the source has watched enough, a predicted tag must beat its Danbooru share four times (ADR 0087)`() {
         val evidence = PictureEvidence(mapOf("cat ears" to 6.0), mapOf("cat ears" to 6), kept = 30, baseRates = mapOf("cat ears" to 0.06))
         val cold = TagAffinityInputs(pictures = evidence)
         assertFalse(cold.pictureAffinity(source, "cat ears", "cat_ears").proven)
         assertTrue(cold.copy(pictures = evidence.copy(baseRates = mapOf("cat ears" to 0.04))).pictureAffinity(source, "cat ears", "cat_ears").proven)
     }
 
-    @Test fun `too few analysed kept posts, or text on the image, prove nothing`() {
+    @Test fun `too few analysed kept posts, or text on the image, prove nothing (ADR 0071)`() {
         val few = TagAffinityInputs(pictures = PictureEvidence(mapOf("cat ears" to 9.0), mapOf("cat ears" to 9), kept = 10, baseRates = mapOf("cat ears" to 0.01)))
         assertFalse(few.pictureAffinity(source, "cat ears", "cat_ears").proven)
         val text = TagAffinityInputs(pictures = PictureEvidence(mapOf("signature" to 20.0), mapOf("signature" to 20), kept = 30, baseRates = mapOf("signature" to 0.01)))
         assertFalse(text.pictureAffinity(source, "signature", "signature").proven)
     }
 
-    @Test fun `a tag about the file proves nothing by its picture, though a profile that chose it still gets it`() {
+    @Test fun `a tag about the file proves nothing by its picture, though a profile that chose it still gets it (ADR 0072, 0087)`() {
         val evidence = PictureEvidence(
             mapOf("3d" to 12.0, "cat ears" to 12.0), mapOf("3d" to 12, "cat ears" to 12), kept = 30, baseRates = mapOf("3d" to 0.01, "cat ears" to 0.01),
         )
@@ -117,7 +153,7 @@ class ForYouPictureInterestsTest {
         assertTrue(chosen.affinity(source, "3d").proven)
     }
 
-    @Test fun `picture evidence counts kept posts' confident predictions, weighted by score`() {
+    @Test fun `picture evidence counts kept posts' confident predictions, weighted by score (ADR 0072, 0085)`() {
         val kept = PostId(SourceKey.NHENTAI, "kept")
         val index = PredictedTagIndex(
             byPost = mapOf(
@@ -133,14 +169,14 @@ class ForYouPictureInterestsTest {
         assertEquals(mapOf("cat ears" to 0.05), evidence.baseRates)
     }
 
-    @Test fun `text on the image and tags on half of Danbooru are never evidence`() {
+    @Test fun `text on the image and tags on half of Danbooru are never evidence (ADR 0072)`() {
         val post = PostId(SourceKey.PIXIV, "post")
         val tags = listOf("cat_ears", "signature", "solo").map { PredictedTag(it, 0.9f, PredictedTag.Kind.GENERAL) }
         val index = PredictedTagIndex(mapOf(post to tags), baseRates = mapOf("solo" to 0.6))
         assertEquals(setOf("cat ears"), index.evidence(post).keys)
     }
 
-    @Test fun `a predicted tag on nearly every kept post is universal, however rare on Danbooru`() {
+    @Test fun `a predicted tag on nearly every kept post is universal, however rare on Danbooru (ADR 0087)`() {
         val pictures = PictureEvidence(mapOf("looking at viewer" to 15.0), mapOf("looking at viewer" to 27), kept = 30, baseRates = mapOf("looking at viewer" to 0.3))
         val affinity = TagAffinityInputs(pictures = pictures).pictureAffinity(source, "looking at viewer", "looking_at_viewer")
         assertTrue(affinity.universal)

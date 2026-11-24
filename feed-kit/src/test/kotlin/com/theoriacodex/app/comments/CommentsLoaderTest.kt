@@ -16,21 +16,25 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import kotlin.coroutines.CoroutineContext
 
 class CommentsLoaderTest {
     private val post = testPost(sourcePostId = "1")
 
     @Test
-    fun `supports follows the adapter and a repeated page is served from the session cache`() = runTest {
+    fun `supports follows the adapter and a repeated page is served from the session cache (ADR 0076)`() = runTest {
         val adapter = FakeCommentsAdapter()
         val loader = CommentsLoader(FakeRegistry(adapter))
 
@@ -56,12 +60,13 @@ class CommentsLoaderTest {
     }
 
     @Test
-    fun `overlapping requests for one page share a single provider call`() = runTest {
+    fun `overlapping requests for one page share a single provider call (ADR 0076)`() = runTest {
         val release = CompletableDeferred<Unit>()
         val adapter = FakeCommentsAdapter(gate = release)
         val loader = CommentsLoader(FakeRegistry(adapter), StandardTestDispatcher(testScheduler))
 
         val callers = List(3) { async { loader.load(post, null) } }
+        runCurrent()
         release.complete(Unit)
         val pages = callers.awaitAll()
 
@@ -70,7 +75,26 @@ class CommentsLoaderTest {
     }
 
     @Test
-    fun `a failure reaches the caller and is not remembered`() = runTest {
+    fun `a request that missed the cache while another filled the page reads the filled page (ADR 0076)`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val adapter = FakeCommentsAdapter(gate)
+        val dispatcher = HoldingDispatcher(StandardTestDispatcher(testScheduler), held = "late")
+        val loader = CommentsLoader(FakeRegistry(adapter), dispatcher)
+
+        val first = async(CoroutineName("early")) { loader.load(post, null) }
+        runCurrent()
+        val late = async(CoroutineName("late")) { loader.load(post, null) }
+        runCurrent()
+        gate.complete(Unit)
+        val filled = first.await()
+        dispatcher.release()
+
+        assertEquals(filled, late.await())
+        assertEquals(1, adapter.requests.size)
+    }
+
+    @Test
+    fun `a failure reaches the caller and is not remembered (ADR 0076)`() = runTest {
         val adapter = FakeCommentsAdapter().apply { failNext = true }
         val loader = CommentsLoader(FakeRegistry(adapter))
 
@@ -85,7 +109,7 @@ class CommentsLoaderTest {
     }
 
     @Test
-    fun `the cache keeps only the newest pages`() = runTest {
+    fun `the cache keeps only the newest pages (ADR 0076)`() = runTest {
         val adapter = FakeCommentsAdapter()
         val loader = CommentsLoader(FakeRegistry(adapter))
         val posts = (1..70).map { testPost(sourcePostId = "p$it") }
@@ -147,4 +171,19 @@ private class FakeRegistry(private val adapter: SourceAdapter) : SourceAdapterRe
     override fun availableSources(): Set<SourceKey> = setOf(adapter.sourceKey)
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapter.takeIf { it.sourceKey == sourceKey }
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+}
+
+private class HoldingDispatcher(private val delegate: CoroutineDispatcher, private val held: String) : CoroutineDispatcher() {
+    private val parked = mutableListOf<Pair<CoroutineContext, Runnable>>()
+    private var holding = true
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        if (holding && context[CoroutineName]?.name == held) parked += context to block else delegate.dispatch(context, block)
+    }
+
+    fun release() {
+        holding = false
+        parked.forEach { (context, block) -> delegate.dispatch(context, block) }
+        parked.clear()
+    }
 }

@@ -22,27 +22,31 @@ class TriageRulesTest {
     private fun swipe(x: Float = 0f, y: Float = 0f, vx: Float = 0f, vy: Float = 0f) =
         swipeDirection(x, y, vx, vy, commitDistance = 200f, flingVelocity = 1_000f)
 
-    @Test fun `a drag commits in the direction of its axis once it passes the distance`() {
+    @Test fun `a drag commits in the direction of its axis once it passes the distance (ADR 0089)`() {
         assertEquals(SwipeDirection.Right, swipe(x = 220f, y = 40f))
         assertEquals(SwipeDirection.Left, swipe(x = -220f))
         assertEquals(SwipeDirection.Up, swipe(y = -220f, x = 60f))
         assertEquals(SwipeDirection.Down, swipe(y = 220f))
     }
 
-    @Test fun `a short slow drag springs back`() {
+    @Test fun `a short slow drag springs back (ADR 0089)`() {
         assertNull(swipe(x = 150f, y = 30f, vx = 300f))
     }
 
-    @Test fun `a fling commits a short drag`() {
+    @Test fun `a fling commits a short drag (ADR 0089)`() {
         assertEquals(SwipeDirection.Left, swipe(x = -40f, vx = -1_800f))
         assertEquals(SwipeDirection.Up, swipe(y = -30f, vy = -1_500f, vx = 200f))
     }
 
-    @Test fun `a fling against the pull cancels it`() {
+    @Test fun `a fling against the pull cancels it (ADR 0089)`() {
         assertNull(swipe(x = 260f, vx = -1_500f))
     }
 
-    @Test fun `a diagonal drag follows the axis it travelled further on`() {
+    @Test fun `a fast flick picks its axis by speed as well as travel (ADR 0089)`() {
+        assertEquals(SwipeDirection.Right, swipe(x = 30f, y = 40f, vx = 2_000f))
+    }
+
+    @Test fun `a diagonal drag follows the axis it travelled further on (ADR 0089)`() {
         assertEquals(SwipeDirection.Up, swipe(x = 150f, y = -230f))
         assertEquals(SwipeDirection.Right, swipe(x = 230f, y = -150f))
     }
@@ -51,11 +55,11 @@ class TriageRulesTest {
         likedCounts = mapOf("cat" to 6, "sky" to 3), likes = 20, interest = mapOf("cat" to 6.0, "sky" to 3.0),
     )
 
-    @Test fun `hide candidates start with the tags the Likes carry least, in the post's order among equals`() {
+    @Test fun `hide candidates start with the tags the Likes carry least, in the post's order among equals (ADR 0089)`() {
         assertEquals(listOf("tree", "dog", "sky"), hideCandidates(post("cat", "sky", "tree", "dog"), counts, emptyList()))
     }
 
-    @Test fun `among equals a content tag beats artist, meta and rating tags`() {
+    @Test fun `among equals a content tag beats artist, meta and rating tags (ADR 0089)`() {
         val tagged = post("artist_name", "highres", "rating_e", "wolf").copy(
             taxonomy = listOf(
                 PostTaxonomyTerm("artist_name", SearchFacet.ARTIST),
@@ -67,7 +71,7 @@ class TriageRulesTest {
         assertEquals(listOf("wolf", "artist_name", "highres"), hideCandidates(tagged, counts, emptyList()))
     }
 
-    @Test fun `among equals text on the image comes after content, even where the source gives no tag types`() {
+    @Test fun `among equals text on the image comes after content, even where the source gives no tag types (ADR 0089)`() {
         assertEquals(listOf("tree", "watermark", "bluesky_username"), hideCandidates(post("watermark", "bluesky_username", "tree"), counts, emptyList()))
     }
 
@@ -76,7 +80,7 @@ class TriageRulesTest {
         assertEquals(listOf("tree", "cat"), candidates)
     }
 
-    @Test fun `a universal tag is never offered, however little it is liked`() {
+    @Test fun `a universal tag is never offered, however little it is liked (ADR 0089)`() {
         val watched = counts.copy(
             watchedBySource = mapOf(SourceKey.GELBOORU to 40L),
             watchedByTag = mapOf(SourceKey.GELBOORU to mapOf("image" to 38L, "tree" to 2L)),
@@ -98,7 +102,7 @@ class TriageRulesTest {
     private fun seen(tag: String, score: Float, kind: PredictedTag.Kind = PredictedTag.Kind.GENERAL) =
         Seen(listOf(PredictedTag(tag, score, kind)))
 
-    @Test fun `a predicted tag hides a sparsely tagged post when confident enough, through any booru source's hidden tags`() {
+    @Test fun `a predicted tag hides a sparsely tagged post when confident enough, through any booru source's hidden tags (ADR 0089)`() {
         val untagged = post().copy(id = PostId(SourceKey.NHENTAI, "n"))
         val hidden = mapOf(SourceKey.DANBOORU to setOf("furry"), SourceKey.HITOMI to setOf("tail"))
 
@@ -110,15 +114,15 @@ class TriageRulesTest {
         assertFalse(untagged.hiddenBy(hidden, Seen(seen = null)))
     }
 
-    @Test fun `a post its provider tagged well is left to its own tags, whatever its picture shows`() {
+    @Test fun `a post its provider tagged well is left to its own tags, whatever its picture shows (ADR 0089)`() {
         val hidden = mapOf(SourceKey.GELBOORU to setOf("furry"))
         assertFalse(post(*WORDS.toTypedArray()).hiddenBy(hidden, seen("furry", 0.9f)))
         assertTrue(post(*WORDS.drop(1).toTypedArray()).hiddenBy(hidden, seen("furry", 0.9f)))
-        assertTrue(post(*Array(WELL_TAGGED) { "other $it" }).hiddenBy(hidden, seen("furry", 0.9f)))
+        assertTrue(post(*Array(10) { "other $it" }).hiddenBy(hidden, seen("furry", 0.9f)))
         assertTrue(post(*WORDS.toTypedArray()).hiddenBy(hidden, Seen(listOf(PredictedTag("furry", 0.9f, PredictedTag.Kind.GENERAL)), emptyList())))
     }
 
-    @Test fun `a provider tag meets the hidden tags written in its vocabulary`() {
+    @Test fun `a provider tag meets the hidden tags written in its vocabulary (ADR 0089)`() {
         val booru = post("Furry")
         assertTrue(booru.hiddenBy(mapOf(SourceKey.GELBOORU to setOf("furry"))))
         assertTrue(booru.hiddenBy(mapOf(SourceKey.DANBOORU to setOf("furry"))))
@@ -135,6 +139,6 @@ class TriageRulesTest {
     )
 
     private companion object {
-        val WORDS = List(WELL_TAGGED) { "word $it" }
+        val WORDS = List(10) { "word $it" }
     }
 }

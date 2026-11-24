@@ -12,7 +12,7 @@ import org.junit.Test
 
 class TrainingTagsTest {
     @Test
-    fun `recommendations keep tag facets and ignore search-only taxonomy`() {
+    fun `recommendations keep tag facets and ignore search-only taxonomy (ADR 0088)`() {
         val post = Post(
             id = PostId(SourceKey.NHENTAI, "1"),
             preview = ImageRef(url = "https://example.com/1.jpg", localPath = null, mime = "image/jpeg"),
@@ -36,7 +36,7 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `a Like keeps every tag, however far down the provider's alphabetical list`() {
+    fun `a Like keeps every tag, however far down the provider's alphabetical list (ADR 0088)`() {
         val tags = (1..60).map { "tag_%02d".format(it) }
         val post = Post(
             id = PostId(SourceKey.GELBOORU, "7"),
@@ -55,7 +55,7 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `a post with raw tags and no typed taxonomy teaches its raw tags`() {
+    fun `a post with raw tags and no typed taxonomy teaches its raw tags (ADR 0088)`() {
         val post = Post(
             id = PostId(SourceKey.GELBOORU, "8"),
             preview = ImageRef(url = "https://example.com/8.jpg", localPath = null, mime = "image/jpeg"),
@@ -73,7 +73,7 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `pixiv recommendation training keeps native raw tags instead of translated aliases`() {
+    fun `pixiv recommendation training keeps native raw tags instead of translated aliases (ADR 0088)`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "42"),
             preview = ImageRef(url = "https://example.com/42.jpg", localPath = null, mime = "image/jpeg"),
@@ -95,7 +95,7 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `typed suggestion metadata keeps non-tag taxonomy out of recommendation fallbacks`() {
+    fun `typed suggestion metadata keeps non-tag taxonomy out of recommendation fallbacks (ADR 0088)`() {
         assertEquals(
             listOf("tag", "female"),
             listOf(

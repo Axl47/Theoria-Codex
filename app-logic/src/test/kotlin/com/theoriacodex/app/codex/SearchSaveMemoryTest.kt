@@ -13,7 +13,7 @@ class SearchSaveMemoryTest {
 
     private fun query(tag: String): Query = emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm(tag)))
 
-    @Test fun `codices saved to from the same search outrank tag relevance, most used first`() {
+    @Test fun `codices saved to from the same search outrank tag relevance, most used first (ADR 0078)`() {
         val memory = SearchSaveMemory()
         memory.record(search, "a")
         memory.record(search, "b")
@@ -22,7 +22,7 @@ class SearchSaveMemoryTest {
         assertEquals(listOf("b", "a", "c"), boosted.entries.sortedByDescending { it.value }.map { it.key })
     }
 
-    @Test fun `other searches and saves without a search are unaffected`() {
+    @Test fun `other searches and saves without a search are unaffected (ADR 0078)`() {
         val memory = SearchSaveMemory()
         memory.record(search, "a")
         memory.record(null, "b")

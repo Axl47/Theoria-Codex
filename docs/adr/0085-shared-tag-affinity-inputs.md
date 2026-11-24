@@ -18,3 +18,10 @@ Stored Like data shapes from earlier releases stay supported.
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/recommend/TagAffinity.kt`: `tagAffinityInputs`, `KeptTagEvidence`, `respellChosen`, `SharedTagAffinity`, `shareTagAffinityInputs`, `retryDelayMs`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/SharedTagAffinityTest.kt`: `a profile's inputs wait out a switch that has not reached them (ADR 0085)`, `inputs follow the active profile and read only its own Codices (ADR 0085)`, `a failing library read gives empty inputs at once and retries after one, then two seconds (ADR 0085)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TagAffinityTest.kt`: `a Like learns every tag of the Library's copy of its post, not only the ones it stored (ADR 0085)`, `a post both Liked and in a Codex is one point of interest (ADR 0085, 0087)`, `one search across several sources is not a repeated search (ADR 0085)`, `a chosen tag's weight moves to its spelling on the source For You fills (ADR 0085)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/ForYouInterestsTest.kt`: `picture evidence counts kept posts' confident predictions, weighted by score (ADR 0072, 0085)`
+- Left to prose: that a usage-time write rebuilds nothing and the kept-library part rebuilds only when the library changes is unguarded: it is a cost choice and the inputs come out the same either way.
