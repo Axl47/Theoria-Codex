@@ -93,6 +93,26 @@ class PixivRequestPacingTest {
     }
 
     @Test
+    fun `a malformed duration answer is not kept, so the next lookup asks Pixiv again (ADR 0046)`() = runTest {
+        val body = """{"ugoira_metadata":{"frames":[{"delay":40},{"delay":60}]}}"""
+        val cache = PixivUgoiraMetadataCache()
+        val httpClient = QueueHttpClient(SourceHttpResponse(200, "<html>busy</html>"), SourceHttpResponse(200, body))
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider().apply { pixivTokens = PixivAuthTokens("access", "refresh", Long.MAX_VALUE) },
+            ugoiraMetadataCache = cache,
+        )
+
+        val failure = runCatching { adapter.resolveDurationMetadata(ugoira) }.exceptionOrNull()
+        val retried = runCatching { adapter.resolveDurationMetadata(ugoira) }
+
+        assertTrue("$failure", failure is SourceAdapterException)
+        assertEquals("the retry asks Pixiv again", 2, httpClient.requests.size)
+        assertEquals(com.theoriacodex.domain.adapter.DurationMetadataSourceResult.Known(100L), retried.getOrNull())
+        assertEquals(body, cache.get("12345"))
+    }
+
+    @Test
     fun `a failed duration lookup propagates its failure so the engine can retry (ADR 0046)`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens("access", "refresh", Long.MAX_VALUE)

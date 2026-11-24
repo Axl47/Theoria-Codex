@@ -152,6 +152,7 @@
 
 ### Fixed
 
+- A Pixiv animation whose details came back garbled once gets its length again on the next try. It used to stay without one until the app restarted.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - The notification saying chapters wait for their extension no longer stays up after chapter downloads fail. It comes back once downloads get through if those chapters are still waiting.
