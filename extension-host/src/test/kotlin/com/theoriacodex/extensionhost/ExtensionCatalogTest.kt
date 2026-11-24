@@ -82,24 +82,20 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `a repo is added with the key it names, once whatever address reaches it, and refused when a backup knew another key`() = runTest {
+    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key`() = runTest {
         serve()
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/index.min.json"))))
         assertEquals(listOf(ExtensionRepo(repoUrl, "Anime", key)), catalog.repos())
 
-        // Another address of the same repo, and the same one again, as a backup restored twice would give.
-        site["https://mirror.example/anime/repo.json"] = site.getValue("$repoUrl/repo.json")
-        site["https://mirror.example/anime/index.min.json"] = site.getValue("$repoUrl/index.min.json")
-        assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("https://mirror.example/anime"), NewExtensionRepo(repoUrl))))
-        assertEquals(1, catalog.repos().size)
-
-        // Another repo signed with the same key would list the same packages again.
-        site["https://other.example/manga/repo.json"] = site.getValue("$repoUrl/repo.json").decodeToString().replace("Anime", "Manga").encodeToByteArray()
+        // The same repo again, as a backup restored twice would give, and another repo its publisher signs with the
+        // same key and name, as Yūzōnō's manga and anime repos are.
+        site["https://other.example/manga/repo.json"] = site.getValue("$repoUrl/repo.json")
         site["https://other.example/manga/index.min.json"] = "[]".encodeToByteArray()
-        assertEquals(mapOf("https://other.example/manga" to "Signed with the same key as Anime"), catalog.add(listOf(NewExtensionRepo("https://other.example/manga"))))
-        assertEquals(1, catalog.repos().size)
+        assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/"), NewExtensionRepo("https://other.example/manga/index.min.json"))))
+        assertEquals(listOf(repoUrl, "https://other.example/manga"), catalog.repos().map { it.url })
 
         catalog.remove(repoUrl)
+        catalog.remove("https://other.example/manga")
         val refused = catalog.add(listOf(NewExtensionRepo(repoUrl, signingKey = otherKey), NewExtensionRepo("http://repo.example/anime"), NewExtensionRepo("https://gone.example")))
         assertEquals(setOf(repoUrl, "http://repo.example/anime", "https://gone.example"), refused.keys)
         assertEquals("Now signed with another key", refused[repoUrl])
@@ -120,6 +116,13 @@ class ExtensionCatalogTest {
             listing.extensions.associate { it.packageName to it.status },
         )
         assertEquals(emptyMap<String, String>(), listing.problems)
+
+        // A second address of the repo offers the same packages, which are listed once.
+        site["https://mirror.example/anime/repo.json"] = site.getValue("$repoUrl/repo.json")
+        site["https://mirror.example/anime/index.min.json"] = site.getValue("$repoUrl/index.min.json")
+        catalog.add(listOf(NewExtensionRepo("https://mirror.example/anime")))
+        assertEquals(listing.extensions, catalog.available().extensions)
+        catalog.remove("https://mirror.example/anime")
 
         // The repo turns to another key: nothing it offers is listed until the user adds it again.
         site["$repoUrl/repo.json"] = site.getValue("$repoUrl/repo.json").decodeToString().replace(key, otherKey).encodeToByteArray()

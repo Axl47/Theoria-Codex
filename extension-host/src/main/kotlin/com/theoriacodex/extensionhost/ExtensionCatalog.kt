@@ -79,15 +79,11 @@ class ExtensionCatalog(
         val index = RepoReader.read(url, ::get)
         if (!index.signingKey.matches(FINGERPRINT)) throw RepoProblem("Names no signing key")
         if (knownKey != null && !knownKey.equals(index.signingKey, ignoreCase = true)) throw RepoProblem("Now signed with another key")
-        val name = index.name.ifBlank { url }
-        var sameKey: ExtensionRepo? = null
+        // A key names a publisher, not a repo: Yūzōnō's manga and anime repos share their name and key.
         choices.update { current ->
-            sameKey = current.repos.firstOrNull { it.url == url || it.signingKey == index.signingKey }
-            if (sameKey != null) current else current.copy(repos = current.repos + ExtensionRepo(url, name, index.signingKey))
+            if (current.repos.any { it.url == url }) current
+            else current.copy(repos = current.repos + ExtensionRepo(url, index.name.ifBlank { url }, index.signingKey))
         }
-        // Two addresses of one repo, such as its folder and its newer index, are the same repo. Another repo signed with
-        // the same key would list the same packages, which one device can hold only once.
-        sameKey?.let { if (it.url != url && it.name != name) throw RepoProblem("Signed with the same key as ${it.name}") }
         indexes[url] = index
     }
 
@@ -102,7 +98,8 @@ class ExtensionCatalog(
             repos.map { repo -> async { repo to runCatchingPreservingCancellation { index(repo, refresh) } } }.awaitAll()
         }
         val onDevice = packages().filter { it.origin != ExtensionOrigin.FILE }.associateBy(ExtensionPackage::packageName)
-        val extensions = read.flatMap { (repo, index) -> index.getOrNull()?.let { offered(repo, it, onDevice) }.orEmpty() }
+        // A package two repos offer, such as one repo reached at two addresses, is listed from the first.
+        val extensions = read.flatMap { (repo, index) -> index.getOrNull()?.let { offered(repo, it, onDevice) }.orEmpty() }.distinctBy(RepoExtension::packageName)
         RepoListing(extensions, read.mapNotNull { (repo, index) -> index.exceptionOrNull()?.let { repo.url to describe(it) } }.toMap())
     }
 

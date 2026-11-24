@@ -75,7 +75,7 @@ private fun ExtensionsList(state: ExtensionsState, viewModel: ExtensionsViewMode
                 SettingsRow(BROWSE_TITLE, onClick = { viewModel.openSubpage(ExtensionsSubpage.BROWSE) })
                 SettingsRowDivider()
             }
-            SettingsRow(REPOS_TITLE, summary = state.repos?.joinToString { it.name }, onClick = { viewModel.openSubpage(ExtensionsSubpage.REPOS) })
+            SettingsRow(REPOS_TITLE, summary = state.repos?.map { it.name }?.distinct()?.joinToString(), onClick = { viewModel.openSubpage(ExtensionsSubpage.REPOS) })
         }
     }
 }

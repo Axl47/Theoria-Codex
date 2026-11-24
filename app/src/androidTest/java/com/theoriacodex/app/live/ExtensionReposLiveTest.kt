@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 
 /**
  * Proves repos on a device, through the Extensions page alone: adding Keiyoushi (whose catalog is only in its newer,
- * protobuf index) and Yūzōnō (a legacy JSON repo), updating a Keiyoushi extension an older app installed as a package,
+ * protobuf index) and Yūzōnō's anime and manga repos (one name and key for two repos), updating a Keiyoushi extension an older app installed as a package,
  * installing an anime extension that was not on the device, loading its sources from the app's own storage, and
  * removing it. Runs only with `-e extensionSourceLive true`, and with `-e adoptedPackage <package>` naming a
  * Keiyoushi extension installed beforehand with `adb install` at an older version than the repo's, which it leaves
@@ -45,10 +45,15 @@ class ExtensionReposLiveTest {
         live.tap("Repos", By.text("Repos"))
         addRepo(KEIYOUSHI, "Keiyoushi")
         addRepo(YUZONO, "Yūzōnō")
+        // Yūzōnō's manga repo has the anime repo's name and key, and is a repo of its own.
+        addRepo(YUZONO_MANGA, "Yūzōnō")
+        live.await("three repos", { repos.repos().map { it.url } }) { it.size == 3 }
         val listing = runBlocking { repos.available() }
         live.report("repos", "${listing.extensions.size} extensions offered; problems: ${listing.problems}")
         assertTrue("Keiyoushi's protobuf catalog is read", listing.extensions.count { it.repo.contains("keiyoushi") } > 100)
         assertTrue("Yūzōnō's legacy catalog is read", listing.extensions.any { it.packageName == ONSEN })
+        // Its catalog is now only a stub telling old apps to update, which offers nothing this app runs.
+        assertTrue("Yūzōnō's manga repo is read", listing.problems.isEmpty())
         device.pressBack()
 
         // The package an older app installed is offered as an update, which installs a private copy in its place.
@@ -108,5 +113,6 @@ class ExtensionReposLiveTest {
         const val ONSEN = "eu.kanade.tachiyomi.animeextension.all.animeonsen"
         const val KEIYOUSHI = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json"
         const val YUZONO = "https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json"
+        const val YUZONO_MANGA = "https://raw.githubusercontent.com/yuzono/manga-repo/repo/index.min.json"
     }
 }

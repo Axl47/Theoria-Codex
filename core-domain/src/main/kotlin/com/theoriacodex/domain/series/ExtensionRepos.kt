@@ -59,9 +59,8 @@ interface ExtensionRepos {
     suspend fun repos(): List<ExtensionRepo>
 
     /**
-     * Adds each repo after reading what it publishes now. A repo already added counts as added, under any of its
-     * addresses: one with the same name and signing key as one already added. Returns, keyed by the
-     * [NewExtensionRepo.url] given, why each other one was not.
+     * Adds each repo after reading what it publishes now; one already added at the same address counts as added.
+     * Returns, keyed by the [NewExtensionRepo.url] given, why each other one was not.
      */
     suspend fun add(repos: List<NewExtensionRepo>): Map<String, String>
 
