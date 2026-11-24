@@ -25,6 +25,8 @@ import kotlinx.serialization.json.putJsonArray
 class FirstPageStore(
     private val file: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val maxAgeMs: Long? = null,
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val lock = Mutex()
 
@@ -34,7 +36,7 @@ class FirstPageStore(
 
     private fun read(key: String): List<Post> =
         runCatching {
-            if (!file.exists()) return@runCatching emptyList()
+            if (!file.exists() || maxAgeMs != null && now() - file.lastModified() > maxAgeMs) return@runCatching emptyList()
             val root = DurableJson.parseToJsonElement(file.readText()).jsonObject
             if (root.getValue(VERSION).jsonPrimitive.int != CURRENT_VERSION || root.getValue(KEY).jsonPrimitive.content != key) {
                 return@runCatching emptyList()
@@ -89,6 +91,7 @@ class FirstPageStore(
     companion object {
         const val SEARCH_FILE_NAME = "search_first_page.json"
         const val FOR_YOU_FILE_NAME = "for_you_deck.json"
+        const val FOR_YOU_MAX_AGE_MS = 24L * 60 * 60 * 1000
         val FILE_NAMES = listOf(SEARCH_FILE_NAME, FOR_YOU_FILE_NAME)
         private const val MAX_POSTS = 60
         private const val CURRENT_VERSION = 2

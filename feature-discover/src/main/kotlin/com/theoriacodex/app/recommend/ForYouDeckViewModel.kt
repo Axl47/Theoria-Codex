@@ -225,13 +225,13 @@ class ForYouDeckViewModel(
             val skips = async { verdictLog.readSkips(profileId) }
             val painted = if (restoring) async { paintLastDeck(request, skips) } else null
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
-                painted?.cancel()
+                painted?.await()
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
                 return@launch settle(ForYouMixState.Failed, error.message)
             }
             skips.await()
             if (lanes.isEmpty()) {
-                painted?.cancel()
+                painted?.await()
                 return@launch settle(ForYouMixState.NoLanes)
             }
             val leading = painted?.await().orEmpty()

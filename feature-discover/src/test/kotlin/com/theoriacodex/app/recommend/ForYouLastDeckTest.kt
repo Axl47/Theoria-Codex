@@ -184,6 +184,24 @@ class ForYouLastDeckTest {
         assertEquals(listOf<TrailRequest>(TrailRequest.Similar(liked)), trails.asked)
     }
 
+    @Test fun `kept cards still show when lane planning fails before the skips are read`() = runTest {
+        val undecided = leftUndecided()
+        lanes.planGate = null
+        lanes.failLanes = true
+        val slow = CompletableDeferred<Unit>()
+        val held = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> {
+                slow.await()
+                return verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit)
+            }
+        }
+        val next = owner(verdicts = held)
+        assertTrue(next.posts.isEmpty())
+        slow.complete(Unit)
+        assertEquals(ForYouMixState.Failed, next.state.value.mix)
+        assertEquals(undecided.ids(), next.posts.ids())
+    }
+
     private class DeckKeepingEngine(private val lanes: FakeForYouEngine) : ForYouRouteEngine by lanes {
         private val decks = mutableMapOf<String, List<Post>>()
 

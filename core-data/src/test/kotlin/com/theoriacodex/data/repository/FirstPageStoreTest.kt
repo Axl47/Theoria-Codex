@@ -79,6 +79,18 @@ class FirstPageStoreTest {
     }
 
     @Test
+    fun `a page older than the store's age limit is not shown`() = runTest {
+        var now = 0L
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler), maxAgeMs = 1_000, now = { now })
+        store.save("key", listOf(post("1")))
+        now = file().lastModified() + 1_000
+
+        assertEquals(listOf("1"), store.load("key").map { it.id.sourcePostId })
+        now += 1
+        assertTrue(store.load("key").isEmpty())
+    }
+
+    @Test
     fun `an unreadable file only costs the instant paint`() = runTest {
         file().writeText("{not json")
 

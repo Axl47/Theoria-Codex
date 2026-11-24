@@ -365,7 +365,9 @@ internal class DefaultTheoriaAppContainer(
         recoveryRegistry = fileStoreRecoveryRegistry,
         profileWriteGuard = profileWriteGuard,
     )
-    private val forYouDeck = FirstPageStore(File(appContext.cacheDir, FirstPageStore.FOR_YOU_FILE_NAME))
+    private val forYouDeck = FirstPageStore(
+        File(appContext.cacheDir, FirstPageStore.FOR_YOU_FILE_NAME), maxAgeMs = FirstPageStore.FOR_YOU_MAX_AGE_MS,
+    )
     private val profileDeletion = ProfileDeletionService(settingsRepository, contentRepository,
         File(storageDirectory, "pending_profile_deletion.json"), profileWriteGuard, removeProfileCaches = { forYouDeck.clear() })
     private val statisticsStore = DataStoreStatisticsRepository(
