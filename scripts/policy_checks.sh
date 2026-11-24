@@ -101,7 +101,6 @@ policy_violations() {
 
 python_tests() {
   python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-  python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
 }
 
 # Robolectric's Android SDK 36 sandbox refuses JVMs older than 21: falls back to Homebrew's JDK.

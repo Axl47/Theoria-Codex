@@ -70,7 +70,7 @@ Keep `AGENTS.md` limited to durable product intent, safety boundaries, and accep
 
 - Likes and creator follows are local actions. Do not add remote bookmarks, favorites, follows, or notification subscriptions.
 - Every visibly presented animated/video card must autoplay simultaneously. Performance improvements must preserve this behavior.
-- Viewer OCR/translation was deliberately retired. Its remaining statistics counters and `deploy/libretranslate/` are legacy compatibility artifacts, not unfinished features.
+- Viewer OCR/translation was deliberately retired, and its translation server is shut down. Its remaining statistics counters are legacy compatibility artifacts, not unfinished features.
 - UI changes follow `docs/product-constraints.md`: persistent screen space is for controls that stay useful in repeated use, and nothing adds onboarding copy.
 - Agreed but unscheduled work is a GitHub issue labelled `backlog`; do not keep backlog files in the repo.
 
