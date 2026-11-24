@@ -37,7 +37,8 @@ import com.theoriacodex.domain.series.SeriesKind
 
 /**
  * The Following view: the followed series as [content] orders and narrows them, under the kind filter and Sort &
- * filter. Pulling down checks them for new entries; when sources fail, [failedCheck] says so above the grid with Retry.
+ * filter. Pulling down checks them for new entries; when sources fail, [failedCheck] says so above the grid with Retry,
+ * and series whose extension is not on are counted there with the way to Extensions.
  * With nothing followed it leads to Browse; with nothing shown, a title search goes on to every source, otherwise Show
  * all clears the filters.
  */
@@ -54,6 +55,7 @@ internal fun FollowingBody(
     onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
+    onOpenExtensions: () -> Unit,
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     val following = content.following
@@ -73,6 +75,11 @@ internal fun FollowingBody(
                 if (failedCheck != null && content.followsAny) {
                     fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
                 }
+                if (content.missingExtensions > 0) {
+                    fullWidth("following-missing-extensions") {
+                        FailureRow(onOpenExtensions, message = missingExtensionsLine(content.missingExtensions), actionLabel = EXTENSIONS_TITLE)
+                    }
+                }
                 when {
                     following == null -> Unit
                     following.isEmpty() && content.followingQuery.isNotBlank() ->
@@ -90,6 +97,10 @@ internal fun FollowingBody(
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
     }
 }
+
+/** "4 series need their extension", or for one "1 series needs its extension". */
+internal fun missingExtensionsLine(count: Int): String =
+    if (count == 1) "1 series needs its extension" else "$count series need their extension"
 
 /** "Couldn't check 2 series", or when none could be checked, "Couldn't check for updates". */
 internal val FollowedCheck.message: String
