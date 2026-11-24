@@ -11,8 +11,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import com.theoriacodex.app.AppJob
 import com.theoriacodex.app.series.SERIES_NOTIFICATION_ID
-import com.theoriacodex.app.series.SERIES_UPDATE_JOB_ID
 import com.theoriacodex.app.series.notifySeriesUpdate
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.data.repository.SeriesUpdate
@@ -388,7 +388,7 @@ class ExtensionSourceLiveTest {
         val scheduler = context.getSystemService(JobScheduler::class.java)
         val deadline = System.currentTimeMillis() + SeriesLiveDriver.UI_TIMEOUT_MS
         while (true) {
-            val job = scheduler.getPendingJob(SERIES_UPDATE_JOB_ID)
+            val job = scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)
             if ((job != null) == scheduled) return job
             check(System.currentTimeMillis() < deadline) { "The check stayed ${if (scheduled) "unscheduled" else "scheduled"}" }
             Thread.sleep(SeriesLiveDriver.POLL_MS)

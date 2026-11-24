@@ -6,6 +6,7 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
+import com.theoriacodex.app.AppJob
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.util.concurrent.atomic.AtomicBoolean
@@ -28,13 +29,13 @@ import kotlinx.coroutines.launch
  */
 internal enum class LibraryJob(val id: Int) {
     /** Hashes and tags the Library's pictures from their stills ([LibraryPictureJobService]). */
-    PICTURES(3102),
+    PICTURES(AppJob.LIBRARY_PICTURES.id),
 
     /**
      * Upgrades playing posts' still analyses with their frames ([LibraryFrameJobService]), only while the device is idle:
      * nobody is using it, so no card plays and no Like tap waits on the decoders.
      */
-    FRAMES(3103),
+    FRAMES(AppJob.LIBRARY_FRAMES.id),
     ;
 
     /** Whether a run is under way in this process, and whether work arrived during it. */
