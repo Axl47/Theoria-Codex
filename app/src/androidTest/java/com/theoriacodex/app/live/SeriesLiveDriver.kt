@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -51,7 +52,12 @@ internal class SeriesLiveDriver {
     fun waitFor(what: String, selector: BySelector, timeoutMs: Long = UI_TIMEOUT_MS): UiObject2 =
         device.wait(Until.findObject(selector), timeoutMs) ?: error("Timed out waiting for $what; on screen: ${screenText()}")
 
-    fun tap(what: String, selector: BySelector, timeoutMs: Long = UI_TIMEOUT_MS) = waitFor(what, selector, timeoutMs).click()
+    /** Taps [selector], finding it again once when the screen redrew it between finding and tapping. */
+    fun tap(what: String, selector: BySelector, timeoutMs: Long = UI_TIMEOUT_MS) = try {
+        waitFor(what, selector, timeoutMs).click()
+    } catch (_: StaleObjectException) {
+        waitFor(what, selector, timeoutMs).click()
+    }
 
     /** Waits until [read] gives a value [done] accepts, and returns it. */
     fun <T> await(what: String, read: suspend () -> T, done: (T) -> Boolean): T {
