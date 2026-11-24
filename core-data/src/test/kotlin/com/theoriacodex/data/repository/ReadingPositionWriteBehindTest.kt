@@ -24,7 +24,7 @@ class ReadingPositionWriteBehindTest {
     private val writeScope = CoroutineScope(StandardTestDispatcher(writeClock))
 
     @Test
-    fun `rapid page turns write once with the newest page`() = runTest {
+    fun `rapid page turns write once with the newest page (ADR 0215)`() = runTest {
         val writes = mutableListOf<List<ReadingPosition>>()
         val repository = CellReadingPositionRepository(
             FileStateCell(emptyList<ReadingPosition>()) { writes += it }.writeBehind(writeScope, READING_POSITION_WRITE_DELAY),
@@ -40,7 +40,7 @@ class ReadingPositionWriteBehindTest {
     }
 
     @Test
-    fun `a page turned during a write is written after it`() = runTest {
+    fun `a page turned during a write is written after it (ADR 0215)`() = runTest {
         val writes = mutableListOf<Int>()
         val firstWriteStarted = CompletableDeferred<Unit>()
         val releaseFirstWrite = CompletableDeferred<Unit>()
@@ -65,7 +65,7 @@ class ReadingPositionWriteBehindTest {
     }
 
     @Test
-    fun `stopping the app flushes so a swiped-away chapter resumes on its last page`() = runTest {
+    fun `stopping the app flushes so a swiped-away chapter resumes on its last page (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val repository = FileBackedReadingPositionRepository(directory, writeScope = writeScope)
         (3..7).forEach { page -> repository.record(position(page, page * 100L)) }
@@ -79,7 +79,7 @@ class ReadingPositionWriteBehindTest {
     }
 
     @Test
-    fun `cancelling during the delay keeps the last written file readable`() = runTest {
+    fun `cancelling during the delay keeps the last written file readable (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val repository = FileBackedReadingPositionRepository(directory, writeScope = writeScope)
         repository.record(position(4, 400L))
@@ -93,7 +93,7 @@ class ReadingPositionWriteBehindTest {
     }
 
     @Test
-    fun `restored positions are on disk before restore returns`() = runTest {
+    fun `restored positions are on disk before restore returns (ADR 0215)`() = runTest {
         val directory = temporary.newFolder()
         val stoppedScope = CoroutineScope(Job().apply { cancel() })
         val repository = FileBackedReadingPositionRepository(directory, writeScope = stoppedScope)

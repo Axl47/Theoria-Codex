@@ -45,7 +45,7 @@ class FeedGridVisibilityTest {
     private val reported = mutableSetOf<PostId>()
     private val grid = LazyStaggeredGridState()
 
-    @Test fun `cards report visible exactly while their media shows inside the grid`() {
+    @Test fun `cards report visible exactly while their media shows inside the grid (ADR 0216)`() {
         compose.setContent {
             MaterialTheme {
                 Column(Modifier.size(400.dp, 600.dp)) {
@@ -75,7 +75,7 @@ class FeedGridVisibilityTest {
         assertFalse(posts.first().id in reported)
     }
 
-    @Test fun `a grid laid out beside the window, as in a tab swipe, reports no card visible`() {
+    @Test fun `a grid laid out beside the window, as in a tab swipe, reports no card visible (ADR 0216)`() {
         compose.setContent {
             MaterialTheme {
                 Box(Modifier.size(400.dp, 600.dp).offset(x = 5000.dp)) {

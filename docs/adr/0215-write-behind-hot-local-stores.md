@@ -15,7 +15,7 @@ The Viewer records a reading position on every page turn. Written through, each 
 
 ## Consequences
 
-Guarded by `ReadingPositionWriteBehindTest`: rapid page turns write once with the newest page, a turn during a write is written after it, the stop flush lets a reopened store resume on the last page, cancelling mid-delay leaves the previous file readable, and restores are on disk before they return. A process crash (not a normal swipe-away) can lose the last delay window of page turns. Other stores that are written on every view can adopt the same cell and add their flush to `DataDependencies.flushPendingWrites`.
+A process crash (not a normal swipe-away) can lose the last delay window of page turns. Other stores that are written on every view can adopt the same cell and add their flush to `DataDependencies.flushPendingWrites`.
 
 ## Applies to
 
@@ -23,3 +23,12 @@ Guarded by `ReadingPositionWriteBehindTest`: rapid page turns write once with th
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ReadingPositionRepository.kt`: `READING_POSITION_WRITE_DELAY`, `FileBackedReadingPositionRepository`, `CellReadingPositionRepository.replace`, `CellReadingPositionRepository.merge`
 - `app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt`: `DataDependencies.flushPendingWrites`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShellEffects.kt`, `TheoriaNavDestinations.kt`: `flushPendingWrites`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionWriteBehindTest.kt`: `rapid page turns write once with the newest page (ADR 0215)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionWriteBehindTest.kt`: `a page turned during a write is written after it (ADR 0215)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionWriteBehindTest.kt`: `stopping the app flushes so a swiped-away chapter resumes on its last page (ADR 0215)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionWriteBehindTest.kt`: `cancelling during the delay keeps the last written file readable (ADR 0215)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ReadingPositionWriteBehindTest.kt`: `restored positions are on disk before restore returns (ADR 0215)`
+- `app/src/androidTest/java/com/theoriacodex/app/journeys/ViewerResumeJourneyTest.kt`: `aGalleryReopenedAfterTheAppStopsResumesOnItsLastPage_adr_0215`

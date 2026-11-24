@@ -26,7 +26,7 @@ class ViewerResumeJourneyTest : AppJourneyFixture() {
     }
 
     @Test
-    fun aGalleryReopenedAfterTheAppStopsResumesOnItsLastPage() {
+    fun aGalleryReopenedAfterTheAppStopsResumesOnItsLastPage_adr_0215() {
         io {
             container.data.recentsRepository.recordSearch(
                 Query(QueryMode.Source(SourceKey.PIXIV), listOf("multi"), emptyList(), SortMode.POPULAR, null, null),

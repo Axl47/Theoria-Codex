@@ -63,7 +63,7 @@ class CodexEditModeTest {
         compose.runOnIdle { assertEquals(1, destinationBacks) }
     }
 
-    @Test fun `selecting a post recomposes only its own cell`() = countCompositions { counter ->
+    @Test fun `selecting a post recomposes only its own cell (ADR 0216)`() = countCompositions { counter ->
         render((0 until 4).map { post("saved-$it") })
         compose.onNodeWithContentDescription("Select posts").performClick()
         compose.waitForIdle()

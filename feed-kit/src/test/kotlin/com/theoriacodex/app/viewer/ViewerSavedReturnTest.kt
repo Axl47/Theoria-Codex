@@ -38,7 +38,7 @@ import org.robolectric.annotation.Config
 class ViewerSavedReturnTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `visible Saved card supplies its own return bounds`() = checkSavedReturn(shelfIndex = 0, postIndex = 0)
+    @Test fun `visible Saved card supplies its own return bounds (ADR 0216)`() = checkSavedReturn(shelfIndex = 0, postIndex = 0)
     @Test fun `Saved scrolls vertically and horizontally to an offscreen exited post`() = checkSavedReturn(shelfIndex = 2, postIndex = 15)
 
     private fun checkSavedReturn(shelfIndex: Int, postIndex: Int) {

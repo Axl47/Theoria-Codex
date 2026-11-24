@@ -18,8 +18,6 @@ Values a grid cell receives are identity-stable across parent passes. Routes rem
 
 A card's media reports visibility through two `Modifier.onVisibilityChanged` checks: one against the enclosing feed viewport (the grid in `AdaptivePostGrid`, or the column in `ViewerReturnColumn`, provided as `FeedViewport` through `LocalFeedViewport`; the window outside one) and one against the window. Media counts as visible while some part of it lies inside both, so every card the user can see still autoplays, media scrolled under a header while its caption shows does not, and a feed the pager has moved beside the window during a tab swipe plays nothing. Duration visibility is reported from an effect keyed on the post and its visibility, so a slot reused for another post reports both changes. The feed viewport also supplies the lifecycle state cards read. The card keeps its media coordinates from `onPlaced` and computes bounds only on a click, and tracks positions for the Viewer return only on the card a pending return names.
 
-Guarded by `SearchCardRecompositionTest`, `ForYouDeckScreenTest`, `CodexEditModeTest`, `FeedGridVisibilityTest`, `FeedMediaVisibilityTest`, `SearchCardResolutionTest` and `ViewerSavedReturnTest`.
-
 ## Consequences
 
 A new feed screen that builds card parameters inline will pass review but re-run every card on each pass; copy the remembered pattern and add a case to the recomposition tests, which count card bodies with `countCompositions`.
@@ -40,3 +38,13 @@ A scrolling container of cards that is neither `AdaptivePostGrid` nor `ViewerRet
 - `feed-kit/src/testFixtures/kotlin/com/theoriacodex/app/testing/CompositionCounter.kt`: `countCompositions`
 - `feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchCardRecompositionTest.kt`: `SearchCardRecompositionTest`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/ui/components/FeedGridVisibilityTest.kt`: `FeedGridVisibilityTest`
+
+## Guarded by
+
+- `feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchCardRecompositionTest.kt`: `a page request and the page it brings recompose only the cards it adds (ADR 0216)`
+- `feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchCardRecompositionTest.kt`: `a like recomposes only the liked card (ADR 0216)`
+- `feature-discover/src/test/kotlin/com/theoriacodex/app/recommend/ForYouDeckScreenTest.kt`: `a like rebuilds the screen's config but recomposes only the liked grid card (ADR 0216)`
+- `feature-library/src/test/kotlin/com/theoriacodex/app/codex/CodexEditModeTest.kt`: `selecting a post recomposes only its own cell (ADR 0216)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/ui/components/FeedGridVisibilityTest.kt`: `cards report visible exactly while their media shows inside the grid (ADR 0216)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/ui/components/FeedGridVisibilityTest.kt`: `a grid laid out beside the window, as in a tab swipe, reports no card visible (ADR 0216)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerSavedReturnTest.kt`: `visible Saved card supplies its own return bounds (ADR 0216)`

@@ -60,7 +60,7 @@ class SearchCardRecompositionTest {
         compose.onNodeWithTag(searchCardTestTag(shown.last().id)).assertIsDisplayed()
     }
 
-    @Test fun `a page request and the page it brings recompose only the cards it adds`() = countCompositions { counter ->
+    @Test fun `a page request and the page it brings recompose only the cards it adds (ADR 0216)`() = countCompositions { counter ->
         render()
         counter.reset()
         compose.runOnIdle {
@@ -81,7 +81,7 @@ class SearchCardRecompositionTest {
         assertEquals("cards recomposed by the page", added, counter.count(FEED_POST_CARD))
     }
 
-    @Test fun `a like recomposes only the liked card`() = countCompositions { counter ->
+    @Test fun `a like recomposes only the liked card (ADR 0216)`() = countCompositions { counter ->
         render()
         counter.reset()
         compose.runOnIdle { marks.value = FeedMarks(liked = setOf(shown.first().id)) }

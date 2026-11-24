@@ -237,7 +237,7 @@ class ForYouDeckScreenTest {
         compose.runOnIdle { assertEquals(listOf("like sea-0-0", "save sea-0-0"), menuActions) }
     }
 
-    @Test fun `a like rebuilds the screen's config but recomposes only the liked grid card`() = countCompositions { counter ->
+    @Test fun `a like rebuilds the screen's config but recomposes only the liked grid card (ADR 0216)`() = countCompositions { counter ->
         render()
         compose.onNodeWithContentDescription("Grid").performClick()
         card("sea-0-0").assertIsDisplayed()
