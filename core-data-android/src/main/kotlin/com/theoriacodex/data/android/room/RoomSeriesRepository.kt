@@ -80,11 +80,13 @@ class RoomSeriesRepository(
 
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?): List<SeriesEntry> =
         database.withTransaction {
-            val stored = dao.series(id.source.id, id.address)?.toStored()
-            if (stored == null || entries.isEmpty()) {
-                emptyList()
-            } else {
-                storeEntries(stored.copy(series = stored.series.copy(memo = seriesMemo ?: stored.series.memo)), entries)
+            val stored = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction emptyList()
+            val withMemo = stored.copy(series = stored.series.copy(memo = seriesMemo ?: stored.series.memo))
+            when {
+                entries.isNotEmpty() -> storeEntries(withMemo, entries)
+                // An empty list leaves the entries as they are, but the memo is stored, as [store] stores it.
+                withMemo != stored -> emptyList<SeriesEntry>().also { dao.upsertSeries(withMemo.toEntity()) }
+                else -> emptyList()
             }
         }
 

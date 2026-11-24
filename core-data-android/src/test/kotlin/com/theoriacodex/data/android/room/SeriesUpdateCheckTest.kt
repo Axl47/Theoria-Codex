@@ -86,6 +86,13 @@ class SeriesUpdateCheckTest {
 
         assertEquals(listOf(emptyList(), listOf(second, first.copy(memo = """{"id":1}"""))), source.handed)
         assertEquals("""{"pages":3}""", repository.series(series.id)!!.series.memo)
+
+        // A listing with no chapters leaves them as they are and still stores the memo.
+        source.chapters[series.id] = emptyList()
+        source.listingMemo = "{}"
+        repository.checkFollowed(sourcesOn(source))
+        assertEquals("{}", repository.series(series.id)!!.series.memo)
+        assertEquals(2, repository.entries(series.id).size)
     }
 
     @Test
