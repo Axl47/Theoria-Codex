@@ -12,18 +12,12 @@ import java.io.File
 import kotlin.time.TimeSource
 import okhttp3.Request
 
-/**
- * What the real-extension harnesses share: the host installed in this test package without the app's browser, an
- * extension APK loaded from the package's external files directory, and reports as text only, never provider media.
- */
 internal class Harness(private val tag: String) {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
-    /** The APK named by the instrumentation argument [name], or null when the run names none. */
     fun apkNamed(name: String): String? = InstrumentationRegistry.getArguments().getString(name)
 
-    /** Installs the host and loads [apkName] as the app would, with both kinds of extension known. */
     fun load(apkName: String, services: HostServices): Pair<ExtensionPackage, List<HostedSource>> {
         ExtensionHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
         val packages = ExtensionPackages(context, listOf(MihonKind, AniyomiKind))
@@ -41,16 +35,11 @@ internal class Harness(private val tag: String) {
         }
     }
 
-    /** Shown by `am instrument -r` as it happens, and in logcat under the harness's tag. */
     fun report(key: String, message: String) {
         Log.i(tag, "$key: $message")
         instrumentation.sendStatus(0, Bundle().apply { putString("harness", "$key: $message") })
     }
 
-    /**
-     * The harness measures an extension alone, without the app's browser cookies (the WebView store lives in the app's
-     * modules), so a site behind a browser check fails here as it would before any check is passed.
-     */
     private object NoCookies : BrowserCookieStore {
         override fun cookieHeader(url: String): String? = null
 
@@ -61,7 +50,6 @@ internal class Harness(private val tag: String) {
         override fun expire(url: String, name: String?) = Unit
     }
 
-    /** The harness measures extensions without the app's WebView, so a challenge fails its source. */
     private object NoBrowser : ChallengeBrowser {
         override fun mayWait() = false
 

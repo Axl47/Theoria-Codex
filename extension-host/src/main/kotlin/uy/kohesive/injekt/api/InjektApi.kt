@@ -1,4 +1,3 @@
-// Binary-compatible stand-in for the Injekt classes extension binaries call (uy.kohesive.injekt 1.16).
 package uy.kohesive.injekt.api
 
 import java.lang.reflect.ParameterizedType
@@ -9,7 +8,6 @@ interface InjektFactory {
     fun <R : Any> getInstance(forType: Type): R
 }
 
-/** A fixed map from type to instance, as Mihon's own read-only registrar is. Only the host runtime binds. */
 class InjektScope : InjektFactory {
     private val bindings = ConcurrentHashMap<Type, Any>()
 
@@ -24,12 +22,10 @@ class InjektScope : InjektFactory {
 
 class InjektionException(message: String) : RuntimeException(message)
 
-/** What extensions read the requested type through; Aniyomi extensions call it by this interface's name. */
 interface TypeReference<T> {
     val type: Type
 }
 
-/** Extensions subclass this anonymously so the requested type survives erasure: `object : FullTypeReference<Json>() {}`. */
 abstract class FullTypeReference<T> protected constructor() : TypeReference<T> {
     override val type: Type = (javaClass.genericSuperclass as ParameterizedType).actualTypeArguments[0]
 }

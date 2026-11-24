@@ -1,15 +1,10 @@
 // Derived from Aniyomi (https://github.com/aniyomiorg/aniyomi), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 @file:Suppress("PropertyName", "VariableNaming")
 
 package eu.kanade.tachiyomi.animesource.model
 
 import java.io.Serializable
 
-/**
- * An anime as a source describes it. [url] identifies it to that source. An anime whose [fetch_type] is
- * [FetchType.Seasons] lists seasons (each an anime of its own, numbered by [season_number]) instead of episodes.
- */
 interface SAnime : Serializable {
     var url: String
     var title: String

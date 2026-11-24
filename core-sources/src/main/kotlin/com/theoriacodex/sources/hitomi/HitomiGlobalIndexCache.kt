@@ -2,11 +2,6 @@ package com.theoriacodex.sources.hitomi
 
 import com.theoriacodex.domain.coroutines.SharedFlights
 
-/**
- * Byte-budgeted cache of global-search gallery IDs for the provider's active index version. Activating a new
- * version clears every entry; a load that finishes after its version was replaced is returned but not kept.
- * Concurrent callers share one load, which is cancelled only when every caller waiting on it has left.
- */
 internal class HitomiGlobalIndexCache(
     maxBytes: Long = DEFAULT_MAX_BYTES,
 ) {
@@ -27,7 +22,6 @@ internal class HitomiGlobalIndexCache(
     ): IntArray {
         activate(version, key)?.let { return it }
         return flights.share(VersionedKey(version, key)) {
-            // A load that overlapped this caller's miss may have finished before this flight started.
             synchronized(lock) { entries.get(key)?.takeIf { activeVersion == version } } ?: loader().also { loaded ->
                 synchronized(lock) { if (activeVersion == version) entries.put(key, loaded) }
             }
@@ -47,7 +41,6 @@ internal class HitomiGlobalIndexCache(
         )
     }
 
-    /** Makes [version] the active one, clearing older entries, and returns the cached IDs for [key]. */
     private fun activate(version: String, key: String): IntArray? = synchronized(lock) {
         if (activeVersion != version) {
             entries.clear()

@@ -11,33 +11,13 @@ import androidx.preference.TwoStatePreference
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSettingOption
 
-/**
- * A source's settings, whichever interface it implements: the preferences file it reads them from ([preferences]),
- * and its code that describes them by filling a [PreferenceScreen] of holder objects ([setup]). Both run its code.
- *
- * The file is the one the source asks the host for by name, `source_<id>` for every kind there is, so a manga and an
- * anime source that compute the same id share one file; the host cannot tell which asked, so the name cannot be scoped.
- */
 class SettingsHook(val preferences: () -> SharedPreferences, val setup: (PreferenceScreen) -> Unit)
 
-/**
- * One source's settings. The source's own code describes them by filling a [PreferenceScreen] of holder objects; this
- * reads the holders, and each setting's current value from the preferences file the source itself reads.
- *
- * The screen is built anew for every call, as Mihon builds it each time its settings page opens, so a summary the
- * source computes from a stored value is current. Making one and both calls run the source's code: do it off the main
- * thread and expect it to throw whatever that code throws.
- */
 class SourceSettings(private val context: Context, private val hook: SettingsHook) {
     private val store: SharedPreferences = hook.preferences()
 
-    /** The settings the source shows that have a key to be stored under. */
     fun list(): List<ExtensionSetting> = screen().mapNotNull { it.toSetting() }
 
-    /**
-     * Stores [setting]'s value, unless the setting is gone or disabled, or the source's change listener refuses the
-     * value by returning false. Returns whether it was stored.
-     */
     fun change(setting: ExtensionSetting): Boolean {
         val preference = screen().firstOrNull { it.key == setting.key && it.isEnabled } ?: return false
         val key = setting.key
@@ -49,11 +29,9 @@ class SourceSettings(private val context: Context, private val hook: SettingsHoo
             is ExtensionSetting.MultiChoice -> setting.values.takeIf { preference is MultiSelectListPreference }?.also { editor.putStringSet(key, it) }
         } ?: return false
         if (preference.onPreferenceChangeListener?.onPreferenceChange(preference, value) == false) return false
-        // Not apply(): the value must be on disk when this returns, the process may end right after.
         return editor.commit()
     }
 
-    /** Each preference reads [store] from the moment the source adds it, and stores its default there when nothing is. */
     private fun screen(): List<Preference> {
         val screen = PreferenceScreen(context, store)
         hook.setup(screen)
@@ -77,7 +55,6 @@ class SourceSettings(private val context: Context, private val hook: SettingsHoo
             is ListPreference -> {
                 val options = options(entries, entryValues)
                 val value = stored(defaultValue as? String) { getString(key, it) }
-                // "%s" in a list's summary stands for the chosen entry.
                 val chosen = options.firstOrNull { it.value == value }?.label.orEmpty()
                 ExtensionSetting.Choice(key, title, summary?.toString()?.replace("%s", chosen), isEnabled, value, options)
             }
@@ -90,7 +67,6 @@ class SourceSettings(private val context: Context, private val hook: SettingsHoo
         }
     }
 
-    /** The stored value, or [default] when nothing is stored or what is stored is of another type. */
     private fun <T> stored(default: T, read: SharedPreferences.(T) -> T): T = try {
         store.read(default)
     } catch (_: ClassCastException) {

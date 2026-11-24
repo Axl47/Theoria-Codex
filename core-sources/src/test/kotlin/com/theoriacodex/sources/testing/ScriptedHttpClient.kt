@@ -5,7 +5,6 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
-/** An offline protocol transcript: unexpected, reordered, or repeated requests fail immediately. */
 class ScriptedHttpClient : SourceHttpClient {
     private val pending = ArrayDeque<ExpectedGet>()
 

@@ -3,7 +3,6 @@ package com.theoriacodex.extensionhost
 import com.theoriacodex.domain.series.SeriesFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 
-/** An Aniyomi source's filter tree as [FilterNode]s (see `ExtensionFilters.kt`). */
 internal fun List<AnimeFilter<*>>.nodes(): List<FilterNode> = map { it.node() }
 
 private fun AnimeFilter<*>.node(): FilterNode = when (this) {

@@ -10,11 +10,6 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
 import com.theoriacodex.sources.common.percentEncode
 
-/**
- * Reaches nhentai through mirrors while its API answers with a Cloudflare challenge: search and reader pages
- * come through the Jina text mirror, and tags from the first HTML metadata mirror that lists them. Metadata
- * requests take turns on the adapter's [pacer].
- */
 internal class NhentaiMirror(
     private val httpClient: SourceHttpClient,
     private val pacer: RequestPacer,
@@ -40,7 +35,6 @@ internal class NhentaiMirror(
         return NhentaiMirrorParser.parseSearchPage(requestText(pathAndQuery))
     }
 
-    /** The reader page's media, enriched with tags and creators when a metadata mirror has them. */
     suspend fun resolvePost(galleryId: String): Post? {
         val post = NhentaiMirrorParser.parseReaderPage(galleryId, requestText("/g/$galleryId/1/")) ?: return null
         val metadata = galleryMetadata(galleryId) ?: return post

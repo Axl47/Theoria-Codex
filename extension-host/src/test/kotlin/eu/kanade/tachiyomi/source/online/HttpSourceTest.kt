@@ -24,7 +24,6 @@ import org.junit.Test
 import uy.kohesive.injekt.Injekt
 
 class HttpSourceTest {
-    /** Every path the source requested, in order. */
     private val requested = CopyOnWriteArrayList<String>()
     private var status = 200
 
@@ -127,7 +126,6 @@ class HttpSourceTest {
         it.url = ""
     }
 
-    /** Each response parses to its own request path, so a result shows which request produced it. */
     private class TestSource(override val lang: String = "en") : HttpSource() {
         override val name = "Test"
         override val baseUrl = "https://example.test"

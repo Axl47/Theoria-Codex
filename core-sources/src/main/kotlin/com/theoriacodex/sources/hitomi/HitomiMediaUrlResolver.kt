@@ -37,14 +37,6 @@ data class HitomiMediaCandidate(
     val configurationVersion: String,
 )
 
-/**
- * Resolves Hitomi file hashes through the provider's mutable `gg.js` configuration.
- *
- * Every format includes the configured primary shard followed by the alternate shard. A caller
- * that receives a media 404 can pass the failed candidate's [HitomiMediaCandidate.configurationVersion]
- * to [refreshCandidates]. That method performs at most one refresh for the failed version, even
- * when the provider returns the same configuration again.
- */
 class HitomiMediaUrlResolver(
     private val httpClient: SourceHttpClient,
     private val cacheTtlMillis: Long = DEFAULT_CONFIGURATION_TTL_MILLIS,
@@ -79,11 +71,6 @@ class HitomiMediaUrlResolver(
 
     suspend fun refresh(): HitomiCdnConfiguration = configuration(forceRefresh = true)
 
-    /**
-     * Refreshes once for [failedConfigurationVersion] and derives a new ordered candidate list.
-     * If another request already refreshed that version, the current cached configuration is used.
-     * A provider or parse failure consumes the attempt; cancellation does not.
-     */
     suspend fun refreshCandidates(
         file: HitomiMediaFile,
         failedConfigurationVersion: String,
@@ -115,7 +102,6 @@ class HitomiMediaUrlResolver(
         return buildCandidates(file, configuration)
     }
 
-    /** Clears both the cached configuration and the per-version 404 refresh guard. */
     fun invalidate() {
         invalidationGeneration.incrementAndGet()
         cachedConfiguration.set(null)

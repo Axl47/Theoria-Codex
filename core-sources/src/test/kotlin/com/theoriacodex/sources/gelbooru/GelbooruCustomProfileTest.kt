@@ -14,7 +14,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** A third Gelbooru-family site described only by data, using a recorded Safebooru response shape (URLs replaced). */
 class GelbooruCustomProfileTest {
     @Test
     fun `a custom profile reads safebooru shaped posts and autocomplete`() = runTest {
@@ -97,11 +96,6 @@ private val SAMPLED_POSTS = """
       "sample":false,"tags":"sky"}]
 """.trimIndent()
 
-/**
- * Safebooru answers posts as a bare JSON array with `directory` + `image` beside `file_url`, no
- * `file_ext`, `created_at` or `creator_id`, and only `change` as an epoch timestamp. Its OR groups
- * use parentheses, and tag suggestions come from `autocomplete.php`.
- */
 private val SAFEBOORU_SHAPED_SITE = GelbooruSite(
     source = SourceKey.GELBOORU,
     label = "Safebooru",

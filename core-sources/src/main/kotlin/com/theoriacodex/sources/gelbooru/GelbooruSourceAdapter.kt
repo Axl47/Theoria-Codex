@@ -53,11 +53,6 @@ import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.SourceHttpClient
 
-/**
- * Builds the adapter for any [GelbooruSite]. The app discovers creator and related posts with `is`
- * checks, so the returned adapter implements those interfaces only when the profile enables them.
- * Named like a class so registration reads the same as the Danbooru family.
- */
 fun GelbooruSourceAdapter(
     site: GelbooruSite,
     httpClient: SourceHttpClient,
@@ -75,14 +70,9 @@ fun GelbooruSourceAdapter(
     }
 }
 
-/**
- * What every Gelbooru-family site supports; creator and related posts depend on the profile. Every
- * creator is a site account (post uploaders and commenters alike), so account pages are universal.
- */
 interface GelbooruFamilySourceAdapter :
     SourceAdapter, TagCountLookupSourceAdapter, CommentsSourceAdapter, AccountProfileSourceAdapter, FileHashLookupSourceAdapter
 
-/** Speaks the DAPI for one [GelbooruSite]; every search pages by `pid` in fixed 40-post pages. */
 private class GelbooruFamilyAdapter(
     private val site: GelbooruSite,
     private val httpClient: SourceHttpClient,
@@ -99,7 +89,6 @@ private class GelbooruFamilyAdapter(
         supportsExcludeTagsServerSide = true,
         supportsGroupedIncludeTagsServerSide = site.orGroup != null,
         requiresExactTags = site.exactTags,
-        // One tag matches the whole video/animated family on Gelbooru-engine sites, checked live 2026-11.
         animatedTerm = AnimatedSearchTerm(SearchTerm("animated")),
     )
 
@@ -121,7 +110,6 @@ private class GelbooruFamilyAdapter(
         )
     }
 
-    /** Statistics, avatar and bio from the profile page; null on sites without public profiles. */
     override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall {
         val profileId = creator.profileId
         if (creator.source != sourceKey || !site.publicProfiles || profileId == null) return@sourceCall null
@@ -178,16 +166,9 @@ private class GelbooruFamilyAdapter(
 
     override fun nativeCommentAnchor(commentId: String): String? = "c$commentId".takeIf { site.commentAnchors }
 
-    /** Set once the DAPI answers comment requests with something other than comment XML; never reset. */
     @Volatile
     private var commentsApiDisabled = false
 
-    /**
-     * Comments come from the DAPI when it answers comment XML, which has no paging. Sites that disable
-     * it (gelbooru.com) are read from the post page instead, which pages by `pid` offsets; those tokens
-     * are never DAPI tokens, so any page token goes straight to the post page. [parent] is ignored:
-     * these sites have no replies.
-     */
     override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall {
         if (post.id.source != sourceKey) return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         val postId = post.id.sourcePostId
@@ -197,7 +178,6 @@ private class GelbooruFamilyAdapter(
             parseGelbooruCommentsXml(body, site)?.let { comments ->
                 return@sourceCall CommentPage(comments, total = comments.size, nextPageToken = null)
             }
-            // Comment text can mention keys, so the key-failure scan runs only on answers that are not comments.
             throwIfAuthFailure(body)
             commentsApiDisabled = true
         }
@@ -220,11 +200,9 @@ private class GelbooruFamilyAdapter(
         )
     }
 
-    /** Set once a [GelbooruTagList.DETECT] site answers the tag list in XML; never reset. */
     @Volatile
     private var tagListIgnoresJson = false
 
-    /** Tag-list rows, or null when this site's tag list ignores `json=1` (see [GelbooruTagList.DETECT]). */
     private suspend fun requestTagList(vararg entries: Pair<String, String>): List<JsonObject>? {
         if (tagListIgnoresJson) return null
         val body = requestApi("s" to "tag", "q" to "index", *entries)
@@ -268,7 +246,6 @@ private class GelbooruFamilyAdapter(
         resolvePosts(relatedIds, RELATED_HYDRATION_CONCURRENCY).postsOrThrow()
     }
 
-    /** A page of the account's public favorites: the DAPI answers `fav:<id>` in the same order as the site's favorites list. */
     private suspend fun favoritePosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
         val profileId = creator.profileId
         if (creator.source != sourceKey || !site.favoritesList || profileId == null) return canonicalPostPage(emptyList(), null)
@@ -288,9 +265,6 @@ private class GelbooruFamilyAdapter(
             "limit" to PAGE_SIZE.toString(),
             "tags" to tags,
         )
-        // Past its depth limit Gelbooru answers in plain text ("Too deep! Pull it back some. Holy fuck.") although
-        // more posts exist, so this must not read as an empty last page. No failure reason names a refusal; UNKNOWN
-        // shows as a plain failure.
         if (response.trimStart().startsWith(DEPTH_REFUSAL_PREFIX)) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.UNKNOWN,
@@ -298,27 +272,22 @@ private class GelbooruFamilyAdapter(
             )
         }
         val rawPosts = parseItems(response, POST_ENVELOPE)
-        // Fullness counts every raw record, so a malformed entry never ends paging early.
         val next = if (rawPosts.size >= PAGE_SIZE) (pageIndex + 1).toString() else null
         return canonicalPostPage(items = rawPosts.mapNotNull(::parsePost), nextPageToken = next)
     }
 
-    /** Resolves [ids] through the DAPI, at most [concurrency] at a time, keeping their order; each failure stays its own result. */
     private suspend fun resolvePosts(ids: List<String>, concurrency: Int): List<Result<Post?>> =
         ids.mapConcurrent(concurrency) { id -> runCatchingPreservingCancellation { resolvePost(PostId(sourceKey, id)) } }
 
-    /** The resolved posts; partial failures drop their posts, but a batch where nothing resolved and something failed rethrows. */
     private fun List<Result<Post?>>.postsOrThrow(): List<Post> {
         val posts = mapNotNull(Result<Post?>::getOrNull).distinctBy(Post::id)
         if (posts.isNotEmpty() || none(Result<Post?>::isFailure)) return posts
         throw firstNotNullOf { result -> result.exceptionOrNull() }
     }
 
-    /** DAPI call with the site's credentials; a site that requires them fails before the request. */
     private suspend fun requestApi(vararg entries: Pair<String, String>): String =
         request(site.apiUrl, apiQuery(*entries))
 
-    /** DAPI query with the site's credentials. Comments are XML only, so they ask for no `json=1`. */
     private suspend fun apiQuery(vararg entries: Pair<String, String>, json: Boolean = true): Map<String, String> {
         val saved = credentials.keysFor(site.credentials, site.label)
         return buildMap {
@@ -329,7 +298,6 @@ private class GelbooruFamilyAdapter(
         }
     }
 
-    /** [scanBody] is off for pages that show user comments, whose text could mimic a key failure. */
     private suspend fun request(url: String, query: Map<String, String>, scanBody: Boolean = true): String {
         val body = requestBody(url, query)
         if (scanBody) throwIfAuthFailure(body)
@@ -339,7 +307,6 @@ private class GelbooruFamilyAdapter(
     private suspend fun requestBody(url: String, query: Map<String, String>): String =
         httpClient.getChecked(site.label, url, query, site.headers, authBlockedBody = ::looksLikeGelbooruAuthFailure)
 
-    /** Sites report a missing or bad key in a successful response body. */
     private fun throwIfAuthFailure(body: String) {
         if (looksLikeGelbooruAuthFailure(body)) {
             throw SourceAdapterException(
@@ -349,11 +316,6 @@ private class GelbooruFamilyAdapter(
         }
     }
 
-    /**
-     * A page's records: `[]`, `{}` and an object without [envelopeKey] (such as `{"@attributes":{...}}`) have none.
-     * A blank body is read as no records too, not as a failure, because some sites answer an empty result that way.
-     * Gson reads a lone word as a string, so a bare-word reply is rejected here instead of ending paging.
-     */
     private fun parseItems(body: String, envelopeKey: String): List<JsonObject> {
         if (body.isBlank()) return emptyList()
         val root = parseJsonElement(body = body, gson = gson, errorLabel = site.label)
@@ -375,7 +337,6 @@ private class GelbooruFamilyAdapter(
             .orEmpty()
         val fullUrl = normalizeGelbooruMediaUrl(raw.stringValue("file_url"))
         val sampleUrl = normalizeGelbooruMediaUrl(raw.stringValue("sample_url"))
-            // Forks that report `sample: false` may still fill `sample_url` with a path that was never generated.
             ?.takeUnless { raw.stringValue("sample")?.lowercase() in NO_SAMPLE_FLAGS }
         val previewUrl = normalizeGelbooruMediaUrl(raw.stringValue("preview_url")) ?: sampleUrl ?: fullUrl
         val fullMime = mimeFromUrlOrExt(fullUrl, raw.stringValue("file_ext"))
@@ -390,18 +351,15 @@ private class GelbooruFamilyAdapter(
             canonicalTags = tags,
             rawTags = tags,
             authorName = creator?.displayName ?: raw.stringValue("author")?.trim()?.ifBlank { null },
-            // `created_at` is a date string on most sites; `change` is the epoch-second fallback.
             createdAtEpochMs = (raw.longValue("created_at") ?: raw.longValue("change"))?.times(1000L),
             durationMs = parseDurationMs(raw),
             creatorProfile = creator?.takeIf { site.creatorPosts },
             commentHint = raw.gelbooruCommentHint(),
-            // gelbooru.com names the file hash `md5`; Gelbooru 0.2 forks name it `hash`.
             contentHash = contentHashOrNull(raw.stringValue("md5") ?: raw.stringValue("hash")),
             originUrl = originUrlOrNull(raw.stringValue("source")),
         )
     }
 
-    /** The uploader is named by `owner`, or by `creator_id` alone on posts without one. */
     private fun parseCreator(raw: JsonObject): CreatorProfile? =
         site.creatorProfile(raw.stringValue("owner"), raw.stringValue("creator_id"))
 
@@ -417,7 +375,6 @@ private class GelbooruFamilyAdapter(
         }
         val exclude = query.excludeTags.map(::normalizeBooruTag).filter(String::isNotBlank).map { "-$it" }
         val sort = when (query.sort) {
-            // With no other tags the site already lists newest first, and asking again costs about 7 s per page.
             SortMode.NEWEST, SortMode.RANDOM -> site.newestSortTag.takeIf { include.isNotEmpty() || exclude.isNotEmpty() }
             SortMode.POPULAR, SortMode.TOP -> site.scoreSortTag
         }
@@ -425,14 +382,9 @@ private class GelbooruFamilyAdapter(
     }
 }
 
-/**
- * Media URLs load over HTTPS only. Gelbooru's numbered video CDN hosts serve invalid certificates;
- * the main host serves the same paths.
- */
 fun normalizeGelbooruMediaUrl(rawUrl: String?): String? =
     httpsMediaUrl(rawUrl)?.replaceFirst(GELBOORU_NUMBERED_VIDEO_CDN_PREFIX, "https://gelbooru.com/")
 
-/** Parses `autocomplete.php` rows such as `{"label": "landscape (9927)", "value": "landscape"}`. */
 internal fun parseAutocompleteSuggestions(body: String, gson: Gson, siteLabel: String): List<TagSuggestion> =
     parseJsonArray(body, gson, "$siteLabel autocomplete").mapNotNull { item ->
         val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
@@ -463,7 +415,6 @@ private fun parseDurationMs(raw: JsonObject): Long? = firstDurationMs(
     raw.ambiguousDurationFieldMs("length"),
 )
 
-/** Missing-key replies from Gelbooru (`API key required`, `Access denied`) and rule34.xxx. */
 internal fun looksLikeGelbooruAuthFailure(body: String): Boolean {
     val lowered = body.lowercase()
     return "access denied" in lowered ||

@@ -21,25 +21,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 
-/**
- * An extension's preferences, kept as one JSON file. Extensions store what the user typed into their settings, which
- * for a self-hosted server is its address, username and password, and Android backs up every file in `shared_prefs`
- * unless a rule names it. The host therefore keeps these files in a directory Android never backs up or transfers
- * (see [ExtensionHost]), which the platform's own `SharedPreferences` cannot be pointed at.
- *
- * As on the platform, the values in memory are what readers see: an edit is visible as soon as it is applied, also
- * when its write fails, and listeners are called on the main thread. Unlike the platform, `apply` writes the file
- * before it returns, on the caller's thread: the files are a few hundred bytes and extensions change them off the
- * main thread, so a write queue would add more than it saves.
- */
 internal class FilePreferences(
     private val file: File,
-    /** Told when a listener, which is extension code, fails; it must not take the main thread down. */
     private val report: (Throwable) -> Unit = { Log.w("ExtensionHost", "An extension's preference listener failed", it) },
 ) : SharedPreferences {
     private val lock = Any()
 
-    /** Whether a write failed since the file last matched [values]; the next commit then writes even if it changes nothing. */
     private var unwritten = false
     private val listeners = WeakHashMap<SharedPreferences.OnSharedPreferenceChangeListener, Unit>()
     private var values: Map<String, Any> = read()
@@ -70,12 +57,10 @@ internal class FilePreferences(
         synchronized(lock) { listeners.remove(listener) }
     }
 
-    /** As the platform does, a value stored as another type than the one asked for is the caller's error. */
     @Suppress("UNCHECKED_CAST")
     private fun <T> value(key: String?): T? = synchronized(lock) { values[key] } as T?
 
     private inner class Edit : SharedPreferences.Editor {
-        // A null value removes the key, as putString(key, null) does on the platform.
         private val changes = LinkedHashMap<String, Any?>()
         private var clear = false
 
@@ -99,7 +84,6 @@ internal class FilePreferences(
             commit()
         }
 
-        /** Whether the file now holds the change; the values in memory hold it either way. */
         override fun commit(): Boolean {
             val written: Boolean
             val changed: List<String>
@@ -108,7 +92,6 @@ internal class FilePreferences(
                 val before = values
                 val after = (if (clear) emptyMap() else before).toMutableMap()
                 changes.forEach { (key, value) -> if (value == null) after.remove(key) else after[key] = value }
-                // Drained: applying this editor again must not replay what it already applied.
                 changes.clear()
                 clear = false
                 changed = (before.keys + after.keys).filter { before[it] != after[it] }
@@ -125,7 +108,6 @@ internal class FilePreferences(
         private fun put(key: String, value: Any?) = apply { synchronized(lock) { changes[key] = value } }
     }
 
-    /** Calls each listener for each key; one that fails (see [endsTheProcess]) is reported and the rest go on. */
     @Suppress("TooGenericExceptionCaught")
     private fun announce(notified: List<SharedPreferences.OnSharedPreferenceChangeListener>, changed: List<String>) {
         notified.forEach { listener ->
@@ -138,10 +120,6 @@ internal class FilePreferences(
         }
     }
 
-    /**
-     * What the file holds. An entry that cannot be read is left out and the rest kept. A file that is not a JSON
-     * object at all is set aside as `.corrupt` rather than left for the next write to replace unseen.
-     */
     private fun read(): Map<String, Any> {
         if (!file.exists()) return emptyMap()
         val entries = runCatching { Json.parseToJsonElement(file.readText()).jsonObject }.getOrElse {
@@ -161,7 +139,6 @@ internal class FilePreferences(
     private companion object {
         val mainThread by lazy { Handler(Looper.getMainLooper()) }
 
-        // Each value is written under a one-letter name for its type, which JSON alone would not keep apart.
         fun encode(value: Any): JsonElement = when (value) {
             is String -> JsonObject(mapOf("s" to JsonPrimitive(value)))
             is Boolean -> JsonObject(mapOf("b" to JsonPrimitive(value)))

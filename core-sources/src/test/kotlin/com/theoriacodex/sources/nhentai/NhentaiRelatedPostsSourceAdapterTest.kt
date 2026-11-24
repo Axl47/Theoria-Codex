@@ -41,7 +41,6 @@ internal class NhentaiRelatedPostsSourceAdapterTest : NhentaiSourceAdapterTestFi
         assertEquals("https://t.nhentai.net/galleries/1030/thumb.webp", posts.first().preview.url)
         assertEquals("Gallery 30", posts.first().title)
         assertEquals(12, posts.first().mediaCount)
-        // List responses remain unresolved so opening a suggestion loads the full gallery.
         assertTrue(posts.first().media.isEmpty())
         assertNull(posts.first().full)
     }

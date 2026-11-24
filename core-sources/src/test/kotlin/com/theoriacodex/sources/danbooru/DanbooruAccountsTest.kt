@@ -22,7 +22,6 @@ class DanbooruAccountsTest {
         SourceKey.DANBOORU, "some artist", profileId = "some_artist", profileUrl = "$base/posts?tags=some_artist", uploadsQuery = "some_artist",
     )
 
-    /** A full page of 40 records with descending ids from [firstId]. */
     private fun fullPage(firstId: Int) = (0 until 40).joinToString(",", "[", "]") { offset ->
         """{"id":${firstId - offset},"file_url":"https://cdn.example/a.jpg","tag_string":"a"}"""
     }

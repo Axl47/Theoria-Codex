@@ -9,7 +9,6 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import kotlin.math.max
 
-/** Owns bounded binary-index transport, complete membership reads and byte-range validation. */
 internal class HitomiNozomiReader(
     private val httpClient: SourceHttpClient,
     knownSizeCacheMaxBytes: Long,
@@ -130,10 +129,6 @@ internal class HitomiNozomiReader(
         return membership
     }
 
-    /**
-     * Reads a whole index from byte zero as sorted distinct IDs. A missing index (404/416) is empty; a partial
-     * response must cover the complete declared body, and no index may hold more than [maxIds].
-     */
     private suspend fun readWholeNozomi(url: String, maxIds: Int, index: WholeIndex): IntArray {
         val response = requestNozomi(
             url = url,
@@ -256,7 +251,6 @@ internal class HitomiNozomiReader(
             return bytes / Int.SIZE_BYTES
         }
 
-        /** Slices a whole ordered index down to the requested page. */
         private fun IntArray.primaryRange(firstIdIndex: Long, idCount: Int): PrimaryRange {
             val from = firstIdIndex.coerceAtMost(size.toLong()).toInt()
             val until = (firstIdIndex + idCount).coerceAtMost(size.toLong()).toInt()
@@ -305,7 +299,6 @@ internal data class HitomiIndexScan(
 internal fun matchesHitomiMemberships(id: Int, includes: List<IntArray>, exclusions: List<IntArray>): Boolean =
     includes.all { it.binarySearch(id) >= 0 } && exclusions.none { it.binarySearch(id) >= 0 }
 
-/** The indexes read whole from byte zero, with the failure messages each has always reported. */
 private enum class WholeIndex(
     val rangeMissing: String,
     val notFromZero: String,

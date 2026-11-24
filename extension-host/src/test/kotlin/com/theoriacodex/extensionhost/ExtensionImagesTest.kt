@@ -22,7 +22,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExtensionImagesTest {
-    // One install's key, as the host keeps it across restarts.
     private val key = lazyOf(ByteArray(ExtensionImages.KEY_BYTES) { 7 })
     private val images = ExtensionImages(key)
     private val source = ImageServerSource()
@@ -63,11 +62,9 @@ class ExtensionImagesTest {
 
         val address = checkNotNull(cold.address(stored))
         assertTrue(asked.isEmpty())
-        // The same address a loaded host gives, and the first request for it loads that source's extension.
         assertEquals(images.address(stored), address)
         assertEquals("source-token https://covers.test/1.jpg", fetch(address, cold))
         assertEquals(listOf(server.key), asked)
-        // A cover that names another source, as an earlier build stored it or a backup could: its own source still fetches it.
         val named = stored.copy(coverUrl = "https://covers.test/1.jpg#mihon=7.00000000000000000000000000000000")
         assertEquals(address, cold.address(named))
         assertEquals(null, cold.address(stored.copy(coverUrl = null)))
@@ -96,7 +93,6 @@ class ExtensionImagesTest {
             checking.publish(listOf(server))
         }
         val issued = checking.cover(server.key, "https://covers.test/1.jpg")
-        // What a Custom Site could put on a thumbnail: a bare tag, a made-up code, and a real code moved to its own host.
         val forged = listOf(
             "https://custom-site.test/thumb.jpg#mihon=custom_mihon_1",
             "https://custom-site.test/thumb.jpg#mihon=custom_mihon_1.00000000000000000000000000000000",
@@ -105,10 +101,8 @@ class ExtensionImagesTest {
         )
 
         forged.forEach { assertEquals("app " + it.substringBefore('#'), fetch(it, checking)) }
-        // Nor does a forged tag load the extensions.
         assertEquals(0, loads)
         assertEquals("source-token https://covers.test/1.jpg", fetch(issued, checking))
-        // Another install's key issues nothing this one honors.
         assertEquals("app https://covers.test/1.jpg", fetch(ExtensionImages().cover(server.key, "https://covers.test/1.jpg"), checking))
     }
 
@@ -213,7 +207,6 @@ class ExtensionImagesTest {
 
         repeat(2) { assertEquals("app https://covers.test/1.jpg", fetch(address, failing)) }
         assertEquals(1, loads)
-        // The next listing that succeeds publishes as usual.
         failing.publish(listOf(server))
         assertEquals("source-token https://covers.test/1.jpg", fetch(address, failing))
     }
@@ -239,7 +232,6 @@ class ExtensionImagesTest {
         assertEquals("image https://img.test/1-0.jpg", fetch(first))
         fetch(first)
 
-        // Asked once per page that answered, in the order the images were requested.
         assertEquals(listOf("/p/3", "/p/broken", "/p/1"), reader.asked)
     }
 
@@ -251,7 +243,6 @@ class ExtensionImagesTest {
 
         assertTrue(second.startsWith("https://reader.test/p/viewer#mihon=custom_mihon_2.") && second.endsWith("/1//c/1") && first != second)
         assertEquals(listOf("image https://img.test/viewer-1.jpg", "image https://img.test/viewer-0.jpg"), listOf(fetch(second), fetch(first)))
-        // Nothing holds the page after a restart: its chapter is listed again and the page at the same place taken.
         assertEquals("image https://img.test/viewer-1.jpg", fetch(second, restarted))
         assertEquals(listOf("/c/1", "/c/1"), reader.listed)
     }
@@ -270,26 +261,19 @@ class ExtensionImagesTest {
         assertEquals(listOf("/p/1", "/p/1"), reader.asked)
     }
 
-    /** [source] as the host holds it, its addresses tagged by [images]. */
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
 
-    /** The address this host hands out for a series of [source] whose stored cover is [url]. */
     private fun ExtensionImages.cover(source: SourceKey, url: String): String =
         checkNotNull(address(Series(SeriesId(source, "/s"), "Series", coverUrl = url)))
 
     private fun fetch(address: String, images: ExtensionImages = this.images): String =
         appClient(images).newCall(Request.Builder().url(address).build()).execute().body.string()
 
-    /** The app's media client: the interceptor under test, then a network that echoes the address it was asked for. */
     private fun appClient(images: ExtensionImages) = OkHttpClient.Builder()
         .addInterceptor(images)
         .addInterceptor(answering { request -> cannedResponse(request, body = "app ${request.url}") })
         .build()
 
-    /**
-     * Names each image only on a page of its own, by that page and its place in the chapter; [asked] records each
-     * time. The page `broken` names none, and while [expired] the image server turns every image down.
-     */
     private class PagePerImageSource(private val pages: List<String> = listOf("1", "broken", "3")) : HttpSource() {
         override val id = 2L
         override val name = "Reader"
@@ -324,7 +308,6 @@ class ExtensionImagesTest {
         }
     }
 
-    /** Builds its image address from `page.url` and `page.imageUrl`, as some sources do, and holds a token only its client adds. */
     private class ImageServerSource : HttpSource() {
         override val id = 1L
         override val name = "Fake"
@@ -341,10 +324,8 @@ class ExtensionImagesTest {
             )
             .build()
 
-        // The default asks the host for its browser agent string, which this test does not install.
         override fun headersBuilder() = Headers.Builder()
 
-        /** Thrown in place of the next page request. */
         var failure: Throwable? = null
 
         override fun imageRequest(page: Page): Request {
@@ -359,5 +340,4 @@ class ExtensionImagesTest {
     }
 }
 
-/** The pages a manga source hands out for [entry]; a source that answers with streams fails the test. */
 private suspend fun SeriesSource.entryPages(entry: SeriesEntry): List<ImageRef> = (media(entry) as EntryMedia.Pages).pages

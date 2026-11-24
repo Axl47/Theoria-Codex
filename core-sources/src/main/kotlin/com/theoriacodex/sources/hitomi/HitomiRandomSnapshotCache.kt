@@ -2,11 +2,6 @@ package com.theoriacodex.sources.hitomi
 
 import com.theoriacodex.domain.coroutines.SharedFlights
 
-/**
- * Keeps complete random-sort snapshots by URL and fingerprint: a first page reuses a snapshot only while it
- * is fresh, and a continuation reuses exactly the snapshot its token names. Concurrent loads of one URL are
- * shared and cancelled only when every caller waiting on them has left.
- */
 internal class HitomiRandomSnapshotCache(
     maxBytes: Long = DEFAULT_MAX_BYTES,
     private val initialReuseTtlMillis: Long = DEFAULT_INITIAL_REUSE_TTL_MILLIS,
@@ -34,7 +29,6 @@ internal class HitomiRandomSnapshotCache(
     ): HitomiNozomiSnapshot {
         cached(url, expectedFingerprint)?.let { return it }
         return flights.share(url) {
-            // A load that overlapped this caller's miss may have finished before this flight started.
             cached(url, expectedFingerprint) ?: loader().also { loaded ->
                 entries.put(
                     HitomiRandomSnapshotKey(url, loaded.fingerprint),

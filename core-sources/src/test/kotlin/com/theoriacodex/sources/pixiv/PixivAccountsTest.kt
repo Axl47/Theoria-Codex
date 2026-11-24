@@ -15,7 +15,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Response shapes follow Pixiv's app-api documentation; they have not been checked against a live account. */
 class PixivAccountsTest {
     private val api = "https://app-api.pixiv.net"
     private val account = pixivUserProfile("7", "alice")!!

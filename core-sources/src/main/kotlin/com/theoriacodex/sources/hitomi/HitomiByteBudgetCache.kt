@@ -1,6 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-/** Thread-safe LRU whose budget and snapshots measure retained payload bytes explicitly. */
 internal class HitomiByteBudgetCache<Key, Value>(
     private val maxBytes: Long,
     private val weigh: (Key, Value) -> Long,

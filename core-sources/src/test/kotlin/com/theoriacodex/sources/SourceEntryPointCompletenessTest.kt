@@ -5,13 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Keeps the source boundary main-safe by reading this module's source. The boundary is every override of a
- * suspending function declared in SourceAdapter.kt, every public suspending member of [BOUNDARY_CLASSES], and
- * [BOUNDARY_FUNCTIONS]. Each must be written as `= sourceCall {` or `= sourceCall(callContext) {` and end where
- * that block ends; production code may never choose the dispatcher. SourceMainSafetyContractTest shows the
- * wrapper itself works.
- */
 class SourceEntryPointCompletenessTest {
     private val moduleDir = File(System.getProperty("user.dir"))
     private val repoDir = moduleDir.parentFile
@@ -64,7 +57,6 @@ class SourceEntryPointCompletenessTest {
                     ALLOWED_CALL_CONTEXT_USES.any { (use, offset) -> text.startsWith(use, match.range.first - offset) }
                 }
                 .map { match -> "$where:${lineOf(text, match.range.first)}: callContext used outside its declaration" }
-            // A positional argument would choose the dispatcher without naming callContext.
             val positional = contextOwners.flatMap { owner ->
                 Regex("""(?<!class )\b$owner\(""").findAll(text).mapNotNull { match ->
                     val open = match.range.last
@@ -102,7 +94,6 @@ class SourceEntryPointCompletenessTest {
     }
 
     private class SourceFile(val path: String, val text: String) {
-        /** [text] with comments and string contents blanked, so neither can satisfy or trip the scan. */
         val code = codeOnly(text)
     }
 
@@ -114,13 +105,11 @@ class SourceEntryPointCompletenessTest {
         val owner: String?,
         val name: String,
         val start: Int,
-        /** The parameter list's opening parenthesis. */
         val paramsOpen: Int,
         val indent: String,
     ) {
         val where get() = "${file.path}:${lineOf(file.text, start)} $name"
 
-        /** Why this function is not exactly `… = sourceCall {` ending with its block, or null when it is. */
         fun violation(): String? {
             val text = file.code
             val afterParams = matchingClose(text, paramsOpen, '(', ')') + 1
@@ -140,19 +129,12 @@ class SourceEntryPointCompletenessTest {
     private companion object {
         const val SOURCE_ADAPTER_FILE = "core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt"
 
-        /** Classes outside the adapters that app code calls directly with a provider response to handle. */
         val BOUNDARY_CLASSES = listOf("PixivAuthApi", "PixivTokenCoordinator", "SiteProber", "SiteHealthCheck")
 
-        /** Top-level functions app code calls directly with a provider response to handle. */
         val BOUNDARY_FUNCTIONS = setOf("fetchGelbooruProfileOwner")
 
-        /** A constructor parameter that defaults to the background dispatcher; only tests pass another. */
         const val CALL_CONTEXT_DECLARATION = "callContext: CoroutineContext = Dispatchers.Default,"
 
-        /**
-         * The only code callContext may appear in, with the offset of the name in each: its declaration, the
-         * wrapper, and a subclass handing its own parameter to its base class.
-         */
         val ALLOWED_CALL_CONTEXT_USES = listOf(
             CALL_CONTEXT_DECLARATION to 0,
             "sourceCall(callContext) {" to 11,
@@ -171,7 +153,6 @@ class SourceEntryPointCompletenessTest {
                 """interface|data|enum|sealed|init|const|lateinit|inline|operator|abstract|open|typealias)\b)""",
         )
 
-        /** [text] with every comment and string character other than a newline replaced by a space. */
         fun codeOnly(text: String): String {
             val code = CharArray(text.length) { if (text[it] == '\n') '\n' else ' ' }
             scanCode(text, 0) { index, char ->
@@ -183,7 +164,6 @@ class SourceEntryPointCompletenessTest {
 
         fun lineOf(text: String, index: Int) = text.substring(0, index).count { it == '\n' } + 1
 
-        /** The next line after [from] that is neither blank nor a comment, or null at the end of the file. */
         fun nextSignificantLine(text: String, from: Int): String? {
             var inBlockComment = false
             for (line in text.substring(from).lines().drop(1)) {
@@ -198,7 +178,6 @@ class SourceEntryPointCompletenessTest {
             return null
         }
 
-        /** The `{` that opens the body of the class declared at [from], skipping its constructor. */
         fun classBodyOpen(text: String, from: Int): Int {
             var index = from
             while (text[index] != '{') {
@@ -207,7 +186,6 @@ class SourceEntryPointCompletenessTest {
             return index
         }
 
-        /** How many braces are open at [to], counting from [from]. */
         fun braceDepth(text: String, from: Int, to: Int): Int {
             var depth = 0
             scanCode(text, from) { index, char ->
@@ -218,7 +196,6 @@ class SourceEntryPointCompletenessTest {
             return depth
         }
 
-        /** The index of the bracket closing the one at [open]. */
         fun matchingClose(text: String, open: Int, opening: Char, closing: Char): Int {
             var depth = 0
             var result = -1
@@ -231,10 +208,6 @@ class SourceEntryPointCompletenessTest {
             return result
         }
 
-        /**
-         * Calls [visit] for every code character from [from], skipping comments, character literals and string
-         * contents (template expressions are visited as code); stops when [visit] returns true.
-         */
         fun scanCode(text: String, from: Int, visit: (Int, Char) -> Boolean) {
             val templates = ArrayDeque<Pair<Boolean, Int>>()
             var index = from
@@ -281,7 +254,6 @@ class SourceEntryPointCompletenessTest {
             return index
         }
 
-        /** Skips a string opening at [start]; returns where scanning resumes and whether a template began. */
         fun skipString(text: String, start: Int, raw: Boolean) = skipStringFrom(text, start + if (raw) 3 else 1, raw)
 
         fun skipStringFrom(text: String, from: Int, raw: Boolean): Pair<Int, Boolean> {

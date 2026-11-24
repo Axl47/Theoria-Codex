@@ -24,26 +24,12 @@ import java.net.URI
 import java.net.URISyntaxException
 import okhttp3.OkHttpClient
 
-/**
- * Transport for user-added sites, used by the prober and by custom-site adapters (plan C7). Requests
- * go out with redirects off; a redirect is followed (at most [maxRedirects] hops) only when it stays
- * on HTTPS and on the same site, so query-string API keys never reach another host or travel in
- * cleartext. A refused redirect is never requested. GET only. When [retry] is set (adapters), each
- * hop retries transient failures and reports its outcome to the diagnostics log the way built-in
- * sources do; probes leave it null, see raw answers and log nothing.
- */
 class CustomSiteHttpClient internal constructor(
     private val maxRedirects: Int,
-    /** Set for adapters, never for probes (which must see raw answers); see [HostOutageTracker]. */
     private val outages: HostOutageTracker? = null,
     private val retry: SourceRetryPolicy? = null,
-    /** Must leave redirects unfollowed, as [httpTransport] does with `followRedirects = false`. */
     private val transport: suspend (HttpRequestSpec) -> SourceByteResponse,
 ) : SourceHttpClient {
-    /**
-     * Probes use the defaults; adapters may pass a longer [readTimeoutMs] and an [outages] tracker, and
-     * passing the tracker is what makes requests retry transient failures (a probe passes none).
-     */
     constructor(
         connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
         readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
@@ -92,12 +78,6 @@ class CustomSiteHttpClient internal constructor(
     override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>): SourceHttpResponse =
         throw UnsupportedOperationException("Custom sites are read-only")
 
-    /**
-     * Sends one hop, retrying under [retry] when set, and records outages: down statuses, a browser
-     * challenge served in place of the API (the same markup the prober reports as blocked), or an
-     * unresolvable domain. A real answer marks the site as working this session, and a refusal of its
-     * keys takes that back.
-     */
     private suspend fun sendTracked(url: String, send: suspend () -> SourceByteResponse): SourceByteResponse {
         if (retry == null && outages == null) return send()
         return executeWithRetry(
@@ -117,13 +97,8 @@ class CustomSiteHttpClient internal constructor(
     }
 }
 
-/** A redirect the custom-site policy refused; [failure] is how a probe reports it. */
 class CustomSiteRedirectException(val failure: ProbeFailure, message: String) : IOException(message)
 
-/**
- * Allows HTTPS → HTTPS on the same host and port. A host and its `www.` twin count as one site,
- * as they do for source ids (plan D2): `sakugabooru.com` answers with a redirect to `www.`.
- */
 internal fun vetRedirect(from: URI, to: URI): URI {
     if (!to.scheme.equals("https", ignoreCase = true)) {
         throw CustomSiteRedirectException(ProbeFailure.INSECURE_REDIRECT, "Refused a redirect away from HTTPS")

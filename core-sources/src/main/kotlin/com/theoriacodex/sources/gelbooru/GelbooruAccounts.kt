@@ -13,15 +13,6 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import org.jsoup.nodes.Element
 
-/**
- * Reads gelbooru.com's profile page (`index.php?page=account&s=profile&id=`):
- * - statistics are `div.row.profileStatSeparator` rows holding a label column then a value column
- *   (Joined as `M/d/yy` or `N/A`, Posts, Favorites);
- * - the avatar is the inline `background` of `div.profileAvatar`, relative to the site root;
- * - the bio is everything after the "About Myself:" section title, which holds rendered HTML.
- *
- * Returns null when the page has none of these, such as an unknown id.
- */
 internal fun parseGelbooruAccountProfile(html: String, siteUrl: String): AccountDetails? {
     val document = parseHtml(html, "$siteUrl/")
     val stats = document.select("div.row.profileStatSeparator").mapNotNull { row ->
@@ -42,10 +33,6 @@ internal fun parseGelbooruAccountProfile(html: String, siteUrl: String): Account
     return details.takeIf { it != AccountDetails() }
 }
 
-/**
- * The account name gelbooru.com's profile page for [creatorId] searches uploads with (`user:<name>`), or null
- * when the page names none. A failed request throws, so callers can tell a missing name from a failed lookup.
- */
 suspend fun fetchGelbooruProfileOwner(
     http: SourceHttpClient,
     creatorId: String,
@@ -66,16 +53,13 @@ private fun parseGelbooruProfileOwner(html: String): String? {
 
 private val PROFILE_OWNER = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
 
-/** The text of everything that follows [title] inside its parent. */
 private fun textAfter(title: Element): String =
     htmlFragmentToText(generateSequence(title.nextSibling()) { it.nextSibling() }.joinToString("") { it.outerHtml() })
 
-/** Counts print with thousands separators; anything without digits is no count. */
 private fun parseCount(value: String): Int? = value.filter(Char::isDigit).toIntOrNull()
 
 private val PROFILE_DATE = DateTimeFormatter.ofPattern("M/d/yy")
 
-/** Midnight UTC of a profile date such as `8/7/07`; null for `N/A` and anything else unreadable. */
 private fun parseProfileDateMs(value: String): Long? =
     parseEpochMs(value) { LocalDate.parse(it, PROFILE_DATE).atStartOfDay().toInstant(ZoneOffset.UTC) }
 

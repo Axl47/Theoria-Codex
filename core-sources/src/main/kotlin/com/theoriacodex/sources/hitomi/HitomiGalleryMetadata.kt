@@ -36,7 +36,6 @@ internal data class ParsedHitomiGallery(
     val animated: Boolean get() = taxonomy.any { it.facet == SearchFacet.TAG && it.value.equals("animated", true) }
 }
 
-/** Pure metadata boundary. Transport stays in the adapter; URL acquisition and sparse publication belong to HitomiPostMapper. */
 internal fun parseHitomiGallery(json: JsonObject, fallbackGalleryId: Int): ParsedHitomiGallery = with(json) {
     val galleryId = stringValue("id")?.toIntOrNull() ?: fallbackGalleryId
     val files = (get("files") as? JsonArray)?.mapIndexed { index, element ->
@@ -179,7 +178,6 @@ internal const val HITOMI_GROUP_NAMESPACE = "group"
 internal const val HITOMI_TYPE_NAMESPACE = "type"
 internal const val HITOMI_LANGUAGE_NAMESPACE = "language"
 
-/** Hitomi's namespaces by facet; female and male are tag namespaces. */
 internal val HITOMI_FACETS = FacetNamespaces(
     HITOMI_TAG_NAMESPACE to SearchFacet.TAG,
     HITOMI_FEMALE_NAMESPACE to SearchFacet.TAG,

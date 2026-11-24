@@ -7,10 +7,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/**
- * Encodes Hitomi page tokens. Tokens live only in a search's in-memory continuation, never in saved data, so
- * only the current version decodes.
- */
 internal class HitomiPageTokenCodec {
     fun encode(token: HitomiPageToken): String {
         val json = hitomiPageTokenJson.encodeToString(token).toByteArray(Charsets.UTF_8)
@@ -79,7 +75,6 @@ internal data class DecodedHitomiPageToken(
     val randomPermutationVersion: Int?,
     val globalIndexVersion: String?,
 ) {
-    /** Throws unless this token continues a search for [queryHash] under [globalIndexVersion] and [sort]. */
     fun requireContinues(queryHash: String, globalIndexVersion: String?, sort: SortMode) {
         val failure = when {
             this.queryHash != queryHash -> "Hitomi page token does not match the active query"
@@ -102,10 +97,6 @@ internal class HitomiPageTokenException(
     cause: Throwable? = null,
 ) : IllegalArgumentException(message, cause)
 
-/**
- * core-sources cannot see core-data's DurableJson, and a page token needs less: only this codec writes tokens, so
- * the reader just tolerates keys a newer build added and omits nulls the way the Gson encoder did.
- */
 internal val hitomiPageTokenJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
