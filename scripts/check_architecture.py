@@ -140,12 +140,42 @@ def delivery_plans_ignore_source_names() -> list[str]:
     return [message for passed, message in expectations if not passed]
 
 
+NON_IDLING_WAIT_FILES = {
+    "feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerUgoiraReadyTest.kt",
+    "media-kit/src/test/kotlin/com/theoriacodex/app/ui/components/OffMainComputationTest.kt",
+}
+
+BARE_COMPOSE_WAIT = re.compile(r"(?<![A-Za-z0-9_])waitUntil\s*[({]")
+WAIT_DECLARATION = re.compile(r"\bfun\s+waitUntil\s*\(")
+NON_IDLING_WAIT = re.compile(r"\bwaitUntilWithoutIdling\b")
+
+
+def is_bare_compose_wait(line: str) -> bool:
+    return bool(BARE_COMPOSE_WAIT.search(line)) and not WAIT_DECLARATION.search(line)
+
+
+def host_tests_wait_settled() -> list[str]:
+    failures = []
+    for source in sorted(ROOT.glob("*/src/test/**/*.kt")):
+        relative = source.relative_to(ROOT).as_posix()
+        for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
+            if is_bare_compose_wait(line):
+                failures.append(f"{relative}:{number} uses a bare waitUntil; use waitUntilSettled (docs/adr/0018-host-test-compose-waits.md)")
+            if NON_IDLING_WAIT.search(line) and relative not in NON_IDLING_WAIT_FILES:
+                failures.append(
+                    f"{relative}:{number} uses waitUntilWithoutIdling, which only the screens listed in "
+                    "docs/adr/0018-host-test-compose-waits.md and NON_IDLING_WAIT_FILES may use"
+                )
+    return failures
+
+
 def main() -> int:
     failures = (
         app_logic_stays_platform_free()
         + moved_owners_stay_in_app_logic()
         + quality_gates_cover_app_logic()
         + delivery_plans_ignore_source_names()
+        + host_tests_wait_settled()
     )
     for failure in failures:
         print(failure, file=sys.stderr)
