@@ -404,7 +404,7 @@ private suspend fun verifyOfflineCopy(offline: File) {
     check(offlineText == "offline bytes") { "offline media text was $offlineText" }
     val stripped = store.withoutOfflineLocations(found)
     check(stripped == post) { "offline store without locations was $stripped" }
-    val postsByOwner = store.snapshot.value.postsByOwner
+    val postsByOwner = store.snapshot.value?.postsByOwner
     check(postsByOwner == mapOf("acceptance" to setOf(post.id))) { "offline posts by owner were $postsByOwner" }
 }
 

@@ -21,6 +21,8 @@ import com.theoriacodex.app.recommend.ForYouScreenConfig
 import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.triage.TriageCardSupport
+import com.theoriacodex.app.ui.ReportLaunchContent
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
@@ -105,6 +107,7 @@ internal fun ForYouRoute(
     val levels by owner.levels.collectAsStateWithLifecycle()
     val level = levels.last()
     val feed by level.feed.collectAsStateWithLifecycle()
+    ReportLaunchContent(TopLevelDestination.ForYou, drawn = feed.posts.isNotEmpty() || feed.pageFailed || !feed.loadingMore && !feed.canLoadMore)
     val viewerFeed by owner.viewerFeedChanges.collectAsStateWithLifecycle(owner.viewerFeed)
     val durationPosts = remember(feed.posts, viewerFeed.relatedPosts) {
         (feed.posts + viewerFeed.relatedPosts.loadedPosts).distinctBy(Post::id)

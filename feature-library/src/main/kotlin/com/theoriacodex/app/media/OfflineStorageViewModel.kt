@@ -57,7 +57,7 @@ data class OfflineStorageUiState(
     val isOpen: Boolean = false,
     val offline: OfflineMediaSnapshot = OfflineMediaSnapshot(),
     val owners: List<OfflineStorageOwner> = emptyList(),
-    val codexStates: Map<String, CodexOfflineState> = emptyMap(),
+    val codexStates: Map<String, CodexOfflineState>? = null,
     val disposable: DisposableMediaCacheSnapshot? = null,
     val refreshing: Boolean = false,
     val working: Boolean = false,
@@ -111,7 +111,7 @@ class OfflineStorageViewModel(
     /** The title of each series with chapters offline, by owner. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val seriesNames = offline.store.snapshot.map { snapshot ->
-        snapshot.postsByOwner.keys.mapNotNull { owner -> seriesIdOfOfflineOwner(owner)?.let { owner to it } }
+        snapshot?.postsByOwner.orEmpty().keys.mapNotNull { owner -> seriesIdOfOfflineOwner(owner)?.let { owner to it } }
     }.distinctUntilChanged().flatMapLatest { owners ->
         val repository = seriesRepository
         if (owners.isEmpty() || repository == null) return@flatMapLatest flowOf(emptyMap())
@@ -123,7 +123,7 @@ class OfflineStorageViewModel(
     /** The current posts of every Codex kept offline, by Codex id, for the ring's share of settled posts. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val members = combine(offline.store.snapshot, offline.jobs) { snapshot, jobs ->
-        (snapshot.postsByOwner.keys + jobs.keys).mapNotNullTo(mutableSetOf(), ::codexIdOfOfflineOwner)
+        (snapshot?.postsByOwner.orEmpty().keys + jobs.keys).mapNotNullTo(mutableSetOf(), ::codexIdOfOfflineOwner)
     }.distinctUntilChanged().flatMapLatest { ids ->
         if (ids.isEmpty()) return@flatMapLatest flowOf(emptyMap())
         combine(ids.map { id -> codices.observeCodexItems(id).map { items -> id to items.mapTo(mutableSetOf(), CodexItem::postId) } }) {
@@ -133,9 +133,15 @@ class OfflineStorageViewModel(
     private val presented = combine(controls, removals.pending) { ui, pending ->
         ui.copy(pendingRemovals = pending, hiddenOwners = pending.keys)
     }
-    val state = combine(presented, offline.store.snapshot, offline.jobs, names, members) { ui, snapshot, jobs, ownerNames, posts ->
+    val state = combine(presented, offline.store.snapshot, offline.jobs, names, members) { ui, scanned, jobs, ownerNames, posts ->
+        val snapshot = scanned ?: OfflineMediaSnapshot()
         val owners = offlineStorageOwners(snapshot, jobs, ownerNames, ui)
-        ui.copy(offline = snapshot, owners = owners, codexStates = codexOfflineStates(owners, posts, snapshot.availablePostIds))
+        ui.copy(
+            offline = snapshot,
+            owners = owners,
+            codexStates = scanned?.let { codexOfflineStates(owners, posts, it.availablePostIds) },
+            refreshing = ui.refreshing || scanned == null,
+        )
     }.stateIn(scope, SharingStarted.Eagerly, OfflineStorageUiState())
 
     fun open() {

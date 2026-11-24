@@ -39,6 +39,7 @@ import com.theoriacodex.app.codex.filterCodexCollectionPosts
 import com.theoriacodex.app.codex.newFirst
 import com.theoriacodex.app.ui.components.newPostsLabel
 import com.theoriacodex.app.ui.rememberSavedNewPosts
+import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.savedCollectionFilters
@@ -197,6 +198,8 @@ private fun SavedCodexSection(
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
+    ReportLaunchContent(TopLevelDestination.Library, drawn = posts.isNotEmpty() ||
+        if (liveOwner == null) !state.loading else feed?.errors?.isNotEmpty() == true)
     val postIds = remember(posts) { posts.map { it.id } }
     // Followed and saved-search sections are live feeds, so only their card hearts like; the hold menu, like Codex
     // detail's, can also unlike from Likes.
