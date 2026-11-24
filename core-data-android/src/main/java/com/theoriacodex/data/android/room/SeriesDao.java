@@ -58,8 +58,14 @@ public interface SeriesDao {
             + "AND source_order >= 0 LIMIT 1")
     SeriesEntryEntity listedEntry(String source, String seriesAddress, String address);
 
-    /** What a profile backup holds: the series the user follows, started reading, or chose a reading mode for. */
+    /**
+     * What a profile backup holds: the series the user follows, chose a reading mode for, opened an entry of, or has
+     * progress in (an entry read or partway through, also one the source no longer lists), as marking chapters read
+     * from the series page gives without opening any.
+     */
     @Query("SELECT * FROM series WHERE followed = 1 OR reading_mode IS NOT NULL OR last_opened_entry IS NOT NULL "
+            + "OR EXISTS (SELECT 1 FROM series_entries WHERE series_entries.source = series.source "
+            + "AND series_entries.series_address = series.address AND (series_entries.read = 1 OR series_entries.last_page > 0)) "
             + "ORDER BY source ASC, address ASC")
     List<SeriesEntity> keptSeries();
 
