@@ -5,6 +5,9 @@ name: Verify
 #   with `scripts/check.sh --record`, or in an earlier run). They never run R8 and only read caches.
 # - The screenshots part compares against Linux-rendered references, so a Mac never records it. Pull
 #   requests run it unless this exact code already passed it here.
+# - The merge queue runs the same parts as a pull request on the commit it would put on main, which
+#   carries every PR queued ahead of it. Its result is reused the same way, so an entry whose code
+#   already passed skips its parts, and only the merge policy runs.
 # - Main and Release call this workflow and choose the parts themselves: Main always runs all of
 #   them, Release only the ones whose result is missing.
 # The final `Verify` job always reports, so it can be the single required status check.
@@ -12,6 +15,7 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
   workflow_call:
     inputs:
       check:
@@ -48,21 +52,21 @@ jobs:
 
     steps:
       - name: Checkout
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 2
 
       - name: Choose the parts to run
         id: plan
         env:
-          IS_PR: ${{ github.event_name == 'pull_request' }}
+          BEFORE_MAIN: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
           RUN_CHECK: ${{ inputs.check }}
           RUN_RELEASE: ${{ inputs.release }}
           RUN_SCREENSHOTS: ${{ inputs.screenshots }}
         run: |
-          if [[ "$IS_PR" == true ]]; then
+          if [[ "$BEFORE_MAIN" == true ]]; then
             RUN_RELEASE=false
             if python3 scripts/release_gate.py has check; then
               RUN_CHECK=false
@@ -81,11 +85,13 @@ jobs:
 
   # The parts check out the PR's head so their results can be reused for the same code, but a branch
   # made before a policy check existed carries no copy of it and passes without it. This job runs the
-  # seconds-long policy checks on the merge result GitHub would create instead. It sees main as of this
-  # run only; main-policy.yml catches a merge that breaks a check after main moved on.
+  # seconds-long policy checks on the merge result GitHub would create instead. On a pull request it
+  # sees main as of that run; in the merge queue it sees the exact commit main will move to, whose
+  # first parent is main plus the entries ahead of it. main-policy.yml still checks pushes that skip
+  # the queue, such as release commits.
   merge-policy:
     name: Merge policy
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

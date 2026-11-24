@@ -88,6 +88,7 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         trigger = self.workflow.split("on:", 1)[1].split("permissions:", 1)[0]
         self.assertNotIn("pull_request:", trigger)
         self.assertNotIn("push:", trigger)
+        self.assertNotIn("merge_group:", trigger)
 
     def test_unpublished_signed_apk_is_discarded(self) -> None:
         release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
