@@ -192,7 +192,7 @@ class SeriesTabViewModel(
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
     private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
-    /** Stores the followed series' new entries, which changes the shelf's unread counts. */
+    /** Stores the followed series' new entries, which changes the shelf's unread counts, and announces them. */
     private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
     private var searchText: String? = saved[SAVED_SEARCH]

@@ -43,8 +43,8 @@ class SeriesDependencies(
     /**
      * Stores the followed series' new chapters and returns the series that gained some, each also handed to [onUpdate]
      * as soon as it is stored, after its new chapters are queued for download where the series asks for that. The
-     * Series tab's refresh and the background job both call this; one check runs at a time, so neither repeats the
-     * other's requests midway.
+     * Series tab's refresh and the background job both call this and both post a notification per update; one check
+     * runs at a time, so neither repeats the other's requests midway, and a chapter one stores is not new to the other.
      */
     suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): List<SeriesUpdate> = checking.withLock {
         repository.checkFollowed(source) { update ->
