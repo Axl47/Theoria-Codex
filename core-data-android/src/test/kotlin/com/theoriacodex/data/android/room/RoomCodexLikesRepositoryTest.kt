@@ -331,19 +331,24 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `undoing Likes clear keeps a like's payload updated after the clear`() = runTest {
+    fun `undoing Likes clear keeps payloads updated after the clear`() = runTest {
         val repository = repository()
-        val liked = post("liked")
+        val member = post("member")
+        val likeOnly = post("like-only")
         val other = repository.createCodex("Other")
-        repository.toggleLikeAndSyncSystemCodex("profile-main", "system_likes_codex", "Likes", liked, listOf("tag"))
-        repository.addItem(other.codexId, liked)
-        repository.removeItems("system_likes_codex", setOf(liked.id))
+        listOf(member, likeOnly).forEach { liked ->
+            repository.toggleLikeAndSyncSystemCodex("profile-main", "system_likes_codex", "Likes", liked, listOf("tag"))
+            repository.addItem(other.codexId, liked)
+        }
+        repository.removeItems("system_likes_codex", setOf(likeOnly.id))
         val cleared = repository.clearLikesAndLikedMemberships("profile-main", "system_likes_codex")
-        repository.updatePost(liked.copy(title = "Updated title"))
+        listOf(member, likeOnly).forEach { liked -> repository.updatePost(liked.copy(title = "Updated ${liked.id.sourcePostId}")) }
 
         repository.restoreClearedLikes(requireNotNull(cleared.undo))
 
-        assertEquals("Updated title", repository.getPost(liked.id)?.title)
+        assertEquals("Updated member", repository.getPost(member.id)?.title)
+        assertEquals("Updated like-only", repository.getPost(likeOnly.id)?.title)
+        assertEquals(listOf(member.id), repository.observeCodexItems("system_likes_codex").first().map { it.postId })
     }
 
     @Test

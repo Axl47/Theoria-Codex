@@ -295,7 +295,8 @@ class RoomCodexLikesRepository(
                     dao.codex(item.codexId) != null &&
                     dao.codexItem(item.codexId, item.postId.source.id, item.postId.sourcePostId) == null
                 ) {
-                    saveItem(item.codexId, post, item.savedAtEpochMs)
+                    if (sharedPosts.insertIfMissing(post)) rememberPicture(post)
+                    insertItem(item.codexId, post.id, item.savedAtEpochMs)
                 }
             }
         }
