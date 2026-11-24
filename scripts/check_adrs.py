@@ -4,12 +4,12 @@
 Code cannot point back to the ADRs that govern it (comments are banned), so a rename or deletion would leave a
 record silently stale. Each bullet under "## Applies to" reads `path`[, `path` ...][: `symbol`, `symbol` ...]:
 the backticked paths before the first colon, the backticked symbols after it, and prose around them ignored. A
-path without a module directory resolves against the directories of the bullet's previous path. A symbol is
-found when each identifier in it (`Owner.member` holds two) appears as a whole word in one of the bullet's
-files. Superseded records are skipped.
+path without a module directory resolves against the directories of the bullet's previous path, and a directory
+stands for every file under it. A symbol is found when each identifier in it (`Owner.member` holds two) appears
+as a whole word in one of the bullet's files. Superseded records are skipped.
 
-With --base, a missing path that git sees as renamed or deleted since that revision is reported with its new
-path, so the PR that moved the file names the records to update.
+With --base, a missing path that git sees as renamed or deleted since that revision gets an indented line naming
+its new path, so the PR that moved the file names the records to update.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from dataclasses import dataclass
 
 ADR_DIR = pathlib.Path("docs/adr")
 ADR_NAME = re.compile(r"\d{4}-[a-z0-9-]+\.md")
-PATH_TOKEN = re.compile(r"[\w./-]*\.(kt|kts|java|xml|py|sh|json|yml|yaml|toml|properties|pro|md|txt|gradle)|[\w.-]+(/[\w.-]+)+/?")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 NUMBERING = "Number a new ADR as the highest on the latest main plus one, and rebase right before pushing."
 
@@ -53,31 +52,26 @@ def parse_bullet(bullet: str) -> Bullet:
     code = [index for index in range(1, len(parts), 2)]
     colon = next((index for index in range(0, len(parts), 2) if ":" in parts[index]), len(parts))
     return Bullet(
-        paths=[parts[index] for index in code if index < colon and PATH_TOKEN.fullmatch(parts[index])],
+        paths=[parts[index] for index in code if index < colon],
         symbols=[parts[index] for index in code if index > colon],
     )
 
 
-def resolve(path: str, previous: pathlib.Path | None, root: pathlib.Path) -> pathlib.Path:
-    """[path] from the repository root, or from an ancestor of [previous]'s directory when only that exists."""
-    direct = root / path.rstrip("/")
-    if direct.exists() or previous is None:
-        return direct
-    for directory in previous.parents:
-        candidate = directory / path
-        if candidate.exists():
-            return candidate
-        if directory == root:
-            break
-    return direct
+def candidates(path: str, previous: pathlib.Path | None, root: pathlib.Path) -> list[pathlib.Path]:
+    """Where [path] may live: the repository root first, then each ancestor of [previous]'s directory."""
+    found = [root / path.rstrip("/")]
+    if previous is not None:
+        found += [directory / path.rstrip("/") for directory in previous.parents if directory.is_relative_to(root) and directory != root]
+    return found
 
 
-def missing_path_message(adr: str, path: str, moved: dict[str, str], deleted: set[str]) -> str:
-    if path in moved:
-        return f"{adr}: `{path}` moved to `{moved[path]}`. Update this record's Applies to."
-    if path in deleted:
-        return f"{adr}: `{path}` was deleted. Point this record at the code that replaced it, or mark it superseded (docs/adr/README.md)."
-    return f"{adr}: `{path}` does not exist. Correct the path, or mark the record superseded if the code is gone (docs/adr/README.md)."
+def missing_path_message(adr: str, path: str, places: list[str], moved: dict[str, str], deleted: set[str]) -> str:
+    message = f"{adr}: `{path}` does not exist. Correct the path, or mark the record superseded if the code is gone (docs/adr/README.md)."
+    if old := next((place for place in places if place in moved), None):
+        return f"{message}\n  It moved to `{moved[old]}` in this change; point the record there."
+    if any(place in deleted for place in places):
+        return f"{message}\n  It was deleted in this change; point the record at what replaced it, or supersede the record."
+    return message
 
 
 def check_record(adr: pathlib.Path, root: pathlib.Path, moved: dict[str, str], deleted: set[str]) -> list[str]:
@@ -89,16 +83,18 @@ def check_record(adr: pathlib.Path, root: pathlib.Path, moved: dict[str, str], d
     for line in applies_to(text):
         bullet = parse_bullet(line)
         files: list[pathlib.Path] = []
+        before = len(problems)
         previous: pathlib.Path | None = None
         for path in bullet.paths:
-            resolved = resolve(path, previous, root)
-            if not resolved.exists():
-                problems.append(missing_path_message(name, path, moved, deleted))
+            places = candidates(path, previous, root)
+            resolved = next((place for place in places if place.exists()), None)
+            if resolved is None:
+                relative = [str(place.relative_to(root)) for place in places]
+                problems.append(missing_path_message(name, path, relative, moved, deleted))
                 continue
             previous = resolved
-            if resolved.is_file():
-                files.append(resolved)
-        if not files or len(files) < len(bullet.paths):
+            files += sorted(file for file in resolved.rglob("*") if file.is_file()) if resolved.is_dir() else [resolved]
+        if len(problems) > before:
             continue
         source = "\n".join(file.read_text(encoding="utf-8", errors="replace") for file in files)
         words = set(IDENTIFIER.findall(source))
