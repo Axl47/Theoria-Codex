@@ -143,8 +143,9 @@ class OfflineViewerWorkflowTest {
                 OfflineMediaStore(directory.resolve("offline-media")), CoroutineScope(Job().apply { cancel() }), { it }, { it.media }, { _, _, _ -> },
             )
             assertNull(unscanned.store.snapshot.value)
-            val beforeScan = ViewerRouteWorkflow(graph.data, this, graph.sources, { null }, offlineMedia = unscanned)
-                .preparePostsForLaunch(snapshots, launchContext)
+            val unscannedWorkflow = ViewerRouteWorkflow(graph.data, this, graph.sources, { null }, offlineMedia = unscanned)
+            assertTrue(unscannedWorkflow.requiresResolution(snapshots[0]))
+            val beforeScan = unscannedWorkflow.preparePostsForLaunch(snapshots, launchContext)
             assertLocalGallery(beforeScan[1], directory)
 
             graph.shutdown()
