@@ -1,6 +1,7 @@
 package com.theoriacodex.data.android.room
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -25,6 +26,29 @@ class RoomUpgradeJourneyTest {
     // Schema 11 is what v1.9.2, the last production release, shipped.
     @Test fun `a library from the shipped schema keeps likes, collections, automatic tags and recents through every later write`() = runTest {
         RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 11)
+    }
+
+    @Test fun `a library older than schema 10 is refused and left intact`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "schema-9.db"
+        context.deleteDatabase(name)
+        SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name).apply { parentFile?.mkdirs() }, null).use {
+            it.execSQL("CREATE TABLE codices (codex_id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL)")
+            it.execSQL("INSERT INTO codices VALUES ('saved', 'Saved')")
+            it.version = 9
+        }
+        val database = TheoriaRoomDatabase.create(context, name)
+        val failure = runCatching { openProfileLibrary(database) }.exceptionOrNull()
+        database.close()
+        assertTrue(failure.toString(), failure is IllegalStateException)
+        SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY).use {
+            assertEquals(9, it.version)
+            it.rawQuery("SELECT name FROM codices", null).use { rows ->
+                assertTrue(rows.moveToFirst())
+                assertEquals("Saved", rows.getString(0))
+            }
+        }
+        context.deleteDatabase(name)
     }
 
     @Test fun `a version 14 picture hash keeps its meaning when the tagger columns arrive`() = runTest {
