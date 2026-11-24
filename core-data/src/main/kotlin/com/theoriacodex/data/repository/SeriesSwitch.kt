@@ -65,12 +65,13 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
  *
  * Each entry of [from] goes to the entry of [to] that [EntryMatcher.match] finds for it. An entry of [to] that entries
  * went to takes their progress: read when one of them was read, and the further place and the later read time, the
- * place capped at a known page count or duration. One no entry went to, but that is a chapter [from] has, another
- * release of its number or one of its name ([EntryMatcher.sameName]), is read when [from] read that chapter.
+ * place capped at a known page count or duration. When one of them is its own release, by the same translator group
+ * or none, only those count: another group's release that fell back to it says nothing about this one.
  *
- * An entry [from] has no chapter for is read when it is numbered below the entry [from] opened last, as a source that
- * skips chapters still reads past them; that is only for manga, since episodes are watched one by one and an episode
- * missing on [from] was never seen.
+ * The rest are filled in only for manga, since episodes are watched one by one and an episode not matched on [from]
+ * was never seen. A chapter no entry went to, but that [from] has as another release of its number or by its name
+ * ([EntryMatcher.sameName]), is read when [from] read that chapter. A chapter [from] does not have is read when it is
+ * numbered below the entry [from] opened last, as a source that skips chapters still reads past them.
  *
  * Continue goes on from where the user is: the match of the entry [from] opened last, else the furthest entry this
  * marks read.
@@ -98,12 +99,15 @@ fun carryProgress(
     val byAddress = fromEntries.associateBy { it.entry.address }
     val opened = byAddress[from.lastOpenedEntry]
     val resumed = opened?.let { forward.match(it.entry) }
-    val boundary = opened?.entry?.number?.takeIf { kind == SeriesKind.MANGA }
+    val manga = kind == SeriesKind.MANGA
+    val boundary = opened?.entry?.number?.takeIf { manga }
 
     val carried = ordered.map { stored ->
-        val own = matched[stored.entry.address].orEmpty()
+        val incoming = matched[stored.entry.address].orEmpty()
+        val own = incoming.filter { sameRelease(it.entry, stored.entry) }.ifEmpty { incoming }
         val number = stored.entry.number
         val chapter = own.ifEmpty {
+            if (!manga) return@ifEmpty emptyList()
             number?.let(byNumber::get).orEmpty() + listOfNotNull(backward.sameName(stored.entry)?.let { byAddress[it.address] })
         }
         when {
@@ -127,6 +131,10 @@ fun carryProgress(
     return to.withSettingsOf(from).copy(lastOpenedEntry = lastOpened) to carried.filterIndexed { index, entry -> entry != ordered[index] }
 }
 
+/** Whether [a] and [b] are one release of their chapter: by the same translator group, or both by none. */
+private fun sameRelease(a: SeriesEntry, b: SeriesEntry): Boolean =
+    a.translatorGroup?.let(::matchKey).orEmpty() == b.translatorGroup?.let(::matchKey).orEmpty()
+
 /**
  * Finds, for an entry of one series ([own]), the entry that is the same chapter on another source ([candidates], in
  * reading order). A switch asks for every entry of both lists, so each list is indexed once.
@@ -137,15 +145,12 @@ class EntryMatcher(own: List<SeriesEntry>, private val candidates: List<SeriesEn
     private val candidatesByNumber = candidates.filter { it.number != null }.groupBy { it.number }
 
     /**
-     * The candidate that is [entry]: the same chapter number, by the same translator group when one has it, else the
-     * first in reading order. Otherwise, by [sameName]. Null when nothing matches.
+     * The candidate that is [entry]: the same chapter number, of the same release ([sameRelease]) when there is one,
+     * else the first in reading order. Otherwise, by [sameName]. Null when nothing matches.
      */
     fun match(entry: SeriesEntry): SeriesEntry? {
         val sameNumber = entry.number?.let(candidatesByNumber::get).orEmpty()
-        val group = entry.translatorGroup?.let(::matchKey)?.ifEmpty { null }
-        return sameNumber.firstOrNull { group != null && it.translatorGroup?.let(::matchKey) == group }
-            ?: sameNumber.firstOrNull()
-            ?: sameName(entry)
+        return sameNumber.firstOrNull { sameRelease(entry, it) } ?: sameNumber.firstOrNull() ?: sameName(entry)
     }
 
     /**

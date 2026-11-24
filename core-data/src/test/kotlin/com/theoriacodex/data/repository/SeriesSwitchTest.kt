@@ -117,7 +117,7 @@ class SeriesSwitchTest {
         )
         val new = listOf(5f, 4f, 3f, 2f, 1f).mapIndexed { order, number ->
             stored(SeriesEntry("/n${number.toInt()}", "$number", number), order = order, length = if (number == 2f) 1_380_000 else null)
-        }
+        } + stored(SeriesEntry("/n2dub", "2", 2f, "Dub"), order = 5)
 
         val (series, changed) = carryProgress(watching, old, switched, new)
 
@@ -133,17 +133,19 @@ class SeriesSwitchTest {
         val old = listOf(
             stored(SeriesEntry("/o5a", "5", 5f, "A"), order = 0, read = true),
             stored(SeriesEntry("/o5b", "5", 5f, "B"), order = 1, position = 4),
+            // Not listed there, so it falls back to the first release in reading order, 5B, which has its own.
+            stored(SeriesEntry("/o5d", "5", 5f, "D"), order = 2, read = true, position = 9),
         )
         val new = listOf(
             stored(SeriesEntry("/n5c", "5", 5f, "C"), order = 0),
-            stored(SeriesEntry("/n5b", "5", 5f, "B"), order = 1),
-            stored(SeriesEntry("/n5a", "5", 5f, "A"), order = 2),
+            stored(SeriesEntry("/n5a", "5", 5f, "A"), order = 1),
+            stored(SeriesEntry("/n5b", "5", 5f, "B"), order = 2),
         )
 
         val (_, changed) = carryProgress(from, old, to, new)
 
         assertEquals(
-            listOf(Triple("/n5a", true, 0L), Triple("/n5b", false, 4L), Triple("/n5c", true, 0L)),
+            listOf(Triple("/n5b", false, 4L), Triple("/n5a", true, 0L), Triple("/n5c", true, 0L)),
             changed.map { Triple(it.entry.address, it.read, it.position) },
         )
     }
