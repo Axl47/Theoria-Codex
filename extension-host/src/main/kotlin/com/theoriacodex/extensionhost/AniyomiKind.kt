@@ -35,6 +35,8 @@ object AniyomiKind : ExtensionKind {
         }
     }
 
+    override fun runs(libVersion: String) = libVersion.substringBefore('.').toIntOrNull() in SUPPORTED_VERSIONS
+
     override fun adapt(instance: Any, host: HostServices): List<HostedSource>? = when (instance) {
         is AnimeSource -> listOf(instance)
         is AnimeSourceFactory -> instance.createSources()

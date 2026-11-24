@@ -2,6 +2,7 @@ import com.android.build.api.dsl.LibraryExtension
 
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
     alias(libs.plugins.detekt)
 }
@@ -48,6 +49,8 @@ dependencies {
     runtimeOnly(libs.okhttp.brotli)
     runtimeOnly(libs.okhttp.zstd)
     runtimeOnly(libs.kotlinx.serialization.json.okio)
+    // Newer extension repos publish their index as protobuf (Mihon's `index_v2`).
+    implementation(libs.kotlinx.serialization.protobuf)
     // The JavaScript engine extensions evaluate scripts with (a third of anime extensions, some manga ones).
     runtimeOnly(libs.quickjs.android)
 

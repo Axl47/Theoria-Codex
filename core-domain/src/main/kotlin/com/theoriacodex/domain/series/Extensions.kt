@@ -18,6 +18,8 @@ data class ExtensionChoices(
      * so a later lookup of that source loads only that extension.
      */
     val owners: Map<String, String> = emptyMap(),
+    /** The extension repos the user added: where extensions are installed from, and the key each one's APKs must carry. */
+    val repos: List<ExtensionRepo> = emptyList(),
 )
 
 interface ExtensionChoiceStore {
@@ -41,6 +43,8 @@ data class InstalledExtension(
     val languages: List<ExtensionLanguage> = emptyList(),
     /** What its sources offer, known from its package before any of its code runs. */
     val kind: SeriesKind = SeriesKind.MANGA,
+    /** Whether this app installed it from a repo, and so can remove it ([ExtensionRepos.uninstall]). */
+    val removable: Boolean = false,
 )
 
 data class ExtensionLanguage(val code: String, val on: Boolean)

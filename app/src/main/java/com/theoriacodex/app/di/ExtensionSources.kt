@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.switchSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.SeriesExtensions
@@ -26,6 +27,8 @@ class SeriesDependencies(
     /** The source a key names when it is on, else null; loads only the extension it needs. */
     val source: suspend (SourceKey) -> SeriesSource?,
     val extensions: SeriesExtensions,
+    /** The user's extension repos and installing from them; also where a backup's repos are added. */
+    val repos: ExtensionRepos,
     val downloads: SeriesDownloads,
     /** Lives as long as the app, for work that must finish after the screen that started it closes. */
     val scope: CoroutineScope,

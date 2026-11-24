@@ -1,0 +1,8 @@
+name: "Fixture"
+badge: "FIX"
+signing_key: "9ADD655A78E96C4EC7A53EF89DCCB557CB5D767489FAC5E785D671A5A75D4DA2"
+contact { website: "https://example.org" }
+extension_list {
+  extensions { name: "Achy" package_name: "eu.kanade.tachiyomi.extension.all.achy" resources { apk_url: "https://cdn.example.org/achy-v1.6.1.apk" icon_url: "https://cdn.example.org/achy.png" jar_url: "https://cdn.example.org/achy.jar" } extension_lib: "1.6" version_code: 106001 version_name: "1.6.1" content_warning: 2 sources { id: 1 name: "Achy" language: "es" } sources { id: 2 name: "Achy" language: "en" } }
+  extensions { name: "Onsen" package_name: "eu.kanade.tachiyomi.animeextension.all.onsen" resources { apk_url: "https://cdn.example.org/onsen-v16.12.apk" } extension_lib: "16" version_code: 12 version_name: "16.12" content_warning: 1 anime_sources { id: 3 name: "Onsen" language: "all" } }
+}
