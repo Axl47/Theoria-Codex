@@ -11,6 +11,10 @@ import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
+import okhttp3.Call
+import okhttp3.EventListener
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -27,7 +31,24 @@ internal inline fun <T> failingAsIo(block: () -> T): T = try {
 }
 
 fun interface SourceImages {
-    fun fetch(address: String, url: HttpUrl, data: String?): Response
+    fun fetch(address: String, url: HttpUrl, data: String?, caller: Call): Response
+}
+
+internal fun Call.executeFor(caller: Call): Response {
+    caller.addEventListener(object : EventListener() {
+        override fun canceled(call: Call) = cancel()
+    })
+    if (caller.isCanceled()) cancel()
+    return execute()
+}
+
+internal fun <T> Call.blockingFor(block: suspend () -> T): T = runBlocking {
+    val work = coroutineContext.job
+    addEventListener(object : EventListener() {
+        override fun canceled(call: Call) = work.cancel()
+    })
+    if (isCanceled()) work.cancel()
+    block()
 }
 
 class ExtensionImages(
@@ -76,7 +97,7 @@ class ExtensionImages(
         val untagged = url.newBuilder().fragment(null).build()
         if (chain.request().cacheControl.onlyIfCached) return chain.proceed(chain.request().newBuilder().url(untagged).build())
         val (source, data) = issued(untagged, fragment) ?: return chain.proceed(chain.request().newBuilder().url(untagged).build())
-        return failingAsIo { source.fetch(url.toString(), untagged, data) }
+        return failingAsIo { source.fetch(url.toString(), untagged, data, chain.call()) }
     }
 
     private fun issued(url: HttpUrl, fragment: String): Pair<SourceImages, String?>? {

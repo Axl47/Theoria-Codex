@@ -13,9 +13,15 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.CacheControl
 import okhttp3.Headers
@@ -129,7 +135,7 @@ class ExtensionImagesTest {
             language = "en",
             siteAddress = { null },
             settings = null,
-            images = SourceImages { _, url, _ -> cannedResponse(Request.Builder().url(url).build(), body = "anime $url") },
+            images = SourceImages { _, url, _, _ -> cannedResponse(Request.Builder().url(url).build(), body = "anime $url") },
         )
         images.publish(listOf(server, anime))
 
@@ -268,7 +274,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `ADR 0059 pages missing together list their chapter once, and a failed listing is not kept`() {
+    fun `pages missing together list their chapter once, and a failed listing is not kept (ADR 0059)`() {
         val waiting = 4
         val reader = GatedPagesSource()
         val pages = MihonImages(reader, MihonKind.sourceKey(reader.id), images) { reader.arrived.countDown(); null }
@@ -276,7 +282,7 @@ class ExtensionImagesTest {
         val callers = Executors.newFixedThreadPool(waiting)
         fun loadAll() = (0 until waiting).also { reader.arrived = CountDownLatch(waiting) }.map { index ->
             callers.submit<Result<String>> {
-                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1").use { it.body.string() } }
+                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1", OkHttpClient().newCall(Request.Builder().url(pageUrl).build())).use { it.body.string() } }
             }
         }.map { it.get(5, TimeUnit.SECONDS) }
 
@@ -292,6 +298,28 @@ class ExtensionImagesTest {
         assertTrue(failed.all { it.exceptionOrNull() != null })
         assertEquals((0 until waiting).map { "image https://img.test/p$it.jpg" }, loaded.map { it.getOrThrow() })
         assertEquals(2, reader.listings.get())
+    }
+
+    @Test
+    fun `a reader closed mid-load hands its source's rate limit back to the next page list (ADR 0059)`() {
+        val source = RateLimitedSource()
+        val hosted = mihon(source).also { images.publish(listOf(server, it)) }
+        val pages = hosted.images as MihonImages
+        val chapter = SChapter.create().apply { url = "/c/1" }
+        val calls = (0 until 4).map { index ->
+            val address = checkNotNull(pages.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.jpg")))
+            appClient(images).newCall(Request.Builder().url(address).build()).also { it.enqueue(ignoringReplies) }
+        }
+        try {
+            assertTrue(source.imageStarted.await(5, TimeUnit.SECONDS))
+            calls.forEach(Call::cancel)
+
+            val listed = runBlocking { withTimeout(2_000) { source.getPageList(chapter) } }
+
+            assertEquals(listOf("https://img.test/listed.jpg"), listed.map { it.imageUrl })
+        } finally {
+            source.released.countDown()
+        }
     }
 
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
@@ -338,6 +366,43 @@ class ExtensionImagesTest {
             asked += path
             check(!path.endsWith("broken")) { "No image on this page" }
             return "https://img.test/${path.substringAfterLast('/')}-${page.index}.jpg"
+        }
+    }
+
+    private class RateLimitedSource : HttpSource() {
+        override val id = 4L
+        override val name = "Rated"
+        override val lang = "en"
+        override val baseUrl = "https://rated.test"
+        override val supportsLatest = false
+        val imageStarted = CountDownLatch(1)
+        val released = CountDownLatch(1)
+        private val permit = Semaphore(1, true)
+
+        override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                while (!permit.tryAcquire(POLL_MS, TimeUnit.MILLISECONDS)) if (chain.call().isCanceled()) throw IOException("Canceled")
+                try {
+                    chain.proceed(chain.request())
+                } finally {
+                    permit.release()
+                }
+            }
+            .addInterceptor { chain ->
+                if (chain.request().url.host == "img.test") {
+                    imageStarted.countDown()
+                    while (!released.await(POLL_MS, TimeUnit.MILLISECONDS)) if (chain.call().isCanceled()) throw IOException("Canceled")
+                }
+                cannedResponse(chain.request(), body = "served ${chain.request().url}")
+            }
+            .build()
+
+        override fun headersBuilder() = Headers.Builder()
+
+        override fun pageListParse(response: Response): List<Page> = listOf(Page(0, imageUrl = "https://img.test/listed.jpg"))
+
+        private companion object {
+            const val POLL_MS = 10L
         }
     }
 
@@ -400,6 +465,11 @@ class ExtensionImagesTest {
             const val PAGE_HEADER = "X-Page"
         }
     }
+}
+
+private val ignoringReplies = object : Callback {
+    override fun onFailure(call: Call, e: IOException) = Unit
+    override fun onResponse(call: Call, response: Response) = response.close()
 }
 
 private suspend fun SeriesSource.entryPages(entry: SeriesEntry): List<ImageRef> = (media(entry) as EntryMedia.Pages).pages

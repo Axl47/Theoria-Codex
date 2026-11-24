@@ -152,6 +152,9 @@
 
 ### Fixed
 
+- Reopening a chapter no longer leaves you on its cover for seconds, sometimes over 30. Closing a chapter now stops its pages downloading, so they no longer hold up sites that limit how fast you can load them, such as Asura Scans.
+- A spinner shows over a chapter until its pages arrive.
+- Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - The notification saying chapters wait for their extension no longer stays up after chapter downloads fail. It comes back once downloads get through if those chapters are still waiting.

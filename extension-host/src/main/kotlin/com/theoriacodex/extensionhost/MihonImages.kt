@@ -37,14 +37,14 @@ internal class MihonImages(
         return address
     }
 
-    override fun fetch(address: String, url: HttpUrl, data: String?): Response {
+    override fun fetch(address: String, url: HttpUrl, data: String?, caller: Call): Response {
         if (data == null) {
             val page = pages[address]
-            return (if (page != null) source.imageCall(page) else source.imageCall(url.toString())).execute()
+            return (if (page != null) source.imageCall(page) else source.imageCall(url.toString())).executeFor(caller)
         }
         val page = unresolvedPage(address, data)
-        val (call, named) = page.imageCall()
-        return fetched(call) { synchronized(page) { if (page.imageUrl == named) page.imageUrl = null } }
+        val (call, named) = page.imageCall(caller)
+        return fetched(call, caller) { synchronized(page) { if (page.imageUrl == named) page.imageUrl = null } }
     }
 
     private fun unresolvedPage(address: String, data: String): Page = pages[address] ?: run {
@@ -57,14 +57,14 @@ internal class MihonImages(
         pages[address] ?: listed.firstOrNull { it.index == index } ?: throw IOException("The chapter no longer has this page")
     }
 
-    private fun Page.imageCall(): Pair<Call, String?> = synchronized(this) {
-        if (imageUrl == null) imageUrl = runBlocking { source.getImageUrl(this@imageCall) }
+    private fun Page.imageCall(caller: Call): Pair<Call, String?> = synchronized(this) {
+        if (imageUrl == null) imageUrl = caller.blockingFor { source.getImageUrl(this@imageCall) }
         source.imageCall(this) to imageUrl
     }
 
-    private inline fun fetched(call: Call, forget: () -> Unit): Response {
+    private inline fun fetched(call: Call, caller: Call, forget: () -> Unit): Response {
         val response = try {
-            call.execute()
+            call.executeFor(caller)
         } catch (failure: IOException) {
             forget()
             throw failure

@@ -44,7 +44,6 @@
 0056-extension-binary-compatibility.md
 0057-extension-challenge-handling.md
 0058-extension-device-harness.md
-0059-extension-image-tags.md
 0060-extension-isolation-and-failures.md
 0061-extension-preferences-storage.md
 0062-extension-registry-loading.md
