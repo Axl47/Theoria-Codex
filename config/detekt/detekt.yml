@@ -95,3 +95,6 @@ theoria:
   CancellationCatchRule:
     active: true
     excludes: ['**/CoroutineResults.kt']
+  StoredJsonUsesDurableJsonRule:
+    active: true
+    excludes: ['**/DurableJson.kt', '**/app/src/**', '**/core-sources/src/**', '**/extension-host/src/**']
