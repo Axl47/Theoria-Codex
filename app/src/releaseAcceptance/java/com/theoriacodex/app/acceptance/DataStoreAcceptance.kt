@@ -26,6 +26,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -138,13 +139,14 @@ internal suspend fun <T> withStoreScope(block: suspend (CoroutineScope) -> T): T
     try {
         return block(scope)
     } finally {
-        withContext(NonCancellable) { scope.coroutineContext.job.cancelAndJoin() }
+        withContext(NonCancellable) { withTimeoutOrNull(STORE_CLOSE_TIMEOUT_MS) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 }
 
 private fun File.json(name: String): JsonObject = Json.parseToJsonElement(resolve(name).readText()).jsonObject
 
 private const val PROFILE = "profile-main"
+private const val STORE_CLOSE_TIMEOUT_MS = 5_000L
 private const val FAVORITE_NAME = "Ears & <co>"
 private const val SITE_ID = "custom_safebooru_org"
 
