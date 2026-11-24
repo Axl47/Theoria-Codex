@@ -82,9 +82,11 @@ class SeriesReaderTest {
 
         val resumed = checkNotNull(reader.session(id, "/c2")).series as ViewerSeries.Reading
         val picked = checkNotNull(reader.session(id, "/c2", pageIndex = 3)).series as ViewerSeries.Reading
+        val restored = checkNotNull(reader.session(id, "/c2", pageIndex = 6)).series as ViewerSeries.Reading
 
         assertEquals(mapOf(PostId(source, "/c3") to 0.25f, PostId(source, "/c2") to 0.6f), resumed.pageOffsets)
         assertEquals(mapOf(PostId(source, "/c3") to 0.25f), picked.pageOffsets)
+        assertEquals(resumed.pageOffsets, restored.pageOffsets)
     }
 
     @Test

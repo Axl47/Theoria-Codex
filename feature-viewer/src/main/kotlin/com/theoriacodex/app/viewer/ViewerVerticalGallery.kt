@@ -72,13 +72,9 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.Post
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -241,7 +237,7 @@ private fun VerticalGalleryEffects(
     val resuming = pageState.pendingMediaIndex != null
     var aligned by remember(list) { mutableStateOf(false) }
     VerticalGalleryScrollSelection(list, pageCount, selected, enabled = isCurrentPost && aligned, host)
-    VerticalGalleryPageReport(post, gallery, selected, isCurrentPost && aligned, reportsPageOffset, host)
+    VerticalGalleryPageReport(post, gallery, selected, isCurrentPost && aligned, reportsPageOffset, painted, host)
     VerticalGalleryOffsetRestore(gallery, selected, isCurrentPost && aligned, painted)
     LaunchedEffect(selected, pageCount, resuming) {
         if (resuming || selected !in 0 until pageCount) {
@@ -254,7 +250,6 @@ private fun VerticalGalleryEffects(
     VerticalGalleryPendingJump(post, list, pageCount, resuming, screen)
 }
 
-@OptIn(FlowPreview::class)
 @Composable
 private fun VerticalGalleryPageReport(
     post: Post,
@@ -262,17 +257,16 @@ private fun VerticalGalleryPageReport(
     selected: Int,
     enabled: Boolean,
     reportsPageOffset: Boolean,
+    painted: (Int) -> Boolean,
     host: ViewerScreenHost,
 ) {
     val list = gallery.list
     LaunchedEffect(post, selected, enabled, reportsPageOffset) {
         val report = host.onVisibleMediaChanged?.takeIf { enabled } ?: return@LaunchedEffect
         if (!reportsPageOffset) return@LaunchedEffect report(post, selected + 1, null)
-        snapshotFlow { if (list.isScrollInProgress || gallery.pendingPageOffset != null) null else list.pageOffset(selected) }
-            .filterNotNull()
-            .debounce(PAGE_OFFSET_SETTLE_MS)
-            .distinctUntilChanged()
-            .collect { offset -> report(post, selected + 1, offset.takeUnless { it.isNaN() }) }
+        snapshotFlow { list.isScrollInProgress || gallery.pendingPageOffset != null }
+            .filter { busy -> !busy }
+            .collect { report(post, selected + 1, list.pageOffset(selected).takeUnless { it.isNaN() || !painted(selected) }) }
     }
 }
 
@@ -284,7 +278,7 @@ private fun VerticalGalleryOffsetRestore(gallery: ViewerVerticalGalleryState, se
         val target = selected
         fun position() = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
         val start = position()
-        withTimeoutOrNull(PAGE_OFFSET_RESTORE_WAIT_MS) { snapshotFlow { painted(target) || list.isScrollInProgress }.first { it } }
+        snapshotFlow { painted(target) || list.isScrollInProgress }.first { it }
         if (painted(target) && !list.isScrollInProgress && start == position()) list.scrollToPageOffset(target, offset)
         gallery.pendingPageOffset = null
     }
@@ -508,8 +502,6 @@ private val VERTICAL_PAGE_CONTROLS = ViewerRendererControls(
 
 private const val DEFAULT_PAGE_SHAPE = 0.7f
 private const val PAGE_OFFSET_STEPS = 1000f
-private const val PAGE_OFFSET_RESTORE_WAIT_MS = 10_000L
-private const val PAGE_OFFSET_SETTLE_MS = 400L
 private const val MAX_ZOOM = 4f
 private const val DOUBLE_TAP_ZOOM = 2f
 

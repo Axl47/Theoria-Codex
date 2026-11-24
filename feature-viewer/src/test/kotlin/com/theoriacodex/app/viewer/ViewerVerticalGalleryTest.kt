@@ -248,16 +248,14 @@ class ViewerVerticalGalleryTest {
             }
         }
         compose.runOnIdle { land() }
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
-        val before = reported.last().second
-        compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 8f, endY = centerY - height / 8f) }
         compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 8f, endY = centerY - height / 8f) }
         compose.waitForIdle()
 
         val (number, offset) = reported.last()
         assertEquals(1, number)
-        assertTrue("reported $reported", before != null && offset != null && offset > before && offset < 1f)
+        assertEquals("measured before the page painted", null, reported.first().second)
+        assertTrue("reported $reported", offset != null && offset > TOP_OF_PAGE && offset < 1f)
     }
 
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
@@ -375,4 +373,4 @@ class ViewerVerticalGalleryTest {
     }
 }
 
-private const val SETTLE_MS = 1_000L
+private const val TOP_OF_PAGE = 0.19f
