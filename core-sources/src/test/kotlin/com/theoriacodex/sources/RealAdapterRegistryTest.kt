@@ -1,6 +1,13 @@
 package com.theoriacodex.sources
 
+import com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.source.ProtocolFamily
+import com.theoriacodex.domain.source.SiteAddress
+import com.theoriacodex.domain.source.SiteAddressParse
+import com.theoriacodex.domain.source.SiteProfile
+import com.theoriacodex.sources.custom.SiteFamilyRegistry
+import com.theoriacodex.sources.custom.SiteRequestContext
 import com.theoriacodex.sources.hitomi.HitomiSourceAdapter
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
@@ -52,5 +59,23 @@ class RealAdapterRegistryTest {
         assertTrue(SourceKey.RULE34PAHEAL in registry.availableSources())
         assertTrue(SourceKey.RULE34VIDEO in registry.availableSources())
         assertTrue(SourceKey.RULE34GEN in registry.availableSources())
+    }
+
+    @Test
+    fun `only the families with an md5 search look up files by hash (ADR 0008)`() {
+        val http = FakeHttpClient()
+        val registry = RealAdapterRegistry(FakeCredentialsProvider(), http, exposedSources = SourceKey.builtIns.toSet())
+        val address = (SiteAddress.parse("booru.example") as SiteAddressParse.Valid).address
+        val customFamilies = SiteFamilyRegistry.default().families.associate { siteFamily ->
+            val profile = SiteProfile(address.derivedSourceId, address, "Booru", siteFamily.family.name, addedAtEpochMs = 0)
+            siteFamily.family to siteFamily.createAdapter(profile, SourceKey.of(profile), SiteRequestContext(http))
+        }
+
+        assertEquals(SourceKey.builtIns.toSet(), registry.availableSources())
+        assertEquals(
+            setOf(SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.GELBOORU, SourceKey.RULE34XXX),
+            SourceKey.builtIns.filter { registry.adapterFor(it) is FileHashLookupSourceAdapter }.toSet(),
+        )
+        assertEquals(setOf(ProtocolFamily.DANBOORU, ProtocolFamily.GELBOORU_02), customFamilies.filterValues { it is FileHashLookupSourceAdapter }.keys)
     }
 }

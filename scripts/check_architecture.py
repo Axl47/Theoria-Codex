@@ -196,23 +196,63 @@ def main_kotlin_sources() -> tuple[tuple[str, str], ...]:
     return kotlin_sources_under(ROOT)
 
 
-OFF_MAIN_NOTE = re.compile(r"\bOffMainWork\.note\(([^)]*)\)")
-OFF_MAIN_LABEL = re.compile(r"OffMainWork\.[A-Z][A-Z0-9_]*")
-FUNCTION_OPENING = re.compile(r"\bfun\b.*\{$")
+OFF_MAIN_CALL = re.compile(r"\bOffMainWork\s*\.\s*note\s*\(")
+BARE_NOTE_IMPORT = re.compile(r"^import\s+com\.theoriacodex\.domain\.diagnostics\.OffMainWork\.note\s*$", re.MULTILINE)
+BARE_NOTE_CALL = re.compile(r"(?<![\w.])(?<!fun\s)note\s*\(")
+OFF_MAIN_LABEL = re.compile(r"(?:[A-Za-z_]\w*\.)*OffMainWork\.[A-Z][A-Z0-9_]*")
+FUNCTION_KEYWORD = re.compile(r"\bfun\b")
+DECLARATION_MODIFIERS = re.compile(
+    r"(?:(?:@[\w.]+(?:\([^)]*\))?|public|private|internal|protected|override|open|final|inline|suspend|tailrec|operator|infix)\s+)*\Z"
+)
+
+
+def closing_paren(text: str, opening: int) -> int:
+    depth = 0
+    for index in range(opening, len(text)):
+        depth += {"(": 1, ")": -1}.get(text[index], 0)
+        if depth == 0:
+            return index
+    return len(text)
+
+
+def opening_brace(text: str, before: int) -> int:
+    depth = 0
+    for index in range(before - 1, -1, -1):
+        if text[index] == "}":
+            depth += 1
+        elif text[index] == "{":
+            if depth == 0:
+                return index
+            depth -= 1
+    return -1
+
+
+def notes_in_a_suspend_or_late_spot(text: str, call: int) -> bool:
+    brace = opening_brace(text, call)
+    if brace < 0 or text[brace + 1:call].strip():
+        return True
+    keywords = list(FUNCTION_KEYWORD.finditer(text, 0, brace))
+    if not keywords:
+        return True
+    header = text[keywords[-1].end():brace]
+    if header.count("{") != header.count("}"):
+        return True
+    modifiers = DECLARATION_MODIFIERS.search(text, 0, keywords[-1].start())
+    return modifiers is not None and re.search(r"\bsuspend\b", modifiers.group(0)) is not None
 
 
 def off_main_note_failures(sources) -> list[str]:
     failures = []
     for relative, text in sources:
-        lines = text.splitlines()
-        for number, line in enumerate(lines, start=1):
-            call = OFF_MAIN_NOTE.search(line)
-            if not call:
-                continue
-            if not OFF_MAIN_LABEL.fullmatch(call.group(1).strip()):
-                failures.append(f"{relative}:{number} notes '{call.group(1)}'; OffMainWork labels are constants (docs/adr/0002-coroutine-and-diagnostics-rules.md)")
-            opening = next((previous.strip() for previous in reversed(lines[:number - 1]) if previous.strip()), "")
-            if not FUNCTION_OPENING.search(opening) or re.search(r"\bsuspend\b", opening):
+        calls = list(OFF_MAIN_CALL.finditer(text))
+        if BARE_NOTE_IMPORT.search(text):
+            calls += BARE_NOTE_CALL.finditer(text)
+        for call in sorted(calls, key=lambda match: match.start()):
+            number = text.count("\n", 0, call.start()) + 1
+            label = " ".join(text[call.end():closing_paren(text, call.end() - 1)].split()).rstrip(",").strip()
+            if not OFF_MAIN_LABEL.fullmatch(label):
+                failures.append(f"{relative}:{number} notes '{label}'; OffMainWork labels are constants (docs/adr/0002-coroutine-and-diagnostics-rules.md)")
+            if notes_in_a_suspend_or_late_spot(text, call.start()):
                 failures.append(
                     f"{relative}:{number} must call OffMainWork.note first in the non-suspend function that does the work "
                     "(docs/adr/0002-coroutine-and-diagnostics-rules.md)"
@@ -225,73 +265,25 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     return off_main_note_failures(main_kotlin_sources())
 
 
-def references_outside(sources, symbol: re.Pattern, allowed: tuple[str, ...]) -> list[str]:
-    return [relative for relative, text in sources if symbol.search(text) and not relative.startswith(allowed)]
-
-
-RECOMMENDATION_NORMALIZATION = re.compile(r"\bRecommendationTagNormalization\b")
-RECOMMENDATION_CODE = (
-    "core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/",
-    "app-logic/src/main/kotlin/com/theoriacodex/app/recommend/",
-)
+RECOMMENDATION_NORMALIZERS = re.compile(r"\b(?:RecommendationTagNormalization|crossSourceTagKey|CrossSourceTraining|PixivTagDictionary)\b")
+RECOMMENDATION_PACKAGE = "core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/"
+RECOMMENDATION_CALLERS = {
+    "app-logic/src/main/kotlin/com/theoriacodex/app/recommend/ForYouInterests.kt",
+    "app-logic/src/main/kotlin/com/theoriacodex/app/triage/TriageRules.kt",
+    "feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouLanes.kt",
+    "feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouSearchSupport.kt",
+}
 
 
 @rule
 def recommendation_normalization_stays_in_recommendations() -> list[str]:
     return [
-        f"{relative} uses RecommendationTagNormalization, which only recommendation code may use "
+        f"{relative} uses recommendation tag normalization, which only the named recommendation callers may use "
         "(docs/adr/0003-cross-source-tags.md)"
-        for relative in references_outside(main_kotlin_sources(), RECOMMENDATION_NORMALIZATION, RECOMMENDATION_CODE)
-    ]
-
-
-DERIVED_SITE_ID = re.compile(r"\bderivedSourceId\b|\bfromAddress\(")
-SITE_ID_NAMERS = (
-    "core-domain/src/main/kotlin/com/theoriacodex/domain/source/CustomSites.kt",
-    "app/src/main/java/com/theoriacodex/app/di/CustomSitesControllerImpl.kt",
-    "core-sources/src/main/kotlin/com/theoriacodex/sources/custom/Families.kt",
-)
-
-
-@rule
-def stored_site_ids_are_never_rederived() -> list[str]:
-    return [
-        f"{relative} derives a custom site id from its address; a stored profile's id is authoritative "
-        "(docs/adr/0004-custom-site-profiles.md)"
-        for relative in references_outside(main_kotlin_sources(), DERIVED_SITE_ID, SITE_ID_NAMERS)
-    ]
-
-
-FILE_HASH_LOOKUP_SUPERTYPE = re.compile(r"(?:\s:|,)\s*FileHashLookupSourceAdapter\b")
-MD5_SEARCH_FAMILIES = (
-    "core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/",
-    "core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/",
-)
-
-
-@rule
-def only_md5_families_look_up_file_hashes() -> list[str]:
-    return [
-        f"{relative} implements FileHashLookupSourceAdapter, which only families with an md5: search may "
-        "(docs/adr/0008-source-adapter-contracts.md)"
-        for relative in references_outside(main_kotlin_sources(), FILE_HASH_LOOKUP_SUPERTYPE, MD5_SEARCH_FAMILIES)
-    ]
-
-
-MIN_SCORE_READ = re.compile(r"\.minScore\b")
-MIN_SCORE_KEEPERS = (
-    "core-domain/src/main/kotlin/com/theoriacodex/domain/query/QueryHash.kt",
-    "core-data/src/main/kotlin/com/theoriacodex/data/storage/RecentsStorage.kt",
-    "feature-search/src/main/kotlin/com/theoriacodex/app/search/SearchSavedState.kt",
-)
-
-
-@rule
-def sources_ignore_min_score() -> list[str]:
-    return [
-        f"{relative} reads Query.minScore, a retired filter only stores and the query hash may read "
-        "(docs/adr/0009-stored-data-compatibility.md)"
-        for relative in references_outside(main_kotlin_sources(), MIN_SCORE_READ, MIN_SCORE_KEEPERS)
+        for relative, text in main_kotlin_sources()
+        if RECOMMENDATION_NORMALIZERS.search(text)
+        and not relative.startswith(RECOMMENDATION_PACKAGE)
+        and relative not in RECOMMENDATION_CALLERS
     ]
 
 

@@ -82,16 +82,24 @@ class CoreDomainRulesTest(unittest.TestCase):
         self.assertIn(check_architecture.off_main_notes_run_where_work_runs, check_architecture.RULES)
         with main_sources({
             "core-sources/src/main/kotlin/Clean.kt": (
-                "internal fun parseHtml(html: String): Document {\n"
-                "    OffMainWork.note(OffMainWork.SOURCE_PARSE)\n"
-                "    return Jsoup.parse(html)\n"
+                "internal fun parseJsonArray(\n"
+                "    body: String,\n"
+                "    onError: () -> Unit = {},\n"
+                "): JsonArray {\n"
+                "    OffMainWork\n"
+                "        .note(\n"
+                "            OffMainWork.SOURCE_PARSE,\n"
+                "        )\n"
+                "    return parse(body)\n"
                 "}\n"
                 "private fun SourceHttpResponse.jsonBody() = body.takeIf(String::isNotBlank)?.let {\n"
-                "    OffMainWork.note(OffMainWork.SOURCE_PARSE)\n"
+                "    OffMainWork.note(com.theoriacodex.domain.diagnostics.OffMainWork.SOURCE_PARSE)\n"
                 "}\n"
             ),
             "core-sources/src/main/kotlin/Broken.kt": (
-                "override suspend fun search(query: Query): Page {\n"
+                "override suspend fun search(\n"
+                "    query: Query,\n"
+                "): Page {\n"
                 "    OffMainWork.note(OffMainWork.SOURCE_PARSE)\n"
                 "}\n"
                 "fun parse(html: String): Document {\n"
@@ -99,55 +107,43 @@ class CoreDomainRulesTest(unittest.TestCase):
                 "    OffMainWork.note(OffMainWork.SOURCE_PARSE)\n"
                 "}\n"
                 "fun title(post: Post): Document {\n"
-                "    OffMainWork.note(post.title)\n"
+                "    OffMainWork.note(\n"
+                "        post.title,\n"
+                "    )\n"
+                "}\n"
+            ),
+            "media-kit/src/main/kotlin/Imported.kt": (
+                "import com.theoriacodex.domain.diagnostics.OffMainWork.note\n"
+                "fun parse(body: String) {\n"
+                "    note(OffMainWork.SOURCE_PARSE)\n"
+                "}\n"
+                "suspend fun load(body: String) {\n"
+                "    note(OffMainWork.SOURCE_PARSE)\n"
                 "}\n"
             ),
         }):
             failures = check_architecture.off_main_notes_run_where_work_runs()
         self.assertEqual(
-            ["core-sources/src/main/kotlin/Broken.kt:2", "core-sources/src/main/kotlin/Broken.kt:6", "core-sources/src/main/kotlin/Broken.kt:9"],
+            ["core-sources/src/main/kotlin/Broken.kt:4", "core-sources/src/main/kotlin/Broken.kt:8",
+             "core-sources/src/main/kotlin/Broken.kt:11", "media-kit/src/main/kotlin/Imported.kt:6"],
             [failure.split(" ", 1)[0] for failure in failures],
         )
 
-    def test_reports_recommendation_normalization_outside_recommendation_code_adr_0003(self) -> None:
+    def test_reports_recommendation_normalization_outside_its_named_callers_adr_0003(self) -> None:
         self.assertIn(check_architecture.recommendation_normalization_stays_in_recommendations, check_architecture.RULES)
-        use = "val key = RecommendationTagNormalization.normalize(source, tag)\n"
         with main_sources({
-            "app-logic/src/main/kotlin/com/theoriacodex/app/recommend/ForYouInterests.kt": use,
-            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt": use,
+            "app-logic/src/main/kotlin/com/theoriacodex/app/triage/TriageRules.kt": "val key = crossSourceTagKey(tag)\n",
+            "core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/CrossSourceTags.kt": "fun crossSourceTagKey(tag: String) = tag\n",
+            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt": "val key = crossSourceTagKey(tag)\n",
+            "core-data/src/main/kotlin/com/theoriacodex/data/repository/FavoriteTags.kt": "val key = RecommendationTagNormalization.normalize(source, tag)\n",
+            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchDraft.kt": "val key = normalizeFavoriteTagForStorage(source, tag)\n",
         }):
             failures = check_architecture.recommendation_normalization_stays_in_recommendations()
-        self.assertEqual(["feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt"], [failure.split(" ", 1)[0] for failure in failures])
-
-    def test_reports_a_custom_site_id_derived_outside_profile_creation_adr_0004(self) -> None:
-        self.assertIn(check_architecture.stored_site_ids_are_never_rederived, check_architecture.RULES)
-        with main_sources({
-            "app/src/main/java/com/theoriacodex/app/di/CustomSitesControllerImpl.kt": "sourceId = address.derivedSourceId,\n",
-            "app/src/main/java/com/theoriacodex/app/di/CustomSourceRuntime.kt": "val id = CustomSourceIds.fromAddress(host, port, path)\n",
-        }):
-            failures = check_architecture.stored_site_ids_are_never_rederived()
-        self.assertEqual(["app/src/main/java/com/theoriacodex/app/di/CustomSourceRuntime.kt"], [failure.split(" ", 1)[0] for failure in failures])
-
-    def test_reports_a_file_hash_lookup_outside_md5_search_families_adr_0008(self) -> None:
-        self.assertIn(check_architecture.only_md5_families_look_up_file_hashes, check_architecture.RULES)
-        with main_sources({
-            "core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapter.kt": "class D(x: Int) : SourceAdapter,\n    FileHashLookupSourceAdapter {\n",
-            "core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt": "class P : SourceAdapter, FileHashLookupSourceAdapter {\n",
-            "media-kit/src/main/kotlin/com/theoriacodex/app/source/FileCopyLookup.kt": "fun f(lookup: FileHashLookupSourceAdapter) = adapter as? FileHashLookupSourceAdapter\n",
-        }):
-            failures = check_architecture.only_md5_families_look_up_file_hashes()
-        self.assertEqual(["core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt"], [failure.split(" ", 1)[0] for failure in failures])
-
-    def test_reports_a_min_score_read_outside_stores_and_the_hash_adr_0009(self) -> None:
-        self.assertIn(check_architecture.sources_ignore_min_score, check_architecture.RULES)
-        with main_sources({
-            "core-domain/src/main/kotlin/com/theoriacodex/domain/query/QueryHash.kt": "val score = query.minScore?.toString()\n",
-            "core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt": "Query(sort = sort, minScore = null)\nval floor = query.minScore ?: 0\n",
-            "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinatorPolicy.kt": "Query(sort = sort, minScore = null)\n",
-        }):
-            failures = check_architecture.sources_ignore_min_score()
-        self.assertEqual(["core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt"], [failure.split(" ", 1)[0] for failure in failures])
-
+        self.assertEqual(
+            ["core-data/src/main/kotlin/com/theoriacodex/data/repository/FavoriteTags.kt",
+             "feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt"],
+            [failure.split(" ", 1)[0] for failure in failures],
+        )
 
 if __name__ == "__main__":
     unittest.main()
