@@ -267,6 +267,7 @@ interface StatisticsRepository {
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
     suspend fun mergeRestored(imported: LifetimeStatistics)
+    suspend fun flush() = Unit
 }
 
 data class LikedPost(

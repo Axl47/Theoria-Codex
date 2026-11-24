@@ -81,6 +81,7 @@
 
 ### Changed
 
+- Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
 - In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.
 - Tapping to show the Viewer's controls responds sooner.

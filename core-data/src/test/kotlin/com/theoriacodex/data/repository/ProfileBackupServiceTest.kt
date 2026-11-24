@@ -501,7 +501,7 @@ private data class Harness(
     val service: ProfileBackupService,
 )
 
-private class FakeBackupStore : ProfileBackupStore {
+internal class FakeBackupStore : ProfileBackupStore {
     var library = BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList())
     var merges = 0
     override suspend fun snapshot(includeRecents: Boolean): BackupLibrary =

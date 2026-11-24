@@ -58,10 +58,12 @@ import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.storage.closeDataStores
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
+import com.theoriacodex.data.repository.STATISTICS_WRITE_DELAY
 import com.theoriacodex.data.repository.FileBackedGalleryReadingModeRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
@@ -75,7 +77,6 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
-import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -93,11 +94,15 @@ class JourneyAppContainer(
     pageSize: Int = 20,
     httpClient: SourceHttpClient = JourneyNoNetworkHttpClient,
     providerShapedSources: Set<SourceKey> = emptySet(),
+    realWriteTimers: Boolean = false,
 ) : TheoriaAppContainer, AutoCloseable {
     private val appContext = context.applicationContext
     private val ownerJob = SupervisorJob(scope.coroutineContext[Job])
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     override val applicationScope: CoroutineScope get() = ownerScope
+    private val writeBehind = if (realWriteTimers) WriteBehind(ownerScope) else WriteBehind.flushOnly(ownerScope)
+    private val statisticsWriteBehind =
+        if (realWriteTimers) WriteBehind(ownerScope, STATISTICS_WRITE_DELAY) else WriteBehind.flushOnly(ownerScope)
     private val fileMirrors = FileMirrorIndex()
     private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors, budgetMs = 10_000)
     val registry = JourneySourceRegistry(
@@ -111,7 +116,9 @@ class JourneyAppContainer(
     private val storeScope = newDataStoreScope()
     val settings = DataStoreSettingsRepository(storageDirectory, storeScope, profileWriteGuard = profileWriteGuard)
     private val restore = DataStoreUiRestoreRepository(storageDirectory, storeScope)
-    private val statistics = DataStoreStatisticsRepository(storageDirectory, storeScope)
+    private val statistics = DataStoreStatisticsRepository(
+        storageDirectory, storeScope, writeBehind = statisticsWriteBehind,
+    )
     private val durations = RoomMediaDurationRepository(database)
     private val accounts = JourneyAccounts(registry.availableSources())
     private val siteProfiles = InMemorySiteProfileRepository()
@@ -143,7 +150,9 @@ class JourneyAppContainer(
         RoomRecentsRepository(database), settings, statistics,
         OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offline),
         restore, durations, MutableStateFlow(emptyList()),
-        readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = ownerScope, writeDelay = FLUSH_ONLY_WRITE_DELAY),
+        readingPositions = FileBackedReadingPositionRepository(
+            storageDirectory, writeBehind = writeBehind,
+        ),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
         forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),
@@ -232,4 +241,3 @@ class JourneyAppContainer(
     }
 }
 
-private val FLUSH_ONLY_WRITE_DELAY = 1.hours

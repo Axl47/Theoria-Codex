@@ -2,7 +2,11 @@ package com.theoriacodex.data.storage
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -50,8 +54,16 @@ internal fun <S, T> StateCell<S>.focus(get: (S) -> T, put: (S, T) -> S): StateCe
 
 internal const val WRITE_BEHIND_RETRIES = 3
 
-internal fun <T : Any> StateCell<T>.writeBehind(scope: CoroutineScope, delay: Duration): StateCell<T> =
-    WriteBehindStateCell(this, scope, delay)
+class WriteBehind(internal val scope: CoroutineScope, internal val delay: Duration = WRITE_BEHIND_DELAY) {
+    companion object {
+        fun flushOnly(scope: CoroutineScope) = WriteBehind(scope, Duration.INFINITE)
+    }
+}
+
+internal val WRITE_BEHIND_DELAY = 2.seconds
+
+internal fun <T : Any> StateCell<T>.writeBehind(config: WriteBehind?): StateCell<T> =
+    config?.let { WriteBehindStateCell(this, it.scope, it.delay) } ?: this
 
 private class WriteBehindStateCell<T : Any>(
     private val durable: StateCell<T>,
@@ -60,6 +72,7 @@ private class WriteBehindStateCell<T : Any>(
 ) : StateCell<T> {
     private val mutex = Mutex()
     private val flushing = Mutex()
+    private val queue = Dispatchers.Default.limitedParallelism(1)
     private val state = MutableStateFlow<T?>(null)
     private var revision = 0L
     private var persistedRevision = 0L
@@ -70,9 +83,13 @@ private class WriteBehindStateCell<T : Any>(
         emitAll(state.filterNotNull())
     }
 
-    override suspend fun value(): T = mutex.withLock { loaded() }
+    override suspend fun value(): T = withContext(queue) { mutex.withLock { loaded() } }
 
-    override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R = mutex.withLock {
+    override suspend fun <R> updateReturning(transform: (T) -> Pair<T, R>): R = withContext(queue + NonCancellable) {
+        mutex.withLock { applying(transform) }
+    }
+
+    private suspend fun <R> applying(transform: (T) -> Pair<T, R>): R {
         val current = loaded()
         val (next, result) = transform(current)
         if (next != current) {
@@ -80,10 +97,12 @@ private class WriteBehindStateCell<T : Any>(
             revision++
             schedule(attempt = 0)
         }
-        result
+        return result
     }
 
-    override suspend fun flush() = flushing.withLock {
+    override suspend fun flush() = withContext(queue) { flushOnce() }
+
+    private suspend fun flushOnce() = flushing.withLock {
         val (latest, latestRevision) = mutex.withLock { state.value to revision }
         if (latest == null || latestRevision == persistedRevision) return@withLock
         durable.update { latest }
@@ -97,7 +116,7 @@ private class WriteBehindStateCell<T : Any>(
     private suspend fun scheduledFlush(attempt: Int) {
         delay(writeDelay)
         mutex.withLock { scheduled = null }
-        val failed = runCatchingPreservingCancellation { flush() }.isFailure
+        val failed = runCatchingPreservingCancellation { flushOnce() }.isFailure
         if (failed && attempt < WRITE_BEHIND_RETRIES) mutex.withLock { schedule(attempt + 1) }
     }
 

@@ -19,7 +19,20 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
+import org.junit.Assert.assertTrue
+import com.theoriacodex.app.di.DataDependencies
+import com.theoriacodex.data.repository.DATASTORE_STATISTICS_FILE_NAME
+import com.theoriacodex.data.repository.ReadingPosition
+import com.theoriacodex.data.repository.ReadingPositionRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -37,6 +50,39 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class)
 class ViewerRestorationWorkflowTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    @Test
+    fun `a Viewer exit flush waits for a view still being recorded (ADR 0215)`() = runTest {
+        val post = testPost(SourceKey.PIXIV, "closing")
+        val held = CompletableDeferred<Unit>()
+        withGraph(listOf(post), data = { graph -> graph.data.copy(readingPositions = heldUntil(held, graph.data.readingPositions)) }) { graph, workflow ->
+            val launch = ViewerSession(listOf(post), context(ViewerStreamSource.RECENTS, "recents:watched"))
+            val viewerScope = CoroutineScope(Job())
+            viewerScope.launch(start = CoroutineStart.UNDISPATCHED) { workflow.recordVisiblePost(post, 1, launch) }
+            viewerScope.cancel()
+            val flushed = async {
+                workflow.awaitRecordings()
+                graph.data.flushPendingWrites()
+            }
+            runCurrent()
+            assertFalse(flushed.isCompleted)
+
+            held.complete(Unit)
+            flushed.await()
+
+            assertEquals(1, FileBackedReadingPositionRepository(graph.data.storageDirectory).get(post.id, RecentPostSection.WATCHED)?.mediaNumber)
+            val stored = graph.data.storageDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME).readText()
+            assertTrue(Regex("\"watchedPostCount\"\\s*:\\s*1\\b").containsMatchIn(stored))
+        }
+    }
+
+    private fun heldUntil(held: CompletableDeferred<Unit>, positions: ReadingPositionRepository) =
+        object : ReadingPositionRepository by positions {
+            override suspend fun record(position: ReadingPosition) {
+                held.await()
+                positions.record(position)
+            }
+        }
 
     @Test
     fun `cold reconstruction preserves filtered order and canonical selection without a live route`() = runTest {
@@ -154,6 +200,7 @@ class ViewerRestorationWorkflowTest {
 
     private suspend fun TestScope.withGraph(
         posts: List<Post>,
+        data: (JourneyAppContainer) -> DataDependencies = { it.data.copy(readingPositions = FileBackedReadingPositionRepository(it.data.storageDirectory)) },
         block: suspend (JourneyAppContainer, ViewerRouteWorkflow) -> Unit,
     ) {
         val graph = JourneyAppContainer(
@@ -167,7 +214,7 @@ class ViewerRestorationWorkflowTest {
                 { it }, { emptyList() }, { _, _, _ -> error("Restoration never saves media offline") },
             )
             val workflow = ViewerRouteWorkflow(
-                graph.data.copy(readingPositions = FileBackedReadingPositionRepository(graph.data.storageDirectory)),
+                data(graph),
                 this, graph.sources, { null }, offlineMedia,
                 providerDispatcher = StandardTestDispatcher(testScheduler),
             )

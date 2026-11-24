@@ -60,10 +60,11 @@ class BenchmarkFixtureActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val scenario = intent?.getStringExtra(EXTRA_SCENARIO)
-        if (scenario == "journey_mixed" || scenario == "journey_duration") {
+        if (scenario in JOURNEY_SCENARIOS) {
             BenchmarkDurationStartSignal.reset()
             lifecycleScope.launch {
-                val session = BenchmarkAppJourney.create(this@BenchmarkFixtureActivity, lifecycleScope)
+                val session = BenchmarkAppJourney.create(this@BenchmarkFixtureActivity, lifecycleScope,
+                    agedStatistics = scenario == SCENARIO_JOURNEY_AGED_STATISTICS)
                 journey = session
                 val viewer = ViewModelProvider(this@BenchmarkFixtureActivity)[ViewerSessionRetentionViewModel::class.java]
                 val shell = ViewModelProvider(this@BenchmarkFixtureActivity)[AppShellViewModel::class.java]
@@ -120,6 +121,8 @@ class BenchmarkFixtureActivity : ComponentActivity() {
         const val SCENARIO_SEARCH_DURATION = "search_duration"
         const val SCENARIO_VIEWER = "viewer"
         const val SCENARIO_VIEWER_CHROME = "viewer_chrome"
+        const val SCENARIO_JOURNEY_AGED_STATISTICS = "journey_aged_statistics"
+        val JOURNEY_SCENARIOS = setOf("journey_mixed", "journey_duration", SCENARIO_JOURNEY_AGED_STATISTICS)
     }
 
     private fun chromePosts(mediaUri: String): List<Post> {

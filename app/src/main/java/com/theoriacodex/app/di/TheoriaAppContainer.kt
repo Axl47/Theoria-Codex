@@ -84,8 +84,10 @@ import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileDeletionService
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.SettingsRepository
+import com.theoriacodex.data.repository.STATISTICS_WRITE_DELAY
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
@@ -168,7 +170,11 @@ data class DataDependencies(
     val visualSignatures: VisualSignatureRepository,
 ) {
     suspend fun flushPendingWrites() {
-        readingPositions.flush()
+        val failures = listOf(
+            runCatchingPreservingCancellation { readingPositions.flush() },
+            runCatchingPreservingCancellation { statisticsRepository.flush() },
+        ).mapNotNull { it.exceptionOrNull() }
+        failures.firstOrNull()?.let { throw it }
     }
 }
 
@@ -378,6 +384,7 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
         recoveryRegistry = fileStoreRecoveryRegistry,
+        writeBehind = WriteBehind(durableStoreScope, STATISTICS_WRITE_DELAY),
     )
     private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
         delegate = statisticsStore,
@@ -403,7 +410,7 @@ internal class DefaultTheoriaAppContainer(
         awaitSources = sourceReadiness::await,
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
-    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = durableStoreScope)
+    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeBehind = WriteBehind(durableStoreScope))
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)

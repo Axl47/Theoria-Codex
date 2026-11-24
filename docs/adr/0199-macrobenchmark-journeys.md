@@ -12,14 +12,16 @@ The performance journeys exist to prove that every visibly presented animated ca
 - `requireChangingMedia` samples the actual image surface of every visible preview (`screenshotSamples`), so paused frames, spinner-only previews and `isPlaying`-only reports cannot satisfy the test; all visible identities must advance, siblings included. The For You deck presents one card, which must play like any visible preview; Feed previews (`requireMovingFeedPreviews`) require at least two visible. The Viewer snapshot comes from the benchmark-only receiver in the app and gives the canonical identity and fitted image bounds, so moving controls cannot satisfy pixel sampling. `requirePreviewLeaseCount` asks that same receiver, which answers from the application-owned player pool.
 - `visiblePreviews` retries the whole snapshot when a node goes stale, since dropping one stale node could omit a visibly playing sibling.
 - `assumeSearchAutoplayDecodersAvailable` skips the Search autoplay scenarios on emulators (`Build.HARDWARE` of `goldfish` or `ranchu`): the goldfish H.264 decoder has four host slots, Media3 falls back to the software decoder for the rest, and from about six software decoders on at least one card stops playing. Phones decode them all in hardware, so the simultaneous-autoplay assertion runs there unchanged.
+- `agedStatisticsViewerSwipes` measures Viewer swipes against a lifetime-sized statistics store, which fresh fixture profiles never reach. `AgedStatistics` generates it from a fixed seed and writes it through `DataStoreStatisticsRepository` before the container starts, instead of committing a file: the seeded file always has the store's current schema and cap, and since the generator lives in `app/src/fixtures` the workload hash changes whenever the data does.
 - The baseline-profile generator drives the paths users repeat most through the offline fixture app, so no provider is contacted.
 
 ## Consequences
 
-Emulators cannot establish simultaneous autoplay; only a phone can. A new journey step should assert on sampled pixels or the lease receiver, not on player state.
+Emulators cannot establish simultaneous autoplay; only a phone can. A new journey step should assert on sampled pixels or the lease receiver, not on player state. `AgedStatisticsTest` checks that the aged file reopens through the store unchanged, that every source holds exactly the watched-tag cap, and that viewing the journey's first eight posts evicts more than once.
 
 ## Applies to
 
-- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt`: `completeFiveFeedJourney`, `requireChangingMedia`, `requireMovingFeedPreviews`, `viewerPreviewSnapshot`, `visiblePreviews`, `requirePreviewLeaseCount`
-- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt`: `assumeSearchAutoplayDecodersAvailable`
+- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/MixedMediaFeedJourney.kt`: `completeFiveFeedJourney`, `requireChangingMedia`, `requireMovingFeedPreviews`, `viewerPreviewSnapshot`, `visiblePreviews`, `requirePreviewLeaseCount`, `completeViewerSwipes`
+- `macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt`: `assumeSearchAutoplayDecodersAvailable`, `agedStatisticsViewerSwipes`
+- `app/src/fixtures/java/com/theoriacodex/app/fixtures/AgedStatistics.kt`: `AgedStatistics.write`, `AgedStatistics.statistics`, `AgedStatistics.postTags`
 - `baseline-profile/src/main/java/com/theoriacodex/baselineprofile/BaselineProfileGenerator.kt`: `feedViewerAndSearchEditor`

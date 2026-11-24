@@ -8,6 +8,8 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.statisticsUsageCategory
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
+import com.theoriacodex.data.repository.StatisticsRepository
+import com.theoriacodex.data.repository.UsageDurationDelta
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -15,6 +17,33 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class AppUsageTrackerTest {
+    @Test
+    fun `going to the background saves its usage and then flushes the store (ADR 0215)`() = runTest {
+        var elapsed = 0L
+        val calls = mutableListOf<String>()
+        val memory = InMemoryStatisticsRepository()
+        val repository = object : StatisticsRepository by memory {
+            override suspend fun addUsageDuration(delta: UsageDurationDelta) {
+                memory.addUsageDuration(delta)
+                calls += "usage"
+            }
+
+            override suspend fun flush() {
+                calls += "flush"
+            }
+        }
+        val tracker = AppUsageTracker(repository, this, { elapsed }, tickIntervalMs = 0L)
+        tracker.onForeground()
+        tracker.awaitIdle()
+        elapsed = 2_000L
+
+        tracker.onBackground()
+        tracker.awaitIdle()
+
+        assertEquals(listOf("usage", "flush"), calls)
+        tracker.close()
+    }
+
     @Test
     fun `live midnight slices are memory only and flush exactly once including Other`() = runTest {
         var elapsed = 0L

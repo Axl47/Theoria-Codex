@@ -49,6 +49,10 @@ class ProfileBackupService(
         mutex.withLock {
             check(!journalFile.exists()) { "Finish the pending restore before making a backup" }
             val repos = extensionRepos?.repos().orEmpty()
+            if (includeRecents) {
+                readingPositions.flush()
+                statistics?.flush()
+            }
             repeat(3) {
                 val initialSettings = settings.observeSettings().first()
                 val sites = siteProfiles.observeProfiles().first()

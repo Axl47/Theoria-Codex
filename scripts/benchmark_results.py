@@ -77,6 +77,7 @@ def default_contract() -> dict[str, Any]:
         "searchDurationEnrichmentConcurrentAutoplayScroll": (5, frames + memory + legacy_preview + [metric("durationBatchSumMs")]),
         "viewerRepeatedSwipes": (5, frames + memory + [metric("viewerPrepareCount"), metric("mediaLoadCount")]),
         "viewerChromeToggle": (5, frames),
+        "agedStatisticsViewerSwipes": (5, frames + memory + [metric("viewerPrepareCount"), metric("mediaLoadCount")]),
         "mixedMediaFiveFeedJourney": (5, frames + memory + churn + [metric("mediaLoadCount")]),
         "durationAcquisitionFiveFeedJourney": (5, frames + memory + churn + [metric("mediaLoadCount"), metric("fixtureByteRangeCount"), metric("journeyDurationBatchSumMs")]),
     }

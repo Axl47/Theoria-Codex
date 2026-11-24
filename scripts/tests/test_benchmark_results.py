@@ -363,10 +363,12 @@ class BenchmarkResultsTest(unittest.TestCase):
         with self.assertRaisesRegex(benchmark.EvidenceError, "Archived report changed"):
             benchmark.load_run(candidate)
 
-    def test_default_contract_requires_all_eight_full_scenarios_and_cost_dimensions(self) -> None:
+    def test_default_contract_requires_all_nine_full_scenarios_and_cost_dimensions(self) -> None:
         contract = benchmark.default_contract()
         benchmark.validate_contract(contract)
-        self.assertEqual(8, len(contract["scenarios"]))
+        self.assertEqual(9, len(contract["scenarios"]))
+        aged = {metric["name"] for metric in contract["scenarios"]["agedStatisticsViewerSwipes"]["metrics"]}
+        self.assertTrue({"frameDurationCpuMsFixture", "frameOverrunMsFixture", "memoryFixtureRssAnonMaxKb"}.issubset(aged))
         self.assertEqual(10, contract["scenarios"]["coldStartup"]["iterations"])
         required = {metric["name"] for metric in contract["scenarios"]["durationAcquisitionFiveFeedJourney"]["metrics"]}
         self.assertTrue({"fixtureByteRangeCount", "journeyDurationBatchSumMs", "previewPlayerCreateCount", "memoryFixtureRssAnonMaxKb", "frameDurationCpuMsFixture"}.issubset(required))

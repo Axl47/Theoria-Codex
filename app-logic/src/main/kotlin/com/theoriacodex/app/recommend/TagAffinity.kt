@@ -17,6 +17,7 @@ import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PredictedTagIndex
 import com.theoriacodex.domain.vision.PredictedTagUse
 import com.theoriacodex.domain.vision.tokens
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -35,6 +37,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transform
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.math.ln
 
 data class TagAffinityInputs(
@@ -205,8 +210,10 @@ fun shareTagAffinityInputs(
     savedSearches: SavedSearchRepository,
     statistics: StatisticsRepository,
     predicted: Flow<PredictedTagIndex> = flowOf(PredictedTagIndex.Empty),
+    computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ): SharedTagAffinity {
     val watched = statistics.observeStatistics()
+        .throttleLatest(TAG_AFFINITY_STATISTICS_PERIOD)
         .map {
             LifetimeStatistics(
                 watchedBySource = it.watchedBySource, watchedByTag = it.watchedByTag, watchedTagFloors = it.watchedTagFloors,
@@ -234,11 +241,17 @@ fun shareTagAffinityInputs(
         delay(retryDelayMs(attempt))
         true
     }
-    return SharedTagAffinity(byProfile.distinctUntilChanged().flowOn(Dispatchers.Default).shareIn(scope, SharingStarted.Lazily, replay = 1), scope)
+    return SharedTagAffinity(byProfile.distinctUntilChanged().flowOn(computationDispatcher).shareIn(scope, SharingStarted.Lazily, replay = 1), scope)
+}
+
+internal fun <T> Flow<T>.throttleLatest(period: Duration): Flow<T> = conflate().transform { value ->
+    emit(value)
+    delay(period)
 }
 
 private fun retryDelayMs(attempt: Long): Long = RETRY_BASE_MS shl attempt.coerceAtMost(RETRY_MAX_DOUBLINGS).toInt()
 
+internal val TAG_AFFINITY_STATISTICS_PERIOD = 5.seconds
 private const val RETRY_BASE_MS = 1_000L
 private const val RETRY_MAX_DOUBLINGS = 6L
 

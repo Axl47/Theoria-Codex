@@ -39,6 +39,7 @@ private const val SCENARIO_SEARCH = "search"
 private const val SCENARIO_SEARCH_DURATION = "search_duration"
 private const val SCENARIO_VIEWER = "viewer"
 private const val SCENARIO_VIEWER_CHROME = "viewer_chrome"
+private const val SCENARIO_JOURNEY_AGED_STATISTICS = "journey_aged_statistics"
 private const val CHROME_POSTS = 3
 private const val CHROME_VIDEO_POST = 1
 private const val CHROME_GALLERY_POST = 2
@@ -54,6 +55,7 @@ private const val STARTUP_ITERATIONS = 10
 private const val INTERACTION_ITERATIONS = 5
 private const val SEARCH_SCROLL_STEPS = 3
 private const val VIEWER_PAGE_COUNT = 6
+private const val AGED_VIEWER_PAGE_COUNT = 8
 private const val UI_TIMEOUT_MS = 15_000L
 private const val FULLY_DRAWN_TIMEOUT_MS = 75_000L
 private const val POLL_INTERVAL_MS = 50L
@@ -238,6 +240,30 @@ class TheoriaMacrobenchmark {
     }
 
     @Test
+    fun agedStatisticsViewerSwipes() {
+        assumeSearchAutoplayDecodersAvailable()
+        benchmarkRule.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(
+                fixtureFrameTimingMetric(),
+                fixtureMemoryUsageMetric(),
+                countMetric(TRACE_VIEWER_PREPARE, "viewerPrepare"),
+                countMetric(TRACE_MEDIA_LOAD, "mediaLoad"),
+            ),
+            compilationMode = COMPILATION_MODE,
+            startupMode = null,
+            iterations = INTERACTION_ITERATIONS,
+            setupBlock = {
+                pressHome()
+                startActivityAndWait(fixtureIntent(SCENARIO_JOURNEY_AGED_STATISTICS))
+                device.requireMovingFeedPreviews("Aged statistics Search setup")
+            },
+        ) {
+            device.completeViewerSwipes(AGED_VIEWER_PAGE_COUNT)
+        }
+    }
+
+    @Test
     fun mixedMediaFiveFeedJourney() = measureAppFeedJourney(durationEnabled = false)
 
     @Test
@@ -402,7 +428,7 @@ private fun UiDevice.requireViewerVideoPlaying(page: Int) {
     }
 }
 
-private fun UiDevice.swipeViewer(next: Boolean) {
+internal fun UiDevice.swipeViewer(next: Boolean) {
     val startX = if (next) displayWidth * 4 / 5 else displayWidth / 5
     val endX = if (next) displayWidth / 5 else displayWidth * 4 / 5
     val centerY = displayHeight / 2

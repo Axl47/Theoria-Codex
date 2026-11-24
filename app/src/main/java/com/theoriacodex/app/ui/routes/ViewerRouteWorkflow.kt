@@ -29,6 +29,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +38,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal class ViewerRouteWorkflow(
@@ -225,53 +228,61 @@ internal class ViewerRouteWorkflow(
             }.getOrNull()
     }
 
+    private val recordings = Mutex()
+
+    suspend fun awaitRecordings() = recordings.withLock { }
+
     suspend fun recordVisiblePost(
         post: Post,
         viewedMediaNumber: Int,
         session: ViewerSession?,
-    ) {
-        if (recordSeriesPage(post, viewedMediaNumber, session)) return
-        val origin = historyOrigin(session?.context)
-        recordReadingPosition(post, viewedMediaNumber, session)
-        runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
-        val codexOpen = statisticsCodexId(session?.context)?.let { codexId ->
-            CodexPostOpen(
-                codexId, statisticsPostKey(post.id),
-                post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.displayName()} ${post.id.sourcePostId}",
-            )
-        }
-        runCatchingPreservingCancellation {
-            data.statisticsRepository.recordWatchedPost(
-                source = post.id.source,
-                tags = statisticsTagsForPost(post),
-                codexOpen = codexOpen,
-            )
-        }
-        data.recentsRepository.recordWatchedPost(
-            post = offlineMedia.withoutOfflineLocations(post),
-            origin = origin,
-            originQueryHash = session?.context?.queryHash,
-            section = recentPostSectionForViewer(session?.context),
-            viewedMediaNumber = viewedMediaNumber,
-        )
-    }
-
-    suspend fun recordVisibleMediaProgress(
-        post: Post,
-        viewedMediaNumber: Int,
-        session: ViewerSession?,
-    ) {
-        if (recordSeriesPage(post, viewedMediaNumber, session)) return
-        val origin = historyOrigin(session?.context)
-        recordReadingPosition(post, viewedMediaNumber, session)
-        runCatchingPreservingCancellation {
-            data.recentsRepository.recordWatchedMediaProgress(
+    ) = withContext(NonCancellable) {
+        recordings.withLock {
+            if (recordSeriesPage(post, viewedMediaNumber, session)) return@withLock
+            val origin = historyOrigin(session?.context)
+            recordReadingPosition(post, viewedMediaNumber, session)
+            runCatchingPreservingCancellation { data.statisticsRepository.recordPostAvailable(post) }
+            val codexOpen = statisticsCodexId(session?.context)?.let { codexId ->
+                CodexPostOpen(
+                    codexId, statisticsPostKey(post.id),
+                    post.title?.takeIf(String::isNotBlank) ?: "${post.id.source.displayName()} ${post.id.sourcePostId}",
+                )
+            }
+            runCatchingPreservingCancellation {
+                data.statisticsRepository.recordWatchedPost(
+                    source = post.id.source,
+                    tags = statisticsTagsForPost(post),
+                    codexOpen = codexOpen,
+                )
+            }
+            data.recentsRepository.recordWatchedPost(
                 post = offlineMedia.withoutOfflineLocations(post),
                 origin = origin,
                 originQueryHash = session?.context?.queryHash,
                 section = recentPostSectionForViewer(session?.context),
                 viewedMediaNumber = viewedMediaNumber,
             )
+        }
+    }
+
+    suspend fun recordVisibleMediaProgress(
+        post: Post,
+        viewedMediaNumber: Int,
+        session: ViewerSession?,
+    ) = withContext(NonCancellable) {
+        recordings.withLock {
+            if (recordSeriesPage(post, viewedMediaNumber, session)) return@withLock
+            val origin = historyOrigin(session?.context)
+            recordReadingPosition(post, viewedMediaNumber, session)
+            runCatchingPreservingCancellation {
+                data.recentsRepository.recordWatchedMediaProgress(
+                    post = offlineMedia.withoutOfflineLocations(post),
+                    origin = origin,
+                    originQueryHash = session?.context?.queryHash,
+                    section = recentPostSectionForViewer(session?.context),
+                    viewedMediaNumber = viewedMediaNumber,
+                )
+            }
         }
     }
 
