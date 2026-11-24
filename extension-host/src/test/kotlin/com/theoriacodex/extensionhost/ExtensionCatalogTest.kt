@@ -93,6 +93,12 @@ class ExtensionCatalogTest {
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("https://mirror.example/anime"), NewExtensionRepo(repoUrl))))
         assertEquals(1, catalog.repos().size)
 
+        // Another repo signed with the same key would list the same packages again.
+        site["https://other.example/manga/repo.json"] = site.getValue("$repoUrl/repo.json").decodeToString().replace("Anime", "Manga").encodeToByteArray()
+        site["https://other.example/manga/index.min.json"] = "[]".encodeToByteArray()
+        assertEquals(mapOf("https://other.example/manga" to "Signed with the same key as Anime"), catalog.add(listOf(NewExtensionRepo("https://other.example/manga"))))
+        assertEquals(1, catalog.repos().size)
+
         catalog.remove(repoUrl)
         val refused = catalog.add(listOf(NewExtensionRepo(repoUrl, signingKey = otherKey), NewExtensionRepo("http://repo.example/anime"), NewExtensionRepo("https://gone.example")))
         assertEquals(setOf(repoUrl, "http://repo.example/anime", "https://gone.example"), refused.keys)
@@ -160,6 +166,7 @@ class ExtensionCatalogTest {
         assertEquals("Older than the copy on this device", catalog.install(repoUrl, "older"))
         assertEquals("The copy on this device is signed with another key", catalog.install(repoUrl, "foreign"))
         assertEquals("No longer in the repo", catalog.install(repoUrl, "missing"))
+        assertEquals("Not a package name", catalog.install(repoUrl, "../escape"))
 
         assertEquals(emptyList<String>(), folder.list().orEmpty().toList())
         assertEquals(emptyMap<String, String>(), store.choices.trusted)

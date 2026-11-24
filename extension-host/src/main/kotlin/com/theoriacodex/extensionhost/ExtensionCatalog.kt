@@ -59,14 +59,14 @@ class ExtensionCatalog(
 
     override suspend fun repos(): List<ExtensionRepo> = choices.choices().repos
 
-    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> {
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = withContext(Dispatchers.IO) {
         val problems = LinkedHashMap<String, String>()
         for (new in repos) {
             val url = RepoReader.storedAddress(new.url)
             if (repos().any { it.url == url }) continue
             runCatchingPreservingCancellation { addOne(url, new.signingKey) }.onFailure { problems[new.url] = describe(it) }
         }
-        return problems
+        problems
     }
 
     /** Reads the repo at [url] and keeps it with the key it names, which must be [knownKey] when a backup knew one. */
@@ -75,11 +75,15 @@ class ExtensionCatalog(
         val index = RepoReader.read(url, ::get)
         if (!index.signingKey.matches(FINGERPRINT)) throw RepoProblem("Names no signing key")
         if (knownKey != null && !knownKey.equals(index.signingKey, ignoreCase = true)) throw RepoProblem("Now signed with another key")
+        val name = index.name.ifBlank { url }
+        var sameKey: ExtensionRepo? = null
         choices.update { current ->
-            // Two addresses of one repo, such as its folder and its newer index, are the same repo.
-            if (current.repos.any { it.url == url || it.signingKey == index.signingKey }) current
-            else current.copy(repos = current.repos + ExtensionRepo(url, index.name.ifBlank { url }, index.signingKey))
+            sameKey = current.repos.firstOrNull { it.url == url || it.signingKey == index.signingKey }
+            if (sameKey != null) current else current.copy(repos = current.repos + ExtensionRepo(url, name, index.signingKey))
         }
+        // Two addresses of one repo, such as its folder and its newer index, are the same repo. Another repo signed with
+        // the same key would list the same packages, which one device can hold only once.
+        sameKey?.let { if (it.url != url && it.name != name) throw RepoProblem("Signed with the same key as ${it.name}") }
         indexes[url] = index
     }
 
@@ -114,6 +118,8 @@ class ExtensionCatalog(
     }
 
     private suspend fun installFrom(url: String, packageName: String): String? {
+        // It names the file the APK is written to.
+        if (!packageName.matches(PACKAGE_NAME)) return "Not a package name"
         val repo = repos().firstOrNull { it.url == url } ?: return "The repo was removed"
         val entry = index(repo, refresh = false).extensions.firstOrNull { it.packageName == packageName } ?: return "No longer in the repo"
         val before = packages().firstOrNull { it.origin != ExtensionOrigin.FILE && it.packageName == packageName }
@@ -203,6 +209,7 @@ class ExtensionCatalog(
 
     private companion object {
         val FINGERPRINT = Regex("[0-9a-f]{64}")
+        val PACKAGE_NAME = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*")
         const val MAX_APK_BYTES = 64L * 1024 * 1024
     }
 }

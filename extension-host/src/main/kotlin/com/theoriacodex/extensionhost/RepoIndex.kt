@@ -2,7 +2,6 @@ package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.series.SeriesKind
 import java.io.ByteArrayInputStream
-import java.io.IOException
 import java.util.zip.GZIPInputStream
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
@@ -45,8 +44,11 @@ data class IndexedExtension(
 internal object RepoReader {
     suspend fun read(url: String, get: suspend (String) -> ByteArray): RepoIndex = read(fetchAddress(url), get, followed = false)
 
-    /** The address to fetch for a stored repo [url]: a folder means its `repo.json`. */
-    fun fetchAddress(url: String): String = if ('.' in url.trimEnd('/').substringAfterLast('/')) url else url.trimEnd('/') + "/repo.json"
+    /** The address to fetch for a stored repo [url]: a folder (a path whose last part has no dot, or none) means its `repo.json`. */
+    fun fetchAddress(url: String): String {
+        val path = url.trimEnd('/').substringAfter("://").substringAfter('/', missingDelimiterValue = "")
+        return if ('.' in path.substringAfterLast('/')) url else url.trimEnd('/') + "/repo.json"
+    }
 
     /** How a repo address is stored: the folder for a legacy repo's files, any other address as given. */
     fun storedAddress(url: String): String {
@@ -58,7 +60,7 @@ internal object RepoReader {
         val body = gunzipped(get(address))
         return when (body.firstOrNull { !it.toInt().toChar().isWhitespace() }?.toInt()?.toChar()) {
             '[' -> {
-                if (!address.endsWith("/index.min.json")) throw IOException("Not a repo address")
+                if (!address.endsWith("/index.min.json")) throw SerializationException("A list of extensions, not a repo")
                 read(address.removeSuffix("/index.min.json") + "/repo.json", get, followed)
             }
             '{' -> {
