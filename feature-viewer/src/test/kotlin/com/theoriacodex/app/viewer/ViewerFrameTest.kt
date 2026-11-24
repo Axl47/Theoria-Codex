@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Application
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -10,8 +11,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +22,15 @@ import org.robolectric.annotation.Config
 class ViewerFrameTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun `a chrome toggle keeps the frame and controls while their visibility follows it`() {
+    private val seen = mutableListOf<Boolean>()
+
+    @Composable
+    private fun ChromeReader(frame: ViewerFrame) {
+        val visible = frame.chromeVisible
+        SideEffect { if (seen.lastOrNull() != visible) seen += visible }
+    }
+
+    @Test fun `a chrome toggle keeps the frame and controls while their readers follow it (ADR 0166)`() {
         val post = ViewerOwnerTestData.post("a")
         val navigation = viewerPostNavigation(ViewerUiState())
         val selection = ViewerSelection(post, post.media, 0, false, emptyList())
@@ -41,6 +48,7 @@ class ViewerFrameTest {
                 if (frames.lastOrNull() !== frame) frames += frame
                 if (controls.lastOrNull() !== control) controls += control
             }
+            ChromeReader(frame)
         }
 
         fun update(change: (ViewerUiState) -> ViewerUiState) {
@@ -49,10 +57,9 @@ class ViewerFrameTest {
         }
 
         update { it.copy(controls = it.controls.copy(chromeVisible = false)) }
-        compose.runOnIdle { assertFalse(frames.last().chromeVisible) }
         update { it.copy(controls = it.controls.copy(chromeVisible = true)) }
         compose.runOnIdle {
-            assertTrue(frames.last().chromeVisible)
+            assertEquals("what a skipping reader saw", listOf(true, false, true), seen)
             assertEquals("frames", 1, frames.size)
             assertEquals("controls", 1, controls.size)
         }

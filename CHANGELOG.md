@@ -81,6 +81,8 @@
 
 ### Changed
 
+- In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.
+- Tapping to show the Viewer's controls responds sooner.
 - For You no longer deals cards you skipped in the last 30 days, even after the app restarts. Start over at the end of the Mix brings them back.
 - For You opens on the cards that were next when you left, instead of a blank deck while it loads. New cards follow behind them, so nothing moves under your finger; Refresh deals a fresh Mix.
 - The app opens sooner when you have many downloaded chapters or offline copies: "Preparing your library…" no longer waits while every download is checked. For a moment after opening, the Offline sheet shows its progress bar until that check finishes.

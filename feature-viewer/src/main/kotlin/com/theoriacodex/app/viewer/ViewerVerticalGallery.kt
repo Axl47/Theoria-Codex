@@ -144,7 +144,7 @@ internal fun ViewerVerticalGallery(
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }
     }
     val shapes = remember(post.id) { HashMap<Int, MutableFloatState>() }
-    var latestShape by remember(post.id) { mutableFloatStateOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
+    val latestShape = remember(post.id) { floatArrayOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
     val session = frame.uiState.session
     val selectedEvents = { key: ViewerMediaKey, generation: Long ->
@@ -162,7 +162,7 @@ internal fun ViewerVerticalGallery(
             .verticalGalleryTaps(gallery, controls, frame.touchExplorationEnabled, actions),
     ) {
         items(pages.size, key = { index -> index }) { index ->
-            val placeholder = remember { latestShape }
+            val placeholder = remember { latestShape[0] }
             val painted = shapes.getOrPut(index) { mutableFloatStateOf(Float.NaN) }
             val shape = painted.floatValue.takeUnless { it.isNaN() } ?: placeholder
             VerticalGalleryPage(
@@ -174,7 +174,7 @@ internal fun ViewerVerticalGallery(
                 onPainted = { width, height ->
                     if (width > 0f && height > 0f) {
                         painted.floatValue = width / height
-                        latestShape = width / height
+                        latestShape[0] = width / height
                     }
                 },
                 onRequestMediaRecovery = host.onRequestMediaRecovery,

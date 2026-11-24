@@ -208,8 +208,11 @@ internal fun rememberViewerFrame(
     inPictureInPicture: Boolean,
     touchExplorationEnabled: Boolean,
     isLandscape: Boolean,
-): ViewerFrame = remember(uiState.ignoringChromeVisibility(), navigation, posts, selection, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
-    ViewerFrame(uiState, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
+): ViewerFrame {
+    val requested = uiState.ignoringChromeVisibility()
+    return remember(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
+        ViewerFrame(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
+    }
 }
 
 private fun ViewerUiState.ignoringChromeVisibility(): ViewerUiState =
