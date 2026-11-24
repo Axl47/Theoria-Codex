@@ -39,6 +39,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -129,7 +130,7 @@ class AniyomiSeriesSourceTest {
 
     @Test
     fun `every server of an episode is asked at once (ADR 0055)`() = runBlocking {
-        val names = listOf("A", "B", "C")
+        val names = (1..18).map { "S$it" }
         val arrived = CountDownLatch(names.size)
         val source = ServerSource(
             servers = names.map { Hoster(hosterName = it) },
@@ -142,7 +143,7 @@ class AniyomiSeriesSourceTest {
             },
         )
 
-        assertEquals(setOf("720p · A", "720p · B", "720p · C"), streamsOf(source).map { it.label }.toSet())
+        assertEquals(names.map { "720p · $it" }.toSet(), streamsOf(source).map { it.label }.toSet())
     }
 
     @Test
@@ -157,9 +158,74 @@ class AniyomiSeriesSourceTest {
 
     @Test
     fun `by default a server list and one server fit inside the Viewer's 60 s episode wait (ADR 0055)`() {
-        val limits = AniyomiStreams.Limits()
+        val limits = AniyomiSeriesSource(ServerSource(), HostServices(ExtensionImages())).streams.limits
 
         assertTrue(limits.listMs + limits.serverMs <= VIEWER_EPISODE_WAIT_MS)
+    }
+
+    @Test
+    fun `the server list is cut off at its own limit while the source still holds it (ADR 0055)`() = runBlocking {
+        val release = CountDownLatch(1)
+        val stuckList = object : FakeAnimeSource() {
+            override suspend fun getHosterList(episode: SEpisode): List<Hoster> {
+                release.await(5, TimeUnit.SECONDS)
+                return emptyList()
+            }
+        }
+        try {
+            val series = AniyomiSeriesSource(stuckList, HostServices(ExtensionImages()), AniyomiStreams.Limits(listMs = 200))
+            val failure = within(2.seconds) { assertFailsWith<SourceAdapterException> { series.media(SeriesEntry("/episode/1", "Episode 1")) } }
+
+            assertEquals("No server answered in time", failure.message)
+            assertEquals(1L, release.count)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun `a server cut off beside servers with no videos is a timeout, not an empty answer (ADR 0055)`() = runBlocking {
+        val source = ServerSource(
+            servers = listOf(Hoster(hosterName = "Empty"), Hoster(hosterName = "Stuck")),
+            videos = mapOf("Empty" to { emptyList() }, "Stuck" to { Thread.sleep(STUCK_MS); emptyList() }),
+        )
+
+        val failure = within(2.seconds) { assertFailsWith<SourceAdapterException> { streamsOf(source, serverLimitMs = 200) } }
+
+        assertEquals(SourceFailureReason.NETWORK to "No server answered in time", failure.reason to failure.message)
+    }
+
+    @Test
+    fun `a virtual machine error from a server's lookup is not taken for that server's failure (ADR 0060)`() = runBlocking {
+        val source = ServerSource(
+            servers = listOf(Hoster(hosterName = "Fine"), Hoster(hosterName = "Broken")),
+            videos = mapOf("Fine" to { listOf(Video("https://fine.example/v.mp4", "720p")) }, "Broken" to { throw OutOfMemoryError("extension") }),
+        )
+
+        assertEquals("extension", assertFailsWith<OutOfMemoryError> { streamsOf(source) }.message)
+    }
+
+    @Test
+    fun `an anime source gets back the episode it listed (ADR 0064)`() = runBlocking {
+        val listed = SEpisode.create().apply { url = "/e/1"; name = "Episode 1" }
+        val source = ServerSource(episodes = listOf(listed))
+        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+
+        val entry = series.entries(Series(SeriesId(series.key, "/a/1"), "Show"), emptyList()).entries.single()
+        series.media(entry)
+
+        assertSame(listed, source.serversAskedFor.single())
+    }
+
+    @Test
+    fun `anime details only add to what the listing said (ADR 0064)`() = runBlocking {
+        val listing = anime("/a/1", "Show").apply { thumbnail_url = "https://c.test/1.jpg"; author = "Listed" }
+        val source = ServerSource(listing = listOf(listing), details = { SAnime.create().apply { thumbnail_url = " "; author = ""; description = "New" } })
+        val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
+
+        val opened = series.details(series.popular(1).series.single())
+
+        assertEquals(listOf("Show", "https://c.test/1.jpg", "Listed", "New"), listOf(opened.title, opened.coverUrl, opened.author, opened.description))
     }
 
     @Test
@@ -346,7 +412,9 @@ class AniyomiSeriesSourceTest {
 
         override suspend fun getPopularAnime(page: Int) = AnimesPage(listing, hasNextPage = false)
 
-        override suspend fun getHosterList(episode: SEpisode): List<Hoster> = servers
+        val serversAskedFor = mutableListOf<SEpisode>()
+
+        override suspend fun getHosterList(episode: SEpisode): List<Hoster> = servers.also { serversAskedFor += episode }
 
         override suspend fun getVideoList(hoster: Hoster): List<Video> = videos.getValue(hoster.hosterName)()
 

@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class AniyomiFiltersTest {
@@ -41,6 +42,17 @@ class AniyomiFiltersTest {
         val searched = checkNotNull(source.searchedWith)
         assertEquals(chosen, searched.nodes().toSeriesFilters())
         assertEquals(AnimeFilter.TriState.STATE_INCLUDE, (searched[6] as Genres).state.first().state)
+    }
+
+    @Test
+    fun `later pages of an anime search reuse the list its first page used (ADR 0064)`() = runTest {
+        val chosen = series.filters().map { if (it is SeriesFilter.Check) it.copy(checked = true) else it }
+
+        series.search("one", 1, chosen)
+        val first = source.searchedWith
+        series.search("one", 2, chosen)
+
+        assertSame(first, source.searchedWith)
     }
 
     private class Studio : AnimeFilter.Text("Studio")

@@ -71,24 +71,31 @@ class MihonFiltersTest {
         val defaults = series.filters()
         val stale = listOf(SeriesFilter.Select("Options", listOf("Old"), 0), SeriesFilter.Separator, SeriesFilter.Check("Author", true))
 
-        series.search("one", 1, stale)
+        val renamed = listOf(SeriesFilter.Header("Options"), SeriesFilter.Separator, SeriesFilter.Text("Writer", "x"), SeriesFilter.Check("Done", true))
 
-        assertEquals(defaults, source.searchedWith.single().nodes().toSeriesFilters())
+        series.search("one", 1, stale)
+        series.search("two", 1, renamed)
+
+        assertEquals(listOf(defaults, defaults), source.searchedWith.map { it.nodes().toSeriesFilters() })
     }
 
     @Test
     fun `later pages of a search reuse the list its first page used, and a new search makes another (ADR 0064)`() = runTest {
         val chosen = series.filters().map { if (it is SeriesFilter.Check) it.copy(checked = true) else it }
 
+        val narrower = chosen.map { if (it is SeriesFilter.Check) it.copy(checked = false) else it }
+
         series.search("one", 1, chosen)
         series.search("one", 2, chosen)
         series.search("one", 1, chosen)
         series.search("two", 2, chosen)
+        series.search("two", 3, narrower)
 
-        val (first, second, again, other) = source.searchedWith
+        val (first, second, again, other, filtered) = source.searchedWith
         assertSame(first, second)
         assertNotSame(first, again)
         assertNotSame(again, other)
+        assertNotSame(other, filtered)
     }
 
     @Test
