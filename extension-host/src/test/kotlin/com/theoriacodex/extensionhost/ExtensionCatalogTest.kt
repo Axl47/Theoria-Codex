@@ -82,7 +82,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key`() = runTest {
+    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key (ADR 0007)`() = runTest {
         serve()
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/index.min.json"))))
         assertEquals(listOf(ExtensionRepo(repoUrl, "Anime", key)), catalog.repos())
@@ -102,7 +102,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `restoring repos stores the valid records in one update without reading them, skips present ones and refuses a bad address or key`() = runTest {
+    fun `restoring repos stores the valid records in one update without reading them, skips present ones and refuses a bad address or key (ADR 0007)`() = runTest {
         var updates = 0
         val counting = object : ExtensionChoiceStore by store {
             override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) {
@@ -180,7 +180,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `an extension installed from a repo is kept privately and turned on, and an update keeps the user's choice`() = runTest {
+    fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("old", 7, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("new", key, 2)
@@ -201,7 +201,20 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `nothing is installed that is not the package the repo named, signed with its key, and no older than the copy on the device`() = runTest {
+    fun `adding a repo installs and turns on nothing (ADR 0007)`() = runTest {
+        serve(Triple("new", 2, "16"))
+        apk("new", key, 2)
+
+        assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo(repoUrl))))
+
+        assertEquals(emptyList<String>(), folder.list().orEmpty().toList())
+        assertEquals(emptyMap<String, String>(), store.choices.trusted)
+        assertEquals(0, changes)
+        assertEquals(listOf(Status.AVAILABLE), catalog.available().extensions.map { it.status })
+    }
+
+    @Test
+    fun `nothing is installed that is not the package the repo named, signed with its key, and no older than the copy on the device (ADR 0007)`() = runTest {
         serve(Triple("swapped", 1, "16"), Triple("unsigned", 1, "16"), Triple("older", 3, "16"), Triple("foreign", 2, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("swapped", key, 1)

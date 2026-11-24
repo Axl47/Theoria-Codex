@@ -83,7 +83,7 @@ class InMemoryCodexLikesTransactions(
                 val automaticCodex = codices.observeCodex(automaticCodexId).first()
                 if (
                     automaticCodex != null &&
-                    CodexLikesPolicy.postMatchesAnyAutomaticTag(post, automaticCodex.automaticTags)
+                    CodexLikesPolicy.postMatchesAutomaticTagGroups(post, automaticCodex.automaticTags)
                 ) {
                     codices.addItem(automaticCodexId, post)
                 }

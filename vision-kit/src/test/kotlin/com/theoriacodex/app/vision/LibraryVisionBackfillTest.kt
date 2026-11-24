@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PredictedTag
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
@@ -281,6 +282,46 @@ class LibraryVisionBackfillTest {
         withTimeout(10_000) { tagger.library.first { it[video.id] != null } }
 
         assertEquals(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)), tagger.known(video.id))
+    }
+
+    @Test
+    fun `look remembers only a seen picture, so an unreachable one is asked again (ADR 0005)`() = runBlocking {
+        var reachable = false
+        val pictures = Pictures(still = { if (reachable) Pattern.TOP.bitmap() else null })
+        val tagger = PictureTagger(readyStore(), Library(emptyList()), pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+        val late = post("late")
+
+        assertEquals(PictureLook.Unseen, tagger.look(late))
+        reachable = true
+        assertEquals(PictureLook.Seen(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL))), tagger.look(late))
+    }
+
+    @Test
+    fun `a picture analysed this session is known but never reaches the library flow (ADR 0005)`() = runTest {
+        val pictures = Pictures(still = { Pattern.TOP.bitmap() })
+        val tagger = PictureTagger(readyStore(), Library(emptyList()), pictures, backgroundScope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+        val seen = post("seen")
+        val settled = tagger.library.first { it.baseRates.isNotEmpty() }
+
+        tagger.analyze(seen)
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)), tagger.known(seen.id))
+        assertEquals(settled, tagger.library.value)
+    }
+
+    @Test
+    fun `known with a ready model answers null for an unanalysed picture without reading or analysing it (ADR 0005)`() = runBlocking {
+        var reads = 0
+        val analysed = mutableListOf<Pattern>()
+        val pictures = Pictures(still = { reads++; Pattern.TOP.bitmap() })
+        val tagger = PictureTagger(readyStore(), Library(emptyList()), pictures, scope, openModel = { _, _ -> PatternModel(analysed) })
+        withTimeout(5_000) { tagger.ready.first { it } }
+
+        val known = tagger.known(post("fresh").id)
+
+        assertEquals(listOf(null, 0, emptyList<Pattern>()), listOf(known, reads, analysed))
     }
 
     private fun backfill(tagger: PictureTagger, library: Library) = LibraryVisionBackfill(tagger, library, hot = { false })

@@ -69,13 +69,21 @@ data class SearchTermGroup(
     }
 }
 
+@RequiresOptIn(
+    message = "minScore is a retired filter that only query stores and the query hash read.",
+    level = RequiresOptIn.Level.ERROR,
+)
+@Retention(AnnotationRetention.BINARY)
+@Target(AnnotationTarget.PROPERTY)
+annotation class RetiredQueryField
+
 data class Query(
     val mode: QueryMode,
     val includeTermGroups: List<SearchTermGroup>,
     val excludeTerms: List<SearchTerm>,
     val sort: SortMode,
     val dateRange: DateRange?,
-    val minScore: Int?,
+    @RetiredQueryField val minScore: Int?,
     val media: MediaFilter = MediaFilter.ANY,
 ) {
     val includeTerms: List<SearchTerm> = includeTermGroups.flatMap(SearchTermGroup::terms)
