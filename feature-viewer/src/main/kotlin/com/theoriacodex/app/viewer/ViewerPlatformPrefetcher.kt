@@ -73,8 +73,13 @@ suspend fun prefetchViewerMedia(
             )
         }
     }
-    // The Viewer page's own request, so a decode kept in memory is the hardware bitmap the page then shows.
-    val request = buildViewerImageRequest(context, location, media.key.postId.source).let { request ->
+    // The Viewer page's own request, so a decode kept in memory is the hardware bitmap the page then shows. A still
+    // decodes as a vertical page does; a horizontal page, smaller, is drawn from that same larger bitmap.
+    val source = media.key.postId.source
+    val request = when (media.kind) {
+        ViewerMediaKind.IMAGE -> buildViewerPageRequest(context, location, source)
+        else -> buildViewerImageRequest(context, location, source)
+    }.let { request ->
         when {
             keepDecodedInMemory -> request
             // A far neighbour may reuse an existing memory entry but never adds one. Only its download matters,

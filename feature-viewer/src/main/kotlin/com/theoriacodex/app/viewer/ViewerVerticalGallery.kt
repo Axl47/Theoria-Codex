@@ -337,6 +337,8 @@ private fun VerticalGalleryPage(
                     onRequestMediaRecovery = onRequestMediaRecovery,
                     onPainted = { size -> onPainted(size.width, size.height) },
                     spinnerModifier = Modifier.onVisiblePart(gallery.list, index),
+                    // Laid out in a borrowed shape until it paints; sizing the decode from that would blur a tall strip.
+                    fillWidth = true,
                 )
             }
             (sharedError ?: failed?.let { ViewerMediaError.Recoverable(key, it) })?.let { error ->
