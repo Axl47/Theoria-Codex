@@ -138,7 +138,7 @@ fun CodexDetailScreen(
     val tagFilter = rememberCodexTagFilter(codexId, posts, settled = !loading, tagSheetRequested, onTagSheetRequestHandled)
     val feed = rememberCodexDetailFeed(codexId, posts, filters, durations, related, sortMode, tagFilter.selected)
     val applyFilters = { updated: CodexCollectionFilters -> onFabRestoreStateChange(fabRestoreState.withCollectionFilters(updated)) }
-    CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, applyFilters)
+    CodexFilterReconciliationEffect(filters, sourceOptions, supportsLanguage, supportsFullColor, settled = !loading, applyFilters)
     val resolveAllDurations = feed.durationFilterActive || sortMode.usesDuration
     LaunchedEffect(resolveAllDurations) { durations.onFilterChanged(resolveAllDurations) }
     DurationRouteEnvironmentEffect(gridState, durations.onEnvironmentChanged)
@@ -338,9 +338,11 @@ private fun CodexFilterReconciliationEffect(
     sourceOptions: List<SourceKey>,
     supportsLanguage: Boolean,
     supportsFullColor: Boolean,
+    settled: Boolean,
     onFiltersChange: (CodexCollectionFilters) -> Unit,
 ) {
-    LaunchedEffect(sourceOptions, supportsLanguage, supportsFullColor) {
+    LaunchedEffect(sourceOptions, supportsLanguage, supportsFullColor, settled) {
+        if (!settled) return@LaunchedEffect
         val reconciled = filters.copy(
             source = filters.source?.takeIf(sourceOptions::contains),
             language = filters.language.takeIf { supportsLanguage } ?: CodexLanguageFilter.ANY,
