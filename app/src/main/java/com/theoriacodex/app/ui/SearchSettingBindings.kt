@@ -3,6 +3,7 @@ package com.theoriacodex.app.ui
 import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
+import com.theoriacodex.app.series.openExtensions
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsPage
 import com.theoriacodex.app.settings.SettingsSheet
@@ -29,6 +30,8 @@ internal sealed interface SettingBinding {
 
     data object WhatsNew : SettingBinding
 
+    data object Extensions : SettingBinding
+
     /** Search offers this one itself, beside the sheet it opens. */
     data object InSearch : SettingBinding
 
@@ -49,6 +52,7 @@ internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
     put(SettingDestinations.HiddenTags.id, SettingBinding.HiddenTags)
     put(SettingDestinations.SourceMix.id, SettingBinding.InSearch)
     put(SettingDestinations.Sites.id, SettingBinding.Settings(SettingsPage.SITES))
+    put(SettingDestinations.Extensions.id, SettingBinding.Extensions)
     put(SettingDestinations.Downloads.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.DOWNLOADS))
     put(SettingDestinations.Controls.id, SettingBinding.Settings(SettingsPage.HOME, SettingsSheet.CONTROLS))
     put(SettingDestinations.PictureTags.id, SettingBinding.Settings(SettingsPage.PICTURE_TAGS))
@@ -61,7 +65,8 @@ internal val SETTING_BINDINGS: Map<String, SettingBinding> = buildMap {
 /**
  * The search box's entry for every setting definition as it stands in [settings]: toggles switch in place
  * through [dispatch], choices show their current value, and picking a choice or destination calls [open]
- * with its binding. [hidden] leaves out definitions this build cannot open (Diagnostics without a report, series checks without extensions).
+ * with its binding. [hidden] leaves out definitions this build cannot open (Diagnostics without a report, Extensions and
+ * series checks without extensions).
  */
 internal fun searchSettingEntries(
     settings: AppSettings,
@@ -95,5 +100,6 @@ internal fun TheoriaShell.openSettingBinding(binding: SettingBinding, openHidden
     is SettingBinding.Settings -> openSettings(binding.page, binding.sheet)
     SettingBinding.HiddenTags -> openHiddenTags()
     SettingBinding.WhatsNew -> owners.settings.onAction(SettingsAction.OpenChangelog)
+    SettingBinding.Extensions -> openExtensions()
     SettingBinding.Switch, SettingBinding.InSearch, SettingBinding.InViewer -> Unit
 }

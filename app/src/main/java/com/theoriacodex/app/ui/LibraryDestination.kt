@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,6 +42,7 @@ import com.theoriacodex.app.ui.routes.CodexDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.RecentsDestinationState
 import com.theoriacodex.app.ui.routes.RecentsDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.SavedCodexRoute
+import com.theoriacodex.app.ui.routes.SavedPostMenu
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
@@ -50,7 +52,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The Library tab: one header (title, the section's actions, the Settings gear) over Codices, Saved
- * or History. Only the chosen section is composed, so tab reselect scrolls whichever one shows.
+ * or History. Only the chosen section is composed, so tab reselect scrolls whichever one shows; the others keep
+ * their saved state, so each returns where it was left.
  */
 @Composable
 internal fun LibraryDestination(shell: TheoriaShell) {
@@ -63,11 +66,15 @@ internal fun LibraryDestination(shell: TheoriaShell) {
             transfers = { LibraryTransfersHeaderButton(shell.transfers) }, actions = actions,
         )
     }
+    // Each section keeps its saved state (scroll positions) while another one shows.
+    val sectionStates = rememberSaveableStateHolder()
     Box(Modifier.fillMaxSize()) {
-        when (section) {
-            LibrarySection.Codices -> CodexLibraryDestination(shell, actionCodexId = null, header = header)
-            LibrarySection.Saved -> SavedLibraryDestination(shell, header)
-            LibrarySection.History -> RecentsDestination(shell, header)
+        sectionStates.SaveableStateProvider(section.name) {
+            when (section) {
+                LibrarySection.Codices -> CodexLibraryDestination(shell, actionCodexId = null, header = header)
+                LibrarySection.Saved -> SavedLibraryDestination(shell, header)
+                LibrarySection.History -> RecentsDestination(shell, header)
+            }
         }
         val undoAnchor = when (section) {
             LibrarySection.Codices -> CodexUndoAnchors.Library
@@ -94,10 +101,18 @@ private fun SavedLibraryDestination(shell: TheoriaShell, header: LibrarySectionH
         onOpenViewer = shell::openCodexViewer,
         onOpenCodexActions = shell.overlays::openCollectionActions,
         resolvePost = { shell.viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
+        postMenu = shell.savedPostMenu(),
         onToggleLike = { shell.toggleLikeAndSyncCodex(it) },
         header = { Box(Modifier.padding(horizontal = 16.dp).padding(top = 12.dp)) { header {} } },
     )
 }
+
+/** A held Saved post's menu, for Library's Saved section and the standalone Saved route. */
+internal fun TheoriaShell.savedPostMenu() = SavedPostMenu(
+    saveToDevice = ::requestSaveToDevice,
+    saveToCodex = { post -> requestSaveToCodex(post) },
+    goToSearch = { navigation.goToTab(TopLevelDestination.Search) },
+)
 
 private fun TheoriaShell.clearRecents(target: RecentsClearTarget, state: RecentsDestinationState, undo: UndoSlot) {
     undo.scope.launch {

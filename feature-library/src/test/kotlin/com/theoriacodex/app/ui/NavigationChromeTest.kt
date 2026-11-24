@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -62,7 +63,12 @@ class NavigationChromeTest {
         compose.onNodeWithText("3").assertExists()
 
         compose.onNodeWithContentDescription("Clear filters").performClick()
-        compose.onNodeWithText("Undo").performClick()
+        // TalkBack reads only "Undo", announced as it appears.
+        compose.onNodeWithText("Undo")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .performClick()
         compose.runOnIdle {
             assertEquals(1, restored)
             assertEquals(3, labels.size)

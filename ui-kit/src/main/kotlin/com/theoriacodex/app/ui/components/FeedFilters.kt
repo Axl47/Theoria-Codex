@@ -39,7 +39,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -127,12 +129,16 @@ fun FeedFilterFab(
         color = if (active) colors.primaryContainer else colors.surfaceContainerHigh,
         contentColor = if (active) colors.onPrimaryContainer else colors.onSurface,
         shadowElevation = 6.dp,
-        modifier = modifier.semantics {
-            stateDescription = if (active) "Filters active" else "No active filters"
-        },
+        modifier = modifier.feedFilterSemantics(active, undoing = pendingUndo != null),
     ) {
         FeedFilterContent(labels, contentDescription, scrollSignal, pendingUndo != null) { undo = onClear() }
     }
+}
+
+/** Undo reads as just "Undo", and is announced as it replaces the clear button that had focus. */
+private fun Modifier.feedFilterSemantics(active: Boolean, undoing: Boolean) = semantics {
+    if (undoing) liveRegion = LiveRegionMode.Polite
+    else stateDescription = if (active) "Filters active" else "No active filters"
 }
 
 @Composable
@@ -152,7 +158,7 @@ private fun FeedFilterContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.FilterList, contentDescription)
+                Icon(Icons.Default.FilterList, contentDescription.takeUnless { canUndo })
                 Text(if (canUndo) "Undo" else "Filter", style = MaterialTheme.typography.labelLarge)
             }
         }
@@ -180,7 +186,7 @@ private fun ActiveFilterContent(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 200.dp),
         )
-        IconButton(onClick = onClear, modifier = Modifier.size(40.dp)) {
+        IconButton(onClick = onClear, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Default.Close, "Clear filters", Modifier.size(18.dp))
         }
     }

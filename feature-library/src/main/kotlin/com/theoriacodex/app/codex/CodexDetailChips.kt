@@ -3,7 +3,7 @@ package com.theoriacodex.app.codex
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,9 +27,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.tags.TagCount
@@ -155,34 +156,28 @@ internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Mo
     }
 }
 
-/** "Tags" until tags are chosen, then the chosen tags with a button that clears them. */
+/** "Tags" until tags are chosen, then the chosen tags followed by a full-size button that clears them. */
 @Composable
 private fun CodexTagFilterChip(selectedTags: List<String>, onOpen: () -> Unit, onClear: () -> Unit) {
     val active = selectedTags.isNotEmpty()
-    FilterChip(
-        selected = active,
-        onClick = onOpen,
-        label = {
-            Text(
-                if (active) selectedTags.joinToString(", ") else "Tags",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 200.dp),
-            )
-        },
-        leadingIcon = { Icon(Icons.Default.Sell, contentDescription = null, Modifier.size(18.dp)) },
-        trailingIcon = if (active) {
-            {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Clear tags",
-                    modifier = Modifier.size(18.dp).clickable(onClickLabel = "Clear tags", role = Role.Button, onClick = onClear),
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(
+            selected = active,
+            onClick = onOpen,
+            label = {
+                Text(
+                    if (active) selectedTags.joinToString(", ") else "Tags",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 200.dp),
                 )
-            }
-        } else {
-            null
-        },
-    )
+            },
+            leadingIcon = { Icon(Icons.Default.Sell, contentDescription = null, Modifier.size(18.dp)) },
+        )
+        if (active) {
+            IconButton(onClick = onClear) { Icon(Icons.Default.Close, contentDescription = "Clear tags", Modifier.size(18.dp)) }
+        }
+    }
 }
 
 @Composable

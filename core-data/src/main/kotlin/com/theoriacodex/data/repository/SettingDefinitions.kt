@@ -55,7 +55,7 @@ object SettingToggles {
         read = { it.viewer.instantSeek }, write = { settings, on -> settings.copy(viewer = settings.viewer.copy(instantSeek = on)) },
     )
     val InvertScrollDirection = SettingToggle(
-        "invert-scroll", "Invert Scroll Direction", listOf("reverse", "swipe"), "Reverse swipes in multi-media posts, except galleries given their own reading mode.",
+        "invert-scroll", "Invert Scroll Direction", listOf("reverse", "swipe"), "Reverse swipes in galleries, except those given their own reading mode.",
         read = { it.viewer.invertMultiImageScrollDirection },
         write = { settings, on -> settings.copy(viewer = settings.viewer.copy(invertMultiImageScrollDirection = on)) },
     )
@@ -125,16 +125,19 @@ object SettingDestinations {
     val HiddenTags = SettingDestination("hidden-tags", "Hidden tags", listOf("blacklist", "blocked", "mute"))
     val SourceMix = SettingDestination("source-mix", "Source mix", listOf("weights", "sources"))
     val Sites = SettingDestination("sites", "Sites", listOf("sources", "accounts", "sign in", "log in"))
+
+    /** Only in a build with extensions. */
+    val Extensions = SettingDestination("extensions", "Extensions", listOf("series", "manga", "repositories", "plugins"))
     val Downloads = SettingDestination("downloads", "Downloads", listOf("download", "quality", "metered", "roaming"))
     val Controls = SettingDestination("controls", "Controls", listOf("gestures", "swipes"))
     val PictureTags = SettingDestination("picture-tags", "Picture tags", listOf("tagger", "model", "on-device", "image", "ai"))
     val Storage = SettingDestination("storage", "Storage & caching", listOf("cache", "space", "clear"))
-    val Backup = SettingDestination("backup", "Backup", listOf("restore", "export", "import"))
+    val Backup = SettingDestination("backup", "Backup", listOf("restore", "export", "import", "mihon", "tachiyomi", "aniyomi"))
     val WhatsNew = SettingDestination("whats-new", "What's new", listOf("changelog", "release notes", "version"))
     val Diagnostics = SettingDestination("diagnostics", "Diagnostics report", listOf("diagnostics", "logs", "errors"))
 
     val all: List<SettingDestination> = listOf(
-        Home, Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Downloads, Controls, PictureTags, Storage, Backup, WhatsNew,
+        Home, Stats, ShareStats, CompareStats, HiddenTags, SourceMix, Sites, Extensions, Downloads, Controls, PictureTags, Storage, Backup, WhatsNew,
         Diagnostics,
     )
 }

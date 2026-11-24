@@ -25,6 +25,7 @@ import com.theoriacodex.app.media.DownloadRemovalRows
 import com.theoriacodex.app.media.LocalCodexOfflineRemovals
 import com.theoriacodex.app.ui.undo.UndoLifetime
 import kotlinx.coroutines.launch
+import com.theoriacodex.domain.series.SeriesId
 
 /**
  * The offline ring's state for every Codex kept offline, its pending removals, and what the ring and the Codex menu
@@ -58,7 +59,12 @@ internal fun LibraryTransfersHeaderButton(tools: LibraryTransferTools) {
 
 /** The open offline and downloads sheet, wired to the Activity-owned offline and download owners. */
 @Composable
-internal fun LibraryTransfersSheetHost(tools: LibraryTransferTools, onOpenPost: suspend (PostDownloadItem) -> Unit) {
+internal fun LibraryTransfersSheetHost(
+    tools: LibraryTransferTools,
+    onOpenPost: suspend (PostDownloadItem) -> Unit,
+    onOpenCodex: (String) -> Unit,
+    onOpenSeries: (SeriesId) -> Unit,
+) {
     val offline by tools.offline.state.collectAsStateWithLifecycle()
     val batches by tools.downloads.batches.collectAsStateWithLifecycle()
     val pendingDownloads by tools.downloadRemovals.pending.collectAsStateWithLifecycle()
@@ -69,6 +75,14 @@ internal fun LibraryTransfersSheetHost(tools: LibraryTransferTools, onOpenPost: 
             remove = { owner -> tools.offline.removeDeferred(owner) },
             removeAll = tools.offline::removeAll,
             actOnRemoval = tools.offline::actOnRemoval,
+            openCodex = { id ->
+                tools.showDownloads = false
+                onOpenCodex(id)
+            },
+            openSeries = { id ->
+                tools.showDownloads = false
+                onOpenSeries(id)
+            },
         )
     }
     LibraryTransfersSheet(

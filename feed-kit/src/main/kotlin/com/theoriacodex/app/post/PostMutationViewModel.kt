@@ -76,7 +76,7 @@ class PostMutationViewModel(
         scope.launch {
             commands.withLock {
                 val result = runCatchingPreservingCancellation { change() }
-                if (result.isFailure) feedback.add("Could not update favorite tags. Please try again.")
+                if (result.isFailure) feedback.add("Could not update saved tags. Please try again.")
             }
         }
     }

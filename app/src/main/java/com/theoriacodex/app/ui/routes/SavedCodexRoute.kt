@@ -49,6 +49,7 @@ import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.codex.usesDuration
 import com.theoriacodex.app.media.MediaDurationStates
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
+import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.feedDurations
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
@@ -84,6 +85,7 @@ internal fun SavedCodexRoute(
     onOpenViewer: (String, List<Post>, Int) -> Unit,
     onOpenCodexActions: (String) -> Unit,
     resolvePost: suspend (PostId) -> Post?,
+    postMenu: SavedPostMenu,
     onToggleLike: (Post) -> Unit = {},
     header: @Composable () -> Unit,
 ) {
@@ -107,7 +109,7 @@ internal fun SavedCodexRoute(
                     item(key = child.codexId) {
                         SavedCodexShelf(child, counts.getValue(child.codexId), news[child.codexId].orEmpty(), data, sources, features, restoreRegistry, { scroll.isScrollInProgress },
                             SavedShelfActions({ onOpenCodex(child.codexId) }, { onOpenCodexActions(child.codexId) },
-                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike))
+                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onToggleLike, postMenu))
                     }
                 }
             }
@@ -124,13 +126,21 @@ internal fun SavedBackHeader(onBack: () -> Unit) {
     }
 }
 
-/** What a Saved shelf can do: open its collection or its actions, open a post, and like. */
+/** What a held Saved post's menu can do besides liking. */
+internal class SavedPostMenu(
+    val saveToDevice: (Post) -> Unit,
+    val saveToCodex: (Post) -> Unit,
+    val goToSearch: () -> Unit,
+)
+
+/** What a Saved shelf can do: open its collection or its actions, open a post or its menu, and like. */
 private class SavedShelfActions(
     val open: () -> Unit,
     val openActions: () -> Unit,
     val openViewer: (List<Post>, Int) -> Unit,
     val resolvePost: suspend (PostId) -> Post?,
     val toggleLike: (Post) -> Unit,
+    val postMenu: SavedPostMenu,
 )
 
 @Composable
@@ -153,8 +163,7 @@ private fun SavedCodexShelf(
     val durationStates by owner.states.collectAsStateWithLifecycle()
     CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, features, restore, durationStates) { state ->
         SavedCodexSection(state, child.codexId, child.name, count, news, restore, sort,
-            owner, durationStates, sources, parentScrolling,
-            actions.open, actions.openActions, actions.openViewer, actions.resolvePost, actions.toggleLike)
+            owner, durationStates, sources, parentScrolling, actions)
     }
 }
 
@@ -171,11 +180,7 @@ private fun SavedCodexSection(
     durationStates: MediaDurationStates,
     sources: SourceDependencies,
     parentScrolling: () -> Boolean,
-    onOpen: () -> Unit,
-    onLongPress: () -> Unit,
-    onOpenViewer: (List<Post>, Int) -> Unit,
-    resolvePost: suspend (PostId) -> Post?,
-    onToggleLike: (Post) -> Unit,
+    actions: SavedShelfActions,
 ) {
     SideEffect { owner.synchronize(id, state.posts, state.resolveUnknownAnimatedDurations) }
     val filters = remember(restore) { restore.savedCollectionFilters() }
@@ -193,31 +198,40 @@ private fun SavedCodexSection(
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     val postIds = remember(posts) { posts.map { it.id } }
-    // Followed and saved-search sections are live feeds, so only they can like.
+    // Followed and saved-search sections are live feeds, so only their card hearts like; the hold menu, like Codex
+    // detail's, can also unlike from Likes.
     val durations = remember(owner, durationStates) { owner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations) }
     val cards = rememberFeedCardEnvironment(
         sources.pixivUgoiraClient, state.likedPostIds, emptyMap(), durations,
-        onToggleLike.takeIf { state.followedOwner != null || state.savedSearchOwner != null }, resolvePost,
+        actions.toggleLike.takeIf { liveOwner != null }, actions.resolvePost,
     )
+    var menuPost by remember { mutableStateOf<Post?>(null) }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
         PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
-            onOpen, { liveOwner?.retry() }, onLongPress,
+            actions.open, { liveOwner?.retry() }, actions.openActions,
             icon = savedCodexChildIcon(id),
             countSuffix = savedCodexCountSuffix(id, count),
-            onMore = onLongPress,
+            onMore = actions.openActions,
             highlight = newPostsLabel(news.size)) {
             LazyRow(state = row, modifier = Modifier.height(rowHeight), contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(posts, key = { _, post -> "${post.id.source.id}:${post.id.sourcePostId}" }) { index, post ->
                     Box(Modifier.width(cardWidth)) {
                         FeedPostCard(post = post, environment = cards,
-                            onClick = { onOpenViewer(posts, index) }, onLongPress = null,
+                            onClick = { actions.openViewer(posts, index) }, onLongPress = { menuPost = post },
                             showSourceBadge = true, showTitle = false,
                             mediaAspectRatio = POST_SHELF_MEDIA_ASPECT_RATIO)
                     }
                 }
-                if (feed?.canLoadMore == true) item(key = "more") { TextButton(onClick = onOpen) { Text("View all") } }
+                if (feed?.canLoadMore == true) item(key = "more") { TextButton(onClick = actions.open) { Text("View all") } }
             }
         }
+    }
+    menuPost?.let { post ->
+        val menu = actions.postMenu
+        FeedPostActionSheet(
+            post, state.creatorBrowsingSources, { menuPost = null }, menu.saveToDevice, menu.saveToCodex, menu.goToSearch,
+            liked = post.id in state.likedPostIds, onToggleLike = actions.toggleLike,
+        )
     }
 }

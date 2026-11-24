@@ -55,9 +55,7 @@ import com.theoriacodex.app.post.PostTagSelection
 import com.theoriacodex.domain.model.Query
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
 import com.theoriacodex.app.search.alternativesText
 import com.theoriacodex.app.search.label
@@ -371,7 +369,7 @@ fun FavoriteTagActionGrid(
     entries: List<FavoriteTagEntry>,
     tagVideoCountProvider: (SourceKey, String) -> Int? = LocalPostTagCounts.current.videoCount,
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = LocalPostTagCounts.current.fetchVideoCounts,
-    emptyText: String = "No favorite tags",
+    emptyText: String = "No saved tags",
     onAddTag: (FavoriteTagEntry) -> Unit,
     onRemoveTag: (FavoriteTagEntry) -> Unit,
     onRenameTag: ((FavoriteTagEntry) -> Unit)? = null,
@@ -475,18 +473,6 @@ private fun LazyListScope.postTagList(
     }
 }
 
-/** Closes the open tag list, so it only shows when the tags do. */
-private fun LazyListScope.postTagHint() {
-    item(key = "hint") {
-        Text(
-            text = "Tap to include, exclude, or clear. Hold to save.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-    }
-}
-
 /** The "Your search" tray under the tag list. */
 @Composable
 private fun PostTagQueryTray(
@@ -497,7 +483,7 @@ private fun PostTagQueryTray(
     confirmation: TrayConfirmation?,
 ) = QueryTray(
     title = "Your search",
-    emptyText = "Tap a tag to start a search.",
+    emptyText = "No tags",
     query = draft,
     targetGroup = targetGroup,
     onTargetGroup = onTargetGroup,
@@ -620,8 +606,6 @@ private fun LazyListScope.postTagSections(
     } else {
         if (filter.available && filter.open) item(key = "tag-filter") { PostTagFilterField(filter) }
         postTagList(groups, expandedGroups, onExpandGroup, filter, chip)
-        // Where a tap forks a trail, the hint about tapping to edit the query would mislead.
-        if (groups.isNotEmpty() && sheetExtras?.onFork == null) postTagHint()
     }
     sheetExtras?.afterTags?.invoke(this)
 }
@@ -673,7 +657,6 @@ private fun FavoriteTagActionCell(
             TagActionPill(
                 actionLabel = "Include $tag in Search",
                 icon = { Text("+", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                selected = false,
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
             )
@@ -681,20 +664,13 @@ private fun FavoriteTagActionCell(
                 TagActionPill(
                     actionLabel = "Name $tag",
                     icon = { Icon(imageVector = Icons.Default.Edit, contentDescription = null) },
-                    selected = false,
                     onClick = rename,
                     modifier = Modifier.weight(1f),
                 )
             }
             TagActionPill(
-                actionLabel = "Remove $tag from favorites",
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Remove favorite tag",
-                    )
-                },
-                selected = false,
+                actionLabel = "Remove $tag from saved tags",
+                icon = { Icon(imageVector = Icons.Default.Delete, contentDescription = null) },
                 onClick = onRemove,
                 modifier = Modifier.weight(1f),
             )
@@ -729,28 +705,21 @@ fun TagSelectionSurface(
     }
 }
 
+/** A saved tag's one-shot action button. */
 @Composable
 private fun TagActionPill(
     actionLabel: String,
-    selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: @Composable () -> Unit,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
     Surface(
         modifier = modifier
-            .sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
-            this.selected = selected
-            contentDescription = actionLabel
-            stateDescription = if (selected) "Selected" else "Not selected"
-        }.clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick),
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics { contentDescription = actionLabel }
+            .clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick),
         shape = RoundedCornerShape(999.dp),
-        color = if (selected) {
-            accent.copy(alpha = 0.24f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
     ) {
         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), Alignment.Center) { icon() }
     }
