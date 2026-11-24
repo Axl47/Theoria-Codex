@@ -11,43 +11,47 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.BackupPreview
 import com.theoriacodex.domain.series.languageName
 
+/**
+ * Back up and Restore. Backing up opens a sheet with the backup's choices; Restore also reads Mihon and Aniyomi
+ * backups (`.tachibk`), which the page says because nothing else would tell the user.
+ */
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
-    SwitchRow(
-        title = "Include History and statistics",
-        checked = state.includeRecents,
-        enabled = !state.busy,
-        contentPadding = PaddingValues(0.dp),
-        onCheckedChange = onIncludeRecents,
-    )
-    Text(
-        "Logins and downloaded media are not included.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    var choosing by rememberSaveable { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onExport, enabled = !state.busy, modifier = Modifier.weight(1f)) {
-            Text("Back up profiles")
+        OutlinedButton(onClick = { choosing = true }, enabled = !state.busy, modifier = Modifier.weight(1f)) {
+            Text(BACK_UP_LABEL)
         }
         OutlinedButton(onClick = onImport, enabled = !state.busy, modifier = Modifier.weight(1f)) {
             Text("Restore backup")
         }
     }
+    Text(
+        "Also restores Mihon and Aniyomi backups.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     state.operation?.let { operation ->
         Text(
             text = when (operation) {
@@ -58,7 +62,40 @@ fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, on
             style = MaterialTheme.typography.bodySmall,
         )
     }
+    if (choosing) {
+        BackupSheet(state.includeRecents, onIncludeRecents, onDismiss = { choosing = false }) {
+            choosing = false
+            onExport()
+        }
+    }
 }
+
+/** What a backup holds, then the button that picks where to save it. */
+@Composable
+private fun BackupSheet(includeRecents: Boolean, onIncludeRecents: (Boolean) -> Unit, onDismiss: () -> Unit, onBackUp: () -> Unit) {
+    ExpandedBottomSheet(onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(BACK_UP_LABEL, style = MaterialTheme.typography.titleLarge)
+            SwitchRow(
+                title = "Include History and statistics",
+                checked = includeRecents,
+                contentPadding = PaddingValues(0.dp),
+                onCheckedChange = onIncludeRecents,
+            )
+            Text(
+                "Logins and downloaded media are not included.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onBackUp, modifier = Modifier.fillMaxWidth()) { Text("Back up") }
+        }
+    }
+}
+
+private const val BACK_UP_LABEL = "Back up profiles"
 
 /** Daily backup to a folder; compact because it is checked rarely and only needs attention on failure. */
 @Composable
