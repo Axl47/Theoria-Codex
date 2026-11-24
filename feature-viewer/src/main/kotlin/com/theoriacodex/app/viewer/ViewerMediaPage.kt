@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.media.awaitsVideoStream
+import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -190,13 +191,20 @@ private class ViewerMediaInteractions {
 private const val VIEWER_HOLD_PLAYBACK_RATE = 2f
 
 /**
- * Space above animated and video media in portrait, clear of the top bar; stills fill the page. A video whose stream is
- * still resolving shows its poster as a still, and keeps the gap so it doesn't shift when the stream arrives.
+ * Space above animated and video media in portrait, clear of the top bar; stills fill the page. A video still resolving
+ * shows its poster as a still, and keeps the gap so it doesn't shift when the stream arrives.
  */
 private fun viewerMediaTopGap(post: Post, mediaIndex: Int, animated: Boolean, layout: ViewerMediaLayout): Dp {
-    val playsMotion = animated || (mediaIndex == 0 && post.awaitsVideoStream)
+    val playsMotion = animated || (mediaIndex == 0 && post.awaitsMotion)
     return if (playsMotion && !layout.edgeToEdge) 40.dp else 0.dp
 }
+
+/**
+ * A post whose moving media resolves only after it opens, so its first page shows a still poster until then: a listing
+ * that gave just a preview and a running time, or one from a source that only serves video.
+ */
+internal val Post.awaitsMotion: Boolean
+    get() = awaitsVideoStream || (full == null && media.isEmpty() && isAnimatedPost(this))
 
 @Composable
 private fun ViewerHoldSpeedLabel(visible: Boolean, modifier: Modifier) {
