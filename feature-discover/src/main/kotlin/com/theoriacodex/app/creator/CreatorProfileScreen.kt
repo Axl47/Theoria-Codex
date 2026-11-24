@@ -159,6 +159,7 @@ fun CreatorProfileScreen(
     selectedActionPost?.let { post ->
         FeedPostActionSheet(
             post, { selectedActionPost = null }, onToggleLike = onToggleLike, onShowRelated = { related.controller.show(post) },
+            shownCreator = creator,
         )
     }
 }
