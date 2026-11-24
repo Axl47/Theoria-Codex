@@ -181,8 +181,9 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
                 import.newRepos.reposNotice()?.let { Text(it) }
-                import.missingNotice()?.let { Text(it) }
+                // Ones to turn on first, so a count of "other" missing extensions reads against them.
                 import.turnOnNotice()?.let { Text(it) }
+                import.missingNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
             }
         },
