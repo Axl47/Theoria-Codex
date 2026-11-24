@@ -76,8 +76,8 @@ class AnimeViewerLiveTest {
     fun aRestartedEpisodeResumesWhereItWasLeft() {
         val (_, episode) = watch()
         val before = hand.awaitPosition("playback past ${RESTART_FROM_MS.seconds()} s") { it >= RESTART_FROM_MS }
-        hand.press("Info", By.desc(Pattern.compile("Info.*")))
-        live.tap("Start over", By.desc(START_OVER))
+        hand.press("More actions", By.desc("More actions"))
+        live.tap("Start over", By.text(START_OVER))
         val restarted = hand.awaitPosition("\"$episode\" to start over") { it < PLAYED_MS }
         hand.awaitPosition("playback past ${PARTWAY_MS.seconds()} s") { it >= PARTWAY_MS }
         live.report("restart", "\"$episode\" at ${before.seconds()} s started over at ${restarted.seconds()} s")

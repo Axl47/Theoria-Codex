@@ -24,13 +24,14 @@ import kotlin.math.roundToInt
 @Composable
 internal fun PlaybackRateSlider(
     rate: ViewerPlaybackRate,
+    modifier: Modifier = Modifier.width(280.dp),
     onRateSelected: (ViewerPlaybackRate) -> Unit,
 ) {
     val rates = ViewerPlaybackRate.entries
     val selectedIndex = rates.indexOf(rate)
     val activeColor = MaterialTheme.colorScheme.primary
     val inactiveColor = MaterialTheme.colorScheme.outlineVariant
-    Column(Modifier.width(280.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("Speed: ${rate.menuLabel}", style = MaterialTheme.typography.labelLarge)
         Slider(
             value = selectedIndex.toFloat(),

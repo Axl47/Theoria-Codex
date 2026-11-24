@@ -1,15 +1,29 @@
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.theoriacodex.app.viewer
 
+import android.content.Context
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
+import android.view.View
+import android.view.ViewGroup
+import android.view.accessibility.CaptioningManager
+import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -19,12 +33,21 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +63,7 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.snapshotFlow
 import com.theoriacodex.app.media.isMediaNetworkMetered
+import kotlin.math.roundToInt
 
 /** Each mounted renderer leases its player and owns its surface/progress; the route sends commands. */
 @Composable
@@ -97,8 +121,8 @@ internal fun ViewerVideoPlayer(
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
-    FollowViewerActiveTracks(state.player, controls.isActive)
-    ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, events)
+    FollowViewerActiveTracks(state.player, controls.isActive, loading = state.loading && !state.failed)
+    ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
@@ -107,9 +131,11 @@ internal fun ViewerVideoPlayer(
 }
 
 /** One player's state, from its [ViewerVideoKey]; [pending] starts as its recovery's opening ([ViewerVideoRecovery.opening]). */
-private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
+internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     var player by mutableStateOf<ExoPlayer?>(null)
     var view: PlayerView? = null
+    var subtitleView: SubtitleView? = null
+    var cues: List<Cue> = emptyList()
     var loading by mutableStateOf(true)
     var hasRenderedFirstFrame by mutableStateOf(false)
     /** The recovery under way ([ViewerVideoStreamRecovery]); null while it plays, [ViewerRecoveryDecision.Fail] for good. */
@@ -121,6 +147,7 @@ private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     var started: ViewerStartedPlayback? = null
     var duration by mutableLongStateOf(0L)
     var position by mutableLongStateOf(0L)
+    var bufferedPosition by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
     var actuallyPlaying by mutableStateOf(false)
     /** The decoded frames' shape once the player knows it. */
@@ -140,6 +167,8 @@ private class ViewerVideoState(pending: ViewerRecoveryDecision?) {
             active.videoSize.let { size -> viewerAspectRatio(size.displayWidth, size.height) }
                 ?.let { aspectRatio = it }
             if (!scrubbing) position = active.currentPosition.coerceAtLeast(0L)
+                .let { if (duration > 0L) it.coerceAtMost(duration) else it }
+            bufferedPosition = active.bufferedPosition.coerceAtLeast(0L)
                 .let { if (duration > 0L) it.coerceAtMost(duration) else it }
         }
     }
@@ -230,6 +259,7 @@ private fun ViewerVideoBinding(
         player.addListener(seeks)
         state.started = started
         state.player = player
+        state.setCues(player.currentCues.cues)
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
             started.resumeMs()?.let { latestOnRelease(it, started.releaseProgress()) }
@@ -238,6 +268,7 @@ private fun ViewerVideoBinding(
             player.removeListener(listener)
             state.actuallyPlaying = false
             state.setPlaying(false)
+            state.setCues(emptyList())
             if (state.player === player) {
                 state.player = null
                 state.started = null
@@ -245,13 +276,14 @@ private fun ViewerVideoBinding(
             runCatching { state.view?.player = null }
             pool.recycle(lease)
             state.view = null
+            state.subtitleView = null
         }
     }
 }
 
 /** Only the selected page owns system playback controls; a swipe target merely buffers. */
 @Composable
-private fun ViewerVideoSystemBindings(state: ViewerVideoState, active: Boolean, events: ViewerRendererEvents) {
+private fun ViewerVideoSystemBindings(state: ViewerVideoState, active: Boolean, fillScreen: Boolean, events: ViewerRendererEvents) {
     val player = state.player
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
@@ -261,13 +293,14 @@ private fun ViewerVideoSystemBindings(state: ViewerVideoState, active: Boolean, 
             val session = createViewerMediaSession(context, player) { latestEvents.onPlaybackIntentChanged(it) }
             java.io.Closeable { session.release() }
         } else null
+        onDispose { binding?.close() }
+    }
+    // In Fill mode PlayerView fills the 20:9 screen while PiP uses the 16:9 ratio; pass a null sourceRectHint so Android does not letterbox the transition.
+    DisposableEffect(player, active, fillScreen) {
         val pictureInPicture = if (active && player != null) {
-            context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player) { state.view }
+            context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player) { state.view.takeUnless { fillScreen } }
         } else null
-        onDispose {
-            pictureInPicture?.close()
-            binding?.close()
-        }
+        onDispose { pictureInPicture?.close() }
     }
 }
 
@@ -310,8 +343,18 @@ private fun viewerVideoListener(
             if (state.player !== player) return
             state.handlePlayingChanged(isPlaying, events)
         }
+        override fun onCues(cueGroup: CueGroup) {
+            if (state.player !== player) return
+            state.setCues(cueGroup.cues)
+        }
 
     }
+}
+
+internal fun ViewerVideoState.setCues(rawCues: List<Cue>) {
+    val sanitized = rawCues.map(::sanitizeViewerSubtitleCue)
+    cues = sanitized
+    subtitleView?.setCues(sanitized)
 }
 
 private fun ViewerVideoState.handlePlayingChanged(isPlaying: Boolean, events: () -> ViewerRendererEvents) {
@@ -556,26 +599,129 @@ private fun ViewerVideoContent(
     loadingPreview: (@Composable () -> Unit)?,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
-    Box(modifier.testTag(viewerVideoTestTag(postId)).then(diagnostics?.let {
-        Modifier.semantics { stateDescription = it.stateDescription; contentDescription = it.contentDescription }
-    } ?: Modifier), contentAlignment = Alignment.Center) {
-        // The decoded frame's shape wins over post metadata, which can disagree with the stream and would
-        // letterbox the video inside its own bounds (and inside the PiP window, which takes those bounds).
-        AndroidView(
-            modifier = Modifier.viewerFittedMedia(state.aspectRatio ?: aspectRatio).then(mediaModifier),
-            factory = { context -> createTexturePlayerView(context).apply { useController = false; player = state.player; state.view = this } },
-            update = { view ->
-                state.view = view
-                view.useController = false
-                view.player = state.player
-                view.tag = if (diagnosticsEnabled) viewerVideoTestTag(postId) else null
-            },
+    val subtitleBottomLiftPx = with(LocalDensity.current) { LocalViewerSubtitleBottomLift.current.toPx() }
+    var parentHeightPx by remember { mutableIntStateOf(0) }
+    var viewBottomPx by remember { mutableFloatStateOf(0f) }
+    val subtitleBottomOverlapPx = viewerSubtitleBottomOverlapPx(parentHeightPx, viewBottomPx, subtitleBottomLiftPx)
+    val effectiveAspectRatio = if (controls.fillScreen) null else state.aspectRatio ?: aspectRatio
+    val videoModifier = if (controls.fillScreen) Modifier.fillMaxSize() else Modifier.viewerFittedMedia(effectiveAspectRatio)
+    Box(
+        modifier
+            .onSizeChanged { parentHeightPx = it.height }
+            .testTag(viewerVideoTestTag(postId))
+            .then(diagnostics?.let {
+                Modifier.semantics { stateDescription = it.stateDescription; contentDescription = it.contentDescription }
+            } ?: Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        ViewerVideoSurface(
+            state = state,
+            postId = postId,
+            diagnosticsEnabled = diagnosticsEnabled,
+            fillScreen = controls.fillScreen,
+            subtitleBottomOverlapPx = subtitleBottomOverlapPx,
+            modifier = videoModifier
+                .onPlaced { coordinates -> viewBottomPx = coordinates.positionInParent().y + coordinates.size.height }
+                .then(mediaModifier),
         )
         if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
+        // Subtle dim backdrop drawn after the video and preview, behind the spinner and timeline so neither is darkened.
+        ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing, Modifier.matchParentSize()) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = VIEWER_DIM_BACKDROP_ALPHA)))
+        }
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text(VIEWER_VIDEO_FAILED, color = MaterialTheme.colorScheme.onBackground)
-        ViewerVideoTimelineOverlay(state, playback, controls, events, state.aspectRatio ?: aspectRatio, Modifier.align(Alignment.BottomCenter))
+        ViewerVideoTimelineOverlay(state, playback, controls, events, effectiveAspectRatio, Modifier.align(Alignment.BottomCenter))
     }
+}
+
+@Composable
+private fun ViewerVideoSurface(
+    state: ViewerVideoState,
+    postId: PostId,
+    diagnosticsEnabled: Boolean,
+    fillScreen: Boolean,
+    subtitleBottomOverlapPx: Int,
+    modifier: Modifier,
+) {
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            createTexturePlayerView(context).apply {
+                useController = false
+                bindViewerSubtitleOverlay(this, state, subtitleBottomOverlapPx)
+                player = state.player
+                state.view = this
+            }
+        },
+        update = { view ->
+            state.view = view
+            view.useController = false
+            view.resizeMode = if (fillScreen) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+            bindViewerSubtitleOverlay(view, state, subtitleBottomOverlapPx)
+            view.player = state.player
+            view.tag = if (diagnosticsEnabled) viewerVideoTestTag(postId) else null
+        },
+    )
+}
+
+private fun viewerSubtitleBottomOverlapPx(parentHeightPx: Int, viewBottomPx: Float, liftPx: Float): Int =
+    (liftPx - (parentHeightPx - viewBottomPx).coerceAtLeast(0f)).roundToInt().coerceAtLeast(0)
+
+/**
+ * Ensures [view] owns one Viewer [SubtitleView] overlay outside `exo_content_frame` and reconnects [state] to it on
+ * every bind, retry, or stream switch that reuses the same [PlayerView].
+ */
+internal fun bindViewerSubtitleOverlay(view: PlayerView, state: ViewerVideoState, bottomOverlapPx: Int): SubtitleView {
+    val overlay = view.viewerSubtitleOverlay() ?: view.attachViewerSubtitleView(view.context)
+    val reconnected = state.subtitleView !== overlay
+    state.subtitleView = overlay
+    if (reconnected) overlay.setCues(state.cues)
+    overlay.setPadding(0, 0, 0, bottomOverlapPx)
+    return overlay
+}
+
+private fun PlayerView.viewerSubtitleOverlay(): SubtitleView? {
+    for (index in 0 until childCount) {
+        val child = getChildAt(index)
+        if (child is SubtitleView && child.tag == VIEWER_SUBTITLE_OVERLAY_TAG) return child
+    }
+    return null
+}
+
+/**
+ * Hides [PlayerView]'s built-in subtitle view and attaches a Viewer-owned [SubtitleView] directly onto [PlayerView].
+ * Keeping it outside `exo_content_frame` ensures [AspectRatioFrameLayout.RESIZE_MODE_ZOOM] never clips cues off-screen,
+ * and delivering sanitized cues through it strips embedded color/background boxes while keeping placement and emphasis.
+ */
+private fun PlayerView.attachViewerSubtitleView(context: Context): SubtitleView {
+    subtitleView?.visibility = View.GONE
+    val overlay = SubtitleView(context).apply {
+        tag = VIEWER_SUBTITLE_OVERLAY_TAG
+        setUserDefaultTextSize()
+        val captioning = context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
+        if (captioning?.isEnabled == true) setUserDefaultStyle() else setStyle(VIEWER_SUBTITLE_STYLE)
+        setApplyEmbeddedStyles(true)
+        setApplyEmbeddedFontSizes(false)
+        setBottomPaddingFraction(VIEWER_SUBTITLE_RESTING_BOTTOM_FRACTION)
+    }
+    addView(overlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    return overlay
+}
+
+/** Strips embedded window/text colors and background boxes while keeping cue placement, italics/bold, and bitmap cues intact. */
+internal fun sanitizeViewerSubtitleCue(cue: Cue): Cue {
+    if (cue.bitmap != null) return cue
+    val builder = cue.buildUpon().clearWindowColor()
+    val text = cue.text
+    if (text is Spanned) {
+        val cleaned = SpannableString.valueOf(text)
+        cleaned.getSpans(0, cleaned.length, Any::class.java).forEach { span ->
+            if (span is BackgroundColorSpan || span is ForegroundColorSpan) cleaned.removeSpan(span)
+        }
+        builder.setText(cleaned)
+    }
+    return builder.build()
 }
 
 @Composable
@@ -594,6 +740,7 @@ private fun ViewerVideoTimelineOverlay(
         val previews = rememberViewerScrubPreviews(state.player.takeIf { playback.readsAheadFreely() }, playback)
         ViewerPlaybackTimeline(
             controls, events, { state.position }, state.duration,
+            bufferedPositionMs = { state.bufferedPosition },
             seek = ViewerTimelineSeek(
                 onStarted = { state.scrubbing = true },
                 onMoved = state::scrubTo,
@@ -613,3 +760,15 @@ private fun ViewerVideoMessage(message: String, modifier: Modifier) {
 }
 
 internal fun viewerVideoTestTag(postId: PostId): String = "viewer_video_${postId.mediaTestTagPart()}"
+
+private const val VIEWER_SUBTITLE_RESTING_BOTTOM_FRACTION = 0.06f
+private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
+private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
+private val VIEWER_SUBTITLE_STYLE = CaptionStyleCompat(
+    android.graphics.Color.WHITE,
+    android.graphics.Color.TRANSPARENT,
+    android.graphics.Color.TRANSPARENT,
+    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+    android.graphics.Color.BLACK,
+    Typeface.SANS_SERIF,
+)

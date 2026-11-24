@@ -52,7 +52,11 @@ sealed interface ViewerSeries {
      * rather than ending at once. The positions seed the Viewer's video positions ([rememberViewerVideoPositions]);
      * where the user gets to goes back through [ViewerScreenHost.onPlaybackProgress].
      */
-    data class Watching(val startPositionsMs: Map<PostId, Long> = emptyMap()) : ViewerSeries
+    data class Watching(
+        val startPositionsMs: Map<PostId, Long> = emptyMap(),
+        /** The series' own title, so the Viewer's top bar splits series and episode cleanly even when a title holds ` · `. */
+        val seriesTitle: String? = null,
+    ) : ViewerSeries
 }
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {

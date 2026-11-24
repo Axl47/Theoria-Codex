@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -23,6 +24,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -123,7 +125,25 @@ internal fun ViewerFrameEffects(
     LaunchedEffect(frame.chromeVisible, frame.selection.isSeekable) {
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
+    ViewerUnlockPeekEffect(frame, screen)
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
+}
+
+/** Auto-hides the revealed Unlock button after the accessibility-adjusted timeout; clears immediately when unlocked. */
+@Composable
+private fun ViewerUnlockPeekEffect(frame: ViewerFrame, screen: ViewerScreenState) {
+    val accessibilityManager = LocalAccessibilityManager.current
+    LaunchedEffect(frame.locked) {
+        if (!frame.locked) screen.hideUnlock()
+    }
+    LaunchedEffect(frame.locked, screen.unlockPeekVisible, screen.unlockPeekSerial, frame.touchExplorationEnabled) {
+        if (!frame.locked || !screen.unlockPeekVisible || frame.touchExplorationEnabled) return@LaunchedEffect
+        val timeout = accessibilityManager?.calculateRecommendedTimeoutMillis(
+            VIEWER_UNLOCK_PEEK_MS, containsIcons = true, containsControls = true,
+        ) ?: VIEWER_UNLOCK_PEEK_MS
+        delay(timeout)
+        screen.hideUnlock()
+    }
 }
 
 @Composable
@@ -162,12 +182,15 @@ private fun ViewerBackHandlers(
     val scope = rememberCoroutineScope()
     // Nothing may pop the route underneath a return that is already moving.
     BackHandler(enabled = screen.pendingDismiss || frame.returning) {}
-    BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.mediaOverviewVisible) {
+    BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.locked) {
+        screen.revealUnlock()
+    }
+    BackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && frame.mediaOverviewVisible) {
         controls.setOverviewVisible(false)
         controls.markInteraction()
     }
     val backDistance = with(LocalDensity.current) { VIEWER_BACK_DISTANCE.toPx() }
-    PredictiveBackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.mediaOverviewVisible) { events ->
+    PredictiveBackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && !frame.mediaOverviewVisible) { events ->
         var committed = false
         try {
             events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }
@@ -274,3 +297,4 @@ private fun advanceToPendingPost(
 }
 
 private val VIEWER_BACK_DISTANCE = 48.dp
+internal const val VIEWER_UNLOCK_PEEK_MS = 3_000L

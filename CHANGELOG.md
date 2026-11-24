@@ -72,6 +72,10 @@
 
 ### Changed
 
+- Viewer subtitles now render as outlined white text with no dark box behind them (unless Android's system caption style is turned on) and sit closer to the bottom of the picture when controls are hidden, moving clear of the timeline when controls appear.
+- Episode playback in the Viewer now shows the series and episode on two lines at the top left, puts Subtitles, Audio, Servers and More (with Start over) at the top right, centers Previous, Play/Pause and Next over the picture, and places Lock, Rotate, Speed, Picture-in-picture and landscape Fit/Fill cleanly above the timeline. Server, subtitle, audio and speed pickers now open as spacious bottom sheets.
+- Locking an episode hides controls and blocks accidental taps, swipes, pinches and Back; tapping or pressing Back reveals only the lock icon to unlock, and lock stays active across automatic moves to the next episode.
+- Video timelines across the Viewer now tint the buffered range ahead of the current playback position.
 - Pulling down on the Series tab notifies you of the new chapters and episodes it finds, the same way the background check does.
 - Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
 - In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.

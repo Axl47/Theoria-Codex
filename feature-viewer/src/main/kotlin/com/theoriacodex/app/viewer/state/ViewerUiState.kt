@@ -107,6 +107,8 @@ data class ViewerControlsState(
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     /** A slideshow is moving through the queue; session-only, never saved. */
     val slideshow: Boolean = false,
+    /** Blocks media gestures and chrome while watching episodes; survives episode advance and clears on exit. */
+    val locked: Boolean = false,
     val episode: ViewerEpisodeChoice = ViewerEpisodeChoice(),
 )
 

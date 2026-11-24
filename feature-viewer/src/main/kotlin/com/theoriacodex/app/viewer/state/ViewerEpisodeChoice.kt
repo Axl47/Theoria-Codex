@@ -11,6 +11,8 @@ data class ViewerEpisodeChoice(
     val streamLabel: String? = null,
     val subtitle: ViewerSubtitleChoice? = null,
     val audioLabel: String? = null,
+    /** Whether landscape episodes crop to fill the screen instead of fitting with pillarbox/letterbox bars. */
+    val fillScreen: Boolean = false,
     /**
      * The streams episodes play in place of [streamLabel]; see [streamLabelFor]. Each episode keeps its own, so an
      * episode that fell back still plays its working stream after another episode fell back too.

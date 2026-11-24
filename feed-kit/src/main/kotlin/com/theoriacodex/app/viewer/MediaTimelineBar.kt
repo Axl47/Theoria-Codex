@@ -83,6 +83,7 @@ fun MediaTimelineBar(
     positionMs: () -> Long,
     durationMs: Long,
     modifier: Modifier = Modifier,
+    bufferedPositionMs: (() -> Long)? = null,
     onSeekStarted: () -> Unit = {},
     onSeekMoved: (Long) -> Unit,
     onSeekFinished: (Long) -> Unit,
@@ -90,12 +91,14 @@ fun MediaTimelineBar(
     preview: @Composable (Long) -> Unit,
     onInteractionActiveChanged: (Boolean) -> Unit = {},
     playbackRate: Float = 1f,
+    showSpeedChip: Boolean = true,
     leading: @Composable () -> Unit = {},
     seekable: Boolean = true,
 ) {
     val instantSeek = LocalViewerInstantSeek.current
     val safeDuration = durationMs.coerceAtLeast(1L)
     val latestPosition by rememberUpdatedState(positionMs)
+    val latestBuffered by rememberUpdatedState(bufferedPositionMs)
     val callbacks = rememberUpdatedState(
         TimelineSeekCallbacks(onSeekStarted, onSeekMoved, onSeekFinished, onSeekCancelled, onInteractionActiveChanged),
     )
@@ -107,9 +110,15 @@ fun MediaTimelineBar(
     FollowHoldScrub(scrub, safeDuration, instantSeek, latestPosition)
 
     val fraction = { (displayPosition().toDouble() / safeDuration.toDouble()).coerceIn(0.0, 1.0).toFloat() }
+    val bufferedFraction: (() -> Float)? = if (durationMs > 0L && bufferedPositionMs != null) {
+        {
+            val buffered = latestBuffered?.invoke()?.coerceIn(0L, safeDuration) ?: 0L
+            (buffered.toDouble() / safeDuration.toDouble()).coerceIn(0.0, 1.0).toFloat()
+        }
+    } else null
     val showingPreview = scrub.active && !instantSeek
 
-    ViewerTimelineLayout(shownSecond * 1000L, safeDuration, playbackRate, showingPreview, modifier, leading) { trackModifier ->
+    ViewerTimelineLayout(shownSecond * 1000L, safeDuration, playbackRate, showSpeedChip, showingPreview, modifier, leading) { trackModifier ->
         Box(
             modifier = trackModifier
                 .height(VIEWER_TIMELINE_TRACK_HEIGHT)
@@ -126,7 +135,12 @@ fun MediaTimelineBar(
                 )),
             contentAlignment = Alignment.Center,
         ) {
-            ViewerTimelineTrack(fraction, Modifier.fillMaxWidth().height(VIEWER_TIMELINE_TRACK_HEIGHT), emphasized = scrub.active)
+            ViewerTimelineTrack(
+                fraction = fraction,
+                modifier = Modifier.fillMaxWidth().height(VIEWER_TIMELINE_TRACK_HEIGHT),
+                bufferedFraction = bufferedFraction,
+                emphasized = scrub.active,
+            )
             if (showingPreview) {
                 ViewerScrubPreview(scrub.positionMs, scrub.positionMs - scrub.startMs, fraction()) { preview(scrub.positionMs) }
             }
@@ -277,6 +291,7 @@ private fun ViewerTimelineLayout(
     positionMs: Long,
     durationMs: Long,
     playbackRate: Float,
+    showSpeedChip: Boolean,
     showingPreview: Boolean,
     modifier: Modifier,
     leading: @Composable () -> Unit,
@@ -288,7 +303,7 @@ private fun ViewerTimelineLayout(
             Text(formatTimelineTime(positionMs), Modifier.padding(start = 4.dp, end = 12.dp), style = ViewerVeil.Time, maxLines = 1)
             track(Modifier.weight(1f))
             Text(formatTimelineTime(durationMs), Modifier.padding(start = 12.dp, end = 8.dp), style = ViewerVeil.Time, maxLines = 1)
-            ViewerSpeedChip(playbackRate)
+            if (showSpeedChip) ViewerSpeedChip(playbackRate)
         }
         return
     }
@@ -303,7 +318,7 @@ private fun ViewerTimelineLayout(
             Spacer(Modifier.width(4.dp))
             ViewerTimelineTime(positionMs, durationMs)
             Spacer(Modifier.weight(1f))
-            ViewerSpeedChip(playbackRate)
+            if (showSpeedChip) ViewerSpeedChip(playbackRate)
         }
         track(Modifier.fillMaxWidth().padding(horizontal = 8.dp))
     }
@@ -348,6 +363,7 @@ fun ViewerTimelineTrack(
     modifier: Modifier = Modifier,
     emphasized: Boolean = false,
     showHandle: Boolean = true,
+    bufferedFraction: (() -> Float)? = null,
 ) {
     val accent = LocalViewerAccent.current
     val emphasis by animateFloatAsState(if (emphasized) 1f else 0f, tween(TheoriaMotion.SHORT_MS), label = "Viewer timeline emphasis")
@@ -356,8 +372,12 @@ fun ViewerTimelineTrack(
         val x = size.width * fraction().coerceIn(0f, 1f)
         val thickness = lerp(4.dp.toPx(), 10.dp.toPx(), emphasis)
         val gap = if (showHandle) lerp(0f, 6.dp.toPx(), emphasis) else 0f
+        val trailingStart = (x + gap).coerceAtMost(size.width)
+        drawPill(ViewerVeil.InactiveTrack, trailingStart, center.y, size.width, thickness)
+        viewerBufferedTrackEnd(bufferedFraction?.invoke(), trailingStart, size.width)?.let { bufferedEnd ->
+            drawPill(accent.copy(alpha = VIEWER_TIMELINE_BUFFERED_ALPHA), trailingStart, center.y, bufferedEnd, thickness)
+        }
         drawPill(accent, 0f, center.y, (x - gap).coerceAtLeast(0f), thickness)
-        drawPill(ViewerVeil.InactiveTrack, (x + gap).coerceAtMost(size.width), center.y, size.width, thickness)
         if (showHandle) {
             val handleWidth = lerp(12.dp.toPx(), 4.dp.toPx(), emphasis)
             val handleHeight = lerp(12.dp.toPx(), 28.dp.toPx(), emphasis)
@@ -365,6 +385,15 @@ fun ViewerTimelineTrack(
         }
     }
 }
+
+/** Right x-coordinate of the buffered track segment, or null when nothing buffered extends past [trailingStart]. */
+internal fun viewerBufferedTrackEnd(bufferedFraction: Float?, trailingStart: Float, width: Float): Float? {
+    val fraction = bufferedFraction?.takeIf { it.isFinite() } ?: return null
+    val end = (width * fraction.coerceIn(0f, 1f)).coerceAtMost(width)
+    return end.takeIf { it > trailingStart }
+}
+
+internal const val VIEWER_TIMELINE_BUFFERED_ALPHA = 0.42f
 
 fun DrawScope.drawPill(color: Color, left: Float, centerY: Float, right: Float, height: Float) {
     if (right <= left) return
@@ -425,13 +454,16 @@ fun ViewerPlaybackTimeline(
     events: ViewerRendererEvents,
     positionMs: () -> Long,
     durationMs: Long,
+    bufferedPositionMs: (() -> Long)? = null,
     seek: ViewerTimelineSeek? = null,
     onToggled: () -> Unit = {},
 ) {
     ViewerTimelineVeil {
         ViewerPlaybackFooter {
             MediaTimelineBar(
-                positionMs = positionMs, durationMs = durationMs,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                bufferedPositionMs = bufferedPositionMs,
                 onSeekStarted = seek?.onStarted ?: {},
                 onSeekMoved = seek?.onMoved ?: {},
                 onSeekFinished = seek?.onFinished ?: {},
@@ -439,13 +471,16 @@ fun ViewerPlaybackTimeline(
                 preview = seek?.preview ?: {},
                 onInteractionActiveChanged = if (seek != null) events.onTimelineInteractionActiveChanged else ({}),
                 playbackRate = controls.playbackRate,
+                showSpeedChip = controls.showSpeedChip,
                 leading = {
-                    TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
-                        events.onTogglePlayback()
-                        onToggled()
-                        events.onTimelineInteractionActiveChanged(true)
-                        events.onTimelineInteractionActiveChanged(false)
-                    })
+                    if (controls.showLeadingPlaybackButton) {
+                        TimelinePlaybackButton(isPaused = !controls.isPlaying, onToggle = {
+                            events.onTogglePlayback()
+                            onToggled()
+                            events.onTimelineInteractionActiveChanged(true)
+                            events.onTimelineInteractionActiveChanged(false)
+                        })
+                    }
                 },
                 seekable = seek != null,
             )
