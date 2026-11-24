@@ -203,7 +203,9 @@ class GuardedByTest(RepositoryTest):
 
         self.assertFalse(pinned("fun post(id: String)", "fun post(id: String)\n    : Post? = null\n"))
         self.assertFalse(pinned("class Foo : Bar", "class Foo : Bar, Extra {\n"))
-        self.assertTrue(pinned("val id: String", "data class Post(\n    val id: String,\n    val title: String,\n)\n"))
+        self.assertFalse(pinned("class Foo : Bar", "class Foo : Bar,\n    Extra {\n"))
+        self.assertTrue(pinned("val id: String,", "data class Post(\n    val id: String,\n    val title: String,\n)\n"))
+        self.assertTrue(pinned("val title: String", "data class Post(\n    val id: String,\n    val title: String,\n)\n"))
 
     def test_reports_a_changed_signature(self) -> None:
         self.assertEqual(
@@ -308,6 +310,10 @@ class GuardEditTest(unittest.TestCase):
         lines = self.OLD.splitlines()
         self.assertEqual(lines[1:5], check_adrs.test_span(lines, 1))
         self.assertEqual(["def test_a(self):", "    self.assertTrue(x)"], check_adrs.test_span(["def test_a(self):", "    self.assertTrue(x)", "def test_b(self):"], 0))
+
+    def test_span_continues_past_a_multi_line_signature_into_the_body(self) -> None:
+        lines = ["fun plan(", "    post: Post,", "): Plan {", "    return Plan(post)", "}", "fun other() = 1"]
+        self.assertEqual(lines[:5], check_adrs.test_span(lines, 0))
 
     def test_flags_any_edit_to_the_guard_body_but_not_formatting_or_other_tests(self) -> None:
         name = "keeps owners (ADR 0001)"

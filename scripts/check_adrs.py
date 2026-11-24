@@ -23,7 +23,7 @@ its tag names, and a name that looks tagged but is not fails. Superseded records
 With --base, a missing path that git sees as renamed or deleted since that revision gets an indented line naming
 its new path, so the PR that moved the file names the records to update. --base also prints notes that never
 change the exit status: the records whose "Applies to" symbols the change's edited lines name or fall inside
-(`touches`), and guard tests edited while their record was not (`guard_edits`), saying when governed code changed
+(`touched`), and guard tests edited while their record was not (`guard_edits`), saying when governed code changed
 too. Notes are indented, like every line the Main policy workflow must not count as a violation.
 """
 
@@ -49,7 +49,7 @@ DECLARATION = re.compile(
 )
 KOTLIN_TAG = re.compile(r"\(ADR (\d{4}(?:, \d{4})*)\)$")
 PYTHON_TAG = re.compile(r"(?:_adr_\d{4})+$")
-MALFORMED_TAG = re.compile(r"\(ADR|_adr_", re.IGNORECASE)
+MALFORMED_TAG = re.compile(r"\(ADR|_adr_\d", re.IGNORECASE)
 TEST_ANNOTATION = re.compile(r"@(?:[\w.]+\.)?Test\b(\s*\([^)]*\))?")
 IGNORE_ANNOTATION = re.compile(r"@(?:[\w.]+\.)?Ignore\b")
 PYTHON_SKIPS = {"skip", "skipIf", "skipUnless", "expectedFailure"}
@@ -323,9 +323,9 @@ def pinned(pin: str, text: str, python: bool) -> bool:
     """Whether source text [pin] appears in [text] token for token, whatever its line breaks.
 
     The match must start a line, so a modifier or annotation added on that line fails, and end before `{ = ( )`
-    (and `:` in Python), before a `,` that ends its line (a parameter on its own line), or at the end of its line or
-    the file when the next line does not start with `:`. So an added nullability, type argument, qualifier, return
-    type or supertype fails.
+    (and `:` in Python), or at the end of its line or the file when the next line does not start with `:`. So an
+    added nullability, type argument, qualifier, return type or supertype fails, and a parameter that another
+    follows is pinned with its comma.
     """
     want = [token for token in tokens(pin) if token != "\n"]
     found = tokens(text)
@@ -346,8 +346,6 @@ def pin_ends(found: list[str], after: int, ends: set[str]) -> bool:
     following = found[after] if after < len(found) else "\n"
     if following == "\n":
         return next((token for token in found[after:] if token != "\n"), "") != ":"
-    if following == ",":
-        return after + 1 == len(found) or found[after + 1] == "\n"
     return following in ends
 
 
@@ -462,15 +460,19 @@ def check(root: pathlib.Path, moved: dict[str, str] | None = None, deleted: set[
 
 
 def test_span(lines: list[str], start: int) -> list[str]:
-    """A test's lines: its declaration through the lines indented deeper, plus a closing `}` or `)` line."""
+    """A declaration's lines: the lines indented deeper than it, through its closing `}` or `)` line. A closing
+    line that opens a block, as `): Plan {` does after a multi-line signature, continues into that block."""
     depth = len(lines[start]) - len(lines[start].lstrip())
     span = [lines[start]]
     for line in lines[start + 1:]:
         if line.strip() and len(line) - len(line.lstrip()) <= depth:
-            if line.lstrip()[0] in "})":
-                span.append(line)
-            break
-        span.append(line)
+            if line.lstrip()[0] not in "})":
+                break
+            span.append(line)
+            if not line.rstrip().endswith("{"):
+                break
+        else:
+            span.append(line)
     return span
 
 
@@ -504,20 +506,10 @@ def git(root: pathlib.Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
 
 
-def changed_files(root: pathlib.Path, revision: str) -> set[str]:
-    """Tracked paths that differ between [revision] and the work tree."""
-    return {path for path in git(root, "diff", "--name-only", "-z", revision, "--").stdout.split("\0") if path}
-
-
 def covered(bullet: Bullet, record: Record, root: pathlib.Path, paths: collections.abc.Iterable[str]) -> list[str]:
     """The [paths] that an "Applies to" bullet names, a directory covering the files under it."""
     places = [place.relative_to(root).as_posix() for place in resolve(bullet, record.name, root, {}, set())[0]]
     return sorted(path for path in paths if any(path == place or path.startswith(place + "/") for place in places))
-
-
-def governed(record: Record, root: pathlib.Path, changed: set[str]) -> list[str]:
-    """The [changed] paths that the record's "Applies to" names."""
-    return sorted({path for bullet in bullets(record.text, "Applies to") for path in covered(bullet, record, root, changed)})
 
 
 @dataclass(frozen=True)
@@ -531,7 +523,7 @@ class Change:
 
 def changed_lines(root: pathlib.Path, revision: str) -> dict[str, Change | None]:
     """Each path changed since [revision], or None when the whole file was added or deleted."""
-    diff = git(root, "-c", "core.quotePath=false", "diff", "-U0", "--no-renames", "--no-color", revision, "--").stdout
+    diff = git(root, "-c", "core.quotePath=false", "diff", "-U0", "--no-renames", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", revision, "--").stdout
     changed: dict[str, Change | None] = {}
     path, whole, header = "", False, True
     for line in diff.splitlines():
@@ -564,10 +556,11 @@ def inside_declarations(text: str, names: set[str], lines: set[int]) -> bool:
     )
 
 
-def touches(record: Record, root: pathlib.Path, changed: dict[str, Change | None]) -> bool:
-    """Whether a changed file falls under one of the record's "Applies to" bullets, and the bullet names no symbol, the
-    file was added or deleted whole, or the last identifier of one of its symbols is on a changed line or declares a
-    span a changed line falls in."""
+def touched(record: Record, root: pathlib.Path, changed: dict[str, Change | None]) -> list[str]:
+    """The changed files under the record's "Applies to" bullets whose change reaches the bullet: it names no symbol,
+    the file was added or deleted whole, or the last identifier of one of its symbols is on a changed line or
+    declares a span a changed line falls in."""
+    found_in: list[str] = []
     for bullet in bullets(record.text, "Applies to"):
         names = {found[-1] for symbol in bullet.symbols if (found := IDENTIFIER.findall(symbol))}
         for path in covered(bullet, record, root, changed):
@@ -578,14 +571,14 @@ def touches(record: Record, root: pathlib.Path, changed: dict[str, Change | None
                 or names & change.words
                 or inside_declarations((root / path).read_text(encoding="utf-8", errors="replace"), names, change.lines)
             ):
-                return True
-    return False
+                found_in.append(path)
+    return sorted(set(found_in))
 
 
 def governing_notes(root: pathlib.Path, revision: str) -> list[str]:
     """One note naming the live records whose code the change's edited lines touch, unless the change edits them."""
     changed = changed_lines(root, revision)
-    names = [record.name for record in records(root) if not record.superseded and record.name not in changed and touches(record, root, changed)]
+    names = [record.name for record in records(root) if not record.superseded and record.name not in changed and touched(record, root, changed)]
     if not names:
         return []
     more = f" and {len(names) - 8} more" if len(names) > 8 else ""
@@ -594,8 +587,8 @@ def governing_notes(root: pathlib.Path, revision: str) -> list[str]:
 
 @dataclass(frozen=True)
 class GuardEdit:
-    """A guard test edited while its record was not, and the first file of the record's governed code the change also
-    edits, if any."""
+    """A guard test edited while its record was not, and the first file where the change also reaches the record's
+    governed code (`touched`), if any."""
 
     record: str
     name: str
@@ -612,7 +605,7 @@ class GuardEdit:
 
 def guard_edits(root: pathlib.Path, revision: str) -> list[GuardEdit]:
     """Each guard test edited since [revision] whose live record was not."""
-    changed = changed_files(root, revision)
+    changed = changed_lines(root, revision)
     edits: list[GuardEdit] = []
     for record in records(root):
         if record.superseded or record.name in changed:
@@ -622,7 +615,7 @@ def guard_edits(root: pathlib.Path, revision: str) -> list[GuardEdit]:
                 continue
             old = git(root, "show", f"{revision}:{path}")
             if old.returncode == 0 and guard_edited(old.stdout, (root / path).read_text(encoding="utf-8"), name, path.endswith(".py")):
-                code = [file for file in governed(record, root, changed) if file != path]
+                code = [file for file in touched(record, root, changed) if file != path]
                 edits.append(GuardEdit(record.name, name, code[0] if code else None))
     return edits
 
