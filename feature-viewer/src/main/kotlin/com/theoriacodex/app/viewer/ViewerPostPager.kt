@@ -24,8 +24,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
-import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.loopsPlayback
+import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -220,16 +221,20 @@ private fun ViewerPostPage(
                 frame, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
                 expectedDurationMs = knownDurationMs?.takeIf { carriesPostDuration(post, media) },
             ),
-            events = viewerRendererEvents(
-                session = frame.uiState.session, key = key, generation = loadGeneration,
-                onAction = host.onAction, onPlaybackProgress = host.episodeProgress(frame.uiState.series, post),
-                onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
-                onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
-            ),
+            events = remember(frame.uiState.session, key, loadGeneration, host, controls, post, media, frame.uiState.series) {
+                viewerRendererEvents(
+                    session = frame.uiState.session, key = key, generation = loadGeneration,
+                    onAction = host.onAction, onPlaybackProgress = host.episodeProgress(frame.uiState.series, post),
+                    onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
+                    onDurationKnown = { duration -> if (carriesPostDuration(post, media)) host.durations.onPlayerDuration(post, duration) },
+                )
+            },
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = host.videoOptions(key, pageState, frame.uiState, screen, quality, qualityHeight, config),
+            videoOptions = remember(key, pageState, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config, host) {
+                host.videoOptions(key, pageState, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config)
+            },
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -247,16 +252,16 @@ private fun ViewerPostPage(
 private fun ViewerScreenHost.videoOptions(
     key: ViewerMediaKey,
     pageState: ViewerPageState,
-    uiState: ViewerUiState,
+    episode: ViewerEpisodeChoice,
+    session: ViewerSessionIdentity?,
     screen: ViewerScreenState,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
     config: ViewerScreenConfig,
 ): ViewerVideoOptions {
-    val episode = uiState.controls.episode
     return ViewerVideoOptions(
         quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
-        ViewerEpisodeOptions(screen.streamAttempts.forSession(uiState.session), episode.pickedStream(key), pageState.resolution.resolvedAtMs) { label ->
+        ViewerEpisodeOptions(screen.streamAttempts.forSession(session), episode.pickedStream(key), pageState.resolution.resolvedAtMs) { label ->
             onAction(ViewerAction.FallBackToStream(key, label))
         },
     )

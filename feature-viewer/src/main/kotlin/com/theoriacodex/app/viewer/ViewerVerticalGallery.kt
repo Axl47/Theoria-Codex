@@ -35,7 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -143,7 +143,7 @@ internal fun ViewerVerticalGallery(
         screen.verticalGalleries[post.id] = gallery
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }
     }
-    val shapes = remember(post.id) { mutableStateMapOf<Int, Float>() }
+    val shapes = remember(post.id) { HashMap<Int, MutableFloatState>() }
     var latestShape by remember(post.id) { mutableFloatStateOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
     val session = frame.uiState.session
@@ -163,7 +163,8 @@ internal fun ViewerVerticalGallery(
     ) {
         items(pages.size, key = { index -> index }) { index ->
             val placeholder = remember { latestShape }
-            val shape = shapes[index] ?: placeholder
+            val painted = shapes.getOrPut(index) { mutableFloatStateOf(Float.NaN) }
+            val shape = painted.floatValue.takeUnless { it.isNaN() } ?: placeholder
             VerticalGalleryPage(
                 post, pageState, index, shape, gallery, screen.imageSession,
                 active = isCurrentPost && index == frame.selection.mediaIndex,
@@ -172,7 +173,7 @@ internal fun ViewerVerticalGallery(
                 onRetry = { host.onAction(ViewerAction.RetryMedia) },
                 onPainted = { width, height ->
                     if (width > 0f && height > 0f) {
-                        shapes[index] = width / height
+                        painted.floatValue = width / height
                         latestShape = width / height
                     }
                 },
@@ -302,9 +303,11 @@ private fun VerticalGalleryPage(
     var painted by remember(key, generation, media.ref) { mutableStateOf(false) }
     var failed by remember(key, generation, media.ref) { mutableStateOf<String?>(null) }
     var attempt by remember(key, generation, media.ref) { mutableIntStateOf(0) }
-    val events = viewerRendererEvents(
-        session = null, key = key, generation = generation, onAction = {}, onTimelineInteractionActiveChanged = {}, onDurationKnown = {},
-    ).copy(onReady = { painted = true; failed = null }, onError = { failed = it })
+    val events = remember(key, generation, media.ref) {
+        viewerRendererEvents(
+            session = null, key = key, generation = generation, onAction = {}, onTimelineInteractionActiveChanged = {}, onDurationKnown = {},
+        ).copy(onReady = { painted = true; failed = null }, onError = { failed = it })
+    }
     LaunchedEffect(active, painted, failed, generation) {
         if (!active) return@LaunchedEffect
         val selected = selectedEvents(key, generation)
