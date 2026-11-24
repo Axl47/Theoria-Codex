@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import functools
 import re
 import sys
 from collections.abc import Callable
@@ -181,6 +182,117 @@ def host_tests_wait_settled() -> list[str]:
                     "docs/adr/0210-host-test-compose-waits.md and NON_IDLING_WAIT_FILES may use"
                 )
     return failures
+
+
+@functools.lru_cache(maxsize=None)
+def kotlin_sources_under(root: Path) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
+        for path in sorted(root.glob("*/src/main/**/*.kt"))
+    )
+
+
+def main_kotlin_sources() -> tuple[tuple[str, str], ...]:
+    return kotlin_sources_under(ROOT)
+
+
+OFF_MAIN_NOTE = re.compile(r"\bOffMainWork\.note\(([^)]*)\)")
+OFF_MAIN_LABEL = re.compile(r"OffMainWork\.[A-Z][A-Z0-9_]*")
+FUNCTION_OPENING = re.compile(r"\bfun\b.*\{$")
+
+
+def off_main_note_failures(sources) -> list[str]:
+    failures = []
+    for relative, text in sources:
+        lines = text.splitlines()
+        for number, line in enumerate(lines, start=1):
+            call = OFF_MAIN_NOTE.search(line)
+            if not call:
+                continue
+            if not OFF_MAIN_LABEL.fullmatch(call.group(1).strip()):
+                failures.append(f"{relative}:{number} notes '{call.group(1)}'; OffMainWork labels are constants (docs/adr/0002-coroutine-and-diagnostics-rules.md)")
+            opening = next((previous.strip() for previous in reversed(lines[:number - 1]) if previous.strip()), "")
+            if not FUNCTION_OPENING.search(opening) or re.search(r"\bsuspend\b", opening):
+                failures.append(
+                    f"{relative}:{number} must call OffMainWork.note first in the non-suspend function that does the work "
+                    "(docs/adr/0002-coroutine-and-diagnostics-rules.md)"
+                )
+    return failures
+
+
+@rule
+def off_main_notes_run_where_work_runs() -> list[str]:
+    return off_main_note_failures(main_kotlin_sources())
+
+
+def references_outside(sources, symbol: re.Pattern, allowed: tuple[str, ...]) -> list[str]:
+    return [relative for relative, text in sources if symbol.search(text) and not relative.startswith(allowed)]
+
+
+RECOMMENDATION_NORMALIZATION = re.compile(r"\bRecommendationTagNormalization\b")
+RECOMMENDATION_CODE = (
+    "core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/",
+    "app-logic/src/main/kotlin/com/theoriacodex/app/recommend/",
+)
+
+
+@rule
+def recommendation_normalization_stays_in_recommendations() -> list[str]:
+    return [
+        f"{relative} uses RecommendationTagNormalization, which only recommendation code may use "
+        "(docs/adr/0003-cross-source-tags.md)"
+        for relative in references_outside(main_kotlin_sources(), RECOMMENDATION_NORMALIZATION, RECOMMENDATION_CODE)
+    ]
+
+
+DERIVED_SITE_ID = re.compile(r"\bderivedSourceId\b|\bfromAddress\(")
+SITE_ID_NAMERS = (
+    "core-domain/src/main/kotlin/com/theoriacodex/domain/source/CustomSites.kt",
+    "app/src/main/java/com/theoriacodex/app/di/CustomSitesControllerImpl.kt",
+    "core-sources/src/main/kotlin/com/theoriacodex/sources/custom/Families.kt",
+)
+
+
+@rule
+def stored_site_ids_are_never_rederived() -> list[str]:
+    return [
+        f"{relative} derives a custom site id from its address; a stored profile's id is authoritative "
+        "(docs/adr/0004-custom-site-profiles.md)"
+        for relative in references_outside(main_kotlin_sources(), DERIVED_SITE_ID, SITE_ID_NAMERS)
+    ]
+
+
+FILE_HASH_LOOKUP_SUPERTYPE = re.compile(r"(?:\s:|,)\s*FileHashLookupSourceAdapter\b")
+MD5_SEARCH_FAMILIES = (
+    "core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/",
+    "core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/",
+)
+
+
+@rule
+def only_md5_families_look_up_file_hashes() -> list[str]:
+    return [
+        f"{relative} implements FileHashLookupSourceAdapter, which only families with an md5: search may "
+        "(docs/adr/0008-source-adapter-contracts.md)"
+        for relative in references_outside(main_kotlin_sources(), FILE_HASH_LOOKUP_SUPERTYPE, MD5_SEARCH_FAMILIES)
+    ]
+
+
+MIN_SCORE_READ = re.compile(r"\.minScore\b")
+MIN_SCORE_KEEPERS = (
+    "core-domain/src/main/kotlin/com/theoriacodex/domain/query/QueryHash.kt",
+    "core-data/src/main/kotlin/com/theoriacodex/data/storage/RecentsStorage.kt",
+    "feature-search/src/main/kotlin/com/theoriacodex/app/search/SearchSavedState.kt",
+)
+
+
+@rule
+def sources_ignore_min_score() -> list[str]:
+    return [
+        f"{relative} reads Query.minScore, a retired filter only stores and the query hash may read "
+        "(docs/adr/0009-stored-data-compatibility.md)"
+        for relative in references_outside(main_kotlin_sources(), MIN_SCORE_READ, MIN_SCORE_KEEPERS)
+    ]
 
 
 def main() -> int:
