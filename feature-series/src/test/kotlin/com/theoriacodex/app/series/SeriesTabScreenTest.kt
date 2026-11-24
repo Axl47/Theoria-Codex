@@ -12,9 +12,12 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
@@ -77,6 +80,23 @@ class SeriesTabScreenTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitForIdle()
         compose.onNodeWithText(languageName("es-419")).assertIsDisplayed()
+    }
+
+    @Test
+    fun aSourcesListingFiltersStayClearOfTheCollapsedSearch() {
+        val sources = listOf(FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 40))
+        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.waitForIdle()
+        compose.runOnIdle { viewModel.openDedicatedSearch(sources.single().key) }
+        compose.waitForIdle()
+
+        compose.onRoot().performTouchInput { swipeUp() }
+        compose.waitForIdle()
+
+        val strip = compose.onNodeWithTag("collapsed-search-strip").fetchSemanticsNode().boundsInRoot
+        val filter = compose.onNodeWithContentDescription(FILTER).fetchSemanticsNode().boundsInRoot
+        assertTrue("$filter overlaps $strip", filter.right <= strip.left)
     }
 
     @Test
