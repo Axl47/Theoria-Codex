@@ -12,7 +12,13 @@ import kotlinx.coroutines.flow.Flow;
 public interface SeriesDao {
     @Query("SELECT series.*, (SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND series_entries.read = 0 "
-            + "AND series_entries.source_order >= 0) AS unread_count "
+            + "AND series_entries.source_order >= 0) AS unread_count, "
+            + "(SELECT COALESCE(MAX(uploaded_at_epoch_ms), MAX(first_seen_at_epoch_ms)) FROM series_entries "
+            + "WHERE series_entries.source = series.source AND series_entries.series_address = series.address "
+            + "AND series_entries.source_order >= 0) AS last_updated_at_epoch_ms, "
+            + "(series.last_opened_entry IS NOT NULL OR EXISTS (SELECT 1 FROM series_entries "
+            + "WHERE series_entries.source = series.source AND series_entries.series_address = series.address "
+            + "AND (series_entries.read = 1 OR series_entries.last_page > 0))) AS started "
             + "FROM series WHERE followed = 1 "
             + "ORDER BY CASE WHEN unread_count > 0 THEN 0 ELSE 1 END ASC, unread_count DESC, "
             + "title COLLATE NOCASE ASC, source ASC, address ASC")
@@ -51,9 +57,14 @@ public interface SeriesDao {
 
     /** A restore adds to a stored series without taking anything from it. */
     @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode), "
-            + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry), download_new = download_new OR :downloadNew "
+            + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry), download_new = download_new OR :downloadNew, "
+            + "followed_at_epoch_ms = CASE WHEN followed = 1 THEN COALESCE(followed_at_epoch_ms, :followedAt) "
+            + "WHEN :followed THEN :followedAt ELSE NULL END, "
+            + "last_read_at_epoch_ms = MAX(COALESCE(last_read_at_epoch_ms, :lastReadAt), COALESCE(:lastReadAt, last_read_at_epoch_ms)) "
             + "WHERE source = :source AND address = :address")
-    void mergeRestoredSeries(String source, String address, boolean followed, String readingMode, String lastOpenedEntry, boolean downloadNew);
+    void mergeRestoredSeries(
+            String source, String address, boolean followed, String readingMode, String lastOpenedEntry, boolean downloadNew,
+            Long followedAt, Long lastReadAt);
 
     /**
      * A stored entry takes the further progress of the two: read on either side, and the later page together with the

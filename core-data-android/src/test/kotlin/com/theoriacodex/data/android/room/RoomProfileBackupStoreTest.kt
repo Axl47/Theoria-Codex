@@ -103,6 +103,8 @@ class RoomProfileBackupStoreTest {
         RoomProfileBackupStore(restoredDatabase).merge(snapshot)
         val kept = restored.series(id)!!
         assertTrue(kept.followed)
+        // Followed again by the restore, since the backup's follow; read last on the device, after the backup's read.
+        assertEquals(30L to 40L, kept.followedAtEpochMs to kept.lastReadAtEpochMs)
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
         restoredDatabase.close()

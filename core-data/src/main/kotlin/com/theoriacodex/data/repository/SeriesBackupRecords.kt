@@ -37,6 +37,9 @@ internal data class BackupSeriesRecord(
     @SerialName("lastCheckedAt") val lastCheckedAt: Long? = null,
     /** Absent from backups written before the setting existed, which restore with it off. */
     @SerialName("downloadNewChapters") val downloadNewChapters: Boolean = false,
+    /** Both absent from backups written before the Following sorts, which restore without them. */
+    @SerialName("followedAt") val followedAt: Long? = null,
+    @SerialName("lastReadAt") val lastReadAt: Long? = null,
     @SerialName("entries") val entries: List<BackupSeriesEntryRecord> = emptyList(),
 ) {
     /** A status or mode this build does not know is dropped; [validateBackupSeries] refuses what no build wrote. */
@@ -58,6 +61,8 @@ internal data class BackupSeriesRecord(
                 lastOpenedEntry = lastOpenedEntry,
                 lastCheckedAtEpochMs = lastCheckedAt,
                 downloadNewChapters = downloadNewChapters,
+                followedAtEpochMs = followedAt,
+                lastReadAtEpochMs = lastReadAt,
             ),
             entries = entries.map(BackupSeriesEntryRecord::toDomain),
         )
@@ -80,6 +85,8 @@ internal data class BackupSeriesRecord(
                 lastOpenedEntry = lastOpenedEntry,
                 lastCheckedAt = lastCheckedAtEpochMs,
                 downloadNewChapters = downloadNewChapters,
+                followedAt = followedAtEpochMs,
+                lastReadAt = lastReadAtEpochMs,
                 entries = backup.entries.map(BackupSeriesEntryRecord::fromDomain),
             )
         }
