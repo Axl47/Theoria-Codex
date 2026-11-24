@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -86,7 +87,11 @@ internal fun DedicatedSourceSearchView(
                 )
             },
         ) {
-            DedicatedSourceGridBody(dedicated, followedIds, grid, supportsLatest, onChoose, onFilter, onRetry, onMore, onOpenSeries)
+            DedicatedSourceGridBody(
+                dedicated, followedIds, grid, supportsLatest,
+                besideCollapsedSearch = searchBarDismissed && !oldSearchBar,
+                onChoose, onFilter, onRetry, onMore, onOpenSeries,
+            )
         }
     }
 }
@@ -107,19 +112,22 @@ private fun DedicatedSourceGridBody(
     followedIds: Set<SeriesId>,
     grid: LazyGridState,
     supportsLatest: Boolean,
+    besideCollapsedSearch: Boolean,
     onChoose: (BrowseKind) -> Unit,
     onFilter: () -> Unit,
     onRetry: () -> Unit,
     onMore: () -> Unit,
     onOpenSeries: (Series) -> Unit,
 ) {
+    val end by animateDpAsState(if (besideCollapsedSearch) DEDICATED_SEARCH_CLEARANCE else 16.dp, label = "Listing controls end")
     ListingControls(
         kind = dedicated.kind,
         latest = supportsLatest,
         filterCount = (dedicated.kind as? BrowseKind.Filtered)?.changed ?: 0,
         onChoose = onChoose,
         onFilter = onFilter,
-        modifier = Modifier.padding(horizontal = 16.dp),
+        // Beside the collapsed search corner the filter button stops short of it, as the home view's switch does.
+        modifier = Modifier.padding(start = 16.dp, end = end),
     )
     LazyVerticalGrid(
         columns = GridCells.Adaptive(CARD_WIDTH),
@@ -134,3 +142,6 @@ private fun DedicatedSourceGridBody(
 }
 
 internal const val DEDICATED_HEADER_TAG = "Dedicated source header"
+
+/** The collapsed search corner's width here (one icon button and its padding) and a gap before it. */
+private val DEDICATED_SEARCH_CLEARANCE = 72.dp
