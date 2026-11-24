@@ -45,7 +45,7 @@ data class TagAffinityInputs(
     val explicit: Set<String> = emptySet(),
     val watchedByTag: Map<SourceKey, Map<String, Long>> = emptyMap(),
     val watchedBySource: Map<SourceKey, Long> = emptyMap(),
-    val watchedFloors: Map<SourceKey, Long> = emptyMap(),
+    val watchedTagFloors: Map<SourceKey, Long> = emptyMap(),
     val keptByTag: Map<SourceKey, Map<String, Int>> = emptyMap(),
     val keptBySource: Map<SourceKey, Int> = emptyMap(),
     val pictures: PictureEvidence = PictureEvidence(),
@@ -61,7 +61,7 @@ data class TagAffinityInputs(
         return keptShare / watchedShare
     }
 
-    private fun watchedAtMost(source: SourceKey, token: String): Long = watchedByTag[source]?.get(token) ?: watchedFloors[source] ?: 0L
+    private fun watchedAtMost(source: SourceKey, token: String): Long = watchedByTag[source]?.get(token) ?: watchedTagFloors[source] ?: 0L
 
     private fun share(source: SourceKey, count: Long): Double? {
         val watched = watchedBySource[source] ?: 0L
