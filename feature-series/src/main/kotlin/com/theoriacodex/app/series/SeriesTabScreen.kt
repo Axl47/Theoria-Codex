@@ -303,7 +303,12 @@ private fun SeriesTabViewBody(
 private fun SeriesViewSwitch(view: SeriesView, besideCollapsedSearch: Boolean, onChoose: (SeriesView) -> Unit) {
     val end by animateDpAsState(if (besideCollapsedSearch) COLLAPSED_SEARCH_CLEARANCE else 16.dp, label = "Series view switch end")
     SingleChoiceSegmentedButtonRow(
-        Modifier.fillMaxWidth().heightIn(min = SearchBarMinHeight).padding(start = 16.dp, end = end).wrapContentHeight(Alignment.CenterVertically),
+        Modifier
+            .fillMaxWidth()
+            // Beside the collapsed search corner it shares that line's height; under the open bar it keeps its own.
+            .heightIn(min = if (besideCollapsedSearch) SearchBarMinHeight else 0.dp)
+            .padding(start = 16.dp, end = end)
+            .wrapContentHeight(Alignment.CenterVertically),
     ) {
         SeriesView.entries.forEachIndexed { index, entry ->
             SegmentedButton(
@@ -396,12 +401,14 @@ private fun LazyListScope.searchResults(
     more: (SourceKey) -> Unit,
 ) {
     if (results.isEmpty()) item(key = "search-no-sources") { EmptyState(noExtensionsOn(content.filter)) }
+    // A language tells sources apart only when they do not all share one.
+    val languages = results.distinctBy { it.language }.size > 1
     results.forEach { result ->
         val listing = result.listing
         item(key = "search-title-${result.key.id}") {
             SourceSearchHeader(
                 title = result.sourceName,
-                subtitle = result.languageSubtitle,
+                subtitle = result.languageSubtitle.takeIf { languages },
                 onClick = { openSource(result.key) },
             )
         }

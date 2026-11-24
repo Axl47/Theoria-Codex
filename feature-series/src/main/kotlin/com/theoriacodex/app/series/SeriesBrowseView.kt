@@ -1,12 +1,15 @@
 package com.theoriacodex.app.series
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,15 +22,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,9 +48,7 @@ import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
-import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
-import com.theoriacodex.domain.series.seriesKind
 
 /**
  * The Browse view: the browsed source's listing under one header, which picks the source (every source that is on,
@@ -115,25 +114,35 @@ private fun BrowseHeader(
     onFilter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedButton(
-            onClick = onPick,
-            modifier = Modifier.weight(1f, fill = false).testTag(BROWSED_SOURCE_TAG),
-            contentPadding = PaddingValues(start = 12.dp, end = 8.dp),
-        ) {
-            if (browse.key.seriesKind == SeriesKind.ANIME) {
-                Icon(Icons.Default.PlayArrow, contentDescription = SeriesKind.ANIME.label, Modifier.size(ButtonDefaults.IconSize))
-            }
-            Text(browse.name, Modifier.weight(1f, fill = false).padding(start = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-        }
-        ListingControls(kind, latest, (kind as? BrowseKind.Filtered)?.active ?: 0, onChoose, onFilter)
+    ListingControls(kind, latest, (kind as? BrowseKind.Filtered)?.active ?: 0, onChoose, onFilter, modifier) {
+        SourceChip(browse.name, onPick, Modifier.weight(1f, fill = false))
+    }
+}
+
+/** The browsed source's name as a chip that opens the source picker; a long name is cut short. */
+@Composable
+private fun SourceChip(name: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = MaterialTheme.shapes.small
+    Row(
+        modifier
+            .minimumInteractiveComponentSize()
+            .heightIn(min = 32.dp)
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clickable(onClickLabel = "Change source", role = Role.DropdownList, onClick = onClick)
+            .padding(start = 12.dp, end = 4.dp)
+            .testTag(BROWSED_SOURCE_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Icon(Icons.Default.ArrowDropDown, contentDescription = null, Modifier.size(18.dp))
     }
 }
 
 /**
- * Popular and, when the source has it, Latest, then the source's filters, counting the [filterCount] changed. Neither
- * listing is chosen while a filtered search shows. Browse and a source's dedicated search share them.
+ * [leading] (Browse's source), Popular and Latest when the source has Latest, then the source's filters at the end,
+ * counting the [filterCount] changed. Neither listing is chosen while a filtered search shows, and Popular stays to
+ * leave it. Browse and a source's dedicated search share them.
  */
 @Composable
 internal fun ListingControls(
@@ -143,10 +152,18 @@ internal fun ListingControls(
     onChoose: (BrowseKind) -> Unit,
     onFilter: () -> Unit,
     modifier: Modifier = Modifier,
+    leading: @Composable RowScope.() -> Unit = {},
 ) {
-    val listings = if (latest) listOf(BrowseKind.Popular to "Popular", BrowseKind.Latest to "Latest") else listOf(BrowseKind.Popular to "Popular")
-    Row(modifier.testTag(LISTING_CONTROLS_TAG), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        listings.forEach { (listing, label) -> FilterChoiceChip(label, selected = kind == listing) { onChoose(listing) } }
+    val listings = when {
+        latest -> listOf(BrowseKind.Popular to "Popular", BrowseKind.Latest to "Latest")
+        kind is BrowseKind.Filtered -> listOf(BrowseKind.Popular to "Popular")
+        else -> emptyList()
+    }
+    Row(modifier.fillMaxWidth().testTag(LISTING_CONTROLS_TAG), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            leading()
+            listings.forEach { (listing, label) -> FilterChoiceChip(label, selected = kind == listing) { onChoose(listing) } }
+        }
         IconButton(onClick = onFilter) {
             BadgedBox(badge = { if (filterCount > 0) Badge { Text("$filterCount") } }) {
                 Icon(Icons.Default.FilterList, contentDescription = FILTER)
@@ -155,10 +172,12 @@ internal fun ListingControls(
     }
 }
 
-/** Every source that is on, under its kind when both kinds are on, each with its language; [selected] is checked. */
+/** Every source that is on, under its kind when both kinds are on, with its language when they differ; [selected] is checked. */
 @Composable
 private fun SourcePickerSheet(sources: List<SeriesSource>, selected: SourceKey?, onPick: (SourceKey) -> Unit, onDismiss: () -> Unit) {
     val groups = sources.groupBy { it.kind }.toSortedMap()
+    // A language tells sources apart only when they do not all share one.
+    val languages = sources.distinctBy { it.language }.size > 1
     ExpandedBottomSheet(onDismiss = onDismiss) {
         SheetHeader("Source", closeDescription = "Close", onDismiss = onDismiss)
         LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
@@ -173,14 +192,14 @@ private fun SourcePickerSheet(sources: List<SeriesSource>, selected: SourceKey?,
                         )
                     }
                 }
-                items(members, key = { it.key.id }) { source -> SourceRow(source, source.key == selected) { onPick(source.key) } }
+                items(members, key = { it.key.id }) { source -> SourceRow(source, source.key == selected, languages) { onPick(source.key) } }
             }
         }
     }
 }
 
 @Composable
-private fun SourceRow(source: SeriesSource, selected: Boolean, onClick: () -> Unit) {
+private fun SourceRow(source: SeriesSource, selected: Boolean, language: Boolean, onClick: () -> Unit) {
     val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
@@ -189,7 +208,7 @@ private fun SourceRow(source: SeriesSource, selected: Boolean, onClick: () -> Un
     ) {
         Column(Modifier.weight(1f)) {
             Text(source.name, style = MaterialTheme.typography.bodyLarge, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(languageName(source.language), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (language) Text(languageName(source.language), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (selected) Icon(Icons.Default.Check, contentDescription = "Browsing", tint = color)
     }

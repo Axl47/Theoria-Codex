@@ -4,11 +4,11 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.EXTENSION_NAME
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.PLAYING
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.SERIES_QUERY
 import com.theoriacodex.app.live.AnimeViewerHand.Companion.seconds
+import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.SourceKey
@@ -45,7 +45,6 @@ import org.junit.runner.RunWith
 class AnimeSeriesLiveTest {
     private val hand = AnimeViewerHand()
     private val live = hand.live
-    private val device = live.device
 
     /** What the first run leaves for the second, in the debug app's data, which a force-stop keeps. */
     private val notes by lazy { live.context.getSharedPreferences("anime_series_live_test", Context.MODE_PRIVATE) }
@@ -96,7 +95,6 @@ class AnimeSeriesLiveTest {
         val episode = checkNotNull(notes.getString(EPISODE, null))
         val leftAt = notes.getLong(LEFT_AT, 0)
         live.openSeriesTab()
-        narrowToAnime()
         assertEquals(title, hand.openSeries(hand.argument(SERIES_QUERY)))
         live.tap("Continue naming the episode left partway", By.text(AnimeViewerHand.continueLabel(episode)), SeriesLiveDriver.RESULTS_TIMEOUT_MS)
         assertEquals(episode, hand.episodeOnScreen(title))
@@ -128,26 +126,21 @@ class AnimeSeriesLiveTest {
         live.context.deleteSharedPreferences("anime_series_live_test")
     }
 
-    /** Browses [source]; its listing fills the tab below its Popular, Latest and Filter row. */
+    /** Browses [source], picking it from Browse's source picker unless it is already browsed, and reads its listing. */
     private fun browseAnime(source: String) {
-        narrowToAnime()
-        val chip = live.waitFor("$source's chip", By.checkable(true).hasDescendant(By.text(source)))
-        if (!chip.isChecked) chip.click()
-        // The listing fills the grid below the source chips, above the Popular, Latest and Filter bar.
-        val listed = live.await("$source's listing", { hand.labels().dropWhile { it != source }.drop(1).takeWhile { it != POPULAR } }) {
+        live.tap("the Browse view", By.text(SeriesLiveDriver.BROWSE))
+        // Browse's header names the browsed source first, after the Following and Browse switch.
+        val browsed = live.await("the browsed source", { hand.labels().dropWhile { it != SeriesLiveDriver.BROWSE }.getOrNull(1) }) { it != null }
+        if (browsed != source) {
+            live.tap("the browsed source, which opens the picker", By.text(checkNotNull(browsed)))
+            live.tap("$source in the picker", By.text(source))
+        }
+        // The listing fills the grid below the source, Popular and Latest, above the navigation bar.
+        val chrome = setOf(POPULAR, LATEST) + TopLevelDestination.entries.map { it.label }
+        val listed = live.await("$source's listing", { hand.labels().dropWhile { it != source }.drop(1).filterNot { it in chrome } }) {
             it.size >= LISTED_AT_LEAST
         }
         live.report("browse", "$source lists ${listed.size} labels")
-    }
-
-    /** Taps the Anime filter, which the tab offers only when the user has series of both kinds. */
-    private fun narrowToAnime() {
-        if (device.wait(Until.hasObject(By.text(ANIME).clickable(true)), SeriesLiveDriver.SHORT_WAIT_MS) == true) {
-            live.tap("the Anime filter", By.text(ANIME).clickable(true))
-            live.report("filter", "narrowed to Anime")
-        } else {
-            live.report("filter", "no kind filter: only anime is on")
-        }
     }
 
     /**
@@ -224,8 +217,8 @@ class AnimeSeriesLiveTest {
         const val TITLE = "title"
         const val EPISODE = "episode"
         const val LEFT_AT = "leftAt"
-        const val ANIME = "Anime"
         const val POPULAR = "Popular"
+        const val LATEST = "Latest"
         const val LISTED_AT_LEAST = 3
         const val MIN_EPISODES = 4
         const val PLAYED_MS = 5_000L
