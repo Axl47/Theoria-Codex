@@ -58,3 +58,4 @@ and link the record that replaces it.
 | [0038](0038-stored-record-compatibility.md) | Durable records are separate from domain models and keep decoding every shape this app ever stored |
 | [0039](0039-tachiyomi-backup-import.md) | Mihon-family backups are decoded from their protobuf wire format and import their followed or started series |
 | [0040](0040-host-test-compose-waits.md) | Host-test Compose waits drain the main looper |
+| [0041](0041-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
