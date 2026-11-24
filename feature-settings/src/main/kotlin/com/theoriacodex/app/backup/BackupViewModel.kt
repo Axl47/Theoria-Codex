@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.ProfileRestorePendingException
 import com.theoriacodex.data.repository.BackupPreview
 import com.theoriacodex.data.repository.SeriesImportPreview
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import java.text.NumberFormat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -174,7 +175,7 @@ internal fun SeriesImportPreview.summary(): String =
         .joinToString(" · ").ifEmpty { "series progress" }
 
 /** "1 profile", "2 profiles", "1,204 chapters": [count] with [noun] or [plural]; used by the restore previews and their messages. */
-internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "${"%,d".format(count)} ${if (count == 1) noun else plural}"
+internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "${NumberFormat.getIntegerInstance().format(count)} ${if (count == 1) noun else plural}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {
