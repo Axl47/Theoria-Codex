@@ -174,10 +174,18 @@ internal fun ShellIncomingUriEffects(
         shell.openExternalContent(pending.value.toUri())
         appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
     }
+    ShellSeriesNotificationEffect(shell)
+}
+
+/**
+ * Opens what a tapped series notification names: always a new series page, since reusing the one on top would keep
+ * the series that page was opened for. An announced entry opens in the Viewer over it, so Back lands on the series;
+ * only while that page is still on top once the entry loads.
+ */
+@Composable
+private fun ShellSeriesNotificationEffect(shell: TheoriaShell) {
     LaunchedEffect(shell.navReady) {
         if (!shell.navReady) return@LaunchedEffect
-        // Always a new page: reusing the one on top would keep the series that page was opened for. An announced entry
-        // opens in the Viewer over it, so Back lands on the series; only while that page is still on top once it loads.
         SeriesNotificationActivity.opened.filterNotNull().collect { link ->
             SeriesNotificationActivity.opened.value = null
             shell.navController.navigate(AppRoute.series(link.series))
