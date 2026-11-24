@@ -3,6 +3,7 @@ package com.theoriacodex.extensionhost
 import android.content.Context
 import dalvik.system.DelegateLastClassLoader
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 
 class ExtensionRejectedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -43,6 +44,8 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
     } catch (error: ExtensionRejectedException) {
         throw error
     } catch (error: Throwable) {
+        val thrown = (error as? InvocationTargetException)?.targetException ?: error
+        if (thrown.endsTheProcess()) throw thrown
         throw ExtensionRejectedException("$className in ${extension.packageName} could not be created: $error", error)
     }
 }
