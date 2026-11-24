@@ -239,7 +239,7 @@ private fun ViewerPostPage(
             ),
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
-            layout = ViewerMediaLayout(frame.isLandscape || frame.reading, frame.inPictureInPicture, frame.touchExplorationEnabled),
+            layout = ViewerMediaLayout(frame.stillsEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
             videoOptions = host.videoOptions(key, pageState, frame.uiState, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,

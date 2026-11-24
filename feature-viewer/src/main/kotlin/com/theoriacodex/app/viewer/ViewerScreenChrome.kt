@@ -212,8 +212,7 @@ private fun BoxScope.ViewerTopBarOverlay(
             source = title,
             subtitle = subtitle,
             indexLabel = if (selection.mediaItems.size > 1) "${selection.mediaIndex + 1} / ${selection.mediaItems.size}" else null,
-            // Like system Back, the first press leaves the page overview.
-            onBack = { if (frame.mediaOverviewVisible) controls.setOverviewVisible(false) else controls.requestDismiss() },
+            onBack = controls::back,
             trailing = {
                 if (watching) {
                     ViewerEpisodeTopActions(
@@ -226,13 +225,15 @@ private fun BoxScope.ViewerTopBarOverlay(
                     )
                 }
             },
-        ) {
-            // The overview's reading-mode switch sits where the trail would.
-            if (!frame.mediaOverviewVisible) {
-                ViewerTrailRow(selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction)
-            }
-        }
+        ) { ViewerTopBarTrail(frame, trail, config, screen, controls) }
     }
+}
+
+/** The trail row, left out while the page overview is open: its reading-mode switch sits where the row would. */
+@Composable
+private fun ViewerTopBarTrail(frame: ViewerFrame, trail: ViewerTrail, config: ViewerScreenConfig, screen: ViewerScreenState, controls: ViewerControls) {
+    if (frame.mediaOverviewVisible) return
+    ViewerTrailRow(frame.selection.post, frame.posts, trail, config.creatorBrowsingSources, screen.trailForks, controls::markInteraction)
 }
 
 @Composable
