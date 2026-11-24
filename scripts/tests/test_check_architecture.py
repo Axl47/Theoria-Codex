@@ -84,6 +84,20 @@ class CleartextTest(unittest.TestCase):
                 '<domain-config cleartextTrafficPermitted="true"><domain>localhost</domain><domain>cdn.example</domain>'
                 "<domain-config><domain>media.example</domain></domain-config></domain-config></network-security-config>"
             ),
+            "app/src/staging/AndroidManifest.xml": f'<manifest {android}><application tools:node="remove" android:usesCleartextTraffic=" True " /></manifest>',
+            "app/src/staging/res/xml/network_security_config.xml": (
+                '<network-security-config><base-config cleartextTrafficPermitted="False" />'
+                '<domain-config cleartextTrafficPermitted="false"><domain>quiet.example</domain>'
+                '<domain-config cleartextTrafficPermitted="True"><domain>nested.example</domain></domain-config>'
+                '<domain-config cleartextTrafficPermitted="1"><domain>numbered.example</domain></domain-config>'
+                '<domain-config cleartextTrafficPermitted="yes"><domain>unparsed.example</domain></domain-config></domain-config>'
+                '<domain-config cleartextTrafficPermitted="0"><domain>zero.example</domain></domain-config>'
+                '<domain-config cleartextTrafficPermitted="TRUE"><domain>LocalHost</domain><domain>::1</domain>'
+                "<domain>127.0.0.2</domain><domain>[::1]</domain></domain-config></network-security-config>"
+            ),
+            "app/src/test/AndroidManifest.xml": f'<manifest {android}><application android:usesCleartextTraffic="true" /></manifest>',
+            "app/src/test/res/xml/network_security_config.xml": '<network-security-config><domain-config cleartextTrafficPermitted="true"><domain>fixture.example</domain></domain-config></network-security-config>',
+            "app/src/androidTestDebug/res/xml/network_security_config.xml": '<network-security-config><base-config cleartextTrafficPermitted="true" /></network-security-config>',
         }
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -99,9 +113,14 @@ class CleartextTest(unittest.TestCase):
                         f"app/src/benchmarkRelease/AndroidManifest.xml must not drop the application's network security config {adr}",
                         f"app/src/debug/AndroidManifest.xml must apply @xml/network_security_config {adr}",
                         f"app/src/release/AndroidManifest.xml must not drop the application's network security config {adr}",
+                        f"app/src/staging/AndroidManifest.xml must not set usesCleartextTraffic {adr}",
+                        f"app/src/staging/AndroidManifest.xml must not drop the application's network security config {adr}",
                         f"app/src/release/res/xml-v28/network_security_config.xml must refuse cleartext in its base-config {adr}",
                         f"app/src/release/res/xml-v28/network_security_config.xml allows cleartext to cdn.example; only loopback may {adr}",
                         f"app/src/release/res/xml-v28/network_security_config.xml allows cleartext to media.example; only loopback may {adr}",
+                        f"app/src/staging/res/xml/network_security_config.xml allows cleartext to nested.example; only loopback may {adr}",
+                        f"app/src/staging/res/xml/network_security_config.xml allows cleartext to numbered.example; only loopback may {adr}",
+                        f"app/src/staging/res/xml/network_security_config.xml allows cleartext to unparsed.example; only loopback may {adr}",
                     ],
                     check_architecture.provider_media_never_loads_in_cleartext(),
                 )
