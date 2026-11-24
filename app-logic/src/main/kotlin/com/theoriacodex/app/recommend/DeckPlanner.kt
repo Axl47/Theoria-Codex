@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -15,8 +16,6 @@ data class DeckCard(val post: Post, val origin: DeckOrigin)
 
 data class DeckLane(val origin: DeckOrigin.Lane, val posts: List<Post>)
 
-enum class DeckSignal { Liked, Saved, Skipped, Hid }
-
 data class DeckSteering(
     val weights: Map<String, Double> = emptyMap(),
     val skipRuns: Map<String, Int> = emptyMap(),
@@ -25,11 +24,11 @@ data class DeckSteering(
 ) {
     fun weight(laneId: String): Double = weights[laneId] ?: 1.0
 
-    fun after(signal: DeckSignal, origin: DeckOrigin): DeckSteering {
+    fun after(signal: ForYouVerdictKind, origin: DeckOrigin): DeckSteering {
         val lane = (origin as? DeckOrigin.Lane)?.laneId ?: return this
         return when (signal) {
-            DeckSignal.Liked, DeckSignal.Saved -> copy(weights = weights - lane, skipRuns = skipRuns - lane)
-            DeckSignal.Skipped, DeckSignal.Hid -> {
+            ForYouVerdictKind.LIKED, ForYouVerdictKind.SAVED -> copy(weights = weights - lane, skipRuns = skipRuns - lane)
+            ForYouVerdictKind.SKIPPED, ForYouVerdictKind.HID -> {
                 val run = (skipRuns[lane] ?: 0) + 1
                 if (run < SKIP_RUN) copy(skipRuns = skipRuns + (lane to run))
                 else copy(weights = weights + (lane to (weight(lane) / 2).coerceAtLeast(MIN_WEIGHT)), skipRuns = skipRuns - lane)
