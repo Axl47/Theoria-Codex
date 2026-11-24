@@ -23,3 +23,10 @@ A poisoned cache entry costs one failed load, not a permanently broken image. Of
 - `media-kit/src/main/kotlin/com/theoriacodex/app/media/UndecodableImageEviction.kt`: `UndecodableImageEviction`
 - `media-kit/src/main/kotlin/com/theoriacodex/app/media/MediaRequestFactory.kt`: `copyCachedMediaBytes`
 - `media-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerGifBytes.kt`: `ViewerGifByteStore`, `warmRemoteViewerGif`
+
+## Guarded by
+
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/UndecodableImageEvictionTest.kt`: `a cached body that fails to decode is dropped while network and HTTP failures keep the cache (ADR 0108)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaRequestFactoryTest.kt`: `cached bytes are copied from the entry keyed by the normalized url, only within the size bounds (ADR 0108)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt`: `a fill is staged in a temporary file and a clear during it publishes nothing (ADR 0108)`
+- Left to prose: that `MediaCacheMaintenance` never clears offline copies holds because it has no reference to them, and its `clear` result passing on the Pixiv archive's answer has no host test (it reaches the context's video and image singletons); which exception Coil raises for a truncated file is decoder behaviour, and a decoder failure reported as an `IOException` keeps its entry like a network error; that `copyCachedMediaBytes` never writes Coil metadata, that `warmRemoteViewerGif` reuses Coil's entry, and the length of `GIF_DOWNLOAD_TIMEOUT_MS` are not guarded.
