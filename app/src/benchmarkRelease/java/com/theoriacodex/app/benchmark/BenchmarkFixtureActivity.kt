@@ -268,6 +268,7 @@ private fun BenchmarkViewerFixture(
             ),
         )
     }
+    val config = remember { ViewerScreenConfig(playbackDiagnosticsEnabled = true) }
     val host = remember(posts) {
         ViewerScreenHost(onAction = { action: ViewerAction -> viewerState = reduceViewerState(viewerState, action).state })
     }
@@ -279,7 +280,7 @@ private fun BenchmarkViewerFixture(
         ViewerScreen(
             uiState = viewerState,
             host = host,
-            config = ViewerScreenConfig(playbackDiagnosticsEnabled = true),
+            config = config,
         )
     }
 }

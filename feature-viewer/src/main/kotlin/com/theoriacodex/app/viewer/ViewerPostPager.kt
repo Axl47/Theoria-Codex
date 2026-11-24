@@ -29,6 +29,7 @@ import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
+import com.theoriacodex.app.viewer.state.ViewerResolutionState
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -226,7 +227,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = host.rememberVideoOptions(key, pageState, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config),
+            videoOptions = host.rememberVideoOptions(key, pageState.resolution, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config.playbackDiagnosticsEnabled),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -265,17 +266,17 @@ private fun ViewerScreenHost.rememberPageEvents(
 @Composable
 private fun ViewerScreenHost.rememberVideoOptions(
     key: ViewerMediaKey,
-    pageState: ViewerPageState,
+    resolution: ViewerResolutionState,
     episode: ViewerEpisodeChoice,
     session: ViewerSessionIdentity?,
     screen: ViewerScreenState,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    config: ViewerScreenConfig,
-): ViewerVideoOptions = remember(key, pageState, episode, session, screen, quality, qualityHeight, config, this) {
+    diagnosticsEnabled: Boolean,
+): ViewerVideoOptions = remember(key, resolution, episode, session, screen, quality, qualityHeight, diagnosticsEnabled, this) {
     ViewerVideoOptions(
-        quality, qualityHeight, episode.streamLabelFor(key), pageState.terminalResolutionMessage(), config.playbackDiagnosticsEnabled,
-        ViewerEpisodeOptions(screen.streamAttempts.forSession(session), episode.pickedStream(key), pageState.resolution.resolvedAtMs) { label ->
+        quality, qualityHeight, episode.streamLabelFor(key), resolution.terminalMessage(), diagnosticsEnabled,
+        ViewerEpisodeOptions(screen.streamAttempts.forSession(session), episode.pickedStream(key), resolution.resolvedAtMs) { label ->
             onAction(ViewerAction.FallBackToStream(key, label))
         },
     )
@@ -284,8 +285,7 @@ private fun ViewerScreenHost.rememberVideoOptions(
 internal fun ViewerScreenHost.episodeProgress(series: ViewerSeries?, post: Post): ((ViewerPlaybackProgress) -> Unit)? =
     onPlaybackProgress?.takeIf { series is ViewerSeries.Watching }?.let { report -> { progress -> report(post, progress) } }
 
-private fun ViewerPageState.terminalResolutionMessage(): String? = resolution
-    .takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }
+private fun ViewerResolutionState.terminalMessage(): String? = takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }
     ?.message
 
 private fun viewerRendererControls(
