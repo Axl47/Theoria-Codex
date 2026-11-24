@@ -1,5 +1,9 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.content.res.Configuration
@@ -183,7 +187,7 @@ private fun ViewerLoadedScreen(
         // Only episodes offer their tracks; no other video's player is followed for them.
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
     ) {
-        ViewerBackdrop(returnProgress, dismissDrag) {
+        ViewerBackdrop(returnProgress, dismissDrag, onTouch = { screen.touchSerial += 1 }) {
             ViewerContentSurface(
                 frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
                 readReturnProgress, flingVelocity, quality, qualityHeight, videoPositions, host, config, scope,
@@ -271,11 +275,19 @@ private fun rememberViewerLoadMore(
 private fun ViewerBackdrop(
     returnProgress: State<Float>,
     dismissDrag: ViewerDismissDrag,
+    onTouch: () -> Unit,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Observes each touch's first contact before any child handles it, without consuming it.
+            .pointerInput(onTouch) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    onTouch()
+                }
+            }
             .drawBehind {
                 drawRect(Color.Black.copy(alpha = (1f - returnProgress.value) * (1f - VIEWER_DISMISS_DIM * dismissDrag.progress)))
             },
