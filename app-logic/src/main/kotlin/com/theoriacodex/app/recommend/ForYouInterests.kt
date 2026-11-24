@@ -84,7 +84,7 @@ object ForYouInterests {
 class ForYouInterestPicker internal constructor(
     private val leads: Map<String, TagAffinity>,
     private val guesses: Map<String, Double>,
-    internal val stats: TagAffinityStats,
+    private val stats: TagAffinityStats,
 ) {
     /**
      * Up to [maxInterests] interests, strongest first, then the best guess (a tag too rare in what the profile watches

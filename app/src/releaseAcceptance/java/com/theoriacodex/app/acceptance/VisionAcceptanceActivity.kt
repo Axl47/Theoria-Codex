@@ -118,11 +118,13 @@ private class VisionPhases(
 
     /**
      * Charging with the app on screen: every post is indexed from its still, the videos from their colour posters, so no
-     * video carries the monochrome that only its frames show.
+     * video carries the monochrome that only its frames show. Progress leaves the videos out until their frames are read.
      */
     private suspend fun stills(): String {
-        val progress = pictures.progress.first { it.analysed >= FIXTURES + videos.size }
+        pictures.progress.first { it.analysed >= FIXTURES }
         val index = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
+        val progress = pictures.progress.first()
+        check(progress.analysed == FIXTURES) { "videos counted before their frames: $progress" }
         val monochrome = normalizeMatchToken("monochrome")
         check(videos.none { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }) { "a video was read from frames" }
         return "analysed=${progress.analysed}/${progress.total} videosFromStills=${videos.size}"

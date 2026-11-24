@@ -182,7 +182,10 @@ private fun keptTagEvidence(
     savedSearches: List<SavedSearchEntry>,
 ): KeptTagEvidence {
     val stored = libraryPosts.associateBy(Post::id)
-    val liked = likes.map { like -> LikedTagDocument(like.postId.source, stored[like.postId]?.let(::trainingTagsFor) ?: like.tags) }
+    // The stored copy is shared with every view of the post; one thinner than what the Like kept does not replace it.
+    val liked = likes.map { like ->
+        LikedTagDocument(like.postId.source, stored[like.postId]?.let(::trainingTagsFor)?.takeIf { it.size >= like.tags.size } ?: like.tags)
+    }
     val likedIds = likes.mapTo(mutableSetOf(), LikedPost::postId)
     // A post both Liked and in a Codex is one kept post.
     val keptPosts = likes.map(LikedPost::postId).zip(liked.map(LikedTagDocument::tags)) +

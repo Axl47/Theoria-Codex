@@ -7,6 +7,7 @@ import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -87,9 +88,12 @@ class LibraryVisionBackfill(
 
     /**
      * Stores what this session already analysed for posts kept since (a For You card liked after it was vetted, say),
-     * whenever the Library gains a post, so those pictures are never read twice.
+     * whenever the Library gains a post, so those pictures are never read twice. First, once the model is ready, it sets
+     * aside the frames of posts waiting on them that do not play ([settleStills]).
      */
     suspend fun writeThrough() {
+        tagger.ready.first { it }
+        settleStills()
         combine(tagger.ready, signatures.observeVisionProgress(tagger.modelId).map { it.total }.distinctUntilChanged()) { ready, _ -> ready }
             .collect { ready ->
                 if (!ready) return@collect
@@ -99,10 +103,26 @@ class LibraryVisionBackfill(
             }
     }
 
+    /**
+     * Marks every analysis awaiting frames whose post does not play as all its post offers. Whether a post plays is known
+     * on the phone, so a still image never waits for the idle-only [drainFrames] to count as tagged; the migration that
+     * added frames marked every earlier analysis as awaiting them.
+     */
+    private suspend fun settleStills() {
+        val checked = HashSet<PostId>()
+        while (tagger.ready.value) {
+            val awaiting = signatures.libraryPostsAwaitingFrames(tagger.modelId, checked.size + SETTLE_BATCH).filterNot { it.id in checked }
+            if (awaiting.isEmpty()) return
+            awaiting.mapTo(checked) { it.id }
+            tagger.playing(awaiting)
+        }
+    }
+
     private companion object {
         /** About four seconds of pictures at phase 0's 450 ms each. */
         const val BATCH = 8
         const val WRITE_THROUGH_LIMIT = 64
+        const val SETTLE_BATCH = 256
 
         /** Posts in a row that could not be reached after which a frame run stops. */
         const val UNREACHABLE_STREAK = 3
