@@ -71,7 +71,7 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val token = intent.getStringExtra("token").orEmpty()
         val phase = intent.getStringExtra("phase").orEmpty()
-        require(token.matches(Regex("[a-f0-9]{24}")) && phase in setOf("write", "read"))
+        require(token.matches(Regex("[a-f0-9]{24}")) && phase in setOf("write", "read")) { "bad token or phase: token=$token phase=$phase" }
         val status = TextView(this).also { setContentView(it) }
         status.text = "Checking minified data contracts"
         lifecycleScope.launch {
@@ -88,7 +88,7 @@ class ReleaseDataAcceptanceActivity : ComponentActivity() {
                 throw cancelled
             } catch (failure: Exception) {
                 status.text = "Minified data contracts failed"
-                Log.e(RESULT_TAG, "FAIL:$token:$phase:${failure.javaClass.simpleName}")
+                Log.e(RESULT_TAG, "FAIL:$token:$phase:${failure.javaClass.simpleName}: ${failure.message}", failure)
             }
         }
     }
@@ -105,7 +105,7 @@ private suspend fun verifyData(directory: File, phase: String) {
     val dataStores = File(directory, "datastore")
     val shippedDataStores = File(directory, "datastore-shipped")
     if (phase == "write") {
-        check(directory.mkdirs())
+        check(directory.mkdirs()) { "could not create ${directory.path}" }
         writeBackups(File(directory, "backup"), videoPostFixture())
         FileBackedUpdateStateStore(updateFile).update { updateState }
         legacyUpdateFile.writeText(LEGACY_UPDATE_STATE)
@@ -120,7 +120,8 @@ private suspend fun verifyData(directory: File, phase: String) {
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
             tags.awaitLoaded()
-            check(tags.get(SourceKey.GELBOORU, 10).any { it.text == "legacy" })
+            val legacyTags = tags.get(SourceKey.GELBOORU, 10)
+            check(legacyTags.any { it.text == "legacy" }) { "tag store lacked legacy: $legacyTags" }
             tags.put(SourceKey.GELBOORU, listOf(TagSuggestion("fresh", "seen", 10)))
             tags.flush()
         } finally {
@@ -133,66 +134,73 @@ private suspend fun verifyData(directory: File, phase: String) {
         verifyCodexShare(shareFile.readText())
         verifyStatsShare(statsFile.readText())
         verifyVideoPost(postFile.readText())
-        val legacyPost = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), legacyPostFile.readText())))
-        check(legacyPost.id == PostId(SourceKey.IWARA, "legacy-video"))
-        check(legacyPost.preview.url == "https://example.test/preview.mp4" && legacyPost.preview.videoVariants.isEmpty())
-        check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>())
-        check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty())
+        val legacyPost = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), legacyPostFile.readText()))) { "legacy post file decoded to null" }
+        check(legacyPost.id == PostId(SourceKey.IWARA, "legacy-video")) { "legacy post id was ${legacyPost.id}" }
+        check(legacyPost.preview.url == "https://example.test/preview.mp4" && legacyPost.preview.videoVariants.isEmpty()) { "legacy preview was ${legacyPost.preview}" }
+        check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>()) { "legacy full was ${legacyPost.full}" }
+        check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty()) { "legacy media was ${legacyPost.media}" }
         verifyOfflineCopy(File(directory, "offline"))
         verifyDataStores(dataStores, shippedDataStores)
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
             tags.awaitLoaded()
-            check(tags.get(SourceKey.GELBOORU, 10).any { it.text == "fresh" })
-            check(Json.parseToJsonElement(tagsFile.readText()).jsonObject.getValue("sources").jsonObject.containsKey("GELBOORU"))
+            val freshTags = tags.get(SourceKey.GELBOORU, 10)
+            check(freshTags.any { it.text == "fresh" }) { "tag store lacked fresh: $freshTags" }
+            val tagsJson = tagsFile.readText()
+            check(Json.parseToJsonElement(tagsJson).jsonObject.getValue("sources").jsonObject.containsKey("GELBOORU")) { "tags file lacked GELBOORU source: $tagsJson" }
         } finally {
             tags.close()
         }
-        check(directory.deleteRecursively())
+        check(directory.deleteRecursively()) { "could not delete ${directory.path}" }
     }
 }
 
 /** kotlinx serializers survive R8 with readable keys, and a file the Gson store wrote still loads. */
 private suspend fun verifyUpdateState(updateFile: File, legacyUpdateFile: File) {
-    check(FileBackedUpdateStateStore(updateFile).snapshot() == updateState)
+    val snapshot = FileBackedUpdateStateStore(updateFile).snapshot()
+    check(snapshot == updateState) { "update state snapshot was $snapshot" }
     val wire = Json.parseToJsonElement(updateFile.readText()).jsonObject
-    check(wire.keys == UPDATE_STATE_KEYS)
+    check(wire.keys == UPDATE_STATE_KEYS) { "update.json keys were ${wire.keys}" }
     val changelog = wire.getValue("pendingPostInstallChangelog").jsonObject
-    check(changelog.keys == CHANGELOG_KEYS)
-    check(changelog.getValue("changelogSections").jsonArray.single().jsonObject.keys == setOf("title", "bullets"))
+    check(changelog.keys == CHANGELOG_KEYS) { "changelog keys were ${changelog.keys}" }
+    check(changelog.getValue("changelogSections").jsonArray.single().jsonObject.keys == setOf("title", "bullets")) { "changelog section keys were ${changelog.getValue("changelogSections").jsonArray.single().jsonObject.keys}" }
     val legacy = FileBackedUpdateStateStore(legacyUpdateFile).snapshot()
-    check(legacy.ignoredReleaseId == RELEASE_ID && legacy.remindLaterUntilEpochMs == REMIND_UNTIL)
-    check(legacy.pendingPostInstallChangelog?.releaseName == "Tom & Jerry's <release>")
+    check(legacy.ignoredReleaseId == RELEASE_ID && legacy.remindLaterUntilEpochMs == REMIND_UNTIL) { "legacy update state was $legacy" }
+    check(legacy.pendingPostInstallChangelog?.releaseName == "Tom & Jerry's <release>") { "legacy pending changelog was ${legacy.pendingPostInstallChangelog}" }
 }
 
 private suspend fun verifyQueryStore(directory: File) {
-    check(FileBackedQueryRepository(directory).observeAppliedQuery(QUERY_MODE).first() == acceptanceQuery)
+    val appliedQuery = FileBackedQueryRepository(directory).observeAppliedQuery(QUERY_MODE).first()
+    check(appliedQuery == acceptanceQuery) { "applied query was $appliedQuery" }
     val wire = Json.parseToJsonElement(File(directory, "query_store.json").readText()).jsonObject
     val record = wire.getValue("queries").jsonObject.getValue(QUERY_MODE).jsonObject
-    check(record.keys == QUERY_KEYS)
-    check(record.getValue("includeTerms").jsonArray.first().jsonObject.keys == setOf("value", "facet", "sourceNamespace"))
+    check(record.keys == QUERY_KEYS) { "query keys were ${record.keys}" }
+    check(record.getValue("includeTerms").jsonArray.first().jsonObject.keys == setOf("value", "facet", "sourceNamespace")) { "include term keys were ${record.getValue("includeTerms").jsonArray.first().jsonObject.keys}" }
 }
 
 private fun verifyCodexShare(json: String) {
     val wire = Json.parseToJsonElement(json).jsonObject
-    check(wire.keys == setOf("version", "title", "posts"))
-    check(wire.getValue("posts").jsonArray.single().jsonObject.keys == setOf("source", "sourcePostId", "snapshot"))
-    val imported = requireNotNull(parseCodexShareFile(json))
-    check(imported.title == "Acceptance & <collection>")
-    check(codexSharePostSnapshot(imported.posts.orEmpty().single())?.id == videoPostFixture().id)
+    check(wire.keys == setOf("version", "title", "posts")) { "share wire keys were ${wire.keys}" }
+    check(wire.getValue("posts").jsonArray.single().jsonObject.keys == setOf("source", "sourcePostId", "snapshot")) { "share post keys were ${wire.getValue("posts").jsonArray.single().jsonObject.keys}" }
+    val imported = requireNotNull(parseCodexShareFile(json)) { "codex share file parsed to null" }
+    check(imported.title == "Acceptance & <collection>") { "imported share title was ${imported.title}" }
+    val snapshotId = codexSharePostSnapshot(imported.posts.orEmpty().single())?.id
+    check(snapshotId == videoPostFixture().id) { "imported share snapshot id was $snapshotId" }
 }
 
 /** Exported stats files keep readable keys, and a file a Gson build exported still imports. */
 private fun verifyStatsShare(json: String) {
     val wire = Json.parseToJsonElement(json).jsonObject
-    check(wire.keys == setOf("format", "version", "name", "codices", "overall"))
+    check(wire.keys == setOf("format", "version", "name", "codices", "overall")) { "stats wire keys were ${wire.keys}" }
     val codex = wire.getValue("codices").jsonArray.single().jsonObject
-    check(codex.keys == setOf("name", "entries", "browsingMs", "watchingMs", "postOpens", "posts"))
-    check(codex.getValue("posts").jsonArray.single().jsonObject.keys == setOf("key", "label", "opens", "videoMs", "imageMs"))
-    check(wire.getValue("overall").jsonObject.keys == STATS_OVERALL_KEYS)
-    check(parseStatsShare(json) == statsShare)
+    check(codex.keys == setOf("name", "entries", "browsingMs", "watchingMs", "postOpens", "posts")) { "stats codex keys were ${codex.keys}" }
+    check(codex.getValue("posts").jsonArray.single().jsonObject.keys == setOf("key", "label", "opens", "videoMs", "imageMs")) { "stats post keys were ${codex.getValue("posts").jsonArray.single().jsonObject.keys}" }
+    check(wire.getValue("overall").jsonObject.keys == STATS_OVERALL_KEYS) { "stats overall keys were ${wire.getValue("overall").jsonObject.keys}" }
+    val parsed = parseStatsShare(json)
+    check(parsed == statsShare) { "parsed stats share was $parsed" }
     // The Gson export predates series time, which reads as zero.
-    check(parseStatsShare(LEGACY_STATS_SHARE) == statsShare.copy(overall = statsShare.overall?.copy(readingMs = 0L, animeMs = 0L)))
+    val parsedLegacy = parseStatsShare(LEGACY_STATS_SHARE)
+    check(parsedLegacy == statsShare.copy(overall = statsShare.overall?.copy(readingMs = 0L, animeMs = 0L))) { "parsed legacy stats share was $parsedLegacy" }
 }
 
 private val statsShare = StatsShareFile(
@@ -223,19 +231,23 @@ private suspend fun verifyCredentials(context: Context, token: String, phase: St
     )
     val directory = File(context.noBackupFilesDir, "release-contract-$token")
     if (phase == "write") {
-        check(store("current").writeVerified(credentials) == CredentialStoreWriteResult.Success)
+        check(store("current").writeVerified(credentials) == CredentialStoreWriteResult.Success) { "current credential write did not succeed" }
         context.writeGsonEnvelope(File(directory, "gson.json"), "release-contract-$token-gson", LEGACY_CREDENTIAL_PAYLOAD)
         context.writeGsonEnvelope(File(directory, "corrupt-payload.json"), "release-contract-$token-corrupt-payload", "{\"schemaVersion\":1,")
         File(directory, "corrupt-envelope.json").writeText("[]")
     } else {
-        check(store("current").read() == CredentialEnvelopeReadResult.Success(credentials))
+        val currentRead = store("current").read()
+        check(currentRead == CredentialEnvelopeReadResult.Success(credentials)) { "current credential read was $currentRead" }
         val wire = Json.parseToJsonElement(File(directory, "current.json").readText()).jsonObject
-        check(wire.keys == setOf("formatVersion", "keyVersion", "iv", "ciphertext"))
-        check(store("gson").read() == CredentialEnvelopeReadResult.Success(credentials))
-        check(store("corrupt-payload").read() == CredentialEnvelopeReadResult.ReconnectRequired)
-        check(store("corrupt-envelope").read() == CredentialEnvelopeReadResult.ReconnectRequired)
-        listOf("current", "gson", "corrupt-payload", "corrupt-envelope").forEach { check(store(it).reset()) }
-        check(directory.deleteRecursively())
+        check(wire.keys == setOf("formatVersion", "keyVersion", "iv", "ciphertext")) { "credential envelope keys were ${wire.keys}" }
+        val gsonRead = store("gson").read()
+        check(gsonRead == CredentialEnvelopeReadResult.Success(credentials)) { "gson credential read was $gsonRead" }
+        val corruptPayloadRead = store("corrupt-payload").read()
+        check(corruptPayloadRead == CredentialEnvelopeReadResult.ReconnectRequired) { "corrupt-payload credential read was $corruptPayloadRead" }
+        val corruptEnvelopeRead = store("corrupt-envelope").read()
+        check(corruptEnvelopeRead == CredentialEnvelopeReadResult.ReconnectRequired) { "corrupt-envelope credential read was $corruptEnvelopeRead" }
+        listOf("current", "gson", "corrupt-payload", "corrupt-envelope").forEach { check(store(it).reset()) { "could not reset credential store $it" } }
+        check(directory.deleteRecursively()) { "could not delete ${directory.path}" }
     }
 }
 
@@ -303,20 +315,23 @@ private suspend fun verifyRoomPayloads(context: Context, databaseName: String, p
             database.recentsDao().upsertSearch(RecentSearchEntity("gson-search", GSON_RECENT_SEARCH, 1L, database.recentsDao().nextSearchSequence()))
             return
         }
-        check(likes.getPost(videoPostFixture().id) == videoPostFixture())
-        check(likes.observeLikes(ACCEPTANCE_PROFILE).first().single().tags == LIKE_TAGS)
-        val payload = Json.parseToJsonElement(checkNotNull(database.codexLikesDao().post("IWARA", "video-contract")).payloadJson)
-        check(payload.jsonObject.getValue("fullVideoVariants").jsonArray.first().jsonObject.containsKey("original"))
+        val likedPost = likes.getPost(videoPostFixture().id)
+        check(likedPost == videoPostFixture()) { "liked post was $likedPost" }
+        val likedTags = likes.observeLikes(ACCEPTANCE_PROFILE).first().single().tags
+        check(likedTags == LIKE_TAGS) { "liked tags were $likedTags" }
+        val payload = Json.parseToJsonElement(checkNotNull(database.codexLikesDao().post("IWARA", "video-contract")) { "liked video post row missing" }.payloadJson)
+        check(payload.jsonObject.getValue("fullVideoVariants").jsonArray.first().jsonObject.containsKey("original")) { "liked payload lacked original variant: $payload" }
         val searches = recents.observeSearches().first().associateBy { it.queryHash }
-        check(searches.getValue("kotlinx-search").let { it.query == unifiedQuery && it.sources == MULTI_SOURCES })
-        val gsonRow = checkNotNull(likes.getPost(gsonRowId))
-        check(gsonRow.title == "Tom & Jerry's <post>" && gsonRow.canonicalTags == listOf("a&b", "c=d"))
-        check(likes.observeLikes(GSON_PROFILE).first().single().tags == listOf("a&b", "it's"))
+        check(searches.getValue("kotlinx-search").let { it.query == unifiedQuery && it.sources == MULTI_SOURCES }) { "kotlinx-search was ${searches.getValue("kotlinx-search")}" }
+        val gsonRow = checkNotNull(likes.getPost(gsonRowId)) { "gson like row $gsonRowId missing" }
+        check(gsonRow.title == "Tom & Jerry's <post>" && gsonRow.canonicalTags == listOf("a&b", "c=d")) { "gson row title ${gsonRow.title} tags ${gsonRow.canonicalTags}" }
+        val gsonTags = likes.observeLikes(GSON_PROFILE).first().single().tags
+        check(gsonTags == listOf("a&b", "it's")) { "gson like tags were $gsonTags" }
         // A For You row reads as Unified with an entry of tags for every source it searched, so it never fails a read.
         check(searches.getValue("gson-search").let {
             it.kind == RecentSearchKind.UNIFIED &&
                 it.sourceTags == mapOf(SourceKey.GELBOORU to listOf("rock & roll", "<seed>"), SourceKey.PIXIV to emptyList())
-        })
+        }) { "gson-search was ${searches.getValue("gson-search")}" }
     } finally {
         database.close()
         if (phase == "read") context.deleteDatabase(databaseName)
@@ -363,13 +378,13 @@ private val QUERY_KEYS = setOf(
 private fun verifyVideoPost(json: String) {
     val wire = Json.parseToJsonElement(json).jsonObject
     val fullVariants = wire.getValue("fullVideoVariants").jsonArray.map { it.jsonObject.keys }
-    check(fullVariants == listOf(setOf("url", "original"), setOf("url", "height", "original", "mime")))
+    check(fullVariants == listOf(setOf("url", "original"), setOf("url", "height", "original", "mime"))) { "full video variants were $fullVariants" }
     val galleryMedia = wire.getValue("media").jsonArray.single().jsonObject
-    check(galleryMedia.keys == setOf("url", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated"))
-    check(galleryMedia.getValue("videoVariants").jsonArray.single().jsonObject.keys == setOf("url", "height", "original", "mime"))
-    val restored = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), json)))
-    check(restored == videoPostFixture())
-    check(restored.preview.videoVariants.isEmpty())
+    check(galleryMedia.keys == setOf("url", "mime", "progressiveUrls", "fallbackUrls", "videoVariants", "isAnimated")) { "gallery media keys were ${galleryMedia.keys}" }
+    check(galleryMedia.getValue("videoVariants").jsonArray.single().jsonObject.keys == setOf("url", "height", "original", "mime")) { "gallery variant keys were ${galleryMedia.getValue("videoVariants").jsonArray.single().jsonObject.keys}" }
+    val restored = requireNotNull(PostStorageCodec.decode(DurableJson.decodeFromString(PostStorageRecord.serializer(), json))) { "post storage record decoded to null" }
+    check(restored == videoPostFixture()) { "restored post was $restored" }
+    check(restored.preview.videoVariants.isEmpty()) { "restored preview variants were ${restored.preview.videoVariants}" }
 }
 
 /** The manifest's kotlinx serializer must survive R8: written in one process, read with stable keys in the next. */
@@ -381,13 +396,18 @@ private suspend fun saveOfflineCopy(offline: File) {
 private suspend fun verifyOfflineCopy(offline: File) {
     val post = videoPostFixture()
     val manifest = Json.parseToJsonElement(File(offline, "${offlineFolderName(post.id)}/manifest.json").readText()).jsonObject
-    check(manifest.keys == setOf("version", "post", "sourcePost", "owners", "mediaBytes"))
-    check(manifest.getValue("version").jsonPrimitive.int == 3 && manifest.getValue("sourcePost").jsonObject.containsKey("fullVideoVariants"))
+    check(manifest.keys == setOf("version", "post", "sourcePost", "owners", "mediaBytes")) { "offline manifest keys were ${manifest.keys}" }
+    check(manifest.getValue("version").jsonPrimitive.int == 3) { "offline manifest version was ${manifest.getValue("version")}" }
+    val sourcePost = manifest.getValue("sourcePost").jsonObject
+    check(sourcePost.containsKey("fullVideoVariants")) { "offline manifest sourcePost keys were ${sourcePost.keys}" }
     val store = OfflineMediaStore(offline)
-    val found = requireNotNull(store.find(post.id))
-    check(found.media.single().localPath?.let(::File)?.readText() == "offline bytes")
-    check(store.withoutOfflineLocations(found) == post)
-    check(store.snapshot.value.postsByOwner == mapOf("acceptance" to setOf(post.id)))
+    val found = requireNotNull(store.find(post.id)) { "offline store lacked ${post.id}" }
+    val offlineText = found.media.single().localPath?.let(::File)?.readText()
+    check(offlineText == "offline bytes") { "offline media text was $offlineText" }
+    val stripped = store.withoutOfflineLocations(found)
+    check(stripped == post) { "offline store without locations was $stripped" }
+    val postsByOwner = store.snapshot.value.postsByOwner
+    check(postsByOwner == mapOf("acceptance" to setOf(post.id))) { "offline posts by owner were $postsByOwner" }
 }
 
 private fun offlineFolderName(id: PostId) = MessageDigest.getInstance("SHA-256")

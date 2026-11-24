@@ -20,9 +20,13 @@ import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -34,11 +38,11 @@ import kotlinx.serialization.json.jsonPrimitive
  * files a Gson build wrote still load. [current] is written through the repositories; [shipped] holds literal files.
  */
 internal suspend fun writeDataStores(current: File, shipped: File) {
-    check(current.mkdirs() && shipped.mkdirs())
+    check(current.mkdirs() && shipped.mkdirs()) { "could not create ${current.path} / ${shipped.path}" }
     withStoreScope { scope ->
         val settings = DataStoreSettingsRepository(current, scope)
         settings.updateSettings { it.copy(oldSearchBar = true) }
-        check(settings.addFavoriteTag(PROFILE, SourceKey.GELBOORU, listOf("cat_ears", "fox_ears"), FAVORITE_NAME))
+        check(settings.addFavoriteTag(PROFILE, SourceKey.GELBOORU, listOf("cat_ears", "fox_ears"), FAVORITE_NAME)) { "favorite tag was not added" }
         DataStoreUiRestoreRepository(current, scope).apply {
             setLastTab("codex")
             setSearchScrollState("h", SearchScrollState(7, 12))
@@ -59,16 +63,23 @@ internal suspend fun writeDataStores(current: File, shipped: File) {
 internal suspend fun verifyDataStores(current: File, shipped: File) {
     withStoreScope { scope ->
         val settings = DataStoreSettingsRepository(current, scope).apply { awaitReady() }.observeSettings().first()
-        check(settings.oldSearchBar && settings.favoriteTagsByProfile.getValue(PROFILE).single().name == FAVORITE_NAME)
+        val favorites = settings.favoriteTagsByProfile[PROFILE]
+        check(settings.oldSearchBar && favorites?.singleOrNull()?.name == FAVORITE_NAME) { "oldSearchBar=${settings.oldSearchBar} favorites=$favorites" }
         DataStoreUiRestoreRepository(current, scope).apply {
             awaitReady()
-            check(getLastTab() == "codex" && getSearchScrollState("h") == SearchScrollState(7, 12))
-            check(getFeedFabRestoreStates() == mapOf("ctx" to feedFilters))
-            check(observeViewerLaunchContext().first() == launchContext)
+            val lastTab = getLastTab()
+            check(lastTab == "codex") { "last tab was $lastTab" }
+            val scroll = getSearchScrollState("h")
+            check(scroll == SearchScrollState(7, 12)) { "search scroll state was $scroll" }
+            val fabStates = getFeedFabRestoreStates()
+            check(fabStates == mapOf("ctx" to feedFilters)) { "fab restore states were $fabStates" }
+            val launch = observeViewerLaunchContext().first()
+            check(launch == launchContext) { "viewer launch context was $launch" }
         }
         val statistics = DataStoreStatisticsRepository(current, scope).apply { awaitReady() }.observeStatistics().first()
-        check(statistics.appOpenCount == 1L && statistics.watchedPostCount == 1L)
-        check(statistics.codexStatistics.getValue("codex").posts.getValue("PIXIV:1").label == "Label & <x>")
+        check(statistics.appOpenCount == 1L && statistics.watchedPostCount == 1L) { "statistics open/watched counts were ${statistics.appOpenCount} / ${statistics.watchedPostCount}" }
+        val codexPost = statistics.codexStatistics["codex"]?.posts?.get("PIXIV:1")
+        check(codexPost?.label == "Label & <x>") { "codex stats PIXIV:1 was $codexPost in ${statistics.codexStatistics}" }
     }
     verifyCurrentKeys(current)
     withStoreScope { scope -> verifyShipped(shipped, scope) }
@@ -76,45 +87,51 @@ internal suspend fun verifyDataStores(current: File, shipped: File) {
 
 private fun verifyCurrentKeys(current: File) {
     val settings = current.json(DATASTORE_SETTINGS_FILE_NAME)
-    check(settings.keys == setOf("schemaVersion", "settings"))
+    check(settings.keys == setOf("schemaVersion", "settings")) { "settings keys were ${settings.keys}" }
     val favorite = settings.getValue("settings").jsonObject.getValue("favoriteTagsByProfile").jsonObject
         .getValue(PROFILE).jsonArray.single().jsonObject
-    check(favorite.keys == setOf("source", "tag", "tags", "name"))
+    check(favorite.keys == setOf("source", "tag", "tags", "name")) { "favorite keys were ${favorite.keys}" }
     val restore = current.json(DATASTORE_UI_RESTORE_FILE_NAME)
-    check(restore.keys == setOf("schemaVersion", "state"))
+    check(restore.keys == setOf("schemaVersion", "state")) { "restore keys were ${restore.keys}" }
     val state = restore.getValue("state").jsonObject
     check(state.keys ==
-        setOf("lastTab", "searchScrollStates", "feedFabRestoreStates", "viewerLaunchContext", "savedSearchNewPosts"))
+        setOf("lastTab", "searchScrollStates", "feedFabRestoreStates", "viewerLaunchContext", "savedSearchNewPosts")) { "state keys were ${state.keys}" }
     check(state.getValue("searchScrollStates").jsonObject.getValue("h").jsonObject.keys ==
-        setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx"))
+        setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx")) { "scroll state keys were ${state.getValue("searchScrollStates").jsonObject.getValue("h").jsonObject.keys}" }
     check(state.getValue("viewerLaunchContext").jsonObject.keys ==
-        setOf("queryHash", "startIndex", "streamSource", "scrollOffsetHint"))
+        setOf("queryHash", "startIndex", "streamSource", "scrollOffsetHint")) { "launch context keys were ${state.getValue("viewerLaunchContext").jsonObject.keys}" }
     val statistics = current.json(DATASTORE_STATISTICS_FILE_NAME)
-    check(statistics.keys == setOf("schemaVersion", "statistics"))
+    check(statistics.keys == setOf("schemaVersion", "statistics")) { "statistics keys were ${statistics.keys}" }
     val post = statistics.getValue("statistics").jsonObject.getValue("codexStatistics").jsonObject.getValue("codex").jsonObject
         .getValue("posts").jsonObject.getValue("PIXIV:1").jsonObject
-    check(post.keys == setOf("label", "opens", "videoMs", "imageMs"))
+    check(post.keys == setOf("label", "opens", "videoMs", "imageMs")) { "post stats keys were ${post.keys}" }
 }
 
 private suspend fun verifyShipped(shipped: File, scope: CoroutineScope) {
     val settings = DataStoreSettingsRepository(shipped, scope).apply { awaitReady() }.observeSettings().first()
-    check(settings.oldSearchBar && settings.followedCreators.single().membershipId == "follow-1")
-    check(settings.providerHealth.getValue(SourceKey.PIXIV).status == ProviderHealthSnapshotStatus.DEGRADED)
+    check(settings.oldSearchBar && settings.followedCreators.single().membershipId == "follow-1") { "oldSearchBar=${settings.oldSearchBar} followed creators=${settings.followedCreators}" }
+    check(settings.providerHealth.getValue(SourceKey.PIXIV).status == ProviderHealthSnapshotStatus.DEGRADED) { "pixiv provider health was ${settings.providerHealth[SourceKey.PIXIV]}" }
     DataStoreUiRestoreRepository(shipped, scope).apply {
         awaitReady()
-        check(getLastTab() == "codex" && getSearchScrollState("h") == SearchScrollState(7, 12))
-        check(getFeedFabRestoreStates().getValue("ctx") == feedFilters)
-        check(observeViewerLaunchContext().first() == launchContext)
+        val lastTab = getLastTab()
+        check(lastTab == "codex") { "last tab was $lastTab" }
+        val scroll = getSearchScrollState("h")
+        check(scroll == SearchScrollState(7, 12)) { "search scroll state was $scroll" }
+        val fabStates = getFeedFabRestoreStates()
+        check(fabStates.getValue("ctx") == feedFilters) { "fab restore states were $fabStates" }
+        val launch = observeViewerLaunchContext().first()
+        check(launch == launchContext) { "viewer launch context was $launch" }
     }
     val statistics = DataStoreStatisticsRepository(shipped, scope).apply { awaitReady() }.observeStatistics().first()
-    check(statistics.appOpenCount == 3L && statistics.history.getValue(LocalDate.of(2026, 11, 2)).watchedPostCount == 2L)
-    check(statistics.codexStatistics.getValue("c").posts.getValue("PIXIV:1").opens == 2L)
+    check(statistics.appOpenCount == 3L && statistics.history.getValue(LocalDate.of(2026, 11, 2)).watchedPostCount == 2L) { "open count ${statistics.appOpenCount} history ${statistics.history}" }
+    check(statistics.codexStatistics.getValue("c").posts.getValue("PIXIV:1").opens == 2L) { "codex stats c was ${statistics.codexStatistics["c"]}" }
     val sites = DataStoreSiteProfileRepository(shipped, scope).apply { awaitReady() }
-    check(sites.observeProfiles().first().single().label == "Safe")
-    check(sites.update(SITE_ID) { it.copy(label = "Renamed") })
+    val profiles = sites.observeProfiles().first()
+    check(profiles.single().label == "Safe") { "site profiles were $profiles" }
+    check(sites.update(SITE_ID) { it.copy(label = "Renamed") }) { "site update did not apply" }
     val site = shipped.json(SITE_PROFILES_FILE_NAME).getValue("sites").jsonArray.single().jsonObject
-    check(site.getValue("label").jsonPrimitive.content == "Renamed")
-    check(site.keys == setOf("sourceId", "baseUrl", "label", "family", "credentialsRequired", "addedAt"))
+    check(site.getValue("label").jsonPrimitive.content == "Renamed") { "site label json was ${site["label"]}" }
+    check(site.keys == setOf("sourceId", "baseUrl", "label", "family", "credentialsRequired", "addedAt")) { "site keys were ${site.keys}" }
 }
 
 internal suspend fun <T> withStoreScope(block: suspend (CoroutineScope) -> T): T {
@@ -122,13 +139,14 @@ internal suspend fun <T> withStoreScope(block: suspend (CoroutineScope) -> T): T
     try {
         return block(scope)
     } finally {
-        scope.cancel()
+        withContext(NonCancellable) { withTimeoutOrNull(STORE_CLOSE_TIMEOUT_MS) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 }
 
 private fun File.json(name: String): JsonObject = Json.parseToJsonElement(resolve(name).readText()).jsonObject
 
 private const val PROFILE = "profile-main"
+private const val STORE_CLOSE_TIMEOUT_MS = 5_000L
 private const val FAVORITE_NAME = "Ears & <co>"
 private const val SITE_ID = "custom_safebooru_org"
 
