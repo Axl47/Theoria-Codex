@@ -18,7 +18,7 @@ internal class PagedListing(
     private var load: Job? = null
 
     fun start(pages: suspend (Int) -> SeriesPage) {
-        resume(pages)
+        this.pages = pages
         settle { firstPage { pages(1) } }
     }
 
