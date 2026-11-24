@@ -31,12 +31,18 @@ class RoomVisualSignatureRepository(
         }.toMap()
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
-    override suspend fun put(postId: PostId, hash: Long?) {
-        withContext(Dispatchers.IO) { dao.put(postId.source.id, postId.sourcePostId, hash, clock()) }
+    override suspend fun putHashes(hashes: Map<PostId, Long?>) {
+        if (hashes.isEmpty()) return
+        val now = clock()
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                hashes.forEach { (postId, hash) -> dao.put(postId.source.id, postId.sourcePostId, hash, now) }
+            }
+        }
     }
 
-    override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = withContext(Dispatchers.IO) {
-        dao.libraryPostsWithoutSignature(limit).decoded()
+    override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = withContext(Dispatchers.IO) {
+        dao.libraryPostsWithoutSignature(limit, skip).decoded()
     }
 
     override suspend fun putVision(entries: List<PictureVision>) {
@@ -75,16 +81,23 @@ class RoomVisualSignatureRepository(
         }
     }
 
-    override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> =
-        dao.observePredictedTags(modelId).map { rows ->
+    override fun observeVisionChanges(): Flow<Unit> = database.invalidationTracker.createFlow(SIGNATURES).map { }
+
+    override suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>> {
+        val rows = withContext(Dispatchers.IO) { dao.predictedTags(modelId) }
+        return withContext(Dispatchers.Default) {
             rows.mapNotNull { row ->
                 val source = SourceKey.parse(row.source) ?: return@mapNotNull null
                 PostId(source, row.sourcePostId) to PredictedTagCodec.decode(row.predictedTags)
             }.toMap()
-        }.distinctUntilChanged().flowOn(Dispatchers.Default)
+        }
+    }
 
     override fun observeVisionProgress(modelId: String): Flow<VisionProgress> =
         dao.observeVisionProgress(modelId, MAX_FRAME_ATTEMPTS).map { VisionProgress(it.analysed, it.total) }.distinctUntilChanged()
+
+    override fun observeLibraryTotal(): Flow<Int> =
+        database.invalidationTracker.createFlow(*LIBRARY).map { dao.libraryTotal() }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override suspend fun clearVision() {
         withContext(Dispatchers.IO) {
@@ -93,6 +106,11 @@ class RoomVisualSignatureRepository(
                 dao.deleteUnhashedRows()
             }
         }
+    }
+
+    private companion object {
+        const val SIGNATURES = "post_visual_signatures"
+        val LIBRARY = arrayOf("codex_items", "liked_posts")
     }
 
     private fun List<PostEntity>.decoded(): List<Post> =

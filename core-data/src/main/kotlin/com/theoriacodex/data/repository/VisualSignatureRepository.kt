@@ -8,9 +8,9 @@ import kotlinx.coroutines.flow.Flow
 interface VisualSignatureRepository {
     fun observePictureHashes(): Flow<Map<PostId, Long>>
 
-    suspend fun put(postId: PostId, hash: Long?)
+    suspend fun putHashes(hashes: Map<PostId, Long?>)
 
-    suspend fun libraryPostsWithoutSignature(limit: Int): List<Post>
+    suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int = 0): List<Post>
 
     suspend fun putVision(entries: List<PictureVision>)
 
@@ -22,9 +22,13 @@ interface VisualSignatureRepository {
 
     suspend fun unwantFrames(postIds: List<PostId>, modelId: String)
 
-    fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>>
+    fun observeVisionChanges(): Flow<Unit>
+
+    suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>>
 
     fun observeVisionProgress(modelId: String): Flow<VisionProgress>
+
+    fun observeLibraryTotal(): Flow<Int>
 
     suspend fun clearVision()
 }

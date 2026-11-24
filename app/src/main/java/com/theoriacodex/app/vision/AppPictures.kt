@@ -32,6 +32,7 @@ class AppPictures(
     private val hashes: LibraryPictureBackfill,
     val tags: LibraryVisionBackfill,
     val progress: Flow<VisionProgress>,
+    val libraryTotal: Flow<Int>,
 ) {
     suspend fun indexLibrary(): Boolean {
         hashes.drain()
@@ -59,7 +60,7 @@ fun appPictures(
     tagger = PictureTagger(model, signatures, AppPictureSource(app, ugoira, offlineCopy, resolvePost), scope)
     val power = app.getSystemService(PowerManager::class.java)
     val tags = LibraryVisionBackfill(tagger, signatures, hot = { power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE })
-    return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id))
+    return AppPictures(model, tagger, hashes, tags, signatures.observeVisionProgress(model.id), signatures.observeLibraryTotal())
 }
 
 private class AppPictureSource(

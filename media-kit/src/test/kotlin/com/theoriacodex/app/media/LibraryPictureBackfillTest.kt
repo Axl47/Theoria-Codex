@@ -30,22 +30,39 @@ class LibraryPictureBackfillTest {
 
         assertEquals(mapOf(id("hashed") to 94L, id("flat") to null), library.records)
         assertEquals(listOf("hashed", "flat", "offline"), hashed)
+        assertEquals(listOf(2), library.writes)
+    }
+
+    @Test fun `ADR 0111 a Library that cannot be reached is read once, a batch at a time`() = runTest {
+        val library = FakeSignatures(List(100) { post("offline-$it") })
+        val asked = mutableListOf<String>()
+
+        LibraryPictureBackfill(library) { post -> PictureHashResult.Unavailable.also { asked += post.id.sourcePostId } }.drain()
+
+        assertEquals(List(100) { "offline-$it" }, asked)
+        assertEquals(listOf(32, 32, 32, 4, 0), library.listed)
     }
 
     private class FakeSignatures(private val library: List<Post>) : VisualSignatureRepository {
         val records = LinkedHashMap<PostId, Long?>()
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = emptyFlow()
-        override suspend fun put(postId: PostId, hash: Long?) {
-            records[postId] = hash
+        val writes = mutableListOf<Int>()
+        override suspend fun putHashes(hashes: Map<PostId, Long?>) {
+            writes += hashes.size
+            records += hashes
         }
-        override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = library.filterNot { it.id in records }.take(limit)
+        val listed = mutableListOf<Int>()
+        override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> =
+            library.filterNot { it.id in records }.drop(skip).take(limit).also { listed += it.size }
         override suspend fun putVision(entries: List<PictureVision>) = Unit
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
         override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) = Unit
         override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) = Unit
-        override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = emptyFlow()
+        override fun observeVisionChanges(): Flow<Unit> = emptyFlow()
+        override suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>> = emptyMap()
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = emptyFlow()
+        override fun observeLibraryTotal(): Flow<Int> = emptyFlow()
         override suspend fun clearVision() = Unit
     }
 

@@ -6,9 +6,7 @@ import com.theoriacodex.domain.model.PostId
 import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 
 class LibraryVisionBackfill(
     private val tagger: PictureTagger,
@@ -62,7 +60,7 @@ class LibraryVisionBackfill(
     suspend fun writeThrough() {
         tagger.ready.first { it }
         settleStills()
-        combine(tagger.ready, signatures.observeVisionProgress(tagger.modelId).map { it.total }.distinctUntilChanged()) { ready, _ -> ready }
+        combine(tagger.ready, signatures.observeLibraryTotal()) { ready, _ -> ready }
             .collect { ready ->
                 if (!ready) return@collect
                 val known = signatures.libraryPostsWithoutVision(tagger.modelId, WRITE_THROUGH_LIMIT)

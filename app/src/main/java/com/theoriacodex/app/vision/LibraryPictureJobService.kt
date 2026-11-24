@@ -18,7 +18,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 internal enum class LibraryJob(private val job: AppJob) {
@@ -98,6 +97,6 @@ class LibraryFrameJobService : LibraryJobService(LibraryJob.FRAMES) {
 
 internal suspend fun keepLibraryPicturesScheduled(context: Context, pictures: AppPictures) {
     val model = pictures.model.states.filter { it == ModelState.Absent || it == ModelState.Ready }.distinctUntilChanged()
-    combine(model, pictures.progress.map { it.total }.distinctUntilChanged()) { _, _ -> }
+    combine(model, pictures.libraryTotal) { _, _ -> }
         .collect { LibraryJob.entries.forEach { it.schedule(context) } }
 }

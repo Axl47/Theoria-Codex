@@ -39,7 +39,7 @@ public interface VisualSignatureDao {
 
     @Query("SELECT source, source_post_id, predicted_tags FROM post_visual_signatures "
             + "WHERE model_id = :modelId AND predicted_tags IS NOT NULL")
-    Flow<List<PredictedTagsRow>> observePredictedTags(String modelId);
+    List<PredictedTagsRow> predictedTags(String modelId);
 
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
@@ -48,8 +48,8 @@ public interface VisualSignatureDao {
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
-            + "ORDER BY posts.rowid DESC LIMIT :limit")
-    List<PostEntity> libraryPostsWithoutSignature(int limit);
+            + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
+    List<PostEntity> libraryPostsWithoutSignature(int limit, int skip);
 
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
@@ -82,6 +82,12 @@ public interface VisualSignatureDao {
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) AS total")
     Flow<ProgressRow> observeVisionProgress(String modelId, int maxAttempts);
+
+    @Query("SELECT COUNT(*) FROM posts WHERE EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
+            + "AND codex_items.source_post_id = posts.source_post_id) "
+            + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
+            + "AND liked_posts.source_post_id = posts.source_post_id)")
+    int libraryTotal();
 
     @Query("UPDATE post_visual_signatures SET model_id = NULL, embedding = NULL, predicted_tags = NULL, frame_state = 0, "
             + "frame_attempts = 0")

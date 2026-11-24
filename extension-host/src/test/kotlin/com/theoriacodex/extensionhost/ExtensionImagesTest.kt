@@ -11,6 +11,12 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.delay
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.CacheControl
 import okhttp3.Headers
 import okhttp3.OkHttpClient
@@ -261,6 +267,33 @@ class ExtensionImagesTest {
         assertEquals(listOf("/p/1", "/p/1"), reader.asked)
     }
 
+    @Test
+    fun `ADR 0059 pages missing together list their chapter once, and a failed listing is not kept`() {
+        val waiting = 4
+        val reader = GatedPagesSource()
+        val pages = MihonImages(reader, MihonKind.sourceKey(reader.id), images) { reader.arrived.countDown(); null }
+        val pageUrl = "https://reader.test/p/x".toHttpUrl()
+        val callers = Executors.newFixedThreadPool(waiting)
+        fun loadAll() = (0 until waiting).also { reader.arrived = CountDownLatch(waiting) }.map { index ->
+            callers.submit<Result<String>> {
+                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1").use { it.body.string() } }
+            }
+        }.map { it.get(5, TimeUnit.SECONDS) }
+
+        val (failed, loaded) = try {
+            reader.failing = true
+            val failed = loadAll()
+            reader.failing = false
+            failed to loadAll()
+        } finally {
+            callers.shutdownNow()
+        }
+
+        assertTrue(failed.all { it.exceptionOrNull() != null })
+        assertEquals((0 until waiting).map { "image https://img.test/p$it.jpg" }, loaded.map { it.getOrThrow() })
+        assertEquals(2, reader.listings.get())
+    }
+
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
 
     private fun ExtensionImages.cover(source: SourceKey, url: String): String =
@@ -305,6 +338,35 @@ class ExtensionImagesTest {
             asked += path
             check(!path.endsWith("broken")) { "No image on this page" }
             return "https://img.test/${path.substringAfterLast('/')}-${page.index}.jpg"
+        }
+    }
+
+    private class GatedPagesSource : HttpSource() {
+        override val id = 3L
+        override val name = "Gated"
+        override val lang = "en"
+        override val baseUrl = "https://reader.test"
+        override val supportsLatest = false
+        val listings = AtomicInteger()
+
+        @Volatile
+        var failing = false
+
+        @Volatile
+        var arrived = CountDownLatch(0)
+
+        override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(answering { request -> cannedResponse(request, body = "image ${request.url}") })
+            .build()
+
+        override fun headersBuilder() = Headers.Builder()
+
+        override suspend fun getPageList(chapter: SChapter): List<Page> {
+            listings.incrementAndGet()
+            check(arrived.await(5, TimeUnit.SECONDS))
+            delay(100)
+            check(!failing) { "Rate limited" }
+            return List(4) { Page(it, "$baseUrl/p/$it", imageUrl = "https://img.test/p$it.jpg") }
         }
     }
 
