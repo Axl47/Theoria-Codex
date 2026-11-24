@@ -205,7 +205,6 @@ internal class FakePictureTags(ready: Boolean = true, private val predicted: Map
     var blind = false
     private var looking = 0
     var mostLooking = 0
-        private set
 
     fun release() = held?.complete(Unit)
 

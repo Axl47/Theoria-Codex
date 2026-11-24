@@ -109,7 +109,7 @@ class ForYouDeckViewModel(
     private val asking = mutableMapOf<PostId, Job>()
 
     private var opening = false
-    private var forking: Job? = null
+    private val forking = SoleJob(workScope)
 
     private val vetting = SoleJob(workScope)
 
@@ -289,10 +289,9 @@ class ForYouDeckViewModel(
     }
 
     fun fork(request: TrailRequest) {
-        if (forking?.isActive == true) return
         val from = top
         val animatedOnly = inputs?.animatedOnly == true
-        forking = workScope.launch {
+        forking.launchIfIdle {
             val spec = runCatchingPreservingCancellation { wiring.trails(request, animatedOnly) }.getOrNull()
             when {
                 top !== from -> Unit

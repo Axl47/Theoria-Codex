@@ -102,11 +102,13 @@ class ForYouDeckVettingTest {
         pictures.unseen = setOf("a-0-0")
         pictures.held = CompletableDeferred()
         val before = pictures.asked.size
+        pictures.mostLooking = 0
         owner.selectChip(laneId("a"))
 
         assertEquals(1, pictures.mostLooking)
         pictures.release()
         val restarted = pictures.asked.drop(before)
+        assertTrue(restarted.isNotEmpty())
         assertEquals(restarted.distinct(), restarted)
     }
 
