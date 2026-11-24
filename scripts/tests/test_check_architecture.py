@@ -46,7 +46,7 @@ class BareComposeWaitTest(unittest.TestCase):
 
 
 class DeliveryPlanTest(unittest.TestCase):
-    def test_reports_a_delivery_plan_that_decides_from_a_source_adr_0074(self) -> None:
+    def test_reports_a_delivery_plan_that_decides_from_a_source_adr_0074_adr_0105(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             post_media = root / "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt"
