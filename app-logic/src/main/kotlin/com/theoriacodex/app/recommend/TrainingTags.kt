@@ -8,12 +8,12 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.isLegacyFacetType
 
+/**
+ * Every tag [post] teaches recommendations, once each, in the post's own order. A Like stores them all, and the kept
+ * evidence in [tagAffinityInputs] reads them from each stored post, so no tag is lost to its place in the list; what
+ * ranks them is [TagAffinityInputs.affinity], when they are used.
+ */
 fun trainingTagsFor(post: Post): List<String> {
-    return recommendationTagsFor(post)
-        .take(MAX_TRAINING_TAGS)
-}
-
-fun recommendationTagsFor(post: Post): List<String> {
     return recommendationTaxonomyFor(post)
         .asSequence()
         .map { term -> term.value.trim() }
@@ -35,7 +35,9 @@ fun recommendationTaxonomyFor(post: Post): List<PostTaxonomyTerm> {
     }
     if (preferredValues.isEmpty()) return emptyList()
 
-    val tagTermsByValue = post.taxonomy
+    // A post with no typed taxonomy at all (a raw-tag-only legacy copy, say) has only general tags.
+    val taxonomy = post.taxonomy.ifEmpty { preferredValues.map { PostTaxonomyTerm(value = it) } }
+    val tagTermsByValue = taxonomy
         .asSequence()
         .filter { term -> term.facet == SearchFacet.TAG }
         .filter { term -> term.value.isNotBlank() }
@@ -74,7 +76,5 @@ fun Query.recommendationIncludeTags(): List<String> {
 fun TagSuggestion.isRecommendationTagSuggestion(): Boolean {
     return !isLegacyFacetType(type)
 }
-
-private const val MAX_TRAINING_TAGS = 20
 
 private fun String.taxonomyKey(): String = trim().lowercase()

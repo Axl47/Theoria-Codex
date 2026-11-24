@@ -59,7 +59,7 @@ internal fun forYouForks(
 /** What a card says about why it is here: its lane, or the like or save that asked for it. */
 internal fun DeckOrigin.label(): String = when (this) {
     is DeckOrigin.Lane -> label
-    is DeckOrigin.Similar -> "Like one you liked"
+    is DeckOrigin.Similar -> if (saved) "Like one you saved" else "Like one you liked"
     is DeckOrigin.Creator -> "More by $name"
 }
 

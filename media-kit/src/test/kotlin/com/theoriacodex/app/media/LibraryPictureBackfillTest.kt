@@ -41,7 +41,7 @@ class LibraryPictureBackfillTest {
         override suspend fun libraryPostsWithoutSignature(limit: Int): List<Post> = library.filterNot { it.id in records }.take(limit)
         override suspend fun putVision(entries: List<PictureVision>) = Unit
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
-        override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int): List<Post> = emptyList()
+        override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) = Unit
         override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) = Unit
         override fun observePredictedTags(modelId: String): Flow<Map<PostId, List<PredictedTag>>> = emptyFlow()

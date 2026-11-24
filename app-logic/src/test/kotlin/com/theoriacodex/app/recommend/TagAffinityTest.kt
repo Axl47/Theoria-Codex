@@ -67,6 +67,29 @@ class TagAffinityTest {
     }
 
     @Test
+    fun `a Like learns every tag of the Library's copy of its post, not only the ones it stored`() {
+        // A Like saved before every tag was stored kept the provider's first ones, alphabetically.
+        val inputs = tagAffinityInputs(listOf(like(listOf("aardvark"), id = "aardvark-zebra")), listOf(post("aardvark", "zebra")),
+            emptyList(), emptyList(), LifetimeStatistics())
+
+        assertEquals(listOf("aardvark", "zebra"), inputs.liked.single().tags)
+        // A copy saved after the Like, with fewer tags, keeps the Like's own.
+        val sparse = tagAffinityInputs(listOf(like(listOf("aardvark", "moth"), id = "zebra")), listOf(post("zebra")),
+            emptyList(), emptyList(), LifetimeStatistics())
+        assertEquals(listOf("zebra", "aardvark", "moth"), sparse.liked.single().tags)
+        assertEquals(1, inputs.likedCounts["zebra"])
+        assertEquals(1, inputs.keptByTag[source]?.get("zebra"))
+    }
+
+    @Test
+    fun `a post both Liked and in a Codex is one point of interest`() {
+        val inputs = tagAffinityInputs(listOf(like(listOf("moth"))), listOf(post("moth")), emptyList(), emptyList(), LifetimeStatistics())
+
+        assertEquals(1.0, inputs.interest.getValue("moth"), 0.0)
+        assertEquals(mapOf(source to 1), inputs.keptBySource)
+    }
+
+    @Test
     fun `a tag on nearly every post of the feed at hand is universal there`() {
         val feed = List(10) { index -> post("animated", "tag$index") }
         val share = feedTagShare(feed)

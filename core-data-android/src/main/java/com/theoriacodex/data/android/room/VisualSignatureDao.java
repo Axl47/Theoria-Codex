@@ -76,7 +76,7 @@ public interface VisualSignatureDao {
 
     /**
      * Liked or saved posts that [modelId] analysed from their still alone while their frames are still to be read, with
-     * fewer than [maxAttempts] failed reads, most recently stored first.
+     * fewer than [maxAttempts] failed reads, most recently stored first, after the first [skip].
      */
     @Query("SELECT posts.* FROM posts JOIN post_visual_signatures AS signature "
             + "ON signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
@@ -85,11 +85,15 @@ public interface VisualSignatureDao {
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
-            + "ORDER BY posts.rowid DESC LIMIT :limit")
-    List<PostEntity> libraryPostsAwaitingFrames(String modelId, int maxAttempts, int limit);
+            + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
+    List<PostEntity> libraryPostsAwaitingFrames(String modelId, int maxAttempts, int limit, int skip);
 
-    /** Liked or saved posts [modelId] has analysed, and how many liked or saved posts there are. */
+    /**
+     * Liked or saved posts [modelId] has finished, and how many liked or saved posts there are. A post whose frames are
+     * still to be read, with fewer than [maxAttempts] failed reads, is not finished yet.
+     */
     @Query("SELECT (SELECT COUNT(*) FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "
+            + "AND NOT (signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts) "
             + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = signature.source "
             + "AND codex_items.source_post_id = signature.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = signature.source "
@@ -98,7 +102,7 @@ public interface VisualSignatureDao {
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) AS total")
-    Flow<ProgressRow> observeVisionProgress(String modelId);
+    Flow<ProgressRow> observeVisionProgress(String modelId, int maxAttempts);
 
     @Query("UPDATE post_visual_signatures SET model_id = NULL, embedding = NULL, predicted_tags = NULL, frame_state = 0, "
             + "frame_attempts = 0")

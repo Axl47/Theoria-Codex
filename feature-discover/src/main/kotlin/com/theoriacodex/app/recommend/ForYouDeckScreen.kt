@@ -13,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -24,6 +23,7 @@ import com.theoriacodex.app.search.StatusRow
 import com.theoriacodex.app.triage.TriageCardSupport
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
+import com.theoriacodex.app.ui.components.ForgetRetainedFeedsEffect
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -89,9 +89,8 @@ fun ForYouDeckScreen(
     val onTrail = levels.size > 1
     var showFilters by remember { mutableStateOf(false) }
     var actionPost by remember { mutableStateOf<Post?>(null) }
-    // The level each grid was last placed for; see ForYouBody.
-    val mixPlaced = rememberSaveable { mutableStateOf(levels.first().id) }
-    val trailPlaced = rememberSaveable { mutableStateOf("") }
+    // Each level on the stack keeps its own grid position; a level that left it is gone for good.
+    ForgetRetainedFeedsEffect(LEVEL_ID_PREFIX, levels.mapTo(mutableSetOf(), ForYouLevel::id))
     BackHandler(enabled = onTrail) { owner.popTo(levels.lastIndex - 1) }
 
     // The shell's scaffold already insets its content for the system bars.
@@ -114,7 +113,7 @@ fun ForYouDeckScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             // Each level keeps its own deck and grid position.
             key(level.id, config.grid) {
-                ForYouBody(owner, state, level, config, related, callbacks, if (onTrail) trailPlaced else mixPlaced) { actionPost = it }
+                ForYouBody(owner, state, level, config, related, callbacks) { actionPost = it }
             }
         }
     }

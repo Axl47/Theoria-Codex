@@ -118,9 +118,20 @@ class ForYouDeckViewModelTest {
 
         assertEquals(listOf("a", "b", "c", "a", "s", "s"), owner.posts.lanes().take(6))
         assertEquals(fresh.take(2), owner.posts.subList(4, 6))
-        assertEquals(DeckOrigin.Similar(liked.id), owner.originOf(fresh[0].id))
+        assertEquals(DeckOrigin.Similar(liked.id, saved = false), owner.originOf(fresh[0].id))
         assertEquals("Like one you liked", owner.originOf(fresh[0].id)?.label())
         assertEquals(listOf(liked.id), actions.liked)
+    }
+
+    @Test fun `similar posts a save asked for say it was a save`() {
+        val fresh = testPost(DECK_SOURCE, "s-1")
+        trails.similar = listOf(fresh)
+        val owner = owner()
+        val saved = owner.decide(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
+        owner.skip(1)
+
+        assertEquals(DeckOrigin.Similar(saved.id, saved = true), owner.originOf(fresh.id))
+        assertEquals("Like one you saved", owner.originOf(fresh.id)?.label())
     }
 
     @Test fun `a save on a source without similar posts asks its creator instead`() {

@@ -2,7 +2,6 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.recommendation.RecommendationTagNormalization
-import com.theoriacodex.domain.recommendation.TagAffinityBuilder
 import com.theoriacodex.domain.recommendation.sharesBooruVocabulary
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import kotlin.math.abs
@@ -22,34 +21,29 @@ data class ForYouInterest(val tags: List<String>)
  */
 object ForYouInterests {
     /**
-     * Up to [maxInterests] interests, strongest first, then the best guess (a tag too rare in what the profile watches
-     * to judge yet) to explore. Tags in [unavailable] (ones the source has no posts for) are never candidates. [random]
-     * varies each score by up to a fifth, so which interests lead changes between Mixes; null keeps score order.
+     * Weighs every candidate once, so a caller that picks again around unavailable tags ([ForYouInterestPicker.pick])
+     * repeats none of this work. Every tag of every document is a candidate; each lead keeps the documents it is on.
      */
-    fun generate(
+    fun prepare(
         source: SourceKey,
         documents: List<List<String>>,
         affinity: TagAffinityInputs,
         translate: (tag: String, into: SourceKey) -> String? = { tag, _ -> tag },
-        unavailable: Set<String> = emptySet(),
-        random: Random? = null,
-        maxInterests: Int = 4,
         pictureCandidates: Map<String, String> = emptyMap(),
-    ): List<ForYouInterest> {
-        val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it, 40) }
-        val stats = TagAffinityBuilder.build(normalized, maxTagsPerDocument = 40)
-        val counts = stats.tagDocumentCounts
+    ): ForYouInterestPicker {
+        val normalized = documents.map { RecommendationTagNormalization.normalizeDistinct(source, it) }
+        val liked = normalized.flatten().distinct()
         val ownTags = RecommendationTagNormalization.normalizeDistinct(source, affinity.keptByTag[source].orEmpty().keys + affinity.explicit)
         val judged = affinity.hasHistory(source)
         val kin = affinity.keptBySource.keys.filter { other ->
             other != source && source.sharesBooruVocabulary && other.sharesBooruVocabulary && affinity.hasHistory(other)
         }
-        val leads = mutableMapOf<String, Double>()
-        val guesses = mutableMapOf<String, Double>()
-        val provided = (counts.keys + ownTags).mapTo(mutableSetOf(), ::normalizeMatchToken)
+        val leads = LinkedHashMap<String, TagAffinity>()
+        val guesses = LinkedHashMap<String, Double>()
+        val provided = (liked + ownTags).mapTo(mutableSetOf(), ::normalizeMatchToken)
         val pictured = pictureCandidates.mapKeys { normalizeMatchToken(it.key) }
         // One candidate per matching key, in the spelling a Like gave it when one did.
-        for (tag in (counts.keys + ownTags + pictureCandidates.keys).distinctBy(::normalizeMatchToken) - unavailable) {
+        for (tag in (liked + ownTags + pictureCandidates.keys).distinctBy(::normalizeMatchToken)) {
             val token = normalizeMatchToken(tag)
             val here = affinity.affinity(source, tag)
             if (here.universal) continue
@@ -62,27 +56,89 @@ object ForYouInterests {
                     .filter(TagAffinity::proven).maxByOrNull(TagAffinity::score) ?: picture
             }
             when {
-                evidence != null -> leads[tag] = evidence.score + abs(evidence.score) * (random?.nextDouble(-JITTER, JITTER) ?: 0.0)
+                evidence != null -> leads[tag] = evidence
                 here.informative && token in provided -> guesses[tag] = here.score
             }
         }
+        // Only leads can pair, and only the anchors a pick tries are paired: counting every pair up front grows with the
+        // square of a post's tags.
+        val documentsByLead = HashMap<String, MutableList<Int>>()
+        normalized.forEachIndexed { index, document ->
+            document.forEach { tag -> if (tag in leads) documentsByLead.getOrPut(tag, ::mutableListOf) += index }
+        }
+        return ForYouInterestPicker(leads, guesses, documentsByLead.mapValues { it.value.toIntArray() })
+    }
+
+    /** [prepare]s [source]'s candidates and picks once; see [ForYouInterestPicker.pick]. */
+    fun generate(
+        source: SourceKey,
+        documents: List<List<String>>,
+        affinity: TagAffinityInputs,
+        translate: (tag: String, into: SourceKey) -> String? = { tag, _ -> tag },
+        unavailable: Set<String> = emptySet(),
+        random: Random? = null,
+        maxInterests: Int = 4,
+        pictureCandidates: Map<String, String> = emptyMap(),
+    ): List<ForYouInterest> = prepare(source, documents, affinity, translate, pictureCandidates).pick(unavailable, random, maxInterests)
+}
+
+/**
+ * A source's weighed candidates, from [ForYouInterests.prepare]: [leads] and [guesses] in candidate order, and the
+ * documents (by index, ascending) each lead is on.
+ */
+class ForYouInterestPicker internal constructor(
+    private val leads: Map<String, TagAffinity>,
+    private val guesses: Map<String, Double>,
+    private val documentsByLead: Map<String, IntArray>,
+) {
+    /**
+     * Up to [maxInterests] interests, strongest first, then the best guess (a tag too rare in what the profile watches
+     * to judge yet) to explore. Tags in [unavailable] (ones the source has no posts for) are never candidates. [random]
+     * varies each score by up to a fifth, so which interests lead changes between Mixes; null keeps score order.
+     */
+    fun pick(unavailable: Set<String> = emptySet(), random: Random? = null, maxInterests: Int = 4): List<ForYouInterest> {
+        val scores = LinkedHashMap<String, Double>()
+        for ((tag, evidence) in leads) {
+            if (tag in unavailable) continue
+            scores[tag] = evidence.score + abs(evidence.score) * (random?.nextDouble(-JITTER, JITTER) ?: 0.0)
+        }
         // Ties, such as every tag before any history, go to the tag liked most often.
-        val anchors = leads.keys.sortedByDescending { counts[it] ?: 0 }.sortedByDescending(leads::getValue)
+        val anchors = scores.keys.sortedByDescending(::count).sortedByDescending(scores::getValue)
         val chosen = mutableListOf<ForYouInterest>()
         for (anchor in anchors) {
             if (chosen.size == maxInterests.coerceIn(1, 40)) break
             if (chosen.any { anchor in it.tags }) continue
             val partner = anchors.firstOrNull { candidate ->
-                candidate != anchor && chosen.none { candidate in it.tags } &&
-                    stats.pairCount(anchor, candidate) >= 2 &&
-                    stats.pairCount(anchor, candidate).toDouble() /
-                    maxOf(counts[anchor] ?: 0, counts[candidate] ?: 0) >= 0.6
+                candidate != anchor && chosen.none { candidate in it.tags } && togetherEnough(anchor, candidate)
             }
             chosen += ForYouInterest(listOfNotNull(anchor, partner))
         }
-        guesses.maxByOrNull { it.value }?.let { chosen += ForYouInterest(listOf(it.key)) }
+        guesses.filterKeys { it !in unavailable }.maxByOrNull { it.value }?.let { chosen += ForYouInterest(listOf(it.key)) }
         return chosen
+    }
+
+    private fun count(tag: String): Int = documentsByLead[tag]?.size ?: 0
+
+    /** Whether [a] and [b] share at least two documents, and [PAIR_SHARE] of the more common one's. */
+    private fun togetherEnough(a: String, b: String): Boolean {
+        val left = documentsByLead[a] ?: return false
+        val right = documentsByLead[b] ?: return false
+        val needed = maxOf(MIN_PAIR_DOCUMENTS.toDouble(), PAIR_SHARE * maxOf(left.size, right.size))
+        if (minOf(left.size, right.size) < needed) return false
+        var shared = 0
+        var i = 0
+        var j = 0
+        while (i < left.size && j < right.size) {
+            when {
+                left[i] < right[j] -> i++
+                left[i] > right[j] -> j++
+                else -> { shared++; i++; j++ }
+            }
+        }
+        return shared >= needed
     }
 }
 
 private const val JITTER = 0.2
+private const val MIN_PAIR_DOCUMENTS = 2
+private const val PAIR_SHARE = 0.6

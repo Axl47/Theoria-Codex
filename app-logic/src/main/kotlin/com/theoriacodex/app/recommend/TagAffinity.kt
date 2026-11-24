@@ -12,6 +12,7 @@ import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.recommendation.LikedTagDocument
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.vision.PredictedTagIndex
 import com.theoriacodex.domain.vision.PredictedTagUse
@@ -38,8 +39,10 @@ import kotlin.math.ln
 
 /**
  * What ranks a post's tags for the active profile, every map keyed by [normalizeMatchToken]:
+ * - [liked]: each Like's tags, newest first, read from the Library's copy of the post where it holds one, since a Like
+ *   saved before every tag was stored kept only some;
  * - [likedCounts]: how many Likes carry each tag, out of [likes];
- * - [interest]: one point per Like or Codex post carrying the tag, plus [EXPLICIT_WEIGHT] when the profile saved it
+ * - [interest]: one point per kept post (Liked or put in a Codex, each once) carrying the tag, plus [EXPLICIT_WEIGHT] when the profile saved it
  *   as a tag, searches it in a saved search, or searched it at least twice;
  * - [explicit]: the tags with that explicit weight;
  * - [watchedByTag] and [watchedBySource]: how many watched posts of each source carried each tag, out of how many;
@@ -47,6 +50,7 @@ import kotlin.math.ln
  * - [pictures]: what the picture tagger predicted on those kept posts.
  */
 data class TagAffinityInputs(
+    val liked: List<LikedTagDocument> = emptyList(),
     val likedCounts: Map<String, Int> = emptyMap(),
     val likes: Int = 0,
     val interest: Map<String, Double> = emptyMap(),
@@ -144,24 +148,27 @@ data class TagAffinity(
     val proven: Boolean = false,
 )
 
-/** Builds [TagAffinityInputs] from the profile's Likes, Codex posts, saved tags and searches, and its statistics. */
+/**
+ * Builds [TagAffinityInputs] from the profile's Likes, the posts its Library holds ([libraryPosts]: its Codices, the
+ * Likes collection among them), its saved tags and searches, and its statistics.
+ */
 fun tagAffinityInputs(
     likes: List<LikedPost>,
-    codexPosts: List<Post>,
+    libraryPosts: List<Post>,
     savedTags: Collection<String>,
     savedSearches: List<SavedSearchEntry>,
     statistics: LifetimeStatistics,
     predicted: PredictedTagIndex = PredictedTagIndex.Empty,
-): TagAffinityInputs = keptTagEvidence(likes, codexPosts, savedTags, savedSearches).withStatistics(statistics, predicted)
+): TagAffinityInputs = keptTagEvidence(likes, libraryPosts, savedTags, savedSearches).withStatistics(statistics, predicted)
 
 /**
  * What [TagAffinityInputs] takes from the profile's library, apart from its statistics: building it reads every kept
  * post's tags, so [shareTagAffinityInputs] rebuilds it only when the library changes, not on every watched post.
  */
 private data class KeptTagEvidence(
+    val liked: List<LikedTagDocument>,
     val likedCounts: Map<String, Int>,
-    val likes: Int,
-    val codexCounts: Map<String, Int>,
+    val keptCounts: Map<String, Int>,
     val saved: Set<String>,
     val keptByTag: Map<SourceKey, Map<String, Int>>,
     val keptBySource: Map<SourceKey, Int>,
@@ -170,18 +177,24 @@ private data class KeptTagEvidence(
 
 private fun keptTagEvidence(
     likes: List<LikedPost>,
-    codexPosts: List<Post>,
+    libraryPosts: List<Post>,
     savedTags: Collection<String>,
     savedSearches: List<SavedSearchEntry>,
 ): KeptTagEvidence {
+    val stored = libraryPosts.associateBy(Post::id)
+    // The stored copy holds every tag a Like saved before then kept; the Like's own tags fill in what it lacks.
+    val likedPosts = likes.map { like ->
+        like.postId to (stored[like.postId]?.let(::trainingTagsFor).orEmpty() + like.tags).distinctBy(::normalizeMatchToken)
+    }
+    val liked = likedPosts.map { (id, tags) -> LikedTagDocument(id.source, tags) }
+    val likedIds = likes.mapTo(HashSet(), LikedPost::postId)
     // A post both Liked and in a Codex is one kept post.
-    val keptPosts = (likes.map { it.postId to it.tags } + codexPosts.map { it.id to it.canonicalTags.ifEmpty { it.rawTags } })
-        .distinctBy { it.first }
+    val keptPosts = likedPosts + stored.values.filter { it.id !in likedIds }.map { it.id to trainingTagsFor(it) }
     val kept = keptPosts.groupBy({ it.first.source }, { it.second })
     return KeptTagEvidence(
-        likedCounts = likes.map { it.tags }.tokenCounts(),
-        likes = likes.size,
-        codexCounts = codexPosts.map { it.canonicalTags.ifEmpty { it.rawTags } }.tokenCounts(),
+        liked = liked,
+        likedCounts = liked.map(LikedTagDocument::tags).tokenCounts(),
+        keptCounts = keptPosts.map { it.second }.tokenCounts(),
         saved = (savedTags + savedSearches.flatMap { it.search.query.includeTags }).map(::normalizeMatchToken).toSet(),
         keptByTag = kept.mapValues { (_, tags) -> tags.tokenCounts() },
         keptBySource = kept.mapValues { (_, tags) -> tags.size },
@@ -195,15 +208,15 @@ private fun KeptTagEvidence.withStatistics(statistics: LifetimeStatistics, predi
         .groupBy({ normalizeMatchToken(it.key.term.value) }, { it.value })
         .filterValues { counts -> counts.max() >= MIN_SEARCHES_FOR_INTEREST }.keys
     val explicit = (saved + searchedTwice).filterTo(mutableSetOf(), String::isNotBlank)
-    val interest = (likedCounts.keys + codexCounts.keys + explicit).associateWith { token ->
-        (likedCounts[token] ?: 0) + (codexCounts[token] ?: 0) + if (token in explicit) EXPLICIT_WEIGHT else 0.0
+    val interest = (keptCounts.keys + explicit).associateWith { token ->
+        (keptCounts[token] ?: 0) + if (token in explicit) EXPLICIT_WEIGHT else 0.0
     }
     val watchedByTag = statistics.watchedByTag.entries.groupBy({ it.key.source }) { it }
         .mapValues { (_, entries) ->
             entries.groupingBy { normalizeMatchToken(it.key.tag) }.fold(0L) { total, entry -> total + entry.value }
         }
     return TagAffinityInputs(
-        likedCounts, likes, interest, explicit, watchedByTag, statistics.watchedBySource, keptByTag, keptBySource,
+        liked, likedCounts, liked.size, interest, explicit, watchedByTag, statistics.watchedBySource, keptByTag, keptBySource,
         PictureEvidence.of(keptIds, predicted),
     )
 }
@@ -259,13 +272,11 @@ fun shareTagAffinityInputs(
     val byProfile = settings.observeSettings().map { it.activeProfileId }.distinctUntilChanged().flatMapLatest { profileId ->
         val savedTags = settings.observeSettings()
             .map { it.favoriteTagsByProfile[profileId].orEmpty().flatMap { entry -> entry.tags } }.distinctUntilChanged()
-        // The profile's own Codices; its Likes collection is left out, since Likes already count once.
-        val codexPosts = codex.observeCodices().map { codices ->
-            codices.mapNotNullTo(mutableSetOf()) { entry ->
-                entry.codexId.takeIf { id -> ProfileLibraryIds.belongsTo(id, profileId) && !id.startsWith(ProfileLibraryIds.LIKES_PREFIX) }
-            }
+        // The profile's own Codices and its Likes collection, whose copies hold each Liked post's every tag.
+        val libraryPosts = codex.observeCodices().map { codices ->
+            codices.mapNotNullTo(mutableSetOf()) { entry -> entry.codexId.takeIf { id -> ProfileLibraryIds.belongsTo(id, profileId) } }
         }.distinctUntilChanged().flatMapLatest(codex::observeLibraryPosts)
-        val kept = combine(savedTags, likes.observeLikes(profileId), codexPosts, savedSearches.observeSavedSearches()) {
+        val kept = combine(savedTags, likes.observeLikes(profileId), libraryPosts, savedSearches.observeSavedSearches()) {
                 tags, liked, posts, searches ->
             keptTagEvidence(liked, posts, tags, searches)
         }.distinctUntilChanged()

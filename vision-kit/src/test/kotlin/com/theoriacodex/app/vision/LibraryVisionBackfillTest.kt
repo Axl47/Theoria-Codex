@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
@@ -63,8 +64,8 @@ class LibraryVisionBackfillTest {
         }
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
             posts.filter { post -> stored.none { it.postId == post.id } }.take(limit)
-        override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int): List<Post> =
-            posts.filter { it.id in signaturesAwaitingFrames() }.take(limit)
+        override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
+            posts.filter { it.id in signaturesAwaitingFrames() }.drop(skip).take(limit)
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {
             attempts[postId] = (attempts[postId] ?: 0) + if (permanently) MAX_FRAME_ATTEMPTS else 1
         }
@@ -117,6 +118,19 @@ class LibraryVisionBackfillTest {
         assertTrue(backfill(tagger, library).drain())
 
         assertEquals(older.map(Post::id), library.stored.map(PictureVision::postId))
+    }
+
+    @Test
+    fun `while the app runs, analyses awaiting frames whose post does not play stop waiting`() = runBlocking {
+        val library = Library(listOf(post("video"), post("picture")))
+        // As the migration that added frames left every earlier analysis.
+        library.putVision(listOf("video", "picture").map { PictureVision(post(it).id, spec.id, null, emptyList(), VisionFrames.WANTED) })
+        val tagger = PictureTagger(readyStore(), library, Pictures(plays = { it.id.sourcePostId == "video" }), scope)
+
+        val running = scope.launch { backfill(tagger, library).writeThrough() }
+        running.cancel()
+
+        assertEquals(listOf(post("video").id), library.signaturesAwaitingFrames())
     }
 
     @Test

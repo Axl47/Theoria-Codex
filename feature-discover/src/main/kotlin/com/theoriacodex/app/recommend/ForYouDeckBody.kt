@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -43,10 +40,7 @@ import com.theoriacodex.app.ui.components.rememberFeedView
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import com.theoriacodex.domain.model.Post
 
-/**
- * The level's posts as the deck or the grid, or what to say when it has none. [positioned] is the level the grid was
- * last placed for, kept by the screen so a new level starts from the top while a returning one keeps its place.
- */
+/** The level's posts as the deck or the grid, or what to say when it has none. */
 @Composable
 internal fun ForYouBody(
     owner: ForYouDeckViewModel,
@@ -55,19 +49,18 @@ internal fun ForYouBody(
     config: ForYouScreenConfig,
     related: RelatedShelfBinding,
     callbacks: ForYouDeckCallbacks,
-    positioned: MutableState<String>,
     onLongPress: (Post) -> Unit,
 ) {
     val feed by level.feed.collectAsStateWithLifecycle()
     val end: @Composable () -> Unit = {
-        ForYouEnd(state.mix.takeIf { level.fork == null }, feed.posts.isEmpty(), owner::rebuild, callbacks.onGoToSearch)
+        ForYouEnd(state.mix.takeIf { level.fork == null }, feed.posts.isEmpty(), owner::rebuild, callbacks.onGoToSearch, callbacks.onOpenSourceAccounts)
     }
     when {
         feed.posts.isEmpty() && feed.pageFailed && !feed.loadingMore -> Column(Modifier.padding(16.dp)) {
             // The tile words a lost connection itself.
             FeedFailureTile(state.failure?.takeIf { level.fork == null } ?: LOAD_FAILED, onRetry = level::retryPage)
         }
-        config.grid -> ForYouGrid(level, feed, config, related, callbacks, positioned, onLongPress, end)
+        config.grid -> ForYouGrid(level, feed, config, related, callbacks, onLongPress, end)
         else -> ForYouDeck(owner, level, feed, config, callbacks, end)
     }
 }
@@ -113,14 +106,13 @@ private fun ForYouGrid(
     config: ForYouScreenConfig,
     related: RelatedShelfBinding,
     callbacks: ForYouDeckCallbacks,
-    positioned: MutableState<String>,
     onLongPress: (Post) -> Unit,
     end: @Composable () -> Unit,
 ) {
-    // The Mix and the trails each keep one grid place while the Viewer covers them.
-    val retainKey = if (level.fork == null) "for-you" else "for-you-trail"
+    // Every level keeps its own grid place while the Viewer or a deeper trail covers it, and a new one starts at the top.
+    val retainKey = level.id
     val gridState = rememberRetainedFeedGridState(retainKey)
-    GridPositionEffect(level.id, positioned, gridState)
+    ScrollToTopOnTabReselect(TopLevelDestination.ForYou) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, config.durations.onEnvironmentChanged)
     // The owner already applied For You's filters, so the grid hides nothing itself.
     val view = rememberFeedView(retainKey, feed.posts, NO_FILTERS, config.durations, related.state)
@@ -174,31 +166,28 @@ private fun ForYouGrid(
     }
 }
 
-/** A level the grid has not shown yet starts from the top, as does reselecting the tab. */
-@Composable
-private fun GridPositionEffect(levelId: String, positioned: MutableState<String>, gridState: LazyStaggeredGridState) {
-    ScrollToTopOnTabReselect(TopLevelDestination.ForYou) { gridState.animateScrollToItem(0) }
-    LaunchedEffect(levelId) {
-        if (positioned.value != levelId) {
-            gridState.scrollToItem(0)
-            positioned.value = levelId
-        }
-    }
-}
-
 /**
  * What a level with nothing left says. [mix] is the Mix's state, or null on a trail; [empty] is whether the level
  * never had a post to show.
  */
 @Composable
-private fun ForYouEnd(mix: ForYouMixState?, empty: Boolean, onStartOver: () -> Unit, onGoToSearch: () -> Unit) {
+private fun ForYouEnd(
+    mix: ForYouMixState?,
+    empty: Boolean,
+    onStartOver: () -> Unit,
+    onGoToSearch: () -> Unit,
+    onManageSources: () -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().padding(16.dp).testTag(FOR_YOU_END_TAG),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         when {
-            mix == ForYouMixState.NoSources -> FeedEmptyTile("No sources enabled")
+            mix == ForYouMixState.NoSources -> {
+                FeedEmptyTile("No sources enabled")
+                TextButton(onManageSources) { Text("Manage sources") }
+            }
             mix == ForYouMixState.NoLanes -> {
                 FeedEmptyTile("No recommendations yet")
                 TextButton(onGoToSearch) { Text("Go to Search") }

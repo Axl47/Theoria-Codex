@@ -8,8 +8,8 @@ sealed interface DeckOrigin {
     /** One of the profile's interests, or a trending lane for a profile with no likes; [label] names it on the card. */
     data class Lane(val laneId: String, val label: String) : DeckOrigin
 
-    /** A post like [of], which the user just liked or saved. */
-    data class Similar(val of: PostId) : DeckOrigin
+    /** A post like [of], which the user just liked, or [saved]. */
+    data class Similar(val of: PostId, val saved: Boolean) : DeckOrigin
 
     /** Another post by the creator of [of], which the user just liked or saved. */
     data class Creator(val of: PostId, val name: String) : DeckOrigin
@@ -96,13 +96,15 @@ data class DeckBatch(val cards: List<DeckCard>, val steering: DeckSteering, val 
 fun nextBatch(
     lanes: List<DeckLane>,
     steering: DeckSteering,
-    seen: Set<PostId>,
+    seen: (PostId) -> Boolean,
     size: Int,
     only: String? = null,
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
 ): DeckBatch {
-    val used = seen.toMutableSet()
-    fun isUsed(post: Post) = post.id in used || copiesOf(post).any(used::contains)
+    // What this batch dealt; [seen] is read as is, so a large history is never copied.
+    val used = HashSet<PostId>()
+    fun isUsed(id: PostId) = seen(id) || id in used
+    fun isUsed(post: Post) = isUsed(post.id) || copiesOf(post).any(::isUsed)
     fun use(post: Post) {
         used += post.id
         used += copiesOf(post)
