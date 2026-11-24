@@ -120,6 +120,8 @@
 
 ### Fixed
 
+- Series from extensions that need extra details to find a series or chapter again now open after you restart the app, instead of failing to load their chapters or pages.
+- Series imported from a Mihon or TachiyomiJ2K backup keep those details too, so they open just as they did in that app.
 - Tapping the Series tab again while on it no longer collapses its search bar.
 - Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires. The cover now also shows for the first chapter you open after starting the app, and for downloaded chapters.
 - Opening an extension series chapter no longer fails some of its pages with "Network request failed unexpectedly" while the app checks for extension updates.

@@ -309,11 +309,11 @@ class ProfileBackupServiceTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = BackupSeries(
             StoredSeries(
-                Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING),
+                Series(id, "Title", "https://example.test/cover.jpg", "Author", listOf("Drama"), "en", "Synopsis", SeriesStatus.ONGOING, """{"slug":"t"}"""),
                 followed = true, readingMode = GalleryReadingMode.VERTICAL, lastOpenedEntry = "/chapter/2", lastCheckedAtEpochMs = 9L,
             ),
             listOf(
-                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20),
+                StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2", 2f, "Group", 5L, """{"id":2}"""), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20),
                 StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, read = true, position = 18, length = 18),
                 StoredSeriesEntry(SeriesEntry("/chapter/0", "Dropped"), sourceOrder = -1, firstSeenAtEpochMs = 4L),
             ),

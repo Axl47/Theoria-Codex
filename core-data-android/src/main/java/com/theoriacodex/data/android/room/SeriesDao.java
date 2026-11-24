@@ -63,25 +63,28 @@ public interface SeriesDao {
     @Query("UPDATE series SET followed = followed OR :followed, reading_mode = COALESCE(reading_mode, :readingMode), "
             + "last_opened_entry = COALESCE(last_opened_entry, :lastOpenedEntry), download_new = download_new OR :downloadNew, "
             + "followed_at_epoch_ms = CASE WHEN followed = 1 THEN COALESCE(followed_at_epoch_ms, :followedAt) "
-            + "WHEN :followed THEN :followedAt ELSE NULL END "
+            + "WHEN :followed THEN :followedAt ELSE NULL END, memo = COALESCE(memo, :memo) "
             + "WHERE source = :source AND address = :address")
     void mergeRestoredSeries(
             String source, String address, boolean followed, String readingMode, String lastOpenedEntry, boolean downloadNew,
-            Long followedAt);
+            Long followedAt, String memo);
 
     /**
      * A stored entry takes the further progress of the two: read on either side, and the later page together with the
      * page count it was recorded against. When that side has no count, as a Mihon backup's pages never do, it takes the
-     * other side's only if it reaches that page, so a page is never shown beyond its count. It keeps the later read time.
+     * other side's only if it reaches that page, so a page is never shown beyond its count. It keeps the later read time,
+     * and its own memo, else the restored one.
      */
     @Query("UPDATE series_entries SET read = read OR :read, last_page = MAX(last_page, :lastPage), "
             + "page_count = CASE WHEN :lastPage > last_page "
             + "THEN COALESCE(:pageCount, CASE WHEN page_count >= :lastPage THEN page_count END) "
             + "ELSE COALESCE(page_count, CASE WHEN :pageCount >= last_page THEN :pageCount END) END, "
-            + "last_read_at_epoch_ms = MAX(COALESCE(last_read_at_epoch_ms, :lastReadAt), COALESCE(:lastReadAt, last_read_at_epoch_ms)) "
+            + "last_read_at_epoch_ms = MAX(COALESCE(last_read_at_epoch_ms, :lastReadAt), COALESCE(:lastReadAt, last_read_at_epoch_ms)), "
+            + "memo = COALESCE(memo, :memo) "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(
-            String source, String seriesAddress, String address, boolean read, long lastPage, Long pageCount, Long lastReadAt);
+            String source, String seriesAddress, String address, boolean read, long lastPage, Long pageCount, Long lastReadAt,
+            String memo);
 
     /** Its entries go with it, by the foreign key's cascade. */
     @Query("DELETE FROM series WHERE source = :source AND address = :address")

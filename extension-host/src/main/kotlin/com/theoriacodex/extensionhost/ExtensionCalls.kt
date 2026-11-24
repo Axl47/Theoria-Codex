@@ -17,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * How a source adapter runs its extension's calls, for either interface. [name] is the source's, for the failure log;
@@ -111,7 +113,17 @@ private const val MAX_LISTED = 2_048
  * A series as an extension of either interface describes it, as the app's: blank texts are none, and the genres are
  * one comma-separated text.
  */
-internal fun extensionSeries(id: SeriesId, title: String, cover: String?, author: String?, genres: String?, language: String, description: String?, status: Int) = Series(
+internal fun extensionSeries(
+    id: SeriesId,
+    title: String,
+    cover: String?,
+    author: String?,
+    genres: String?,
+    language: String,
+    description: String?,
+    status: Int,
+    memo: JsonObject? = null,
+) = Series(
     id = id,
     title = title,
     coverUrl = cover?.takeIf(String::isNotBlank),
@@ -120,6 +132,7 @@ internal fun extensionSeries(id: SeriesId, title: String, cover: String?, author
     language = language,
     description = description?.trim()?.takeIf(String::isNotEmpty),
     status = extensionSeriesStatus(status),
+    memo = memo.storedMemo(),
 )
 
 /**
@@ -136,10 +149,29 @@ internal fun extensionWebUrl(series: Series, stored: String?, baseUrl: String?, 
  * A chapter or episode of [seriesTitle] as the app's entry. Extensions may leave the [number] at -1 for the app to
  * read from the name, as Mihon and Aniyomi do; a blank group and an upload time of 0 are none.
  */
-internal fun extensionEntry(seriesTitle: String, address: String, name: String, number: Float, group: String?, uploadedAtEpochMs: Long) = SeriesEntry(
+internal fun extensionEntry(
+    seriesTitle: String,
+    address: String,
+    name: String,
+    number: Float,
+    group: String?,
+    uploadedAtEpochMs: Long,
+    memo: JsonObject? = null,
+) = SeriesEntry(
     address = address,
     name = name,
     number = number.takeIf { it >= 0f } ?: ChapterRecognition.parseChapterNumber(seriesTitle, name),
     translatorGroup = group?.takeIf(String::isNotBlank),
     uploadedAtEpochMs = uploadedAtEpochMs.takeIf { it > 0L },
+    memo = memo.storedMemo(),
 )
+
+/** A source's memo as the app stores it: its JSON text, or null when it keeps nothing. */
+private fun JsonObject?.storedMemo(): String? = this?.takeIf(JsonObject::isNotEmpty)?.toString()
+
+/**
+ * A memo the app stored, as its source's object again. One that is not a JSON object, which no source wrote, is
+ * none, so a damaged row or import cannot fail the call.
+ */
+internal fun sourceMemo(stored: String?): JsonObject =
+    stored?.let { runCatching { Json.parseToJsonElement(it) as? JsonObject }.getOrNull() } ?: JsonObject(emptyMap())

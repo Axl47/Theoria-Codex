@@ -56,6 +56,22 @@ class TachiyomiBackupTest {
     }
 
     @Test
+    fun `extension memos come along, and an empty or broken one is none`() {
+        val series = decodeTachiyomiBackup(backup {
+            message(1) {
+                long(1, 1); string(2, "/m"); string(3, "M"); string(112, """{"slug":"m-1"}""")
+                message(16) { string(1, "/m/3"); string(13, """{"id":3}"""); long(10, 0) }
+                message(16) { string(1, "/m/2"); string(13, "{}"); long(10, 1) }
+                message(16) { string(1, "/m/1"); string(13, "not json"); long(10, 2) }
+            }
+            message(1) { long(1, 1); string(2, "/n"); string(3, "N"); string(112, "{}") }
+        }, now = 0)
+
+        assertEquals(listOf("""{"slug":"m-1"}""", null), series.map { it.series.series.memo })
+        assertEquals(listOf("""{"id":3}""", null, null), series.first().entries.map { it.entry.memo })
+    }
+
+    @Test
     fun `TachiyomiJ2K's pages left marks a chapter opened on its first page and gives its page count`() {
         val entries = decodeTachiyomiBackup(backup {
             message(1) {

@@ -33,7 +33,8 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
 
     /**
      * Series and chapters as the source listed them. Sources may keep data on them between calls, so a later call
-     * about one hands the source its own object back; one from an earlier run is rebuilt from what the app stored.
+     * about one hands the source its own object back; one from an earlier run is rebuilt from what the app stored,
+     * memo included.
      */
     private val listedSeries = recentlyListed<SManga>()
     private val listedChapters = recentlyListed<SChapter>()
@@ -60,7 +61,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
     override suspend fun entries(series: Series): List<SeriesEntry> = calls.calling {
         source.getMangaUpdate(manga(series), emptyList(), fetchDetails = false, fetchChapters = true).chapters.map { chapter ->
             listedChapters[chapter.url] = chapter
-            extensionEntry(series.title, chapter.url, chapter.name, chapter.chapter_number, chapter.scanlator, chapter.date_upload)
+            extensionEntry(series.title, chapter.url, chapter.name, chapter.chapter_number, chapter.scanlator, chapter.date_upload, chapter.memo)
         }
     }
 
@@ -73,6 +74,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
             entry.number?.let { chapter_number = it }
             scanlator = entry.translatorGroup
             entry.uploadedAtEpochMs?.let { date_upload = it }
+            memo = sourceMemo(entry.memo)
         }
         source.getPageList(chapter).mapNotNull { page -> pageImage(chapter, page) }
     }
@@ -96,6 +98,7 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         thumbnail_url = series.coverUrl?.substringBefore(ExtensionImages.FRAGMENT)
         author = series.author
         genre = series.genres.joinToString().takeIf(String::isNotBlank)
+        memo = sourceMemo(series.memo)
     }
 
     /**
@@ -110,9 +113,10 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         details.genre?.takeIf(String::isNotBlank)?.let { series.genre = it }
         details.description?.takeIf(String::isNotBlank)?.let { series.description = it }
         if (details.status != SManga.UNKNOWN) series.status = details.status
+        details.memo.takeIf { it.isNotEmpty() }?.let { series.memo = it }
     }
 
-    private fun SManga.toSeries() = extensionSeries(SeriesId(key, url), title, thumbnail_url, author, genre, source.lang, description, status)
+    private fun SManga.toSeries() = extensionSeries(SeriesId(key, url), title, thumbnail_url, author, genre, source.lang, description, status, memo)
 
     /**
      * Nothing is requested here. Some sources name each image only on a page of its own; [sourceImages] asks for that when

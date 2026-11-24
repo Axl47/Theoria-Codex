@@ -78,7 +78,10 @@ class RoomProfileBackupStoreTest {
         // An extension source: restoring needs no extension installed, since nothing here asks one.
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
-        series.store(Series(id, "Title", coverUrl = "https://cdn.test/c.jpg", language = "en"), listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1")))
+        series.store(
+            Series(id, "Title", coverUrl = "https://cdn.test/c.jpg", language = "en", memo = """{"slug":"t1"}"""),
+            listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1", memo = """{"id":1}""")),
+        )
         series.setFollowed(id, true)
         series.setReadingMode(id, GalleryReadingMode.VERTICAL)
         series.recordProgress(id, "/chapter/1", position = 18, length = 18)
@@ -97,7 +100,10 @@ class RoomProfileBackupStoreTest {
         assertEquals(series.entries(id), restored.entries(id))
         assertEquals(listOf("Title" to 1), restored.observeFollowed().first().map { it.series.title to it.unreadCount })
 
-        // On a device that already has the series, unfollowed and further along, the restore only adds.
+        // On a device that already has the series, unfollowed and further along, the restore only adds: a memo the
+        // device lacks comes from the backup, and one it has stays.
+        restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series SET memo = NULL")
+        restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET memo = '{\"id\":\"device\"}' WHERE address = '/chapter/1'")
         restored.setFollowed(id, false)
         restored.setReadingMode(id, GalleryReadingMode.RIGHT_TO_LEFT)
         restored.recordProgress(id, "/chapter/2", position = 20, length = 20)
@@ -109,6 +115,8 @@ class RoomProfileBackupStoreTest {
         assertEquals(restoredAt, restored.entries(id).single { it.entry.address == "/chapter/2" }.lastReadAtEpochMs)
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
+        assertEquals("""{"slug":"t1"}""", kept.series.memo)
+        assertEquals("""{"id":"device"}""", restored.entries(id).single { it.entry.address == "/chapter/1" }.entry.memo)
         restoredDatabase.close()
     }
 
@@ -150,7 +158,7 @@ class RoomProfileBackupStoreTest {
         // The page count goes with the position that wins: page 8 of 10 here and page 3 of 20 in the backup stay 8 of 10,
         // and page 2 of 10 here becomes the backup's 3 of 20, never "3 of 10".
         suspend fun progress() = device.entries(id).single { it.entry.address == "/chapter/2" }.let { it.position to it.length }
-        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L, null)
+        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L, null, null)
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
         assertEquals(8L to 10L, progress())
         deviceDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_page = 2, page_count = 10 WHERE address = '/chapter/2'")
@@ -163,13 +171,13 @@ class RoomProfileBackupStoreTest {
         fun reset(page: Long, count: Long?) = deviceDatabase.openHelper.writableDatabase
             .execSQL("UPDATE series_entries SET last_page = ?, page_count = ? WHERE address = '/chapter/2'", arrayOf(page, count))
         reset(5, 10)
-        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 20L, null, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 20L, null, null, null)
         assertEquals(20L to null, progress())
         reset(20, null)
-        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 5L, 10L, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 5L, 10L, null, null)
         assertEquals(20L to null, progress())
         reset(5, null)
-        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 4L, 10L, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 4L, 10L, null, null)
         assertEquals(5L to 10L, progress())
         deviceDatabase.close()
     }

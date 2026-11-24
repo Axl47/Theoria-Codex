@@ -249,6 +249,7 @@ internal fun SeriesEntity.toStored() = StoredSeries(
         language = language,
         description = description,
         status = SeriesStatus.entries.firstOrNull { it.name == status } ?: SeriesStatus.UNKNOWN,
+        memo = memo,
     ),
     followed = followed,
     readingMode = readingMode?.let { name -> GalleryReadingMode.entries.firstOrNull { it.name == name } },
@@ -276,19 +277,22 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     downloadNewChapters,
     chaptersShareFirstPage,
     followedAtEpochMs,
+    series.memo,
 )
 
 /**
- * [this] with [stored]'s description and status where it has none: only a details page gives them, so a listing of
- * the series, or details that leave them out, must not erase what an earlier details page said.
+ * [this] with [stored]'s description, status and memo where it has none: only a details page gives the first two, so a
+ * listing of the series, or details that leave them out, must not erase what an earlier details page said. A source
+ * may likewise give its memo on one of those and not the other, and needs it to open the series again.
  */
 private fun Series.keeping(stored: Series): Series = copy(
     description = description ?: stored.description,
     status = status.takeUnless { it == SeriesStatus.UNKNOWN } ?: stored.status,
+    memo = memo ?: stored.memo,
 )
 
 internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
-    entry = SeriesEntry(address, name, number, translatorGroup, uploadedAtEpochMs),
+    entry = SeriesEntry(address, name, number, translatorGroup, uploadedAtEpochMs, memo),
     sourceOrder = sourceOrder,
     firstSeenAtEpochMs = firstSeenAtEpochMs,
     read = read,
@@ -311,4 +315,5 @@ internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     position,
     length,
     lastReadAtEpochMs,
+    entry.memo,
 )

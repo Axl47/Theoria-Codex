@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 19,
+        version = 20,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -218,6 +218,14 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
+    // What an extension keeps with a series or chapter to open it again. Nothing was kept before.
+    public static final Migration MIGRATION_19_20 = new Migration(19, 20) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series` ADD COLUMN `memo` TEXT");
+            database.execSQL("ALTER TABLE `series_entries` ADD COLUMN `memo` TEXT");
+        }
+    };
+
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -236,7 +244,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_15_16,
             MIGRATION_16_17,
             MIGRATION_17_18,
-            MIGRATION_18_19
+            MIGRATION_18_19,
+            MIGRATION_19_20
     };
 
     public abstract CodexLikesDao codexLikesDao();
