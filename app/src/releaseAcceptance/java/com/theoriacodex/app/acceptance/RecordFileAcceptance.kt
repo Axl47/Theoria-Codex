@@ -50,14 +50,14 @@ internal suspend fun verifyRecordFiles(context: Context, token: String, phase: S
         database.close()
         if (phase == "read") {
             context.deleteDatabase(databaseName)
-            check(directory.deleteRecursively())
+            check(directory.deleteRecursively()) { "could not delete ${directory.path}" }
         }
     }
 }
 
 private suspend fun writeRecordFiles(directory: File, settings: DataStoreSettingsRepository, library: CodexLikesTransactions) {
     FileBackedReadingPositionRepository(directory).replace(positions)
-    directory.resolve("shipped").apply { check(mkdirs()) }.resolve(READING_POSITIONS_FILE_NAME).writeText(SHIPPED_POSITIONS)
+    directory.resolve("shipped").apply { check(mkdirs()) { "could not create $path" } }.resolve(READING_POSITIONS_FILE_NAME).writeText(SHIPPED_POSITIONS)
     OfflinePendingJobStore(directory.resolve("offline_jobs.json")).save(offlineRequests)
     FileBackedPostDownloadJobStore(directory.resolve("post_download_jobs.json")).save(downloads)
 
@@ -73,32 +73,36 @@ private suspend fun writeRecordFiles(directory: File, settings: DataStoreSetting
     } catch (_: ProfileDeletionPendingException) {
         true
     }
-    check(pending)
-    check(directory.resolve(CURRENT_JOURNAL).isFile)
+    check(pending) { "profile deletion was not left pending" }
+    check(directory.resolve(CURRENT_JOURNAL).isFile) { "current journal missing at ${directory.resolve(CURRENT_JOURNAL)}" }
     directory.resolve(SHIPPED_JOURNAL).writeText("""{"version":1,"profileId":"${shipped.profileId}"}""")
 }
 
 private suspend fun readRecordFiles(directory: File, settings: DataStoreSettingsRepository, library: CodexLikesTransactions) {
-    check(FileBackedReadingPositionRepository(directory).snapshot() == positions)
-    check(FileBackedReadingPositionRepository(directory.resolve("shipped")).snapshot() == positions)
+    val currentPositions = FileBackedReadingPositionRepository(directory).snapshot()
+    check(currentPositions == positions) { "current reading positions were $currentPositions" }
+    val shippedPositions = FileBackedReadingPositionRepository(directory.resolve("shipped")).snapshot()
+    check(shippedPositions == positions) { "shipped reading positions were $shippedPositions" }
     val wire = Json.parseToJsonElement(directory.resolve(READING_POSITIONS_FILE_NAME).readText()).jsonObject
-    check(wire.keys == setOf("schemaVersion", "positions"))
+    check(wire.keys == setOf("schemaVersion", "positions")) { "reading positions keys were ${wire.keys}" }
     check(wire.getValue("positions").jsonArray.first().jsonObject.keys ==
-        setOf("source", "postId", "section", "mediaNumber", "lastViewedAt"))
-    check(OfflinePendingJobStore(directory.resolve("offline_jobs.json")).load() == offlineRequests)
+        setOf("source", "postId", "section", "mediaNumber", "lastViewedAt")) { "reading position keys were ${wire.getValue("positions").jsonArray.first().jsonObject.keys}" }
+    val offlineJobs = OfflinePendingJobStore(directory.resolve("offline_jobs.json")).load()
+    check(offlineJobs == offlineRequests) { "offline jobs were $offlineJobs" }
     val restored = FileBackedPostDownloadJobStore(directory.resolve("post_download_jobs.json")).load().single()
-    check(restored.title == downloads.single().title)
-    check(restored.items.single().let { it.request.post.id == downloadPost.id && it.request.marker == "marker & <1>" })
+    check(restored.title == downloads.single().title) { "restored download title was ${restored.title}" }
+    check(restored.items.single().let { it.request.post.id == downloadPost.id && it.request.marker == "marker & <1>" }) { "restored download items were ${restored.items}" }
 
     val profiles = settings.observeSettings().first().recommendationProfiles
     val removing = listOf(CURRENT_PROFILE, SHIPPED_PROFILE).map { name -> profiles.single { it.name == name }.profileId }
     val journal = Json.parseToJsonElement(directory.resolve(CURRENT_JOURNAL).readText()).jsonObject
-    check(journal.keys == setOf("version", "profileId") && journal.getValue("profileId").jsonPrimitive.content == removing[0])
+    check(journal.keys == setOf("version", "profileId") && journal.getValue("profileId").jsonPrimitive.content == removing[0]) { "deletion journal was $journal" }
     listOf(CURRENT_JOURNAL, SHIPPED_JOURNAL).forEach { name ->
         val owner = ProfileDeletionService(settings, library, directory.resolve(name), ProfileLibraryWriteGuard())
-        check(owner.recoverPendingDeletion() && !directory.resolve(name).exists())
+        check(owner.recoverPendingDeletion() && !directory.resolve(name).exists()) { "recovery of $name did not complete or left the journal" }
     }
-    check(settings.observeSettings().first().recommendationProfiles.none { it.profileId in removing })
+    val remaining = settings.observeSettings().first().recommendationProfiles
+    check(remaining.none { it.profileId in removing }) { "recommendation profiles were $remaining" }
 }
 
 private const val CURRENT_PROFILE = "Removed & <current>"

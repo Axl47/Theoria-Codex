@@ -50,11 +50,11 @@ import kotlinx.serialization.json.jsonObject
  * and finish it. [post] is the acceptance video post.
  */
 internal suspend fun writeBackups(directory: File, post: Post) {
-    check(directory.mkdirs())
+    check(directory.mkdirs()) { "could not create ${directory.path}" }
     directory.resolve("backup.json").writeBytes(ProfileBackupCodec().encode(acceptanceBackup(post)))
     FileBackedSavedSearchRepository(directory.resolve("pins"), now = { PIN_SAVED_AT }, newId = { PIN_ID })
         .save(PIN_NAME, acceptanceSearch())
-    directory.resolve("shipped-pins").apply { check(mkdirs()) }.resolve(PINS_FILE).writeText(SHIPPED_PINS)
+    directory.resolve("shipped-pins").apply { check(mkdirs()) { "could not create $path" } }.resolve(PINS_FILE).writeText(SHIPPED_PINS)
     val interrupted = object : ProfileBackupStore {
         override suspend fun snapshot(includeRecents: Boolean): BackupLibrary = error("Restore never snapshots")
         override suspend fun merge(library: BackupLibrary): Int = throw IOException("Process stopped mid-restore")
@@ -65,21 +65,29 @@ internal suspend fun writeBackups(directory: File, post: Post) {
     } catch (_: ProfileRestorePendingException) {
         true
     }
-    check(pending && directory.resolve("restore").resolve(RESTORE_JOURNAL).isFile)
+    check(pending) { "interrupted restore did not leave a pending restore" }
+    val journal = directory.resolve("restore").resolve(RESTORE_JOURNAL)
+    check(journal.isFile) { "pending restore journal missing at ${journal.path}" }
 }
 
 internal suspend fun verifyBackups(directory: File, post: Post) {
     val codec = ProfileBackupCodec()
     val written = directory.resolve("backup.json").readText()
-    check(Json.parseToJsonElement(written) == shippedBackupWithSeriesTime())
+    check(Json.parseToJsonElement(written) == shippedBackupWithSeriesTime()) { "written backup json was $written" }
     val expected = codec.decode(codec.encode(acceptanceBackup(post)))
-    check(codec.decode(written.toByteArray()) == expected && codec.decode(SHIPPED_BACKUP.toByteArray()) == expected)
-    check(expected.library.posts.single() == post && expected.customSources.single().label == "Safe & 'sound'")
+    val decodedWritten = codec.decode(written.toByteArray())
+    check(decodedWritten == expected) { "decoded written backup was $decodedWritten" }
+    val decodedShipped = codec.decode(SHIPPED_BACKUP.toByteArray())
+    check(decodedShipped == expected) { "decoded shipped backup was $decodedShipped" }
+    check(expected.library.posts.single() == post && expected.customSources.single().label == "Safe & 'sound'") { "expected library posts ${expected.library.posts} custom sources ${expected.customSources}" }
 
     val pins = listOf(SavedSearchEntry(PIN_ID, PIN_NAME, acceptanceSearch(), PIN_SAVED_AT))
-    check(FileBackedSavedSearchRepository(directory.resolve("pins")).observeSavedSearches().first() == pins)
-    check(Json.parseToJsonElement(directory.resolve("pins").resolve(PINS_FILE).readText()) == Json.parseToJsonElement(SHIPPED_PINS))
-    check(FileBackedSavedSearchRepository(directory.resolve("shipped-pins")).observeSavedSearches().first() == pins)
+    val currentPins = FileBackedSavedSearchRepository(directory.resolve("pins")).observeSavedSearches().first()
+    check(currentPins == pins) { "current pins were $currentPins" }
+    val pinsFile = directory.resolve("pins").resolve(PINS_FILE).readText()
+    check(Json.parseToJsonElement(pinsFile) == Json.parseToJsonElement(SHIPPED_PINS)) { "pins file was $pinsFile" }
+    val shippedPins = FileBackedSavedSearchRepository(directory.resolve("shipped-pins")).observeSavedSearches().first()
+    check(shippedPins == pins) { "shipped pins were $shippedPins" }
 
     val restore = directory.resolve("restore")
     val imported = mutableListOf<BackupLibrary>()
@@ -90,18 +98,21 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
             return 1
         }
     }
-    check(withRestoreService(restore, store) { it.recoverPendingRestore() })
-    check(!restore.resolve(RESTORE_JOURNAL).exists() && imported.single() == expected.library)
-    check(FileBackedSavedSearchRepository(restore.resolve("pins")).observeSavedSearches().first() == pins)
-
-    // Mihon-family backups decode through protobuf models, which R8 must keep with their field numbers.
     val mihon = Base64.getDecoder().decode(MIHON_BACKUP)
     val repos = AddedRepos()
-    val (preview, series) = withRestoreService(restore, store, repos) { it.preview(mihon) to it.importSeries(mihon) }
+    val (preview, series) = withRestoreService(restore, store, repos) { service ->
+        check(service.recoverPendingRestore()) { "restore recovery did not report success" }
+        val journalRemains = restore.resolve(RESTORE_JOURNAL).exists()
+        check(!journalRemains && imported.single() == expected.library) { "journal exists=$journalRemains imported=$imported" }
+        val restoredPins = FileBackedSavedSearchRepository(restore.resolve("pins")).observeSavedSearches().first()
+        check(restoredPins == pins) { "restored pins were $restoredPins" }
+        // Mihon-family backups decode through protobuf models, which R8 must keep with their field numbers.
+        service.preview(mihon) to service.importSeries(mihon)
+    }
     val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0)
-    check(preview == BackupPreview.Series(counts, newRepos = listOf("https://repo.example"), missingSources = listOf("Source")))
-    check(series == SeriesImportResult(counts, reposAdded = 1) && repos.given == listOf(ExtensionRepo("https://repo.example", "https://repo.example", "ab")))
-    check(imported.last().series.single().entries.single().read)
+    check(preview == BackupPreview.Series(counts, newRepos = listOf("https://repo.example"), missingSources = listOf("Source"))) { "series preview was $preview" }
+    check(series == SeriesImportResult(counts, reposAdded = 1) && repos.given == listOf(ExtensionRepo("https://repo.example", "https://repo.example", "ab"))) { "series import was $series repos were ${repos.given}" }
+    check(imported.last().series.single().entries.single().read) { "last imported series entries were ${imported.last().series}" }
 }
 
 /** A restore service over durable stores in [directory], as the app builds one, with [store] for the library. */
