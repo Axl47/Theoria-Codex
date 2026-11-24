@@ -173,7 +173,7 @@ internal fun extensionEntry(
  * [MAX_MEMO_LENGTH] is stored as an empty object, which replaces the stored memo where null would keep it, so after a
  * restart the source gets no memo rather than an older one that may no longer match it. The first is reported.
  */
-private fun JsonObject?.storedMemo(): String? {
+internal fun JsonObject?.storedMemo(): String? {
     val text = this?.takeIf(JsonObject::isNotEmpty)?.toString() ?: return null
     if (text.length <= MAX_MEMO_LENGTH) return text
     if (oversizedMemoReported.compareAndSet(false, true)) {
@@ -183,7 +183,9 @@ private fun JsonObject?.storedMemo(): String? {
 }
 
 private val oversizedMemoReported = AtomicBoolean(false)
-private const val EMPTY_MEMO = "{}"
+
+/** A memo with nothing in it, as stored to replace one the app holds; every reader takes it as none. */
+internal const val EMPTY_MEMO = "{}"
 
 /**
  * A memo the app stored, as its source's object again. One that is not a JSON object, which no source wrote, is

@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -61,13 +62,22 @@ class MihonSeriesSource(private val source: Source, host: HostServices) : Series
         manga.withDetails(details).also { if (it.memo.isEmpty()) it.memo = memo }.also { listedSeries[it.url] = it }.toSeries()
     }
 
-    /** A chapter listed twice is the first, as the app stores it. */
-    override suspend fun entries(series: Series): List<SeriesEntry> = calls.calling {
-        val chapters = source.getMangaUpdate(manga(series), emptyList(), fetchDetails = false, fetchChapters = true).chapters
-        chapters.distinctBy { it.url }.map { chapter ->
+    /**
+     * As Mihon does, the source is handed its [stored] chapters, memos included, and the memo of the series it returns
+     * is what it keeps from then on, also when it cleared it, since some sources record state there while listing. A
+     * chapter listed twice is the first, as the app stores it.
+     */
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = calls.calling {
+        val manga = manga(series)
+        val before = manga.memo
+        val update = source.getMangaUpdate(manga, stored.map(::chapter), fetchDetails = false, fetchChapters = true)
+        // A source may change the series it was handed in place or return a copy; the held one takes the copy's memo.
+        manga.memo = update.manga.memo
+        val entries = update.chapters.distinctBy { it.url }.map { chapter ->
             listedChapters[chapter.url] = chapter
             extensionEntry(series.title, chapter.url, chapter.name, chapter.chapter_number, chapter.scanlator, chapter.date_upload, chapter.memo)
         }
+        SeriesEntries(entries, manga.memo.storedMemo() ?: EMPTY_MEMO.takeIf { before.isNotEmpty() })
     }
 
     override suspend fun media(entry: SeriesEntry): EntryMedia = EntryMedia.Pages(pages(entry))

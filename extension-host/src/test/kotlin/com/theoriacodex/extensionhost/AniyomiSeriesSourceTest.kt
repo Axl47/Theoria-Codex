@@ -214,22 +214,22 @@ class AniyomiSeriesSourceTest {
         val source = ServerSource(listing = listOf(anime("/a/1", "Grouped")), details = { SAnime.create().apply { fetch_type = FetchType.Seasons } })
         val warm = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
         val opened = warm.details(warm.popular(1).series.single())
-        assertEquals("Seasons aren't supported yet", assertFailsWith<UnsupportedEntriesException> { warm.entries(opened) }.message)
+        assertEquals("Seasons aren't supported yet", assertFailsWith<UnsupportedEntriesException> { warm.entries(opened, emptyList()) }.message)
         assertEquals(1, source.detailsAsked)
 
         // Listed again after it was opened, as browsing does before the followed series are checked: no more requests.
         warm.popular(1)
-        assertFailsWith<UnsupportedEntriesException> { warm.entries(opened) }
+        assertFailsWith<UnsupportedEntriesException> { warm.entries(opened, emptyList()) }
         assertEquals(1, source.detailsAsked)
 
         // Listed but never opened, as a search does before counting episodes.
         val searched = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
-        assertFailsWith<UnsupportedEntriesException> { searched.entries(searched.popular(1).series.single()) }
+        assertFailsWith<UnsupportedEntriesException> { searched.entries(searched.popular(1).series.single(), emptyList()) }
         assertEquals(2, source.detailsAsked)
 
         // As the new-episode check asks after a restart: nothing listed, nothing opened.
         val cold = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
-        assertFailsWith<UnsupportedEntriesException> { cold.entries(Series(SeriesId(cold.key, "/a/1"), "Grouped")) }
+        assertFailsWith<UnsupportedEntriesException> { cold.entries(Series(SeriesId(cold.key, "/a/1"), "Grouped"), emptyList()) }
         assertEquals(3, source.detailsAsked)
     }
 
@@ -246,10 +246,10 @@ class AniyomiSeriesSourceTest {
 
         assertEquals(
             listOf(SeriesEntry("/e/2", "Episode 2", 2f, "Subs", 1_000L), SeriesEntry("/e/1", "Show - Episode 1", 1f)),
-            series.entries(stored),
+            series.entries(stored, emptyList()).entries,
         )
         // Listed once its details were asked for, so a second listing asks no more.
-        series.entries(stored)
+        series.entries(stored, emptyList())
         assertEquals(1, source.detailsAsked)
     }
 

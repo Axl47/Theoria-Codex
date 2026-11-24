@@ -7,6 +7,7 @@ import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -405,7 +406,7 @@ class SeriesDownloadsTest {
         override suspend fun popular(page: Int): SeriesPage = error("unused")
         override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>): SeriesPage = error("unused")
         override suspend fun details(series: Series): Series = series
-        override suspend fun entries(series: Series): List<SeriesEntry> = emptyList()
+        override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
     }
 
     /** A repository that only answers what is stored; downloads need nothing else. */
@@ -417,7 +418,7 @@ class SeriesDownloadsTest {
         override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
         override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
         override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
-        override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
+        override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
         override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
         override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
         override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit

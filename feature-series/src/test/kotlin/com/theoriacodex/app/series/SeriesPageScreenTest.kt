@@ -27,6 +27,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -260,7 +261,7 @@ private class PageFakeSource(id: String, override val name: String, private val 
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = SeriesPage(emptyList(), false)
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
     override fun webUrl(series: Series): String = "$baseUrl${series.id.address}"
 }
@@ -275,7 +276,7 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
     override suspend fun series(id: SeriesId): StoredSeries? = storedFlow.value
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = entriesFlow.value
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) {
         storedFlow.value = storedFlow.value?.copy(followed = followed)
     }

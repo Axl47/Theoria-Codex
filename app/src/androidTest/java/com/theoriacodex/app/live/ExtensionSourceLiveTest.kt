@@ -377,7 +377,7 @@ class ExtensionSourceLiveTest {
         // and the source refuses two requests for one series at a time.
         val listed = runBlocking {
             source.popular(1).series.take(CANDIDATES).first { listed ->
-                val chapters = if (series.repository.series(listed.id) != null) series.repository.entries(listed.id) else source.entries(source.details(listed))
+                val chapters = if (series.repository.series(listed.id) != null) series.repository.entries(listed.id) else source.entries(source.details(listed), stored = emptyList()).entries
                 chapters.size > 1
             }
         }

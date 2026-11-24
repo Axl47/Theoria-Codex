@@ -79,6 +79,16 @@ data class SeriesEntry(
  */
 const val MAX_MEMO_LENGTH = 8_192
 
+/**
+ * What a source's [SeriesSource.entries] fetched: the [entries], and [seriesMemo], the memo it keeps with the series
+ * after listing them, which some sources change while listing. Null leaves the stored memo as it is, for a source that
+ * keeps none; an empty object, which every reader takes as none, replaces it, for a source that cleared its memo.
+ */
+data class SeriesEntries(val entries: List<SeriesEntry>, val seriesMemo: String? = null) {
+    /** [series] with the memo its source keeps now; as it is when the source keeps none. */
+    fun memoOn(series: Series): Series = seriesMemo?.let { series.copy(memo = it) } ?: series
+}
+
 data class SeriesPage(val series: List<Series>, val hasNextPage: Boolean)
 
 /** What an entry opens as. [SeriesSource.media] returns the kind its source's [SeriesSource.kind] serves. */
@@ -123,10 +133,12 @@ interface SeriesSource {
     suspend fun details(series: Series): Series
 
     /**
-     * In the source's order, which lists the newest first. Throws [UnsupportedEntriesException] for a series it finds
-     * but whose entries the app cannot list.
+     * [series]' entries in the source's order, which lists the newest first. [stored] is the list the app holds for
+     * it, in that order, or empty for a series it holds none of: Mihon extensions are handed their stored chapters, memos included, and some stop
+     * paging at one they listed before or carry older ones forward. Throws [UnsupportedEntriesException] for a series
+     * it finds but whose entries the app cannot list.
      */
-    suspend fun entries(series: Series): List<SeriesEntry>
+    suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries
 
     /**
      * [entry]'s pages, or its streams for an anime source. Addresses can expire within minutes, so they are asked for

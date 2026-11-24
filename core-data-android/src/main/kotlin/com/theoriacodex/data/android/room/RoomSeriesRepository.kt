@@ -78,10 +78,15 @@ class RoomSeriesRepository(
         return emptyList()
     }
 
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>): List<SeriesEntry> = database.withTransaction {
-        val stored = dao.series(id.source.id, id.address)?.toStored()
-        if (stored == null || entries.isEmpty()) emptyList() else storeEntries(stored, entries)
-    }
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?): List<SeriesEntry> =
+        database.withTransaction {
+            val stored = dao.series(id.source.id, id.address)?.toStored()
+            if (stored == null || entries.isEmpty()) {
+                emptyList()
+            } else {
+                storeEntries(stored.copy(series = stored.series.copy(memo = seriesMemo ?: stored.series.memo)), entries)
+            }
+        }
 
     /**
      * Writes [stored] as checked now, with [entries] as its entry list, and returns the new ones (none for its first

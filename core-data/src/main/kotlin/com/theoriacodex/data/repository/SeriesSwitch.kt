@@ -31,8 +31,8 @@ suspend fun SeriesRepository.switchSource(
     // The same lock as a refresh, so a check of [to] cannot store an older list over the one moved in.
     val moved = refreshLocks.getOrPut(source.key, ::Mutex).withLock {
         val details = source.details(to)
-        val entries = source.entries(details)
-        moveSeries(from, details, entries)
+        val listed = fetchEntries(source, details)
+        moveSeries(from, listed.memoOn(details), listed.entries)
     }
     if (!moved) return false
     try {

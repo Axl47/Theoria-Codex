@@ -76,7 +76,7 @@ class ExtensionHarnessTest {
      */
     private suspend fun firstReadable(source: SeriesSource, listed: List<Series>): List<ImageRef> =
         listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
-            val first = source.entries(source.details(series)).lastOrNull()
+            val first = source.entries(source.details(series), stored = emptyList()).entries.lastOrNull()
             (first?.let { source.media(it) } as? EntryMedia.Pages)?.pages?.takeIf { it.isNotEmpty() }
         } ?: error("None of the first $MAX_SERIES_TRIED series had a readable chapter")
 

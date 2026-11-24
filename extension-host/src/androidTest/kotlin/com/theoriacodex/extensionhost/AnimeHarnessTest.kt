@@ -73,7 +73,7 @@ class AnimeHarnessTest {
     private suspend fun firstEpisode(source: SeriesSource, listed: List<Series>): SeriesEntry =
         listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
             val details = harness.timed("details") { source.details(series) }
-            val entries = harness.timed("episodes") { source.entries(details) }
+            val entries = harness.timed("episodes") { source.entries(details, stored = emptyList()).entries }
             report("episodes", "${entries.size} episodes")
             entries.lastOrNull()
         } ?: error("None of the first $MAX_SERIES_TRIED series had an episode")
