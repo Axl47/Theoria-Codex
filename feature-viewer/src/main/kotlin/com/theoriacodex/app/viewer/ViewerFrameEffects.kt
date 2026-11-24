@@ -6,11 +6,11 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -204,7 +204,7 @@ private fun ViewerBackHandlers(
     dismissDrag: ViewerDismissDrag,
 ) {
     val scope = rememberCoroutineScope()
-    ViewerHeldBackHandler(holding = screen.pendingDismiss || frame.returning)
+    ViewerHeldBackHandler(holding = screen.pendingDismiss || frame.returning, screen)
     BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.locked) {
         screen.revealUnlock()
     }
@@ -216,33 +216,42 @@ private fun ViewerBackHandlers(
             events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }
             committed = true
         } finally {
-            // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope.
-            if (committed) controls.requestDismiss() else scope.launch { dismissDrag.recoil() }
+            // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope. A second Back can
+            // commit here before the frame that enables the hold, so it is held like one the hold caught.
+            when {
+                !committed -> scope.launch { dismissDrag.recoil() }
+                screen.pendingDismiss -> screen.heldBack = true
+                else -> controls.requestDismiss()
+            }
         }
     }
 }
 
 /**
- * Nothing may pop the route underneath a return that is already moving, so a Back pressed while [holding] waits and runs
- * once the hold ends: when [holding] turns false, or when the Viewer leaves composition at the end of its return. Two
- * quick Backs therefore still mean two steps back. At most one held Back runs.
+ * Nothing may pop the route underneath a return that is already moving, so a Back pressed while [holding] is kept in
+ * [ViewerScreenState.heldBack] and runs once the hold ends: when [holding] turns false, or when the Viewer leaves
+ * composition at the end of its return. Two quick Backs therefore still mean two steps back. At most one held Back runs.
+ *
+ * The hold follows the activity's lifecycle, not the Viewer destination's: popping the Viewer stops its destination
+ * before the return ends, and a handler tied to it would let Back through to the screen underneath.
  */
 @Composable
-internal fun ViewerHeldBackHandler(holding: Boolean) {
+internal fun ViewerHeldBackHandler(holding: Boolean, screen: ViewerScreenState) {
     val owner = LocalOnBackPressedDispatcherOwner.current ?: return
     val view = LocalView.current
-    val held = remember { mutableStateOf(false) }
-    BackHandler(enabled = holding) { held.value = true }
+    CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+        BackHandler(enabled = holding) { screen.heldBack = true }
+    }
     LaunchedEffect(holding) {
-        if (!holding && held.value) {
-            held.value = false
+        if (!holding && screen.heldBack) {
+            screen.heldBack = false
             owner.onBackPressedDispatcher.onBackPressed()
         }
     }
     DisposableEffect(owner, view) {
         onDispose {
-            if (!held.value) return@onDispose
-            held.value = false
+            if (!screen.heldBack) return@onDispose
+            screen.heldBack = false
             // Posted so every handler leaving with the Viewer is gone first; a Viewer leaving with its activity drops it.
             view.post { if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) owner.onBackPressedDispatcher.onBackPressed() }
         }

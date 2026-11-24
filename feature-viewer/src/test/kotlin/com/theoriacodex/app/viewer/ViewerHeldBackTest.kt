@@ -4,7 +4,13 @@ import android.app.Application
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -23,11 +29,20 @@ class ViewerHeldBackTest {
     private val viewerShown = mutableStateOf(true)
     private var backsBehind = 0
 
+    /** A popped Viewer destination is stopped while its return still runs. */
+    private val poppedDestination = object : LifecycleOwner {
+        override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.CREATED }
+    }
+
     private fun showReturningViewer() {
         compose.setContent {
             // The screen behind the Viewer.
             BackHandler { backsBehind++ }
-            if (viewerShown.value) ViewerHeldBackHandler(holding.value)
+            if (viewerShown.value) {
+                CompositionLocalProvider(LocalLifecycleOwner provides poppedDestination) {
+                    ViewerHeldBackHandler(holding.value, remember { ViewerScreenState() })
+                }
+            }
         }
     }
 
