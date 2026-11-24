@@ -5,8 +5,10 @@ import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoExtension.Status
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -168,6 +170,20 @@ class ExtensionCatalogTest {
         val changed = catalog.available(refresh = true)
         assertEquals(emptyList<Any>(), changed.extensions)
         assertTrue(changed.problems.getValue(repoUrl).startsWith("Now signed with another key"))
+    }
+
+    @Test
+    fun `a repo whose index is too large, as fetched or once gunzipped, is refused without reading it all`() = runTest {
+        site["https://huge.example/repo.json"] = ByteArray(MAX_INDEX_BYTES.toInt() + 1) { ' '.code.toByte() }
+        assertEquals(mapOf("https://huge.example" to "Too large"), catalog.add(listOf(NewExtensionRepo("https://huge.example"))))
+
+        serve()
+        catalog.add(listOf(NewExtensionRepo(repoUrl)))
+        // A few kilobytes that expand past the limit.
+        site["$repoUrl/index.min.json"] = ByteArrayOutputStream().also { out ->
+            GZIPOutputStream(out).use { it.write(ByteArray(MAX_INDEX_BYTES.toInt() + 1)) }
+        }.toByteArray()
+        assertEquals(mapOf(repoUrl to "Too large"), catalog.available(refresh = true).problems)
     }
 
     @Test
