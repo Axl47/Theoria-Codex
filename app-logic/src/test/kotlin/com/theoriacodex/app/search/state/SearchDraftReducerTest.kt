@@ -242,7 +242,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `gelbooru input requires an exact suggestion and canonicalizes spaces`() {
+    fun `gelbooru input requires an exact suggestion and canonicalizes spaces (ADR 0008)`() {
         val gelbooru = state(query(QueryMode.Source(SourceKey.GELBOORU))).copy(
             suggestions = SearchSuggestionsUiState(
                 autocomplete = listOf(TagSuggestion("blue_hair", "tag", 10)),

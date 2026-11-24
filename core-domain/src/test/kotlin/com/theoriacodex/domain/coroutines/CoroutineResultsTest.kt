@@ -16,7 +16,7 @@ import org.junit.Test
 
 class CoroutineResultsTest {
     @Test
-    fun `cancellation is rethrown unchanged`() = runTest {
+    fun `cancellation is rethrown unchanged (ADR 0002)`() = runTest {
         val expected = CancellationException("request superseded")
         var thrown: CancellationException? = null
 
@@ -42,7 +42,7 @@ class CoroutineResultsTest {
     }
 
     @Test
-    fun `exception variant rethrows cancellation and captures exceptions`() = runTest {
+    fun `exception variant rethrows cancellation and captures exceptions (ADR 0002)`() = runTest {
         val expected = CancellationException("request superseded")
         var thrown: CancellationException? = null
 

@@ -174,6 +174,22 @@ class PostDownloadQueueTest {
     }
 
     @Test
+    fun `an unexpected preparation failure reaches diagnostics with its cause`() = runTest {
+        val backend = FakeBackend()
+        val cause = IllegalStateException("decoder crashed")
+        backend.prepareOverride = { throw cause }
+        val reported = mutableListOf<Throwable?>()
+        val queue = PostDownloadQueue(backgroundScope, backend, diagnostics = { _, _, error -> reported += error })
+        queue.submit("One", listOf(request(1)))
+        runCurrent()
+
+        val item = queue.batches.value.single().items.single()
+        assertEquals(PostDownloadStatus.FAILED, item.status)
+        assertEquals("Could not save this post. Try again.", item.message)
+        assertEquals(listOf<Throwable?>(cause), reported)
+    }
+
+    @Test
     fun `system progress keeps unknown totals indeterminate and provides actionable failures`() {
         val pending = downloadTransferSnapshot(DownloadManager.STATUS_PAUSED, DownloadManager.PAUSED_QUEUED_FOR_WIFI, -1, -1)
         assertEquals(PostDownloadStatus.WAITING, pending.status)
