@@ -39,6 +39,7 @@ import com.theoriacodex.app.media.totalBytes
 import com.theoriacodex.app.media.PostDownloadItem
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import com.theoriacodex.domain.series.SeriesId
 
 /**
  * Transfer work (the app's one download queue, Activity-owned removals, backup and offline owners) with shell-owned
@@ -163,11 +164,15 @@ internal fun LibraryTransferSettings(tools: LibraryTransferTools) {
 }
 
 @Composable
-internal fun LibraryTransferDialogs(tools: LibraryTransferTools, onOpenPost: suspend (PostDownloadItem) -> Unit) {
+internal fun LibraryTransferDialogs(
+    tools: LibraryTransferTools,
+    onOpenPost: suspend (PostDownloadItem) -> Unit,
+    onOpenSeries: (SeriesId) -> Unit,
+) {
     val offline = tools.offline
     val offlineState by offline.state.collectAsStateWithLifecycle()
     if (offlineState.isOpen) StorageSheet(offlineState, offline::dismiss, offline::refreshUsage, offline::clearDisposableCache)
-    if (tools.showDownloads) LibraryTransfersSheetHost(tools, onOpenPost)
+    if (tools.showDownloads) LibraryTransfersSheetHost(tools, onOpenPost, onOpenSeries)
     val backup = tools.backup
     val backupState by backup.state.collectAsStateWithLifecycle()
     BackupDialogs(backupState, backup::dismissDialog, backup::applyPreferences, backup::restore)

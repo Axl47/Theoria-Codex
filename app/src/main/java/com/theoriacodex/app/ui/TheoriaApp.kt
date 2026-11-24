@@ -349,7 +349,7 @@ private fun ShellDialogs(shell: TheoriaShell, appShellState: AppShellUiState) {
             onDismiss = { overlays.releaseHistoryEntries = null },
         )
     }
-    LibraryTransferDialogs(shell.transfers) { item -> shell.openDownloadedPost(item) }
+    LibraryTransferDialogs(shell.transfers, { item -> shell.openDownloadedPost(item) }) { id -> shell.navController.navigate(AppRoute.series(id)) }
     CredentialRecoveryOverlay(
         owner = shell.owners.settings,
         recoveryState = shell.sources.accounts.recoveryState,

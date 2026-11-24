@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +32,8 @@ import com.theoriacodex.data.repository.seriesIdOfOfflineOwner
 
 /**
  * One offline owner in the Library's sheet: name, what is kept, its job's progress and any message about
- * it. Cancel or Retry sits on the row; removal is on the row's own menu. [marked] highlights the Codex
- * the sheet was opened for.
+ * it. Cancel or Retry sits on the row; removal is on the row's own menu. A series' details open its page.
+ * [marked] highlights the Codex the sheet was opened for.
  */
 @Composable
 internal fun OfflineOwnerRow(owner: OfflineStorageOwner, enabled: Boolean, marked: Boolean, actions: OfflineRowActions) {
@@ -42,7 +43,9 @@ internal fun OfflineOwnerRow(owner: OfflineStorageOwner, enabled: Boolean, marke
             .background(background, MaterialTheme.shapes.medium).padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val series = seriesIdOfOfflineOwner(owner.id)
+        val opens = series?.let { id -> Modifier.clickable(onClickLabel = "Open series") { actions.openSeries(id) } } ?: Modifier
+        Column(Modifier.weight(1f).then(opens), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(owner.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(offlineOwnerStatus(owner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OfflineOwnerProgress(owner)
