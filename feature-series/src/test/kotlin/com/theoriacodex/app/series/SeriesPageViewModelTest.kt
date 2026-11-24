@@ -267,7 +267,7 @@ class SeriesPageViewModelTest {
     }
 
     @Test
-    fun aSourceThatCannotListTheEntriesSaysWhyInItsOwnWordsWithoutRetry() = runTest {
+    fun `a source that cannot list the entries says why in its own words without retry (ADR 0007)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
         val source = Seasons(id.source)
@@ -276,6 +276,20 @@ class SeriesPageViewModelTest {
 
         advanceUntilIdle()
         assertEquals(RefreshFailure(Seasons.MESSAGE, retryable = false), viewModel.state.value.failure)
+        collecting.cancel()
+    }
+
+    @Test
+    fun `any other failure's own text is never shown (ADR 0007)`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
+        val source = Seasons(id.source, IllegalStateException("socket closed by 10.0.0.2"))
+        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
+        val collecting = launch { viewModel.state.collect {} }
+
+        advanceUntilIdle()
+        val failure = checkNotNull(viewModel.state.value.failure)
+        assertFalse(failure.message, "10.0.0.2" in failure.message)
         collecting.cancel()
     }
 
@@ -312,13 +326,16 @@ class SeriesPageViewModelTest {
     )
 }
 
-private class Seasons(override val key: SourceKey) : SeriesSource {
+private class Seasons(
+    override val key: SourceKey,
+    private val failure: Throwable = UnsupportedEntriesException(MESSAGE),
+) : SeriesSource {
     override val name = "Fake"
     override val language = "en"
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = throw UnsupportedEntriesException(MESSAGE)
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = throw failure
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(emptyList())
 
     companion object {

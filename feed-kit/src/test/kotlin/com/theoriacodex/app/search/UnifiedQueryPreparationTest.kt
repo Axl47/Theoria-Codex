@@ -10,7 +10,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class UnifiedQueryPreparationTest {
     @Test
-    fun `successful compatibility mappings are reused and expire`() = runTest {
+    fun `successful compatibility mappings are reused and expire (ADR 0008)`() = runTest {
         val adapter = TestAdapter(SourceKey.GELBOORU).apply {
             autocomplete = listOf(TagSuggestion("blue_hair", "tag", 100))
         }

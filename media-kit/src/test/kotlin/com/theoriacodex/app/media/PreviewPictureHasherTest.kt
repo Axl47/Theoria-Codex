@@ -11,7 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PreviewPictureHasherTest {
-    @Test fun `a listing waits for its previews only as long as the budget, and the next listing has the late hashes`() = runTest {
+    @Test fun `a listing waits for its previews only as long as the budget, and the next listing has the late hashes (ADR 0006)`() = runTest {
         val slow = CompletableDeferred<PictureHashResult>()
         val loads = mutableListOf<String>()
         val hasher = PreviewPictureHasher(backgroundScope, { candidate ->
