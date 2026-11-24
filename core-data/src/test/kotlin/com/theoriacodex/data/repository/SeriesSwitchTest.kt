@@ -51,7 +51,7 @@ class SeriesSwitchTest {
     }
 
     @Test
-    fun `the chapter the user is in bounds what is read, and a chapter read beyond it is read alone`() {
+    fun `below the chapter the user is in, only chapters the old source lacks are filled in as read`() {
         val old = listOf(
             stored(SeriesEntry("/o200", "200", 200f), order = 0, read = true),
             stored(SeriesEntry("/o12", "12", 12f, "A"), order = 1, position = 12),
@@ -65,7 +65,8 @@ class SeriesSwitchTest {
         val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o12"), old, to, new)
 
         val byAddress = changed.associateBy { it.entry.address }
-        assertEquals(setOf("/n1", "/n11", "/n200"), changed.filter { it.read }.map { it.entry.address }.toSet())
+        // Chapter 1 was unread there and stays unread; 11 was not there, so it is read as one passed over.
+        assertEquals(setOf("/n11", "/n200"), changed.filter { it.read }.map { it.entry.address }.toSet())
         val resumed = byAddress.getValue("/n12A")
         assertEquals("Unfinished, capped at the new chapter's page count", 8L to false, resumed.position to resumed.read)
         assertEquals("/n12A", series.lastOpenedEntry)
@@ -77,11 +78,54 @@ class SeriesSwitchTest {
         val new = listOf(3f, 2f, 1f).mapIndexed { order, number -> stored(SeriesEntry("/n$number", "$number", number), order) }
 
         val (_, finished) = carryProgress(from.copy(lastOpenedEntry = "/o3"), old, to, new)
-        assertEquals(setOf("/n1.0", "/n2.0", "/n3.0"), finished.filter { it.read }.map { it.entry.address }.toSet())
+        assertEquals(setOf("/n2.0", "/n3.0"), finished.filter { it.read }.map { it.entry.address }.toSet())
 
         val (series, alone) = carryProgress(from, old, to, new)
         assertEquals(listOf("/n3.0"), alone.map { it.entry.address })
         assertEquals("The furthest chapter read is where Continue goes on from", "/n3.0", series.lastOpenedEntry)
+    }
+
+    @Test
+    fun `every chapter partway through keeps its place, the further one winning, capped at its page count`() {
+        val old = listOf(
+            stored(SeriesEntry("/o3", "3", 3f), order = 0, position = 4),
+            stored(SeriesEntry("/o2", "2", 2f), order = 1, position = 15),
+            // No longer listed there (a negative order), but its place still counts.
+            stored(SeriesEntry("/o1", "1", 1f), order = -1, position = 6),
+        )
+        val new = listOf(
+            stored(SeriesEntry("/n3", "3", 3f), order = 0),
+            stored(SeriesEntry("/n2", "2", 2f), order = 1, length = 10),
+            stored(SeriesEntry("/n1", "1", 1f), order = 2, position = 8),
+        )
+
+        val (series, changed) = carryProgress(from.copy(lastOpenedEntry = "/o3"), old, to, new)
+
+        assertEquals(listOf("/n2" to 10L, "/n3" to 4L), changed.map { it.entry.address to it.position })
+        assertEquals("Nothing is read by a place alone", emptyList<String>(), changed.filter { it.read }.map { it.entry.address })
+        assertEquals("/n3", series.lastOpenedEntry)
+    }
+
+    @Test
+    fun `an episode keeps its own watched state and place, and one the old source lacks stays unwatched`() {
+        val watching = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/a"), "Series"), lastOpenedEntry = "/o5")
+        val switched = StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_2"), "/b"), "Series"))
+        val old = listOf(
+            stored(SeriesEntry("/o5", "5", 5f), order = 0, position = 600_000, length = 1_440_000),
+            stored(SeriesEntry("/o3", "3", 3f), order = 1, position = 300_000, length = 1_440_000),
+            stored(SeriesEntry("/o2", "2", 2f), order = 2, read = true, position = 1_400_000, length = 1_440_000),
+        )
+        val new = listOf(5f, 4f, 3f, 2f, 1f).mapIndexed { order, number ->
+            stored(SeriesEntry("/n${number.toInt()}", "$number", number), order = order, length = if (number == 2f) 1_380_000 else null)
+        }
+
+        val (series, changed) = carryProgress(watching, old, switched, new)
+
+        assertEquals(
+            listOf(Triple("/n2", true, 1_380_000L), Triple("/n3", false, 300_000L), Triple("/n5", false, 600_000L)),
+            changed.map { Triple(it.entry.address, it.read, it.position) },
+        )
+        assertEquals("/n5", series.lastOpenedEntry)
     }
 
     @Test
