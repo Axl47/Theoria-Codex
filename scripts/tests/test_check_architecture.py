@@ -12,7 +12,7 @@ import check_architecture  # noqa: E402
 
 
 class BareComposeWaitTest(unittest.TestCase):
-    def test_flags_every_spelling_of_a_bare_wait(self) -> None:
+    def test_flags_every_spelling_of_a_bare_wait_adr_0210(self) -> None:
         for line in [
             "compose.waitUntil(10_000) { ready }",
             "        waitUntil { ready }",

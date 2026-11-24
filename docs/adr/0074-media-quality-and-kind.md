@@ -24,3 +24,6 @@ New sources get delivery optimizations automatically if their media offers varia
 - `app-logic/src/main/kotlin/com/theoriacodex/app/viewer/UgoiraDecodePolicy.kt`: `ugoiraFrameSampleSize`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/media/MediaStorageBreakdown.kt`: `MediaStorageBreakdown`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostMediaTest.kt`: `PostMediaTest`
+
+## Guarded by
+- `scripts/check_architecture.py`: `delivery_plans_ignore_source_names`

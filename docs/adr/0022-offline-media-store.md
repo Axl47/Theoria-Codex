@@ -25,3 +25,7 @@ Anything that moves or renames copy files must keep the manifest last. Raising t
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/OfflineMediaStore.kt`: `OfflineMediaStore`, `admit`, `save`, `deleteCopy`, `readRecord`, `mediaMatchesManifest`, `salvageOwners`, `OfflineRefKey`, `OfflineManifest`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/OfflineMediaCatalog.kt`: `OfflineMediaCatalog`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/OfflinePendingJobStore.kt`: `OfflinePendingJobStore.load`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/OfflineMediaStoreTest.kt`: `a numeric owner never keeps a folder alive (ADR 0022)`
