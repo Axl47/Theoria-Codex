@@ -34,15 +34,21 @@ class SeriesProgressTest {
     }
 
     @Test
-    fun `an episode is watched from 85 percent of its length, stays watched, and resumes where it was left until then`() {
+    fun `an episode is watched from 85 percent of its length, stays watched, and resumes where it was left short of its last 2 minutes`() {
         val length = 1_200_000L
         val midway = entry("e1", order = 0).withProgress(position = 1_019_999, length = length, SeriesKind.ANIME)
         assertFalse("Short of 85%", midway.read)
         assertEquals(1_019_999L, midway.resumePositionMs())
 
-        val finished = midway.withProgress(position = 1_020_000, length = length, SeriesKind.ANIME)
-        assertTrue(finished.read)
-        assertEquals("A finished episode starts over", 0L, finished.resumePositionMs())
+        val watched = midway.withProgress(position = 1_020_000, length = length, SeriesKind.ANIME)
+        assertTrue(watched.read)
+        assertEquals("Watched, but left in its credits", 1_020_000L, watched.resumePositionMs())
+
+        val finished = watched.withProgress(position = length - 120_000, length = length, SeriesKind.ANIME)
+        assertEquals("Within its last 2 minutes it starts over", 0L, finished.resumePositionMs())
+        val clip = entry("e2", order = 1).withProgress(position = 54_000, length = 60_000, SeriesKind.ANIME)
+        assertEquals("A short one's tail is its last 10%", 0L, clip.resumePositionMs())
+        assertEquals(53_000L, clip.withProgress(position = 53_000, length = 60_000, SeriesKind.ANIME).resumePositionMs())
 
         val rewatched = finished.withProgress(position = 60_000, length = length, SeriesKind.ANIME)
         assertTrue(rewatched.read)

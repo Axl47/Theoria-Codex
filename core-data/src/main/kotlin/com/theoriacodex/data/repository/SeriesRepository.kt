@@ -210,11 +210,15 @@ fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): Store
 fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).coerceAtLeast(0).toInt()
 
 /**
- * The playback position, in milliseconds, an episode starts at: where the user left it, while that is short of the
- * point that counts as watching it ([ANIME_FINISHED_PERCENT]), else 0. A watched episode left partway through a rewatch
- * resumes too.
+ * The playback position, in milliseconds, an episode starts at: where the user left it, watched or not, unless that is
+ * in its tail, the last [RESUME_TAIL_MS] or last 10% of it, whichever is shorter: the ending and next-episode preview of
+ * a 24-minute episode, where it was as good as played out, so it starts over. Watching [ANIME_FINISHED_PERCENT] still
+ * marks it watched and moves Continue on, but one left at 20:30 of 24:00 reopens there.
  */
 fun StoredSeriesEntry.resumePositionMs(): Long {
     val length = length ?: return if (read) 0 else position
-    return if (position * 100 < length * ANIME_FINISHED_PERCENT) position else 0
+    return if (position < length - minOf(RESUME_TAIL_MS, length / 10)) position else 0
 }
+
+/** The longest tail of an episode in which a saved position counts as having played it out; see [resumePositionMs]. */
+const val RESUME_TAIL_MS = 120_000L

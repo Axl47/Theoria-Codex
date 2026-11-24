@@ -228,7 +228,7 @@ class SeriesReaderTest {
     }
 
     @Test
-    fun anEpisodeRecordsOnlyPlaybackAndResumesWhereItStoppedUntilWatched() = runTest {
+    fun anEpisodeRecordsOnlyPlaybackAndResumesWhereItStoppedUntilItsEnd() = runTest {
         val repository = StoredOnly(StoredSeries(Series(anime, "Title")), listOf(episode(1, 0)))
         val reader = SeriesReader(dependencies(repository, { listOf(FakeSeriesSource(anime.source) { EntryMedia.Streams(listOf(stream)) }) }))
         val session = checkNotNull(reader.session(anime, "/e1"))
@@ -244,9 +244,11 @@ class SeriesReaderTest {
         reader.recordPlaybackProgress(session, opened, ViewerPlaybackProgress(positionMs = 61_000, durationMs = 1_440_000))
         assertEquals(61_000L, startsAt())
         assertFalse(repository.entries(anime).single().read)
-        // 85% is watched, and a watched episode starts from its beginning.
+        // 85% is watched, yet it resumes there; only its last 2 minutes start it over.
         reader.recordPlaybackProgress(session, opened, ViewerPlaybackProgress(positionMs = 1_224_000, durationMs = 1_440_000))
         assertTrue(repository.entries(anime).single().read)
+        assertEquals(1_224_000L, startsAt())
+        reader.recordPlaybackProgress(session, opened, ViewerPlaybackProgress(positionMs = 1_420_000, durationMs = 1_440_000))
         assertEquals(0L, startsAt())
     }
 
