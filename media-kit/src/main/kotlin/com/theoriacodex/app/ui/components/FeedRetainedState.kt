@@ -25,9 +25,10 @@ internal class FeedRetainedState : ViewModel() {
     fun gridState(key: String, create: () -> LazyStaggeredGridState): LazyStaggeredGridState =
         gridStates.getOrPut(key, create)
 
-    /** Forgets every feed whose key starts with [prefix], apart from those in [keep]. */
+    /** Forgets every feed whose key starts with [prefix], apart from those in [keep] and the parts keyed under them (`key:part`). */
     fun forgetExcept(prefix: String, keep: Set<String>) {
-        listOf(durationProjections, gridStates, frameCaches).forEach { states -> states.keys.removeAll { it.startsWith(prefix) && it !in keep } }
+        val kept = { key: String -> key in keep || keep.any { key.startsWith("$it:") } }
+        listOf(durationProjections, gridStates, frameCaches).forEach { states -> states.keys.removeAll { it.startsWith(prefix) && !kept(it) } }
     }
 
     /** One [rememberComputedOffMain] call site owns each key, so its element and value types never change. */

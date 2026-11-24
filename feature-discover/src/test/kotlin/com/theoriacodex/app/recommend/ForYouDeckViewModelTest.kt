@@ -118,7 +118,7 @@ class ForYouDeckViewModelTest {
 
         assertEquals(listOf("a", "b", "c", "a", "s", "s"), owner.posts.lanes().take(6))
         assertEquals(fresh.take(2), owner.posts.subList(4, 6))
-        assertEquals(DeckOrigin.Similar(liked.id), owner.originOf(fresh[0].id))
+        assertEquals(DeckOrigin.Similar(liked.id, saved = false), owner.originOf(fresh[0].id))
         assertEquals("Like one you liked", owner.originOf(fresh[0].id)?.label())
         assertEquals(listOf(liked.id), actions.liked)
     }

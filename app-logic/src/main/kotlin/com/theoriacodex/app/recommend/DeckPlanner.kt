@@ -9,7 +9,7 @@ sealed interface DeckOrigin {
     data class Lane(val laneId: String, val label: String) : DeckOrigin
 
     /** A post like [of], which the user just liked, or [saved]. */
-    data class Similar(val of: PostId, val saved: Boolean = false) : DeckOrigin
+    data class Similar(val of: PostId, val saved: Boolean) : DeckOrigin
 
     /** Another post by the creator of [of], which the user just liked or saved. */
     data class Creator(val of: PostId, val name: String) : DeckOrigin
