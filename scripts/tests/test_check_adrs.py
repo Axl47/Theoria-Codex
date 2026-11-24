@@ -161,6 +161,9 @@ class GuardedByTest(RepositoryTest):
         self.assertIn("mixes test and source files", self.guarded(f"- `{KOTLIN_TEST}`, `core/src/a/Search.kt`: `SearchModel`")[0])
         self.assertIn("\"Guarded by\" lists nothing", self.guarded("")[0])
 
+    def test_reports_a_guard_line_without_a_backticked_path(self) -> None:
+        self.assertIn("names no backticked path", self.guarded("- core/src/a/Search.kt: `SearchModel`")[0])
+
     def test_names_new_path_of_a_moved_guard(self) -> None:
         self.record("0001-a.md", "- `core/src/a/Search.kt`", guarded="- `core/src/test/a/OldTest.kt`: `x (ADR 0001)`")
         problems = self.problems({"core/src/test/a/OldTest.kt": "core/src/test/a/NewTest.kt"})

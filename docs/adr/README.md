@@ -38,7 +38,8 @@ Detekt rule. Each record lists its guards under `Guarded by`, after `Applies to`
   names the record at the moment someone is tempted to edit it.
 - a signature: its file and the declaration as source text, such as `` `suspend fun post(id: String): Post?` ``.
 - a policy rule: its script and function name.
-- `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour.
+- `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour. Any
+  other line must name a backticked path.
 
 When a guard fails and the promise still holds, fix the code. When the decision changed, edit the record and
 the guard together.

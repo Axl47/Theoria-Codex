@@ -15,7 +15,8 @@ fails here and names the record. Its paths are files. In a test file (TEST_FILE)
 name: declared once in the bullet's files, run (`@Test` and no `@Ignore` above it, or a Python `test_` name)
 and tagged with the record's number (`tags`). Any other file is a source guard: a symbol without whitespace
 follows the "Applies to" rule, and one with whitespace is source text that must appear in a file, compared with
-whitespace removed and `,)` read as `)`. A section with no bullet fails. In reverse, every tagged test in the
+whitespace removed and `,)` read as `)`. A line that names no path must start "Left to prose:", so a forgotten
+backtick cannot turn a guard into prose. A section with no bullet fails. In reverse, every tagged test in the
 tracked test files must be listed by the live record its tag names. Superseded records are skipped.
 
 With --base, a missing path that git sees as renamed or deleted since that revision gets an indented line naming
@@ -48,6 +49,7 @@ PYTHON_TAG = re.compile(r"(?:_adr_\d{4})+$")
 TEST_ANNOTATION = re.compile(r"@(?:[\w.]+\.)?Test\b")
 IGNORE_ANNOTATION = re.compile(r"@(?:[\w.]+\.)?Ignore\b")
 ASSERTION = re.compile(r"\b(?:(?:assert|expect|verify|fail)\w*\s*[(<{]|should\w*\b|(?:check|require)\()")
+PROSE = "Left to prose:"
 SIGNATURE_CHANGED = "the signature this record pins has changed: restore it, or edit the record if the decision changed."
 
 
@@ -236,7 +238,11 @@ def guarded_by(record: Record, root: pathlib.Path, moved: dict[str, str], delete
         return [], []
     if not section(record.text, "Guarded by"):
         return [f"{record.name}: \"Guarded by\" lists nothing. Name a guard, or say why the record is left to prose (docs/adr/README.md)."], []
-    problems: list[str] = []
+    problems = [
+        f"{record.name}: \"Guarded by\" line `- {line}` names no backticked path. Name the guard's file, or start the line with \"{PROSE}\"."
+        for line in section(record.text, "Guarded by")
+        if not parse_bullet(line).paths and not line.startswith(PROSE)
+    ]
     listed: list[tuple[str, str]] = []
     for bullet in bullets(record.text, "Guarded by"):
         files, missing = resolve(bullet, record.name, root, moved, deleted)
