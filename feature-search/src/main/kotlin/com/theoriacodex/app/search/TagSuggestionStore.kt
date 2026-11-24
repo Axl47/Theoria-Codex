@@ -644,14 +644,6 @@ private data class SuggestionIdentity(
     val normalizedValue: String,
 )
 
-private fun CachedSuggestion.identity(): SuggestionIdentity {
-    return SuggestionIdentity(
-        facet = facet,
-        sourceNamespace = sourceNamespace,
-        normalizedValue = text.lowercase(Locale.ROOT),
-    )
-}
-
 private fun preferredSuggestionType(primary: String?, secondary: String?): String? {
     val primaryRank = suggestionTypeRank(primary)
     val secondaryRank = suggestionTypeRank(secondary)

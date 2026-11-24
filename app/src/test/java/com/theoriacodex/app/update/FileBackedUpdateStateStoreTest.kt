@@ -8,7 +8,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -25,8 +24,9 @@ class FileBackedUpdateStateStoreTest {
         val file = File(tempDir, "update_state.json")
         val store = FileBackedUpdateStateStore(file)
 
-        store.setIgnoredRelease(42L)
-        store.setRemindLater(42L, 123_456L)
+        store.update { current ->
+            current.copy(ignoredReleaseId = 42L, remindLaterReleaseId = 42L, remindLaterUntilEpochMs = 123_456L)
+        }
 
         val reopened = FileBackedUpdateStateStore(file)
         val snapshot = reopened.snapshot()
@@ -36,51 +36,23 @@ class FileBackedUpdateStateStoreTest {
     }
 
     @Test
-    fun `clear prompt deferrals resets fields`() = runTest {
-        val tempDir = tempDir("update-store-test-")
-        val file = File(tempDir, "update_state.json")
-        val store = FileBackedUpdateStateStore(file)
-        store.setIgnoredRelease(11L)
-        store.setRemindLater(11L, 999L)
-
-        store.clearPromptDeferrals()
-
-        val snapshot = store.snapshot()
-        assertNull(snapshot.ignoredReleaseId)
-        assertNull(snapshot.remindLaterReleaseId)
-        assertNull(snapshot.remindLaterUntilEpochMs)
-    }
-
-    @Test
     fun `persists last installed changelog`() = runTest {
         val tempDir = tempDir("update-store-test-")
         val file = File(tempDir, "update_state.json")
         val store = FileBackedUpdateStateStore(file)
-        store.setLastInstalledChangelog(
-            PendingPostInstallChangelog(
-                releaseId = 99L,
-                fromVersionCode = 100,
-                versionCode = 101,
-                tagName = "main-vc101-abc1234",
-                commitShaShort = "abc1234",
-                changelogMarkdown = "## Fixes\n- Improved startup",
-                changelogSections = listOf(
-                    ChangelogSection(
-                        title = "Fixes",
-                        bullets = listOf("Improved startup"),
-                    )
-                ),
-            )
+        val changelog = PendingPostInstallChangelog(
+            releaseId = 99L,
+            fromVersionCode = 100,
+            versionCode = 101,
+            tagName = "v1.0.1",
+            commitShaShort = "abc1234",
+            changelogMarkdown = "## Fixes\n- Improved startup",
+            changelogSections = listOf(ChangelogSection(title = "Fixes", bullets = listOf("Improved startup"))),
         )
+        store.update { current -> current.copy(lastInstalledChangelog = changelog) }
 
         val reopened = FileBackedUpdateStateStore(file)
-        val snapshot = reopened.snapshot()
-        val changelog = snapshot.lastInstalledChangelog
-        assertNotNull(changelog)
-        assertEquals(99L, changelog?.releaseId)
-        assertEquals(100, changelog?.fromVersionCode)
-        assertEquals(101, changelog?.versionCode)
-        assertEquals("abc1234", changelog?.commitShaShort)
+        assertEquals(changelog, reopened.snapshot().lastInstalledChangelog)
     }
 
     @Test
@@ -116,14 +88,14 @@ class FileBackedUpdateStateStoreTest {
     @Test
     fun `failed atomic replacement preserves prior update state`() = runTest {
         val file = File(tempDir("update-store-failed-write-test-"), "update_state.json")
-        FileBackedUpdateStateStore(file).setLastSeenReleaseId(800L)
+        FileBackedUpdateStateStore(file).update { current -> current.copy(lastSeenReleaseId = 800L) }
         val priorBody = file.readText()
         val store = FileBackedUpdateStateStore(file)
         store.snapshot()
         // The replacement's temp file cannot be created beside a read-only target.
         check(file.parentFile.setWritable(false))
         val failure = try {
-            runCatching { store.setIgnoredRelease(801L) }.exceptionOrNull()
+            runCatching { store.update { current -> current.copy(ignoredReleaseId = 801L) } }.exceptionOrNull()
         } finally {
             file.parentFile.setWritable(true)
         }

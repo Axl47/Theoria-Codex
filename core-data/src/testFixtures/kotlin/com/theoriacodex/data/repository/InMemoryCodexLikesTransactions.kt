@@ -131,20 +131,4 @@ class InMemoryCodexLikesTransactions(
         codices.restoreItems(snapshot.items, snapshot.posts)
         likes.restoreLikes(snapshot.likes)
     }
-
-    override suspend fun clearLikesAndDeleteSystemCodex(
-        profileId: String,
-        systemCodexId: String,
-    ): CodexProfileDeleteResult {
-        val clearedLikes = likes.observeLikedPostIds(profileId).first().size
-        val existed = codices.observeCodex(systemCodexId).first() != null
-        likes.clearLikes(profileId)
-        if (existed) codices.deleteCodexForUndo(systemCodexId)
-        return CodexProfileDeleteResult(
-            clearedLikes = clearedLikes,
-            systemCodexDeleted = existed,
-        )
-    }
-
-
 }

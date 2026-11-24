@@ -308,8 +308,5 @@ private fun Post.candidate(
 
 private fun ImageRef.hasAnyLocation(): Boolean = !url.isNullOrBlank() || !localPath.isNullOrBlank() || streams.isNotEmpty()
 
-private fun ImageRef.bestLocation(): String? =
-    localPath?.takeIf(String::isNotBlank) ?: url?.takeIf(String::isNotBlank)
-
 private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp", "heic", "heif", "avif")
 private val STATIC_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "bmp")

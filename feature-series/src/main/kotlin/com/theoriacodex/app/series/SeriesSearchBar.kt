@@ -136,12 +136,11 @@ private fun SeriesSearchClearSlot(showClear: Boolean, onClear: () -> Unit) {
     }
 }
 
-/** Collapses the search bar when [scrollable] starts moving and restores floating controls at the top. */
+/** Collapses the search bar and clears focus when [scrollable] starts moving. */
 @Composable
 internal fun SeriesScrollChromeEffect(
     scrollable: ScrollableState,
     onScrollStarted: () -> Unit,
-    onAtTop: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
     LaunchedEffect(scrollable) {
@@ -150,11 +149,6 @@ internal fun SeriesScrollChromeEffect(
                 onScrollStarted()
                 focus.clearFocus()
             }
-        }
-    }
-    LaunchedEffect(scrollable) {
-        snapshotFlow { !scrollable.canScrollBackward }.collectLatest { atTop ->
-            if (atTop) onAtTop()
         }
     }
 }

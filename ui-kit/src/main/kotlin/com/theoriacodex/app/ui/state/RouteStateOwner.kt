@@ -11,7 +11,6 @@ interface RouteStateOwner<State : Any, Action : Any, Effect : Any> {
 }
 
 object AppRouteSavedStateKeys {
-    const val HOME_TAB_ROUTE = "home_tab_route"
     const val PENDING_INCOMING_URI = "pending_incoming_uri"
     const val VIEWER_SESSION_ID = "viewer_session_id"
 }

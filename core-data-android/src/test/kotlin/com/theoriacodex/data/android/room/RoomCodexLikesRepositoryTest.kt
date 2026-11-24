@@ -339,32 +339,6 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `profile delete removes the whole system Codex and cleans orphan posts`() = runTest {
-        val repository = repository()
-        val liked = post("liked")
-        val manuallySaved = post("manual")
-        repository.toggleLikeAndSyncSystemCodex(
-            profileId = "profile-main",
-            systemCodexId = "system_likes_codex",
-            systemCodexName = "Likes",
-            post = liked,
-            tags = listOf("tag"),
-        )
-        repository.addItem("system_likes_codex", manuallySaved)
-
-        val deleted = repository.clearLikesAndDeleteSystemCodex(
-            "profile-main",
-            "system_likes_codex",
-        )
-
-        assertNull(repository.observeCodex("system_likes_codex").first())
-        assertNull(repository.getPost(liked.id))
-        assertNull(repository.getPost(manuallySaved.id))
-        assertEquals(1, deleted.clearedLikes)
-        assertTrue(deleted.systemCodexDeleted)
-    }
-
-    @Test
     fun `versioned local Post payload round trips every field`() = runTest {
         val repository = repository()
         val creator = CreatorProfile(

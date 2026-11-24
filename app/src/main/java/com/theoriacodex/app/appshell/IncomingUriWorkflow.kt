@@ -1,6 +1,7 @@
 package com.theoriacodex.app.appshell
 
 import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.ui.state.AppRouteSavedStateKeys
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,7 +38,7 @@ internal class IncomingUriWorkflow(
                 else -> IncomingUriKind.EXTERNAL_CONTENT
             },
         )
-        savedStateHandle[URI_KEY] = incoming.value
+        savedStateHandle[AppRouteSavedStateKeys.PENDING_INCOMING_URI] = incoming.value
         savedStateHandle[KIND_KEY] = incoming.kind.name
         mutablePending.value = incoming
         return incoming
@@ -45,13 +46,15 @@ internal class IncomingUriWorkflow(
 
     fun consume(expected: PendingIncomingUri) {
         if (mutablePending.value != expected) return
-        savedStateHandle[URI_KEY] = null
+        savedStateHandle[AppRouteSavedStateKeys.PENDING_INCOMING_URI] = null
         savedStateHandle[KIND_KEY] = null
         mutablePending.value = null
     }
 
     private fun restore(): PendingIncomingUri? {
-        val uri = savedStateHandle.get<String>(URI_KEY)?.takeIf(String::isNotBlank) ?: return null
+        val uri = savedStateHandle.get<String>(AppRouteSavedStateKeys.PENDING_INCOMING_URI)
+            ?.takeIf(String::isNotBlank)
+            ?: return null
         val kind = savedStateHandle.get<String>(KIND_KEY)
             ?.let { stored -> IncomingUriKind.entries.firstOrNull { it.name == stored } }
             ?: IncomingUriKind.EXTERNAL_CONTENT
@@ -59,7 +62,6 @@ internal class IncomingUriWorkflow(
     }
 
     private companion object {
-        const val URI_KEY = "pending_incoming_uri"
         const val KIND_KEY = "pending_incoming_uri_kind"
     }
 }

@@ -31,10 +31,6 @@ class StubFixtureLoader(
         return readJson("$rootPath/scenarios/failures.json", FailureScenarioFixture::class.java)
     }
 
-    fun loadEmptyScenario(): EmptyScenarioFixture {
-        return readJson("$rootPath/scenarios/empties.json", EmptyScenarioFixture::class.java)
-    }
-
     private fun <T> readJson(path: String, clazz: Class<T>): T {
         val stream = classLoader.getResourceAsStream(path)
             ?: error("Missing stub fixture: $path")
@@ -101,6 +97,8 @@ data class FailureScenarioFixture(
     val sources: Map<String, SourceFailureConfig>,
 )
 
-data class EmptyScenarioFixture(
-    val sources: Map<String, Boolean>,
+data class SourceFailureConfig(
+    val failSearch: Boolean,
+    val failTrending: Boolean,
+    val delayMs: Long,
 )

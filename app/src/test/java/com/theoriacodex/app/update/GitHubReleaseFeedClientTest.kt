@@ -8,21 +8,8 @@ import org.junit.Test
 
 class GitHubReleaseFeedClientTest {
     @Test
-    fun `tag parser extracts version code and sha from legacy main tag`() {
-        val parsed = MainReleaseTagParser.parse(
-            channel = "main",
-            tagName = "main-vc12034-a1b2c3d",
-        )
-
-        checkNotNull(parsed)
-        assertEquals(12034, parsed.versionCode)
-        assertEquals("a1b2c3d", parsed.commitShaShort)
-    }
-
-    @Test
     fun `tag parser extracts version code from semver tag`() {
         val parsed = MainReleaseTagParser.parse(
-            channel = "main",
             tagName = "v0.1.11",
             fallbackCommitSha = "1234567890abcdef1234567890abcdef12345678",
         )
@@ -34,26 +21,23 @@ class GitHubReleaseFeedClientTest {
 
     @Test
     fun `tag parser rejects malformed tags`() {
-        assertNull(MainReleaseTagParser.parse("main", "main-v12034-a1b2c3d"))
-        assertNull(MainReleaseTagParser.parse("main", "stable-vc12034-a1b2c3d"))
-        assertNull(MainReleaseTagParser.parse("main", "main-vc0-a1b2c3d"))
-        assertNull(MainReleaseTagParser.parse("main", "v1.2"))
-        assertNull(MainReleaseTagParser.parse("main", "v1.100.2"))
+        assertNull(MainReleaseTagParser.parse("1.2.3"))
+        assertNull(MainReleaseTagParser.parse("v1.2"))
+        assertNull(MainReleaseTagParser.parse("v1.100.2"))
     }
 
     @Test
     fun `release parser picks newest prerelease with fixed asset`() {
         val json = mixedReleaseJson()
 
-        val remote = GitHubReleaseFeedClient.parseLatestMainPrerelease(
+        val remote = GitHubReleaseFeedClient.parseMainPrereleaseHistory(
             jsonBody = json,
-            channel = "main",
             assetName = "theoria-codex-main.apk",
-        )
+        ).firstOrNull()
 
         checkNotNull(remote)
         assertEquals(2L, remote.releaseId)
-        assertEquals(12031, remote.versionCode)
+        assertEquals(1_500_010_031, remote.versionCode)
         assertEquals("bbbbbbb", remote.commitShaShort)
         assertEquals("https://example.com/b.apk", remote.assetDownloadUrl)
         assertEquals(456L, remote.assetSizeBytes)
@@ -72,15 +56,14 @@ class GitHubReleaseFeedClientTest {
 
         val history = GitHubReleaseFeedClient.parseMainPrereleaseHistory(
             jsonBody = json,
-            channel = "main",
             assetName = "theoria-codex-main.apk",
         )
 
         assertEquals(2, history.size)
         assertEquals(11L, history[0].releaseId)
-        assertEquals(1009, history[0].versionCode)
+        assertEquals(1_500_010_009, history[0].versionCode)
         assertEquals(10L, history[1].releaseId)
-        assertEquals(1008, history[1].versionCode)
+        assertEquals(1_500_010_008, history[1].versionCode)
     }
 
     @Test
@@ -90,7 +73,8 @@ class GitHubReleaseFeedClientTest {
             [
               {
                 "id": 1,
-                "tag_name": "main-vc12030-aaaaaaa",
+                "tag_name": "v1.0.30",
+                "target_commitish": "aaaaaaa",
                 "draft": false,
                 "prerelease": true,
                 "published_at": "2026-02-24T20:00:00Z",
@@ -104,11 +88,10 @@ class GitHubReleaseFeedClientTest {
             ]
             """.trimIndent()
 
-        val remote = GitHubReleaseFeedClient.parseLatestMainPrerelease(
+        val remote = GitHubReleaseFeedClient.parseMainPrereleaseHistory(
             jsonBody = json,
-            channel = "main",
             assetName = "theoria-codex-main.apk",
-        )
+        ).firstOrNull()
 
         assertNull(remote)
     }
@@ -136,11 +119,10 @@ class GitHubReleaseFeedClientTest {
             ]
             """.trimIndent()
 
-        val remote = GitHubReleaseFeedClient.parseLatestMainPrerelease(
+        val remote = GitHubReleaseFeedClient.parseMainPrereleaseHistory(
             jsonBody = json,
-            channel = "main",
             assetName = "theoria-codex-main.apk",
-        )
+        ).firstOrNull()
 
         checkNotNull(remote)
         assertEquals(88L, remote.releaseId)
@@ -155,10 +137,11 @@ class GitHubReleaseFeedClientTest {
         val json = """
             [
               "not a release",
-              {"id": {"bad": true}, "tag_name": "main-vc1010-ccccccc", "draft": false, "prerelease": true},
+              {"id": {"bad": true}, "tag_name": "v1.0.10", "target_commitish": "ccccccc", "draft": false, "prerelease": true},
               {
                 "id": 11,
-                "tag_name": "main-vc1009-bbbbbbb",
+                "tag_name": "v1.0.9",
+                "target_commitish": "bbbbbbb",
                 "draft": false,
                 "prerelease": true,
                 "assets": [
@@ -170,7 +153,7 @@ class GitHubReleaseFeedClientTest {
             ]
         """.trimIndent()
 
-        val history = GitHubReleaseFeedClient.parseMainPrereleaseHistory(json, "main", "theoria-codex-main.apk")
+        val history = GitHubReleaseFeedClient.parseMainPrereleaseHistory(json, "theoria-codex-main.apk")
 
         assertEquals(listOf(11L), history.map { it.releaseId })
         assertEquals("https://example.com/11.apk", history.single().assetDownloadUrl)
@@ -212,7 +195,8 @@ class GitHubReleaseFeedClientTest {
         [
           {
             "id": 1,
-            "tag_name": "main-vc12030-aaaaaaa",
+            "tag_name": "v1.0.30",
+            "target_commitish": "aaaaaaa",
             "draft": false,
             "prerelease": true,
             "published_at": "2026-02-24T20:00:00Z",
@@ -227,7 +211,8 @@ class GitHubReleaseFeedClientTest {
           {
             "id": 2,
             "name": "Main build vc12031 (bbbbbbb)",
-            "tag_name": "main-vc12031-bbbbbbb",
+            "tag_name": "v1.0.31",
+            "target_commitish": "bbbbbbb",
             "draft": false,
             "prerelease": true,
             "published_at": "2026-02-25T20:00:00Z",
@@ -242,7 +227,8 @@ class GitHubReleaseFeedClientTest {
           },
           {
             "id": 3,
-            "tag_name": "main-vc12032-ccccccc",
+            "tag_name": "v1.0.32",
+            "target_commitish": "ccccccc",
             "draft": false,
             "prerelease": false,
             "published_at": "2026-02-26T20:00:00Z",
@@ -264,7 +250,8 @@ class GitHubReleaseFeedClientTest {
           {
             "id": 10,
             "name": "Main Build vc100...8",
-            "tag_name": "main-vc1008-aaaaaaa",
+            "tag_name": "v1.0.8",
+            "target_commitish": "aaaaaaa",
             "draft": false,
             "prerelease": true,
             "published_at": "2026-02-20T20:00:00Z",
@@ -280,7 +267,8 @@ class GitHubReleaseFeedClientTest {
           {
             "id": 11,
             "name": "Main Build vc100...9",
-            "tag_name": "main-vc1009-bbbbbbb",
+            "tag_name": "v1.0.9",
+            "target_commitish": "bbbbbbb",
             "draft": false,
             "prerelease": true,
             "published_at": "2026-02-21T20:00:00Z",
@@ -296,7 +284,8 @@ class GitHubReleaseFeedClientTest {
           {
             "id": 12,
             "name": "Main Build vc101...0",
-            "tag_name": "main-vc1010-ccccccc",
+            "tag_name": "v1.0.10",
+            "target_commitish": "ccccccc",
             "draft": true,
             "prerelease": true,
             "published_at": "2026-02-22T20:00:00Z",
@@ -310,5 +299,4 @@ class GitHubReleaseFeedClientTest {
           }
         ]
         """.trimIndent()
-
 }

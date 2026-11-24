@@ -48,7 +48,7 @@ class LikesCodexSyncServiceTest {
     }
 
     @Test
-    fun `clear and remove profile Codex are idempotent`() = runTest {
+    fun `clearing a profile keeps independently saved Likes Codex posts`() = runTest {
         val transactions = InMemoryCodexLikesTransactions()
         val likes = transactions.likes
         val codices = transactions.codices
@@ -68,10 +68,6 @@ class LikesCodexSyncServiceTest {
                 CodexSortMode.NEWEST_SAVED,
             ).first().map { post -> post.id },
         )
-
-        service.removeProfileCodex(profile.profileId)
-        service.removeProfileCodex(profile.profileId)
-        assertNull(codices.observeCodex(likesCodexIdForProfile(profile.profileId)).first())
     }
 
     @Test

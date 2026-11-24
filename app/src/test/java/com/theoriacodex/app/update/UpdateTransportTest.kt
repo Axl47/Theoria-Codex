@@ -106,7 +106,7 @@ class UpdateTransportTest {
                 return SourceByteResponse(200, "[]".toByteArray())
             }
         }
-        val client = GitHubReleaseFeedClient("owner", "repo", "main", "app.apk", http) { now }
+        val client = GitHubReleaseFeedClient("owner", "repo", "app.apk", http) { now }
         val latest = async { client.latestMainPrerelease() }
         val history = async { client.mainPrereleaseHistory(50) }
         release.complete(Unit)

@@ -57,7 +57,7 @@ internal fun DedicatedSourceSearchView(
     LaunchedEffect(dedicated.kind) {
         query = (dedicated.kind as? BrowseKind.Filtered)?.text.orEmpty()
     }
-    SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true }, onAtTop = {})
+    SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true })
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
         grid.animateScrollToItem(0)
         // After the scroll, which collapses the bar as any scroll does.
