@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.text.Cue
@@ -296,9 +297,9 @@ private fun viewerVideoListener(
             val decision = recovery.decide(ViewerRecoveryEvent.PlayerError(error.errorCode, player.currentPosition.coerceAtLeast(0L)))
             state.follow(decision, viewerVideoFailureMessage(error.errorCode, error.message), events)
         }
-        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (state.player !== player) return
-            if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION && player.repeatMode == Player.REPEAT_MODE_ONE) state.looped = true
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) state.looped = true
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return
