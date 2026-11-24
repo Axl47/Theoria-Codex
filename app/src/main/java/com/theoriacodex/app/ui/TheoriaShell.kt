@@ -108,7 +108,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -660,11 +659,9 @@ internal class TheoriaShell(
             toast("${deepLink.sourceLabel} source is unavailable")
             return
         }
-        val resolved = try {
+        val resolved = runCatchingPreservingCancellation {
             adapter.resolvePost(PostId(source = deepLink.source, sourcePostId = deepLink.postId))
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
+        }.getOrElse { error ->
             toast(error.message ?: "Could not open ${deepLink.sourceLabel} URL")
             when (sharedPostFix(deepLink.source, error)) {
                 SharedPostFix.ADD_KEY -> {

@@ -3,6 +3,7 @@ package com.theoriacodex.app.media
 import android.os.Trace
 import com.theoriacodex.app.source.presentation
 import com.theoriacodex.data.repository.MediaDurationRepository
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.util.concurrent.atomic.AtomicInteger
@@ -317,11 +318,9 @@ class MediaDurationCoordinator(
         val sequence = cookie.toLong()
         lateinit var work: ActiveWork
         val job = scope.launch(start = CoroutineStart.LAZY) {
-            val result = try {
+            val result = runCatchingExceptionsPreservingCancellation {
                 acquirer.acquire(post)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
+            }.getOrElse {
                 MediaDurationState.RetryableFailure(
                     retryAtEpochMs = clock() + retryDelayMs,
                     reason = MediaDurationFailureReason.TRANSPORT_FAILURE,
@@ -370,26 +369,20 @@ class MediaDurationCoordinator(
 
     private suspend fun loadStoredState(key: MediaDurationKey): MediaDurationState? {
         val repository = durationRepository ?: return null
-        return try {
+        return runCatchingExceptionsPreservingCancellation {
             // "No media" costs nothing to re-derive, and a source may have gained a resolver since.
             repository.get(key.toStoredKey())?.toMediaDurationState()?.takeUnless { state ->
                 state == MediaDurationState.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrNull()
     }
 
     private suspend fun persistState(key: MediaDurationKey, state: MediaDurationState) {
         val repository = durationRepository ?: return
         val storedState = state.toStoredState() ?: return
-        try {
+        runCatchingExceptionsPreservingCancellation {
             repository.put(key.toStoredKey(), storedState)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
+        }.onFailure {
             // Duration persistence is a cache optimization and never changes a successful outcome.
         }
     }

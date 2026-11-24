@@ -266,11 +266,9 @@ class SearchSuggestionCoordinator internal constructor(
     }
 
     private suspend fun fetchFeatured(request: AutocompleteRequest.Featured): List<FacetedTagSuggestion> {
-        val featured = try {
+        val featured = runCatchingPreservingCancellation {
             request.adapter.featuredFacetedSuggestions(request.scope, FACETED_AUTOCOMPLETE_LIMIT)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
+        }.getOrElse {
             emptyList()
         }
         if (featured.isNotEmpty()) tagSuggestionStore.putFaceted(request.source, featured, TagSuggestionOrigin.FEATURED)

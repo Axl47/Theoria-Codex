@@ -3,11 +3,11 @@ package com.theoriacodex.app.media
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.repository.OfflinePendingJobStore
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import java.io.File
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -271,12 +271,10 @@ class OfflineMediaCoordinator(
                         }
                     }
                 } ?: return
-                try {
+                runCatchingExceptionsPreservingCancellation {
                     savePost(post, owner)
                     completed++
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
+                }.onFailure {
                     failed += post.id
                 }
                 settled++

@@ -6,6 +6,7 @@ import android.net.Uri
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.decodeEachOrSkip
 import com.theoriacodex.domain.coroutines.SharedFlights
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -186,7 +187,7 @@ class PixivUgoiraClient constructor(
     private fun createLoad(key: UgoiraLoadKey): SharedUgoiraLoad {
         val updates = MutableStateFlow<Result<UgoiraPlayback>?>(null)
         val deferred = loadScope.async(start = CoroutineStart.LAZY) {
-            try {
+            runCatchingExceptionsPreservingCancellation {
                 val playback = withTimeoutOrNull(operationTimeoutMs) {
                     cached(key.postId, key.sizeBucket) ?: loadOrThrow(key.postId, key.sizeBucket) { partial ->
                         if (!partial.isComplete) updates.value = Result.success(partial)
@@ -195,9 +196,7 @@ class PixivUgoiraClient constructor(
                 currentCoroutineContext().ensureActive()
                 cachePlayback(key, playback)
                 updates.value = Result.success(playback)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
+            }.getOrElse { error ->
                 updates.value = Result.failure(error)
             }
         }

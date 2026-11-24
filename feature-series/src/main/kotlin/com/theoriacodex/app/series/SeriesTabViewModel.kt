@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Inclusion
 import com.theoriacodex.domain.series.Series
@@ -21,7 +22,6 @@ import com.theoriacodex.domain.series.changedFrom
 import com.theoriacodex.domain.series.seriesKind
 import com.theoriacodex.domain.series.withChoices
 import com.theoriacodex.domain.series.languageName
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -423,11 +423,9 @@ class SeriesTabViewModel(
             it.copy(dedicated = DedicatedSourceState(source.toListing(it.sources.orEmpty(), SeriesListing.Loading), BrowseKind.Popular, run))
         }
         viewModelScope.launch {
-            val defaults = try {
+            val defaults = runCatchingExceptionsPreservingCancellation {
                 source.filters()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
+            }.getOrElse {
                 emptyList()
             }
             if (state.value.dedicated?.run != run) return@launch
@@ -521,11 +519,9 @@ class SeriesTabViewModel(
         filterLoad?.cancel()
         mutableState.update { it.copy(filterSheet = FilterSheetState(text = applied?.text.orEmpty())) }
         val load = viewModelScope.launch {
-            val defaults = try {
+            val defaults = runCatchingExceptionsPreservingCancellation {
                 source.filters()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
+            }.getOrElse {
                 emptyList()
             }
             ensureActive()
@@ -729,16 +725,14 @@ private suspend fun SeriesSource.list(kind: BrowseKind, page: Int): SeriesPage =
 }
 
 /** A source's first page as a listing; any failure but cancellation becomes [SeriesListing.Failed]. Also the Switch source sheet's search. */
-internal suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = try {
+internal suspend fun firstPage(load: suspend () -> SeriesPage): SeriesListing = runCatchingExceptionsPreservingCancellation {
     load().let { SeriesListing.Loaded(it.series, nextPage = 2.takeIf { _ -> it.hasNextPage }) }
-} catch (error: CancellationException) {
-    throw error
-} catch (error: Exception) {
+}.getOrElse { error ->
     SeriesListing.Failed(failureLine(error))
 }
 
 /** [this] with page [page] from [load] added; a failure keeps what is loaded and holds that page back until Retry. */
-private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int) -> SeriesPage): SeriesListing.Loaded = try {
+private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int) -> SeriesPage): SeriesListing.Loaded = runCatchingExceptionsPreservingCancellation {
     val more = load(page)
     copy(
         series = (series + more.series).distinctBy(Series::id),
@@ -746,9 +740,7 @@ private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int)
         loadingMore = false,
         moreFailed = false,
     )
-} catch (error: CancellationException) {
-    throw error
-} catch (ignored: Exception) {
+}.getOrElse {
     // The loaded series stay on screen; the row's end offers the page again.
     copy(loadingMore = false, moreFailed = true)
 }
@@ -757,7 +749,7 @@ private suspend fun SeriesListing.Loaded.withPage(page: Int, load: suspend (Int)
  * What the screen says about [error]: a line for its reason, never the exception's own text, except for an
  * [UnsupportedEntriesException], whose text is written for the user.
  */
-internal fun failureLine(error: Exception): String = when (error) {
+internal fun failureLine(error: Throwable): String = when (error) {
     is UnsupportedEntriesException -> error.message
     else -> sourceFailureDetail((error as? SourceAdapterException)?.reason)
 }

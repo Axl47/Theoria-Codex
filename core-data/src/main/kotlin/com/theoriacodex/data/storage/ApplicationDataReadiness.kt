@@ -1,6 +1,6 @@
 package com.theoriacodex.data.storage
 
-import kotlinx.coroutines.CancellationException
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -64,13 +64,11 @@ class ApplicationDataReadiness<T>(
     private fun newAttempt(): Deferred<AttemptResult<T>> {
         mutableState.value = ApplicationDataState.Loading
         return applicationScope.async(initializationDispatcher) {
-            try {
+            runCatchingPreservingCancellation {
                 val value = initialize()
                 mutableState.value = ApplicationDataState.Ready(value)
                 AttemptResult.Success(value)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (failure: Throwable) {
+            }.getOrElse { failure ->
                 com.theoriacodex.domain.diagnostics.Diagnostics.report("startup", "Saved data could not be opened", failure)
                 mutableState.value = ApplicationDataState.Failed(failure)
                 AttemptResult.Failure(failure)

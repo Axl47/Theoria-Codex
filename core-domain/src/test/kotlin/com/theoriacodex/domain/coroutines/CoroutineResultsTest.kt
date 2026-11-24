@@ -34,6 +34,36 @@ class CoroutineResultsTest {
         assertEquals("provider unavailable", result.exceptionOrNull()?.message)
     }
 
+    @Test
+    fun `exception variant rethrows cancellation and captures exceptions`() = runTest {
+        val expected = CancellationException("request superseded")
+        var thrown: CancellationException? = null
+
+        try {
+            runCatchingExceptionsPreservingCancellation { suspendCancellation(expected) }
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+        val failure = runCatchingExceptionsPreservingCancellation<String> { error("provider unavailable") }
+
+        assertSame(expected, thrown)
+        assertEquals("provider unavailable", failure.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `exception variant lets errors propagate`() {
+        val expected = OutOfMemoryError("heap")
+        var thrown: Throwable? = null
+
+        try {
+            runCatchingExceptionsPreservingCancellation<String> { throw expected }
+        } catch (error: Throwable) {
+            thrown = error
+        }
+
+        assertSame(expected, thrown)
+    }
+
     private suspend fun suspendCancellation(error: CancellationException): Nothing {
         throw error
     }

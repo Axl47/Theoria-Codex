@@ -5,12 +5,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.Serializer
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,11 +100,9 @@ internal class JsonDataStore<T>(
     override val storageStatus: StateFlow<DurableStoreStatus> = status.asStateFlow()
 
     override val data: Flow<T> = flow {
-        try {
+        runCatchingExceptionsPreservingCancellation {
             awaitReady()
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Exception) {
+        }.onFailure {
             status.first { current -> current.phase == DurableStorePhase.READY }
         }
         emitAll(store.data)
@@ -112,11 +110,9 @@ internal class JsonDataStore<T>(
 
     override suspend fun awaitReady() = opening.withLock {
         if (status.value.phase == DurableStorePhase.READY) return@withLock
-        try {
+        runCatchingExceptionsPreservingCancellation {
             store.data.first()
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (failure: Exception) {
+        }.onFailure { failure ->
             status.value = DurableStoreStatus(DurableStorePhase.FAILED, failure.message ?: failure::class.simpleName)
             throw failure
         }

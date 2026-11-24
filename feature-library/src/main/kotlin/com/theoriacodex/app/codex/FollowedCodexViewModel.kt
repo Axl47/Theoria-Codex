@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.PostId
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,7 +17,6 @@ import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.CancellationException
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,7 +65,7 @@ class FollowedCodexViewModel(
     override fun retry() = feed.retry()
 
     private suspend fun fetch(branch: CreatorBranch): CreatorBranch {
-        return try {
+        return runCatchingExceptionsPreservingCancellation {
             val creator = branch.follow.creator
             check(creator.source in availableSources.orEmpty()) { "Source unavailable" }
             val adapter = registry.adapterFor(creator.source) as? CreatorPostsSourceAdapter
@@ -81,9 +81,7 @@ class FollowedCodexViewModel(
                 exhausted = page.nextPageToken.isNullOrBlank(),
                 error = null,
             )
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
+        }.getOrElse { error ->
             branch.copy(error = error.message ?: "Could not load posts")
         }
     }

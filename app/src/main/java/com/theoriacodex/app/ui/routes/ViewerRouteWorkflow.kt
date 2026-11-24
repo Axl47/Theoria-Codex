@@ -24,6 +24,7 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ReadingPosition
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -34,7 +35,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
@@ -108,13 +108,9 @@ internal class ViewerRouteWorkflow(
         if (streamSource == ViewerStreamSource.SERIES) {
             return runCatchingPreservingCancellation { series?.resolve(queryHash, post.id) }.getOrNull()?.takeIf { stillApplies() }
         }
-        val recovered = try {
+        val recovered = runCatchingExceptionsPreservingCancellation {
             withContext(providerDispatcher) { recoverRemoteMedia(sources.registry, post, failedMedia) }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            null
-        } ?: return null
+        }.getOrNull() ?: return null
         if (!stillApplies()) return null
         persistResolvedPost(recovered, streamSource)
         return recovered

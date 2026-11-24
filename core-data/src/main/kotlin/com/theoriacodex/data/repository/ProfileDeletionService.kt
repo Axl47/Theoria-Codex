@@ -2,10 +2,10 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-class ProfileDeletionPendingException(cause: Exception) : IllegalStateException(
+class ProfileDeletionPendingException(cause: Throwable) : IllegalStateException(
     "Profile removal paused. Retry removal or reopen the app to finish safely.", cause,
 )
 
@@ -62,7 +62,7 @@ class ProfileDeletionService(
 
     private suspend fun finish(profileId: String) = withContext(NonCancellable) {
         writeGuard.retire(profileId)
-        try {
+        runCatchingExceptionsPreservingCancellation {
             val current = settings.observeSettings().first()
             if (current.activeProfileId == profileId) {
                 val replacement = current.recommendationProfiles.firstOrNull { it.profileId != profileId }
@@ -75,9 +75,7 @@ class ProfileDeletionService(
                 "The removed profile was not committed"
             }
             check(journalFile.delete() || !journalFile.exists()) { "Could not finish the profile removal journal" }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
+        }.getOrElse { failure ->
             throw ProfileDeletionPendingException(failure)
         }
     }

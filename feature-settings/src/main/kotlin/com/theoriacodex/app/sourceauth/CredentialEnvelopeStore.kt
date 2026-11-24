@@ -7,6 +7,7 @@ import android.util.Base64
 import com.theoriacodex.data.repository.readBoundedDocument
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.storedVersion
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.domain.source.SiteCredentials
 import java.io.File
@@ -42,55 +43,55 @@ class AndroidCredentialEnvelopeStore(
                 .toByteArray(Charsets.UTF_8),
     )
 
-    override suspend fun read(): CredentialEnvelopeReadResult {
-        return try {
-            val raw = readEnvelopeBytes() ?: return CredentialEnvelopeReadResult.Missing
-            val envelopeTree = raw.parseCredential()
-            newerCredentialVersion(
-                envelopeTree.storedVersion("formatVersion") to CREDENTIAL_FORMAT_VERSION,
-                envelopeTree.storedVersion("keyVersion") to CREDENTIAL_KEY_VERSION,
-            )?.let { return CredentialEnvelopeReadResult.UnsupportedVersion(it) }
-            val envelope = envelopeTree.decodeCredential<CredentialEnvelopeRecord>()
-            if (envelope.formatVersion <= 0) {
-                return CredentialEnvelopeReadResult.ReconnectRequired
-            }
-            if (envelope.formatVersion != CREDENTIAL_FORMAT_VERSION) {
-                return CredentialEnvelopeReadResult.UnsupportedVersion(envelope.formatVersion)
-            }
-            if (envelope.keyVersion <= 0) {
-                return CredentialEnvelopeReadResult.ReconnectRequired
-            }
-            if (envelope.keyVersion != CREDENTIAL_KEY_VERSION) {
-                return CredentialEnvelopeReadResult.UnsupportedVersion(envelope.keyVersion)
-            }
-            if (!crypto.hasKey()) return CredentialEnvelopeReadResult.ReconnectRequired
-            val iv = envelope.iv?.decodeCredentialBase64()
-                ?: return CredentialEnvelopeReadResult.ReconnectRequired
-            val ciphertext = envelope.ciphertext?.decodeCredentialBase64()
-                ?: return CredentialEnvelopeReadResult.ReconnectRequired
-            if (iv.size != GCM_IV_BYTES || ciphertext.size < GCM_TAG_BYTES) {
-                return CredentialEnvelopeReadResult.ReconnectRequired
-            }
-            val plaintext = crypto.decrypt(
-                iv = iv,
-                ciphertext = ciphertext,
-            )
-            val payloadTree = plaintext.parseCredential()
-            newerCredentialVersion(payloadTree.storedVersion("schemaVersion") to CREDENTIAL_PAYLOAD_SCHEMA_VERSION)
-                ?.let { return CredentialEnvelopeReadResult.UnsupportedVersion(it) }
-            val payload = payloadTree.decodeCredential<CredentialPayloadRecord>()
-            if (payload.schemaVersion <= 0) {
-                return CredentialEnvelopeReadResult.ReconnectRequired
-            }
-            if (payload.schemaVersion != CREDENTIAL_PAYLOAD_SCHEMA_VERSION) {
-                return CredentialEnvelopeReadResult.UnsupportedVersion(payload.schemaVersion)
-            }
-            CredentialEnvelopeReadResult.Success(payload.toSnapshot())
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            error.toCredentialReadFailure()
+    override suspend fun read(): CredentialEnvelopeReadResult = runCatchingExceptionsPreservingCancellation {
+        readSnapshot()
+    }.getOrElse { error ->
+        error.toCredentialReadFailure()
+    }
+
+    private suspend fun readSnapshot(): CredentialEnvelopeReadResult {
+        val raw = readEnvelopeBytes() ?: return CredentialEnvelopeReadResult.Missing
+        val envelopeTree = raw.parseCredential()
+        newerCredentialVersion(
+            envelopeTree.storedVersion("formatVersion") to CREDENTIAL_FORMAT_VERSION,
+            envelopeTree.storedVersion("keyVersion") to CREDENTIAL_KEY_VERSION,
+        )?.let { return CredentialEnvelopeReadResult.UnsupportedVersion(it) }
+        val envelope = envelopeTree.decodeCredential<CredentialEnvelopeRecord>()
+        if (envelope.formatVersion <= 0) {
+            return CredentialEnvelopeReadResult.ReconnectRequired
         }
+        if (envelope.formatVersion != CREDENTIAL_FORMAT_VERSION) {
+            return CredentialEnvelopeReadResult.UnsupportedVersion(envelope.formatVersion)
+        }
+        if (envelope.keyVersion <= 0) {
+            return CredentialEnvelopeReadResult.ReconnectRequired
+        }
+        if (envelope.keyVersion != CREDENTIAL_KEY_VERSION) {
+            return CredentialEnvelopeReadResult.UnsupportedVersion(envelope.keyVersion)
+        }
+        if (!crypto.hasKey()) return CredentialEnvelopeReadResult.ReconnectRequired
+        val iv = envelope.iv?.decodeCredentialBase64()
+            ?: return CredentialEnvelopeReadResult.ReconnectRequired
+        val ciphertext = envelope.ciphertext?.decodeCredentialBase64()
+            ?: return CredentialEnvelopeReadResult.ReconnectRequired
+        if (iv.size != GCM_IV_BYTES || ciphertext.size < GCM_TAG_BYTES) {
+            return CredentialEnvelopeReadResult.ReconnectRequired
+        }
+        val plaintext = crypto.decrypt(
+            iv = iv,
+            ciphertext = ciphertext,
+        )
+        val payloadTree = plaintext.parseCredential()
+        newerCredentialVersion(payloadTree.storedVersion("schemaVersion") to CREDENTIAL_PAYLOAD_SCHEMA_VERSION)
+            ?.let { return CredentialEnvelopeReadResult.UnsupportedVersion(it) }
+        val payload = payloadTree.decodeCredential<CredentialPayloadRecord>()
+        if (payload.schemaVersion <= 0) {
+            return CredentialEnvelopeReadResult.ReconnectRequired
+        }
+        if (payload.schemaVersion != CREDENTIAL_PAYLOAD_SCHEMA_VERSION) {
+            return CredentialEnvelopeReadResult.UnsupportedVersion(payload.schemaVersion)
+        }
+        return CredentialEnvelopeReadResult.Success(payload.toSnapshot())
     }
 
     private suspend fun readEnvelopeBytes(): ByteArray? {
@@ -115,7 +116,7 @@ class AndroidCredentialEnvelopeStore(
     override suspend fun writeVerified(
         snapshot: SourceCredentialSnapshot,
     ): CredentialStoreWriteResult {
-        return try {
+        return runCatchingExceptionsPreservingCancellation {
             val plaintext = DurableJson.encodeToString(CredentialPayloadRecord.serializer(), CredentialPayloadRecord(snapshot))
                 .toByteArray(Charsets.UTF_8)
             val encrypted = crypto.encrypt(plaintext)
@@ -146,9 +147,7 @@ class AndroidCredentialEnvelopeStore(
                     CredentialStoreWriteResult.ReconnectRequired
                 else -> CredentialStoreWriteResult.TemporarilyUnavailable
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
+        }.getOrElse { error ->
             when (error.toCredentialReadFailure()) {
                 CredentialEnvelopeReadResult.ReconnectRequired ->
                     CredentialStoreWriteResult.ReconnectRequired
@@ -247,8 +246,8 @@ data class CustomSiteCredentialRecord(
 }
 
 /** A lost key or a corrupt envelope asks to reconnect; any other failure, such as IO or the keystore, may pass. */
-private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {
-    val causes = generateSequence(this as Throwable?) { error -> error.cause }
+private fun Throwable.toCredentialReadFailure(): CredentialEnvelopeReadResult {
+    val causes = generateSequence(this) { error -> error.cause }
     val unrecoverable = causes.any { error ->
         error is AEADBadTagException ||
             error is KeyPermanentlyInvalidatedException ||

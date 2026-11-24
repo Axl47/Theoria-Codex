@@ -1,5 +1,7 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -10,9 +12,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.SourceAvailability
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.SiteProfile
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
@@ -25,7 +25,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-class ProfileRestorePendingException(cause: Exception) : IllegalStateException(
+class ProfileRestorePendingException(cause: Throwable) : IllegalStateException(
     "Restore paused. Reopen Theoria to finish safely. Your existing profiles are preserved.", cause,
 )
 
@@ -148,7 +148,7 @@ class ProfileBackupService(
     }
 
     private suspend fun finish(pending: PendingRestore): ProfileRestoreResult = withContext(NonCancellable) {
-        try {
+        runCatchingExceptionsPreservingCancellation {
             val imported = pending.legacyOperationId?.let(pending.backup::forLegacyRestore) ?: pending.backup
             preflight(imported, pending.applyPreferences)
             val existingProfileIds = settings.observeSettings().first().recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
@@ -175,9 +175,7 @@ class ProfileBackupService(
                 reposAdded = repos?.added ?: 0,
                 repoProblems = repos?.problems.orEmpty(),
             )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
+        }.getOrElse { failure ->
             throw ProfileRestorePendingException(failure)
         }
     }

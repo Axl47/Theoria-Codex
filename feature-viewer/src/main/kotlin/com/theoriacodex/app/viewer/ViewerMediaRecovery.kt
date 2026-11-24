@@ -1,8 +1,8 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** What asking the source again for a post's failed media came to ([recoverMedia]). */
@@ -40,13 +40,9 @@ suspend fun ViewerViewModel.recoverMedia(
     val active = session.value ?: return ViewerMediaRecovery.NOTHING_NEW
     fun stillApplies() = session.value?.sessionId == active.sessionId && state.value.pages.any { page -> page.post == post }
     if (!stillApplies()) return ViewerMediaRecovery.NOTHING_NEW
-    val recovered = try {
+    val recovered = runCatchingExceptionsPreservingCancellation {
         withTimeoutOrNull(viewerResolutionTimeoutMs(state.value.series)) { recover(active, ::stillApplies) }
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        null
-    }
+    }.getOrNull()
     if (recovered == null || !recovered.refreshes(failedMedia) || !stillApplies()) return ViewerMediaRecovery.NOTHING_NEW
     applyResolvedPost(recovered, recovered = true)
     return ViewerMediaRecovery.REPLACED

@@ -22,6 +22,8 @@ import com.theoriacodex.data.repository.SearchedTagKey
 import com.theoriacodex.data.repository.searchedTerms
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
@@ -29,7 +31,6 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -48,7 +49,6 @@ import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceAutocompletePrefix
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.util.LinkedHashMap
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -214,14 +214,12 @@ class SearchCoordinator(
         currentCoroutineContext().ensureActive()
         val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
         val base = firstPage(sanitized, sourceScope, sources)
-        return try {
+        return runCatchingPreservingCancellation {
             when (val mode = sanitized.mode) {
                 QueryMode.Unified -> executeUnifiedInitial(base, onPartial)
                 is QueryMode.Source -> executeSourceInitial(base, mode)
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
+        }.getOrElse { error ->
             SearchExecutionResult.Failure(
                 executionKey = base.executionKey,
                 query = sanitized,
@@ -329,11 +327,10 @@ class SearchCoordinator(
         return SearchPageResult.Success(base.executionKey, result.items, result.statuses, base.accept(result, setOf(source)))
     }
 
-    private suspend fun retrySingleSource(base: SearchContinuation, source: SourceKey): SearchPageResult = try {
+    private suspend fun retrySingleSource(base: SearchContinuation, source: SourceKey): SearchPageResult = runCatchingExceptionsPreservingCancellation {
         val page = fetchSource(base, source, timeoutMs = SINGLE_SOURCE_RETRY_TIMEOUT_MS)
         SearchPageResult.Success(base.executionKey, page.items, page.statuses, base.accept(page, setOf(source)))
-    } catch (error: CancellationException) { throw error }
-    catch (error: Exception) {
+    }.getOrElse { error ->
         SearchPageResult.Failure(base.executionKey, listOf(sourceFailureStatus(source, error)),
             error.message ?: "Could not retry source")
     }
@@ -353,14 +350,12 @@ class SearchCoordinator(
 
     override suspend fun executePage(continuation: SearchContinuation): SearchPageResult {
         currentCoroutineContext().ensureActive()
-        return try {
+        return runCatchingPreservingCancellation {
             when (val mode = continuation.query.mode) {
                 QueryMode.Unified -> executeUnifiedPage(continuation)
                 is QueryMode.Source -> executeSourcePage(continuation, mode.source)
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
+        }.getOrElse { error ->
             SearchPageResult.Failure(
                 executionKey = continuation.executionKey,
                 statuses = thrownStatuses(error, continuation.query),

@@ -1,12 +1,12 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.seriesKind
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -25,11 +25,8 @@ suspend fun SeriesRepository.switchSource(
         moveSeries(from, listed.memoOn(details), listed.entries)
     }
     if (!moved) return false
-    try {
+    runCatchingExceptionsPreservingCancellation {
         removeDownloads(from)
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
     }
     return true
 }
