@@ -2,8 +2,8 @@
 
 Runs [Mihon](https://github.com/mihonapp/mihon) manga extensions and [Aniyomi](https://github.com/aniyomiorg/aniyomi)
 anime extensions and presents their sources as `SeriesSource`s, which the Series tab browses and the Viewer reads
-chapter by chapter or plays episode by episode. It finds the extensions Mihon or Aniyomi installed on the device, and
-runs one only after the user turns it on. Every build includes it, and the Series tab is always shown.
+chapter by chapter or plays episode by episode. It finds the extensions Mihon or Aniyomi installed on the device,
+installs and updates its own from the repos the user adds, and runs one only after the user turns it on. Every build includes it, and the Series tab is always shown.
 
 It began as a spike asking how much of Mihon's run-time Theoria must provide before the extension ecosystem works
 here. That verdict and its measurements are kept below; the Series feature is built on top of it.
@@ -30,6 +30,19 @@ question asked before turning one on shows the fingerprint, and only that finger
 the question was open is asked about again. Loaded code is kept per listed file, signer, version, length and write time
 included, so a file replaced in place loads anew, from a private copy of its own, and never runs under another file's
 signer or name. Trust is never written to or read from a profile backup.
+
+**Repos.** The user adds the same repo addresses Mihon and Aniyomi take: a legacy `repo.json` and `index.min.json`
+folder, or the newer gzipped protobuf index that legacy `repo.json` files name in `index_v2` (Keiyoushi's
+`index.min.json` is now a stub, so its catalog is only there). Adding a repo pins the signing key it names; a repo that
+later names another key offers nothing until it is added again. An extension is installed by downloading its APK and
+checking that it is the package the index named, signed with the pinned key, no older than the copy on the device,
+and that no copy on the device is signed with another key. It is kept as `noBackupFilesDir/extensions/<package>.apk`
+and loaded like a debug-folder file, from a private read-only copy, so it is no Android package: no install dialog, no
+developer verification, and another app cannot replace or remove it. A copy of its own stands in for an installed
+package of the same name. A fresh install turns the extension on, since installing it is the choice; an update keeps
+the user's choice; removing it deletes the file and its trust. Repos live in `ExtensionChoices` beside trust and, like
+it, are not in profile backups. Nothing checks for updates in the background: the Extensions page asks the repos each
+time it opens.
 
 **Changes on the device.** The app listens for package broadcasts while it runs, in every build, and debug builds also
 watch the APK folder. Both start before the extensions first load. Each change lists the device again and loads only
@@ -102,9 +115,11 @@ once more.
 | `MihonKind` | same | Mihon's manga interface, API 1.6, presented by `MihonSeriesSource`, with its covers and pages fetched by `MihonImages`. |
 | `AniyomiKind` | same | Aniyomi's anime interface, versions 14 and 16, presented by `AniyomiSeriesSource` (see "Anime extensions"). Refuses other versions and extensions that stream by torrent, saying why on the Extensions page. |
 | `ExtensionCalls`, `ExtensionFilters.kt` | same | What both adapters share: running an extension call off the caller's thread and reporting its failure the way built-in sources do, and the filter tree as `SeriesFilter`s. The status numbers are `core-domain`'s `extensionSeriesStatus`, shared with the backup import. |
-| `ExtensionPackages` | same | Lists the extensions on the device without running them: installed packages that declare a kind's feature and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
+| `ExtensionPackages` | same | Lists the extensions on the device without running them: those installed from repos into the app's storage, installed packages that declare a kind's feature (unless one from a repo stands in for it) and, in debug builds only, APK files in the app's `mihon-extensions` folder. |
+| `RepoReader` | same | Reads a repo's name, key and extensions from any address users and backups give for one, in the legacy JSON or the newer protobuf format. Anime and manga protobuf stores number their fields differently; the anime layout is tried first. |
+| `ExtensionCatalog` | same | The user's repos (`ExtensionRepos` in `core-domain`): adds and removes them, lists what they offer with how the device stands with each (available, installed, update, signed with another key), and installs, updates and removes extensions in the app's storage. |
 | `ExtensionRegistry` | same | The rule for what runs: loads extensions that are on, on first use, each with 15 s to finish: a lookup of one source loads only the extension last seen offering it (`ExtensionChoices.owners`), and the whole list loads all of them. It offers the sources of the languages that are on; only those sources fetch images. One that hangs or fails is left out and says why on the Extensions page. Settings are read only for the extension whose page is open. |
-| `ExtensionLoader` | same | Loads an installed package's code from its own APK; a folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
+| `ExtensionLoader` | same | Loads an installed package's code from its own APK; a repo or folder file is first copied to a private read-only file (Android refuses writable code) and the copy's signer checked again. |
 | `SourceSettings`, `androidx/preference` | same | Reads a source's settings out of the holder classes and stores a changed value where the source reads it. |
 | `ExtensionHost` | same | Gives extensions what they ask the service locator for: the application, a `Json`, and an HTTP client. The client shares the system WebView's cookies for every host, as Mihon's does (see "Browser checks"). |
 | `MihonSeriesSource`, `AniyomiSeriesSource` | same | Presents one extension source as the app's `SeriesSource` (`core-domain`): popular, latest and search list series, a series has details and chapters (episodes), and a chapter gives its pages when it is opened (an episode its streams). A source's search filters become the app's `SeriesFilter`s (`MihonFilters.kt`, `AniyomiFilters.kt`); a search sets the values chosen onto a list the source makes afresh, matching each by place, kind and name, and leaves one that no longer lines up at the source's default; later pages of the same search reuse that list, as Mihon does. |
@@ -314,7 +329,8 @@ What the feature still lacks.
   behind one is skipped that round; a chapter page that fails a check inside the Viewer shows the Viewer's usual
   failure.
 - **Protobuf and extra image decoders**, used by about 1% of manga extensions.
-- **Installing and updating extensions.** There is no repository browser and no update check.
+- **Update checks in the background.** Repos are asked for updates only when the Extensions page opens, and nothing
+  notifies about them.
 - **Other extension API versions.** Only Mihon's API 1.6 and Aniyomi's versions 14 and 16 load, which is all the
   indexes held besides Aniyomi's newest, 17. Torrent streams and seasons are not supported.
 - **A limit on calls.** Loading an extension, reading its settings and looking up an episode's streams have a time
