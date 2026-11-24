@@ -65,7 +65,7 @@ class TachiyomiBackupTest {
                 message(16) { string(1, "/m/1"); string(13, "not json"); long(10, 2) }
             }
             message(1) { long(1, 1); string(2, "/n"); string(3, "N"); string(112, "{}") }
-        }, now = 0)
+        }, now = 0).series
 
         assertEquals(listOf("""{"slug":"m-1"}""", null), series.map { it.series.series.memo })
         assertEquals(listOf("""{"id":3}""", null, null), series.first().entries.map { it.entry.memo })
