@@ -53,10 +53,10 @@ internal fun SavedSearchesCodexBoundary(
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
     val posts = rememberComputedOffMain(
-        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT,
+        feed.posts, sort, usage, durations, feed.batches, section = FeedTraceSections.SORT,
         retainKey = LiveCodexSortFrames.at("codex-sort:$SAVED_SEARCHES_CODEX_ID"),
     ) {
-        sortLiveCodexPosts(feed.posts, sort, usage, durations)
+        sortLiveCodexPosts(feed.posts, sort, usage, durations, feed.batches)
     }
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,

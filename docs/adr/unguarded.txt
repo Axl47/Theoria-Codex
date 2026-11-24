@@ -133,7 +133,6 @@
 0149-library-offline-and-download-removals.md
 0150-library-section-persistence.md
 0151-likes-codex-sync-writes.md
-0152-live-saved-collections.md
 0153-pixiv-pkce-login.md
 0154-recents-history-behavior.md
 0155-settings-backup.md

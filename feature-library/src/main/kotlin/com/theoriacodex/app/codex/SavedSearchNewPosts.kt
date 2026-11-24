@@ -32,7 +32,7 @@ class SavedSearchNewPostsChecker(
     }
 }
 
-private fun SavedSearchEntry.newestFirst() =
+internal fun SavedSearchEntry.newestFirst() =
     copy(search = search.copy(query = search.query.copy(sort = SortMode.NEWEST)))
 
 suspend fun UiRestoreRepository.markSavedSearchesSeen(ids: Set<String>? = null) {

@@ -521,10 +521,10 @@ private fun FollowedCodexDestinationStateBoundary(
         owner.synchronize(selected, available, sort, usage, durations)
     }
     val posts = rememberComputedOffMain(
-        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT,
+        feed.posts, sort, usage, durations, feed.batches, section = FeedTraceSections.SORT,
         retainKey = LiveCodexSortFrames.at("codex-sort:$FOLLOWED_CODEX_ID"),
     ) {
-        sortLiveCodexPosts(feed.posts, sort, usage, durations)
+        sortLiveCodexPosts(feed.posts, sort, usage, durations, feed.batches)
     }
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
