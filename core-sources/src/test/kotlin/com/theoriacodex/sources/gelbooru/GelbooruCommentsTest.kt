@@ -210,12 +210,15 @@ class GelbooruCommentsTest {
         val adapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http, { credentials.userApiKey(SourceKey.RULE34XXX) })
         val rule34Post = commentTestPost(SourceKey.RULE34XXX, "77")
         val keyedDapi = dapiQuery + mapOf("user_id" to "1", "api_key" to "k")
+        http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, statusCode = 401)
         http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, body = "<?xml version=\"1.0\"?><error>Missing authentication.</error>")
         http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, body = dapiXml)
 
+        val unauthorized = runCatching { adapter.comments(rule34Post, pageToken = null) }.exceptionOrNull()
         val refused = runCatching { adapter.comments(rule34Post, pageToken = null) }.exceptionOrNull()
         val page = adapter.comments(rule34Post, pageToken = null)
 
+        assertTrue("$unauthorized", unauthorized is SourceAdapterException)
         assertEquals(SourceFailureReason.AUTH_REQUIRED, (refused as SourceAdapterException).reason)
         assertEquals(listOf("5", "6"), page.comments.map { it.id })
         http.assertExhausted()

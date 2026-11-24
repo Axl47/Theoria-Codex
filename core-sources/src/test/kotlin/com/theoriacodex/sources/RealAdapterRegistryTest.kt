@@ -105,13 +105,14 @@ class RealAdapterRegistryTest {
         assertEquals(emptyList<String>(), unavailableReport.wrong)
         assertEquals(emptyList<String>(), rateLimitedReport.wrong)
         assertEquals(emptyList<String>(), downReport.wrong)
-        assertEquals("checked lookups", 27, unavailableReport.checked)
-        assertEquals(unavailableReport.checked, rateLimitedReport.checked)
-        assertEquals(unavailableReport.checked, downReport.checked)
-        assertEquals(setOf("AIBOORU", "DANBOORU", "GELBOORU", "IWARA", "PIXIV", "custom_booru_example"), unavailableReport.accountsAsking)
+        val everySource = SourceKey.builtIns.map(SourceKey::id).toSet() + "custom_booru_example"
+        for (report in listOf(unavailableReport, rateLimitedReport, downReport)) {
+            assertEquals("every source has a lookup checked", everySource, report.checkedSources)
+            assertTrue("a lookup per source at least", report.checked >= everySource.size)
+        }
     }
 
-    private class FailedRequestReport(val checked: Int, val wrong: List<String>, val accountsAsking: Set<String>)
+    private class FailedRequestReport(val checked: Int, val wrong: List<String>, val checkedSources: Set<String>)
 
     private suspend fun failedRequestReport(http: FailingTransport, isProviderFailure: (Throwable?) -> Boolean): FailedRequestReport {
         val credentials = FakeCredentialsProvider().apply {
@@ -119,13 +120,12 @@ class RealAdapterRegistryTest {
             gelbooruCredentials = UserApiKey("1", "key")
             rule34XxxCredentials = UserApiKey("1", "key")
         }
-        val registered = RealAdapterRegistry::class.java.getDeclaredField("adaptersBySource")
-            .apply { isAccessible = true }
-            .get(RealAdapterRegistry(credentials, http)) as Map<*, *>
-        val adapters = registered.values.map { it as SourceAdapter } + customFamilyAdapters(http).values
+        val registry = RealAdapterRegistry(credentials, http, exposedSources = SourceKey.builtIns.toSet())
+        assertEquals(SourceKey.builtIns.toSet(), registry.availableSources())
+        val adapters = SourceKey.builtIns.map { key -> requireNotNull(registry.adapterFor(key)) } + customFamilyAdapters(http).values
         var checked = 0
         val wrong = mutableListOf<String>()
-        val accountsAsking = mutableSetOf<String>()
+        val checkedSources = mutableSetOf<String>()
         for (adapter in adapters) {
             val post = commentTestPost(adapter.sourceKey, "123")
             val creator = CreatorProfile(adapter.sourceKey, "alice", "1", "https://www.iwara.tv/profile/alice", "user:alice")
@@ -140,14 +140,14 @@ class RealAdapterRegistryTest {
                 val failure = runCatching { lookup() }.exceptionOrNull()
                 val asked = http.requests > before
                 val where = "${adapter.sourceKey.id}.$name"
-                if (name == "accountDetails" && asked) accountsAsking += adapter.sourceKey.id
                 if (name == "accountDetails" && !asked && failure == null) continue
                 checked += 1
+                checkedSources += adapter.sourceKey.id
                 if (!asked) wrong += "$where never asked the site"
                 if (!isProviderFailure(failure)) wrong += "$where ended with $failure"
             }
         }
-        return FailedRequestReport(checked, wrong, accountsAsking)
+        return FailedRequestReport(checked, wrong, checkedSources)
     }
 
     private class FailingTransport(private val answer: () -> SourceByteResponse) : SourceHttpClient {

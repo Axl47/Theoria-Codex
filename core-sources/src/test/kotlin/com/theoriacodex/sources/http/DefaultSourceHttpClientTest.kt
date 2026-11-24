@@ -7,9 +7,11 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -171,10 +173,12 @@ class DefaultSourceHttpClientTest {
     @Test
     fun `cancellation disconnects an active post response read (ADR 0051)`() = runBlocking {
         val disconnected = CountDownLatch(1)
+        val handlerStarted = CountDownLatch(1)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/stalled-post") { exchange ->
                 exchange.requestBody.close()
                 exchange.sendResponseHeaders(200, 0L)
+                handlerStarted.countDown()
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
                 try {
                     while (System.nanoTime() < deadline) {
@@ -191,19 +195,20 @@ class DefaultSourceHttpClientTest {
             start()
         }
 
-        val (failure, disconnectedBeforeRelease) = try {
-            val failure = runCatching {
-                withTimeout(100L) {
-                    DefaultSourceHttpClient(readTimeoutMs = 10_000, maxRetries = 0)
-                        .postJson(url = "http://127.0.0.1:${server.address.port}/stalled-post", body = "{}")
-                }
-            }.exceptionOrNull()
-            failure to disconnected.await(2L, TimeUnit.SECONDS)
+        val call = launch(Dispatchers.IO) {
+            DefaultSourceHttpClient(readTimeoutMs = 10_000, maxRetries = 0)
+                .postJson(url = "http://127.0.0.1:${server.address.port}/stalled-post", body = "{}")
+        }
+        val disconnectedBeforeRelease = try {
+            assertTrue("the request never reached the server", handlerStarted.await(5L, TimeUnit.SECONDS))
+            call.cancel()
+            disconnected.await(2L, TimeUnit.SECONDS)
         } finally {
             server.stop(0)
         }
+        call.join()
 
-        assertTrue(failure is TimeoutCancellationException)
+        assertTrue(call.isCancelled)
         assertTrue("the call kept reading after its caller was cancelled", disconnectedBeforeRelease)
     }
 

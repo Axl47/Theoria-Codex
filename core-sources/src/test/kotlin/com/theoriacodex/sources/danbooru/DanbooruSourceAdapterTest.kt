@@ -30,7 +30,7 @@ class DanbooruSourceAdapterTest {
     }
 
     @Test
-    fun `score search spends a term on its order metatag and keeps numbered pages (ADR 0041, 0054)`() = runTest {
+    fun `score search spends a term on its order metatag and keeps numbered pages (ADR 0041, 0051, 0054)`() = runTest {
         for (sort in listOf(SortMode.TOP, SortMode.POPULAR)) {
             val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fullPage()) }
 
