@@ -60,6 +60,13 @@ class ForYouInterestsTest {
         assertEquals(listOf("hatsune_miku"), interests.first().tags)
     }
 
+    @Test fun `a tag on most of the source's watched posts leads no lane, even where another booru proves it (ADR 0087)`() {
+        val affinity = history(SourceKey.GELBOORU, mapOf("blush" to 18, "miku" to 15), watched = mapOf("blush" to 60L, "miku" to 5L))
+            .merge(history(SourceKey.DANBOORU, mapOf("blush" to 15), watched = mapOf("blush" to 5L)))
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, List(15) { listOf("blush", "miku") }, affinity).pick()
+        assertEquals(listOf(listOf("miku")), interests.map { it.tags })
+    }
+
     @Test fun `with equal scores the most liked tag leads (ADR 0071)`() {
         val documents = listOf(listOf("alpha"), listOf("beta"), listOf("beta"))
         val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty).pick()
@@ -137,7 +144,7 @@ class ForYouPictureInterestsTest {
     }
 
     @Test fun `too few analysed kept posts, or text on the image, prove nothing (ADR 0071)`() {
-        val few = TagAffinityInputs(pictures = PictureEvidence(mapOf("cat ears" to 9.0), mapOf("cat ears" to 9), kept = 10, baseRates = mapOf("cat ears" to 0.01)))
+        val few = TagAffinityInputs(pictures = PictureEvidence(mapOf("cat ears" to 2.0), mapOf("cat ears" to 2), kept = 10, baseRates = mapOf("cat ears" to 0.01)))
         assertFalse(few.pictureAffinity(source, "cat ears", "cat_ears").proven)
         val text = TagAffinityInputs(pictures = PictureEvidence(mapOf("signature" to 20.0), mapOf("signature" to 20), kept = 30, baseRates = mapOf("signature" to 0.01)))
         assertFalse(text.pictureAffinity(source, "signature", "signature").proven)
