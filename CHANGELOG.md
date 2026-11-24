@@ -4,6 +4,7 @@
 
 ### Added
 
+- When no sources are enabled, For You offers Manage sources, which opens Settings › Sites.
 - Restore backup also takes backups from Mihon, TachiyomiJ2K and Anikku. Their followed manga and anime appear in Series, with the chapters you read, the episodes you watched and where you stopped in each. Nothing you already have is removed, and importing the same backup twice adds nothing more. The extension repos the backup lists are added too, without contacting them. The preview names the extensions still missing, so you only need to install them, and a series opens once its extension is on here. The next background check for new chapters notifies you of chapters and episodes the backup didn't have yet, unless you already refreshed that series.
 - Backups Theoria makes include your extension repos. Restoring one adds the repos you don't have yet, so a new device finds the repos your series came from; which extensions are on stays on each device.
 - Restoring a Mihon, TachiyomiJ2K or Anikku backup no longer lists an extension you have as missing when it, or its language, is only turned off; the preview names what to turn on in Extensions. An extension never turned on here still shows as missing.
@@ -74,6 +75,8 @@
 
 ### Changed
 
+- For You learns from every tag of the posts you like, not only the first 20 in the site's order. On Gelbooru and Danbooru, whose tags come alphabetically, interests further down the alphabet now shape your Mix too, including for posts you liked before this update. A post you both liked and saved counts once.
+- For You plans a Mix faster when you have liked many posts.
 - Viewer subtitles now render as outlined white text with no dark box behind them (unless Android's system caption style is turned on) and sit closer to the bottom of the picture when controls are hidden, moving clear of the timeline when controls appear.
 - Episode playback in the Viewer now shows the series and episode on two lines at the top left, puts Subtitles, Audio, Servers and More (with Start over) at the top right, centers Previous, Play/Pause and Next over the picture, and places Lock, Rotate, Speed, Picture-in-picture and landscape Fit/Fill cleanly above the timeline. Server, subtitle, audio and speed pickers now open as spacious bottom sheets.
 - Locking an episode hides controls and blocks accidental taps, swipes, pinches and Back; tapping or pressing Back reveals only the lock icon to unlock, and lock stays active across automatic moves to the next episode.
@@ -134,6 +137,9 @@
 - Manga chapters read page by page fill the screen's width, without the gap at the top and the border around each page.
 - The screen no longer turns off while you read a manga chapter.
 - Start over in a manga chapter's information sheet closes the sheet, as it does for episodes.
+- For You cards a Save brought in say "Like one you saved" instead of "Like one you liked".
+- Settings › Picture tags no longer counts a video or animation as tagged while its frames are still to be read.
+- Going back to a For You trail in the grid returns to where you were in it, instead of its top.
 - Series from extensions that need extra details to find a series or chapter again now open after you restart the app or import a Mihon or TachiyomiJ2K backup, instead of failing to load their chapters or pages.
 - Tapping the Series tab again while on it no longer collapses its search bar.
 - Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires. The cover now also shows for the first chapter you open after starting the app, and for downloaded chapters.

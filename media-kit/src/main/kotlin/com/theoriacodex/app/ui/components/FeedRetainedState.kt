@@ -2,6 +2,7 @@ package com.theoriacodex.app.ui.components
 
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,6 +24,11 @@ internal class FeedRetainedState : ViewModel() {
 
     fun gridState(key: String, create: () -> LazyStaggeredGridState): LazyStaggeredGridState =
         gridStates.getOrPut(key, create)
+
+    /** Forgets every feed whose key starts with [prefix], apart from those in [keep]. */
+    fun forgetExcept(prefix: String, keep: Set<String>) {
+        listOf(durationProjections, gridStates, frameCaches).forEach { states -> states.keys.removeAll { it.startsWith(prefix) && it !in keep } }
+    }
 
     /** One [rememberComputedOffMain] call site owns each key, so its element and value types never change. */
     @Suppress("UNCHECKED_CAST")
@@ -48,6 +54,16 @@ fun rememberRetainedFeedGridState(key: String): LazyStaggeredGridState {
     return rememberSaveable(retained, key, saver = saver) {
         retained.gridState(key) { LazyStaggeredGridState() }
     }
+}
+
+/**
+ * For a screen whose feeds come and go, each under its own key: forgets the retained state of every feed keyed under
+ * [prefix] but those in [keep], since a feed that can never show again would hold its posts until the screen leaves.
+ */
+@Composable
+fun ForgetRetainedFeedsEffect(prefix: String, keep: Set<String>) {
+    val retained = viewModel<FeedRetainedState>()
+    LaunchedEffect(retained, prefix, keep) { retained.forgetExcept(prefix, keep) }
 }
 
 /** The reveal order of a feed survives the Viewer, so a late post stays where it landed. */

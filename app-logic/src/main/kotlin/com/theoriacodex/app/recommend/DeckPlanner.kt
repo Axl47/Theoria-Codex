@@ -8,8 +8,8 @@ sealed interface DeckOrigin {
     /** One of the profile's interests, or a trending lane for a profile with no likes; [label] names it on the card. */
     data class Lane(val laneId: String, val label: String) : DeckOrigin
 
-    /** A post like [of], which the user just liked or saved. */
-    data class Similar(val of: PostId) : DeckOrigin
+    /** A post like [of], which the user just liked, or [saved]. */
+    data class Similar(val of: PostId, val saved: Boolean = false) : DeckOrigin
 
     /** Another post by the creator of [of], which the user just liked or saved. */
     data class Creator(val of: PostId, val name: String) : DeckOrigin

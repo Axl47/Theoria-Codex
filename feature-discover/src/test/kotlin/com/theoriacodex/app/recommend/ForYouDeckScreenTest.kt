@@ -17,17 +17,21 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.related.testRelatedShelf
@@ -78,6 +82,7 @@ class ForYouDeckScreenTest {
     private val savedSearches = mutableStateListOf<Query>()
     private val selectedProfiles = mutableListOf<String>()
     private var wentToSearch = 0
+    private var sourcesOpened = 0
     private var hiddenTagsOpened = 0
 
     @After fun tearDown() = writeScope.cancel()
@@ -105,7 +110,7 @@ class ForYouDeckScreenTest {
             onSaveToDevice = {},
             onSaveSearch = { savedSearches += it },
             onToggleLike = {},
-            onOpenSourceAccounts = {},
+            onOpenSourceAccounts = { sourcesOpened++ },
             onGoToSearch = { wentToSearch++ },
         )
         compose.setContent {
@@ -259,6 +264,31 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertDoesNotExist()
         compose.onNodeWithText("Go to Search").performClick()
         compose.runOnIdle { assertEquals(1, wentToSearch) }
+    }
+
+    @Test fun `a Mix with no sources enabled opens source management`() {
+        engine.sources = emptyList()
+        render()
+        compose.onNodeWithText("No sources enabled").assertExists()
+        compose.onNodeWithText("Manage sources").performClick()
+        compose.runOnIdle { assertEquals(1, sourcesOpened) }
+    }
+
+    @Test fun `a trail keeps its grid place under a deeper trail, which starts at the top`() {
+        trails.creator = (1..60).map { testPost(DECK_SOURCE, "t-$it") }
+        trails.tag = (1..60).map { testPost(DECK_SOURCE, "g-$it") }
+        val owner = render()
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").performClick()
+        compose.onNodeWithContentDescription("Grid").performClick()
+        compose.onNodeWithTag(FOR_YOU_GRID_TAG).onChild().performScrollToNode(hasTestTag(searchCardTestTag(PostId(DECK_SOURCE, "t-50"))))
+        card("t-1").assertIsNotDisplayed()
+
+        compose.runOnIdle { owner.fork(TrailRequest.Tag("sky", DECK_SOURCE, null, testPost(DECK_SOURCE, "t-50"))) }
+        card("g-1").assertIsDisplayed()
+
+        compose.runOnIdle { owner.popTo(1) }
+        card("t-50").assertIsDisplayed()
+        card("t-1").assertIsNotDisplayed()
     }
 
     @Test fun `a Mix that could not load offers Retry, which deals it`() {
