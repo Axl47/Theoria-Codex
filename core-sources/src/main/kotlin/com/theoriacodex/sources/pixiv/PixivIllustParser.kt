@@ -10,12 +10,13 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.media.inferMimeFromUrl
-import java.time.Instant
 import com.theoriacodex.sources.common.objects
+import java.time.Instant
 
 /** The posts in a response's `illusts` array, skipping records that are not illustrations. */
 internal fun JsonObject.pixivIllusts(): List<Post> =
@@ -41,7 +42,7 @@ internal fun parsePixivIllust(raw: JsonObject): Post? {
     val id = raw.longValue("id")?.toString() ?: return null
     val media = parsePixivMedia(raw)
     val tags = parsePixivTags(raw)
-    val createdAt = parseIsoInstant(raw.stringValue("create_date"))
+    val createdAt = parseEpochMs(raw.stringValue("create_date"), Instant::parse)
     val user = raw.optionalJsonObject("user")
     val userName = user?.stringValue("name")?.trim().orEmpty().ifBlank { null }
     val userId = user?.longValue("id")?.toString()
@@ -88,10 +89,6 @@ private fun normalizedUrl(url: String?): String? {
     return url?.trim()?.takeIf(String::isNotBlank)
 }
 
-private fun parseIsoInstant(value: String?): Long? {
-    if (value.isNullOrBlank()) return null
-    return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
-}
 
 private data class ParsedPixivMedia(val preview: ImageRef, val full: ImageRef?, val pages: List<ImageRef>)
 /**

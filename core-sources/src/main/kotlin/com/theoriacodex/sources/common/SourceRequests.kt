@@ -7,6 +7,7 @@ import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
 
@@ -31,6 +32,20 @@ internal fun SourceHttpResponse.requireSuccess(
         reason = classifyHttpFailure(statusCode, body, authBlockedBody = authBlockedBody),
         message = providerMessage(body) ?: "$failure ($statusCode)",
     )
+}
+
+internal suspend inline fun SourceHttpClient.getChecked(
+    siteLabel: String,
+    url: String,
+    query: Map<String, String> = emptyMap(),
+    headers: Map<String, String> = emptyMap(),
+    noinline authBlockedBody: (String) -> Boolean = { false },
+    noinline providerMessage: (String) -> String? = { null },
+    notFound: () -> String? = { null },
+): String {
+    val response = sourceRequest(siteLabel) { get(url = url, query = query, headers = headers) }
+    if (response.statusCode == 404) notFound()?.let { return it }
+    return response.requireSuccess("$siteLabel request failed", authBlockedBody, providerMessage).body
 }
 
 /** The keys [use] attaches to a site's API calls; a site that requires keys fails before the request without them. */

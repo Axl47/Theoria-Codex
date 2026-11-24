@@ -47,9 +47,8 @@ import com.theoriacodex.sources.common.objectList
 import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonElement
-import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceRequest
+import com.theoriacodex.sources.common.getChecked
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -338,9 +337,7 @@ private class GelbooruFamilyAdapter(
     }
 
     private suspend fun requestBody(url: String, query: Map<String, String>): String =
-        sourceRequest(site.label) { httpClient.get(url = url, query = query, headers = site.headers) }
-            .requireSuccess("${site.label} request failed", authBlockedBody = ::looksLikeGelbooruAuthFailure)
-            .body
+        httpClient.getChecked(site.label, url, query, site.headers, authBlockedBody = ::looksLikeGelbooruAuthFailure)
 
     /** Sites report a missing or bad key in a successful response body. */
     private fun throwIfAuthFailure(body: String) {

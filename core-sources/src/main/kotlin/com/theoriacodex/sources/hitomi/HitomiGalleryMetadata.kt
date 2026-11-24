@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.percentEncode
 
 internal data class ParsedHitomiGallery(
@@ -161,20 +162,11 @@ private fun JsonObject.addObjectTaxonomy(
     }
 }
 
-private fun parseHitomiDate(date: String?, published: String?): Long? {
-    date?.let { raw ->
-        listOf("yyyy-MM-dd HH:mm:ssX", "yyyy-MM-dd HH:mm:ssXX", "yyyy-MM-dd HH:mm:ssXXX")
-            .firstNotNullOfOrNull { pattern ->
-                runCatching { OffsetDateTime.parse(raw, DateTimeFormatter.ofPattern(pattern)) }
-                    .getOrNull()
-            }
-            ?.let { parsed -> return parsed.toInstant().toEpochMilli() }
-    }
-    return published?.let { raw ->
-        runCatching { LocalDate.parse(raw).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
-            .getOrNull()
-    }
-}
+private val HITOMI_DATE_FORMATS = listOf("X", "XX", "XXX").map { offset -> DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss$offset") }
+
+private fun parseHitomiDate(date: String?, published: String?): Long? =
+    HITOMI_DATE_FORMATS.firstNotNullOfOrNull { format -> parseEpochMs(date) { OffsetDateTime.parse(it, format).toInstant() } }
+        ?: parseEpochMs(published) { LocalDate.parse(it).atStartOfDay().toInstant(ZoneOffset.UTC) }
 
 internal const val HITOMI_ANIME_TYPE = "anime"
 internal const val HITOMI_TAG_NAMESPACE = "tag"

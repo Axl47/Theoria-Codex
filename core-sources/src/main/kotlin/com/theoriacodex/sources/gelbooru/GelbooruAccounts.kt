@@ -3,6 +3,7 @@ package com.theoriacodex.sources.gelbooru
 import com.theoriacodex.domain.diagnostics.OffMainWork
 import com.theoriacodex.domain.model.AccountDetails
 import com.theoriacodex.sources.common.htmlFragmentToText
+import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
@@ -10,7 +11,6 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 import org.jsoup.nodes.Element
 
 /**
@@ -76,10 +76,7 @@ private fun parseCount(value: String): Int? = value.filter(Char::isDigit).toIntO
 private val PROFILE_DATE = DateTimeFormatter.ofPattern("M/d/yy")
 
 /** Midnight UTC of a profile date such as `8/7/07`; null for `N/A` and anything else unreadable. */
-private fun parseProfileDateMs(value: String): Long? = try {
-    LocalDate.parse(value, PROFILE_DATE).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
-} catch (_: DateTimeParseException) {
-    null
-}
+private fun parseProfileDateMs(value: String): Long? =
+    parseEpochMs(value) { LocalDate.parse(it, PROFILE_DATE).atStartOfDay().toInstant(ZoneOffset.UTC) }
 
 private const val BIO_TITLE = "About Myself"

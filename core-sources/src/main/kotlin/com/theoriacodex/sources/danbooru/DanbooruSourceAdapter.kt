@@ -44,9 +44,8 @@ import com.theoriacodex.sources.common.originUrlOrNull
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseOffsetDateTimeMs
-import com.theoriacodex.sources.common.requireSuccess
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceRequest
+import com.theoriacodex.sources.common.getChecked
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.ApiKeyUse
 import com.theoriacodex.sources.credentials.UserApiKey
@@ -233,13 +232,17 @@ class DanbooruSourceAdapter(
 
     private suspend fun request(path: String, query: Map<String, String> = emptyMap()): String {
         val saved = credentials.keysFor(site.credentials, site.label)
-        return sourceRequest(site.label) {
-            httpClient.get(url = "${site.baseUrl}$path", query = query + DanbooruSite.authQuery(saved), headers = site.headers)
-        }.requireSuccess("${site.label} request failed") { body ->
-            // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
-            runCatching { parseJsonObject(body, gson, site.label) }.getOrNull()
-                ?.stringValue("message")?.trim()?.takeIf(String::isNotBlank)
-        }.body
+        return httpClient.getChecked(
+            site.label,
+            "${site.baseUrl}$path",
+            query = query + DanbooruSite.authQuery(saved),
+            headers = site.headers,
+            providerMessage = { body ->
+                // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
+                runCatching { parseJsonObject(body, gson, site.label) }.getOrNull()
+                    ?.stringValue("message")?.trim()?.takeIf(String::isNotBlank)
+            },
+        )
     }
 
     /** Posts without a file URL are restricted to signed-in users, so they are left out. */
