@@ -132,8 +132,6 @@ fun postDownloadMediaCandidate(post: Post): PostMediaCandidate? {
     }
 }
 
-fun postShareMediaCandidate(post: Post): PostMediaCandidate? = postDownloadMediaCandidate(post)
-
 /** The post's pages as the provider listed them, or its single full file; downloads and offline copies count pages by it. */
 val Post.downloadablePages: List<ImageRef>
     get() = media.ifEmpty { listOfNotNull(full) }
