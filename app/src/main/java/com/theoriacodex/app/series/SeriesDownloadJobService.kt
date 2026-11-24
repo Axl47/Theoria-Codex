@@ -4,7 +4,6 @@ import android.app.job.JobInfo
 import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.app.job.JobService
-import android.content.ComponentName
 import android.content.Context
 import android.net.ConnectivityManager
 import com.theoriacodex.app.AppJob
@@ -65,7 +64,8 @@ internal class SeriesDownloadScheduler(
 
     override suspend fun schedule(automatic: Boolean) {
         if (automatic) {
-            scheduler.schedule(job(AppJob.AUTOMATIC_DOWNLOAD.id).setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED).build())
+            val automaticJob = AppJob.AUTOMATIC_DOWNLOAD.builder(context).setPersisted(true)
+            scheduler.schedule(automaticJob.setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED).build())
             return
         }
         val settings = downloadSettings()
@@ -74,7 +74,7 @@ internal class SeriesDownloadScheduler(
             !settings.downloadsOverRoaming -> JobInfo.NETWORK_TYPE_NOT_ROAMING
             else -> JobInfo.NETWORK_TYPE_ANY
         }
-        val userInitiated = job(AppJob.USER_DOWNLOAD.id).setRequiredNetworkType(network)
+        val userInitiated = AppJob.USER_DOWNLOAD.builder(context).setPersisted(true).setRequiredNetworkType(network)
         // Only an app in view may start a user-initiated job. Out of view (resuming after a restart, say) the
         // chapters still download, in an ordinary job.
         val scheduled = try {
@@ -88,8 +88,6 @@ internal class SeriesDownloadScheduler(
     override suspend fun ensureScheduled(automatic: Boolean) {
         if (scheduler.getPendingJob(if (automatic) AppJob.AUTOMATIC_DOWNLOAD.id else AppJob.USER_DOWNLOAD.id) == null) schedule(automatic)
     }
-
-    private fun job(id: Int) = JobInfo.Builder(id, ComponentName(context, SeriesDownloadJobService::class.java)).setPersisted(true)
 }
 
 /**

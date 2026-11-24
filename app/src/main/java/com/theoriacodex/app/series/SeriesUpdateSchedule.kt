@@ -2,7 +2,6 @@ package com.theoriacodex.app.series
 
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
-import android.content.ComponentName
 import android.content.Context
 import com.theoriacodex.app.AppJob
 import com.theoriacodex.data.repository.AppSettings
@@ -33,7 +32,7 @@ internal fun scheduleSeriesUpdates(context: Context, intervalHours: Int?) {
     // Scheduling again restarts the wait, so a job already running this often is left alone at every app start.
     if (scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)?.intervalMillis == period) return
     scheduler.schedule(
-        JobInfo.Builder(AppJob.SERIES_UPDATE.id, ComponentName(context, SeriesUpdateJobService::class.java))
+        AppJob.SERIES_UPDATE.builder(context)
             .setPeriodic(period)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setPersisted(true)
