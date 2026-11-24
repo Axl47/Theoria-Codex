@@ -260,6 +260,13 @@ class SeriesTabViewModel(
         mutableState.update { it.copy(followingQuery = query) }
     }
 
+    /** Takes the Following title query to Browse and searches every source for it. */
+    fun searchAllSources() {
+        val query = state.value.followingQuery
+        mutableState.update { it.copy(view = SeriesView.BROWSE, followingQuery = "") }
+        search(query)
+    }
+
     /** Checks the followed series for new entries, unless a check is already running. */
     fun refresh() {
         if (state.value.refreshing) return

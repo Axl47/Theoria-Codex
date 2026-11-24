@@ -60,9 +60,13 @@ class RoomUpgradeJourneyTest {
             }
         }
         helper.runMigrationsAndValidate(name, 19, true, TheoriaRoomDatabase.MIGRATION_18_19).use { database ->
-            database.query("SELECT address, followed_at_epoch_ms, last_read_at_epoch_ms FROM series ORDER BY address").use {
-                val rows = buildList { while (it.moveToNext()) add(listOf(it.getString(0), it.getString(1), it.getString(2))) }
-                assertEquals(listOf(listOf("/a", "10", null), listOf("/b", null, null)), rows)
+            database.query("SELECT address, followed_at_epoch_ms FROM series ORDER BY address").use {
+                val rows = buildList { while (it.moveToNext()) add(it.getString(0) to it.getString(1)) }
+                assertEquals(listOf("/a" to "10", "/b" to null), rows)
+            }
+            database.query("SELECT COUNT(*) FROM series_entries WHERE last_read_at_epoch_ms IS NULL").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(2, it.getInt(0))
             }
         }
     }

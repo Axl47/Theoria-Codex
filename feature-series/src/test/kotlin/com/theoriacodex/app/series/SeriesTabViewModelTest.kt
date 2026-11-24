@@ -410,6 +410,19 @@ class SeriesTabViewModelTest {
     }
 
     @Test
+    fun aTitleSearchThatFindsNothingFollowedGoesOnToEverySource() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) {}
+        advanceUntilIdle()
+        viewModel.chooseView(SeriesView.FOLLOWING)
+        viewModel.filterFollowing("blue")
+
+        viewModel.searchAllSources()
+        val state = viewModel.state.value
+        assertEquals(Triple(SeriesView.BROWSE, "", "blue"), Triple(state.view, state.followingQuery, state.searchQuery))
+    }
+
+    @Test
     fun theFollowedSeriesWaitForTheSavedSortAndFilter() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val manga = Answering("custom_mihon_7")

@@ -6,7 +6,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.ProfileLibraryIds
-import com.theoriacodex.data.repository.READ_STAMP_INTERVAL_MS
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -91,7 +90,7 @@ class RoomProfileBackupStoreTest {
 
         val restoredDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
             TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
-        val restoredAt = 30L + READ_STAMP_INTERVAL_MS
+        val restoredAt = 60L
         val restored = RoomSeriesRepository(restoredDatabase, clock = { restoredAt })
         RoomProfileBackupStore(restoredDatabase).merge(snapshot)
         assertEquals(series.series(id), restored.series(id))
@@ -106,7 +105,8 @@ class RoomProfileBackupStoreTest {
         val kept = restored.series(id)!!
         assertTrue(kept.followed)
         // Followed again by the restore, since the backup's follow; read last on the device, after the backup's read.
-        assertEquals(30L to restoredAt, kept.followedAtEpochMs to kept.lastReadAtEpochMs)
+        assertEquals(30L, kept.followedAtEpochMs)
+        assertEquals(restoredAt, restored.entries(id).single { it.entry.address == "/chapter/2" }.lastReadAtEpochMs)
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
         restoredDatabase.close()
@@ -150,7 +150,7 @@ class RoomProfileBackupStoreTest {
         // The page count goes with the position that wins: page 8 of 10 here and page 3 of 20 in the backup stay 8 of 10,
         // and page 2 of 10 here becomes the backup's 3 of 20, never "3 of 10".
         suspend fun progress() = device.entries(id).single { it.entry.address == "/chapter/2" }.let { it.position to it.length }
-        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L)
+        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L, null)
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
         assertEquals(8L to 10L, progress())
         deviceDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_page = 2, page_count = 10 WHERE address = '/chapter/2'")

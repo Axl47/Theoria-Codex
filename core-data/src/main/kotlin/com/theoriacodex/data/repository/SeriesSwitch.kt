@@ -54,17 +54,16 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
     followed = followed || from.followed,
     readingMode = from.readingMode ?: readingMode,
     downloadNewChapters = downloadNewChapters || from.downloadNewChapters,
-    // Followed since the earlier of the two, and read last when either was.
+    // Followed since the earlier of the two.
     followedAtEpochMs = listOfNotNull(followedAtEpochMs.takeIf { followed }, from.followedAtEpochMs.takeIf { from.followed }).minOrNull(),
-    lastReadAtEpochMs = listOfNotNull(lastReadAtEpochMs, from.lastReadAtEpochMs).maxOrNull(),
 )
 
 /**
  * [to] and its listed [toEntries] after taking over the progress the user made on [from] and its [fromEntries], the
  * same work on another source. Returns the series, with [from]'s settings, and only the entries that changed.
  *
- * The entry [from] opened last is where the user is. Its [matchingEntry] takes its read state and last page (capped at
- * a known page count) and becomes the entry opened last. Entries numbered below it are read; any other entry is read
+ * The entry [from] opened last is where the user is. Its [matchingEntry] takes its read state, last page (capped at
+ * a known page count) and read time, and becomes the entry opened last. Entries numbered below it are read; any other entry is read
  * only when [from] read that same chapter: one of its number, or, where either lacks a number, of its name. When the
  * entry opened last has no match, the furthest entry this marks read becomes the entry opened last, so Continue goes
  * on after it.
@@ -98,7 +97,8 @@ fun carryProgress(
         when {
             opened != null && stored.entry.address == resumed?.address -> {
                 val position = stored.length?.let { opened.position.coerceAtMost(it) } ?: opened.position
-                stored.copy(read = stored.read || opened.read, position = maxOf(stored.position, position))
+                val readAt = listOfNotNull(stored.lastReadAtEpochMs, opened.lastReadAtEpochMs).maxOrNull()
+                stored.copy(read = stored.read || opened.read, position = maxOf(stored.position, position), lastReadAtEpochMs = readAt)
             }
             stored.read -> stored
             boundary != null && number != null && number < boundary -> stored.copy(read = true)

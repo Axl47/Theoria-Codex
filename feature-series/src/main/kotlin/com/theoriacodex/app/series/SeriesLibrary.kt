@@ -37,6 +37,7 @@ enum class LibraryShow {
     UNREAD,
     NOT_STARTED,
     IN_PROGRESS,
+    CAUGHT_UP,
     COMPLETED,
     ;
 
@@ -45,6 +46,7 @@ enum class LibraryShow {
         UNREAD -> words.notDone.capitalized()
         NOT_STARTED -> "Not started"
         IN_PROGRESS -> "In progress"
+        CAUGHT_UP -> "Caught up"
         COMPLETED -> "Completed"
     }
 
@@ -53,6 +55,7 @@ enum class LibraryShow {
         UNREAD -> item.unreadCount > 0
         NOT_STARTED -> !item.started
         IN_PROGRESS -> item.started && item.unreadCount > 0
+        CAUGHT_UP -> item.started && item.unreadCount == 0
         COMPLETED -> item.series.status == SeriesStatus.COMPLETED
     }
 }

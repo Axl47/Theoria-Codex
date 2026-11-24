@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.FollowedSeries
-import com.theoriacodex.data.repository.READ_STAMP_INTERVAL_MS
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -273,22 +272,27 @@ class RoomSeriesRepositoryTest {
         repository.setFollowed(id, true)
         assertEquals(FollowedSeries(series, 2, followedAtEpochMs = 200L, lastUpdatedAtEpochMs = 50L), repository.observeFollowed().first().single())
 
+        // Opening an entry stamps it; reopening it where it was left does not, and moving on does.
         now = 300L
         repository.recordProgress(id, "/c/1", position = 1, length = 4)
-        now = 300L + READ_STAMP_INTERVAL_MS - 1
-        repository.recordProgress(id, "/c/1", position = 2, length = 4)
+        now = 400L
+        repository.recordProgress(id, "/c/1", position = 1, length = 4)
         assertEquals(300L to true, repository.observeFollowed().first().single().let { it.lastReadAtEpochMs to it.started })
-        now = 300L + READ_STAMP_INTERVAL_MS
-        repository.recordProgress(id, "/c/1", position = 3, length = 4)
-        assertEquals(now, repository.series(id)!!.lastReadAtEpochMs)
+        now = 500L
+        repository.recordProgress(id, "/c/1", position = 2, length = 4)
+        assertEquals(500L, repository.observeFollowed().first().single().lastReadAtEpochMs)
+        // Marking an entry read is not reading it.
+        now = 600L
+        repository.setAllRead(id, read = true)
+        assertEquals(listOf(null, 500L), repository.entries(id).map { it.lastReadAtEpochMs })
 
         repository.setFollowed(id, false)
         assertNull(repository.series(id)!!.followedAtEpochMs)
     }
 
     @Test
-    fun `a source without upload dates is last updated when its newest entry was first seen`() = runTest {
-        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+    fun `an entry without an upload date counts as updated when it was first seen`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1", uploadedAtEpochMs = 20L)))
         repository.setFollowed(id, true)
         now = 500L
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))

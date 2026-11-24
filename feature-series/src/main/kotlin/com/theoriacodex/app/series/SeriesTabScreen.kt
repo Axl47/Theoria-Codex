@@ -228,7 +228,7 @@ private fun searchBinding(
     )
     SeriesView.BROWSE -> SearchBinding(
         query = query,
-        placeholder = "Search all sources",
+        placeholder = SEARCH_ALL_SOURCES,
         searching = state.search != null,
         onQueryChange = onQueryChange,
         onSearch = viewModel::search,
@@ -266,6 +266,7 @@ private fun SeriesTabViewBody(
             onChooseKind = viewModel::chooseKind,
             onChooseLibrary = viewModel::chooseLibrary,
             onShowAll = viewModel::showAllFollowing,
+            onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
         )
