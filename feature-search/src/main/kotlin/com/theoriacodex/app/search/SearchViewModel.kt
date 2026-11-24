@@ -131,7 +131,7 @@ class SearchViewModel(
     private val suggestionRefresh =
         SearchSuggestionRefresher(viewModelScope, mutableState, coordinator, suggestionDispatcher, autocompleteDelayMs)
     private val scrollPersistence = coordinator.scrollPersistence(scrollPersistenceDispatcher, scrollPersistenceDelayMs)
-    private val session = SearchSessionStore(savedStateHandle, coordinator, scrollPersistence)
+    private val session = SearchSessionStore(savedStateHandle)
     private val liveSearch = LiveSearchScheduler(
         viewModelScope, liveSearchDelays,
         onWaitingChanged = { waiting ->
@@ -718,7 +718,6 @@ class SearchViewModel(
         if (restorationJob?.isActive == true) return
         if (mutableState.value.restoration is SearchRestorationUiState.Restored) return
         reduce(SearchStateChange.BeginRestoration)
-        session.markRestorationStarted()
         restorationJob = viewModelScope.launch {
             try {
                 val initialization = coordinator.initializeRoute()
@@ -732,14 +731,17 @@ class SearchViewModel(
                     reconcileEnvironment(settings, scheduleRetry = false)
                 } == true
                 val restoredQuery = restoreSavedDraft()
-                val scroll = session.restoredScroll(mutableState.value.query)
+                val applied = mutableState.value.query
+                val scroll = session.savedScroll ?: coordinator.restoreSearchScrollState(
+                    queryHash = applied.appliedQueryHash,
+                    sourceScope = applied.appliedSourceScope,
+                )
                 reduce(
                     SearchStateChange.RestorationCompleted(
                         restoredQuery = restoredQuery,
                         scrollState = scroll,
                     ),
                 )
-                session.markRestorationCompleted()
                 persistDraftQuery()
                 suggestionRefresh.refreshTrending()
                 val pendingSearch = pendingRootSearch.also { pendingRootSearch = null }
@@ -778,7 +780,10 @@ class SearchViewModel(
         session.saveScroll(scroll)
         // Scrolling the results of a finished search means the user has taken it: it settles.
         if ((scroll.firstVisibleItemIndex > 0 || scroll.firstVisibleItemOffsetPx > 0) && !mutableState.value.loading) settlement.settle()
-        session.persistScroll(mutableState.value.query, scroll)
+        val query = mutableState.value.query
+        if (query.appliedSourceScope is SearchSourceScope.Temporary) return
+        val queryHash = query.appliedQueryHash.takeIf(String::isNotBlank) ?: return
+        scrollPersistence.submit(SearchScrollPersistenceTarget(queryHash = queryHash, state = scroll))
     }
 
     private fun requestRouteEntryScrollRestoration() {
