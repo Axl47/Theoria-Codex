@@ -36,16 +36,6 @@ import kotlinx.coroutines.flow.stateIn
 
 val LocalCodexSaveRelevanceLoader = staticCompositionLocalOf<CodexSaveRelevanceLoader?> { null }
 
-/**
- * Codex relevance for save surfaces, shared by every surface asking about the same posts and search.
- *
- * Requests are keyed by posts and search, so the hold menu, info sheet and one-tap save surfaces can observe
- * different posts at once. The saved library and its tag rarity are observed once and shared: each request only
- * rescores the retained snapshot when the library changes. A request stays warm for 5 s after its last collector leaves,
- * which carries the scores from the hold menu into the picker; the library stops 5 s after the last request.
- * [predicted] is the picture tagger's index for the saved library, whose tags count beside the provider's; [incoming]
- * answers what it knows about the posts being saved, read once when a request starts.
- */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CodexSaveRelevanceLoader(
     repository: CodexRepository,
@@ -64,7 +54,6 @@ class CodexSaveRelevanceLoader(
         .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = RETAIN_MS), replay = 1)
     private val requests = HashMap<Request, Lookup>()
 
-    /** Scores by Codex id for [posts] saved from [query]; collect it for as long as the surface shows. */
     fun observe(posts: List<Post>, query: Query?): Flow<Map<String, Double>> {
         val request = Request(posts.distinctBy(Post::id), query)
         return flow {
@@ -77,7 +66,6 @@ class CodexSaveRelevanceLoader(
         }
     }
 
-    /** The scores a live or recently closed request already has, so a surface can open on them. */
     fun latest(posts: List<Post>, query: Query?): Map<String, Double> = synchronized(requests) {
         requests[Request(posts.distinctBy(Post::id), query)]?.scores?.value.orEmpty()
     }
@@ -115,14 +103,12 @@ class CodexSaveRelevanceLoader(
 
     private data class Request(val posts: List<Post>, val query: Query?)
 
-    /** [scores] is null until the first scoring, so collectors never see a placeholder. */
     private class Lookup(val scope: CoroutineScope, val scores: StateFlow<Map<String, Double>?>) {
         var collectors = 0
         var expiry: Job? = null
     }
 }
 
-/** Keep the lookup subscribed for as long as a post's action surface is visible. */
 @Composable
 fun PreloadCodexSaveRelevance(post: Post, query: Query? = null) {
     val loader = LocalCodexSaveRelevanceLoader.current ?: return

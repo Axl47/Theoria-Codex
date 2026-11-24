@@ -26,16 +26,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 
-/**
- * Local-first tag suggestion, provider refresh, and trending orchestration for Search. A cached answer and a fetched
- * one resolve the request the same way and assemble from the same steps; a fetch only adds what providers return.
- */
 class SearchSuggestionCoordinator internal constructor(
     private val registry: SourceAdapterRegistry,
     private val tagSuggestionStore: TagSuggestionStore,
     private val clock: () -> Long,
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
-    /** Current per-tag search counts from Statistics, read on every keystroke. */
     private val searchCounts: () -> Map<SearchedTagKey, Long> = { emptyMap() },
 ) {
     private val lastTrendingRefreshAtBySource = java.util.concurrent.ConcurrentHashMap<SourceKey, Long>()
@@ -74,7 +69,6 @@ class SearchSuggestionCoordinator internal constructor(
         }
     }
 
-    /** Returns only local knowledge so the route can publish before its network debounce. */
     fun cachedAutocomplete(
         query: Query,
         sources: Set<SourceKey>,
@@ -90,7 +84,6 @@ class SearchSuggestionCoordinator internal constructor(
         }.copy(searchedTags = searchedTags(request, sources))
     }
 
-    /** History for the input's resolved scope; Unified runs only portable general tags, so it offers only those. */
     private fun searchedTags(request: AutocompleteRequest.Typed, sources: Set<SourceKey>): List<SearchTerm> =
         when (request) {
             is AutocompleteRequest.UnifiedTags -> rankSearchedTags(searchCounts(), sources, request.prefix,
@@ -99,7 +92,6 @@ class SearchSuggestionCoordinator internal constructor(
                 SEARCHED_TAG_SUGGESTION_LIMIT, request.scope::accepts)
         }
 
-    /** Resolves the input's scope against what the draft's source supports, and what kind of answer it needs. */
     private fun resolve(query: Query, selectedScope: FacetedSearchScope, input: String): AutocompleteRequest {
         val parsed = parseScopedInput(input)
         val supported = supportedSearchScopes(query.mode)
@@ -192,7 +184,6 @@ class SearchSuggestionCoordinator internal constructor(
         )
     }
 
-    /** Ranks the cached matches again as each source answers, publishing every update, and returns the last. */
     private suspend fun fetchUnified(
         input: String,
         request: AutocompleteRequest.UnifiedTags,
@@ -237,12 +228,10 @@ class SearchSuggestionCoordinator internal constructor(
             .map(FacetedTagSuggestion::toPortableLegacySuggestion)
     }
 
-    /** Where Unified reads a faceted source's general tags: everything, or its plain tag scope. */
     private fun FacetedSearchSourceAdapter.generalTagScope(): FacetedSearchScope? =
         FacetedSearchScope.All.takeIf { it in this.supportedSearchScopes }
             ?: this.supportedSearchScopes.firstOrNull { it.facet == SearchFacet.TAG && it.sourceNamespace in setOf(null, "tag") }
 
-    /** A source's tags for [prefix] from its provider, kept in the tag store; empty while a recent answer is fresh. */
     private suspend fun fetchTags(source: SourceKey, adapter: SourceAdapter?, prefix: String, limit: Int): List<TagSuggestion> {
         val fetched = fetchProviderAutocomplete(AutocompleteFetchKey(source, normalizeMatchToken(prefix), FacetedSearchScope.All)) {
             adapter?.autocompleteTags(prefix, limit).orEmpty()
@@ -251,7 +240,6 @@ class SearchSuggestionCoordinator internal constructor(
         return fetched
     }
 
-    /** A faceted source's suggestions in [scope] from its provider, kept in the tag store; empty while fresh. */
     private suspend fun fetchFaceted(
         source: SourceKey,
         adapter: FacetedSearchSourceAdapter,
@@ -315,7 +303,6 @@ class SearchSuggestionCoordinator internal constructor(
         }
     }
 
-    /** Refreshes stale sources' trending tags in the tag store, then answers like [cachedTrending]. */
     suspend fun fetchTrending(
         query: Query,
         sources: Set<SourceKey>,
@@ -351,7 +338,6 @@ class SearchSuggestionCoordinator internal constructor(
         is QueryMode.Source -> rankedTrending(mode.source, SOURCE_TRENDING_LIMIT)
     }
 
-    /** The source's current trending tags that match [prefix], offered alongside its autocomplete. */
     private fun trendingMatches(source: SourceKey, prefix: String): List<TagSuggestion> =
         rankedTrending(source, SOURCE_TRENDING_LIMIT).filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
 
@@ -376,19 +362,15 @@ class SearchSuggestionCoordinator internal constructor(
     }
 }
 
-/** What an autocomplete request needs, resolved once for both its cached and its fetched answer. */
 private sealed interface AutocompleteRequest {
-    /** Needs no suggestions: an input error, or a blank input with nothing featured. */
     data class Answered(val result: SearchAutocompleteResult) : AutocompleteRequest
 
-    /** A blank input in a faceted source's picked scope: that scope's featured tags. */
     data class Featured(
         val source: SourceKey,
         val adapter: FacetedSearchSourceAdapter,
         val scope: FacetedSearchScope,
     ) : AutocompleteRequest
 
-    /** Typed input; [scope] is the input's resolved scope and [prefix] the text to match. */
     sealed interface Typed : AutocompleteRequest {
         val scope: FacetedSearchScope
         val prefix: String
@@ -396,12 +378,10 @@ private sealed interface AutocompleteRequest {
 
     data class UnifiedTags(override val scope: FacetedSearchScope, override val prefix: String) : Typed
 
-    /** Typed input for the draft's one source. */
     sealed interface SourceRequest : Typed {
         val source: SourceKey
     }
 
-    /** [facetScope] is where the source's suggestions come from, or null when it offers neither [scope] nor All. */
     data class SourceFacets(
         override val scope: FacetedSearchScope,
         override val prefix: String,

@@ -11,7 +11,6 @@ enum class MediaStorageCategory {
 
 data class MediaStorageUsage(val category: MediaStorageCategory, val bytes: Long)
 
-/** Categories are disjoint stores (downloads live in the public Downloads folder); percentages share the complete managed-media total. */
 data class MediaStorageBreakdown(val categories: List<MediaStorageUsage>) {
     val totalBytes: Long = categories.sumOf(MediaStorageUsage::bytes)
 

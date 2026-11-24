@@ -13,10 +13,6 @@ private const val MAX_PENDING_EVENTS = 512
 private const val MAX_CRASH_FILES = 5
 private const val MAX_STACK_CHARS = 6_000
 
-/**
- * Private on-device failure log. Text is redacted before it reaches disk and both files are bounded, so the log
- * can stay on permanently. Events are appended on one background thread because failures are reported from the UI.
- */
 class DiagnosticLogStore(
     private val directory: File,
     private val now: () -> Long = System::currentTimeMillis,
@@ -29,7 +25,6 @@ class DiagnosticLogStore(
     private var repeats = 0
 
     override fun record(area: String, message: String, error: Throwable?) {
-        // Dropping during a flood keeps memory bounded; the earlier lines already show what went wrong.
         if (pending.incrementAndGet() > MAX_PENDING_EVENTS) {
             pending.decrementAndGet()
             return
@@ -63,7 +58,6 @@ class DiagnosticLogStore(
         }
     }
 
-    /** Runs on the crashing thread and blocks: the process is about to die, so nothing can be queued. */
     fun writeCrash(thread: Thread, error: Throwable) {
         if (!directory.isDirectory && !directory.mkdirs()) return
         val timestamp = now()
@@ -72,12 +66,10 @@ class DiagnosticLogStore(
         crashFiles().drop(MAX_CRASH_FILES).forEach(File::delete)
     }
 
-    /** Oldest line first, after every event recorded before this call has been written. */
     fun readEvents(): String = onWriter {
         listOf(previous, current).filter(File::isFile).joinToString(separator = "") { it.readText() }
     }
 
-    /** Newest report first. Runs on the writer so [clear] cannot delete a file partway through. */
     fun readCrashes(): List<String> = onWriter { crashFiles().map(File::readText) }
 
     fun clear() = onWriter {
@@ -92,7 +84,6 @@ class DiagnosticLogStore(
     private fun <T> onWriter(block: () -> T): T = writer.submit(Callable { block() }).get()
 }
 
-/** Keeps the stack of any crash, then hands over so Android still ends the process as usual. */
 fun installCrashCapture(store: DiagnosticLogStore) {
     val previous = Thread.getDefaultUncaughtExceptionHandler()
     Thread.setDefaultUncaughtExceptionHandler { thread, error ->

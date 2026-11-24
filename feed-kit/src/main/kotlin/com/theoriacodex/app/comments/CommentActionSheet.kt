@@ -24,10 +24,6 @@ import com.theoriacodex.app.ui.components.SourceImage
 import com.theoriacodex.domain.model.PostComment
 import com.theoriacodex.domain.model.SourceKey
 
-/**
- * What holding a comment offers: its text, and its [link] (null when the post has no page URL to build one on).
- * The author's name opens their profile when [author] says where it leads; every action closes the sheet.
- */
 @Composable
 internal fun CommentActionSheet(
     source: SourceKey,

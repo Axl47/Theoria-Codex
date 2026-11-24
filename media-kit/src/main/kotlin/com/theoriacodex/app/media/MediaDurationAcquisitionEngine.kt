@@ -42,7 +42,6 @@ class MediaDurationAcquisitionEngine(
         require(retryDelayMs > 0L) { "Duration acquisition retry delay must be positive" }
     }
 
-    /** Answers that need no network, so they never wait behind paced lookups. */
     override fun settleWithoutWork(post: Post): MediaDurationState? {
         return when (plan(post)) {
             is DurationAcquisitionPlan.Unsupported -> MediaDurationState.Unsupported(
@@ -52,7 +51,6 @@ class MediaDurationAcquisitionEngine(
         }
     }
 
-    /** The pacing wait sits outside the timeout, which only bounds time spent on the network. */
     override suspend fun acquire(post: Post): MediaDurationState {
         settleWithoutWork(post)?.let { return it }
         var result: MediaDurationState = retryable(MediaDurationFailureReason.RATE_LIMITED)

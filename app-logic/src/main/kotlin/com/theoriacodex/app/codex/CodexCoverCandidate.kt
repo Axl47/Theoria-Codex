@@ -3,7 +3,6 @@ package com.theoriacodex.app.codex
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 
-/** One way to draw a Codex cover; a cover is tried candidate by candidate until one loads. */
 sealed interface CodexCoverCandidate {
     data class LocalFile(val file: File, val cacheRevision: Long = 0L) : CodexCoverCandidate
 

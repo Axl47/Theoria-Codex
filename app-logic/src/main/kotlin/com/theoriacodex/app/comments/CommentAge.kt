@@ -7,10 +7,6 @@ private const val WEEK_MS = 7 * DAY_MS
 private const val MONTH_MS = 30 * DAY_MS
 private const val YEAR_MS = 365 * DAY_MS
 
-/**
- * How long ago a comment was posted, in the shortest form: "now", "5m", "3h", "3d", "2w", "4mo", "2y".
- * Null when the source gave no time.
- */
 fun commentAgeLabel(nowEpochMs: Long, createdAtEpochMs: Long?): String? {
     val elapsed = (nowEpochMs - (createdAtEpochMs ?: return null)).coerceAtLeast(0L)
     return when {

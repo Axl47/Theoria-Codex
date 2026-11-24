@@ -53,7 +53,6 @@ class OfflineMediaAcquisitionTest {
         val PNG_BYTES = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3)
     }
 
-    /** Answers every request itself; [length] may disagree with [bytes], as a truncated response does. */
     private class FakeServer(
         private val bytes: ByteArray = PNG_BYTES,
         private val length: Long = bytes.size.toLong(),

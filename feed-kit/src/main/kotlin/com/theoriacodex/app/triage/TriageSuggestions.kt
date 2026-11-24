@@ -18,17 +18,12 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Save targets for the deck's cards, by post. A post with no entry is still loading, which is not the same as
- * having no Codex to suggest.
- */
 @Stable
 internal class TriageSuggestions {
     private val loaded = mutableStateMapOf<PostId, SaveSuggestions>()
 
     operator fun get(post: PostId): SaveSuggestions? = loaded[post]
 
-    /** [post]'s targets once they load; null when they have not arrived in a few seconds. */
     suspend fun await(post: PostId): SaveSuggestions? =
         withTimeoutOrNull(SUGGESTIONS_WAIT_MS) { snapshotFlow { loaded[post] }.filterNotNull().first() }
 
@@ -41,10 +36,6 @@ internal class TriageSuggestions {
     }
 }
 
-/**
- * Loads save targets for [posts] (the current card and the next), so the next card's are usually ready when it
- * comes up; a post keeps its targets while it stays in [posts].
- */
 @Composable
 internal fun rememberTriageSuggestions(posts: List<Post>, query: Query?): TriageSuggestions {
     val quickSave = LocalQuickSave.current

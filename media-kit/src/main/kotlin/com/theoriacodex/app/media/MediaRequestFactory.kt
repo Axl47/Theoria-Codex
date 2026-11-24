@@ -44,11 +44,6 @@ object MediaRequestFactory {
     }
 }
 
-/**
- * Copies Coil's raw disk-cache entry for [url] to [destination] without decoding or networking. Entries are
- * keyed by the normalized URL that [MediaRequestFactory.imageRequest] loads. Never writes Coil metadata.
- * Returns false when no entry of 1..[maxBytes] bytes is cached.
- */
 @OptIn(ExperimentalCoilApi::class)
 fun copyCachedMediaBytes(
     context: Context,

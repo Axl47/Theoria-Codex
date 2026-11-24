@@ -18,10 +18,6 @@ import kotlinx.coroutines.flow.map
 private val noSearchDraft = flowOf<Query?>(null)
 internal val LocalSearchDraftSelection = staticCompositionLocalOf<Flow<Query?>> { noSearchDraft }
 
-/**
- * How tag sheets count posts per tag: [videoCount] answers from what is already known, [fetchVideoCounts] looks up
- * general tags it could not, and [fetchTermCounts] looks up typed tags by their full identity.
- */
 internal class PostTagCounts(
     val videoCount: (SourceKey, String) -> Int? = { _, _ -> null },
     val fetchVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
@@ -30,7 +26,6 @@ internal class PostTagCounts(
 
 internal val LocalPostTagCounts = staticCompositionLocalOf { PostTagCounts() }
 
-/** Edits and runs that tag sheets send to Search from any route; each edit takes the post its tag came from. */
 class PostTagSearchActions(
     val addInclude: (Post, SearchTerm) -> Boolean = { _, _ -> false },
     val addExclude: (Post, SearchTerm) -> Boolean = { _, _ -> false },
@@ -42,10 +37,6 @@ class PostTagSearchActions(
 
 val LocalPostTagSearchActions = staticCompositionLocalOf { PostTagSearchActions() }
 
-/**
- * The active profile's saved single tags, so every tag sheet marks them, and how holding a tag saves ([add]) or
- * removes it. [add] is null where tags cannot be saved.
- */
 class PostTagSavedTags(
     val saved: Flow<Set<Pair<SourceKey, String>>> = flowOf(emptySet()),
     val add: ((SourceKey, String) -> Unit)? = null,
@@ -54,10 +45,6 @@ class PostTagSavedTags(
 
 internal val LocalPostTagSavedTags = staticCompositionLocalOf { PostTagSavedTags() }
 
-/**
- * Every route's tag sheets share the Search draft, tag counts, saved tags and Search edits through this, so screens
- * pass none of them.
- */
 @Composable
 fun PostTagContextProvider(
     state: StateFlow<SearchUiState>?,

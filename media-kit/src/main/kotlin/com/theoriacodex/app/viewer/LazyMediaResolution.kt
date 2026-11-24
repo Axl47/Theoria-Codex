@@ -24,7 +24,6 @@ private val REFRESHABLE_REMOTE_MEDIA_SOURCES = setOf(
     SourceKey.RULE34GEN,
 )
 
-/** Custom sources are booru families (and extension sources); their media links are refreshed like the built-in boorus'. */
 fun SourceKey.hasRefreshableRemoteMedia(): Boolean = this in REFRESHABLE_REMOTE_MEDIA_SOURCES || isCustom
 
 fun requiresLazyMediaResolution(post: Post): Boolean {
@@ -32,7 +31,6 @@ fun requiresLazyMediaResolution(post: Post): Boolean {
         addAll(post.media)
         post.full?.let { add(it) }
     }
-    // An episode's streams were fetched as it opened; links that expire come back through the Viewer's media recovery.
     if (mediaRefs.any { ref -> ref.streams.isNotEmpty() }) return false
     if (
         post.id.source.hasRefreshableRemoteMedia() &&
@@ -40,7 +38,6 @@ fun requiresLazyMediaResolution(post: Post): Boolean {
     ) {
         return true
     }
-    // A gallery whose listing named no pages gets them from its lookup, whatever its source.
     if (post.galleryLengthUnknown && mediaRefs.none { ref -> !ref.url.isNullOrBlank() }) return true
     if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
     if (post.id.source == SourceKey.NHENTAI &&

@@ -17,7 +17,6 @@ import org.junit.Test
 class TrailTriageFeedTest {
     private val posts = (1..4).map { testPost(sourcePostId = "p$it") }
 
-    /** Answers each [TrailPager.next] with the next scripted page, a null one failing. */
     private class ScriptedPager(vararg pages: TrailPage?) : TrailPager {
         private val pages = ArrayDeque(pages.toList())
         var calls = 0
@@ -27,7 +26,6 @@ class TrailTriageFeedTest {
         }
     }
 
-    /** Collects every snapshot [this] emits, starting now. */
     private fun TestScope.collected(feed: TriageFeed): List<TriageFeedSnapshot> =
         mutableListOf<TriageFeedSnapshot>().also { seen -> backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { feed.snapshots.toList(seen) } }
 

@@ -18,40 +18,33 @@ import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
 
 sealed interface SearchStateChange {
-    /** [retrySource] is the one source a page request retries; a root request and a plain next page have none. */
     data class BeginRequest(
         val request: SearchRequest,
         val retrySource: SourceKey? = null,
     ) : SearchStateChange
 
-    /** A root request's complete answer. */
     data class RootResult(
         val requestId: Long,
         val result: SearchExecutionResult,
     ) : SearchStateChange
 
-    /** Results that arrived while their request keeps running; paging waits for the request to finish. */
     data class PartialResult(
         val requestId: Long,
         val result: SearchExecutionResult.Success,
     ) : SearchStateChange
 
-    /** The last run's first page of the search now rerunning, to show until the fresh one arrives. */
     data class ShowCachedFirstPage(
         val requestId: Long,
         val posts: List<Post>,
     ) : SearchStateChange
 
-    /** The user moved away from the top of a cached first page. */
     data object CachedFirstPageScrolled : SearchStateChange
 
-    /** A page request's answer: the next page, or one source retried. */
     data class PageResult(
         val requestId: Long,
         val result: SearchPageResult,
     ) : SearchStateChange
 
-    /** The request ended without an answer: it threw or ran out of time. */
     data class RequestFailed(
         val requestId: Long,
         val message: String,
@@ -84,7 +77,6 @@ sealed interface SearchStateChange {
 }
 
 object SearchStateReducer {
-    /** Builds restored state: the stored search is the draft, the applied search and the settled one. */
     fun restore(initialization: SearchInitialization, appliedHash: String): SearchUiState = SearchUiState(
         query = SearchQueryUiState(
             draft = initialization.query,
@@ -101,7 +93,6 @@ object SearchStateReducer {
         ),
         content = SearchContentUiState(hasExecutedSearch = initialization.hasExecutedSearch),
         restoration = SearchRestorationUiState.Restoring,
-        // The stored search was settled when it was left, so the next one can step back to it.
         history = SearchQueryHistory(
             current = SearchHistoryEntry(initialization.query, initialization.sourceScope)
                 .takeIf { initialization.hasExecutedSearch },
@@ -165,8 +156,6 @@ object SearchStateReducer {
     ): SearchReduction {
         val restored = state.restoration as? SearchRestorationUiState.Restored
             ?: return SearchReduction(state)
-        // A keep-live request may be left undone on a grid showing posts, so it must not replace an open
-        // request that has to move the grid, such as the startup restore or a reset to top.
         if (keepLiveGrid && restored.scrollState != null && !restored.keepLiveGrid) return SearchReduction(state)
         return SearchReduction(
             state = state.copy(
@@ -211,8 +200,6 @@ object SearchStateReducer {
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = action.scrollOffsetHint.coerceAtLeast(0),
         )
-        // Opening a post shows the user has taken over the grid, like a drag: a pending restore must not jump
-        // the grid to an old anchor after they return from the Viewer.
         return SearchReduction(
             state = state.withScrollRequestClosed(),
             effects = listOf(
@@ -234,7 +221,6 @@ object SearchStateReducer {
                 content = state.content.copy(error = null),
                 execution = state.execution.copy(
                     request = change.request,
-                    // A new search replaces the results, so nothing continues from them.
                     continuation = state.execution.continuation.takeIf { page },
                     pageRetrySource = change.retrySource.takeIf { page },
                 ),
@@ -274,7 +260,6 @@ object SearchStateReducer {
             AppliedSearch(result.query, result.sourceScope, result.executionKey), result.posts, result.statuses,
             canLoadMore = false,
         )
-        // The applied query may be a normalized form of what was asked.
         return SearchReduction(published.withRequest(request.copy(shownQuery = result.query)))
     }
 
@@ -287,7 +272,6 @@ object SearchStateReducer {
         val published = state.withPublishedResults(
             AppliedSearch(request.query, request.sourceScope, request.executionKey), change.posts, emptyList(),
             canLoadMore = false,
-            // Nothing has answered yet, so this is not yet a search the mode has run.
             recordForMode = false,
         )
         return SearchReduction(
@@ -301,17 +285,12 @@ object SearchStateReducer {
         return SearchReduction(state.withRequest(request.copy(cachedFirstPage = CachedFirstPage.SCROLLED)))
     }
 
-    /**
-     * Someone who has scrolled the cached page keeps their place: its posts stay put, even one the refresh shows is a
-     * copy of another, and new ones go below unless they copy a post above.
-     */
     private fun SearchRequest.refreshed(shown: List<Post>, fresh: List<Post>): List<Post> {
         if (cachedFirstPage != CachedFirstPage.SCROLLED) return fresh
         val freshById = fresh.associateBy(Post::id)
         return shown.map { post -> freshById[post.id]?.withPictureHashOf(post) ?: post }.plusDistinctFiles(fresh)
     }
 
-    /** [this] fresh post, with [cached]'s picture hash when its own missed the listing's wait for the same preview. */
     private fun Post.withPictureHashOf(cached: Post): Post =
         if (pictureHash == null && preview == cached.preview && cached.pictureHash != null) {
             copy(pictureHash = cached.pictureHash)
@@ -335,7 +314,6 @@ object SearchStateReducer {
         ),
     )
 
-    /** A draft still equal to what was asked follows the applied query, which may be a normalized form of it. */
     private fun SearchQueryUiState.withApplied(
         applied: AppliedSearch,
         submittedQuery: Query?,
@@ -355,7 +333,6 @@ object SearchStateReducer {
     private fun pageResult(state: SearchUiState, change: SearchStateChange.PageResult): SearchReduction {
         val request = state.activeRequest(change.requestId) ?: return SearchReduction(state)
         val result = change.result
-        // A page belongs to the results on screen only while they are still the search it was asked for.
         if (result.executionKey != request.executionKey || state.query.appliedQueryHash != request.executionKey) {
             return cancelRequest(state, request.id)
         }
@@ -376,7 +353,6 @@ object SearchStateReducer {
                 ),
             )
 
-            // The continuation and the retried source stay, so Retry repeats this page.
             is SearchPageResult.Failure -> SearchReduction(
                 state.withFailedRequest(request, result.message, result.statuses, null, state.execution.continuation),
             )
@@ -385,14 +361,12 @@ object SearchStateReducer {
 
     private fun requestFailed(state: SearchUiState, change: SearchStateChange.RequestFailed): SearchReduction {
         val request = state.activeRequest(change.requestId) ?: return SearchReduction(state)
-        // A search that never answered still becomes the applied one, so Retry repeats it and not the one before.
         val attempted = AppliedSearch(request.query, request.sourceScope, request.executionKey).takeUnless { request.isPage }
         return SearchReduction(
             state.withFailedRequest(request, change.message, emptyList(), attempted, state.execution.continuation),
         )
     }
 
-    /** [applied] is the search the failure belongs to; null leaves the results and their search as they are. */
     private fun SearchUiState.withFailedRequest(
         request: SearchRequest,
         message: String,
@@ -426,7 +400,6 @@ object SearchStateReducer {
     }
 }
 
-/** The search some results or a failure belong to. */
 private data class AppliedSearch(
     val query: Query,
     val sourceScope: SearchSourceScope,

@@ -8,7 +8,6 @@ import java.io.InputStream
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/** Each request is cancelled when the last animation consumer leaves. */
 internal class PixivUgoiraTransport(private val client: OkHttpClient) {
     suspend fun fetchMetadata(postId: String, accessToken: String): TextResponse {
         val url = "${PIXIV_API_BASE}/v1/ugoira/metadata?illust_id=$postId"
@@ -72,5 +71,4 @@ internal class PixivUgoiraTransport(private val client: OkHttpClient) {
 private const val PIXIV_API_BASE = "https://app-api.pixiv.net"
 private const val UGOIRA_DOWNLOAD_BUFFER_BYTES = 64 * 1024
 
-/** An archive past [UGOIRA_MAX_COMPRESSED_BYTES] or a sample's budget: downloading it again gives the same answer. */
 internal class UgoiraArchiveTooLarge : UnreadableMedia("Pixiv ugoira archive exceeds compressed-byte limit")

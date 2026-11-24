@@ -272,7 +272,6 @@ class OfflineMediaCoordinatorTest {
         return OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { _, _, file -> file.writeText("bytes") }) to store
     }
 
-    /** Starts a preparation that has loaded its posts and is past its last cancellable point; completing the result lets it start. */
     private suspend fun loadedPreparation(coordinator: OfflineMediaCoordinator): CompletableDeferred<Unit> {
         val loaded = CompletableDeferred<Unit>()
         val proceed = CompletableDeferred<Unit>()

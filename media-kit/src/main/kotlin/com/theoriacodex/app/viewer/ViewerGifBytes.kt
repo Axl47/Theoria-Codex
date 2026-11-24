@@ -17,20 +17,14 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
-/**
- * Raw GIF cache shared by lookahead, Movie decoding and Coil decoder fallback. Each acquisition is
- * filled into a `.tmp` staging file first, so prefetch can warm an entry without holding it in memory.
- */
 internal class ViewerGifByteStore(private val directory: File) {
     private val locks = List(16) { Mutex() }
     private val writeMutex = Mutex()
     private var generation = 0L
 
-    /** Returns the cached bytes for [key], filling the entry once through [fill] on a miss. */
     suspend fun load(key: String, fill: suspend (File) -> Unit): ByteArray =
         withEntry(key) { destination -> read(destination) ?: store(destination, fill, File::readBytes) }
 
-    /** Ensures [key] is cached and returns its length without reading the file into memory. */
     suspend fun warm(key: String, fill: suspend (File) -> Unit): Long = withEntry(key) { destination ->
         if (isFresh(destination)) destination.length() else store(destination, fill, File::length)
     }
@@ -40,7 +34,6 @@ internal class ViewerGifByteStore(private val directory: File) {
         locks[(name.hashCode() and Int.MAX_VALUE) % locks.size].withLock { block(File(directory, name)) }
     }
 
-    /** Publishes a filled staging file unless the cache was cleared meanwhile; [result] reads it first. */
     private suspend fun <T> store(destination: File, fill: suspend (File) -> Unit, result: (File) -> T): T {
         val admittedGeneration = writeMutex.withLock { generation }
         directory.mkdirs()
@@ -81,7 +74,6 @@ internal class ViewerGifByteStore(private val directory: File) {
 
     private fun read(file: File): ByteArray? = if (isFresh(file)) runCatching { file.readBytes() }.getOrNull() else null
 
-    /** Published entries; in-flight staging files belong to their acquisition until it finishes. */
     private fun entries(): List<File> =
         directory.listFiles().orEmpty().filter { it.isFile && !it.name.endsWith(TEMPORARY_SUFFIX) }
 
@@ -113,16 +105,13 @@ suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, locati
     return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
 }
 
-/** Prefetch path: caches the GIF on disk and reports its size without loading it into memory. */
 suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {
     val url = normalizeMediaUrl(source, location) ?: location
     return gifByteStore(context).warm("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
 }
 
 private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: String, destination: File) {
-    // Feed images may already have warmed Coil's raw disk entry.
     if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES)) return
-    // The connection's read timeout catches stalls; this bound must leave room for large files on slow links.
     withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
         downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, context.appHttpClients.downloads)
     }
@@ -143,6 +132,5 @@ private fun gifByteStore(context: Context): ViewerGifByteStore = synchronized(gi
 }
 
 private val gifStores = linkedMapOf<File, ViewerGifByteStore>()
-/** The largest GIF the Viewer downloads, caches or decodes. */
 const val MAX_VIEWER_GIF_BYTES = 64L * 1024L * 1024L
 private const val GIF_DOWNLOAD_TIMEOUT_MS = 120_000L

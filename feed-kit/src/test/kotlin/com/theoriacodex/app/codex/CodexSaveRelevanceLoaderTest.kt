@@ -76,10 +76,8 @@ class CodexSaveRelevanceLoaderTest {
 
     private fun post(id: String, tag: String): Post = testPost(sourcePostId = id, canonicalTags = listOf(tag))
 
-    /** A Codex holding a post tagged [tag] beside an unrelated one, so [tag] is rare enough in the library to count. */
     private fun saved(tag: String) = listOf(post("saved", tag), post("other", "bird"))
 
-    /** The score when one of the Codex's two posts matches, weighed by the library's rarity as the loader weighs it. */
     private val match = saved("cat").let { library ->
         CodexSaveRelevance(listOf(post("one", "cat"))).score(library, TagRarity.of(library))
     }

@@ -10,12 +10,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 
-/**
- * Collects one-shot route effects only while the destination can safely host UI work.
- *
- * The latest callback is used without restarting collection, so recomposition cannot lose a
- * buffered effect or make a route repeat navigation merely because its shell callbacks changed.
- */
 @Composable
 fun <Effect : Any> CollectRouteEffects(
     effects: Flow<Effect>,

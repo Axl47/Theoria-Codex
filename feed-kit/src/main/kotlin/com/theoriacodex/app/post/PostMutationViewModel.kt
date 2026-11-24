@@ -21,7 +21,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Captured destinations and commit callbacks survive Activity recreation without a second membership state. */
 class PostMutationViewModel(
     private val settings: SettingsRepository,
     private val toggle: suspend (RecommendationProfile, Post, List<String>) -> LikeToggleOutcome,
@@ -37,7 +36,6 @@ class PostMutationViewModel(
     fun like(profile: RecommendationProfile, post: Post, onCommitted: (LikeToggleOutcome) -> Unit = {}) {
         scope.launch {
             commands.withLock {
-                // Membership can emit before toggle returns. Retain the post through shelf setup.
                 mutablePendingLikePostIds.value = mapOf(profile.profileId to setOf(post.id))
                 try {
                     val result = runCatchingPreservingCancellation {
@@ -54,7 +52,6 @@ class PostMutationViewModel(
         }
     }
 
-    /** Saves or removes one tag, or an "or" group when [tags] holds several; [name] labels a new group. */
     fun favorite(profileId: String, source: SourceKey, tags: List<String>, add: Boolean, name: String? = null) {
         updateFavorites {
             if (add) {
@@ -67,7 +64,6 @@ class PostMutationViewModel(
         }
     }
 
-    /** Names a saved group, or clears its name when [name] is blank. */
     fun renameFavorite(profileId: String, source: SourceKey, tags: List<String>, name: String) {
         updateFavorites { settings.renameFavoriteTag(profileId, source, tags, name) }
     }

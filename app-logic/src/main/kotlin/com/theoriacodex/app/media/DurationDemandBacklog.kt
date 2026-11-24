@@ -1,6 +1,5 @@
 package com.theoriacodex.app.media
 
-/** Owned demand outlives a full work queue. Priority lanes avoid rescanning a large library per completion. */
 class DurationDemandBacklog {
     private val entries = mutableMapOf<MediaDurationKey, MutableMap<String, DurationDemand>>()
     private val lanes = DurationDemandPriority.entries.associateWith { linkedSetOf<MediaDurationKey>() }

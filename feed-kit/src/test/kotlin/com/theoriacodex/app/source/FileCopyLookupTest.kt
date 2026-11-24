@@ -92,7 +92,6 @@ class FileCopyLookupTest {
         assertFalse(FileCopyLookup(registry(SourceKey.DANBOORU to { _ -> null })).canFind(seed))
     }
 
-    /** A registry whose available sources answer file-hash lookups with [answers]; [unavailable] is registered but off. */
     private fun registry(
         vararg answers: Pair<SourceKey, suspend (String) -> Post?>,
         unavailable: Pair<SourceKey, suspend (String) -> Post?>? = null,
@@ -110,7 +109,6 @@ class FileCopyLookupTest {
     }
 }
 
-/** A source whose only working calls are the file-hash lookup and resolving [resolved] posts. */
 private class LookupAdapter(
     override val sourceKey: SourceKey,
     private val resolved: Map<PostId, Post>,

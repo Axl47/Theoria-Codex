@@ -47,7 +47,6 @@ class PostTagDraftBindingTest {
         val chip = compose.tagChip("cat")
         fun state(value: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value)
         chip.assert(state("Excluded"))
-        // A refused edit changes nothing, and the opposing entry goes only once the new one is in.
         compose.runOnIdle { accept = false }
         chip.performCustomAction("Include cat in Search")
         chip.assert(state("Excluded"))

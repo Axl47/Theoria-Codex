@@ -11,7 +11,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.isActive
 
-/** Local animation time; pausing never includes the elapsed time spent off screen. */
 internal class LoopingAnimationClock(private val durationMs: Long) {
     private var position = 0.0
     private var completed = false
@@ -44,7 +43,6 @@ internal class LoopingAnimationClock(private val durationMs: Long) {
             val next = position + elapsedMs * rate
             val availableEnd = availableUntilMs.coerceIn(1L, durationMs)
             if (availableEnd < durationMs) {
-                // Hold at the decoded boundary; a seek beyond it waits at its requested position.
                 position = maxOf(position, minOf(next, (availableEnd - 1).toDouble()))
                 return false
             }
@@ -57,7 +55,6 @@ internal class LoopingAnimationClock(private val durationMs: Long) {
     }
 }
 
-/** Only the image/timeline consumes frame changes; route state owns playback commands. */
 class AnimationPlaybackState(durationMs: Long) {
     private val clock = LoopingAnimationClock(durationMs)
     var positionMs by mutableLongStateOf(0L)
@@ -115,7 +112,6 @@ internal suspend fun animatePlaybackWhileStarted(
     }
 }
 
-/** Exclusive frame ends allow seeking and late frames to jump directly to the right image. */
 internal fun animationFrameIndexAt(positionMs: Long, frameEndsMs: LongArray): Int {
     require(frameEndsMs.isNotEmpty())
     val found = frameEndsMs.binarySearch(positionMs.coerceAtLeast(0L))

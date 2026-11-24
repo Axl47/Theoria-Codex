@@ -63,7 +63,6 @@ class FeedImagePreloadTest {
     @Test fun `a plain post grid preloads the card images just past what it shows`() {
         val posts = List(40) { testPost(sourcePostId = "p$it") }
         compose.setContent {
-            // Recents' grid holds headings among its posts; any grid built on AdaptivePostGrid preloads like every feed.
             AdaptivePostGrid(posts, rememberLazyStaggeredGridState(), Modifier.width(360.dp).height(400.dp)) {
                 items(posts.size) { Box(Modifier.height(100.dp)) }
             }

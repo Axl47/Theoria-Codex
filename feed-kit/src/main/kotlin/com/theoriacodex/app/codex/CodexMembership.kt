@@ -10,13 +10,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import com.theoriacodex.domain.model.PostId
 
-/**
- * Posts in a Codex people made themselves (Likes aside), provided once for the app so every post menu can mark them.
- * A [State] keeps updates from recomposing the provider; only the menus that read it change.
- */
 val LocalCodexPostIds = staticCompositionLocalOf<State<Set<PostId>>> { mutableStateOf(emptySet()) }
 
-/** Marks a post that is already in a Codex, readable on both light and dark surfaces. */
 @Composable
 @ReadOnlyComposable
 fun codexSavedColor(): Color =

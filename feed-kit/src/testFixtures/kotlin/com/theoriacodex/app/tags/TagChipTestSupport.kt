@@ -7,11 +7,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 
-/** The tappable chip for [name]; the same name can also appear as plain text in the query tray. */
 fun SemanticsNodeInteractionsProvider.tagChip(name: String): SemanticsNodeInteraction =
     onNode(hasText(name) and hasClickAction())
 
-/** The scrolling tag list, told apart from the query tray that also scrolls. */
 fun SemanticsNodeInteractionsProvider.tagList(): SemanticsNodeInteraction = onNode(hasScrollToIndexAction())
 
 internal fun SemanticsNodeInteraction.performCustomAction(label: String) {

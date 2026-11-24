@@ -11,12 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Spells a Unified query's tags as a source that matches only exact tags lists them, reusing successful lookups.
- * Preparation belongs to that source's request only.
- */
 internal class UnifiedQueryPreparation(
-    /** True for a tag the source has already reported a count for, which is spelled as the source spells it. */
     private val isKnownTag: (SourceKey, String) -> Boolean = { _, _ -> false },
     private val clock: () -> Long,
 ) {

@@ -22,7 +22,6 @@ data class ExternalPostDeepLink(
     val sourceLabel: String,
     val postId: String,
     val initialMediaIndex: Int = 0,
-    /** The comment the link points at, read from its fragment; the Viewer opens on it. */
     val comment: CommentTarget? = null,
 )
 
@@ -37,7 +36,6 @@ fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
     return parseExternalPostDeepLink(uri.toString())
 }
 
-/** A post link; a `#comment` fragment on it becomes [ExternalPostDeepLink.comment]. */
 fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
     val uri = parseExternalUri(rawUrl) ?: return null
     return parseKnownPostDeepLink(uri)?.withCommentOf(uri)
@@ -286,7 +284,6 @@ private data class ParsedExternalUri(
     val host: String,
     val encodedPath: String,
     val queryParameters: Map<String, String>,
-    /** Without the `#`, decoded; null when the link has none. */
     val fragment: String?,
 )
 
@@ -308,10 +305,6 @@ private val HITOMI_GALLERY_PATH = Regex(
 )
 private val HITOMI_ARTIST_PATH = Regex("^/artist/([^/]+)-all\\.html/?$")
 
-/**
- * A post link on a user-added site, matched by host (a `www.` twin counts) and install path. Each
- * family's post page: Gelbooru 0.2 `index.php?page=post&s=view&id=N`, Danbooru `/posts/N`.
- */
 fun parseCustomSitePostDeepLink(rawUrl: String, sites: List<CustomSiteSummary>): ExternalPostDeepLink? {
     val uri = parseExternalUri(rawUrl) ?: return null
     return sites.firstNotNullOfOrNull { site ->
@@ -325,10 +318,8 @@ fun parseCustomSitePostDeepLink(rawUrl: String, sites: List<CustomSiteSummary>):
     }
 }
 
-/** Where a shared post that failed to open should send the person, on an added site they can fix. */
 enum class SharedPostFix { ADD_KEY, VERIFY }
 
-/** Null for a failure Settings → Sites can't help with, which only the message can explain. */
 fun sharedPostFix(source: SourceKey, error: Throwable): SharedPostFix? {
     if (!source.isCustom) return null
     val failure = error as? SourceAdapterException ?: return null
@@ -339,7 +330,6 @@ fun sharedPostFix(source: SourceKey, error: Throwable): SharedPostFix? {
     }
 }
 
-/** The host of a link shaped like a booru post page on a site that isn't added yet, for setup. */
 fun unaddedBooruPostHost(rawUrl: String, sites: List<CustomSiteSummary>): String? {
     val uri = parseExternalUri(rawUrl)?.takeIf { it.scheme == "https" } ?: return null
     if (sites.any { siteHost(runCatching { URI(it.baseUrl).host }.getOrNull().orEmpty()) == siteHost(uri.host) }) return null

@@ -9,7 +9,6 @@ import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.SourceKey
 
-/** A source choice shown by its icon, named for accessibility. */
 @Composable
 fun SourceFilterChip(source: SourceKey, selected: Boolean, onClick: () -> Unit) {
     val name = source.displayName()

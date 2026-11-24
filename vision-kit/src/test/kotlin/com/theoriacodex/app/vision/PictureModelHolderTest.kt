@@ -90,7 +90,6 @@ class PictureModelHolderTest {
         holder.release()
         assertEquals(1, counting.closes.get())
 
-        // The cancelled idle timer must not close the model a second time.
         advanceTimeBy(IDLE + 1)
         runCurrent()
         assertEquals(1, counting.closes.get())

@@ -23,7 +23,6 @@ class CodexSaveRelevanceTest {
         val generic = collection(200, listOf("common", "popular"))
         assertTrue(relevance.score(specialized) > relevance.score(generic))
         assertEquals(0.95, relevance.score(specialized), 0.000001)
-        // Every incoming tag on all 200 posts: full density but for the three posts every Codex is padded by.
         assertEquals(0.05 * 400.0 / 203 / 2, relevance.score(generic), 0.000001)
         assertEquals(relevance.score(specialized), relevance.score(collection(200, listOf("yellow"))), 0.000001)
     }
@@ -49,7 +48,6 @@ class CodexSaveRelevanceTest {
         val relevance = CodexSaveRelevance(listOf(incoming, incoming))
         val one = post("one", listOf("blue_hair", "CAT", "cat"))
         val two = post("two", listOf("cat"))
-        // Three matches of two tags over two posts, padded by three: duplicates count once.
         assertEquals(3.0 / 5 / 2, relevance.score(listOf(one, two, one)), 0.000001)
         assertEquals(2.0 / 4 / 2, relevance.score(listOf(one.copy(id = PostId(SourceKey.PIXIV, "one")))), 0.000001)
         assertTrue(relevance.score(collection(10, listOf("blue_hair", "cat"))) >
@@ -90,7 +88,6 @@ class CodexSaveRelevanceTest {
 
         assertTrue(scores.getValue("miku") > scores.getValue("generic"))
         assertTrue(scores.getValue("miku") > scores.getValue("lucky"))
-        // Without the library's rarity every tag weighs alike, and the generic Codex wins on two shared tags.
         assertTrue(relevance.score(library.getValue("generic")) > relevance.score(library.getValue("miku")))
     }
 
@@ -109,7 +106,6 @@ class CodexSaveRelevanceTest {
         assertTrue(relevance.hasSignals)
         assertTrue(relevance.score(untaggedFoxes, rarity) > 0.0)
         assertEquals(0.0, relevance.score(untaggedCats, rarity), 0.0)
-        // Below the evidence threshold a prediction says nothing.
         assertFalse(CodexSaveRelevance(listOf(incoming), predicted = PredictedTagIndex(mapOf(incoming.id to guess("fox_ears", 0.4f)))).hasSignals)
     }
 

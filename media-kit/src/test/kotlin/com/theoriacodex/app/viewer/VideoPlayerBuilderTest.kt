@@ -18,7 +18,6 @@ class VideoPlayerBuilderTest {
     @Test
     fun `feed preview players skip platform diagnostics and Viewer players keep them`() {
         val infrastructure = VideoPlaybackInfrastructure(RuntimeEnvironment.getApplication())
-        // ExoPlayer.Builder has no getter for the setting; the field is package-private in Media3 1.11.1.
         val setting = ExoPlayer.Builder::class.java.getDeclaredField("usePlatformDiagnostics")
             .apply { isAccessible = true }
         fun diagnostics(profile: VideoPlaybackProfile) = setting.getBoolean(infrastructure.playerBuilder(profile))

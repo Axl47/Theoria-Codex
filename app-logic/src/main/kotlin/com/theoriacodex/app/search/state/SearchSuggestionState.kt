@@ -2,7 +2,6 @@ package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.SearchAutocompleteResult
 
-/** Pure state transitions for the two-stage local/remote suggestion pipeline. */
 fun SearchUiState.withAutocompleteResult(result: SearchAutocompleteResult): SearchUiState = copy(
     query = query.copy(selectedScope = result.selectedScope),
     suggestions = suggestions.copy(

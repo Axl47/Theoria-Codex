@@ -73,11 +73,6 @@ private const val HIGHLIGHT_ALPHA = 0.18f
 private const val HIGHLIGHT_SHRINK_MS = 250
 private const val HOLD_FILL_DELAY_MS = 80L
 
-/**
- * How the comments section is shown: folded or not, its sort order, which the header's button cycles, and
- * what a comment's actions lead to. [highlightKey] names the item ([commentItemKey], [replyItemKey]) tinted
- * to show where a link led; clearing it fades the tint out.
- */
 class CommentsView(
     val collapsed: Boolean,
     val onToggleCollapsed: () -> Unit,
@@ -91,11 +86,6 @@ class CommentsView(
     fun authorDestination(author: CreatorProfile?) = commentAuthorDestination(author, creatorBrowsingSources)
 }
 
-/**
- * A post's comments as items of the info sheet's list: a header with the count that folds the rest away,
- * each comment in the chosen order, with its replies opened beneath it, and under each list a progress row, a
- * retry, or "More". Adds nothing when the post's state says there is no section ([PostCommentsState.hasSection]).
- */
 fun LazyListScope.commentsSection(
     post: Post,
     state: PostCommentsState,
@@ -122,7 +112,6 @@ private fun CommentsHeader(count: CommentCount?, view: CommentsView) {
     }
 }
 
-/** One top-level comment, then its replies and their footer while they are opened. */
 private fun LazyListScope.commentWithReplies(
     post: Post,
     state: PostCommentsState,
@@ -149,7 +138,6 @@ private fun LazyListScope.commentWithReplies(
     listFooter("replies-footer:${comment.id}", replies, "More", REPLY_INDENT) { actions.loadMoreReplies(post, comment) }
 }
 
-/** What follows a list: progress while a page loads, a retry after a failed one, or the button for the next page. */
 private fun LazyListScope.listFooter(key: String, list: CommentList, moreLabel: String, indent: Dp, onLoadNext: () -> Unit) {
     if (list.status == CommentLoadStatus.Loaded && !list.hasMore) return
     item(key = key, contentType = "comments-footer") {
@@ -169,10 +157,6 @@ private fun LazyListScope.listFooter(key: String, list: CommentList, moreLabel: 
     }
 }
 
-/**
- * One comment: avatar beside the author, age and text, then its stamp and the button that opens its replies.
- * Holding it opens its actions; tapping the avatar or name opens the author's profile. [parentId] is set for a reply.
- */
 @Composable
 private fun CommentRow(
     post: Post,
@@ -193,7 +177,6 @@ private fun CommentRow(
         showingActions = true
     }
     val author = view.authorDestination(comment.author)
-    // Holding the avatar or name opens the actions too, since a tap there already belongs to the profile.
     val authorTap = author?.let {
         Modifier.combinedClickable(
             role = Role.Button,
@@ -240,12 +223,6 @@ private fun CommentRow(
     }
 }
 
-/**
- * The row's tint and hold gesture. [linked] tints the row and fades out when it ends, to show where a link led.
- * Holding fills the row from the finger, covering it as the hold completes and runs [onLongPress]; the fill stays
- * while [selected] (its actions are open) and shrinks back on an early release or when they close.
- * Screen readers get the hold as a long-click named [label]. Taps are left alone.
- */
 @Composable
 private fun Modifier.commentRowHighlight(linked: Boolean, selected: Boolean, label: String, onLongPress: () -> Unit): Modifier {
     val tint = MaterialTheme.colorScheme.primary
@@ -265,7 +242,6 @@ private fun Modifier.commentRowHighlight(linked: Boolean, selected: Boolean, lab
                 onPress = { at ->
                     origin = at
                     held = false
-                    // A short delay keeps a scroll's touch-down from flashing the fill.
                     val grow = scope.launch {
                         delay(HOLD_FILL_DELAY_MS)
                         fill.animateTo(1f, tween((holdMs - HOLD_FILL_DELAY_MS.toInt()).coerceAtLeast(1), easing = LinearEasing))
@@ -284,7 +260,6 @@ private fun Modifier.commentRowHighlight(linked: Boolean, selected: Boolean, lab
         .drawBehind { drawRowHighlight(tint, link, fill.value, origin) }
 }
 
-/** Draws the link tint at [link] strength and the hold fill as a circle from [origin] grown to [fill] of the row. */
 private fun DrawScope.drawRowHighlight(tint: Color, link: Float, fill: Float, origin: Offset) {
     val outset = HIGHLIGHT_OUTSET.toPx()
     val bounds = RoundRect(-outset, -outset, size.width + outset, size.height + outset, CornerRadius(2 * outset))

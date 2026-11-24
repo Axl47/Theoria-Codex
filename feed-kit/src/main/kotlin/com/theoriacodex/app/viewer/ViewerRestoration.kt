@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
-/** Exact bounded launch order captures sorting/filtering without rerunning a changing feed. */
 data class ViewerRestorationRequest(
     val session: ViewerSessionIdentity,
     val selectedPostId: PostId?,

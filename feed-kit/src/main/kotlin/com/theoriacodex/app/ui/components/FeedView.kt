@@ -15,10 +15,6 @@ import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
-/**
- * The liked, saved and watched posts a feed's hide filters read, and the likes still being written. Compared by value,
- * so a screen may build one each composition.
- */
 data class FeedMarks(
     val liked: Set<PostId> = emptySet(),
     val saved: Set<PostId> = emptySet(),
@@ -30,18 +26,12 @@ data class FeedMarks(
     }
 }
 
-/**
- * Keeps or drops each of a feed's posts on its own, given the lengths known so far. Feeds refilter when it changes,
- * compared by equality, so implementations are data classes of everything they read.
- */
 fun interface FeedPostFilter {
     fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post>
 
-    /** This filter with [range] as its date range; a feed's own filter, which reads none, stays as it is. */
     fun withDateRange(range: DateRange?): FeedPostFilter = this
 }
 
-/** Search's filters with the marks they read; the filter every feed uses unless it has its own. */
 private data class VisibilityPostFilter(
     val filters: SearchVisibilityFilters,
     val liked: Set<PostId>,
@@ -57,12 +47,6 @@ private data class VisibilityPostFilter(
     override fun withDateRange(range: DateRange?): FeedPostFilter = copy(filters = filters.copy(dateRange = range))
 }
 
-/**
- * What a feed's grid shows: its posts after the length step and its filters ([visiblePosts]), with any related
- * shelf placed among them ([related]). [filters] is the feed's media and mark filters, which the related shelf and
- * the Viewer apply too; [durations] is the length step over the feed's posts; [postFilter] is the filter step itself,
- * which the triage deck applies to the posts the feed gets later.
- */
 class FeedView(
     val filters: SearchVisibilityFilters,
     val durations: DurationFilterMetadata,
@@ -72,14 +56,6 @@ class FeedView(
     val postFilter: FeedPostFilter,
 )
 
-/**
- * Search, For You, Creator and Codex's one feed pipeline over [posts]: known lengths, then [filters] and [marks]
- * (or a feed's own [postFilter]), then the related shelf from [relatedState]. [retainKey] names the feed, so each
- * step keeps its last result while the Viewer covers it.
- *
- * [revealInOrder] keeps shown cards in place while lengths arrive; a feed sorted by length turns it off, since its
- * order must follow the lengths.
- */
 @Composable
 fun rememberFeedView(
     retainKey: String,

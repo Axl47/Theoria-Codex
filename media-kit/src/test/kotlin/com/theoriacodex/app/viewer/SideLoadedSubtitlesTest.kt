@@ -29,7 +29,6 @@ class SideLoadedSubtitlesTest {
         assertEquals(MimeTypes.APPLICATION_TTML, sniff("<?xml version=\"1.0\"?><tt xmlns=\"http://www.w3.org/ns/ttml\"/>"))
         assertEquals(MimeTypes.APPLICATION_SUBRIP, sniff("1\r\n00:00:01,000 --> 00:00:02,000\r\nHi"))
         assertEquals(MimeTypes.APPLICATION_TTML, sniff("<tt xmlns=\"http://www.w3.org/ns/ttml\"/>"))
-        // Java's UTF-16 encoder writes a big-endian byte order mark.
         assertEquals(MimeTypes.TEXT_VTT, sniff("WEBVTT\n", Charsets.UTF_16))
         assertEquals(MimeTypes.TEXT_SSA, sniff("\uFEFF[Script Info]", Charsets.UTF_16LE))
         assertNull(sniff("<html><body>Not found</body></html>"))

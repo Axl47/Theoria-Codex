@@ -4,7 +4,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.domain.model.VideoVariant
 
-/** Select a rendition without changing gallery identity or canonical download metadata. */
 fun ImageRef.withVideoQuality(quality: VideoQuality, metered: Boolean, height: Int? = null): ImageRef {
     if (!localPath.isNullOrBlank() || videoVariants.isEmpty()) return this
     val variants = videoVariants.filter { it.url.isNotBlank() }.distinctBy(VideoVariant::url)
@@ -22,10 +21,6 @@ fun ImageRef.withVideoQuality(quality: VideoQuality, metered: Boolean, height: I
     return selected?.let { copy(url = it.url, mime = it.mime ?: mime) } ?: this
 }
 
-/**
- * Feed cards are small, so a metered network always previews the Data saver rendition regardless of the
- * Viewer's quality. Cards still autoplay together; unmetered feeds keep the post's default stream.
- */
 fun ImageRef.feedPreviewLocation(metered: Boolean): String? {
     val selected = if (metered) withVideoQuality(VideoQuality.DATA_SAVER, metered = true) else this
     return selected.localPath ?: selected.url

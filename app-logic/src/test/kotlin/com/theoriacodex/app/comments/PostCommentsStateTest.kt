@@ -19,7 +19,6 @@ class PostCommentsStateTest {
         assertEquals(CommentCount.Some, commentCount(CommentHint.Some, null))
         assertNull(commentCount(CommentHint.None, null))
         assertNull(commentCount(null, null))
-        // A request still in flight or failed has told us nothing new.
         assertEquals(CommentCount.Some, commentCount(CommentHint.Some, PostCommentsState()))
     }
 

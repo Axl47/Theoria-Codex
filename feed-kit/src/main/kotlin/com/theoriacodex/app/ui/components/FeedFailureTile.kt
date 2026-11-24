@@ -7,11 +7,6 @@ import com.theoriacodex.app.search.OFFLINE_FEED_MESSAGE
 import com.theoriacodex.app.search.OFFLINE_FEED_TITLE
 import com.theoriacodex.app.ui.LocalNetworkOnline
 
-/**
- * A feed's failure card, which says the device is offline instead of [message] while it is and a retry could help.
- * Every feed retries by itself once the network returns. An [accountProblem] (an account or verification failure)
- * is never shown as offline, since reconnecting won't fix it.
- */
 @Composable
 fun FeedFailureTile(
     message: String,

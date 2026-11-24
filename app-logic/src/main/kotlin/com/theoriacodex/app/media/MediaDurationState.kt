@@ -76,7 +76,6 @@ sealed interface MediaDurationState {
     }
 }
 
-/** No lookup has decided this duration yet: none was asked for, or one is still running. */
 val MediaDurationState?.isUndecided: Boolean
     get() = this == null || this == MediaDurationState.Pending
 
@@ -98,7 +97,6 @@ enum class MediaDurationFailureReason {
     PROVIDER_FAILURE,
     TRANSPORT_FAILURE,
     TIMEOUT,
-    /** The host pushed back on our request rate, so the media itself may be fine. */
     RATE_LIMITED,
 }
 
@@ -119,7 +117,6 @@ data class DurationDemand(
     }
 }
 
-/** What a post without a feed-supplied duration offers for looking one up. */
 data class DurationAcquisitionFacts(
     val hasAuthoritativeFullVideo: Boolean,
     val hasProviderDurationResolver: Boolean,
