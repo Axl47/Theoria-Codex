@@ -64,8 +64,8 @@
   "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesDedicatedSourceView.kt": 4,
   "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesSearchBar.kt": 2,
   "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabScreen.kt": 21,
-  "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt": 56,
-  "feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabViewModelTest.kt": 13,
+  "feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt": 48,
+  "feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabViewModelTest.kt": 10,
   "media-kit/src/main/kotlin/com/theoriacodex/app/media/OfflineMediaCoordinator.kt": 11,
   "media-kit/src/test/kotlin/com/theoriacodex/app/media/OfflineMediaCoordinatorTest.kt": 1,
   "media-kit/src/test/kotlin/com/theoriacodex/app/media/OfflineQueueRecoveryTest.kt": 2
