@@ -53,7 +53,7 @@ class OfflineQueueRecoveryTest {
             reopened.recoverPendingJobs()
             reopened.jobs.first { it[AUTOMATIC_OFFLINE_OWNER]?.isRunning == false }
             assertEquals(listOf("a", "b", "c"), acquired)
-            assertEquals(3, reopenedStore.snapshot.value.postCount)
+            assertEquals(3, reopenedStore.snapshot.value!!.postCount)
         } finally { firstScope.cancel(); secondScope.cancel(); directory.deleteRecursively() }
     }
 
@@ -132,7 +132,7 @@ class OfflineQueueRecoveryTest {
                 parent.writeText("storage became unavailable")
                 val result = runCatching { if (clearAll) owner.clear() else owner.remove("codex:keep") }
                 org.junit.Assert.assertTrue(result.exceptionOrNull() is java.io.IOException)
-                assertEquals(1, media.snapshot.value.postCount)
+                assertEquals(1, media.snapshot.value!!.postCount)
             } finally { scope.cancel(); directory.deleteRecursively() }
         }
     }

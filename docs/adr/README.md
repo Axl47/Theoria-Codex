@@ -154,3 +154,4 @@ and link the record that replaces it.
 | [0209](0209-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |
 | [0210](0210-host-test-compose-waits.md) | Host-test Compose waits drain the main looper |
 | [0211](0211-viewer-owns-keep-screen-on.md) | The Viewer owns keep-screen-on |
+| [0212](0212-startup-offline-catalog-and-full-display.md) | Startup does not wait for the offline catalog, and the launch reports full display from the restored tab |

@@ -56,17 +56,21 @@ import kotlinx.coroutines.launch
 internal fun HomePager(shell: TheoriaShell) {
     val pagerState = shell.navigation.pagerState
     val forYouGrid = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT)?.grid == true
-    HorizontalPager(
-        state = pagerState,
-        modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = tabSwipeEnabled(pagerState.settledPage, forYouGrid),
-        flingBehavior = topLevelPagerFling(pagerState),
-    ) { page ->
-        when (TopLevelDestination.entries[page]) {
-            TopLevelDestination.Search -> SearchDestination(shell)
-            TopLevelDestination.ForYou -> ForYouDestination(shell)
-            TopLevelDestination.Library -> LibraryDestination(shell)
-            TopLevelDestination.Series -> SeriesTabDestination(shell)
+    ReportsLaunchContent(launchTab = {
+        TopLevelDestination.entries[pagerState.settledPage].takeIf { shell.navReady && it.route == shell.navigation.homeTabRoute }
+    }) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = tabSwipeEnabled(pagerState.settledPage, forYouGrid),
+            flingBehavior = topLevelPagerFling(pagerState),
+        ) { page ->
+            when (TopLevelDestination.entries[page]) {
+                TopLevelDestination.Search -> SearchDestination(shell)
+                TopLevelDestination.ForYou -> ForYouDestination(shell)
+                TopLevelDestination.Library -> LibraryDestination(shell)
+                TopLevelDestination.Series -> SeriesTabDestination(shell)
+            }
         }
     }
 }

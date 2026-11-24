@@ -649,16 +649,12 @@ internal class DefaultTheoriaAppContainer(
         val statisticsReady = async { statisticsStore.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
         val contentReady = async { openProfileLibrary(contentDatabase) }
-        // The offline catalog scan is independent of profile stores; its snapshot must be warm before jobs resume.
-        val offlineCatalogReady = async { offlineStore.load() }
         settingsReady.await()
         statisticsReady.await()
         uiRestoreReady.await()
         contentReady.await()
         profileBackup.recoverPendingRestore()
         profileDeletion.recoverPendingDeletion()
-        offlineCatalogReady.await()
-        // Registers the saved offline queue before any screen can add to it; its jobs wait on sourceReadiness.
         offlineMedia.recoverPendingJobs()
         sourceReadiness.open()
         if (series != null) {
