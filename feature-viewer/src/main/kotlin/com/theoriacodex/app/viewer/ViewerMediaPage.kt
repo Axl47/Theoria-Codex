@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
@@ -129,9 +130,7 @@ internal fun ViewerMediaPage(
             translationY = current.panY
         }
     }
-    // A video whose stream is still resolving shows its poster as a still; it keeps the gap so it doesn't shift on arrival.
-    val playsMotion = animated || (mediaIndex == 0 && post.awaitsVideoStream)
-    val topGap = if (playsMotion && !layout.edgeToEdge) VIEWER_ANIMATED_TOP_GAP else 0.dp
+    val topGap = viewerMediaTopGap(post, mediaIndex, animated, layout)
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
     val transformAspectRatio = if (controls.fillScreen) null else viewerMediaAspectRatio(post, media)
     val overlayAspectRatio = if (controls.fillScreen) null else viewerAspectRatio(post)
@@ -190,8 +189,14 @@ private class ViewerMediaInteractions {
 
 private const val VIEWER_HOLD_PLAYBACK_RATE = 2f
 
-/** Space above animated and video media in portrait, clear of the top bar. */
-private val VIEWER_ANIMATED_TOP_GAP = 40.dp
+/**
+ * Space above animated and video media in portrait, clear of the top bar; stills fill the page. A video whose stream is
+ * still resolving shows its poster as a still, and keeps the gap so it doesn't shift when the stream arrives.
+ */
+private fun viewerMediaTopGap(post: Post, mediaIndex: Int, animated: Boolean, layout: ViewerMediaLayout): Dp {
+    val playsMotion = animated || (mediaIndex == 0 && post.awaitsVideoStream)
+    return if (playsMotion && !layout.edgeToEdge) 40.dp else 0.dp
+}
 
 @Composable
 private fun ViewerHoldSpeedLabel(visible: Boolean, modifier: Modifier) {
