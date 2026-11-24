@@ -1,9 +1,5 @@
-package com.theoriacodex.app.fixtures
+package com.theoriacodex.app.recommend
 
-import com.theoriacodex.app.recommend.ForYouInterests
-import com.theoriacodex.app.recommend.TagAffinityInputs
-import com.theoriacodex.app.recommend.affinity
-import com.theoriacodex.app.recommend.tagAffinityInputs
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.LikedPost

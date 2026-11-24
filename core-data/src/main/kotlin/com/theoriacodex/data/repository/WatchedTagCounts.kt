@@ -9,22 +9,22 @@ internal fun LifetimeStatistics.recordWatchedTags(
     tags: Set<String>,
     limit: Int = WATCHED_TAGS_PER_SOURCE,
 ): LifetimeStatistics {
-    val names = tags.mapNotNullTo(linkedSetOf()) { tag -> tag.trim().takeIf(String::isNotBlank) }
-    if (names.isEmpty()) return this
+    val keys = tags.mapNotNullTo(linkedSetOf()) { tag -> tag.trim().takeIf(String::isNotBlank)?.let { StatisticsTagKey(source, it) } }
+    if (keys.isEmpty()) return this
     val counts = watchedByTag.toMutableMap()
+    val (seen, unseen) = keys.partition(counts::containsKey)
+    seen.forEach { key -> counts[key] = counts.getValue(key).saturatingAdd(1L) }
     var size = counts.keys.count { it.source == source }
     var floor = watchedTagFloors[source] ?: 0L
-    for (name in names) {
-        val key = StatisticsTagKey(source, name)
-        val count = counts[key]
-        if (count == null && size >= limit) {
-            floor = counts.filterKeys { it.source == source }.values.min()
+    for (key in unseen) {
+        if (size >= limit) {
+            floor = counts.entries.asSequence().filter { it.key.source == source }.minOf { it.value }
             val before = counts.size
-            counts.entries.removeAll { (key, count) -> key.source == source && count == floor }
+            counts.entries.removeAll { (evicted, count) -> evicted.source == source && count == floor }
             size -= before - counts.size
         }
-        if (count == null) size++
-        counts[key] = (count ?: floor).saturatingAdd(1L)
+        counts[key] = floor.saturatingAdd(1L)
+        size++
     }
     return copy(watchedByTag = counts, watchedTagFloors = if (floor > 0L) watchedTagFloors + (source to floor) else watchedTagFloors)
 }
@@ -39,7 +39,7 @@ internal fun LifetimeStatistics.capWatchedTags(limit: Int = WATCHED_TAGS_PER_SOU
     val floors = watchedTagFloors.filterValues { it > 0L }.toMutableMap()
     sizes.filterValues { it > limit }.keys.forEach { source ->
         val floor = floors[source] ?: 0L
-        val above = watchedByTag.filter { (key, count) -> key.source == source && count > floor }.values
+        val above = watchedByTag.entries.mapNotNull { (key, count) -> count.takeIf { key.source == source && count > floor } }
         floors[source] = above.sortedDescending()[limit]
     }
     return copy(watchedByTag = watchedByTag.filter { (key, count) -> count > (floors[key.source] ?: 0L) }, watchedTagFloors = floors)

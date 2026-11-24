@@ -184,6 +184,18 @@ class TagAffinityTest {
     }
 
     @Test
+    fun `a count inherited from the floor never makes a tag universal or a picture tag proven`() {
+        val floored = statistics(watched = 300, "tree" to 155).copy(watchedTagFloors = mapOf(source to 30L))
+        val inputs = tagAffinityInputs(emptyList(), emptyList(), listOf("tree"), emptyList(), floored)
+        val pictures = PictureEvidence(keptByTag = mapOf("fox" to 3.0), postsByTag = mapOf("fox" to 3), kept = 30)
+
+        assertEquals(125.0 / 300, inputs.watchedShare(source, "tree")!!, 1e-9)
+        assertFalse(inputs.affinity(source, "tree").universal)
+        assertFalse(inputs.copy(pictures = pictures).pictureAffinity(source, "fox", "fox").proven)
+        assertTrue(inputs.copy(pictures = pictures, watchedTagFloors = emptyMap()).pictureAffinity(source, "fox", "fox").proven)
+    }
+
+    @Test
     fun `a dropped tag kept once stays too rare to judge, so it can still be guessed`() {
         val kept = List(30) { index -> like(listOfNotNull("tree", "moth".takeIf { index == 0 }), "$index") }
         val dropped = statistics(watched = 300, "tree" to 280).copy(watchedTagFloors = mapOf(source to 30L))
