@@ -5,7 +5,7 @@ description: Publish a curated Theoria Codex prerelease from the latest main. Us
 
 # Theoria Codex Release
 
-Publish exactly one prerelease from the newest `origin/main`. The only human step is approving the version and notes. That approval authorizes everything below it, through publication, so do not ask again.
+Publish exactly one prerelease from the newest `origin/main`. You draft the version and notes and get them approved; that is the only human step. Then the `theoria-release` T3 Code workflow ([theoria-release.ts](theoria-release.ts)) carries the release to the end, and you relay how it ended. Approval authorizes everything after it, through publication, so do not ask again.
 
 ## Release Contract
 
@@ -22,7 +22,7 @@ Only `vX.Y.Z` tags are app releases. Other tags, such as `models-vision-N` (mode
 
 ## Who Does What
 
-Keep the version choice, the release notes, and any failure fix on the main model. Hand the reading to Haiku subagents: in step 2, when there are too many changes since the tag to read yourself, give each subagent a slice of the commits and have it return the user-visible changes it found, with SHAs; when a run fails, have one read the failed job logs and report each failing task or test with its first error line.
+Keep the version choice and the release notes on the main model. When there are too many changes since the tag to read yourself, give Haiku subagents a slice of the commits each and have them return the user-visible changes they found, with SHAs. The workflow makes the release commit, runs Release, reruns runner trouble once, reads failed logs with Haiku, and checks the published prerelease.
 
 ## Versioning Policy
 
@@ -55,25 +55,34 @@ Run `git fetch origin --tags --prune`, then compare the checkout with `origin/ma
 
 Change nothing yet.
 
-1. Find the most recent `vX.Y.Z` tag, read the `[Unreleased]` section of root `CHANGELOG.md`, and review user-visible changes since the tag. Treat pending notes as drafting input, not a substitute for reviewing the changes.
-2. Read relevant feature behavior, not only Conventional Commit subjects. Exclude internal refactors, test-only work, and implementation detail unless users notice its effect.
-3. Propose the next version and write the notes.
-4. Present them and ask for approval. This is the only question in the whole flow.
+1. If `origin/main` already declares a version that has `release-notes/vX.Y.Z.md` but no `vX.Y.Z` tag, an approved release failed and its fix has since landed. Skip drafting and go to step 3 with that version and those notes.
+2. Record the `origin/main` SHA you draft against. The workflow refuses to release if main moves after it.
+3. Find the most recent `vX.Y.Z` tag, read the `[Unreleased]` section of root `CHANGELOG.md`, and review user-visible changes since the tag. Treat pending notes as drafting input, not a substitute for reviewing the changes.
+4. Read relevant feature behavior, not only Conventional Commit subjects. Exclude internal refactors, test-only work, and implementation detail unless users notice its effect.
+5. Propose the next version and write the notes. If startup or the main journeys changed since the tag, say the baseline profile may be stale; refreshing it (`./gradlew :app:generateReleaseBaselineProfile` on an API 36 or 37 emulator) goes through a PR before the release, not in it.
+6. Present them and ask for approval. This is the only question in the whole flow.
 
-## 3. Publish After Approval
+## 3. Start The Workflow
 
-1. Update `versionName` and `versionCode` in `app/build.gradle.kts`, and add `release-notes/vX.Y.Z.md` with the approved text.
-2. Move the released entries from `[Unreleased]` into a dated `[X.Y.Z]` section directly below the now-empty `[Unreleased]` section of root `CHANGELOG.md`.
-3. If startup or the main journeys changed since the last `vX.Y.Z` tag and a supported API 36 or 37 emulator is free, refresh the baseline profile with `ANDROID_SERIAL=<emulator-serial> ./gradlew :app:generateReleaseBaselineProfile`. Otherwise skip it and say so.
-4. Run `python3 scripts/release_gate.py`. Fix any problem it reports.
-5. Commit only those release files as `chore(release): prepare vX.Y.Z` and push the commit straight to `main`. A release commit needs no PR.
-6. Run `gh workflow run release.yml --ref main`, find the new run, and confirm its `headSha` is that commit.
-7. Monitor the run to completion. Every push to `main` is already proven by the Main workflow: the pre-PR check, the R8 release builds, and emulator tests on Android 16 and 17, each recorded when it passes. Release accepts those results (a release-only commit reuses its parent's) and just signs, builds, and publishes, in about 6 minutes. Any result still missing, for example because Main is still running, runs inside the Release itself, so expect about 15 minutes then. It creates the tag and publishes only if all of it passes.
-8. Confirm the prerelease exists, is not a draft, uses the expected tag and notes, and contains `theoria-codex-main.apk`.
+Write the approved notes to a temporary file, then from the checkout:
 
-## When The Run Fails
+```sh
+input=$(jq -nc --arg repo "$(git rev-parse --show-toplevel)" --arg base "<drafted SHA>" \
+  --arg version "X.Y.Z" --rawfile notes <notes file> \
+  '{repo: $repo, base: $base, version: $version, notes: $notes}')
+t3 workflow start theoria-release --key "vX.Y.Z/$(date +%s)" --input "$input" --json
+```
 
-No tag exists until the run succeeds, so a failure never uses up the version.
+- If T3 says workflows are off, ask the user to turn on Settings → Labs → Workflows. If it doesn't know `theoria-release`, link `~/.t3/workflows/theoria-release.ts` to the main checkout's copy of this skill's `theoria-release.ts` and start again.
+- Add `dryRun: true` to rehearse: the run makes and gates the release commit, returns its diff, and pushes nothing.
 
-- **Emulator or runner trouble** (emulator offline or failing to boot, a failed SDK download): run `gh run rerun <run-id> --failed` once. Jobs that passed are kept.
-- **A real failure** (a failing test, or a release acceptance error): fix it through a PR, then dispatch Release again on the new `main` with the same version and notes. The fix's Main run proves it; dispatching before that finishes is fine, the missing pieces just run inside the Release.
+The workflow writes `versionName`, `versionCode`, and `release-notes/vX.Y.Z.md`, moves `[Unreleased]` under a dated `[X.Y.Z]` heading in `CHANGELOG.md`, runs `scripts/release_gate.py`, and pushes `chore(release): prepare vX.Y.Z` straight to `main` from a worktree of its own, so your checkout stays as it is. It then dispatches Release, which signs, builds, and publishes in about 6 minutes, or about 15 when a Main result is still missing and runs inside it. Last, it checks that the prerelease is not a draft, has the tag on the release commit, has the approved notes, and has `theoria-codex-main.apk`.
+
+Wait until `t3 workflow show <run> --json` reports `.run.status` as `completed`, `stopped`, `cancelled`, or `paused`: poll it from a background command and wait on that with the tool built for it. Then report the release URL, or the reason the run gives.
+
+## When The Run Doesn't Complete
+
+No tag exists until Release succeeds, so a failure never uses up the version.
+
+- **Stopped:** the reason says what to do. Runner or emulator trouble was already rerun once; another failure there can be retried by starting the workflow again. A real failure (a failing test, a release acceptance error) needs a fix through a PR; once it is on `main`, run this skill again, and step 2.1 picks the release back up. If main moved before the release commit, draft again.
+- **Paused:** a step hit an error, such as GitHub being unreachable, and retries on its own after 5, 20, and 80 minutes. Read the failing step with `t3 workflow show <run>`, fix the cause, and `t3 workflow resume <run>`.
