@@ -58,6 +58,7 @@ import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.storage.closeDataStores
+import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
@@ -80,6 +81,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -110,9 +112,10 @@ class JourneyAppContainer(
     val database = TheoriaRoomDatabase.create(appContext, storageDirectory.resolve("journey.db").absolutePath)
     private val profileWriteGuard = ProfileLibraryWriteGuard()
     val content = RoomCodexLikesRepository(database, writeGuard = profileWriteGuard)
-    val settings = DataStoreSettingsRepository(storageDirectory, ownerScope, profileWriteGuard = profileWriteGuard)
-    private val restore = DataStoreUiRestoreRepository(storageDirectory, ownerScope)
-    private val statistics = DataStoreStatisticsRepository(storageDirectory, ownerScope)
+    private val storeScope = newDataStoreScope()
+    val settings = DataStoreSettingsRepository(storageDirectory, storeScope, profileWriteGuard = profileWriteGuard)
+    private val restore = DataStoreUiRestoreRepository(storageDirectory, storeScope)
+    private val statistics = DataStoreStatisticsRepository(storageDirectory, storeScope)
     private val durations = RoomMediaDurationRepository(database)
     private val accounts = JourneyAccounts(registry.availableSources())
     private val siteProfiles = InMemorySiteProfileRepository()
@@ -222,10 +225,14 @@ class JourneyAppContainer(
     }
     /** Await DataStore ownership release before another graph opens the same fixture files. */
     suspend fun shutdown() = withContext(Dispatchers.IO) {
-        features.mediaDurationCoordinator.close()
-        tags.close()
-        ownerScope.closeDataStores()
-        database.close()
+        try {
+            features.mediaDurationCoordinator.close()
+            tags.close()
+            ownerJob.cancelAndJoin()
+            storeScope.closeDataStores()
+        } finally {
+            database.close()
+        }
     }
 
     override fun close() {

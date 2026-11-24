@@ -12,6 +12,7 @@ DataStore allows one active store per file and releases that claim only when the
 - Closing registers a completion handler on the scope's job, cancels the job, and waits for that handler. `Job.join()` is not enough: it returns once the job's state reads completed, while the job's completion handlers, DataStore's file release among them, still run afterwards on the thread that completed it. Handlers run in registration order and DataStore registers its release when the store is created, so the helper's handler fires only after the release has returned.
 - The wait runs on `Dispatchers.IO` under `NonCancellable`, so it finishes even when the caller is being cancelled, and so a `runTest` caller's virtual clock cannot expire it early.
 - The wait is bounded at `DATASTORE_CLOSE_TIMEOUT` (5 s). A store that does not release in time is an error, not a silent pass, since the next open of that file would fail anyway with a less useful message. When the block already failed, the timeout is attached to that failure as suppressed so the original cause stays first.
+- A store scope hosts only stores. The repositories take their scope with no default, so every caller names the owner that closes it; a container whose scope also runs other work gives its stores a separate `newDataStoreScope()` and closes that after the other work has stopped.
 - The application's process-lifetime store scope is never closed and stays outside this rule.
 
 ## Consequences

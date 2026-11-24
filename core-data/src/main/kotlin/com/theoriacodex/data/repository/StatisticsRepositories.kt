@@ -1,6 +1,5 @@
 package com.theoriacodex.data.repository
 
-import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.AsynchronousStore
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.JsonDataStore
@@ -400,7 +399,7 @@ class DataStoreStatisticsRepository private constructor(
 ) : StatisticsRepository by CellStatisticsRepository(store, clock), AsynchronousStore by store {
     constructor(
         baseDirectory: File,
-        scope: CoroutineScope = newDataStoreScope(),
+        scope: CoroutineScope,
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         clock: Clock = Clock.systemDefaultZone(),
     ) : this(
