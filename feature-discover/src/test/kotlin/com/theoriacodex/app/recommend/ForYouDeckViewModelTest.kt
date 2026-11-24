@@ -9,6 +9,7 @@ import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.data.repository.ForYouVerdictRepository
 import com.theoriacodex.data.repository.InMemoryForYouVerdictRepository
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -466,6 +467,20 @@ class ForYouDeckViewModelTest {
         assertTrue(next.posts.isEmpty())
         next.startOver()
         assertEquals(listOf("a-0-0", "a-0-1", "a-0-2", "a-0-3"), next.posts.map { it.id.sourcePostId })
+    }
+
+    @Test fun `Start over after a failed skip read does not read the skips back`() = runTest {
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("a", 0, 0).id, ForYouVerdictKind.SKIPPED, 1, null))
+        var down = true
+        val flaky = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int) =
+                if (down) error("down") else verdicts.skippedSince(profileId, sinceEpochMs, limit)
+        }
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, flaky)).also { it.synchronize(deckEnvironment()) }
+        assertEquals("a-0-0", owner.current.id.sourcePostId)
+        down = false
+        owner.startOver()
+        assertEquals("a-0-0", owner.current.id.sourcePostId)
     }
 
     @Test fun `a session's skips stay out of a refreshed Mix`() {

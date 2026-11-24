@@ -254,6 +254,8 @@ class ForYouDeckViewModel(
     fun startOver() {
         seen.clear()
         recentSkips = emptySet()
+        // Counts as read, so this Mix does not read the skips back.
+        skipsReadFor = inputs?.profileId
         rebuild()
     }
 
@@ -294,14 +296,16 @@ class ForYouDeckViewModel(
     }
 
     /**
-     * Reads the posts [profileId] skipped in the last [SKIP_MEMORY_MS] into [recentSkips]. A read that fails, or takes
-     * longer than [SKIP_READ_TIMEOUT_MS], leaves them out of this Mix rather than hold its first card back, and is
-     * tried again by the next Mix.
+     * Reads the posts [profileId] skipped in the last [SKIP_MEMORY_MS] into [recentSkips], after the swipes still being
+     * logged. A read that fails, or takes longer than [SKIP_READ_TIMEOUT_MS], leaves them out of this Mix rather than
+     * hold its first card back, and is tried again by the next Mix.
      */
     private suspend fun readRecentSkips(profileId: String) {
         val since = wiring.clock() - SKIP_MEMORY_MS
+        // Only the wait is timed: a database query that stalls cannot be cancelled.
+        val read = workScope.async { verdictWrites.withLock { wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT) } }
         val skips = withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) {
-            runCatchingPreservingCancellation { wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT) }
+            runCatchingPreservingCancellation { read.await() }
                 .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
                 .getOrNull()
         } ?: return
