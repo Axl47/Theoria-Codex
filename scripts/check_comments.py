@@ -24,13 +24,14 @@ SOURCE_SUFFIXES = (".kt", ".java")
 # Comments a tool or a licence requires, so they are allowed anywhere and never counted:
 # - `noinspection`: Android lint's only in-source suppression for a single statement.
 # - `@formatter:off` / `@formatter:on`: IDE formatter fences around hand-aligned code.
-# - `// Derived from <project> (<url>), <licence>; see <file>`: the notice Apache 2.0 requires on files
-#   adapted from Mihon and Aniyomi (extension-host).
+# - `// Derived from Mihon|Aniyomi (<url>), Apache License 2.0; ...`: the notice Apache 2.0 requires on
+#   extension-host files adapted from those projects, matched in full.
 # Detekt suppressions are `@Suppress` annotations, not comments. Generated code lives under build/, which
 # git does not track, so it needs no exception.
 ALLOWED_DIRECTIVE = re.compile(
-    r"//\s*noinspection\s+\w[\w ,]*"
-    r"|// Derived from .+\(https?://\S+\), .*\bLicen[cs]e\b.*"
+    r"//\s*noinspection\s+\w+(\s*,\s*\w+)*"
+    r"|// Derived from (Mihon|Aniyomi) \(https://github\.com/\w+/\w+\), Apache License 2\.0;"
+    r" see LICENSE-APACHE-2\.0\.txt in this module\."
     r"|//\s*@formatter:(on|off)"
     r"|/\*\s*@formatter:(on|off)\s*\*/"
 )
@@ -159,7 +160,7 @@ def source_files() -> list[pathlib.Path]:
 
 
 def current_counts() -> dict[str, int]:
-    counts = {str(path): len(counted_comments(path)) for path in source_files()}
+    counts = {path.as_posix(): len(counted_comments(path)) for path in source_files()}
     return {path: count for path, count in sorted(counts.items()) if count}
 
 
@@ -169,7 +170,9 @@ def read_baseline() -> dict[str, int]:
 
 def baseline_at(revision: str) -> dict[str, int] | None:
     """The baseline as committed at [revision], or None before the ratchet existed there."""
-    shown = subprocess.run(["git", "show", f"{revision}:{BASELINE}"], capture_output=True, text=True)
+    commit = ["git", "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}"]
+    subprocess.run(commit, check=True, stdout=subprocess.DEVNULL)
+    shown = subprocess.run(["git", "show", f"{revision}:{BASELINE.as_posix()}"], capture_output=True, text=True)
     return json.loads(shown.stdout) if shown.returncode == 0 else None
 
 
@@ -196,7 +199,8 @@ def check(
             )
         elif found < allowed:
             problems.append(
-                f"{path}: {found} comments, baseline allows {allowed}. Lower it: python3 scripts/check_comments.py --update"
+                f"{path}: {found} comments, baseline allows {allowed}. "
+                "Lower it: python3 scripts/check_comments.py --update"
             )
     return problems
 
