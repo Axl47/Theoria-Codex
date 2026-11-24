@@ -6,6 +6,8 @@ import androidx.lifecycle.LifecycleOwner
 import com.theoriacodex.app.backup.AutoBackupWorkflow
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import java.util.Collections
+import java.util.WeakHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -29,7 +31,10 @@ internal class AppBackgroundObserver(
     }
 }
 
+private val observedContainers = Collections.newSetFromMap(WeakHashMap<TheoriaAppContainer, Boolean>())
+
 internal fun TheoriaAppContainer.observeAppBackground(processLifecycle: Lifecycle) {
+    if (!observedContainers.add(this)) return
     processLifecycle.addObserver(
         AppBackgroundObserver(features.appUsageTracker, data::flushPendingWrites, workflows.autoBackup, applicationScope),
     )
