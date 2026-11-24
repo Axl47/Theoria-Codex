@@ -97,7 +97,7 @@ private fun BackupSheet(includeRecents: Boolean, onIncludeRecents: (Boolean) -> 
 
 private const val BACK_UP_LABEL = "Back up profiles"
 
-/** Daily backup to a folder; compact because it is checked rarely and only needs attention on failure. */
+/** Daily backup to a folder, under its own "Daily backup" heading; compact because it is checked rarely and only needs attention on failure. */
 @Composable
 fun AutoBackupControls(
     status: AutoBackupStatus,
@@ -107,7 +107,7 @@ fun AutoBackupControls(
 ) {
     if (!status.enabled) {
         OutlinedButton(onClick = onChooseFolder, modifier = Modifier.fillMaxWidth()) {
-            Text("Back up daily to a folder")
+            Text("Choose folder")
         }
         return
     }

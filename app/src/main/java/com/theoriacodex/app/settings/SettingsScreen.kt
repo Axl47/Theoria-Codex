@@ -478,6 +478,11 @@ private fun BackupPage(backup: SettingsBackupEntry, onBack: () -> Unit) {
         SettingsGroup(null) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { backup.controls() }
         }
+        backup.daily?.let { daily ->
+            SettingsGroup("Daily backup") {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { daily() }
+            }
+        }
     }
 }
 
