@@ -9,7 +9,7 @@ class SoleJob(private val scope: CoroutineScope) {
     private val lock = Any()
     private var job: Job? = null
 
-    val isActive: Boolean get() = synchronized(lock) { job.busy }
+    val isBusy: Boolean get() = synchronized(lock) { job.busy }
 
     fun launchIfIdle(block: suspend CoroutineScope.() -> Unit) {
         val next = synchronized(lock) {

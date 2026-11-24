@@ -30,10 +30,10 @@ class SoleJobTest {
 
         request()
         assertEquals(1, runs)
-        assertTrue(sole.isActive)
+        assertTrue(sole.isBusy)
 
         gate.complete(Unit)
-        assertFalse(sole.isActive)
+        assertFalse(sole.isBusy)
         request()
         assertEquals(2, runs)
     }
@@ -50,7 +50,7 @@ class SoleJobTest {
         assertEquals(1, runs)
 
         parent.cancelChildren()
-        assertFalse(sole.isActive)
+        assertFalse(sole.isBusy)
         sole.launchIfIdle { runs += 1 }
         assertEquals(2, runs)
         parent.cancel()

@@ -137,7 +137,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
     fun chooseUpdate(choice: StartupUpdateChoice) {
         val environment = updateEnvironment ?: return
         val remote = state.value.startup.choice ?: return
-        if (state.value.startup.actionLocked || updateJob.isActive) return
+        if (state.value.startup.actionLocked || updateJob.isBusy) return
         event(StartupUpdateWorkflowEvent.InstallStarted)
         launchUpdate {
             when (choice) {
