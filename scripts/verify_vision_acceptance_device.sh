@@ -15,8 +15,8 @@ readonly model_dir="$1"
 readonly apk_path="${2:-app/build/outputs/apk/releaseAcceptance/app-releaseAcceptance.apk}"
 readonly package_name="com.theoriacodex.acceptance"
 readonly activity="com.theoriacodex.app.acceptance.VisionAcceptanceActivity"
-readonly job_id=3102
-readonly frames_job_id=3103
+readonly job_id=3104 # AppJob.LIBRARY_PICTURES
+readonly frames_job_id=3105 # AppJob.LIBRARY_FRAMES
 readonly port=8765
 readonly script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 

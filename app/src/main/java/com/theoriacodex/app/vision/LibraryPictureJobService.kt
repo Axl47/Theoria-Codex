@@ -4,8 +4,8 @@ import android.app.job.JobInfo
 import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.app.job.JobService
-import android.content.ComponentName
 import android.content.Context
+import com.theoriacodex.app.AppJob
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.util.concurrent.atomic.AtomicBoolean
@@ -26,15 +26,15 @@ import kotlinx.coroutines.launch
  * unmetered network with its battery not low, since a run may fetch previews the cache lost or video frames, and both
  * survive a reboot.
  */
-internal enum class LibraryJob(val id: Int) {
+internal enum class LibraryJob(private val job: AppJob) {
     /** Hashes and tags the Library's pictures from their stills ([LibraryPictureJobService]). */
-    PICTURES(3102),
+    PICTURES(AppJob.LIBRARY_PICTURES),
 
     /**
      * Upgrades playing posts' still analyses with their frames ([LibraryFrameJobService]), only while the device is idle:
      * nobody is using it, so no card plays and no Like tap waits on the decoders.
      */
-    FRAMES(3103),
+    FRAMES(AppJob.LIBRARY_FRAMES),
     ;
 
     /** Whether a run is under way in this process, and whether work arrived during it. */
@@ -49,13 +49,9 @@ internal enum class LibraryJob(val id: Int) {
         requested.set(true)
         if (running.get()) return
         val scheduler = context.getSystemService(JobScheduler::class.java)
-        if (scheduler.getPendingJob(id) != null) return
-        val service = when (this) {
-            PICTURES -> LibraryPictureJobService::class.java
-            FRAMES -> LibraryFrameJobService::class.java
-        }
+        if (scheduler.getPendingJob(job.id) != null) return
         scheduler.schedule(
-            JobInfo.Builder(id, ComponentName(context, service))
+            job.builder(context)
                 .setRequiresCharging(true)
                 .setRequiresBatteryNotLow(true)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)

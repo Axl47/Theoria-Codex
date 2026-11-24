@@ -6,6 +6,7 @@ import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.app.AppJob
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesUpdateInterval
@@ -36,7 +37,7 @@ class SeriesUpdateScheduleTest {
     private val followed = MutableStateFlow(emptyList<FollowedSeries>())
     private val settings = MutableStateFlow(AppSettings())
 
-    private fun job(): JobInfo? = scheduler.getPendingJob(SERIES_UPDATE_JOB_ID)
+    private fun job(): JobInfo? = scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)
 
     @Test
     fun `the check is scheduled only while a series is followed and the setting is on`() = runTest(UnconfinedTestDispatcher()) {
