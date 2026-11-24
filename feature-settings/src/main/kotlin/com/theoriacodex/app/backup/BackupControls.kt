@@ -150,6 +150,7 @@ private fun RestoreBackupDialog(
                     if (preview.seriesCount > 0) " · ${preview.seriesCount} series" else "")
                 Text("Adds what's missing to matching profiles and Codices. Nothing you have is removed or changed, and restoring twice adds nothing more.")
                 Text("Login credentials and downloaded media are not included.")
+                preview.newRepos.reposNotice()?.let { Text(it) }
                 BackupCheckbox("Also apply global preferences", state.applyPreferences, onApplyPreferences, !state.busy)
                 if (state.busy) Text("Restoring backup…")
             }
@@ -178,7 +179,7 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
             ) {
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
-                import.reposNotice()?.let { Text(it) }
+                import.newRepos.reposNotice()?.let { Text(it) }
                 import.missingNotice()?.let { Text(it) }
                 if (busy) Text("Importing…")
             }
@@ -188,11 +189,11 @@ private fun ImportSeriesDialog(import: BackupPreview.Series, busy: Boolean, onDi
     )
 }
 
-/** "Also adds these extension repos: Keiyoushi, Kohi den.", so the user sees whose extensions they will be offered; null when none are new. */
-internal fun BackupPreview.Series.reposNotice(): String? = when (newRepos.size) {
+/** "Also adds these extension repos: Keiyoushi, Kohi den." for the [ProfileBackupPreview.newRepos] or [BackupPreview.Series.newRepos] of a backup, so the user sees whose extensions they will be offered; null when none are new. */
+internal fun List<String>.reposNotice(): String? = when (size) {
     0 -> null
-    1 -> "Also adds this extension repo: ${newRepos.single()}."
-    else -> "Also adds these extension repos: ${newRepos.joinToString()}."
+    1 -> "Also adds this extension repo: ${single()}."
+    else -> "Also adds these extension repos: ${joinToString()}."
 }
 
 /** "Needs these extensions: Comick, Gogoanime and 1 other.", naming what the backup names; null when nothing is missing. */

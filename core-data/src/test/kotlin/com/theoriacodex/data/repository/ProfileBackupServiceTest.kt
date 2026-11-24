@@ -94,7 +94,7 @@ class ProfileBackupServiceTest {
         assertEquals(emptyList<ExtensionRepo>(), codec.decode(codec.encode(backup())).extensionRepos)
     }
 
-    @Test fun `exporting writes the device's repos and restoring adds the missing ones, skips present ones and reports a changed key`() = runTest {
+    @Test fun `exporting writes the device's repos, previewing names the new ones, and restoring stores them`() = runTest {
         val held = listOf(ExtensionRepo("https://present.example/repo", "Present", "aa11"))
         val source = object : ExtensionRepos by RecordingRepos(refuse = "", added = "") {
             override suspend fun repos() = held
@@ -106,18 +106,44 @@ class ProfileBackupServiceTest {
         assertEquals(held, exported.extensionRepos)
         val bytes = codec.encode(exported.copy(extensionRepos = held + listOf(
             ExtensionRepo("https://new.example/repo", "New", "bb22"),
-            ExtensionRepo("https://changed.example/repo", "Changed", "cc33"),
+            ExtensionRepo("https://unnamed.example/repo", "https://unnamed.example/repo", "dd44"),
+            ExtensionRepo("https://bad.example/repo", "Bad", "cc33"),
         )))
 
-        val repos = RecordingRepos(refuse = "https://changed.example/repo", added = "https://present.example/repo")
+        val repos = RecordingRepos(refuse = "https://bad.example/repo", added = "https://present.example/repo")
         val restoreDirectory = temporary.newFolder()
         val restoring = ProfileBackupService(InMemorySettingsRepository(), FakeBackupStore(), InMemorySavedSearchRepository(),
             FileBackedReadingPositionRepository(restoreDirectory), restoreDirectory.resolve("restore.json"), extensionRepos = repos)
+        val preview = (restoring.preview(bytes) as BackupPreview.Profiles).preview
+        assertEquals(listOf("New", "https://unnamed.example/repo", "Bad"), preview.newRepos)
         val result = restoring.restore(bytes)
 
-        assertEquals(setOf("https://new.example/repo", "https://changed.example/repo"), repos.given.map { it.url }.toSet())
-        assertEquals(1, result.reposAdded)
-        assertEquals(mapOf("https://changed.example/repo" to "Now signed with another key"), result.repoProblems)
+        assertEquals(listOf("https://new.example/repo", "https://unnamed.example/repo", "https://bad.example/repo"), repos.given.drop(1).map { it.url })
+        assertEquals(2, result.reposAdded)
+        assertEquals(mapOf("https://bad.example/repo" to "Names no signing key"), result.repoProblems)
+    }
+
+    @Test fun `startup recovery of an interrupted restore stores the backup's repos`() = runTest {
+        val realSettings = InMemorySettingsRepository()
+        var fail = true
+        val settings = object : SettingsRepository by realSettings {
+            override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
+                if (fail) error("Simulated storage failure")
+                realSettings.updateSettings(transform)
+            }
+        }
+        val repos = RecordingRepos(refuse = "", added = "https://present.example/repo")
+        val harness = harness(settings)
+        val service = ProfileBackupService(settings, harness.store, harness.pins, harness.positions, harness.journal, extensionRepos = repos)
+        val bytes = codec.encode(backup().copy(extensionRepos = listOf(ExtensionRepo("https://new.example/repo", "New", "bb22"))))
+
+        assertTrue(runCatching { service.restore(bytes) }.exceptionOrNull() is ProfileRestorePendingException)
+        fail = false
+        val restarted = ProfileBackupService(settings, harness.store, harness.pins, harness.positions, harness.journal, extensionRepos = repos)
+        assertTrue(restarted.recoverPendingRestore())
+
+        assertEquals(listOf("https://present.example/repo", "https://new.example/repo"), repos.repos().map { it.url })
+        assertFalse(harness.journal.exists())
     }
 
     @Test fun `portable round trip preserves profile libraries rules settings and exact search replay`() {

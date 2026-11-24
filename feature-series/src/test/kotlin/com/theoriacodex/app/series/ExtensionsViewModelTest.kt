@@ -148,6 +148,8 @@ class ExtensionsViewModelTest {
             return bad.associate { it.url to "Not an extension repo" }
         }
 
+        override suspend fun restore(repos: List<ExtensionRepo>): Map<String, String> = error("unused")
+
         override suspend fun remove(url: String) {
             added.removeAll { it.url == url }
             offered = offered.filterNot { it.repo == url }

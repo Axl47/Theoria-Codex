@@ -104,6 +104,45 @@ class ExtensionCatalogTest {
     }
 
     @Test
+    fun `restoring repos stores the valid records in one update without reading them, skips present ones and refuses a bad address or key`() = runTest {
+        var updates = 0
+        val counting = object : ExtensionChoiceStore by store {
+            override suspend fun update(transform: (ExtensionChoices) -> ExtensionChoices) {
+                updates++
+                store.update(transform)
+            }
+        }
+        val restoring = ExtensionCatalog(
+            choices = counting,
+            client = OkHttpClient.Builder().addInterceptor { error("restoring must not use the network") }.build(),
+            kinds = listOf(MihonKind, AniyomiKind),
+            packages = { emptyList() },
+            read = { null },
+            folder = folder,
+        )
+        store.choices = ExtensionChoices(repos = listOf(ExtensionRepo(repoUrl, "Held", key)))
+
+        val refused = restoring.restore(listOf(
+            ExtensionRepo("$repoUrl/index.min.json", "Held again", otherKey),
+            ExtensionRepo("https://new.example/manga/index.min.json", "New", key.uppercase()),
+            ExtensionRepo("https://unnamed.example/anime", " ", otherKey),
+            ExtensionRepo("http://plain.example/anime", "Plain", key),
+            ExtensionRepo("https://nokey.example/anime", "No key", "abc"),
+        ))
+
+        assertEquals(1, updates)
+        assertEquals(setOf("http://plain.example/anime", "https://nokey.example/anime"), refused.keys)
+        assertEquals(
+            listOf(
+                ExtensionRepo(repoUrl, "Held", key),
+                ExtensionRepo("https://new.example/manga", "New", key),
+                ExtensionRepo("https://unnamed.example/anime", "https://unnamed.example/anime", otherKey),
+            ),
+            restoring.repos(),
+        )
+    }
+
+    @Test
     fun `each extension the host runs is listed with how the device stands with it`() = runTest {
         serve(Triple("new", 2, "16"), Triple("current", 5, "14"), Triple("old", 7, "16"), Triple("foreign", 1, "16"), Triple("unsupported", 1, "15"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))

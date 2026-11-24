@@ -126,11 +126,10 @@ class BackupViewModelTest {
     }
 
     @Test
-    fun `the import preview names the repos it adds`() {
-        val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 0, episodesWatched = 0)
-        assertNull(BackupPreview.Series(counts).reposNotice())
-        assertEquals("Also adds this extension repo: Keiyoushi.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi")).reposNotice())
-        assertEquals("Also adds these extension repos: Keiyoushi, Kohi den.", BackupPreview.Series(counts, newRepos = listOf("Keiyoushi", "Kohi den")).reposNotice())
+    fun `a backup preview names the repos it adds`() {
+        assertNull(emptyList<String>().reposNotice())
+        assertEquals("Also adds this extension repo: Keiyoushi.", listOf("Keiyoushi").reposNotice())
+        assertEquals("Also adds these extension repos: Keiyoushi, Kohi den.", listOf("Keiyoushi", "Kohi den").reposNotice())
     }
 
     @Test

@@ -19,9 +19,10 @@ import kotlinx.serialization.json.Json
 
 /**
  * What this device decided and knows about extensions, in a file Android neither backs up nor transfers to a new
- * phone: turning an extension on is a decision made on a device, about the code installed on it. Nothing else is
- * ever read: not a profile backup, and not the settings store, where builds before the first release with extensions
- * kept these choices (see [forgetLegacyExtensionData]).
+ * phone: turning an extension on is a decision made on a device, about the code installed on it. A profile backup
+ * carries only the repos ([com.theoriacodex.domain.series.ExtensionRepos.restore] merges them in); the trusted
+ * extensions and languages stay on the device. Nothing else is read: not the settings store, where builds before
+ * the first release with extensions kept these choices (see [forgetLegacyExtensionData]).
  */
 internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceStore {
     private val lock = Mutex()

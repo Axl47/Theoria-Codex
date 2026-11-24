@@ -8,8 +8,8 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
-import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
@@ -82,21 +82,25 @@ class ProfileBackupService(
 
     /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
     suspend fun preview(bytes: ByteArray): BackupPreview {
-        if (!isTachiyomiBackup(bytes)) return BackupPreview.Profiles(codec.decode(bytes).preview())
+        if (!isTachiyomiBackup(bytes)) {
+            val backup = codec.decode(bytes)
+            return BackupPreview.Profiles(backup.preview(newRepos(backup.extensionRepos)))
+        }
         val backup = decodeTachiyomiBackup(bytes, clock())
-        // Details only: a device that cannot answer leaves them out rather than refuse the backup. Sources that cannot be
-        // listed are unavailable in Series too, so they count as missing.
-        val newRepos = extensionRepos?.let { repos ->
-            runCatchingPreservingCancellation { backup.repos.notIn(repos.repos()) }.getOrNull()
-        }.orEmpty()
-        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos)
+        // Sources that cannot be listed are unavailable in Series too, so they count as missing.
+        return backup.preview(runCatchingPreservingCancellation { extensionSources() }.getOrDefault(emptySet()), newRepos(backup.repos))
     }
+
+    /** The [listed] repos not added here yet. Details only: a device that cannot answer leaves them out rather than refuse the backup. */
+    private suspend fun newRepos(listed: List<ExtensionRepo>): List<ExtensionRepo> = extensionRepos?.let { repos ->
+        runCatchingPreservingCancellation { listed.notIn(repos.repos()) }.getOrNull()
+    }.orEmpty()
 
     /**
      * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
      * on the device is removed, each entry keeps the further progress of the two sides, and importing twice adds
-     * nothing more. One Room transaction holds it all, so it needs no journal. Then adds the repos the backup lists
-     * ([addFromBackup]).
+     * nothing more. One Room transaction holds it all, so it needs no journal. Then restores the repos the backup lists
+     * ([restoreFromBackup]).
      */
     suspend fun importSeries(bytes: ByteArray): SeriesImportResult = withContext(Dispatchers.IO) {
         val backup = mutex.withLock {
@@ -106,44 +110,42 @@ class ProfileBackupService(
             }
         }
         val imported = backup.importPreview()
-        // Outside the lock: each repo is read over the network, and none touches the library. The series are in by now,
-        // so a failure here is reported against the repos alone.
+        // Outside the lock: the repos do not touch the library. The series are in by now, so a failure here is
+        // reported against the repos alone.
         val repos = extensionRepos?.takeIf { backup.repos.isNotEmpty() } ?: return@withContext SeriesImportResult(imported)
-        val added = repos.addFromBackup(backup.repos)
+        val added = runCatchingPreservingCancellation { repos.restoreFromBackup(backup.repos) }
+            .getOrElse { BackupReposAdded(problems = backup.repos.associate { it.url to "Import the backup again to retry" }) }
         SeriesImportResult(imported, reposAdded = added.added, repoProblems = added.problems)
     }
 
     /**
-     * Restores a Theoria backup, then adds the extension repos it lists ([addFromBackup]), outside the lock and the
-     * journal: each is read over the network, and a failure there leaves the restore standing. A restore that
-     * startup recovery finishes adds no repos; restoring the backup again does.
+     * Restores a Theoria backup: its library, settings and sites, and its extension repos ([restoreFromBackup]), all
+     * in [finish], so startup recovery of an interrupted restore stores the repos too.
      */
     suspend fun restore(
         bytes: ByteArray,
         applyPreferences: Boolean = false,
         selectImportedProfile: Boolean = false,
-    ): ProfileRestoreResult = withContext(Dispatchers.IO) {
-        val backup = codec.decode(bytes)
-        val restored = mutex.withLock {
-            if (journalFile.exists()) {
-                val pending = readJournal()
-                require(codec.encode(pending.backup).contentEquals(codec.encode(backup)) &&
-                    pending.applyPreferences == applyPreferences &&
-                    pending.selectImportedProfile == selectImportedProfile) { "Finish the pending restore first" }
-                return@withLock finish(pending)
-            }
-            val pending = PendingRestore(applyPreferences, backup, selectImportedProfile)
-            preflight(backup, applyPreferences)
-            preflightSites(backup)
-            withContext(NonCancellable) {
-                writeJournal(pending)
-                finish(pending)
+    ): ProfileRestoreResult =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val backup = codec.decode(bytes)
+                if (journalFile.exists()) {
+                    val pending = readJournal()
+                    require(codec.encode(pending.backup).contentEquals(codec.encode(backup)) &&
+                        pending.applyPreferences == applyPreferences &&
+                        pending.selectImportedProfile == selectImportedProfile) { "Finish the pending restore first" }
+                    return@withLock finish(pending)
+                }
+                val pending = PendingRestore(applyPreferences, backup, selectImportedProfile)
+                preflight(backup, applyPreferences)
+                preflightSites(backup)
+                withContext(NonCancellable) {
+                    writeJournal(pending)
+                    finish(pending)
+                }
             }
         }
-        val repos = extensionRepos?.takeIf { backup.extensionRepos.isNotEmpty() } ?: return@withContext restored
-        val added = repos.addFromBackup(backup.extensionRepos.map { NewExtensionRepo(it.url, it.signingKey) })
-        restored.copy(reposAdded = added.added, repoProblems = added.problems)
-    }
 
     suspend fun recoverPendingRestore(): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
@@ -183,6 +185,7 @@ class ProfileBackupService(
             readingPositions.merge(imported.readingPositions)
             val sites = siteProfiles.mergeRestored(imported.customSources)
             imported.statistics?.let { statistics?.mergeRestored(it) }
+            val repos = extensionRepos?.takeIf { imported.extensionRepos.isNotEmpty() }?.restoreFromBackup(imported.extensionRepos)
             settings.updateSettings {
                 val merged = it.mergeRestoredSettings(imported.settings, pending.applyPreferences)
                 if (pending.selectImportedProfile) merged.copy(activeProfileId = imported.settings.activeProfileId) else merged
@@ -198,6 +201,8 @@ class ProfileBackupService(
                 profilesAdded = imported.settings.recommendationProfiles.count { it.profileId !in existingProfileIds },
                 collectionsAdded = collectionsAdded,
                 keptExistingSites = sites.keptExisting,
+                reposAdded = repos?.added ?: 0,
+                repoProblems = repos?.problems.orEmpty(),
             )
         } catch (cancelled: CancellationException) {
             throw cancelled

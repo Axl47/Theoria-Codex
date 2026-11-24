@@ -47,7 +47,8 @@ data class ProfileBackup(
     /** The user's extension repos, so a new device finds the repos its series came from. Absent from older backups. */
     val extensionRepos: List<ExtensionRepo> = emptyList(),
 ) {
-    fun preview() = ProfileBackupPreview(
+    /** [newRepos] are the backup's extension repos not added here yet; restoring adds them. */
+    fun preview(newRepos: List<ExtensionRepo> = emptyList()) = ProfileBackupPreview(
         createdAtEpochMs = createdAtEpochMs,
         profileNames = settings.recommendationProfiles.map(RecommendationProfile::name),
         collectionCount = library.codices.size,
@@ -57,6 +58,7 @@ data class ProfileBackup(
         recentCount = library.watched.size + library.searches.size,
         followedCreatorCount = settings.followedCreators.size,
         seriesCount = library.series.size,
+        newRepos = newRepos.map(ExtensionRepo::name),
     )
 }
 
@@ -94,6 +96,8 @@ data class ProfileBackupPreview(
     val recentCount: Int,
     val followedCreatorCount: Int,
     val seriesCount: Int = 0,
+    /** The names (else addresses) of the extension repos the backup lists that are not added here yet; restoring adds them. */
+    val newRepos: List<String> = emptyList(),
 )
 
 /** [keptExistingSites]: ids of sites kept as already configured here, though the backup's address or family differed. */

@@ -191,14 +191,15 @@ class TachiyomiBackupTest {
         assertEquals(1, preview.unnamedMissingSources)
 
         val result = service.importSeries(bytes)
-        // The manga repo is added already, so it is not asked for again.
+        // Records as the backup holds them: its name, else the address, and its key. The manga repo is added already.
         val given = listOf(
-            NewExtensionRepo("https://anime.example/repo", "bb22"),
-            NewExtensionRepo("https://more.example/repo", "cc33"),
+            ExtensionRepo("https://manga.example/repo", "Manga", "aa11"),
+            ExtensionRepo("https://anime.example/repo", "Anime", "bb22"),
+            ExtensionRepo("https://more.example/repo", "https://more.example/repo", "cc33"),
         )
-        assertEquals(given.toSet(), repos.given.toSet())
+        assertEquals(given, repos.given)
         assertEquals(1, result.reposAdded)
-        assertEquals(mapOf("https://anime.example/repo" to "Now signed with another key"), result.repoProblems)
+        assertEquals(mapOf("https://anime.example/repo" to "Names no signing key"), result.repoProblems)
     }
 
     @Test
@@ -243,17 +244,17 @@ private class RecordingStore : ProfileBackupStore {
     override suspend fun merge(library: BackupLibrary): Int = 0.also { merged += library }
 }
 
-/** Holds [added] already and adds each other repo but [refuse], which it refuses as [ExtensionRepos.add] does a repo whose key changed. */
+/** Holds [added] already and restores each other repo but [refuse], which it refuses as [ExtensionRepos.restore] does a repo with a bad key. */
 internal class RecordingRepos(private val refuse: String, added: String) : ExtensionRepos {
-    val given = mutableListOf<NewExtensionRepo>()
+    val given = mutableListOf<ExtensionRepo>()
     private val stored = mutableListOf(ExtensionRepo(added, added, ""))
     override suspend fun repos() = stored.toList()
-    // Repos may be added from several threads at once.
-    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = synchronized(this) {
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = error("unused")
+    override suspend fun restore(repos: List<ExtensionRepo>): Map<String, String> {
         given += repos
         val new = repos.filter { repo -> stored.none { it.url == repo.url } }
-        stored += new.filter { it.url != refuse }.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
-        new.filter { it.url == refuse }.associate { it.url to "Now signed with another key" }
+        stored += new.filter { it.url != refuse }
+        return new.filter { it.url == refuse }.associate { it.url to "Names no signing key" }
     }
     override suspend fun remove(url: String) = error("unused")
     override suspend fun available(refresh: Boolean): RepoListing = error("unused")

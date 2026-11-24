@@ -102,6 +102,8 @@ internal object NoRepos : ExtensionRepos {
 
     override suspend fun add(repos: List<NewExtensionRepo>) = repos.associate { it.url to "Offline" }
 
+    override suspend fun restore(repos: List<ExtensionRepo>) = repos.associate { it.url to "Offline" }
+
     override suspend fun remove(url: String) = Unit
 
     override suspend fun available(refresh: Boolean) = RepoListing(emptyList())
