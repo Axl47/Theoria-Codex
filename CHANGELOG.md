@@ -121,7 +121,7 @@
 - The search bar narrows Following by title as you type; on Browse it searches every source. When nothing you follow matches, Search all sources takes the title to Browse.
 - Series pages now open with a blurred cover backdrop, a Follow button beside Open in browser and Share, tap-to-zoom cover preview, long-press title copy, an expandable About section with genre tags that open that source's genre filter, a full-width Continue reading button, pull-to-refresh, card-styled chapters showing scanlator groups, and a floating top bar that hides as you scroll down and returns as you scroll up.
 - On a series page, the top bar now searches chapters inline, holding a chapter offers per-chapter read/unread, Mark previous as read, and download actions, bulk read/unread changes offer Undo, and the chapter list's filter button remembers sort and filter choices per series with quick-clear pills under the header.
-- Back up profiles opens a sheet holding Include History and statistics and the Back up button. The Backup page itself shows just Back up profiles and Restore backup, and notes that Restore also takes Mihon and Aniyomi backups. Daily backup has a group of its own below them.
+- Back up profiles opens a sheet holding Include History and statistics and the Back up button. The Backup page itself shows Back up profiles and Restore backup, and notes that Restore also takes Mihon and Aniyomi backups. Daily backup has a group of its own below them.
 
 ### Removed
 
