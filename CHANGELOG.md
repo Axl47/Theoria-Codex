@@ -130,6 +130,12 @@
 
 ### Fixed
 
+- Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.
+- A turned-off or removed extension no longer holds up other chapter downloads: chapters from other sources keep downloading, and a notification says how many chapters wait for their extension.
+- When chapter downloads fail within one series, the notification opens that series, and names the chapter when only one failed.
+- Pulling down on Following says when followed series couldn't be checked, with Retry, instead of looking the same as finding nothing new.
+- The Series tab no longer loads a source's listing while it shows Following or a search.
+- A series page's chapter list stays smoother while chapters download.
 - In the Viewer's page overview, the Back arrow at the top closes the overview instead of the whole Viewer, the trail row no longer covers the reading-mode switch, and the last pages are no longer hidden behind the buttons at the bottom.
 - Manga chapters read page by page fill the screen's width, without the gap at the top and the border around each page.
 - The screen no longer turns off while you read a manga chapter.

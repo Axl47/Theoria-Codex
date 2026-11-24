@@ -1,13 +1,12 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.series.ChapterPictures
+import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.data.repository.switchSource
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.Series
@@ -41,15 +40,15 @@ class SeriesDependencies(
     private val checking = Mutex()
 
     /**
-     * Stores the followed series' new chapters and returns the series that gained some, each also handed to [onUpdate]
-     * as soon as it is stored, after its new chapters are queued for download where the series asks for that. The
+     * Stores the followed series' new chapters and returns what the check found, each series that gained some also
+     * handed to [onUpdate] as soon as it is stored, after its new chapters are queued for download where the series
+     * asks for that. The
      * Series tab's refresh and the background job both call this and both post a notification per update; one check
      * runs at a time, so neither repeats the other's requests midway, and a chapter one stores is not new to the other.
      */
-    suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): List<SeriesUpdate> = checking.withLock {
+    suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): FollowedCheck = checking.withLock {
         repository.checkFollowed(source) { update ->
-            runCatchingPreservingCancellation { downloads.downloadNew(update) }
-                .onFailure { Diagnostics.report("series", "New chapters could not be queued for download", it) }
+            downloads.downloadNew(update)
             onUpdate(update)
         }
     }

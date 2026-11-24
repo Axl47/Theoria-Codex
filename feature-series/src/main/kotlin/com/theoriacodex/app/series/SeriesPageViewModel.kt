@@ -10,6 +10,7 @@ import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -122,8 +124,9 @@ data class RefreshFailure(val message: String, val retryable: Boolean) {
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently; each is a refresh.
  * Without [downloads] the page offers none, and an anime offers none either: episodes do not download yet.
- * [chapterPreferences] persists per-series sort and filter choices, read at the start on [ioDispatcher]. A test passes
- * its own dispatcher: on the real one the read can finish after the test, and fail the next test that starts.
+ * [chapterPreferences] persists per-series sort and filter choices, read at the start on [ioDispatcher], which also
+ * filters and sorts the entry list off the main thread. A test passes its own dispatcher: on the real one the work can
+ * finish after the test, and fail the next test that starts.
  */
 class SeriesPageViewModel(
     private val id: SeriesId,
@@ -157,19 +160,18 @@ class SeriesPageViewModel(
         if (kind == SeriesKind.MANGA) downloadStates else flowOf(emptyMap()),
         chapterOptions,
     ) { stored, entries, refresh, downloads, options ->
-        val ordered = entries.sortedBy { it.sourceOrder }
-        val visible = applyChapterOptions(ordered, downloads, options)
+        // The repository lists entries in the source's order already.
         refresh.copy(
             stored = stored,
-            entries = ordered,
-            visibleEntries = visible,
+            entries = entries,
+            visibleEntries = applyChapterOptions(entries, downloads, options),
             downloads = downloads,
             chapterSort = options.sort,
             sortDescending = options.descending,
             chapterFilter = options.filter,
             chapterQuery = options.query,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), refresh.value)
+    }.flowOn(ioDispatcher).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), refresh.value)
 
     /** The refresh running, which a newer one replaces. */
     private var refreshJob: Job? = null
@@ -188,7 +190,10 @@ class SeriesPageViewModel(
         viewModelScope.launch { sourcesChanged.collect { refresh() } }
     }
 
-    /** Fetches the series' details and entries from its source and stores them. */
+    /**
+     * Fetches the series' details and entries from its source and stores them. New chapters it finds are queued for
+     * download as the check for new chapters would queue them; it announces none, though.
+     */
     fun refresh(userInitiated: Boolean = false) {
         if (moving) return
         refreshJob?.cancel()
@@ -222,7 +227,9 @@ class SeriesPageViewModel(
         }
         refresh.update { it.copy(source = source, sourceName = source.label(sources), sourceMissing = false) }
         val failure = try {
-            repository.series(id)?.let { repository.refresh(source, it.series) }
+            repository.series(id)?.let { stored ->
+                repository.refresh(source, stored.series) { added -> downloads?.downloadNew(SeriesUpdate(stored.series, added)) }
+            }
             null
         } catch (error: CancellationException) {
             throw error

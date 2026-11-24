@@ -11,9 +11,12 @@ import android.net.Uri
 import android.os.Bundle
 import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.R
+import com.theoriacodex.data.repository.ChapterName
 import com.theoriacodex.data.repository.DrainProgress
+import com.theoriacodex.data.repository.QueuedChapter
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +67,9 @@ private const val DOWNLOADS_CHANNEL = "chapter_downloads"
 internal const val DOWNLOAD_PROGRESS_NOTIFICATION_ID = 3
 private const val DOWNLOADS_FAILED_NOTIFICATION_ID = 4
 
+/** Each lane's chapters waiting for their extension, under its lane's tag. */
+private const val DOWNLOADS_WAITING_NOTIFICATION_ID = 5
+
 /**
  * The download queue's ongoing notification: the series and chapter being fetched, which of the chapters taken on so
  * far it is, and its pages as progress. Tapping it opens that series' page. [progress] is null before the first
@@ -94,19 +100,66 @@ internal fun cancelDownloadProgress(context: Context) {
     context.getSystemService(NotificationManager::class.java).cancel(DOWNLOAD_PROGRESS_NOTIFICATION_ID)
 }
 
-/** Says how many chapters a drain gave up on; they show as not downloaded again. */
-internal fun notifyDownloadsFailed(context: Context, failed: Int) {
-    val manager = context.getSystemService(NotificationManager::class.java)
-    if (!manager.areNotificationsEnabled()) return
-    val app = PendingIntent.getActivity(context, 0, Intent(context, SeriesNotificationActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-    manager.notify(
-        DOWNLOADS_FAILED_NOTIFICATION_ID,
-        downloadNotification(context).setContentTitle(downloadsFailedText(failed)).setContentIntent(app).setAutoCancel(true).build(),
-    )
+/** Says which chapters a drain gave up on; they show as not downloaded again. */
+internal fun notifyDownloadsFailed(context: Context, failed: List<ChapterName>) {
+    postChaptersNotice(context, null, DOWNLOADS_FAILED_NOTIFICATION_ID, failedNotice(failed))
 }
 
-internal fun downloadsFailedText(failed: Int): String =
-    if (failed == 1) "1 chapter could not be downloaded" else "$failed chapters could not be downloaded"
+/**
+ * Shows how many of the [automatic] lane's chapters wait for their extension to be on, titled by their [series] when
+ * they share one, or takes the notice away once none wait: they stay queued and download once it is back.
+ */
+internal fun showDownloadsWaiting(context: Context, automatic: Boolean, waiting: Int, series: Series?) {
+    val tag = laneTag(automatic)
+    if (waiting == 0) {
+        context.getSystemService(NotificationManager::class.java).cancel(tag, DOWNLOADS_WAITING_NOTIFICATION_ID)
+    } else {
+        postChaptersNotice(context, tag, DOWNLOADS_WAITING_NOTIFICATION_ID, waitingNotice(waiting, series))
+    }
+}
+
+/** Takes away the waiting notice of each lane, by [automatic][QueuedChapter.automatic], with nothing left queued. */
+internal fun clearIdleWaitingNotices(context: Context, queuedLanes: Set<Boolean>) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    listOf(false, true).filter { it !in queuedLanes }.forEach { manager.cancel(laneTag(it), DOWNLOADS_WAITING_NOTIFICATION_ID) }
+}
+
+private fun laneTag(automatic: Boolean) = if (automatic) "automatic" else "user"
+
+/** A download notification about some chapters: titled by their series and opening its page when they share one. */
+internal data class ChaptersNotice(val title: String, val text: String?, val series: SeriesId?)
+
+/** "Ch. 12 could not be downloaded" under its series' title, or how many could not. */
+internal fun failedNotice(failed: List<ChapterName>): ChaptersNotice {
+    val counted = if (failed.size == 1) "1 chapter could not be downloaded" else "${failed.size} chapters could not be downloaded"
+    val series = failed.sharedSeries() ?: return ChaptersNotice(counted, null, null)
+    val one = failed.singleOrNull()?.chapter?.takeIf(String::isNotBlank)
+    return ChaptersNotice(series.series, one?.let { "$it could not be downloaded" } ?: counted, series.seriesId)
+}
+
+/** "3 chapters waiting · Extension unavailable" under their [series]' title, or across series "5 chapters waiting". */
+internal fun waitingNotice(waiting: Int, series: Series?): ChaptersNotice {
+    val counted = if (waiting == 1) "1 chapter waiting" else "$waiting chapters waiting"
+    if (series == null) return ChaptersNotice(counted, "Extensions unavailable", null)
+    return ChaptersNotice(series.title, "$counted · Extension unavailable", series.id)
+}
+
+/** The first chapter, when every chapter is of its series and that series is stored. */
+private fun List<ChapterName>.sharedSeries(): ChapterName? =
+    firstOrNull()?.takeIf { first -> first.series.isNotBlank() && all { it.seriesId == first.seriesId } }
+
+private fun postChaptersNotice(context: Context, tag: String?, id: Int, notice: ChaptersNotice) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (!manager.areNotificationsEnabled()) return
+    // One series' notice opens its page; across series it brings the app forward.
+    val open = Intent(context, SeriesNotificationActivity::class.java).apply {
+        notice.series?.let { action = Intent.ACTION_VIEW; data = seriesUri(it) }
+    }
+    val intent = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    val builder = downloadNotification(context).setContentTitle(notice.title).setContentIntent(intent).setAutoCancel(true)
+    notice.text?.let(builder::setContentText)
+    manager.notify(tag, id, builder.build())
+}
 
 private fun downloadNotification(context: Context): Notification.Builder {
     context.getSystemService(NotificationManager::class.java)

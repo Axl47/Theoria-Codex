@@ -110,6 +110,8 @@ internal fun EntryRow(
     onToggleDownload: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val dates = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
+    val detail = remember(entry, kind) { entryDetail(entry, kind, dates) }
     val rowAlpha = when {
         !enabled -> DISABLED_ALPHA
         entry.read -> READ_ALPHA
@@ -136,7 +138,7 @@ internal fun EntryRow(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    entryDetail(entry, kind)?.let { detail ->
+                    if (detail != null) {
                         Text(
                             text = detail,
                             style = MaterialTheme.typography.bodySmall,
@@ -192,7 +194,9 @@ private fun EntryContextMenu(
     onMarkPreviousRead: () -> Unit,
     onToggleDownload: () -> Unit,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    // Composed only while open: a long chapter list would otherwise hold a closed menu per row.
+    if (!expanded) return
+    DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         DropdownMenuItem(
             text = { Text("Mark as ${if (read) words.notDone else words.done}") },
             onClick = { onDismiss(); onToggleRead() },
@@ -248,8 +252,12 @@ private fun DownloadMark(download: ChapterDownload?, onClick: () -> Unit) {
  * unfinished ("Page 7 of 18", or "8:12 / 23:40" as the Viewer's timeline writes it), or what a finished one is ("Read",
  * "Watched").
  */
-internal fun entryDetail(entry: StoredSeriesEntry, kind: SeriesKind): String? {
-    val date = entry.entry.uploadedAtEpochMs?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
+internal fun entryDetail(
+    entry: StoredSeriesEntry,
+    kind: SeriesKind,
+    dates: DateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM),
+): String? {
+    val date = entry.entry.uploadedAtEpochMs?.let { dates.format(Date(it)) }
     val group = entry.entry.translatorGroup?.trim()?.takeIf(String::isNotEmpty)
     val status = when {
         entry.read -> kind.words.finished

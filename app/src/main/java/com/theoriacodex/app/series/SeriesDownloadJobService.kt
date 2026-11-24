@@ -133,9 +133,11 @@ class SeriesDownloadJobService : JobService() {
     private suspend fun drain(params: JobParameters): Boolean {
         val automatic = params.jobId == AppJob.AUTOMATIC_DOWNLOAD.id
         if (automatic && getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) return true
-        val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().series?.downloads ?: return false
-        val result = downloads.drain(automatic) { showProgress(params, it) }
-        if (result.failed > 0) notifyDownloadsFailed(this, result.failed)
+        val series = (application as TheoriaAppContainerOwner).awaitAppContainer().series ?: return false
+        val result = series.downloads.drain(automatic) { showProgress(params, it) }
+        if (result.failed.isNotEmpty()) notifyDownloadsFailed(this, result.failed)
+        val shared = result.waiting.map { it.series }.distinct().singleOrNull()?.let { series.repository.series(it)?.series }
+        showDownloadsWaiting(this, automatic, result.waiting.size, shared)
         return result.retry
     }
 

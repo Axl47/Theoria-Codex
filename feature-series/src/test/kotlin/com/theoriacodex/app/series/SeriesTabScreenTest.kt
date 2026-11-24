@@ -56,7 +56,7 @@ class SeriesTabScreenTest {
             FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 4),
             FakeSeriesSource("custom_mihon_2", "Paper Lantern", "es-419", count = 4),
         )
-        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
+        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
         compose.setContent {
             MaterialTheme {
                 SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {})
@@ -87,7 +87,7 @@ class SeriesTabScreenTest {
     @Test
     fun aSourcesListingFiltersStayClearOfTheCollapsedSearch() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 40))
-        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
+        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
         compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
         compose.runOnIdle { viewModel.openDedicatedSearch(sources.single().key) }
@@ -108,7 +108,7 @@ class SeriesTabScreenTest {
             FollowedSeries(Series(SeriesId(source, "/alpha"), "Alpha Saga"), unreadCount = 2, started = true),
             FollowedSeries(Series(SeriesId(source, "/beta"), "Beta Tale"), unreadCount = 5),
         )
-        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) {}
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) { NOTHING_CHECKED }
         compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
 
@@ -132,7 +132,7 @@ class SeriesTabScreenTest {
     @Test
     fun browsePicksItsSourceAndListingFromOneHeader() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3), FakeSeriesSource("custom_aniyomi_2", "Moon Reel", "en", count = 3))
-        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) {}
+        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
         compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
 
