@@ -79,6 +79,13 @@ class TachiyomiBackupTest {
     }
 
     @Test
+    fun `Aniyomi's anime come from its own field`() {
+        val series = decodeTachiyomiBackup(backup { message(3) { long(1, 9); string(2, "/watch/y"); string(3, "Y") } }, now = 0)
+
+        assertEquals("custom_aniyomi_9", series.single().series.series.id.source.id)
+    }
+
+    @Test
     fun `series neither followed nor started, and the local source's, are left behind`() {
         val series = decodeTachiyomiBackup(backup {
             message(1) { long(1, 1); string(2, "/untouched"); string(3, "U"); bool(100, false); message(16) { string(1, "/u/1") } }

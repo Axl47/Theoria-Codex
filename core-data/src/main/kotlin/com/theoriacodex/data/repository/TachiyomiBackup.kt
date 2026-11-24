@@ -32,7 +32,7 @@ internal fun isTachiyomiBackup(bytes: ByteArray): Boolean = bytes.size >= 2 && b
 internal fun decodeTachiyomiBackup(bytes: ByteArray, now: Long): List<BackupSeries> {
     require(isTachiyomiBackup(bytes)) { "This is not a Mihon or Aniyomi backup." }
     val backup = rejectMalformedBackup { ProtoBuf.decodeFromByteArray<TachiyomiBackup>(gunzip(bytes)) }
-    val series = (backup.manga.mapNotNull { it.toBackup(SeriesKind.MANGA, now) } + backup.anime.mapNotNull { it.toBackup(SeriesKind.ANIME, now) })
+    val series = (backup.manga.mapNotNull { it.toBackup(SeriesKind.MANGA, now) } + (backup.anime + backup.aniyomiAnime).mapNotNull { it.toBackup(SeriesKind.ANIME, now) })
         .distinctBy { it.series.series.id }
         .writable()
     require(series.isNotEmpty()) { "This backup has no series to import." }
@@ -109,11 +109,13 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long): StoredSeriesEn
 
 /**
  * The parts of a Mihon-family backup this import reads; protobuf skips the rest. Mihon and TachiyomiJ2K keep manga in
- * field 1; Anikku keeps anime in field 501, in the same shape, with episodes where chapters are.
+ * field 1; Anikku keeps anime in field 501, in the same shape, with episodes where chapters are. Aniyomi keeps its
+ * anime in field 3, which the others leave unused; no Aniyomi backup has been checked against it yet.
  */
 @Serializable
 private class TachiyomiBackup(
     @ProtoNumber(1) val manga: List<TachiyomiSeries> = emptyList(),
+    @ProtoNumber(3) val aniyomiAnime: List<TachiyomiSeries> = emptyList(),
     @ProtoNumber(501) val anime: List<TachiyomiSeries> = emptyList(),
 )
 
