@@ -12,6 +12,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -19,6 +22,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.recommend.FOR_YOU_CHIPS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMBS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMB_TAG_PREFIX
@@ -30,6 +34,7 @@ import com.theoriacodex.app.recommend.FOR_YOU_UNDO_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.ForYouVerdictKind
+
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
@@ -138,6 +143,52 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     }
 
     @Test
+    fun aSaveBringsACardLikeItThatSaysItWasASave() {
+        io { container.content.ensureCodex(profileScopedCodexId("profile-main", "journey-saves"), "Journey saves") }
+        openDeck()
+        decide { it.startsWith("Save to ") }
+        val brought = (0 until 6).any { (origin() == "Like one you saved").also { found -> if (!found) decide("Skip") } }
+        assertTrue("No card like the saved one in the next six", brought)
+    }
+
+    @Test
+    fun aTrailKeepsItsGridPlaceUnderADeeperTrail() {
+        openDeck()
+        forkByTag()
+        activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
+        compose.waitUntil(10_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
+        val first = topGridCard()
+        repeat(3) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).performTouchInput { swipeUp() }; compose.waitForIdle() }
+        val scrolled = topGridCard()
+        assertNotEquals(first, scrolled)
+
+        // Forks are offered on deck cards: open the card's creator from the deck, then come back to the grid.
+        activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
+        compose.waitUntil(10_000) { currentCardOrNull() != null }
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").fetchSemanticsNodes().isNotEmpty() }
+        activate(compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator"))
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isNotEmpty() }
+        activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
+        compose.waitUntil(10_000) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
+
+        // The crumb leaves the creator's trail as Back does.
+        activate(compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1"))
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}2").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(FOR_YOU_GRID_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(scrolled, topGridCard())
+    }
+
+    @Test
+    fun noSourcesEnabledOffersManageSources() {
+        io { container.data.settingsRepository.setEnabledSources(emptySet()) }
+        launch()
+        tab("For You")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("No sources enabled").fetchSemanticsNodes().isNotEmpty() }
+        activate(compose.onNodeWithText("Manage sources"))
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Built-in").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
     fun everySwipeIsKeptAcrossARestartAndUndoForgetsIt() {
         openDeck()
         val liked = currentCard()
@@ -192,12 +243,14 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     }
 
     /** Decides the card through the action the deck gives TalkBack, as a swipe would, and waits for the next card. */
-    private fun decide(label: String) {
-        val offers = SemanticsMatcher("offers $label") { node ->
-            node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label == label }
+    private fun decide(label: String) = decide { it == label }
+
+    private fun decide(label: (String) -> Boolean) {
+        val offers = SemanticsMatcher("offers the action") { node ->
+            node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { label(it.label) }
         }
         val before = currentCard()
-        val action = compose.onNode(offers).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
+        val action = compose.onNode(offers).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { label(it.label) }
         compose.runOnUiThread { action.action() }
         compose.waitUntil(10_000) { currentCardOrNull().let { it != null && it != before } }
     }
@@ -229,6 +282,18 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         }
         return compose.onAllNodes(card and hasAnyAncestor(hasTestTag("triage-deck"))).fetchSemanticsNodes()
             .singleOrNull()?.config?.get(SemanticsProperties.TestTag)
+    }
+
+    /** The test tag of the highest card showing in the grid. */
+    private fun topGridCard(): String {
+        val card = SemanticsMatcher("a grid card") { node ->
+            node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("search_card_") == true
+        }
+        val viewport = compose.onNodeWithTag(FOR_YOU_GRID_TAG).fetchSemanticsNode().boundsInRoot
+        return compose.onAllNodes(card and hasAnyAncestor(hasTestTag(FOR_YOU_GRID_TAG))).fetchSemanticsNodes()
+            .filter { it.boundsInRoot.height > 0f && it.boundsInRoot.bottom > viewport.top && it.boundsInRoot.top < viewport.bottom }
+            .minWith(compareBy({ it.boundsInRoot.top }, { it.boundsInRoot.left }))
+            .config[SemanticsProperties.TestTag]
     }
 
     private fun verdicts() = io { container.data.forYouVerdicts.verdicts("profile-main") }

@@ -35,7 +35,9 @@ fun recommendationTaxonomyFor(post: Post): List<PostTaxonomyTerm> {
     }
     if (preferredValues.isEmpty()) return emptyList()
 
-    val tagTermsByValue = post.taxonomy
+    // A post with no typed taxonomy at all (a raw-tag-only legacy copy, say) has only general tags.
+    val taxonomy = post.taxonomy.ifEmpty { preferredValues.map { PostTaxonomyTerm(value = it) } }
+    val tagTermsByValue = taxonomy
         .asSequence()
         .filter { term -> term.facet == SearchFacet.TAG }
         .filter { term -> term.value.isNotBlank() }

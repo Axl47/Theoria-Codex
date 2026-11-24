@@ -105,13 +105,13 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
 }
 
 /**
- * "120 of 450 Library posts tagged", and when some are left, that the rest are tagged while charging on Wi-Fi; null for
- * an empty Library.
+ * "120 of 450 Library posts tagged", and when some are left, when the rest are tagged: while charging on Wi-Fi, and
+ * a video's frames only while the phone also sits unused; null for an empty Library.
  */
 private fun libraryProgress(progress: VisionProgress): String? {
     if (progress.total == 0) return null
     val done = "${progress.analysed} of ${progress.total} Library posts tagged"
-    return if (progress.analysed < progress.total) "$done. The rest are tagged while charging on Wi-Fi." else done
+    return if (progress.analysed < progress.total) "$done. The rest are tagged while charging on Wi-Fi, videos once the phone sits unused." else done
 }
 
 private fun percent(bytes: Long, total: Long): Long = if (total <= 0) 0 else bytes * 100 / total

@@ -109,12 +109,12 @@ class LibraryVisionBackfill(
      * added frames marked every earlier analysis as awaiting them.
      */
     private suspend fun settleStills() {
-        val checked = HashSet<PostId>()
+        // The posts that play stay awaiting, ahead of the next batch; the others leave, so each post is read once.
+        var playing = 0
         while (tagger.ready.value) {
-            val awaiting = signatures.libraryPostsAwaitingFrames(tagger.modelId, checked.size + SETTLE_BATCH).filterNot { it.id in checked }
+            val awaiting = signatures.libraryPostsAwaitingFrames(tagger.modelId, SETTLE_BATCH, skip = playing)
             if (awaiting.isEmpty()) return
-            awaiting.mapTo(checked) { it.id }
-            tagger.playing(awaiting)
+            playing += tagger.playing(awaiting).size
         }
     }
 
