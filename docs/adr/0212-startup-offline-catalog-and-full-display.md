@@ -1,4 +1,4 @@
-# 0209. Startup does not wait for the offline catalog, and the launch reports full display from the restored tab
+# 0212. Startup does not wait for the offline catalog, and the launch reports full display from the restored tab
 
 Status: Accepted
 
@@ -13,7 +13,7 @@ The startup benchmark also measured only time to initial display, the spinner's 
 - `awaitDurableStores` does not await the catalog scan. `OfflineMediaCoordinator` starts it when built.
 - `OfflineMediaStore.snapshot` is null until the first scan finishes, so every reader must handle the unscanned state. `load` returns the scanned catalog, waiting for the scan only if none has finished. Once one has, it returns without taking the store's lock, so it never queues behind long store work. `scannedSnapshots` scans first, then follows the catalog. The store's other operations scan under the lock before they act.
 - Readers wait for the scan where an empty catalog would be wrong:
-  - Every Viewer launch (`launchViewer`) and restore (`restoreSession`) waits for the scan before pages are built, so `requiresResolution` knows which posts have offline copies.
+  - Every Viewer launch (`launchViewer`) and restore (`restoreSession`) waits for the scan before pages are built, so `requiresResolution` knows which posts have offline copies. If a page is built before the scan anyway, `requiresResolution` treats the post as possibly offline. Resolving it goes through `find`, which waits for the scan, so a path that skips both waits shows the offline copy instead of remote media.
   - `keepOffline` waits before it decides whether an owner keeps copies.
   - Series downloads read through `load` and `scannedSnapshots`.
   - The Offline sheet reads as refreshing, and `codexStates` (with `LocalCodexOfflineStates`) stays null, which hides Codex offline rings and the Codex menu's offline row until the copies are known.
