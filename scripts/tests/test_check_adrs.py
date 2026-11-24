@@ -68,6 +68,12 @@ class CheckTest(RepositoryTest):
         self.assertIn("`gradlew` does not exist", problems[1])
         self.assertIn("It was deleted in this change", problems[1])
 
+    def test_sibling_of_a_moved_path_resolves_against_its_old_directory(self) -> None:
+        self.record("0001-a.md", "- `core/src/old/First.kt`, `Second.kt`")
+        moved = {"core/src/old/First.kt": "core/src/new/First.kt", "core/src/old/Second.kt": "core/src/new/Second.kt"}
+        problems = self.problems(moved)
+        self.assertIn("It moved to `core/src/new/Second.kt`", problems[1])
+
     def test_directory_stands_for_every_file_under_it(self) -> None:
         self.record("0001-a.md", "- `core/src/`: `SearchModel`, `otherValue`\n- `core/src/b/`: `SearchModel`")
         self.assertEqual(["docs/adr/0001-a.md: `SearchModel` is not in `core/src/b/`. "
