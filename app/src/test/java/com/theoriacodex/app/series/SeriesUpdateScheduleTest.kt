@@ -92,7 +92,6 @@ class SeriesUpdateScheduleTest {
         notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/7", "7"), SeriesEntry("/c/6", "6"))))
         assertNull(posted(series).actions)
 
-        // Replacing a notification still showing, which may have announced an unread entry, offers no Read.
         notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/8", "8"))))
         assertNull(posted(series).actions)
     }

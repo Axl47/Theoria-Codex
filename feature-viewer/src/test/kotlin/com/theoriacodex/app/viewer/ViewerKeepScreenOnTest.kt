@@ -93,7 +93,6 @@ class ViewerKeepScreenOnTest {
             assertTrue(view.keepScreenOn)
             idleFor(VIEWER_READING_IDLE_MS + 1_000L)
             assertFalse(view.keepScreenOn)
-            // Retry reaches no Viewer control and changes no page: only the touch itself counts.
             compose.onNodeWithText("Retry").performTouchInput { click() }
             compose.mainClock.advanceTimeBy(1_000L)
             assertTrue(view.keepScreenOn)

@@ -37,7 +37,6 @@ internal class ViewerScreenState {
     val verticalGalleryPositions = mutableMapOf<PostId, ViewerVerticalGalleryState>()
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
-    /** Counts every touch that lands anywhere on the Viewer; an open chapter keeps the screen on while they come. */
     var touchSerial by mutableIntStateOf(0)
     var timelineInteractionActive by mutableStateOf(false)
     /** Set while a hold-scrub has shown chrome that was hidden, so the scrub's end can hide it again. */

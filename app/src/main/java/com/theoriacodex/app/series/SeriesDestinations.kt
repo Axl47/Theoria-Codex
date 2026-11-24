@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** [AppRoute.Series]'s arguments. */
 internal val seriesArguments = listOf(
     navArgument("source") { type = NavType.StringType },
     navArgument("address") { type = NavType.StringType },
@@ -35,10 +34,8 @@ internal val seriesArguments = listOf(
     },
 )
 
-/** Set once the page has opened the entry its route names, so returning to the page does not open it again. */
 private const val ROUTE_ENTRY_OPENED = "routeEntryOpened"
 
-/** Carries a genre chip tap from a series page to the Series tab's source-filtered search. */
 internal class SeriesGenreRequests {
     private val mutablePending = MutableStateFlow<Pair<SourceKey, String>?>(null)
     val pending: StateFlow<Pair<SourceKey, String>?> = mutablePending.asStateFlow()
@@ -54,7 +51,6 @@ internal class SeriesGenreRequests {
 
 internal val LocalSeriesGenreSearch = staticCompositionLocalOf { SeriesGenreRequests() }
 
-/** The Series tab. */
 @Composable
 internal fun SeriesTabDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
@@ -88,7 +84,6 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     )
 }
 
-/** The Extensions page, pushed from the Series tab and from Settings. */
 @Composable
 internal fun ExtensionsDestination(shell: TheoriaShell) {
     val series = shell.container.series ?: return
@@ -100,7 +95,6 @@ internal fun TheoriaShell.openExtensions() {
     navController.navigate(AppRoute.Extensions) { launchSingleTop = true }
 }
 
-/** One series' page. A chapter opens in the Viewer as a series session, which the saved launch context never names. */
 @Composable
 internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val series = shell.container.series ?: return
@@ -126,7 +120,6 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val openEntry: suspend (String) -> Unit = { address ->
         shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }
     }
-    // Tied to this page: Back while the entry loads cancels it, so the Viewer never opens over another screen.
     LaunchedEffect(entry) {
         val routed = entry.arguments?.getString("entry") ?: return@LaunchedEffect
         if (entry.savedStateHandle.get<Boolean>(ROUTE_ENTRY_OPENED) == true) return@LaunchedEffect
@@ -139,7 +132,6 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
         onOpenExtensions = shell::openExtensions,
         switchSource = switchSource,
         onOpenSeries = { opened -> shell.navController.navigate(AppRoute.series(opened)) },
-        // The old series is gone, so its page leaves the back stack; only while it is still the page on screen.
         onSwitched = { moved ->
             if (shell.navController.currentBackStackEntry == entry) {
                 shell.navController.navigate(AppRoute.series(moved)) { popUpTo(entry.destination.id) { inclusive = true } }

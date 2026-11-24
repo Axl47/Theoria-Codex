@@ -397,5 +397,4 @@ private fun advanceToPendingPost(
 private val VIEWER_BACK_DISTANCE = 48.dp
 internal const val VIEWER_UNLOCK_PEEK_MS = 3_000L
 
-/** How long an open chapter keeps the screen on without any interaction or page change. */
 internal const val VIEWER_READING_IDLE_MS = 10 * 60_000L

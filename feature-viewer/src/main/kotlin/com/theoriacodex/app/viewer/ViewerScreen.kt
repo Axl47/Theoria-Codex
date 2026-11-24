@@ -281,7 +281,6 @@ private fun ViewerBackdrop(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // Observes each touch's first contact before any child handles it, without consuming it.
             .pointerInput(onTouch) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)

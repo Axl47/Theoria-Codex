@@ -56,7 +56,6 @@ internal const val REPOS_TITLE = "Repos"
 internal const val BROWSE_TITLE = "Get extensions"
 internal const val ADD_REPO_LABEL = "Add repo"
 
-/** The user's repos, each with why it could not be read when that is so, the way to add one, and once there is one, Get extensions. */
 @Composable
 internal fun ReposPage(state: ExtensionsState, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     SettingsPageColumn {
@@ -79,7 +78,6 @@ internal fun ReposPage(state: ExtensionsState, viewModel: ExtensionsViewModel, o
             }
         }
         SettingsGroup(null) {
-            // Leads on from a repo just added to what it offers.
             if (!repos.isNullOrEmpty()) {
                 SettingsRow(BROWSE_TITLE, onClick = { viewModel.openSubpage(ExtensionsSubpage.BROWSE) })
                 SettingsRowDivider()
@@ -90,13 +88,11 @@ internal fun ReposPage(state: ExtensionsState, viewModel: ExtensionsViewModel, o
     state.addRepo?.let { ask -> AddRepoDialog(ask, onDismiss = { viewModel.askForRepo(false) }, onAdd = viewModel::addRepo) }
 }
 
-/** Asks for a repo's address. Adding one is what lets its extensions be installed, so the dialog says what they can do. */
 @Composable
 private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -> Unit) {
     var url by rememberSaveable { mutableStateOf("") }
     val submit = { if (url.isNotBlank() && !ask.busy) onAdd(url.trim()) }
     AlertDialog(
-        // Stays open while the repo is read, so its answer lands in this dialog.
         onDismissRequest = { if (!ask.busy) onDismiss() },
         title = { Text(ADD_REPO_LABEL) },
         text = {
@@ -121,10 +117,6 @@ private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -
     )
 }
 
-/**
- * Every extension the repos offer that this app can run, narrowed by kind when both are offered and by language (by
- * default the device's languages), then by name with a search.
- */
 @Composable
 internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -162,7 +154,6 @@ internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, 
     }
 }
 
-/** The extensions found, or why there are none yet; a search with matches only in [elsewhere] other languages offers them. */
 private fun LazyListScope.browseRowItems(
     rows: List<RepoExtension>?,
     query: String,
@@ -200,10 +191,6 @@ private fun BrowseSearchField(query: String, onQueryChange: (String) -> Unit) {
     )
 }
 
-/**
- * Which languages Get extensions lists: the device's, every one, or [Only] one (with those covering every language).
- * Languages compare by [languagePart], so Spanish includes `es-419`.
- */
 internal sealed interface LanguageFilter {
     data object Yours : LanguageFilter
     data object Every : LanguageFilter
@@ -217,10 +204,6 @@ internal sealed interface LanguageFilter {
     }
 }
 
-/**
- * What the browse page lists: those of [kind] (any when null) in the [language] chosen, then name matches for [query].
- * Extensions covering every language ("all") show under any language.
- */
 internal fun browseRows(
     extensions: List<RepoExtension>,
     query: String,
@@ -240,15 +223,10 @@ internal fun browseRows(
         .sortedBy { it.name.lowercase() }
 }
 
-/**
- * Every language some extension offers, by [languagePart] and sorted by name; "all" is left out, since those extensions
- * show under each, as are blank codes.
- */
 internal fun offeredLanguages(extensions: List<RepoExtension>): List<String> =
     extensions.flatMap { it.languages }.map(::languagePart).filter { it.isNotBlank() && it != "all" }.distinct()
         .sortedBy { languageName(it).lowercase() }
 
-/** How many extensions a search that found no [rows] would find in all languages; 0 when that would show nothing new. */
 internal fun otherLanguageMatches(
     extensions: List<RepoExtension>,
     rows: List<RepoExtension>?,
@@ -261,7 +239,6 @@ internal fun otherLanguageMatches(
     return browseRows(extensions, query, deviceLanguages, LanguageFilter.Every, kind).size
 }
 
-/** The chosen language as a chip; tapping it offers the device's languages, every language, or any one offered. */
 @Composable
 private fun LanguageChip(chosen: LanguageFilter, languages: List<String>, onChoose: (LanguageFilter) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
@@ -287,7 +264,6 @@ private fun LanguageChip(chosen: LanguageFilter, languages: List<String>, onChoo
     }
 }
 
-/** The Updates group atop the Extensions list: each extension a repo has a newer version of, with a way to update all. */
 @Composable
 internal fun UpdatesGroup(state: ExtensionsState, viewModel: ExtensionsViewModel) {
     val updates = state.updates
@@ -301,7 +277,6 @@ internal fun UpdatesGroup(state: ExtensionsState, viewModel: ExtensionsViewModel
     }
 }
 
-/** One extension a repo offers: its languages and version, and Install or Update while that is possible. */
 @Composable
 private fun RepoExtensionRow(extension: RepoExtension, state: ExtensionsState, bothKinds: Boolean, onInstall: (RepoExtension) -> Unit) {
     val failure = state.failures[extension.packageName]
@@ -320,7 +295,6 @@ private fun RepoExtensionRow(extension: RepoExtension, state: ExtensionsState, b
     )
 }
 
-/** Its languages (or how many), its version, what it is when both kinds are listed, and why it cannot be installed. */
 internal fun repoExtensionSummary(extension: RepoExtension, bothKinds: Boolean): String {
     val languages = extension.languages.singleOrNull()?.let(::languageName) ?: "${extension.languages.size} languages"
     val status = when (extension.status) {
