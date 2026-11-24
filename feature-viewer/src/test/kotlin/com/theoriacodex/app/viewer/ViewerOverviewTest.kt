@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
@@ -11,6 +13,7 @@ import com.theoriacodex.app.viewer.state.reduceViewerState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -39,5 +42,20 @@ class ViewerOverviewTest {
         compose.runOnIdle { assertTrue(state.value.overview.visible) }
         compose.runOnIdle { reduce(ViewerAction.AppendPosts(requireNotNull(state.value.session), listOf(testPost(sourcePostId = "next")))) }
         compose.runOnIdle { assertTrue(state.value.overview.visible) }
+    }
+
+    @Test fun `the top bar's Back closes an open overview, not the Viewer`() {
+        val gallery = testPost(sourcePostId = "gallery").copy(media = (1..3).map { ImageRef(null, "/missing-$it.jpg", "image/jpeg") })
+        val launch = ViewerSession(listOf(gallery), ViewerLaunchContext("q", 0, ViewerStreamSource.SEARCH, 0), sessionId = "overview-back")
+        val state = mutableStateOf(reduceViewerState(ViewerUiState.Empty, launch.toReplaceViewerSessionAction()).state)
+        val actions = mutableListOf<ViewerAction>()
+        fun reduce(action: ViewerAction) { actions += action; state.value = reduceViewerState(state.value, action).state }
+        compose.setContent { MaterialTheme { ViewerScreen(uiState = state.value, host = ViewerScreenHost(onAction = ::reduce)) } }
+        compose.runOnIdle { reduce(ViewerAction.ToggleOverview) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.runOnIdle {
+            assertFalse(state.value.overview.visible)
+            assertFalse(actions.any { it is ViewerAction.PrepareDismiss })
+        }
     }
 }

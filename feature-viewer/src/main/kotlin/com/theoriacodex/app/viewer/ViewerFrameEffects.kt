@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
@@ -15,6 +16,10 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerPageState
@@ -126,7 +131,20 @@ internal fun ViewerFrameEffects(
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
     ViewerUnlockPeekEffect(frame, screen)
+    ViewerKeepScreenOnEffect(frame.keepsScreenAwake)
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
+}
+
+/** Keeps the screen on while [awake], released once the Viewer pauses or leaves. */
+@Composable
+private fun ViewerKeepScreenOnEffect(awake: Boolean) {
+    val view = LocalView.current
+    val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
+    val on = awake && resumed
+    DisposableEffect(view, on) {
+        view.keepScreenOn = on
+        onDispose { view.keepScreenOn = false }
+    }
 }
 
 /** Auto-hides the revealed Unlock button after the accessibility-adjusted timeout; clears immediately when unlocked. */
@@ -185,10 +203,7 @@ private fun ViewerBackHandlers(
     BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.locked) {
         screen.revealUnlock()
     }
-    BackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && frame.mediaOverviewVisible) {
-        controls.setOverviewVisible(false)
-        controls.markInteraction()
-    }
+    BackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && frame.mediaOverviewVisible, onBack = controls::back)
     val backDistance = with(LocalDensity.current) { VIEWER_BACK_DISTANCE.toPx() }
     PredictiveBackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && !frame.mediaOverviewVisible) { events ->
         var committed = false

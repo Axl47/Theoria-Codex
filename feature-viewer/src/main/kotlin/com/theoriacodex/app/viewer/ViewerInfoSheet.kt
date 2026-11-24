@@ -158,6 +158,7 @@ internal fun ViewerInfoSheet(
                     restartViewerEpisode(post, controls, host.onAction)
                 } else {
                     controls.jumpToMedia(post.id, 0)
+                    controls.setInfoSheetVisible(false)
                 }
             }
         }

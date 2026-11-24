@@ -55,7 +55,8 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 internal data class ViewerMediaLayout(
-    val landscape: Boolean,
+    /** Still images fill the page with no inset: in landscape and while reading a Series chapter. */
+    val edgeToEdge: Boolean,
     val pictureInPicture: Boolean,
     val touchExploration: Boolean,
 )
@@ -124,7 +125,7 @@ internal fun ViewerMediaPage(
             translationY = current.panY
         }
     }
-    val mediaPadding = if (layout.landscape || animated) 0.dp else 16.dp
+    val mediaPadding = if (layout.edgeToEdge || animated) 0.dp else 16.dp
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
     val transformAspectRatio = if (controls.fillScreen) null else viewerMediaAspectRatio(post, media)
     val overlayAspectRatio = if (controls.fillScreen) null else viewerAspectRatio(post)

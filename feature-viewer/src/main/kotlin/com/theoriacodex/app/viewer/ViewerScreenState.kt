@@ -165,6 +165,13 @@ internal class ViewerControls(
         if (isActive) markInteraction()
     }
 
+    /** Back from the top bar or the system: it leaves an open page overview before it closes the Viewer. */
+    fun back() {
+        if (!overviewVisible) return requestDismiss()
+        setOverviewVisible(false)
+        markInteraction()
+    }
+
     fun requestDismiss() {
         if (screen.pendingDismiss) return
         onAction(ViewerAction.PrepareDismiss)
@@ -234,8 +241,20 @@ internal class ViewerFrame(
     /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
     val locked = uiState.controls.locked && watching && !inPictureInPicture
 
-    // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
-    val mediaEdgeToEdge = isLandscape || inPictureInPicture
+    private val reading = uiState.series is ViewerSeries.Reading
+
+    // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars, and
+    // while reading a chapter, whose pages need every pixel.
+    val mediaEdgeToEdge = isLandscape || inPictureInPicture || reading
+
+    /**
+     * Still images drop their inset in landscape and while reading a chapter. Galleries outside a series keep it: the
+     * inset and top gap are their screenshot-referenced layout, and only chapter reading was asked to fill the width.
+     */
+    val stillsEdgeToEdge = isLandscape || reading
+
+    /** A running slideshow or an open chapter keeps the screen on. */
+    val keepsScreenAwake = uiState.controls.slideshow || reading
 
     /**
      * Whether the selected video may take the system's media controls and picture-in-picture: not while the Viewer
