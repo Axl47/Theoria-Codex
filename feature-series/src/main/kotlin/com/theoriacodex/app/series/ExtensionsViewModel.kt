@@ -151,15 +151,23 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
         showListing(refresh = false)
     }
 
-    /** The latest [showListing]; an earlier one still reading the repos, such as the first refresh, is not shown. */
+    /**
+     * The latest [showListing]; an earlier one still reading the repos, such as the first refresh, is not shown, so one
+     * that supersedes a refresh refreshes too.
+     */
     private var listingRequest = 0
+    private var refreshing = false
 
     private suspend fun showListing(refresh: Boolean) {
         val request = ++listingRequest
+        refreshing = refresh || refreshing
+        val fresh = refreshing
         val repos = repos.repos()
         mutableState.update { it.copy(repos = repos) }
-        val listing = this.repos.available(refresh)
-        if (request == listingRequest) mutableState.update { it.copy(listing = listing) }
+        val listing = this.repos.available(fresh)
+        if (request != listingRequest) return
+        refreshing = false
+        mutableState.update { it.copy(listing = listing) }
     }
 
     private fun show(listed: List<InstalledExtension>) = mutableState.update { it.copy(extensions = listed) }
