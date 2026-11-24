@@ -152,6 +152,21 @@ class RoomProfileBackupStoreTest {
         deviceDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_page = 2, page_count = 10 WHERE address = '/chapter/2'")
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
         assertEquals(3L to 20L, progress())
+
+        // A side without a count, as Mihon backups are, keeps the other's only when it reaches the winning page:
+        // page 20 without a count and page 5 of 10 never make "20 of 10", whichever is merged first.
+        val dao = deviceDatabase.seriesDao()
+        fun reset(page: Long, count: Long?) = deviceDatabase.openHelper.writableDatabase
+            .execSQL("UPDATE series_entries SET last_page = ?, page_count = ? WHERE address = '/chapter/2'", arrayOf(page, count))
+        reset(5, 10)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 20L, null)
+        assertEquals(20L to null, progress())
+        reset(20, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 5L, 10L)
+        assertEquals(20L to null, progress())
+        reset(5, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 4L, 10L)
+        assertEquals(5L to 10L, progress())
         deviceDatabase.close()
     }
 

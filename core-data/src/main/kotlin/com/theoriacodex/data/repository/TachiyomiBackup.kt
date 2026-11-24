@@ -158,7 +158,7 @@ private class TachiyomiHistory(
 )
 
 /**
- * Far above a real library's (the TachiyomiJ2K backup of 253 series and 40,000 chapters inflates to 4 MB), yet small
- * enough that the inflated bytes, their copy and the decoded series fit an app's heap.
+ * How far a backup may inflate: far above a real library's (the TachiyomiJ2K backup of 253 series and 40,000 chapters
+ * inflates to 4 MB).
  */
 private const val MAX_TACHIYOMI_BACKUP_BYTES = 64 * 1024 * 1024
