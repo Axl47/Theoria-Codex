@@ -75,13 +75,9 @@ internal object RepoReader {
                 // Anime stores number their fields differently from manga ones (field 8 is the torrent flag, not the
                 // sources), and a store says neither. The anime layout is tried first, which a manga store listing
                 // sources fails; one listing none fits it, but names Mihon's interface versions, which have a dot.
-                val anime = try {
-                    protoStore(body, AnimeEntry.serializer(), get)
-                } catch (_: SerializationException) {
-                    null
-                } catch (_: IllegalArgumentException) {
-                    null
-                }
+                val anime = runCatching { protoStore(body, AnimeEntry.serializer(), get) }
+                    .onFailure { if (it !is SerializationException && it !is IllegalArgumentException) throw it }
+                    .getOrNull()
                 val store = anime?.takeUnless { (_, _, entries) -> entries.any { '.' in it.extensionLib } } ?: protoStore(body, MangaEntry.serializer(), get)
                 RepoIndex(store.first, store.second.lowercase(), store.third.map(ProtoEntry::indexed))
             }
