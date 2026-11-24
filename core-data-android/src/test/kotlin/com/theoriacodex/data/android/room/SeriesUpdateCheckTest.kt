@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.domain.model.SourceKey
@@ -16,16 +17,16 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.theoriacodex.data.repository.refresh
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -145,12 +146,58 @@ class SeriesUpdateCheckTest {
         runCurrent()
 
         val askedWhileWaiting = mutableListOf<Boolean>()
-        val check = launch { repository.checkFollowed({ askedWhileWaiting += !pageRefresh.isCompleted; null }) }
-        withContext(Dispatchers.Default) { delay(200) }
+        val followedRead = CompletableDeferred<Unit>()
+        val reading = object : SeriesRepository by repository {
+            override fun observeFollowed() = repository.observeFollowed().onEach { followedRead.complete(Unit) }
+        }
+        val check = launch { reading.checkFollowed({ askedWhileWaiting += !pageRefresh.isCompleted; null }) }
+        followedRead.await()
+        runCurrent()
         pageRefresh.complete(Unit)
         joinAll(refresh, check)
 
         assertEquals(listOf(false), askedWhileWaiting)
+    }
+
+    @Test
+    fun `leaving a series' page while its refresh stores new chapters still queues them`() = runTest {
+        follow(series)
+        source.detailsWait = CompletableDeferred(Unit)
+        source.chapters[series.id] = listOf(first)
+        repository.refresh(source, series)
+
+        source.chapters[series.id] = listOf(second, first)
+        val storing = CompletableDeferred<Unit>()
+        val stored = CompletableDeferred<Unit>()
+        val slowStore = object : SeriesRepository by repository {
+            override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> {
+                storing.complete(Unit)
+                stored.await()
+                return repository.store(series, entries)
+            }
+        }
+        val queued = mutableListOf<List<SeriesEntry>>()
+        val refresh = launch { slowStore.refresh(source, series) { currentCoroutineContext().ensureActive(); queued += it } }
+        storing.await()
+        refresh.cancel()
+        stored.complete(Unit)
+        refresh.join()
+
+        assertEquals(listOf(listOf(second)), queued)
+    }
+
+    @Test
+    fun `a first refresh and one that finds nothing new queue nothing`() = runTest {
+        follow(series)
+        source.detailsWait = CompletableDeferred(Unit)
+        source.chapters[series.id] = listOf(second, first)
+        val queued = mutableListOf<List<SeriesEntry>>()
+
+        repository.refresh(source, series) { queued += it }
+        repository.refresh(source, series) { queued += it }
+
+        assertEquals(emptyList<List<SeriesEntry>>(), queued)
+        assertEquals(2, repository.entries(series.id).size)
     }
 
     @Test

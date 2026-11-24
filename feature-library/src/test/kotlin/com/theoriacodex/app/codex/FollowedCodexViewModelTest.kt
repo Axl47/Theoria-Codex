@@ -218,6 +218,86 @@ class FollowedCodexViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
+    @Test fun `refresh keeps the loaded posts while offline and replaces them with the newest page once online`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            var uploads = listOf("old")
+            var offline = false
+            val owner = owner { creator, _ ->
+                check(!offline) { "offline" }
+                Page(uploads.map { testPost(SourceKey.PIXIV, "${creator.profileId}-$it") }, null)
+            }
+            store.put("owner", owner)
+            owner.synchronize(listOf(follow("1"), follow("2")), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val loadedAt = owner.state.value.loadedAtEpochMs
+            uploads = listOf("new")
+
+            offline = true
+            owner.refresh()
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("1-old", "2-old"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertTrue(owner.state.value.errors.isEmpty())
+            assertEquals(loadedAt, owner.state.value.loadedAtEpochMs)
+            assertFalse(owner.state.value.loading)
+
+            offline = false
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("1-new", "2-new"), owner.state.value.posts.map { it.id.sourcePostId })
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `a new follow set arriving mid-refresh wins and leaves refresh working`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            var slow = false
+            var calls = 0
+            val owner = owner { creator, _ ->
+                calls++
+                if (slow) withContext(NonCancellable) { delay(1_000) }
+                Page(listOf(testPost(SourceKey.PIXIV, "${creator.profileId}-$calls")), null)
+            }
+            store.put("owner", owner)
+            owner.synchronize(listOf(follow("1")), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+
+            slow = true
+            owner.refresh()
+            runCurrent()
+            slow = false
+            owner.synchronize(listOf(follow("2")), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            assertEquals(listOf("2-3"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertFalse(owner.state.value.loading)
+
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf("2-4"), owner.state.value.posts.map { it.id.sourcePostId })
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `refresh with no follows fetches nothing and leaves the feed idle`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            var calls = 0
+            val owner = owner { _, _ -> calls++; Page(emptyList(), null) }
+            store.put("owner", owner)
+            owner.synchronize(emptyList(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val before = owner.state.value
+
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(0, calls)
+            assertEquals(before, owner.state.value)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
     private class FixedRelatedLoader(private val posts: List<Post>) : RelatedPostsLoading {
         override fun supports(source: SourceKey) = true
         override suspend fun load(seed: PostId) = posts
