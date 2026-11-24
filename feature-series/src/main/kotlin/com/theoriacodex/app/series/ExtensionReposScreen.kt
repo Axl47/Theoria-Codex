@@ -80,7 +80,8 @@ private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -
     var url by rememberSaveable { mutableStateOf("") }
     val submit = { if (url.isNotBlank() && !ask.busy) onAdd(url.trim()) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        // Stays open while the repo is read, so its answer lands in this dialog.
+        onDismissRequest = { if (!ask.busy) onDismiss() },
         title = { Text("Add repo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -99,7 +100,7 @@ private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -
                 Text("Extensions you install from it run inside this app and can read its data.", style = MaterialTheme.typography.bodyMedium)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !ask.busy) { Text("Cancel") } },
         confirmButton = { TextButton(onClick = submit, enabled = url.isNotBlank() && !ask.busy) { Text("Add") } },
     )
 }

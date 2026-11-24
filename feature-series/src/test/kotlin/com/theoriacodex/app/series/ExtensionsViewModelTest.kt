@@ -12,10 +12,12 @@ import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -84,6 +86,21 @@ class ExtensionsViewModelTest {
     }
 
     @Test
+    fun `a slow first check of the repos does not bring back a repo removed meanwhile`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repos = Repos()
+        repos.offered = listOf(offered("a", RepoExtension.Status.UPDATE))
+        repos.refreshDelay = 1_000
+        val viewModel = ExtensionsViewModel(OnDevice(emptyList()), repos)
+        runCurrent()
+
+        viewModel.removeRepo("https://repo.example")
+        advanceUntilIdle()
+
+        assertEquals(emptyList<RepoExtension>(), viewModel.state.value.updates)
+    }
+
+    @Test
     fun `browsing shows the device's languages and every-language extensions until a search looks through all`() {
         val extensions = listOf(offered("pt", languages = listOf("pt-BR")), offered("all", languages = listOf("all")), offered("ja", languages = listOf("ja")), offered("En2", languages = listOf("en")))
         assertEquals(listOf("all", "En2", "pt"), browseRows(extensions, "", listOf("en-US", "pt-PT")).map { it.name })
@@ -93,10 +110,14 @@ class ExtensionsViewModelTest {
     private fun offered(name: String, status: RepoExtension.Status = RepoExtension.Status.AVAILABLE, languages: List<String> = listOf("en")) =
         RepoExtension("https://repo.example", name, name, languages, "1.0", SeriesKind.ANIME, status)
 
-    /** A repo that offers [offered], refuses to install what [refusing] names, and adds only `https://repo.example`. */
+    /**
+     * A repo that offers [offered], refuses to install what [refusing] names, and adds only `https://repo.example`. A
+     * refreshed listing takes [refreshDelay] and holds what was offered when it was asked for.
+     */
     private class Repos : ExtensionRepos {
         var offered = emptyList<RepoExtension>()
         var refusing = emptyMap<String, String>()
+        var refreshDelay = 0L
         val installed = mutableListOf<String>()
         private val added = mutableListOf<ExtensionRepo>()
 
@@ -108,9 +129,16 @@ class ExtensionsViewModelTest {
             return bad.associate { it.url to "Not an extension repo" }
         }
 
-        override suspend fun remove(url: String) = Unit
+        override suspend fun remove(url: String) {
+            added.removeAll { it.url == url }
+            offered = offered.filterNot { it.repo == url }
+        }
 
-        override suspend fun available(refresh: Boolean) = RepoListing(offered)
+        override suspend fun available(refresh: Boolean): RepoListing {
+            val now = offered
+            if (refresh) delay(refreshDelay)
+            return RepoListing(now)
+        }
 
         override suspend fun install(repo: String, packageName: String): String? {
             installed += packageName
