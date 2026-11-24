@@ -172,36 +172,34 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         mutableState.value = state.value.copy(loading = true, generation = generation)
         job = scope.launch {
             try {
-                ids.mapConcurrent(concurrency = 2) { id ->
-                    val branch = branches[id] ?: return@mapConcurrent
-                    val result = fetch(branch, retry)
-                    if (generation == admitted) {
-                        branches[id] = result
-                        if (!reloading) {
-                            publish(loading = true)
-                            cacheFirstPost(admitted, cacheInitialCover)
-                        }
-                    }
-                }
-                if (reloading && generation == admitted) {
-                    keepFailedBranches()
-                    publish(loading = true)
-                    cacheFirstPost(admitted, root = true)
-                }
+                ids.mapConcurrent(concurrency = 2) { id -> fetchBranch(id, retry, admitted, publishEach = !reloading, cacheInitialCover) }
+                if (reloading && generation == admitted) finishReload(admitted)
             } finally {
                 if (generation == admitted) {
+                    if (reloading) keptBranches = null
                     publish(loading = false)
                 }
             }
         }
     }
 
-    private fun keepFailedBranches() {
-        val kept = keptBranches ?: return
-        keptBranches = null
+    private suspend fun fetchBranch(id: String, retry: Boolean, admitted: Long, publishEach: Boolean, cacheInitialCover: Boolean) {
+        val branch = branches[id] ?: return
+        val result = fetch(branch, retry)
+        if (generation != admitted) return
+        branches[id] = result
+        if (!publishEach) return
+        publish(loading = true)
+        cacheFirstPost(admitted, cacheInitialCover)
+    }
+
+    private suspend fun finishReload(admitted: Long) {
+        val kept = keptBranches.orEmpty()
         val failed = branches.filter { (id, branch) -> branch.posts.isEmpty() && branch.error != null && id in kept }.keys
         failed.forEach { branches[it] = kept.getValue(it) }
         if (failed.isNotEmpty()) loadedAt = keptLoadedAt
+        publish(loading = true)
+        cacheFirstPost(admitted, root = true)
     }
 
     private suspend fun cacheFirstPost(admitted: Long, root: Boolean) {
