@@ -28,6 +28,6 @@ Changing a threshold needs re-measurement; the stored floor must stay at or belo
 - `core-domain/src/test/kotlin/com/theoriacodex/domain/vision/PredictedTagTest.kt`: `each use counts a tag from its measured threshold and not just below it (ADR 0005)`, `the stored floor is 0_35, at or below every use's threshold (ADR 0005)`
 - `core-domain/src/test/kotlin/com/theoriacodex/domain/vision/PictureTagsTest.kt`: `without a tagger nothing is ready, known or seen (ADR 0005)`
 - `vision-kit/src/test/kotlin/com/theoriacodex/app/vision/PictureTaggerTest.kt`: `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005)`
-- `vision-kit/src/test/kotlin/com/theoriacodex/app/vision/LibraryVisionBackfillTest.kt`: `look remembers only a seen picture, so an unreachable one is asked again (ADR 0005)`, `a picture analysed this session is known but never reaches the library flow (ADR 0005)`
+- `vision-kit/src/test/kotlin/com/theoriacodex/app/vision/LibraryVisionBackfillTest.kt`: `look remembers only a seen picture, so an unreachable one is asked again (ADR 0005)`, `a picture analysed this session is known but never reaches the library flow (ADR 0005)`, `known with a ready model answers null for an unanalysed picture without reading or analysing it (ADR 0005)`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/vision/PictureTags.kt`: `fun known(id: PostId): List<PredictedTag>?`
 - Left to prose: never showing a prediction as a tag the post was given is a UI rule; the thresholds' precision and recall need re-measurement, not a check.
