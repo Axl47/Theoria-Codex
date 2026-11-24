@@ -18,6 +18,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ManageSearch
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CollectionsBookmark
 import androidx.compose.material.icons.filled.Person
@@ -117,6 +118,7 @@ private fun RowScope.OmniboxText(title: String, detail: String?) {
 /** Each kind's icon and what TalkBack calls it, so rows of different kinds read apart. */
 private fun omniboxKindIcon(kind: OmniboxKind): Pair<ImageVector, String> = when (kind) {
     OmniboxKind.CODEX -> Icons.Default.CollectionsBookmark to "Codex"
+    OmniboxKind.SERIES -> Icons.AutoMirrored.Filled.MenuBook to "Series"
     OmniboxKind.CREATOR -> Icons.Default.Person to "Creator"
     OmniboxKind.SAVED_SEARCH -> Icons.Default.Bookmark to "Saved search"
     OmniboxKind.RECENT_SEARCH -> Icons.AutoMirrored.Filled.ManageSearch to "Recent search"

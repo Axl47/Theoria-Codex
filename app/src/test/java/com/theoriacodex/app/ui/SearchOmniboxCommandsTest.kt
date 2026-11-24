@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.media.videoQualityLabel
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.matchOmnibox
@@ -18,6 +19,9 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
+import com.theoriacodex.domain.series.SeriesId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -92,6 +96,21 @@ class SearchOmniboxCommandsTest {
 
         assertEquals(listOf(beni, chiyo), recentCreators(watched, listOf(followed)))
         assertEquals(listOf(beni), recentCreators(watched, listOf(followed), limit = 1))
+    }
+
+    @Test fun `a followed series is found by its title, names its kind and source, and opens its page`() {
+        val manga = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/hero"), "The Hero", coverUrl = "https://cdn.test/hero.jpg")
+        val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_2"), "/hero-tv"), "Hero TV")
+        var opened: SeriesId? = null
+
+        val entries = followedSeriesEntries(listOf(manga, anime), mapOf(manga.id.source to "Ink Harbor"), SeriesCovers.Stored) { opened = it }
+        val found = matchOmnibox(entries, "hero").filterIsInstance<OmniboxEntry.Action>()
+
+        assertEquals("Hero TV starts with the text", listOf("Hero TV", "The Hero"), found.map { it.title })
+        assertEquals(listOf("Anime", "Manga · Ink Harbor"), found.map { it.detail })
+        assertEquals(listOf(CodexCoverCandidate.RemoteImage(manga.id.source, "https://cdn.test/hero.jpg")), found.last().cover)
+        found.last().run()
+        assertEquals(manga.id, opened)
     }
 
     private fun watched(id: String, viewedAt: Long, vararg creators: CreatorProfile) = RecentPostEntry(
