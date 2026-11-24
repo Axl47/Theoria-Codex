@@ -59,16 +59,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import com.theoriacodex.app.search.alternativesText
 import com.theoriacodex.app.search.label
-import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
 import com.theoriacodex.app.search.state.SearchDraftReducer
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.FavoriteTagEntry
-import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SearchFacet
-import com.theoriacodex.domain.model.GENERAL_TAG_NAMESPACE
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
@@ -725,106 +721,6 @@ private fun TagActionPill(
     }
 }
 
-internal data class PostActionTermGroup(
-    val label: String,
-    val terms: List<SearchTerm>,
-)
-
-/** Keep supplied counts keyed by the same typed identity used by the action grid. */
-internal fun postActionSuppliedCounts(post: Post): Map<SearchTerm, Int> = buildMap {
-    post.taxonomy.forEach { taxonomy ->
-        val term = taxonomy.toSearchTerm().normalizedPostActionTermOrNull()
-        val count = taxonomy.count?.takeIf { it >= 0 }
-        if (term != null && count != null) put(term, count)
-    }
-}
-
-/** Native tag value to its provider translation; chips show both and still search the native tag. */
-internal fun Post.tagTranslations(): Map<String, String> =
-    taxonomy.mapNotNull { term -> term.translation?.let { term.value to it } }.toMap()
-
-internal fun postTagChipLabel(value: String, translation: String?): String =
-    translation?.let { "$it · $value" } ?: value
-
-fun postActionTerms(post: Post): List<SearchTerm> {
-    val typedTerms = post.taxonomy
-        .mapNotNull { taxonomyTerm -> taxonomyTerm.toSearchTerm().normalizedPostActionTermOrNull() }
-        .distinct()
-    if (typedTerms.isNotEmpty()) return typedTerms
-
-    val legacyTags = post.canonicalTags
-        .ifEmpty { post.rawTags }
-        .map(String::trim)
-        .filter(String::isNotBlank)
-        .distinct()
-    return legacyTags.map { value -> SearchTerm(value = value) }
-}
-
-internal fun postActionTermGroups(post: Post): List<PostActionTermGroup> {
-    return postActionTerms(post)
-        .groupBy(SearchTerm::postActionGroupKey)
-        .entries
-        .sortedWith(
-            compareBy<Map.Entry<PostActionGroupKey, List<SearchTerm>>> { entry ->
-                postTagFacetOrder.indexOf(entry.key.facet)
-            }.thenBy { entry -> entry.key.namespaceOrder }
-                .thenBy { entry -> entry.key.sourceNamespace.orEmpty() },
-        )
-        .map { (key, terms) ->
-            PostActionTermGroup(
-                label = searchScopeLabel(
-                    FacetedSearchScope(
-                        facet = key.facet,
-                        sourceNamespace = key.sourceNamespace,
-                    ),
-                ),
-                terms = terms,
-            )
-        }
-}
-
-internal fun generalPostActionTags(post: Post): List<String> {
-    return postActionTerms(post)
-        .filter(SearchTerm::isGeneralTag)
-        .map(SearchTerm::value)
-        .distinct()
-}
-
-private data class PostActionGroupKey(
-    val facet: SearchFacet,
-    val sourceNamespace: String?,
-) {
-    val namespaceOrder: Int
-        get() = when (sourceNamespace?.lowercase()) {
-            null, GENERAL_TAG_NAMESPACE -> 0
-            "female" -> 1
-            "male" -> 2
-            else -> 3
-        }
-}
-
-private fun SearchTerm.postActionGroupKey(): PostActionGroupKey {
-    val groupNamespace = sourceNamespace
-        ?.takeUnless { namespace -> facet == SearchFacet.TAG && namespace.equals(GENERAL_TAG_NAMESPACE, true) }
-    return PostActionGroupKey(facet = facet, sourceNamespace = groupNamespace)
-}
-
-private fun SearchTerm.normalizedPostActionTermOrNull(): SearchTerm? {
-    val normalizedValue = value.trim().takeIf(String::isNotBlank) ?: return null
-    val normalizedNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank)
-    return copy(value = normalizedValue, sourceNamespace = normalizedNamespace)
-}
-
-/** The most identifying types come first, since they tend to make the most useful searches. */
-val postTagFacetOrder = listOf(
-    SearchFacet.ARTIST,
-    SearchFacet.SERIES,
-    SearchFacet.CHARACTER,
-    SearchFacet.TAG,
-    SearchFacet.GROUP,
-    SearchFacet.TYPE,
-    SearchFacet.LANGUAGE,
-)
 /** The sheet's header, the tags' header and the tag peek come before whatever follows the folded tags. */
 private const val AFTER_FOLDED_TAGS_INDEX = 3
 private const val PEEK_TAG_COUNT = 10
