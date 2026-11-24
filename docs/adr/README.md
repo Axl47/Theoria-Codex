@@ -35,3 +35,4 @@ and link the record that replaces it.
 | [0015](0015-series-entry-storage.md) | Series entries are kept, never deleted, when a source stops listing them |
 | [0016](0016-shared-post-storage.md) | Posts are stored once, sparsely and compared by decoded value |
 | [0017](0017-visual-similarity-storage.md) | Visual signatures and For You verdicts are stored with their own lifecycle |
+| [0018](0018-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |

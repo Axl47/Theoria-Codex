@@ -130,10 +130,7 @@ class ForYouDeckViewModel(
     /** Posts decided on any level this session. */
     private val seen = mutableSetOf<PostId>()
 
-    /** Posts the profile skipped in the last [SKIP_MEMORY_MS], read from the log before the profile's first deal. */
     private var recentSkips: Set<PostId> = emptySet()
-
-    /** The profile [recentSkips] were read for; null until a read succeeds. */
     private var skipsReadFor: String? = null
 
     /**
@@ -247,14 +244,9 @@ class ForYouDeckViewModel(
         }
     }
 
-    /**
-     * Starts a fresh Mix that forgets what was decided this session or skipped in the last 30 days, so it may deal those
-     * posts again. Liked, saved and hidden posts stay out.
-     */
     fun startOver() {
         seen.clear()
         recentSkips = emptySet()
-        // Counts as read, so this Mix does not read the skips back.
         skipsReadFor = inputs?.profileId
         rebuild()
     }
@@ -275,7 +267,6 @@ class ForYouDeckViewModel(
         // The model loads while the lanes are planned and their first pages fetched, so the first check need not wait.
         if (vetsPictures) workScope.launch { wiring.pictures.prepare() }
         workScope.launch {
-            // Read while the lanes are planned; the first deal waits for it.
             val skips = if (skipsReadFor == profileId) null else async { readRecentSkips(profileId) }
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
@@ -295,16 +286,9 @@ class ForYouDeckViewModel(
         }
     }
 
-    /**
-     * Reads the posts [profileId] skipped in the last [SKIP_MEMORY_MS] into [recentSkips], after the swipes still being
-     * logged. A read that fails, or takes longer than [SKIP_READ_TIMEOUT_MS], leaves them out of this Mix rather than
-     * hold its first card back, and is tried again by the next Mix.
-     */
     private suspend fun readRecentSkips(profileId: String) {
         val since = wiring.clock() - SKIP_MEMORY_MS
-        // Only the wait is timed: a database query that stalls cannot be cancelled.
         val read = workScope.async {
-            // Waits out the writes already queued, without holding back the swipes made while it reads.
             verdictWrites.withLock {}
             wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT)
         }
@@ -754,13 +738,7 @@ class ForYouDeckViewModel(
         /** Vetted posts each lane keeps ready ahead of the deal: about a deal's worth across a Mix's lanes. */
         const val VET_AHEAD = 3
 
-        /**
-         * How long a skip keeps its post out of the Mix: long enough that a restart does not deal it again, short
-         * enough that a small or newest-sorted source does not run dry and a skip is not forever.
-         */
         const val SKIP_MEMORY_MS = 30L * 24 * 60 * 60 * 1000
-
-        /** The newest skips read back: about 30 days at 150 skips a day, read in well under the timeout. */
         const val SKIP_READ_LIMIT = 5_000
         const val SKIP_READ_TIMEOUT_MS = 1_500L
     }

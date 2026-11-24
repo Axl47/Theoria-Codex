@@ -32,7 +32,6 @@ interface ForYouVerdictRepository {
     /** The profile's verdicts, newest first. */
     suspend fun verdicts(profileId: String): List<ForYouVerdict>
 
-    /** The posts the profile skipped at or after [sinceEpochMs], at most the newest [limit]. */
     suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId>
 }
 
