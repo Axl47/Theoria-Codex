@@ -129,14 +129,16 @@ fun FeedFilterFab(
         color = if (active) colors.primaryContainer else colors.surfaceContainerHigh,
         contentColor = if (active) colors.onPrimaryContainer else colors.onSurface,
         shadowElevation = 6.dp,
-        // Undo reads as just "Undo", and is announced as it replaces the clear button that had focus.
-        modifier = modifier.semantics {
-            if (pendingUndo != null) liveRegion = LiveRegionMode.Polite
-            else stateDescription = if (active) "Filters active" else "No active filters"
-        },
+        modifier = modifier.feedFilterSemantics(active, undoing = pendingUndo != null),
     ) {
         FeedFilterContent(labels, contentDescription, scrollSignal, pendingUndo != null) { undo = onClear() }
     }
+}
+
+/** Undo reads as just "Undo", and is announced as it replaces the clear button that had focus. */
+private fun Modifier.feedFilterSemantics(active: Boolean, undoing: Boolean) = semantics {
+    if (undoing) liveRegion = LiveRegionMode.Polite
+    else stateDescription = if (active) "Filters active" else "No active filters"
 }
 
 @Composable
