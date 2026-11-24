@@ -1,15 +1,12 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.source.SiteAddress
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteHeaders
 import com.theoriacodex.domain.source.SiteProfile
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -134,12 +131,7 @@ class DataStoreSiteProfileRepositoryTest {
         recoveries: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         block: suspend (DataStoreSiteProfileRepository) -> Unit,
     ) {
-        val job = SupervisorJob()
-        try {
-            block(DataStoreSiteProfileRepository(directory, CoroutineScope(job + Dispatchers.IO), recoveries))
-        } finally {
-            job.cancelAndJoin()
-        }
+        withDataStoreScope { scope -> block(DataStoreSiteProfileRepository(directory, scope, recoveries)) }
     }
 
     private fun profile(

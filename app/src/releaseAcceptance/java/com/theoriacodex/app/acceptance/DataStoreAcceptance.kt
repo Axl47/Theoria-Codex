@@ -1,5 +1,6 @@
 package com.theoriacodex.app.acceptance
 
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.data.repository.CodexPostOpen
 import com.theoriacodex.data.repository.DATASTORE_SETTINGS_FILE_NAME
 import com.theoriacodex.data.repository.DATASTORE_STATISTICS_FILE_NAME
@@ -19,14 +20,7 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -39,7 +33,7 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 internal suspend fun writeDataStores(current: File, shipped: File) {
     check(current.mkdirs() && shipped.mkdirs()) { "could not create ${current.path} / ${shipped.path}" }
-    withStoreScope { scope ->
+    withDataStoreScope { scope ->
         val settings = DataStoreSettingsRepository(current, scope)
         settings.updateSettings { it.copy(oldSearchBar = true) }
         check(settings.addFavoriteTag(PROFILE, SourceKey.GELBOORU, listOf("cat_ears", "fox_ears"), FAVORITE_NAME)) { "favorite tag was not added" }
@@ -61,7 +55,7 @@ internal suspend fun writeDataStores(current: File, shipped: File) {
 }
 
 internal suspend fun verifyDataStores(current: File, shipped: File) {
-    withStoreScope { scope ->
+    withDataStoreScope { scope ->
         val settings = DataStoreSettingsRepository(current, scope).apply { awaitReady() }.observeSettings().first()
         val favorites = settings.favoriteTagsByProfile[PROFILE]
         check(settings.oldSearchBar && favorites?.singleOrNull()?.name == FAVORITE_NAME) { "oldSearchBar=${settings.oldSearchBar} favorites=$favorites" }
@@ -82,7 +76,7 @@ internal suspend fun verifyDataStores(current: File, shipped: File) {
         check(codexPost?.label == "Label & <x>") { "codex stats PIXIV:1 was $codexPost in ${statistics.codexStatistics}" }
     }
     verifyCurrentKeys(current)
-    withStoreScope { scope -> verifyShipped(shipped, scope) }
+    withDataStoreScope { scope -> verifyShipped(shipped, scope) }
 }
 
 private fun verifyCurrentKeys(current: File) {
@@ -134,19 +128,9 @@ private suspend fun verifyShipped(shipped: File, scope: CoroutineScope) {
     check(site.keys == setOf("sourceId", "baseUrl", "label", "family", "credentialsRequired", "addedAt")) { "site keys were ${site.keys}" }
 }
 
-internal suspend fun <T> withStoreScope(block: suspend (CoroutineScope) -> T): T {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    try {
-        return block(scope)
-    } finally {
-        withContext(NonCancellable) { withTimeoutOrNull(STORE_CLOSE_TIMEOUT_MS) { scope.coroutineContext.job.cancelAndJoin() } }
-    }
-}
-
 private fun File.json(name: String): JsonObject = Json.parseToJsonElement(resolve(name).readText()).jsonObject
 
 private const val PROFILE = "profile-main"
-private const val STORE_CLOSE_TIMEOUT_MS = 5_000L
 private const val FAVORITE_NAME = "Ears & <co>"
 private const val SITE_ID = "custom_safebooru_org"
 

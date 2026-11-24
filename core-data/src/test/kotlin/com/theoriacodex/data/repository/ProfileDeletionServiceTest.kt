@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.assertStoredFormat
 import java.nio.file.Files
@@ -16,17 +17,19 @@ class ProfileDeletionServiceTest {
     @Test fun `retired profile checks execute inside Settings writes without affecting another profile`() = runTest {
         val directory = Files.createTempDirectory("retired-profile-settings").toFile()
         try {
-            val guard = ProfileLibraryWriteGuard()
-            val settings = DataStoreSettingsRepository(directory, backgroundScope, profileWriteGuard = guard)
-            settings.awaitReady()
-            val profile = settings.addRecommendationProfile("Retired")
-            val before = settings.observeSettings().first()
-            guard.retire(profile.profileId)
-            assertTrue(runCatching { settings.addFavoriteTag(profile.profileId,
-                com.theoriacodex.domain.model.SourceKey.PIXIV, listOf("tag")) }.isFailure)
-            assertTrue(runCatching { settings.setActiveProfile(profile.profileId) }.isFailure)
-            org.junit.Assert.assertEquals(before, settings.observeSettings().first())
-            assertTrue(settings.addFavoriteTag("profile-main", com.theoriacodex.domain.model.SourceKey.PIXIV, listOf("tag")))
+            withDataStoreScope { scope ->
+                val guard = ProfileLibraryWriteGuard()
+                val settings = DataStoreSettingsRepository(directory, scope, profileWriteGuard = guard)
+                settings.awaitReady()
+                val profile = settings.addRecommendationProfile("Retired")
+                val before = settings.observeSettings().first()
+                guard.retire(profile.profileId)
+                assertTrue(runCatching { settings.addFavoriteTag(profile.profileId,
+                    com.theoriacodex.domain.model.SourceKey.PIXIV, listOf("tag")) }.isFailure)
+                assertTrue(runCatching { settings.setActiveProfile(profile.profileId) }.isFailure)
+                org.junit.Assert.assertEquals(before, settings.observeSettings().first())
+                assertTrue(settings.addFavoriteTag("profile-main", com.theoriacodex.domain.model.SourceKey.PIXIV, listOf("tag")))
+            }
         } finally { directory.deleteRecursively() }
     }
 

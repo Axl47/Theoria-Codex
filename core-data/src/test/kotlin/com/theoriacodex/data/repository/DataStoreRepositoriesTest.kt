@@ -3,18 +3,16 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.DurableStorePhase
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.closeDataStores
+import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.sha256
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -33,7 +31,7 @@ class DataStoreRepositoriesTest {
     @Test
     fun `viewer preferences survive a fresh settings repository`() = runTest {
         val directory = tempFolder.newFolder("viewer-play-mode")
-        val firstScope = newScope()
+        val firstScope = newDataStoreScope()
         try {
             DataStoreSettingsRepository(directory, firstScope).updateSettings { current ->
                 current.copy(oldSearchBar = true, codexLibrarySort = CodexLibrarySort.MOST_ITEMS, viewer = current.viewer.copy(
@@ -43,9 +41,9 @@ class DataStoreRepositoriesTest {
                 ))
             }
         } finally {
-            closeScope(firstScope)
+            firstScope.closeDataStores()
         }
-        val secondScope = newScope()
+        val secondScope = newDataStoreScope()
         try {
             val restored = DataStoreSettingsRepository(directory, secondScope).observeSettings().first()
             assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE, restored.viewer.playbackMode)
@@ -54,35 +52,35 @@ class DataStoreRepositoriesTest {
             assertTrue(restored.oldSearchBar)
             assertEquals(CodexLibrarySort.MOST_ITEMS, restored.codexLibrarySort)
         } finally {
-            closeScope(secondScope)
+            secondScope.closeDataStores()
         }
     }
 
     @Test
-    fun `constructors perform no file reads or writes`() {
+    fun `constructors perform no file reads or writes`() = runTest {
         val directory = tempFolder.newFolder("constructor-no-io")
-        val scope = newScope()
+        val scope = newDataStoreScope()
 
         DataStoreSettingsRepository(directory, scope)
         DataStoreUiRestoreRepository(directory, scope)
         DataStoreStatisticsRepository(directory, scope)
 
         assertTrue(directory.listFiles().orEmpty().isEmpty())
-        scope.cancel()
+        scope.closeDataStores()
     }
 
     @Test
     fun `source weight memory survives repository reconstruction`() = runTest {
         val directory = tempFolder.newFolder("weight-memory")
-        val firstScope = newScope()
+        val firstScope = newDataStoreScope()
         val first = DataStoreSettingsRepository(directory, firstScope)
         val pair = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         first.setEnabledSources(pair)
         first.updateSettings { it.copy(runtime = it.runtime.copy(sourceWeights = mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))) }
         first.setEnabledSources(setOf(SourceKey.HITOMI))
-        closeScope(firstScope)
+        firstScope.closeDataStores()
 
-        val secondScope = newScope()
+        val secondScope = newDataStoreScope()
         try {
             val second = DataStoreSettingsRepository(directory, secondScope)
             second.setEnabledSources(pair)
@@ -90,7 +88,7 @@ class DataStoreRepositoriesTest {
             assertEquals(0.8, weights.getValue(SourceKey.PIXIV), 0.0000001)
             assertEquals(0.2, weights.getValue(SourceKey.GELBOORU), 0.0000001)
         } finally {
-            closeScope(secondScope)
+            secondScope.closeDataStores()
         }
     }
 
@@ -110,11 +108,11 @@ class DataStoreRepositoriesTest {
             }
             """.trimIndent(),
         )
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val settings = DataStoreSettingsRepository(directory, scope).observeSettings().first()
 
         assertTrue(settings.viewer.invertMultiImageScrollDirection)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
@@ -135,7 +133,7 @@ class DataStoreRepositoriesTest {
             "query_store.json" to """{"queries":{},"scrollOffsets":{"legacy":27}}""",
         )
         untouchedFiles.forEach { (name, text) -> directory.resolve(name).writeText(text) }
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val settings = DataStoreSettingsRepository(directory, scope)
         val uiRestore = DataStoreUiRestoreRepository(directory, scope)
 
@@ -152,7 +150,7 @@ class DataStoreRepositoriesTest {
             untouchedFiles.keys + DATASTORE_SETTINGS_FILE_NAME + DATASTORE_UI_RESTORE_FILE_NAME,
             directory.list().orEmpty().toSet(),
         )
-        closeScope(scope)
+        scope.closeDataStores()
     }
     @Test
     fun `minimal pre-catalog settings gain every later source and retain legacy defaults`() = runTest {
@@ -160,7 +158,7 @@ class DataStoreRepositoriesTest {
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
             """{"schemaVersion":3,"settings":{"enabledSources":["PIXIV"],"cacheFullImageOnSave":true}}"""
         )
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
 
         val settings = repository.observeSettings().first()
@@ -172,20 +170,20 @@ class DataStoreRepositoriesTest {
         assertEquals(settings.runtime.enabledSources, settings.runtime.sourceWeights.keys)
         assertTrue(settings.cache.cacheFullImageOnSave)
         assertFalse(settings.contentFilters.resolveUnknownAnimatedDurations)
-        closeScope(scope)
+        scope.closeDataStores()
     }
     @Test
     fun `settings corruption is backed up and resets to defaults`() = runTest {
         val directory = tempFolder.newFolder("settings-corruption")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText("{broken")
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val recoveries = FileStoreRecoveryRegistry()
         val recovered = DataStoreSettingsRepository(directory, scope, recoveries)
         val settings = recovered.observeSettings().first()
 
         assertEquals(AppSettings().scenarioPreset, settings.scenarioPreset)
         assertRecorded(recoveries, "Settings", directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).single())
-        closeScope(scope)
+        scope.closeDataStores()
     }
     @Test
     fun `a second corruption keeps the first set-aside file`() = runTest {
@@ -193,9 +191,9 @@ class DataStoreRepositoriesTest {
         val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         listOf("{first broken", "{second broken").forEach { broken ->
             storeFile.writeText(broken)
-            val scope = newScope()
+            val scope = newDataStoreScope()
             DataStoreSettingsRepository(directory, scope).awaitReady()
-            closeScope(scope)
+            scope.closeDataStores()
         }
 
         assertEquals(
@@ -212,14 +210,14 @@ class DataStoreRepositoriesTest {
         storeFile.writeBytes(broken)
         // A directory already holds the set-aside name, so the file cannot be moved there.
         directory.resolve("${storeFile.name}.corrupt-${broken.size}-${broken.sha256()}").mkdir()
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
 
         assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { repository.awaitReady() } }
 
         assertArrayEquals(broken, storeFile.readBytes())
         assertEquals(DurableStorePhase.FAILED, repository.storageStatus.value.phase)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
@@ -228,7 +226,7 @@ class DataStoreRepositoriesTest {
         val destination = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         val future = """{"schemaVersion":99,"settings":{},"legacyImports":[]}"""
         destination.writeText(future)
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
 
         assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { repository.awaitReady() } }
@@ -236,13 +234,13 @@ class DataStoreRepositoriesTest {
         assertEquals(future, destination.readText())
         assertFalse(directory.setAsideCopiesOf(DATASTORE_SETTINGS_FILE_NAME).isNotEmpty())
         assertEquals(DurableStorePhase.FAILED, repository.storageStatus.value.phase)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
     fun `concurrent settings mutations are serialized without lost profile state`() = runTest {
         val directory = tempFolder.newFolder("settings-concurrency")
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
         val profile = repository.observeSettings().first().activeProfileId
 
@@ -256,7 +254,7 @@ class DataStoreRepositoriesTest {
 
         val tags = repository.observeSettings().first().favoriteTagsByProfile.getValue(profile).map { it.tags.single() }.toSet()
         assertEquals((0 until 40).map { index -> "tag-$index" }.toSet(), tags)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
@@ -304,7 +302,7 @@ class DataStoreRepositoriesTest {
         val file = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
         val original = """{"schemaVersion":2,"state":$payload}"""
         file.writeText(original)
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreUiRestoreRepository(directory, scope)
         assertEquals("codex", repository.getLastTab())
         assertEquals(SearchScrollState(4, 12), repository.getSearchScrollState("query"))
@@ -312,8 +310,8 @@ class DataStoreRepositoriesTest {
         assertEquals(2, repository.observeViewerLaunchContext().first()?.startIndex)
         assertEquals(original, file.readText())
         repository.setLastTab("search")
-        closeScope(scope)
-        val reopenedScope = newScope()
+        scope.closeDataStores()
+        val reopenedScope = newDataStoreScope()
         val reopened = DataStoreUiRestoreRepository(directory, reopenedScope)
         assertEquals("search", reopened.getLastTab())
         assertEquals(SearchScrollState(4, 12), reopened.getSearchScrollState("query"))
@@ -321,7 +319,7 @@ class DataStoreRepositoriesTest {
         assertEquals(2, reopened.observeViewerLaunchContext().first()?.startIndex)
         assertTrue(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isEmpty())
         assertFalse(file.readText().contains("settingsSectionExpansion"))
-        closeScope(reopenedScope)
+        reopenedScope.closeDataStores()
     }
     @Test
     fun `older feed FAB records include all saved searches by default`() {
@@ -333,7 +331,7 @@ class DataStoreRepositoriesTest {
     @Test
     fun `ui restore reconstructs independent feed FAB contexts after reopening`() = runTest {
         val directory = tempFolder.newFolder("ui-feed-fab-contexts")
-        val firstScope = newScope()
+        val firstScope = newDataStoreScope()
         val first = DataStoreUiRestoreRepository(directory, firstScope)
         val search = FeedFabRestoreState(animatedOnly = true, hideLiked = true)
         val codex = FeedFabRestoreState(source = "PIXIV", language = "JAPANESE", sortMode = "OLDEST_SAVED",
@@ -343,13 +341,13 @@ class DataStoreRepositoriesTest {
         first.setFeedFabRestoreState("codex:system:saved-searches", saved)
         first.setFeedFabRestoreState("search", search)
         first.setFeedFabRestoreState("codex:one", codex)
-        closeScope(firstScope)
+        firstScope.closeDataStores()
 
-        val secondScope = newScope()
+        val secondScope = newDataStoreScope()
         val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
 
         assertEquals(mapOf("search" to search, "codex:one" to codex, "codex:system:saved-searches" to saved), reconstructed.getFeedFabRestoreStates())
-        closeScope(secondScope)
+        secondScope.closeDataStores()
     }
 
     @Test
@@ -358,7 +356,7 @@ class DataStoreRepositoriesTest {
         val destination = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)
         val future = """{"schemaVersion":99,"state":{},"legacyImports":[]}"""
         destination.writeText(future)
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreUiRestoreRepository(directory, scope)
 
         assertThrows(Exception::class.java) { kotlinx.coroutines.runBlocking { repository.awaitReady() } }
@@ -366,13 +364,13 @@ class DataStoreRepositoriesTest {
         assertEquals(future, destination.readText())
         assertFalse(directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).isNotEmpty())
         assertEquals(DurableStorePhase.FAILED, repository.storageStatus.value.phase)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
     fun `concurrent ui mutations preserve independent scroll entries`() = runTest {
         val directory = tempFolder.newFolder("ui-concurrency")
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreUiRestoreRepository(directory, scope)
 
         coroutineScope {
@@ -389,13 +387,13 @@ class DataStoreRepositoriesTest {
         (0 until 40).forEach { index ->
             assertEquals(index, repository.getSearchScrollState("query-$index")?.firstVisibleItemIndex)
         }
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
     fun `ui restore bounds and reconstructs the most recent scroll states`() = runTest {
         val directory = tempFolder.newFolder("ui-scroll-bound")
-        val firstScope = newScope()
+        val firstScope = newDataStoreScope()
         val first = DataStoreUiRestoreRepository(directory, firstScope)
         val launch = ViewerLaunchContext(
             queryHash = "recents:watched",
@@ -415,30 +413,30 @@ class DataStoreRepositoriesTest {
         }
         assertNull(first.getSearchScrollState("query-0"))
         assertEquals(124, first.getSearchScrollState("query-124")?.firstVisibleItemIndex)
-        closeScope(firstScope)
+        firstScope.closeDataStores()
 
-        val secondScope = newScope()
+        val secondScope = newDataStoreScope()
         val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
         assertEquals("settings", reconstructed.getLastTab())
         assertEquals(launch, reconstructed.observeViewerLaunchContext().first())
         assertNull(reconstructed.getSearchScrollState("query-24"))
         assertEquals(25, reconstructed.getSearchScrollState("query-25")?.firstVisibleItemIndex)
         assertEquals(124, reconstructed.getSearchScrollState("query-124")?.firstVisibleItemIndex)
-        closeScope(secondScope)
+        secondScope.closeDataStores()
     }
 
     @Test
     fun `ui restore corruption recovers to an explicit empty state`() = runTest {
         val directory = tempFolder.newFolder("ui-corruption")
         directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText("not-json")
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val recoveries = FileStoreRecoveryRegistry()
         val repository = DataStoreUiRestoreRepository(directory, scope, recoveries)
 
         assertNull(repository.getLastTab())
         assertNull(repository.observeViewerLaunchContext().first())
         assertRecorded(recoveries, "Last screen", directory.setAsideCopiesOf(DATASTORE_UI_RESTORE_FILE_NAME).single())
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     private fun representativeLegacySettings(): String {
@@ -465,13 +463,6 @@ class DataStoreRepositoriesTest {
               "providerHealth": []
             }
         """.trimIndent()
-    }
-
-    private fun newScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private suspend fun closeScope(scope: CoroutineScope) {
-        scope.cancel()
-        scope.coroutineContext.job.join()
     }
 }
 

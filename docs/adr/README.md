@@ -49,7 +49,7 @@ and link the record that replaces it.
 | [0029](0029-source-weights-normalization.md) | Source weights are normalized without drift and new sources get an even share |
 | [0030](0030-statistics-recording.md) | Usage statistics split by local calendar day, merge by maximum and seed tag counts once |
 | [0031](0031-custom-site-profile-storage.md) | User-added site profiles are stored without credentials, skip invalid records, and merge on restore without the site limit |
-| [0032](0032-datastore-open-and-recovery.md) | Stores open through a startup gate, refuse newer schemas, and set unreadable files aside before resetting |
+| [0032](0032-datastore-open-and-recovery.md) | Stores open through a startup gate, refuse newer schemas, set unreadable files aside before resetting, and close by waiting for their release |
 | [0033](0033-durable-json-configuration.md) | All saved data uses one kotlinx Json configuration that keeps Gson-era behaviour |
 | [0034](0034-golden-files-pin-stored-formats.md) | Golden files are bytes real builds wrote and are never regenerated to pass a change |
 | [0035](0035-repository-state-cells.md) | Repository rules run over a StateCell so in-memory and durable backings share one code path |
