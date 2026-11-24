@@ -8,7 +8,7 @@ Source ids, query hashes and post records are stored in Room, JSON stores, backu
 
 ## Decision
 
-- `SourceKey.id` is the persisted form and never changes for a source. `toString` returns it as the enum did; `parse` accepts a well-formed custom id even without a profile so data from a removed site is not dropped; `parseOrThrow` is for validated documents. `SourceKey.of(profile)` trusts the profile's stored id.
+- `SourceKey.id` is the persisted form and never changes for a source. `toString` returns it as the enum did; `parse` accepts a well-formed custom id even without a profile so data from a removed site is not dropped; `parseOrThrow` is for validated documents. `SourceKey` stays a value class over a string, so reflective Gson output (offline manifests) is unchanged from when sources were an enum. Built-ins keep their historical declaration order (`builtIns`, which `compareTo` follows), then custom sources by id, so sorted output matches the old enum ordering. `SourceKey.of(profile)` trusts the profile's stored id.
 - `QueryHash` adds the media part only when set, so queries stored before the field keep their hash; the `v3` hash format must not change.
 - `Query.minScore` is a retired filter kept so stored queries still decode and hash; sources ignore it. `includeTerms` is derived during construction so `copy` cannot change it independently of the groups.
 - `withInferredGalleryLength` sets the unknown-length flag on nhentai/Hitomi records and Codex shares that predate it.

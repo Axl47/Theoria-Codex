@@ -1,14 +1,14 @@
-# 0004. Custom booru sites get collision-free ids, validated HTTPS roots and secret-safe credentials
+# 0004. Custom booru sites get ids compatible with existing encodings, validated HTTPS roots and secret-safe credentials
 
 Status: Accepted
 
 ## Context
 
-Users add booru sites by address. Ids are persisted with every post and cache file, and must not clash with existing source-id encodings. Headers and credentials come from user input.
+Users add booru sites by address. Ids are persisted with every post and cache file, and must stay compatible with existing source-id encodings. Headers and credentials come from user input.
 
 ## Decision
 
-- `CustomSourceIds`: `custom_` plus host with dots as underscores, then `__p<port>` for a non-default port and `__h<8 hex>` (SHA-256 of the path) for an install path. The alphabet avoids every separator other source-id encodings use (`:`, `.`, `/`, `,`, `|`). `MAX_LENGTH` 96 keeps `custom_<id>_<postId>.<ext>` cache file names below 255 bytes. A profile's stored id is authoritative; `fromAddress` only names new profiles.
+- `CustomSourceIds`: `custom_` plus host with a leading `www.` removed and dots as underscores, then `__p<port>` for a non-default port and `__h<8 hex>` (the first 8 hex digits of the path's SHA-256) for an install path. The id is derived, not proven unique: `www.example.org` and `example.org` share an id, and different paths could in principle share a truncated hash. The alphabet avoids every separator other source-id encodings use (`:`, `.`, `/`, `,`, `|`). `MAX_LENGTH` 96 keeps `custom_<id>_<postId>.<ext>` cache file names below 255 bytes. A profile's stored id is authoritative; `fromAddress` only names new profiles.
 - `SiteAddress.parse` treats schemeless input as HTTPS; the path stops before the first booru page segment so pasting a post or search URL finds the root.
 - `SiteHeaders` customizes only user agent and referer, and values must be single-line so they cannot inject headers.
 - `SiteCredentials` live in encrypted storage only; never logged, persisted in clear or backed up.

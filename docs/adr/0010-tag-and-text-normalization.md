@@ -10,7 +10,7 @@ Persisted tag keys, provider searches and cross-source comparison all depend on 
 
 - `TagDialect` of a source never changes, because persisted tag keys depend on it. Every custom site is a booru and uses `UNDERSCORE`.
 - `decodeHtmlEntities` decodes in a single pass as HTML does (`&amp;#039;` becomes literal `&#039;`); `normalizeGelbooruToken` decodes entities so escaped API tags compare equal to real names.
-- `pixivSearchToken` turns booru-style ASCII tokens (`saber_(fate)`) into `saber` but passes native Pixiv tags through unchanged, since their parentheses belong to the tag.
+- `pixivSearchToken` first trims, drops a leading `-` and collapses whitespace for every token. A token that is all ASCII is then treated as booru-style: underscores become spaces and trailing parenthesized qualifiers are stripped repeatedly (`saber_(fate)` becomes `saber`). A token with any non-ASCII character is passed through with only the shared normalization, so native Japanese tags such as `ラム(リゼロ)` keep their parentheses. This is a heuristic on spelling, not recognition of native tags: an all-ASCII native Pixiv tag ending in parentheses is also stripped.
 - `withRecoveredPixivTranslations` upgrades old Pixiv posts: the adapter always stored each translation directly after its native tag, so that order recovers the pairs, and standalone translation terms are dropped.
 - `decodePercentEncodedUtf8Strict` keeps a literal `+` and returns null for malformed escapes, unpaired surrogates or malformed UTF-8 rather than a replacement character.
 

@@ -9,7 +9,7 @@ Sources differ in what they can answer: some have an MD5 search term, some expos
 ## Decision
 
 - Each optional capability is its own interface (`SearchMetadataSourceAdapter`, `AccountProfileSourceAdapter`, `FileHashLookupSourceAdapter`, `RelatedPostsSourceAdapter`, `CommentsSourceAdapter`, `MediaRecoverySourceAdapter`, `DurationMetadataSourceAdapter`); a source leaves out what it cannot do.
-- Null means the thing does not exist (`resolveSearchMetadata` for a deleted post, `findByFileHash` for no match); acquisition failures throw.
+- Acquisition failures throw; null is a successful answer whose meaning depends on the lookup: `resolveSearchMetadata` returns null when the post no longer exists, `findByFileHash` when the site has no post with that MD5, `accountDetails` when the source has nothing beyond what the creator profile already holds (the account exists), and `nativeCommentAnchor` when the site has no comment fragment of its own.
 - `AccountProfileSourceAdapter`: a source whose creators can be accounts or tags decides from the profile's shape alone, so the page layout is known before any request.
 - `FileHashLookupSourceAdapter` is implemented only by families with an `md5:` search (Danbooru and Gelbooru families, custom sites included).
 - `CommentsSourceAdapter.nativeCommentAnchor` returns the site's own comment fragment so shared links also jump in a browser; null falls back to Theoria's fragment.
@@ -20,7 +20,7 @@ Sources differ in what they can answer: some have an MD5 search term, some expos
 
 ## Consequences
 
-New sources opt into capabilities without touching shared code. Callers must handle both null and thrown failure on every lookup. Moving a capability into the base interface would force every source to stub it.
+New sources opt into capabilities without touching shared code. Callers must handle both null and thrown failure on every lookup, and read null by that lookup's meaning. Moving a capability into the base interface would force every source to stub it.
 
 ## Applies to
 

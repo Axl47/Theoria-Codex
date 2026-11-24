@@ -20,7 +20,7 @@ and link the record that replaces it.
 | [0001](0001-comment-links.md) | Comment links use the site's anchor when it has one, else a fragment browsers ignore |
 | [0002](0002-coroutine-and-diagnostics-rules.md) | Shared requests, cancellation, diagnostics and off-main checks follow fixed rules |
 | [0003](0003-cross-source-tags.md) | For You trains across sources by translating tags, with foreign likes capped |
-| [0004](0004-custom-site-profiles.md) | Custom booru sites get collision-free ids, validated HTTPS roots and secret-safe credentials |
+| [0004](0004-custom-site-profiles.md) | Custom booru sites get ids compatible with existing encodings, validated HTTPS roots and secret-safe credentials |
 | [0005](0005-picture-tagger-thresholds.md) | Predicted picture tags are a separate tag source with per-use score thresholds |
 | [0006](0006-post-identity-and-dedup.md) | One file or picture shown once: posts are deduplicated by ID, MD5 and a banded perceptual hash |
 | [0007](0007-series-sources-and-extensions.md) | Series come from Mihon and Aniyomi extensions installed into app storage, trusted by pinned signing key |

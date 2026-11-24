@@ -9,10 +9,10 @@ Likes, imports and cleaning serialize on Room's transaction executor, and every 
 ## Decision
 
 - Single-statement reads (`hasLibraryData`, media duration `get`) skip `withTransaction` and use WAL readers, so they never queue behind writes. Only an expired duration retry uses a transaction, re-reading the row first.
-- Writes that change nothing touch no row: `raiseWatchedMediaProgress` updates only when progress rises; series entries are not rewritten when unchanged; `observeHasFollowed` reads only `series` so entry progress never wakes it.
+- Writes that change nothing touch no row: `raiseWatchedMediaProgress` updates only when progress rises; `recordProgress` and the read-state, follow and setting updates write only when the stored value would change (a series listing refresh, `storeEntries`, does upsert the series row and every current entry each time); `observeHasFollowed` reads only `series` so entry progress never wakes it.
 - The library read reruns only on membership writes (even ones leaving the same ids, since a read can fall between a removal and its Undo), not on every `posts` write.
 - `RetainedPostPayloads` keeps the Posts of the latest projection so unchanged payloads are not decoded again; callers sharing an instance must project the same rows. Every sort of a Codex shares one projection, and all watched Recents collectors share one.
-- `RetainedPostPayloadCache` is a small LRU that outlives one collection; a projection above `maxRetainedPosts` is dropped when its collection ends so large libraries do not become a process-wide cache.
+- `RetainedPostPayloadCache` is a small LRU that outlives one collection; `trim()` runs on each emission and evicts projections above `maxRetainedPosts`, then least recently used ones while there are more than `maxEntries` or more retained posts than `maxRetainedPosts` in total, so large libraries do not become a process-wide cache. Eviction removes the projection from the cache only; a collector already holding its projection keeps decoding into it for as long as it collects, and the next `projection(key)` call starts a fresh one.
 - Room emits null for a single-row query with no match despite the Java signature, so the flow is mapped as nullable.
 
 ## Consequences

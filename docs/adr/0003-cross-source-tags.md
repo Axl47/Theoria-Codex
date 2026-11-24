@@ -9,7 +9,7 @@ Likes on one source should teach recommendations on tag-compatible sources, with
 ## Decision
 
 - `crossSourceTagKey` follows Danbooru's own Pixiv-tag normalization (NFKC, lowercase, whitespace and underscore runs to one space).
-- `CrossSourceTraining` trains a target on its own likes first, then on translated likes from other sources; unmappable tags are dropped, and foreign documents are capped at `max(native, FOREIGN_DOCUMENT_FLOOR)` so they bridge a cold start but never outweigh the target's own likes. Likes should be ordered most recent first; each document is translated at most once.
+- `CrossSourceTraining` trains a target on its own likes first, then on translated likes from other sources; unmappable tags are dropped, and foreign documents are capped at `max(native, FOREIGN_DOCUMENT_FLOOR)` (24), so with few or no native likes up to 24 foreign documents still bridge a cold start, and otherwise they never outnumber the target's own likes. Likes should be ordered most recent first. Each document's concept keys (the normalized, source-independent form of its tags) are computed once and cached; they are spelled again for every target, since the target's own spelling differs (underscores, or a Pixiv native tag from the dictionary).
 - `sharesBooruVocabulary` includes custom sites by default, betting on Danbooru-style tags. Nothing persists it, so it can change or become per-site without migration.
 - `RecommendationTagNormalization` is separate from search matching and persisted favorite tags, which have different compatibility requirements.
 

@@ -8,7 +8,7 @@ Extensions run third-party code. The app installs them into its own storage so n
 
 ## Decision
 
-- Trust: `ExtensionRepo.signingKey` is pinned when the repo is added; only APKs signed by it are installed, and `install` checks package, signing key and that the copy is not older than the one on the device. `restore` keeps recorded repos without a network read, because the key is what is trusted. `ExtensionChoices.trusted` maps extension to the certificate fingerprint it had when turned on; an extension runs only while it has that certificate (`trusts`), and one with no readable signer can never be turned on. `setOn` refuses when the signer differs from the one the user was shown.
+- Trust: `ExtensionRepo.signingKey` is pinned when the repo is added; only APKs signed by it are installed, and `install` checks package, signing key and that the copy is not older than the one on the device. `restore` keeps recorded repos without a network read, because the key is what is trusted. Adding a repo installs and turns on nothing. Installing an extension that has no installed copy (other than a loaded-from-file one) turns that extension on, trusted under the repo's key; installing over an installed copy (an update) leaves its choice as it was; uninstalling removes the copy and turns it off (`ExtensionCatalog`). `ExtensionChoices.trusted` maps extension to the certificate fingerprint it had when turned on; an extension runs only while it has that certificate (`trusts`), and one with no readable signer can never be turned on. `setOn` refuses when the signer differs from the one the user was shown.
 - Extension choices live where Android neither backs them up nor transfers them.
 - Listing an extension that is off reads only package-manager data and runs none of its code; language lists stay empty until it is on. `ExtensionChoices.owners` records which extension offered each source so lookups load only that one.
 - Defaults: `defaultLanguages` matches by language part (`pt-BR` matches `pt-PT`), else English, else the first offered.
@@ -27,6 +27,7 @@ Updates signed by the same key stay on; a key change silently turns an extension
 ## Applies to
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/series/ExtensionRepos.kt`: `ExtensionRepo`, `ExtensionRepos`, `storedRepoAddress`
+- `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionCatalog.kt`: `ExtensionCatalog`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/series/Extensions.kt`: `ExtensionChoices`, `trusts`, `SeriesExtensions`, `defaultLanguages`, `InstalledExtension`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/series/Series.kt`: `MAX_MEMO_LENGTH`, `SeriesEntries`, `SeriesSource`, `SeriesCovers`, `UnsupportedEntriesException`, `extensionSeriesStatus`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/series/SeriesFilter.kt`: `withChoices`
