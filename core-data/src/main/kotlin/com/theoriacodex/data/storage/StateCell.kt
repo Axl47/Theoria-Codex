@@ -2,10 +2,15 @@ package com.theoriacodex.data.storage
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlin.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,25 +59,37 @@ internal fun <S, T> StateCell<S>.focus(get: (S) -> T, put: (S, T) -> S): StateCe
 
 internal const val WRITE_BEHIND_RETRIES = 3
 
-class WriteBehind(internal val scope: CoroutineScope, internal val delay: Duration = WRITE_BEHIND_DELAY) {
-    companion object {
-        fun flushOnly(scope: CoroutineScope) = WriteBehind(scope, Duration.INFINITE)
+class WriteBehind(
+    private val scope: CoroutineScope,
+    private val timed: Boolean = true,
+    private val newQueue: () -> CoroutineDispatcher = { Dispatchers.Default.limitedParallelism(1) },
+) {
+    private val cells = CopyOnWriteArrayList<StateCell<*>>()
+
+    internal fun <T : Any> wrap(durable: StateCell<T>, delay: Duration): StateCell<T> =
+        WriteBehindStateCell(durable, scope, if (timed) delay else Duration.INFINITE, newQueue()).also(cells::add)
+
+    suspend fun flushAll() {
+        val failures = coroutineScope {
+            cells.map { cell -> async { runCatchingPreservingCancellation { cell.flush() }.exceptionOrNull() } }.awaitAll()
+        }
+        failures.firstNotNullOfOrNull { it }?.let { throw it }
     }
 }
 
 internal val WRITE_BEHIND_DELAY = 2.seconds
 
-internal fun <T : Any> StateCell<T>.writeBehind(config: WriteBehind?): StateCell<T> =
-    config?.let { WriteBehindStateCell(this, it.scope, it.delay) } ?: this
+internal fun <T : Any> StateCell<T>.writeBehind(writeBehind: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY): StateCell<T> =
+    writeBehind?.wrap(this, delay) ?: this
 
 private class WriteBehindStateCell<T : Any>(
     private val durable: StateCell<T>,
     private val scope: CoroutineScope,
     private val writeDelay: Duration,
+    private val queue: CoroutineDispatcher,
 ) : StateCell<T> {
     private val mutex = Mutex()
     private val flushing = Mutex()
-    private val queue = Dispatchers.Default.limitedParallelism(1)
     private val state = MutableStateFlow<T?>(null)
     private var revision = 0L
     private var persistedRevision = 0L
@@ -110,7 +127,7 @@ private class WriteBehindStateCell<T : Any>(
     }
 
     private fun schedule(attempt: Int) {
-        if (scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush(attempt) }
+        if (writeDelay.isFinite() && scheduled?.isActive != true) scheduled = scope.launch { scheduledFlush(attempt) }
     }
 
     private suspend fun scheduledFlush(attempt: Int) {
