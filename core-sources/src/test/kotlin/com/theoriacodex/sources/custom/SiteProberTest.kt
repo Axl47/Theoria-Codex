@@ -215,9 +215,12 @@ class SiteProberTest {
         val site = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) TOUCH_ICON else throw IOException("home page down") }
 
         val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example") as SiteProbeResult.Supported
+        val page = SourceHttpResponse(200, "<html></html>", mapOf("Content-Type" to listOf("text/html")))
+        val htmlAtIconPath = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) page else throw IOException("home page down") }
 
         assertEquals("booru.example", result.suggestedLabel)
         assertEquals("https://booru.example/apple-touch-icon.png", result.iconUrl)
+        assertEquals(null, (SiteProber(SiteFamilyRegistry.default(), htmlAtIconPath).probe("booru.example") as SiteProbeResult.Supported).iconUrl)
     }
 
     @Test
@@ -321,7 +324,7 @@ class SiteProberTest {
 
     companion object {
         private val GOOD_KEYS = SiteCredentials("name", "good-key")
-        private val TOUCH_ICON = SourceHttpResponse(200, "", mapOf("Content-Type" to listOf("image/png")))
+        private val TOUCH_ICON = SourceHttpResponse(200, "", mapOf("Content-Type" to listOf("image/vnd.microsoft.icon")))
         val FIXTURE_SITES = arrayOf("danbooru", "aibooru", "safebooru", "gelbooru", "rule34xxx", "sakugabooru", "sakugabooru_apex", "challenge_gate", "example")
     }
 }

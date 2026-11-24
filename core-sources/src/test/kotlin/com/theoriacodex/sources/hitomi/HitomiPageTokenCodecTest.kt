@@ -44,10 +44,10 @@ class HitomiPageTokenCodecTest {
 
     @Test
     fun `a token of another format version is rejected (ADR 0043, 0054)`() {
-        val current = HitomiPageToken(version = HITOMI_PAGE_TOKEN_VERSION, queryHash = "q", primaryKey = "all", primaryOffset = 0L, randomSeed = 7L)
+        val current = HitomiPageToken(version = 4, queryHash = "q", primaryKey = "all", primaryOffset = 0L, randomSeed = 7L)
 
         assertEquals("all", codec.decode(codec.encode(current)).primaryKey)
-        for (version in listOf(HITOMI_PAGE_TOKEN_VERSION - 1, HITOMI_PAGE_TOKEN_VERSION + 1, null)) {
+        for (version in listOf(3, 5, null)) {
             val failure = runCatching { codec.decode(codec.encode(current.copy(version = version))) }.exceptionOrNull()
             assertTrue("version $version", failure is HitomiPageTokenException)
         }
