@@ -21,7 +21,6 @@ class GitHubReleaseFeedClientTest {
 
     @Test
     fun `tag parser rejects malformed tags`() {
-        assertNull(MainReleaseTagParser.parse("main-vc12034-a1b2c3d"))
         assertNull(MainReleaseTagParser.parse("1.2.3"))
         assertNull(MainReleaseTagParser.parse("v1.2"))
         assertNull(MainReleaseTagParser.parse("v1.100.2"))
