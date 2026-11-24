@@ -69,9 +69,10 @@ def default_contract() -> dict[str, Any]:
     memory = [metric("memoryFixtureRssAnonMaxKb"), metric("memoryFixtureGpuMaxKb")]
     legacy_preview = [metric("previewPrepareCount"), metric("mediaLoadCount")]
     churn = [metric(f"previewPlayer{action}Count") for action in ("Create", "Prepare", "Rebind", "Cool", "Release")]
+    startup = [metric("timeToInitialDisplayMs", "median"), metric("timeToFullDisplayMs", "median")]
     specs = {
-        "coldStartup": (10, [metric("timeToInitialDisplayMs", "median")]),
-        "warmStartup": (10, [metric("timeToInitialDisplayMs", "median")]),
+        "coldStartup": (10, startup),
+        "warmStartup": (10, startup),
         "searchConcurrentAutoplayScroll": (5, frames + memory + legacy_preview),
         "searchDurationEnrichmentConcurrentAutoplayScroll": (5, frames + memory + legacy_preview + [metric("durationBatchSumMs")]),
         "viewerRepeatedSwipes": (5, frames + memory + [metric("viewerPrepareCount"), metric("mediaLoadCount")]),
@@ -79,7 +80,7 @@ def default_contract() -> dict[str, Any]:
         "durationAcquisitionFiveFeedJourney": (5, frames + memory + churn + [metric("mediaLoadCount"), metric("fixtureByteRangeCount"), metric("journeyDurationBatchSumMs")]),
     }
     return {
-        "version": "production-five-feed-v2",
+        "version": "production-five-feed-v3",
         "class_name": BENCHMARK_CLASS,
         "scenarios": {name: {"iterations": count, "metrics": metrics} for name, (count, metrics) in specs.items()},
     }

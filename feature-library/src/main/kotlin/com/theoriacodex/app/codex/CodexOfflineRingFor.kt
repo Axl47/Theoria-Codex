@@ -20,7 +20,7 @@ import com.theoriacodex.app.ui.components.ActionMenuRow
  */
 @Composable
 internal fun CodexOfflineRingFor(codexId: String, onTopUp: (() -> Unit)?, modifier: Modifier = Modifier) {
-    val state = LocalCodexOfflineStates.current[codexId] ?: return
+    val state = LocalCodexOfflineStates.current?.get(codexId) ?: return
     val tap = codexOfflineRingTap(codexId, state, LocalCodexOfflineControls.current, onTopUp)
     CodexOfflineRing(state, modifier, clickLabel = tap.label, onClick = tap.run)
 }
@@ -28,7 +28,7 @@ internal fun CodexOfflineRingFor(codexId: String, onTopUp: (() -> Unit)?, modifi
 /** Codex [codexId]'s offline ring on a Library tile: status only, so a tap anywhere on the tile opens the Codex. */
 @Composable
 internal fun CodexOfflineStatusFor(codexId: String, modifier: Modifier = Modifier) {
-    LocalCodexOfflineStates.current[codexId]?.let { CodexOfflineRing(it, modifier) }
+    LocalCodexOfflineStates.current?.get(codexId)?.let { CodexOfflineRing(it, modifier) }
 }
 
 /**
@@ -38,7 +38,8 @@ internal fun CodexOfflineStatusFor(codexId: String, modifier: Modifier = Modifie
  */
 @Composable
 internal fun CodexOfflineMenuRow(codexId: String, close: () -> Unit, makeOffline: (String) -> Unit) {
-    if (codexId in LocalCodexOfflineStates.current) {
+    val states = LocalCodexOfflineStates.current ?: return
+    if (codexId in states) {
         val controls = LocalCodexOfflineControls.current
         ActionMenuRow(Icons.Default.CloudOff, "Remove offline copy") { close(); controls.remove(codexId) }
     } else {

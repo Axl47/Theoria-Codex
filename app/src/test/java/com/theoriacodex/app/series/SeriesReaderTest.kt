@@ -400,10 +400,8 @@ class SeriesReaderTest {
         return SeriesReader(dependencies(StoredOnly(stored, entries), { error("unused") }, deleteAfterReading))
     }
 
-    private suspend fun TestScope.onDevice() = store().run {
-        load()
-        snapshot.value.postsByOwner[seriesOfflineOwner(id)].orEmpty().map { it.sourcePostId }.sorted()
-    }
+    private suspend fun TestScope.onDevice() =
+        store().load().postsByOwner[seriesOfflineOwner(id)].orEmpty().map { it.sourcePostId }.sorted()
 
     private fun TestScope.store() = OfflineMediaStore(folder.root.resolve("downloads"), StandardTestDispatcher(testScheduler))
 

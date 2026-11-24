@@ -40,7 +40,7 @@ internal class OfflineManifestGoldenTest : FileBackedRepositoryTestFixture() {
         assertEquals(source.media.indices.map { File(generation, "$it.png").absolutePath }, loaded.media.map { it.localPath })
         assertEquals(loaded.media.first(), loaded.full)
         assertEquals(source, store.withoutOfflineLocations(loaded))
-        assertEquals(mapOf("codex:a" to setOf(source.id), "codex:b" to setOf(source.id)), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(source.id), "codex:b" to setOf(source.id)), store.snapshot.value!!.postsByOwner)
     }
 
     @Test

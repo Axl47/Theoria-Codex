@@ -23,8 +23,12 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -56,9 +60,14 @@ class OfflineMediaStore internal constructor(
     private val ownerRevisions = mutableMapOf<String, Long>()
     private val activeStaging = java.util.concurrent.ConcurrentHashMap.newKeySet<File>()
     private val catalog = OfflineMediaCatalog()
-    private var catalogLoaded = false
-    private val mutableSnapshot = MutableStateFlow(OfflineMediaSnapshot())
-    val snapshot: StateFlow<OfflineMediaSnapshot> = mutableSnapshot
+    private val mutableSnapshot = MutableStateFlow<OfflineMediaSnapshot?>(null)
+
+    val snapshot: StateFlow<OfflineMediaSnapshot?> = mutableSnapshot
+
+    val scannedSnapshots: Flow<OfflineMediaSnapshot> = flow {
+        load()
+        emitAll(mutableSnapshot.filterNotNull())
+    }
 
     fun hasOfflineLocations(post: Post): Boolean =
         isOfflineRef(post.preview) || post.full?.let(::isOfflineRef) == true || post.media.any(::isOfflineRef)
@@ -103,7 +112,9 @@ class OfflineMediaStore internal constructor(
         while (true) sourceMediaByOfflineRef.remove((collectedOfflineRefs.poll() as? OfflineRefKey) ?: return)
     }
 
-    suspend fun load() = withContext(ioDispatcher) { mutex.withLock { ensureCatalogLoaded() } }
+    suspend fun load(): OfflineMediaSnapshot = mutableSnapshot.value ?: withContext(ioDispatcher) {
+        mutex.withLock { ensureCatalogLoaded(); checkNotNull(mutableSnapshot.value) }
+    }
 
     suspend fun refresh() = withContext(ioDispatcher) { mutex.withLock { rebuildCatalog() } }
 
@@ -327,7 +338,7 @@ class OfflineMediaStore internal constructor(
         }
     }
 
-    private fun ensureCatalogLoaded() { if (!catalogLoaded) rebuildCatalog() }
+    private fun ensureCatalogLoaded() { if (mutableSnapshot.value == null) rebuildCatalog() }
 
     private fun rebuildCatalog() {
         catalog.clear()
@@ -338,7 +349,6 @@ class OfflineMediaStore internal constructor(
                 else -> indexFolder(folder, readRecord(folder))
             }
         }
-        catalogLoaded = true
         mutableSnapshot.value = catalog.snapshot()
     }
 

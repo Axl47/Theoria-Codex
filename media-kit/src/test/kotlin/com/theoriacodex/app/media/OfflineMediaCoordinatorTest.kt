@@ -60,7 +60,7 @@ class OfflineMediaCoordinatorTest {
         assertNotNull(coordinator.find(post("a").id))
         assertNull(coordinator.find(post("b").id))
         coordinator.clear()
-        assertEquals(0, store.snapshot.value.postCount)
+        assertEquals(0, store.snapshot.value!!.postCount)
         assertTrue(coordinator.jobs.value.isEmpty())
     }
 
@@ -101,7 +101,7 @@ class OfflineMediaCoordinatorTest {
         coordinator.jobs.first { it[AUTOMATIC_OFFLINE_OWNER]?.isRunning == false }
         cache.clearFullImageCache()
         assertNotNull(coordinator.find(post("saved").id))
-        assertEquals(mapOf(AUTOMATIC_OFFLINE_OWNER to setOf(post("saved").id)), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf(AUTOMATIC_OFFLINE_OWNER to setOf(post("saved").id)), store.snapshot.value!!.postsByOwner)
     }
 
     @Test
@@ -121,11 +121,11 @@ class OfflineMediaCoordinatorTest {
         coordinator.saveOnCollectionSave(post("second"))
         coordinator.saveOnCollectionSave(post("third"))
         assertEquals(3, coordinator.jobs.value.getValue(AUTOMATIC_OFFLINE_OWNER).totalPosts)
-        assertEquals(0, coordinator.store.snapshot.value.postCount)
+        assertEquals(0, coordinator.store.snapshot.value!!.postCount)
         finish.complete(Unit)
         val completed = coordinator.jobs.first { it[AUTOMATIC_OFFLINE_OWNER]?.isRunning == false }
         assertEquals(3, completed.getValue(AUTOMATIC_OFFLINE_OWNER).completedPosts)
-        assertEquals(3, coordinator.store.snapshot.value.postCount)
+        assertEquals(3, coordinator.store.snapshot.value!!.postCount)
     }
 
     @Test
@@ -188,7 +188,29 @@ class OfflineMediaCoordinatorTest {
 
         assertEquals(1, topped.getValue("codex:a").completedPosts)
         assertEquals(listOf("a", "b"), acquisitions)
-        assertEquals(mapOf("codex:a" to setOf(post("a").id, post("b").id)), store.snapshot.value.postsByOwner)
+        assertEquals(mapOf("codex:a" to setOf(post("a").id, post("b").id)), store.snapshot.value!!.postsByOwner)
+        assertNull(coordinator.jobs.value["codex:other"])
+    }
+
+    @Test
+    fun `posts saved before the first scan finishes wait for it to tell kept owners apart`() = runTest {
+        val directory = temporary.newFolder()
+        val acquisitions = mutableListOf<String>()
+        val acquire: suspend (Post, ImageRef, java.io.File) -> Unit = { post, _, file ->
+            acquisitions += post.id.sourcePostId
+            file.writeText("bytes")
+        }
+        OfflineMediaStore(directory).save(post("a"), post("a").media, "codex:a") { _, file -> file.writeText("bytes"); null }
+        val store = OfflineMediaStore(directory, ioDispatcher = StandardTestDispatcher(testScheduler))
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, acquire)
+
+        coordinator.keepOffline("codex:a", listOf(post("b")))
+        coordinator.keepOffline("codex:other", listOf(post("x")))
+        assertNull(store.snapshot.value)
+        coordinator.jobs.first { it["codex:a"]?.isRunning == false }
+
+        assertEquals(listOf("b"), acquisitions)
+        assertEquals(mapOf("codex:a" to setOf(post("a").id, post("b").id)), store.snapshot.value!!.postsByOwner)
         assertNull(coordinator.jobs.value["codex:other"])
     }
 
@@ -240,7 +262,7 @@ class OfflineMediaCoordinatorTest {
         proceed.complete(Unit)
         runCurrent()
         assertTrue(coordinator.jobs.value.isEmpty())
-        assertEquals(0, store.snapshot.value.postCount)
+        assertEquals(0, store.snapshot.value!!.postCount)
     }
 
     @Test
@@ -264,7 +286,7 @@ class OfflineMediaCoordinatorTest {
         clearing.join()
         advanceUntilIdle()
         assertTrue(coordinator.jobs.value.isEmpty())
-        assertEquals(0, store.snapshot.value.postCount)
+        assertEquals(0, store.snapshot.value!!.postCount)
     }
 
     private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {
