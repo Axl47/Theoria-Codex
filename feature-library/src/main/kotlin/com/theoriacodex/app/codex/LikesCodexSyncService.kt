@@ -99,13 +99,6 @@ class LikesCodexSyncService constructor(
 
     suspend fun restoreClearedLikes(snapshot: ClearedLikesSnapshot) = transactions.restoreClearedLikes(snapshot)
 
-    suspend fun removeProfileCodex(profileId: String) {
-        transactions.clearLikesAndDeleteSystemCodex(
-            profileId = profileId,
-            systemCodexId = likesCodexIdForProfile(profileId),
-        )
-    }
-
     suspend fun ensureProfileCodex(profile: RecommendationProfile): String {
         return codexRepository.ensureCodex(
             codexId = likesCodexIdForProfile(profile.profileId),
@@ -131,8 +124,6 @@ fun profileScopedCodexId(
     uniqueId: String = UUID.randomUUID().toString(),
 ): String = com.theoriacodex.data.repository.ProfileLibraryIds.codex(profileId, uniqueId)
 
-internal const val PROFILE_CODEX_ID_PREFIX = com.theoriacodex.data.repository.ProfileLibraryIds.CODEX_PREFIX
 internal const val LIKES_CODEX_ID_PREFIX = com.theoriacodex.data.repository.ProfileLibraryIds.LIKES_PREFIX
 private const val LIKES_CODEX_NAME = "Likes"
-private const val DEFAULT_PROFILE_ID = "profile-main"
 private const val DEFAULT_PROFILE_NAME = "Main"

@@ -5,11 +5,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
-import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -96,24 +92,6 @@ class TrainingTagsTest {
         )
 
         assertEquals(listOf("猫"), trainingTagsFor(post))
-    }
-
-    @Test
-    fun `query affinity seeds ignore non-tag facets`() {
-        val query = Query(
-            mode = QueryMode.Source(SourceKey.NHENTAI),
-            includeTerms = listOf(
-                SearchTerm(value = " general "),
-                SearchTerm(value = "x-ray", facet = SearchFacet.TAG, sourceNamespace = "female"),
-                SearchTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist"),
-            ),
-            excludeTerms = emptyList(),
-            sort = SortMode.TOP,
-            dateRange = null,
-            minScore = null,
-        )
-
-        assertEquals(listOf("general", "x-ray"), query.recommendationIncludeTags())
     }
 
     @Test

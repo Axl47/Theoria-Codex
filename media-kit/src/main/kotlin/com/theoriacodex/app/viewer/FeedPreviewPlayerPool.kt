@@ -146,8 +146,6 @@ class FeedPreviewPlayerPool(
 
     fun activePlayerCount(): Int = slots.activeResourceCount
 
-    internal fun idlePlayerCount(): Int = slots.idleResourceCount
-
     private fun createPlayer(): ExoPlayer {
         return traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_CREATE) {
             infrastructure.playerBuilder(VideoPlaybackProfile.FEED_PREVIEW)

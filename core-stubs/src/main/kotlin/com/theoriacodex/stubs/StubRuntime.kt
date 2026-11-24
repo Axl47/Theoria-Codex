@@ -6,3 +6,10 @@ class StubRuntime(
     @Volatile
     var preset: StubScenarioPreset = initialPreset
 }
+
+enum class StubScenarioPreset {
+    NORMAL,
+    PARTIAL_FAILURE,
+    EMPTY_RESULTS,
+    SLOW_NETWORK,
+}

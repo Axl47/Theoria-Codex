@@ -18,22 +18,22 @@ class ForYouInterestsTest {
     @Test fun `shuffle samples one stable weight per tag before sorting a large interest set`() {
         val documents = (1..300).map { listOf("interest_$it") }
         val random = CountingRandom()
-        val generated = ForYouInterests.generate(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty, random = random)
+        val generated = ForYouInterests.prepare(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty).pick(random = random)
         assertEquals(documents.size, random.draws)
-        assertEquals(generated, ForYouInterests.generate(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty, random = CountingRandom()))
+        assertEquals(generated, ForYouInterests.prepare(SourceKey.GELBOORU, documents, TagAffinityInputs.Empty).pick(random = CountingRandom()))
         assertEquals(4, generated.size)
     }
 
     @Test fun `a tag far down a Like's alphabetical list still leads`() {
         val documents = List(3) { like -> (1..50).map { "filler_${like}_$it" } + "zorro" }
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU, documents, likedOnly(documents))
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, likedOnly(documents)).pick()
         assertEquals(listOf("zorro"), interests.first().tags)
     }
 
     @Test fun `separate interests stay together rather than creating unrelated pairs`() {
         val documents = List(4) { listOf("common", "night", "city") } +
             List(4) { listOf("common", "forest", "watercolor") }
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU, documents, likedOnly(documents))
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, likedOnly(documents)).pick()
         assertEquals(listOf(listOf("night", "city"), listOf("forest", "watercolor")), interests.map { it.tags })
     }
 
@@ -44,7 +44,7 @@ class ForYouInterestsTest {
         val affinity = history(
             SourceKey.GELBOORU, kept, watched = mapOf("blush" to 60L, "miku" to 5L, "artist name" to 2L, "tree" to 20L),
         )
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU, documents, affinity)
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, documents, affinity).pick()
         assertEquals(listOf(listOf("miku"), listOf("moth")), interests.map { it.tags })
     }
 
@@ -55,29 +55,29 @@ class ForYouInterestsTest {
             likes = List(15) { LikedTagDocument(SourceKey.PIXIV, listOf("初音ミク")) },
             dictionary = PixivTagDictionary.from(listOf("初音ミク" to "Hatsune Miku")),
         )
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU, training.documentsFor(SourceKey.GELBOORU), affinity,
-            translate = { tag, into -> training.translate(tag, SourceKey.GELBOORU, into) })
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU, training.documentsFor(SourceKey.GELBOORU), affinity,
+            translate = { tag, into -> training.translate(tag, SourceKey.GELBOORU, into) }).pick()
         assertEquals(listOf("hatsune_miku"), interests.first().tags)
     }
 
     @Test fun `a liked tag and its kept spelling are one candidate`() {
         val affinity = TagAffinityInputs(keptByTag = mapOf(SourceKey.PIXIV to mapOf("blue hair" to 1)), keptBySource = mapOf(SourceKey.PIXIV to 1))
-        val interests = ForYouInterests.generate(SourceKey.PIXIV, listOf(listOf("blue_hair")), affinity)
+        val interests = ForYouInterests.prepare(SourceKey.PIXIV, listOf(listOf("blue_hair")), affinity).pick()
         assertEquals(listOf(listOf("blue_hair")), interests.map { it.tags })
     }
 
     @Test fun `a saved tag leads a lane without any Like carrying it`() {
         val affinity = TagAffinityInputs(interest = mapOf("fox ears" to EXPLICIT_WEIGHT), explicit = setOf("fox ears"))
-        assertEquals(listOf(listOf("fox_ears")), ForYouInterests.generate(SourceKey.GELBOORU, emptyList(), affinity).map { it.tags })
+        assertEquals(listOf(listOf("fox_ears")), ForYouInterests.prepare(SourceKey.GELBOORU, emptyList(), affinity).pick().map { it.tags })
     }
 
     @Test fun `interests are bounded and use source normalization`() {
-        val interests = ForYouInterests.generate(SourceKey.GELBOORU,
-            (1..12).map { listOf("Interest $it") }, TagAffinityInputs.Empty)
+        val interests = ForYouInterests.prepare(SourceKey.GELBOORU,
+            (1..12).map { listOf("Interest $it") }, TagAffinityInputs.Empty).pick()
         assertEquals(4, interests.size)
         assertTrue(interests.all { it.tags.single().startsWith("interest_") })
         assertEquals(4, interests.flatMap { it.tags }.distinct().size)
-        assertEquals(emptyList<ForYouInterest>(), ForYouInterests.generate(SourceKey.PIXIV, listOf(listOf("1000users入り")), TagAffinityInputs.Empty))
+        assertEquals(emptyList<ForYouInterest>(), ForYouInterests.prepare(SourceKey.PIXIV, listOf(listOf("1000users入り")), TagAffinityInputs.Empty).pick())
     }
 }
 
@@ -87,9 +87,9 @@ class ForYouPictureInterestsTest {
     @Test fun `a tag predicted on many kept pictures leads a lane, compared with what the profile watches`() {
         val affinity = history(source, mapOf("tree" to 3), watched = mapOf("tree" to 30L, "cat ears" to 2L))
             .copy(pictures = PictureEvidence(mapOf("cat ears" to 12.0, "solo" to 25.0), mapOf("cat ears" to 12, "solo" to 25), kept = 30, baseRates = mapOf("solo" to 0.6)))
-        val interests = ForYouInterests.generate(
+        val interests = ForYouInterests.prepare(
             source, listOf(listOf("tree")), affinity, pictureCandidates = mapOf("cat_ears" to "cat ears", "solo" to "solo"),
-        )
+        ).pick()
         assertEquals(listOf(listOf("cat_ears")), interests.map { it.tags })
     }
 

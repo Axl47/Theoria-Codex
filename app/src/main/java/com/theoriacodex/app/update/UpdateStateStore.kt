@@ -48,10 +48,6 @@ interface UpdateStateStore {
     suspend fun snapshot(): UpdateStateSnapshot
     suspend fun update(transform: (UpdateStateSnapshot) -> UpdateStateSnapshot)
 
-    suspend fun setLastSeenReleaseId(releaseId: Long?) = update { current ->
-        current.copy(lastSeenReleaseId = releaseId)
-    }
-
     suspend fun setPendingInstall(releaseId: Long?, versionCode: Int?) = update { current ->
         current.copy(
             pendingInstallReleaseId = releaseId,
@@ -66,30 +62,7 @@ interface UpdateStateStore {
         )
     }
 
-    suspend fun setIgnoredRelease(releaseId: Long?) = update { current ->
-        current.copy(ignoredReleaseId = releaseId)
-    }
-
-    suspend fun setRemindLater(releaseId: Long?, untilEpochMs: Long?) = update { current ->
-        current.copy(
-            remindLaterReleaseId = releaseId,
-            remindLaterUntilEpochMs = untilEpochMs,
-        )
-    }
-
-    suspend fun clearPromptDeferrals() = update { current ->
-        current.copy(
-            ignoredReleaseId = null,
-            remindLaterReleaseId = null,
-            remindLaterUntilEpochMs = null,
-        )
-    }
-
     suspend fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) = update { current ->
         current.copy(pendingPostInstallChangelog = changelog)
-    }
-
-    suspend fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?) = update { current ->
-        current.copy(lastInstalledChangelog = changelog)
     }
 }

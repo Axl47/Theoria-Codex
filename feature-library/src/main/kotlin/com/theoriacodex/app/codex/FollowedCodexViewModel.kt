@@ -22,8 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-internal typealias FollowedFeedState = LiveCodexFeedState
-
 /** Session-owned live collection. Branch identity includes the durable follow membership. */
 class FollowedCodexViewModel(
     private val registry: SourceAdapterRegistry,

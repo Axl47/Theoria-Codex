@@ -475,7 +475,6 @@ internal class DefaultTheoriaAppContainer(
     private val updateFeedClient = GitHubReleaseFeedClient(
         owner = BuildConfig.UPDATE_REPO_OWNER,
         repo = BuildConfig.UPDATE_REPO_NAME,
-        channel = BuildConfig.UPDATE_CHANNEL,
         assetName = BuildConfig.UPDATE_ASSET_NAME,
         httpClient = sourceHttpClient,
     )

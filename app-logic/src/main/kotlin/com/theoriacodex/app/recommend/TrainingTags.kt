@@ -3,7 +3,6 @@ package com.theoriacodex.app.recommend
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostTaxonomyTerm
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.isLegacyFacetType
@@ -49,16 +48,6 @@ fun recommendationTaxonomyFor(post: Post): List<PostTaxonomyTerm> {
                 term.value.taxonomyKey(),
             )
         }
-        .toList()
-}
-
-fun Query.recommendationIncludeTags(): List<String> {
-    return includeTerms
-        .asSequence()
-        .filter { term -> term.facet == SearchFacet.TAG }
-        .map { term -> term.value.trim() }
-        .filter(String::isNotBlank)
-        .distinctBy(String::lowercase)
         .toList()
 }
 
