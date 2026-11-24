@@ -50,8 +50,9 @@ module_layering() {
   for build in */build.gradle.kts; do
     module="${build%%/*}"
     [[ "$module" == app || "$module" == core-data-android ]] && continue
-    for name in $(grep -E '^[[:space:]]*[A-Za-z]+\([[:space:]]*project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?":core-data-android"' "$build" \
-      | sed -E 's/^[[:space:]]*([A-Za-z]+).*/\1/' | grep -v '[Tt]est'); do
+    for name in $(grep -vE '^[[:space:]]*//' "$build" | tr '\n' ' ' \
+      | grep -oE '[A-Za-z]+"?[[:space:]]*[(,][[:space:]]*project\([[:space:]]*(path[[:space:]]*=[[:space:]]*)?":core-data-android"' \
+      | grep -oE '^[A-Za-z]+' | grep -v '[Tt]est'); do
       echo "$build depends on :core-data-android through $name; only :app may in main code." >&2; failed=1
     done
   done
