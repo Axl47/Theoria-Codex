@@ -49,7 +49,6 @@ class QueryHashTest {
             dateRange = null,
             minScore = null,
         )
-        // The hash every stored query has had since v3; changing it orphans saved pages and keys.
         val stored = "v3|source:DANBOORU|group[include:TAG:null:9:landscape];exclude:TAG:null:5:comic|TOP|none|none"
 
         assertEquals(stored, QueryHash.from(any))

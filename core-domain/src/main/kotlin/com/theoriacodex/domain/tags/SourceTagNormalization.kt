@@ -8,12 +8,9 @@ private val NAMED_HTML_ENTITIES = mapOf(
     "amp" to '&'.code, "lt" to '<'.code, "gt" to '>'.code, "quot" to '"'.code, "apos" to '\''.code,
 )
 
-/** How a source spells multi-word tags. Persisted tag keys depend on it, so it never changes for a source. */
 enum class TagDialect {
-    /** Booru style: lowercase, words joined with underscores. */
     UNDERSCORE,
 
-    /** Words joined with spaces; matching ignores case, underscores and repeated whitespace. */
     SPACED,
 }
 
@@ -21,11 +18,9 @@ private val UNDERSCORE_BUILT_INS = setOf(
     SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.IWARA, SourceKey.RULE34XXX,
 )
 
-/** Every user-added site is a booru, so custom sources use [TagDialect.UNDERSCORE]. */
 val SourceKey.tagDialect: TagDialect
     get() = if (isCustom || this in UNDERSCORE_BUILT_INS) TagDialect.UNDERSCORE else TagDialect.SPACED
 
-/** The provider spelling of typed input, used as an autocomplete prefix. */
 fun sourceAutocompletePrefix(source: SourceKey, input: String): String = when (source.tagDialect) {
     TagDialect.UNDERSCORE -> normalizeGelbooruToken(input)
     TagDialect.SPACED -> input
@@ -39,7 +34,6 @@ fun normalizeMatchToken(value: String): String {
         .replace(SOURCE_TAG_WHITESPACE_REGEX, " ")
 }
 
-/** Underscore-joined booru spelling; entities are decoded so escaped API tags compare equal. */
 fun normalizeGelbooruToken(value: String): String {
     return decodeHtmlEntities(value)
         .trim()
@@ -47,11 +41,6 @@ fun normalizeGelbooruToken(value: String): String {
         .replace(SOURCE_TAG_WHITESPACE_REGEX, "_")
 }
 
-/**
- * Decodes HTML character references (`&#039;`, `&#x27;`, `&amp;`, ...). Gelbooru-family APIs
- * return tag names escaped (`jojo&#039;s_bizarre_adventure`), but search and tag lookups want the
- * real name. A single pass, as in HTML, so `&amp;#039;` becomes the literal text `&#039;`.
- */
 fun decodeHtmlEntities(value: String): String {
     if ('&' !in value) return value
     return HTML_ENTITY_REGEX.replace(value) { match ->

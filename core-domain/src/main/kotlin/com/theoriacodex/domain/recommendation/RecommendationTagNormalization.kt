@@ -5,12 +5,6 @@ import com.theoriacodex.domain.tags.TagDialect
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.tagDialect
 
-/**
- * Canonical normalization for tags that train and serve the For You recommendation model.
- *
- * Search matching and persisted favorite tags intentionally use separate contracts because
- * their compatibility requirements differ from recommendation affinity keys.
- */
 object RecommendationTagNormalization {
     fun normalize(
         source: SourceKey,

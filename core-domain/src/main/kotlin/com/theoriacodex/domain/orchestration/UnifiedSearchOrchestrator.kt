@@ -59,15 +59,7 @@ data class UnifiedSearchResult(
 class UnifiedSearchOrchestrator(
     private val adaptersBySource: Map<SourceKey, SourceAdapter>,
     private val sourceTimeoutMs: Long = 15_000L,
-    /**
-     * Runs provider calls, which parse whole response pages, so callers on the main thread stay free to draw.
-     * Tests pass [kotlin.coroutines.EmptyCoroutineContext] to keep those calls on their own dispatcher.
-     */
     private val providerContext: CoroutineContext = Dispatchers.Default,
-    /**
-     * Adds what the app derives from each source's page before it is merged with the others, such as every post's
-     * [Post.pictureHash], so copies are collapsed where pages meet. It must return the posts in their order.
-     */
     private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
 ) {
     suspend fun search(
@@ -77,7 +69,6 @@ class UnifiedSearchOrchestrator(
         weights: Map<SourceKey, Double>,
         queryOverridesBySource: Map<SourceKey, Query> = emptyMap(),
         prepareQuery: suspend (SourceKey, Query) -> Query = { _, sourceQuery -> sourceQuery },
-        /** When set, receives usable results before every source has answered; see [publishAsSourcesAnswer]. */
         onPartial: (suspend (UnifiedSearchResult) -> Unit)? = null,
     ): UnifiedSearchResult = coroutineScope {
         val preparedQueries = ConcurrentHashMap<SourceKey, Query>()
@@ -106,7 +97,6 @@ class UnifiedSearchOrchestrator(
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
                 async(providerContext) {
-                    // A source with a term cap receives only the leading terms it accepts.
                     val sourceBaseQuery = sourceBaseQuery(query, portableQuery, queryOverridesBySource[source])
                         .withinTermLimit(adapter.capabilities.searchTermLimit)
                     val answer = source to runCatchingPreservingCancellation {
@@ -127,11 +117,6 @@ class UnifiedSearchOrchestrator(
         }
     }
 
-    /**
-     * Publishes the first sources to answer, then appends each later source below them, so one slow or dead source
-     * cannot hold back results that already arrived, and cards already on screen never move. Sources answering within
-     * [FIRST_ANSWERS_SETTLE_MS] of the first success are interleaved exactly as a complete search would be.
-     */
     private suspend fun publishAsSourcesAnswer(
         answered: StateFlow<List<SourceAnswer>>,
         expected: Int,
@@ -157,7 +142,6 @@ class UnifiedSearchOrchestrator(
         return combined
     }
 
-    /** Combines [jobs] into one result; [items] replaces the weighted interleave when order is already fixed. */
     private fun combineResults(
         jobs: List<SourceAnswer>,
         hardExcluded: Map<SourceKey, Set<CapabilityExclusionReason>>,
@@ -231,14 +215,9 @@ class UnifiedSearchOrchestrator(
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
             } else page
         } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-        // Outside the source's timeout: annotating has its own budget, and a page that arrived in time stays answered.
         return page.copy(items = annotateListing(page.items))
     }
 
-    /**
-     * One page of [adapter]'s results for [query], annotated like every page the orchestrator serves. [timeoutMs] limits
-     * the source's answer only, not the annotating after it.
-     */
     suspend fun searchSource(
         adapter: SourceAdapter,
         query: Query,
@@ -257,7 +236,6 @@ class UnifiedSearchOrchestrator(
         query: Query,
         pageToken: String?,
     ): Page<Post> = withContext(providerContext) {
-        // The media terms go to the provider only; posts are still matched against the user's own terms.
         val request = query.withMediaTerms(adapter.capabilities)
         val groups = request.effectiveIncludeTermGroups
         val alternatives = groups.filter { group -> group.terms.size > 1 }
@@ -331,7 +309,6 @@ class UnifiedSearchOrchestrator(
             accumulators[selected] = accumulators.getValue(selected) - 1.0
         }
 
-        // Sites that mirror each other list the same files; the copy from the earlier interleaved source stays.
         return merged.distinctByFile()
     }
 
@@ -391,10 +368,6 @@ class UnifiedSearchOrchestrator(
         }
     }
 
-    /**
-     * Drops posts outside the search's dates before sites are merged. Most sites ignore the range, and merging keeps
-     * one copy of each file: an out-of-range copy kept there would hide the in-range copy another site holds.
-     */
     private fun Page<Post>.inDateRange(range: DateRange?): Page<Post> =
         if (range == null) this else copy(items = items.filter { post -> post.createdAtEpochMs in range })
 

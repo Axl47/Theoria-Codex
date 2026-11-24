@@ -37,7 +37,6 @@ class MediaTermsTest {
     @Test
     fun `a full term limit falls back to the no-cost term`() {
         assertEquals(listOf("cat", "dog", "filetype:gif,mp4,webm,zip"), query("cat", "dog").withMediaTerms(danbooruLike).includeTags)
-        // A ranked sort spends one of the two terms on its order metatag.
         assertEquals(
             listOf("cat", "filetype:gif,mp4,webm,zip"),
             query("cat", sort = SortMode.TOP).withMediaTerms(danbooruLike).includeTags,

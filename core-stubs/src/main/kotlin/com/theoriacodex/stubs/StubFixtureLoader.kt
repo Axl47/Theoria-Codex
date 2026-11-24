@@ -43,7 +43,6 @@ class StubFixtureLoader(
         }
     }
 
-    /** Fixture folders are the lowercase source id (`pixiv`, `rule34xxx`, ...). */
     private fun sourceFolder(sourceKey: SourceKey): String = sourceKey.id.lowercase()
 }
 
