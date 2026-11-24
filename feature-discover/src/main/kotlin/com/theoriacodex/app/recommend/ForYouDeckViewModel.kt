@@ -428,13 +428,13 @@ class ForYouDeckViewModel(
      */
     private fun deal() {
         val mix = mix ?: return
-        mix.deal(if (mix.opening) DECK_DEAL else dealSize, seen + kept)
+        mix.deal(if (mix.opening) DECK_DEAL else dealSize, ::isKnown)
         refill(mix)
     }
 
     /** Deals what a short deal still owes [mix] (a whole deal before the first), as its next cards arrive. */
     private fun makeUp(mix: ForYouMix) {
-        mix.deal(mix.owed(if (mix.opening) DECK_DEAL else dealSize), seen + kept)
+        mix.deal(mix.owed(if (mix.opening) DECK_DEAL else dealSize), ::isKnown)
         refill(mix)
     }
 
@@ -501,7 +501,7 @@ class ForYouDeckViewModel(
     private fun restartMixLevel(mix: ForYouMix) {
         mix.takeBack(seen, ::needsLook)
         lastDecision = null
-        mix.deal(dealSize, seen + kept)
+        mix.deal(dealSize, ::isKnown)
         resetLevels()
         refill(mix)
     }

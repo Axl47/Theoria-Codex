@@ -34,9 +34,9 @@ interface VisualSignatureRepository {
 
     /**
      * Up to [limit] liked or saved posts whose [modelId] analysis awaits their frames ([VisionFrames.WANTED]) and has
-     * failed fewer than [MAX_FRAME_ATTEMPTS] reads, most recently stored first.
+     * failed fewer than [MAX_FRAME_ATTEMPTS] reads, most recently stored first, after the first [skip].
      */
-    suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int): List<Post>
+    suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int = 0): List<Post>
 
     /**
      * Records a failed read of [postId]'s frames against its [modelId] analysis, which keeps standing. A failure that

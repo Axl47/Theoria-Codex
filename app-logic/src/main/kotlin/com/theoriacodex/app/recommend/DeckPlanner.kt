@@ -96,13 +96,15 @@ data class DeckBatch(val cards: List<DeckCard>, val steering: DeckSteering, val 
 fun nextBatch(
     lanes: List<DeckLane>,
     steering: DeckSteering,
-    seen: Set<PostId>,
+    seen: (PostId) -> Boolean,
     size: Int,
     only: String? = null,
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
 ): DeckBatch {
-    val used = seen.toMutableSet()
-    fun isUsed(post: Post) = post.id in used || copiesOf(post).any(used::contains)
+    // What this batch dealt; [seen] is read as is, so a large history is never copied.
+    val used = HashSet<PostId>()
+    fun isUsed(id: PostId) = seen(id) || id in used
+    fun isUsed(post: Post) = isUsed(post.id) || copiesOf(post).any(::isUsed)
     fun use(post: Post) {
         used += post.id
         used += copiesOf(post)

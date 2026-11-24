@@ -162,10 +162,10 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
         seen(post.id) || post.id in dealt || copiesOf(post).any { seen(it) || it in dealt }
 
     /** Deals up to [size] cards nobody has [seen], once a lane has opened; a copy of a seen or dealt post counts as seen. */
-    fun deal(size: Int, seen: Set<PostId>) {
+    fun deal(size: Int, seen: (PostId) -> Boolean) {
         // Before any lane answers nothing is owed but the whole first deal, whatever size the first answer finds.
         if (!ready) return
-        val batch = nextBatch(lanes.map { DeckLane(it.origin, it.buffer) }, steering, seen + dealt, size, only, copiesOf)
+        val batch = nextBatch(lanes.map { DeckLane(it.origin, it.buffer) }, steering, { seen(it) || it in dealt }, size, only, copiesOf)
         steering = batch.steering
         lanes.forEach { lane -> batch.taken[lane.origin.laneId]?.let(lane::drop) }
         batch.cards.forEach { card ->
