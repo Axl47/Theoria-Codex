@@ -38,19 +38,9 @@ internal object MainReleaseTagParser {
     private val commitishPattern = Regex("^[0-9a-fA-F]{7,40}$")
 
     fun parse(
-        channel: String,
         tagName: String,
         fallbackCommitSha: String? = null,
     ): ParsedMainReleaseTag? {
-        val channelPattern = Regex("^${Regex.escape(channel)}-vc(\\d+)-([0-9a-fA-F]{7,40})$")
-        val legacyMatch = channelPattern.matchEntire(tagName)
-        if (legacyMatch != null) {
-            val versionCode = legacyMatch.groupValues[1].toIntOrNull() ?: return null
-            if (versionCode <= 0) return null
-            val commitShaShort = legacyMatch.groupValues[2].lowercase()
-            return ParsedMainReleaseTag(versionCode = versionCode, commitShaShort = commitShaShort)
-        }
-
         val semverMatch = semverPattern.matchEntire(tagName) ?: return null
         val major = semverMatch.groupValues[1].toIntOrNull() ?: return null
         val minor = semverMatch.groupValues[2].toIntOrNull() ?: return null

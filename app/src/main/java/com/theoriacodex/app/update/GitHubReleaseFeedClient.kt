@@ -23,7 +23,6 @@ import kotlinx.serialization.json.JsonElement
 class GitHubReleaseFeedClient(
     private val owner: String,
     private val repo: String,
-    private val channel: String,
     private val assetName: String,
     private val httpClient: SourceHttpClient = DefaultSourceHttpClient(),
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 },
@@ -60,13 +59,12 @@ class GitHubReleaseFeedClient(
         if (response.statusCode !in 200..299) throw IOException("GitHub update check failed (${response.statusCode})")
         val body = decodeDocumentUtf8(response.body)
         checkDocumentDepth(body)
-        return parseMainPrereleaseHistory(body, channel, assetName)
+        return parseMainPrereleaseHistory(body, assetName)
     }
 
     companion object {
         internal fun parseMainPrereleaseHistory(
             jsonBody: String,
-            channel: String,
             assetName: String,
         ): List<RemoteUpdate> {
             val entries = try {
@@ -80,11 +78,9 @@ class GitHubReleaseFeedClient(
 
                 val tagName = release.tagName.trim()
                 val parsedTag = MainReleaseTagParser.parse(
-                    channel = channel,
                     tagName = tagName,
                     fallbackCommitSha = release.targetCommitish.trim(),
-                )
-                    ?: return@mapNotNull null
+                ) ?: return@mapNotNull null
 
                 val publishedEpoch = runCatching { Instant.parse(release.publishedAt.trim()).toEpochMilli() }.getOrElse { 0L }
 
@@ -112,18 +108,6 @@ class GitHubReleaseFeedClient(
                 compareByDescending<RemoteUpdate> { it.publishedAtEpochMs ?: 0L }
                     .thenByDescending { it.versionCode }
             )
-        }
-
-        internal fun parseLatestMainPrerelease(
-            jsonBody: String,
-            channel: String,
-            assetName: String,
-        ): RemoteUpdate? {
-            return parseMainPrereleaseHistory(
-                jsonBody = jsonBody,
-                channel = channel,
-                assetName = assetName,
-            ).firstOrNull()
         }
     }
 }

@@ -177,9 +177,9 @@ private class VisionPhases(
         check(token in inputs.pictures.candidates) { "candidates ${inputs.pictures.candidates.size}" }
         val affinity = inputs.pictureAffinity(SourceKey.DANBOORU, token, token)
         check(affinity.score > 0.0) { "affinity $affinity" }
-        val interests = ForYouInterests.generate(
+        val interests = ForYouInterests.prepare(
             SourceKey.DANBOORU, emptyList(), inputs, pictureCandidates = inputs.pictures.candidates.associateWith { it },
-        )
+        ).pick()
         check(interests.any { token in it.tags }) { "interests $interests" }
         return "candidates=${inputs.pictures.candidates.size} score=${"%.2f".format(java.util.Locale.ROOT, affinity.score)} lanes=${interests.size}"
     }

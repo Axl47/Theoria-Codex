@@ -125,9 +125,6 @@ data class FacetedTagSuggestion(
 interface FacetedSearchSourceAdapter {
     val supportedSearchScopes: Set<FacetedSearchScope>
 
-    val supportedSearchFacets: Set<SearchFacet>
-        get() = supportedSearchScopes.mapNotNullTo(linkedSetOf(), FacetedSearchScope::facet)
-
     suspend fun autocompleteFaceted(
         prefix: String,
         scope: FacetedSearchScope,

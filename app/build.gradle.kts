@@ -237,7 +237,6 @@ android {
 
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"Axl47\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"Theoria-Codex\"")
-        buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
         buildConfigField("String", "UPDATE_ASSET_NAME", "\"theoria-codex-main.apk\"")
         buildConfigField("long", "UPDATE_CHECK_TIMEOUT_MS", "3000L")
         buildConfigField("boolean", "UPDATER_ENABLED", "false")

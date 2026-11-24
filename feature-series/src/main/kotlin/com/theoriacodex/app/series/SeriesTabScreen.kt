@@ -153,7 +153,7 @@ private fun SeriesTabHomeContent(
     }
     val scrollable = grids.shown(content.view, state.search != null)
 
-    SeriesScrollChromeEffect(scrollable = scrollable, onScrollStarted = { searchBarDismissed = true }, onAtTop = {})
+    SeriesScrollChromeEffect(scrollable = scrollable, onScrollStarted = { searchBarDismissed = true })
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
         when (scrollable) {
             is LazyGridState -> scrollable.animateScrollToItem(0)

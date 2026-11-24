@@ -25,10 +25,6 @@ class StubAdapterRegistry(
         return adaptersBySource[sourceKey]
     }
 
-    fun allAdapters(): List<SourceAdapter> {
-        return adaptersBySource.values.toList()
-    }
-
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
         return UnifiedSearchOrchestrator(adaptersBySource)
     }

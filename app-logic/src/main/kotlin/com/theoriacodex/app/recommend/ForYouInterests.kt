@@ -51,17 +51,6 @@ object ForYouInterests {
         }
         return ForYouInterestPicker(leads, guesses, documentsByLead.mapValues { it.value.toIntArray() })
     }
-
-    fun generate(
-        source: SourceKey,
-        documents: List<List<String>>,
-        affinity: TagAffinityInputs,
-        translate: (tag: String, into: SourceKey) -> String? = { tag, _ -> tag },
-        unavailable: Set<String> = emptySet(),
-        random: Random? = null,
-        maxInterests: Int = 4,
-        pictureCandidates: Map<String, String> = emptyMap(),
-    ): List<ForYouInterest> = prepare(source, documents, affinity, translate, pictureCandidates).pick(unavailable, random, maxInterests)
 }
 
 class ForYouInterestPicker internal constructor(
