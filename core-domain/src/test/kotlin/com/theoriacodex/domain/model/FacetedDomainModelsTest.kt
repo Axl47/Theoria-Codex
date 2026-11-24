@@ -23,6 +23,18 @@ class FacetedDomainModelsTest {
     }
 
     @Test
+    fun `copying a query's groups recomputes its include terms (ADR 0009)`() {
+        val query = Query(
+            mode = QueryMode.Unified, includeTags = listOf("landscape"), excludeTags = emptyList(),
+            sort = SortMode.NEWEST, dateRange = null, minScore = null,
+        )
+
+        val copied = query.copy(includeTermGroups = listOf(SearchTermGroup.single(SearchTerm("sky"))))
+
+        assertEquals(listOf(SearchTerm("sky")), copied.includeTerms)
+    }
+
+    @Test
     fun `typed query terms retain facets while exposing plain labels`() {
         val query = Query(
             mode = QueryMode.Source(SourceKey.NHENTAI),

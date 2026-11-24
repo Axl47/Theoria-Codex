@@ -22,7 +22,7 @@ class CancellationCatchRuleTest {
         ).map { it.message }
 
     @Test
-    fun `flags a rethrow before catching Throwable`() {
+    fun `flags a rethrow before catching Throwable (ADR 0002)`() {
         assertEquals(
             listOf("Use runCatchingPreservingCancellation instead of rethrowing CancellationException by hand."),
             messages("catch (e: CancellationException) { throw e } catch (x: Throwable) { println(x) }"),

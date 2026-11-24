@@ -79,6 +79,7 @@ def main_sources(files: dict[str, str]):
 
 class CoreDomainRulesTest(unittest.TestCase):
     def test_reports_off_main_notes_outside_the_start_of_a_parse_helper_adr_0002(self) -> None:
+        self.assertIn(check_architecture.off_main_notes_run_where_work_runs, check_architecture.RULES)
         with main_sources({
             "core-sources/src/main/kotlin/Clean.kt": (
                 "internal fun parseHtml(html: String): Document {\n"
@@ -109,6 +110,7 @@ class CoreDomainRulesTest(unittest.TestCase):
         )
 
     def test_reports_recommendation_normalization_outside_recommendation_code_adr_0003(self) -> None:
+        self.assertIn(check_architecture.recommendation_normalization_stays_in_recommendations, check_architecture.RULES)
         use = "val key = RecommendationTagNormalization.normalize(source, tag)\n"
         with main_sources({
             "app-logic/src/main/kotlin/com/theoriacodex/app/recommend/ForYouInterests.kt": use,
@@ -118,6 +120,7 @@ class CoreDomainRulesTest(unittest.TestCase):
         self.assertEqual(["feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt"], [failure.split(" ", 1)[0] for failure in failures])
 
     def test_reports_a_custom_site_id_derived_outside_profile_creation_adr_0004(self) -> None:
+        self.assertIn(check_architecture.stored_site_ids_are_never_rederived, check_architecture.RULES)
         with main_sources({
             "app/src/main/java/com/theoriacodex/app/di/CustomSitesControllerImpl.kt": "sourceId = address.derivedSourceId,\n",
             "app/src/main/java/com/theoriacodex/app/di/CustomSourceRuntime.kt": "val id = CustomSourceIds.fromAddress(host, port, path)\n",
@@ -126,6 +129,7 @@ class CoreDomainRulesTest(unittest.TestCase):
         self.assertEqual(["app/src/main/java/com/theoriacodex/app/di/CustomSourceRuntime.kt"], [failure.split(" ", 1)[0] for failure in failures])
 
     def test_reports_a_file_hash_lookup_outside_md5_search_families_adr_0008(self) -> None:
+        self.assertIn(check_architecture.only_md5_families_look_up_file_hashes, check_architecture.RULES)
         with main_sources({
             "core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapter.kt": "class D(x: Int) : SourceAdapter,\n    FileHashLookupSourceAdapter {\n",
             "core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt": "class P : SourceAdapter, FileHashLookupSourceAdapter {\n",
@@ -135,6 +139,7 @@ class CoreDomainRulesTest(unittest.TestCase):
         self.assertEqual(["core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt"], [failure.split(" ", 1)[0] for failure in failures])
 
     def test_reports_a_min_score_read_outside_stores_and_the_hash_adr_0009(self) -> None:
+        self.assertIn(check_architecture.sources_ignore_min_score, check_architecture.RULES)
         with main_sources({
             "core-domain/src/main/kotlin/com/theoriacodex/domain/query/QueryHash.kt": "val score = query.minScore?.toString()\n",
             "core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt": "Query(sort = sort, minScore = null)\nval floor = query.minScore ?: 0\n",
