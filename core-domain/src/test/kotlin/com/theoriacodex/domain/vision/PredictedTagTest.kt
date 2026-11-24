@@ -19,7 +19,7 @@ class PredictedTagTest {
         measured.forEach { (use, thresholds) ->
             thresholds.forEach { (kind, threshold) ->
                 assertTrue("$use $kind at $threshold", PredictedTag("tag", threshold, kind).counts(use))
-                assertFalse("$use $kind below $threshold", PredictedTag("tag", threshold - 0.01f, kind).counts(use))
+                assertFalse("$use $kind below $threshold", PredictedTag("tag", Math.nextDown(threshold), kind).counts(use))
             }
         }
     }

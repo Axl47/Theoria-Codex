@@ -10,6 +10,8 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
@@ -283,14 +285,21 @@ class SeriesPageViewModelTest {
     fun `any other failure's own text is never shown (ADR 0007)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val id = SeriesId(SourceKey.parseOrThrow("custom_aniyomi_7"), "/title/1")
-        val source = Seasons(id.source, IllegalStateException("socket closed by 10.0.0.2"))
-        val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
-        val collecting = launch { viewModel.state.collect {} }
+        val errors = listOf(
+            IllegalStateException("socket closed by 10.0.0.2"),
+            SourceAdapterException(SourceFailureReason.NETWORK, "socket closed by 10.0.0.2"),
+        )
 
-        advanceUntilIdle()
-        val failure = checkNotNull(viewModel.state.value.failure)
-        assertFalse(failure.message, "10.0.0.2" in failure.message)
-        collecting.cancel()
+        val shown = errors.map { error ->
+            val source = Seasons(id.source, error)
+            val viewModel = SeriesPageViewModel(id, Restored(StoredSeries(Series(id, "Title")), emptyList()), loadSources = { listOf(source) }, ioDispatcher = StandardTestDispatcher(testScheduler))
+            val collecting = launch { viewModel.state.collect {} }
+            advanceUntilIdle()
+            collecting.cancel()
+            checkNotNull(viewModel.state.value.failure).message
+        }
+
+        assertEquals(emptyList<String>(), shown.filter { "10.0.0.2" in it })
     }
 
     @Test

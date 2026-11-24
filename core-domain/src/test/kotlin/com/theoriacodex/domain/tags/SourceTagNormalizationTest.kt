@@ -17,6 +17,7 @@ class SourceTagNormalizationTest {
         assertEquals("jojo's_bizarre_adventure", decodeHtmlEntities("jojo&#039;s_bizarre_adventure"))
         assertEquals("a&b <c> \"d\" 'e'", decodeHtmlEntities("a&amp;b &lt;c&gt; &quot;d&quot; &#x27;e&apos;"))
         assertEquals("&#039; &unknown; & plain", decodeHtmlEntities("&amp;#039; &unknown; & plain"))
+        assertEquals("\uD83D\uDE00 \uD83D\uDE00", decodeHtmlEntities("&#128512; &#x1F600;"))
         assertTrue(sourceTagsMatch(SourceKey.GELBOORU, "jojo&#039;s_bizarre_adventure", "jojo's bizarre adventure"))
         assertEquals("jojo's_bizarre_adventure", sourceTagKey(SourceKey.RULE34XXX, "jojo&#039;s_bizarre_adventure"))
     }

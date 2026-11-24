@@ -83,7 +83,7 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `every server's streams come in the source's preferred order, and a stream without headers gets the source's (ADR 0007)`() = runBlocking {
+    fun `every server's streams come in the source's preferred order, and a stream without headers gets the source's`() = runBlocking {
         val source = ServerSource(
             servers = listOf(Hoster(hosterName = "Server A"), Hoster(hosterName = "Server B", videoList = listOf(Video("https://b.example/v.mp4", "Server B 480p", preferred = true)))),
             videos = mapOf(
@@ -122,6 +122,28 @@ class AniyomiSeriesSourceTest {
                 MediaStream("https://a.example/play?id=360", "360p HLS · Server A", mime = "application/x-mpegURL", headers = sourceHeaders),
             ),
             media,
+        )
+    }
+
+    @Test
+    fun `a stream without headers gets its source's, and one with its own keeps them (ADR 0007)`() = runBlocking {
+        val source = ServerSource(
+            servers = listOf(Hoster(hosterName = "Server A")),
+            videos = mapOf(
+                "Server A" to {
+                    listOf(
+                        Video("https://a.example/own.mp4", "own", headers = headersOf("Referer", "https://a.example/")),
+                        Video("https://a.example/bare.mp4", "bare"),
+                    )
+                },
+            ),
+        )
+
+        val headers = streamsOf(source).associate { it.url to it.headers }
+
+        assertEquals(
+            mapOf("https://a.example/own.mp4" to mapOf("Referer" to "https://a.example/"), "https://a.example/bare.mp4" to sourceHeaders),
+            headers,
         )
     }
 

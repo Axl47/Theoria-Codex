@@ -28,7 +28,7 @@ import org.junit.Test
 
 class SearchMetadataHydrationTest {
     @Test
-    fun `group verification hydrates overlapping identities once and deduplicates after canonical resolution (ADR 0011)`() = runTest {
+    fun `overlapping branches hydrate each original post id once (ADR 0011)`() = runTest {
         val resolved = mutableListOf<String>()
         val adapter = SparseAdapter(
             search = { query, _ ->

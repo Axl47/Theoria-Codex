@@ -57,16 +57,19 @@ class QueryHashTest {
 
     @Test
     fun `a stored query with a retired minimum score keeps its hash (ADR 0009)`() {
-        val legacy = Query(
+        fun legacy(score: Int) = QueryHash.from(Query(
             mode = QueryMode.Source(SourceKey.DANBOORU),
             includeTerms = listOf(SearchTerm("landscape")),
             excludeTerms = emptyList(),
             sort = SortMode.NEWEST,
             dateRange = null,
-            minScore = 5,
-        )
+            minScore = score,
+        ))
 
-        assertEquals("v3|source:DANBOORU|group[include:TAG:null:9:landscape]|NEWEST|none|5", QueryHash.from(legacy))
+        assertEquals(
+            listOf(5, 0, -3).map { "v3|source:DANBOORU|group[include:TAG:null:9:landscape]|NEWEST|none|$it" },
+            listOf(legacy(5), legacy(0), legacy(-3)),
+        )
     }
 
     @Test

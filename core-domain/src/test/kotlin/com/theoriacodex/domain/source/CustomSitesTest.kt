@@ -27,7 +27,9 @@ class CustomSitesTest {
             Triple("https://booru.example:8443/", "https://booru.example:8443", "custom_booru_example__p8443"),
             Triple("HTTPS://Booru.Example:443/#top", "https://booru.example", "custom_booru_example"),
             Triple("//booru.example//posts/123", "https://booru.example", "custom_booru_example"),
-        )
+        ) + listOf("index.php", "posts", "post", "tags", "pools", "wiki_pages", "artists", "comments", "Wiki_Pages").map { segment ->
+            Triple("https://booru.example/board/$segment/1", "https://booru.example/board", "custom_booru_example__h${sha256("/board").take(8)}")
+        }
 
         cases.forEach { (input, baseUrl, sourceId) ->
             val address = valid(input)
