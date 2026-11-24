@@ -26,7 +26,7 @@ Statistics are local and must survive DST changes, long gaps and restoring the s
 
 ## Consequences
 
-Counters are monotonic; there is no way to subtract on restore. Tag counts on the Statistics screen can read a little high for tags that entered a full table. A floor is at most views times tags per post divided by the limit, so a heavy source's floor stays under a fixed share of its watched posts; a source with fewer tags per post has a lower floor.
+Counters are monotonic; there is no way to subtract on restore. The watched-tag limit is per source, so the file still grows with the number of sources watched, Custom Sites included; nothing caps the total. Tag counts on the Statistics screen can read a little high for tags that entered a full table. A floor is at most views times tags per post divided by the limit, so a heavy source's floor stays under a fixed share of its watched posts; a source with fewer tags per post has a lower floor.
 
 ## Applies to
 
