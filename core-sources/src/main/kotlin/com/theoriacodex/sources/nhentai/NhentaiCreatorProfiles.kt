@@ -7,7 +7,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.percentEncode
 
-/** Artist identity shared by API galleries and mirrored gallery metadata. */
 internal fun List<PostTaxonomyTerm>.nhentaiCreatorProfiles(): List<CreatorProfile> {
     return asSequence()
         .filter { it.facet == SearchFacet.ARTIST && it.sourceNamespace == NHENTAI_ARTIST_NAMESPACE }

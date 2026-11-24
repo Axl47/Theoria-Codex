@@ -7,10 +7,8 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.UserApiKey
 
-/** One provider's search page: posts 42 (listed twice) and 43, then [continuation]. */
 internal data class ProviderPageFixture(val source: SourceKey, val body: String, val continuation: String?)
 
-/** Credentials every registry source accepts without refreshing. */
 internal fun providerPageCredentials() = FakeCredentialsProvider().apply {
     pixivTokens = PixivAuthTokens("fixture-access", "fixture-refresh", Long.MAX_VALUE)
     rule34XxxCredentials = UserApiKey("fixture-user", "fixture-key")
@@ -21,11 +19,6 @@ internal fun providerPageQuery(source: SourceKey) = Query(
     sort = SortMode.NEWEST, dateRange = null, minScore = null,
 )
 
-/**
- * A search page for every registry source except Hitomi, whose binary index and post-hydration alias contracts
- * remain in HitomiGlobalIndexSourceAdapterTest with its captured protocol fixtures. Deliberately synthetic
- * protocol edge cases.
- */
 internal fun providerPageFixtures(): List<ProviderPageFixture> {
     val booru = (List(39) { index ->
         """{"id":${if (index % 2 == 0) "42" else "\"42\""},"file_url":"https://example.com/42.png","tags":"sky"}"""
@@ -43,7 +36,6 @@ internal fun providerPageFixtures(): List<ProviderPageFixture> {
         "<item><link>https://rule34.paheal.net/post/view/$id</link><title>Post</title></item>"
     }
     return listOf(
-        // Danbooru sites page newest-first searches before the lowest post id.
         ProviderPageFixture(SourceKey.AIBOORU, booru, "b42"),
         ProviderPageFixture(SourceKey.DANBOORU, booru, "b42"),
         ProviderPageFixture(SourceKey.GELBOORU, booru, "1"),

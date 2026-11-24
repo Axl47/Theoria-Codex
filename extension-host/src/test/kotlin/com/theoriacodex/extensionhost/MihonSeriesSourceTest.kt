@@ -132,7 +132,6 @@ class MihonSeriesSourceTest {
     fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt`() = runTest {
         val slug = buildJsonObject { put("slug", "s-1") }
         source.listing = MangasPage(listOf(manga("/s", "Series").also { it.memo = slug }), hasNextPage = false)
-        // A memo longer than the app stores is cleared, so it replaces the stored one rather than keeping it.
         val oversized = buildJsonObject { put("blob", "x".repeat(MAX_MEMO_LENGTH)) }
         source.chapters = listOf(
             chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } },
@@ -142,16 +141,13 @@ class MihonSeriesSourceTest {
         assertEquals("""{"slug":"s-1"}""", listed.memo)
         assertEquals(listOf("""{"id":1}""", "{}"), series.entries(listed, emptyList()).entries.map { it.memo })
 
-        // A later run: nothing listed, so both are rebuilt from what the app stored.
         val later = MihonSeriesSource(source, HostServices(ExtensionImages()))
         later.details(listed)
         assertEquals(slug, source.asked.last().memo)
         later.media(SeriesEntry("/c/1", "Chapter 1", memo = """{"id":1}"""))
         assertEquals(buildJsonObject { put("id", 1) }, source.pageListRequests.last().memo)
-        // A stored memo that is not a JSON object is none, rather than a failed call.
         later.media(SeriesEntry("/c/2", "Chapter 2", memo = "not json"))
         assertTrue(source.pageListRequests.last().memo.isEmpty())
-        // A rebuilt chapter is held, so the source gets the same object when its pages are listed again.
         val rebuilt = source.pageListRequests.last()
         later.media(SeriesEntry("/c/2", "Chapter 2"))
         assertSame(rebuilt, source.pageListRequests.last())
@@ -169,7 +165,6 @@ class MihonSeriesSourceTest {
         source.details = manga("/s", "Series").also { it.memo = buildJsonObject { put("slug", "s-2") } }
         assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
 
-        // Details that clear the memo of the series they were handed keep the one it had.
         source.details = null
         source.clearMemo = true
         assertEquals("""{"slug":"s-2"}""", series.details(listed).memo)
@@ -187,11 +182,9 @@ class MihonSeriesSourceTest {
         assertEquals("/c/1", handed.url)
         assertEquals(buildJsonObject { put("id", 1) }, handed.memo)
         assertEquals("""{"pages":3}""", listed.seriesMemo)
-        // The held series keeps it, so the source gets it back on its next call.
         series.details(stored)
         assertEquals(buildJsonObject { put("pages", 3) }, source.asked.last().memo)
 
-        // A listing that clears it clears the stored one too, rather than leaving the older memo to come back.
         source.listingMemo = JsonObject(emptyMap())
         assertEquals("{}", series.entries(stored, emptyList()).seriesMemo)
         assertTrue(source.asked.last().memo.isEmpty())
@@ -310,15 +303,12 @@ class MihonSeriesSourceTest {
         var listing = MangasPage(emptyList(), hasNextPage = false)
         var chapters = emptyList<SChapter>()
 
-        /** What the details page returns; the series it was asked about when null. */
         var details: SManga? = null
         var pages = emptyList<Page>()
         var failure: Throwable? = null
 
-        /** Whether a details call clears the memo of the series it is handed. */
         var clearMemo = false
 
-        /** What a chapter-only call records on the series, on a copy it returns; nothing when null. */
         var listingMemo: JsonObject? = null
         val handedChapters = mutableListOf<List<SChapter>>()
 

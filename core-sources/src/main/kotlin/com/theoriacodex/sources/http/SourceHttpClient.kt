@@ -6,7 +6,6 @@ data class SourceHttpResponse(
     val headers: Map<String, List<String>> = emptyMap(),
 )
 
-/** The first value of header [name], whatever case the server or a test wrote it in. */
 fun Map<String, List<String>>.header(name: String): String? =
     entries.firstOrNull { (key, _) -> key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
 
@@ -33,13 +32,8 @@ class SourceHttpBodyTooLargeException(
     val maxBodyBytes: Int,
 ) : IllegalStateException("Source HTTP response exceeded the $maxBodyBytes byte limit")
 
-/**
- * Identifies the app to providers. Danbooru's Cloudflare challenges generic browser agents such as
- * `Mozilla/5.0` on its API and CDN, so its requests and media loads must send this instead.
- */
 const val THEORIA_SOURCE_USER_AGENT: String = "TheoriaCodex/1.0 (Android source adapter)"
 
-/** A bare browser agent, for sites that refuse library agents but not the app's lack of a real browser. */
 const val BROWSER_USER_AGENT: String = "Mozilla/5.0"
 
 const val DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES: Int = 8 * 1024 * 1024
@@ -82,9 +76,6 @@ internal fun Map<String, String>.withByteRange(range: SourceByteRange?): Map<Str
     require(keys.none { it.equals("Range", ignoreCase = true) }) {
         "Pass either SourceByteRange or a Range header, not both"
     }
-    // Android's HttpURLConnection transparently inflates gzip responses. A bounded range can end
-    // in the middle of the compressed stream, producing EOF or making Content-Range describe
-    // different bytes than the decoded body. Range consumers require byte-exact identity data.
     return this + mapOf(
         "Range" to range.headerValue,
         "Accept-Encoding" to "identity",

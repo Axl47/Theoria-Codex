@@ -6,13 +6,6 @@ import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.stringValue
 
-/**
- * Header facts from a `/v1/user/detail` response, read from its documented shape (not verified live,
- * as the app-api needs OAuth): `user.profile_image_urls.medium` is the avatar, `user.comment` the bio,
- * and `profile` carries `total_illusts`, `total_manga` and `total_illust_bookmarks_public`.
- * `profile.total_follow_users` counts who the user follows, not their followers, so it is not read.
- * Pixiv publishes no join date.
- */
 internal fun parsePixivAccountDetails(root: JsonObject): AccountDetails? {
     val user = root.optionalJsonObject("user")
     val profile = root.optionalJsonObject("profile")

@@ -41,12 +41,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Shows that `sourceCall` does what SourceEntryPointCompletenessTest assumes: a boundary call made from a
- * stand-in main thread returns its result, parses, fetches and reads credentials on another thread, and resumes
- * on the caller's thread. The stand-in is a plain single-thread dispatcher, deliberately not a main-dispatcher
- * type, because Compose's dispatcher is not one either.
- */
 class SourceMainSafetyContractTest {
     private val standInThread = CompletableFuture<Thread>()
     private val standIn = Executors.newSingleThreadExecutor { task ->
@@ -131,7 +125,6 @@ class SourceMainSafetyContractTest {
         assertOffCallerEvents("unconfined")
     }
 
-    /** Runs [call] on the stand-in thread and checks its result, where its work ran, and where it resumed. */
     private fun <T> assertOffCaller(row: String, expected: T, call: suspend () -> T) {
         events.clear()
         val (result, resumedOn) = runBlocking(standIn) { call() to Thread.currentThread() }
@@ -154,7 +147,6 @@ class SourceMainSafetyContractTest {
 
     private data class Event(val kind: String, val thread: Thread)
 
-    /** Records the thread of every request, then answers from [delegate]. */
     private inner class RecordingHttpClient(private val delegate: SourceHttpClient) : SourceHttpClient {
         override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
             record(HTTP)
@@ -183,7 +175,6 @@ class SourceMainSafetyContractTest {
         }
     }
 
-    /** Records the thread of every credential read. */
     private inner class RecordingCredentials(
         private val delegate: SourceCredentialsProvider,
     ) : SourceCredentialsProvider by delegate {

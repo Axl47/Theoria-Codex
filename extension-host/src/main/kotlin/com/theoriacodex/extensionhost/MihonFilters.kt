@@ -3,7 +3,6 @@ package com.theoriacodex.extensionhost
 import com.theoriacodex.domain.series.SeriesFilter
 import eu.kanade.tachiyomi.source.model.Filter
 
-/** A Mihon source's filter tree as [FilterNode]s (see `ExtensionFilters.kt`). */
 internal fun List<Filter<*>>.nodes(): List<FilterNode> = map { it.node() }
 
 private fun Filter<*>.node(): FilterNode = when (this) {

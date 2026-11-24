@@ -18,12 +18,6 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.header
 import java.io.IOException
 
-/**
- * Exercises the provider-owned routes that a generic search probe cannot prove: mutable CDN
- * configuration, exact regression galleries, and bounded media range transport. The two media
- * range steps are the only probes that download media bytes; [probeMediaRanges] = false skips them
- * for unattended public runs.
- */
 class HitomiProviderHealthProbe(
     private val adapter: SourceAdapter,
     private val httpClient: SourceHttpClient,

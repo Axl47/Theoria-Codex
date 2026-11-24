@@ -7,48 +7,26 @@ import com.theoriacodex.sources.credentials.ApiKeyUse
 import com.theoriacodex.sources.credentials.UserApiKey
 import com.theoriacodex.sources.http.BROWSER_USER_AGENT
 
-/**
- * One site running the Gelbooru 0.2 DAPI (`index.php?page=dapi`). Every field is plain data, so a
- * user-added site can be described the same way as the built-in presets; defaults follow what most
- * Gelbooru 0.2 sites accept. Post and tag lists are JSON (`json=1`), either a bare array or wrapped
- * as `{"post": [...]}` / `{"tag": [...]}`; the adapter accepts both, so the wrapper needs no field.
- */
 data class GelbooruSite(
     val source: SourceKey,
-    /** Name used in failure messages. */
     val label: String,
-    /** Site root for post, uploader and related-post pages. */
     val siteUrl: String,
-    /** DAPI endpoint; some sites serve the API from a separate host. */
     val apiUrl: String = "$siteUrl/index.php",
-    /** `autocomplete.php`-style endpoint returning `[{label, value}]`; null searches the DAPI tag list instead. */
     val autocompleteUrl: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val credentials: ApiKeyUse = ApiKeyUse.OPTIONAL,
     val postLookup: GelbooruPostLookup = GelbooruPostLookup.ID_PARAMETER,
-    /** Native spelling of an OR group; null makes the search orchestrator expand groups instead. */
     val orGroup: GelbooruOrGroup? = null,
-    /** Appended to newest-first searches; null relies on the site's default id order. */
     val newestSortTag: String? = null,
     val scoreSortTag: String = "sort:score:desc",
-    /** Uploader (`owner`) becomes a followable creator whose posts are searched with `user:<owner>`. */
     val creatorPosts: Boolean = false,
-    /** The HTML post page's "More Like This:" block supplies related posts. */
     val relatedPosts: Boolean = false,
     val tagList: GelbooruTagList = GelbooruTagList.JSON,
-    /** The post page wraps each comment in `div#c<id>`, so `#c<id>` jumps to it (0.2 forks; gelbooru.com does not). */
     val commentAnchors: Boolean = true,
-    /** `index.php?page=account&s=profile&id=` is a public profile page with statistics (0.2 forks send guests to login). */
     val publicProfiles: Boolean = false,
-    /** Searches answer `fav:<account id>` with that account's public favorites (verified on gelbooru.com with a key, 2026-11-11). */
     val favoritesList: Boolean = false,
-    /** Searches match only tags spelled as the site lists them; see [SourceCapabilities.requiresExactTags]. */
     val exactTags: Boolean = false,
 ) {
-    /**
-     * A site account as a creator: [owner] is the user name (searched as `user:<owner>`), [creatorId] the
-     * account id that opens the profile page. Null when neither is known. Shared by post uploaders and commenters.
-     */
     fun creatorProfile(owner: String?, creatorId: String?): CreatorProfile? {
         val name = owner?.trim().orEmpty()
         val id = creatorId?.trim()?.ifBlank { null }
@@ -62,7 +40,6 @@ data class GelbooruSite(
     }
 
     companion object {
-        /** API keys as DAPI query parameters; empty without keys. */
         fun authQuery(keys: UserApiKey?): Map<String, String> =
             keys?.let { mapOf("user_id" to it.userId, "api_key" to it.apiKey) }.orEmpty()
 
@@ -80,7 +57,6 @@ data class GelbooruSite(
             exactTags = true,
         )
 
-        /** The API host differs from the site, every API call needs a key, and tags come from `autocomplete.php`. */
         val RULE34XXX = GelbooruSite(
             source = SourceKey.RULE34XXX,
             label = "rule34.xxx",
@@ -96,25 +72,15 @@ data class GelbooruSite(
 }
 
 enum class GelbooruPostLookup {
-    /** `id=<id>` on the post list. */
     ID_PARAMETER,
 
-    /** `tags=id:<id>` on the post list. */
     ID_TAG,
 }
 
-/** How the DAPI tag list (`s=tag`) answers, which decides where trending, autocomplete and counts come from. */
 enum class GelbooruTagList {
-    /** Honors `json=1`, `names`, `name_pattern` and `orderby`. */
     JSON,
 
-    /**
-     * Unknown until the first tag request. Some forks (Safebooru) answer the tag list in XML whatever
-     * `json=1` says and ignore its filters; the first XML answer switches the adapter to
-     * `autocomplete.php` for suggestions and counts and turns trending off for its lifetime.
-     */
     DETECT,
 }
 
-/** Wraps OR alternatives, e.g. `{cat ~ dog}` on Gelbooru or `( cat ~ dog )` on older forks. */
 data class GelbooruOrGroup(val prefix: String, val separator: String, val suffix: String)

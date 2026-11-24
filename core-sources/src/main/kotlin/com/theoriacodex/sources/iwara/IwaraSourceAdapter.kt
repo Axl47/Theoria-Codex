@@ -160,7 +160,6 @@ class IwaraSourceAdapter(
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
         if (creator.source == SourceKey.IWARA && !creator.profileId.isNullOrBlank()) listOf(AccountFeed.UPLOADS) else emptyList()
 
-    /** The profile (avatar, bio, join date) and the follower total; null when the user is unknown. */
     override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall {
         val userId = creator.profileId?.trim()?.takeIf { it.isNotBlank() && creator.source == SourceKey.IWARA } ?: return@sourceCall null
         val username = iwaraUsername(creator) ?: return@sourceCall null
@@ -194,7 +193,6 @@ class IwaraSourceAdapter(
         }
     }
 
-    /** One page of `/videos` across all ratings, in Iwara's [sort] order, optionally only [user]'s uploads. */
     private suspend fun videosPage(sort: String, page: Int, user: String? = null): JsonObject = requestJsonObject(
         url = "$IWARA_API_BASE/videos",
         query = buildMap {
@@ -469,7 +467,6 @@ class IwaraSourceAdapter(
 
 }
 
-/** Small rendition URL of an Iwara file object (a custom thumbnail or an avatar); null without an id. */
 internal fun iwaraAssetUrl(asset: JsonObject): String? {
     val assetId = asset.stringValue("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
     val fileExt = asset.stringValue("name")
@@ -478,7 +475,6 @@ internal fun iwaraAssetUrl(asset: JsonObject): String? {
         ?.lowercase()
         ?.ifBlank { "jpg" }
         ?: "jpg"
-    // Used for cards: the original of a custom thumbnail is 1-7 MB, this rendition well under 100 KB.
     return "https://i.iwara.tv/image/thumbnail/$assetId/$assetId.$fileExt"
 }
 

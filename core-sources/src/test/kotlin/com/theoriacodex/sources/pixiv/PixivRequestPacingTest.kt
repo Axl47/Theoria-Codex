@@ -28,7 +28,6 @@ class PixivRequestPacingTest {
             credentialsProvider = credentials,
             clock = { testScheduler.currentTime + 1_000_000L },
             minRequestIntervalMs = 10_000L,
-            // A pacing wait must show on the virtual clock, so the calls stay on the test dispatcher.
             callContext = EmptyCoroutineContext,
         )
         val ugoira = Post(

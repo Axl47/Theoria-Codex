@@ -3,7 +3,6 @@ package com.theoriacodex.sources.credentials
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Serializes account decisions and refresh commits without holding the lock during provider I/O. */
 class SessionBoundSourceCredentials(private val delegate: SourceCredentialsProvider) : SourceCredentialsProvider by delegate {
     private val mutex = Mutex()
     private var revision = 0L
@@ -23,7 +22,6 @@ class SessionBoundSourceCredentials(private val delegate: SourceCredentialsProvi
         true
     }
 
-    /** Resetting encrypted storage is also an account decision, even if it fails to persist. */
     suspend fun <T> invalidatePixivSession(action: suspend () -> T): T = mutex.withLock {
         revision++
         action()

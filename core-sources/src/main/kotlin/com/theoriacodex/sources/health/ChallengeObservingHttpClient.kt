@@ -10,10 +10,6 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.toTextResponse
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Counts browser challenges answered to the probes, so a step that fails behind one can report that
- * the provider could not be checked instead of that it is down.
- */
 internal class ChallengeObservingHttpClient(
     private val delegate: SourceHttpClient,
 ) : SourceHttpClient by delegate {
@@ -54,6 +50,5 @@ internal class ChallengeObservingHttpClient(
     }
 }
 
-/** A challenge served instead of the API. A maintenance page is an outage, so it does not count. */
 internal fun SourceHttpResponse.isBrowserChallenge(): Boolean =
     HostOutageTracker.outageKindOf(statusCode, headers) == HostOutageKind.CHALLENGE || isVerificationChallenge()

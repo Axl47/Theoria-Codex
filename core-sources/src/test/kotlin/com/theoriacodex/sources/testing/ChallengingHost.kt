@@ -9,11 +9,6 @@ import java.net.InetSocketAddress
 import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * A provider host that answers every request with a Cloudflare challenge, reached through a real
- * [DefaultSourceHttpClient] with a [HostOutageTracker], so adapters meet the outage the tracker records.
- * Requests to [mirrorPrefix] get [mirrorResponse] instead; [hits] counts requests that reached the host.
- */
 class ChallengingHost(
     private val mirrorPrefix: String,
     private val mirrorResponse: SourceHttpResponse,
@@ -34,7 +29,6 @@ class ChallengingHost(
 
     private val real = DefaultSourceHttpClient(maxRetries = 0, outages = HostOutageTracker())
 
-    /** Sends provider requests to the local host, keeping their path and query. */
     val client: SourceHttpClient = object : SourceHttpClient {
         override suspend fun get(
             url: String,

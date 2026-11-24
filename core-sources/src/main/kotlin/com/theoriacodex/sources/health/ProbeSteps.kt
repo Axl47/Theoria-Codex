@@ -7,12 +7,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlin.system.measureTimeMillis
 
-/**
- * Builds and times the steps of one probe target, for [ProviderProbeRunner] and
- * [HitomiProviderHealthProbe]. Every result names [source], [includeTerms] and, unless the step
- * names its own, [autocompletePrefix]; a step that reports no request URL reports its
- * [diagnosticUrls] entry.
- */
 internal class ProbeSteps(
     private val source: SourceKey,
     private val nowProvider: () -> Long,
@@ -22,7 +16,6 @@ internal class ProbeSteps(
     private val autocompletePrefix: String? = null,
     private val diagnosticUrls: Map<String, String> = emptyMap(),
 ) {
-    /** A step outcome stamped now; [run] fills in its latency. */
     fun result(
         checkName: String,
         status: ProviderHealthStatus,
@@ -46,11 +39,6 @@ internal class ProbeSteps(
         requestUrl = requestUrl ?: diagnosticUrls[checkName],
     )
 
-    /**
-     * Runs [block] as step [checkName] and records its latency. A thrown failure becomes a FAILED
-     * result reporting [requestUrl], read after the step so it can name the request that failed;
-     * cancellation propagates.
-     */
     suspend fun run(
         checkName: String,
         autocompletePrefix: String? = this.autocompletePrefix,
@@ -74,10 +62,6 @@ internal class ProbeSteps(
     }
 }
 
-/**
- * Runs one probe step. A problem during which a browser challenge answered says nothing about the
- * provider, so it is reported as [ProviderHealthStatus.CANNOT_CHECK].
- */
 private suspend fun observingChallenges(
     challengesSeen: () -> Int,
     step: suspend () -> ProviderProbeStepResult,

@@ -12,39 +12,24 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.protobuf.ProtoNumber
 
-/** What a repo publishes: its name, the key its APKs are signed with, and the extensions it offers. */
 data class RepoIndex(val name: String, val signingKey: String, val extensions: List<IndexedExtension>)
 
-/** One extension as a repo's index lists it. Nothing here is trusted until the downloaded APK says the same. */
 data class IndexedExtension(
     val name: String,
     val packageName: String,
     val apkUrl: String,
-    /** The extension interface it is built against, as the index states it: `1.6` for Mihon, `14` or `16` for Aniyomi. */
     val libVersion: String,
     val versionCode: Long,
     val versionName: String,
     val languages: List<String>,
     val kind: SeriesKind,
-    /** Aniyomi's legacy index marks extensions that stream by torrent, which the host refuses. */
     val torrent: Boolean = false,
 )
 
-/**
- * Reads a repo the way Mihon does, from any of the addresses users and backups give for one:
- * - the folder holding `repo.json` and `index.min.json` (what backups store), or either file's address;
- * - a legacy `repo.json` that names a newer index (`index_v2`), which is then read instead: Keiyoushi's `index.min.json`
- *   is now a stub and its catalog is only in that index;
- * - a newer index itself: protobuf, usually gzipped, holding the repo's name, key and extensions, or the address of
- *   the extension list. A store holds one kind of extension.
- *
- * [get] fetches an address's body and throws when it cannot.
- */
 @OptIn(ExperimentalSerializationApi::class)
 internal object RepoReader {
     suspend fun read(url: String, get: suspend (String) -> ByteArray): RepoIndex = read(fetchAddress(url), get, followed = false)
 
-    /** The address to fetch for a stored repo [url]: a folder (a path whose last part has no dot, or none) means its `repo.json`. */
     fun fetchAddress(url: String): String {
         val path = url.trimEnd('/').substringAfter("://").substringAfter('/', missingDelimiterValue = "")
         return if ('.' in path.substringAfterLast('/')) url else url.trimEnd('/') + "/repo.json"
@@ -66,9 +51,6 @@ internal object RepoReader {
                 RepoIndex(repo.meta.name, repo.meta.signingKeyFingerprint.lowercase(), list.map { it.indexed(folder) })
             }
             else -> {
-                // Anime stores number their fields differently from manga ones (field 8 is the torrent flag, not the
-                // sources), and a store says neither. The anime layout is tried first, which a manga store listing
-                // sources fails; one listing none fits it, but names Mihon's interface versions, which have a dot.
                 val anime = runCatching { protoStore(body, AnimeEntry.serializer(), get) }
                     .onFailure { if (it !is SerializationException && it !is IllegalArgumentException) throw it }
                     .getOrNull()
@@ -78,7 +60,6 @@ internal object RepoReader {
         }
     }
 
-    /** The store in [body] as its name, signing key and extensions, read with [entry]'s layout. */
     private suspend fun <E : ProtoEntry> protoStore(body: ByteArray, entry: KSerializer<E>, get: suspend (String) -> ByteArray): Triple<String, String, List<E>> {
         val store = protobuf.decodeFromByteArray(ProtoStore.serializer(entry), body)
         val list = store.extensionList ?: store.extensionListUrl?.let { protobuf.decodeFromByteArray(ProtoList.serializer(entry), gunzipped(get(it))) }
@@ -86,7 +67,6 @@ internal object RepoReader {
         return Triple(store.name, store.signingKey, list.extensions)
     }
 
-    /** [body], decompressed when gzipped; a small body can expand enormously, so the result is held to [MAX_INDEX_BYTES]. */
     private fun gunzipped(body: ByteArray): ByteArray =
         if (body.size >= 2 && body[0] == GZIP_FIRST && body[1] == GZIP_SECOND) GZIPInputStream(ByteArrayInputStream(body)).use { readAtMost(it, MAX_INDEX_BYTES) } else body
 
@@ -135,7 +115,6 @@ private class LegacyExtension(
 @Serializable
 private class LegacySource(val lang: String = "")
 
-/** Mihon's `NetworkExtensionStore`, trimmed to what is read here; unknown fields are skipped. */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 private class ProtoStore<E>(
@@ -149,7 +128,6 @@ private class ProtoStore<E>(
 @Serializable
 private class ProtoList<E>(@ProtoNumber(1) val extensions: List<E> = emptyList())
 
-/** One extension in a newer index; fields 1 to 6 are the same for both kinds. */
 private interface ProtoEntry {
     val extensionLib: String
 

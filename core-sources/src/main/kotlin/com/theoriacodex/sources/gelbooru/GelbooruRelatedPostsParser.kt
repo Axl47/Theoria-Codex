@@ -2,7 +2,6 @@ package com.theoriacodex.sources.gelbooru
 
 import com.theoriacodex.sources.common.parseHtml
 
-/** Returns null when the post page's related block is absent, versus an empty present block. */
 internal fun parseGelbooruRelatedPostIds(
     html: String,
     baseUrl: String,
@@ -24,7 +23,6 @@ internal fun parseGelbooruRelatedPostIds(
         .toList()
 }
 
-/** The post id of a `page=post&s=view&id=` link; null for any other link. */
 internal fun viewedPostId(href: String): String? {
     if (!PAGE_POST_PATTERN.containsMatchIn(href) || !VIEW_POST_PATTERN.containsMatchIn(href)) return null
     return POST_ID_PATTERN.find(href)?.groupValues?.getOrNull(1)

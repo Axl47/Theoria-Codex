@@ -30,27 +30,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 
-/**
- * The run-time environment Mihon and Aniyomi extensions expect from their host app: the service locator they ask for an
- * `Application`, a `Json` and a `NetworkHelper`, and the host's version. Installed once, before any extension loads.
- *
- * Extensions get an HTTP client of their own, with Mihon's timeouts and interceptor names (Aniyomi's are the same) and
- * none of the app's interceptors, so they behave here as they do there. Like Mihon's, it shares the system browser's
- * cookies.
- */
 object ExtensionHost {
-    /** HTTP requests extensions have started, so a caller can report what one step cost. */
     val requestCount = AtomicLong()
 
-    /** The extensions' client, once [install] has made it. */
     @Volatile
     private var client: OkHttpClient? = null
 
-    /**
-     * [cookies] is the system browser's cookie store, which the extensions' client and its browser checks share;
-     * [browsers] pass checks out of sight, shared with the app's own client, and [outages] records the ones they cannot,
-     * as for every other source.
-     */
     fun install(
         application: Application,
         versionName: String,
@@ -69,11 +54,6 @@ object ExtensionHost {
         Injekt.bind(NetworkHelper::class.java, NetworkHelper(client) { DEFAULT_USER_AGENT })
     }
 
-    /**
-     * Whether the extensions' own client now gets [url] without a challenge, sending [userAgent]: the app's browser
-     * check is passed for an extension source once this is true. False before any extension has loaded. Throws
-     * [java.io.IOException] when the site cannot be reached at all.
-     */
     suspend fun clearsChallenge(url: String, userAgent: String): Boolean = withContext(Dispatchers.IO) {
         val client = ExtensionHost.client ?: return@withContext false
         try {
@@ -83,14 +63,6 @@ object ExtensionHost {
         }
     }
 
-    /**
-     * Extensions rebuild this client and require the three named interceptors, in Mihon's order. Its cookie jar holds
-     * every host's cookies, as Mihon's does: extensions are written against it, and many keep a session in cookies. It
-     * is not limited to the hosts the app's own clients may send browser cookies to (`SiteCookieBridge`), because
-     * extension code runs in the app's process and could read the store directly, so such a limit would be no barrier.
-     * It resolves hosts as the WebView would connect to them ([BrowserAddressDns]), since a clearance cookie a browser
-     * check earns is only accepted from the address it was earned from.
-     */
     internal fun extensionClient(cookies: BrowserCookieStore, browsers: ChallengeBrowsers, outages: HostOutageTracker): OkHttpClient = OkHttpClient.Builder()
         .dns(BrowserAddressDns())
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -106,11 +78,6 @@ object ExtensionHost {
         }
         .build()
 
-    /**
-     * The `Application` extensions are handed: the real one in everything but preferences, which are files of the
-     * host's own (see [FilePreferences]). A source asks for `source_<id>`, as it does in Mihon, and so can never name
-     * one of the app's files. This keeps names apart; it is no barrier against code that runs in the app's process.
-     */
     private class ExtensionApplication(private val base: Application) : Application() {
         private val opened = HashMap<String, FilePreferences>()
         init {
@@ -122,25 +89,15 @@ object ExtensionHost {
         }
     }
 
-    /** Where the preferences an extension calls [name] are kept: under the directory Android never backs up or transfers. */
     fun preferencesFile(context: Context, name: String): File =
         File(File(context.noBackupFilesDir, PREFERENCES_DIRECTORY), URLEncoder.encode(name, "UTF-8") + ".json")
 
-    /**
-     * Deletes the `shared_prefs/mihon_<name>.xml` files debug builds wrote before extensions reached a release, which
-     * Android backs up. Nothing is imported. Called by the app at startup, whether or not an extension ever loads.
-     */
     fun deleteLegacyPreferences(context: Context) {
         File(context.dataDir, "shared_prefs").list().orEmpty()
             .filter { it.startsWith(LEGACY_PREFERENCES_PREFIX) && it.endsWith(".xml") }
             .forEach { context.deleteSharedPreferences(it.removeSuffix(".xml")) }
     }
 
-    /**
-     * The key [ExtensionImages] signs its addresses with: made once per install and kept where Android neither backs
-     * it up nor transfers it. A key that cannot be read is replaced; addresses signed with the old one then load as
-     * ordinary ones until their series is opened again.
-     */
     fun imageKey(context: Context): ByteArray {
         val file = File(context.noBackupFilesDir, "extension_image_key")
         runCatching { file.readBytes() }.getOrNull()?.takeIf { it.size == ExtensionImages.KEY_BYTES }?.let { return it }
@@ -153,11 +110,9 @@ object ExtensionHost {
         return key
     }
 
-    // Named when Mihon's were the only extensions; renaming it would lose every source's stored settings.
     private const val PREFERENCES_DIRECTORY = "mihon_preferences"
     private const val LEGACY_PREFERENCES_PREFIX = "mihon_"
 
-    /** Mihon's default, the agent extensions are written and tested against. */
     private const val DEFAULT_USER_AGENT =
         "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36"
     private const val CONNECT_TIMEOUT_SECONDS = 30L

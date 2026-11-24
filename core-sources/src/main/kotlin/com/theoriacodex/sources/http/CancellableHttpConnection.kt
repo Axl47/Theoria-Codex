@@ -8,11 +8,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/**
- * Cancels the caller immediately and closes its connection off the caller's thread. Some JDK
- * implementations hold the response-read lock inside disconnect(), so awaiting that cleanup would
- * keep a departed route blocked. The blocking operation must configure finite connect/read timeouts.
- */
 suspend fun <T> executeCancellableHttpConnection(
     connection: HttpURLConnection,
     block: () -> T,

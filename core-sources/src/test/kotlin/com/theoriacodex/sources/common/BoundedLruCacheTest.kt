@@ -10,7 +10,7 @@ class BoundedLruCacheTest {
         val cache = BoundedLruCache<String, Int>(maxEntries = 2)
         cache.update("a") { 1 }
         cache.update("b") { 2 }
-        cache["a"] // makes "b" the eldest
+        cache["a"]
         cache.update("c") { 3 }
 
         assertNull(cache["b"])

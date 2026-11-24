@@ -5,17 +5,11 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.query.QueryHash
 import java.security.MessageDigest
 
-/** The gallery IDs one search page shows, and the token that continues after them (null at the end). */
 internal data class HitomiResultPage(
     val ids: IntArray,
     val nextToken: String?,
 )
 
-/**
- * Chooses which gallery IDs a search page shows. It walks the smallest primary index in sort order (or a
- * seeded permutation of a complete snapshot for random sort), keeps IDs every other included index holds and
- * no excluded index does, and encodes where the walk stopped in the next page token.
- */
 internal class HitomiSearchPager(
     private val queryCompiler: HitomiQueryCompiler,
     private val nozomiReader: HitomiNozomiReader,
@@ -127,7 +121,6 @@ internal class HitomiSearchPager(
         return snapshot
     }
 
-    /** The cheapest primary index: inline IDs, then cached suggestion counts, then a size probe. */
     private suspend fun choosePrimary(options: List<CompiledIndex>): CompiledIndex {
         require(options.isNotEmpty()) { "Hitomi search requires a primary index" }
         if (options.size == 1) return options.single()
@@ -145,7 +138,6 @@ internal class HitomiSearchPager(
         ) ?: options.first()
     }
 
-    /** The token that resumes [walk] at [offset]; random walks also pin their snapshot and permutation. */
     private fun nextToken(walk: Walk, offset: Long, randomSnapshotFingerprint: String?): String =
         pageTokenCodec.encode(
             HitomiPageToken(
@@ -168,7 +160,6 @@ internal class HitomiSearchPager(
         throw hitomiParseFailure(error.message ?: "Hitomi page token was invalid", error)
     }
 
-    /** Where one page's walk starts and what every token it issues must carry. */
     private data class Walk(
         val queryHash: String,
         val primary: CompiledIndex,

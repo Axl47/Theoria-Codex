@@ -16,12 +16,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Probe outcomes against the captured fixtures, through the real redirect policy. */
 class SiteProberTest {
     private val transport = FixtureSiteTransport(*FIXTURE_SITES)
     private val http = CustomSiteHttpClient(3, transport = transport::execute)
 
-    /** Built-in hosts are disabled so shipped sites' fixtures exercise the families as if user-added. */
     private val prober = SiteProber(SiteFamilyRegistry.default(), http, builtInHosts = emptyMap())
 
     @Test
@@ -32,7 +30,6 @@ class SiteProberTest {
                 "https://aibooru.online/counts/posts.json",
                 "https://aibooru.online/profile.json",
                 "https://aibooru.online/posts.json?limit=40&page=1&tags=",
-                // The home page and touch icon, for the name and icon; with no fixtures the host stays the label.
                 "https://aibooru.online/",
                 "https://aibooru.online/apple-touch-icon.png",
             ),
@@ -145,7 +142,6 @@ class SiteProberTest {
         val result = prober.probe("booru.challenge-gate.example")
 
         assertEquals(SiteProbeResult.Unreachable(address("https://booru.challenge-gate.example"), ProbeFailure.BLOCKED), result)
-        // Asking the site itself (counts, DAPI) and the unsupported-family signature, nothing else.
         assertEquals(3, transport.requested.size)
     }
 
@@ -225,7 +221,6 @@ class SiteProberTest {
 
     private fun address(url: String): SiteAddress = (SiteAddress.parse(url) as SiteAddressParse.Valid).address
 
-    /** A Danbooru site that accepts [GOOD_KEYS] and answers its API with [anonymous] when no key is sent; null when it is open. */
     private fun danbooruSite(anonymous: SourceHttpResponse?) = object : SourceHttpClient by NoWrites {
         val requests = mutableListOf<Pair<String, Map<String, String>>>()
 

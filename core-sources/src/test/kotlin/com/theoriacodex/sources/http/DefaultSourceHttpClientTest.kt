@@ -98,7 +98,6 @@ class DefaultSourceHttpClientTest {
         }.exceptionOrNull()
 
         assertTrue(failure is IOException)
-        // Coroutine stack recovery can add a copy of the exception in front of the original cause.
         assertTrue(generateSequence(failure) { it.cause }.any { it is SecurityException })
     }
 
