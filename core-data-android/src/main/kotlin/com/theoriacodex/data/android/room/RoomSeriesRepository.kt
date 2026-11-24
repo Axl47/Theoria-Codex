@@ -82,7 +82,7 @@ class RoomSeriesRepository(
         val before = dao.series(id.source.id, id.address)?.toStored() ?: StoredSeries(series)
         val stored = before.copy(series = series.keeping(before.series))
         if (!entries.isNullOrEmpty()) return storeEntries(stored, entries)
-        dao.upsertSeries(stored.copy(listed = stored.listed || entries != null).toEntity())
+        dao.upsertSeries(stored.toEntity())
         return emptyList()
     }
 
@@ -90,17 +90,18 @@ class RoomSeriesRepository(
         database.withTransaction {
             val stored = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction emptyList()
             val withMemo = stored.copy(series = stored.series.copy(memo = seriesMemo ?: stored.series.memo))
-            if (entries.isNotEmpty()) return@withTransaction storeEntries(withMemo, entries)
-            // An empty list leaves the entries as they are, but the memo is stored, as [store] stores it.
-            val listed = withMemo.copy(listed = true)
-            if (listed != stored) dao.upsertSeries(listed.toEntity())
-            emptyList()
+            when {
+                entries.isNotEmpty() -> storeEntries(withMemo, entries)
+                // An empty list leaves the entries as they are, but the memo is stored, as [store] stores it.
+                withMemo != stored -> emptyList<SeriesEntry>().also { dao.upsertSeries(withMemo.toEntity()) }
+                else -> emptyList()
+            }
         }
 
     /**
-     * Writes [stored] with [entries] as its entry list, and returns the new ones. It returns none for a first listing,
-     * with no entries stored, since nothing was there to compare with; a series its source listed empty before gets
-     * every entry, since that listing was the baseline. It also returns none when no listed entry matches a
+     * Writes [stored] with [entries] as its entry list, and returns the new ones. When no entries were stored before,
+     * nothing was there to compare with, so it returns only those dated after a followed series was followed. It returns
+     * none when no listed entry matches a
      * stored one by address or as a moved entry: such a list almost always means the source changed its addresses, not
      * that the whole series came out at once, so it is stored as a new baseline. A source that only ever lists its one
      * newest chapter therefore never reports a new one. Entries are written only by a listing or an import, so a series
@@ -128,11 +129,14 @@ class RoomSeriesRepository(
         val dropped = known.values.filter { it.entry.address !in listed && it.sourceOrder != NOT_LISTED }.map { it.copy(sourceOrder = NOT_LISTED) }
         val reopened = moved.entries.firstOrNull { it.value.entry.address == stored.lastOpenedEntry }?.key
         // The series first: its entries refer to its row.
-        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry, listed = true).toEntity())
+        dao.upsertSeries(stored.copy(lastOpenedEntry = reopened ?: stored.lastOpenedEntry).toEntity())
         dao.upsertEntries((rows + dropped).map { it.toEntity(id) })
-        // No listed entry matched a stored one: the list is a baseline, as a first listing is.
-        val baseline = if (known.isEmpty()) !stored.listed else newEntries.size == current.size
-        return if (baseline) emptyList() else newEntries
+        // No listed entry matched a stored one: the list is a baseline, as when nothing was stored.
+        return when {
+            newEntries.size != current.size -> newEntries
+            known.isEmpty() -> datedAfterFollowing(stored, newEntries)
+            else -> emptyList()
+        }
     }
 
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) {
@@ -263,6 +267,13 @@ private fun movedEntries(listed: Pair<List<SeriesEntry>, List<SeriesEntry>>, dro
     }.toMap()
 }
 
+private fun datedAfterFollowing(stored: StoredSeries, entries: List<SeriesEntry>): List<SeriesEntry> {
+    val since = (stored.followedAtEpochMs ?: return emptyList()) - DATE_SLACK_MS
+    return entries.filter { entry -> entry.uploadedAtEpochMs?.let { it > since } == true }
+}
+
+private const val DATE_SLACK_MS = 24 * 60 * 60 * 1_000L
+
 internal fun SeriesEntity.toStored() = StoredSeries(
     series = Series(
         id = SeriesId(SourceKey.parseOrThrow(source), address),
@@ -281,7 +292,6 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     downloadNewChapters = downloadNew,
     chaptersShareFirstPage = chaptersShareFirstPage,
     followedAtEpochMs = followedAtEpochMs,
-    listed = listed,
 )
 
 internal fun StoredSeries.toEntity() = SeriesEntity(
@@ -301,7 +311,6 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     chaptersShareFirstPage,
     followedAtEpochMs,
     series.memo,
-    listed,
 )
 
 /**

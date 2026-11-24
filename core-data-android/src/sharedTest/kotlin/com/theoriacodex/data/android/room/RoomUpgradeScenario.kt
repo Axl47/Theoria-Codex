@@ -81,7 +81,7 @@ object RoomUpgradeScenario {
                     setFollowed(seriesId, true)
                     recordProgress(seriesId, "/c/1", position = 4, length = 9)
                 }
-                assertEquals(22, database.openHelper.readableDatabase.version)
+                assertEquals(21, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
                 ).use { assertFalse(it.moveToFirst()) }
