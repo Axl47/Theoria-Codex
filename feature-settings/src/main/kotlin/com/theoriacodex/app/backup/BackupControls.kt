@@ -160,7 +160,7 @@ private fun RestoreBackupDialog(
     )
 }
 
-/** A Mihon-family backup brings only series, so its preview says what of them comes along and nothing else. */
+/** A Mihon-family backup brings only series and its extension repos, so its preview says what of them comes along and which extensions are still missing. */
 @Composable
 private fun ImportSeriesDialog(preview: SeriesImportPreview, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
     val counts = listOfNotNull(
@@ -178,7 +178,8 @@ private fun ImportSeriesDialog(preview: SeriesImportPreview, busy: Boolean, onDi
             ) {
                 Text(counts.joinToString(" · "))
                 Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
-                Text("A series stays unavailable until its extension is on here.")
+                if (preview.repos > 0) Text("Also adds ${countLabel(preview.repos, "extension repo")}.")
+                if (preview.missingSources.isNotEmpty()) Text("Unavailable until these extensions are on: ${preview.missingSources.joinToString()}")
                 if (busy) Text("Importing…")
             }
         },

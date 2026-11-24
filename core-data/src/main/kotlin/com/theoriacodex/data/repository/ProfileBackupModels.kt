@@ -63,8 +63,24 @@ sealed interface BackupPreview {
     data class Series(val preview: SeriesImportPreview) : BackupPreview
 }
 
-/** What importing a Mihon-family backup adds: the series it follows by kind, and the entries it finished. */
-data class SeriesImportPreview(val manga: Int, val anime: Int, val chaptersRead: Int, val episodesWatched: Int)
+/** What importing a Mihon-family backup adds: the series it follows by kind, the entries it finished, and its extension repos. */
+data class SeriesImportPreview(
+    val manga: Int,
+    val anime: Int,
+    val chaptersRead: Int,
+    val episodesWatched: Int,
+    /** How many extension repos the backup lists; importing adds them. */
+    val repos: Int = 0,
+    /** The backup's names for the sources its series are on that are not on here, the one with the most series first. */
+    val missingSources: List<String> = emptyList(),
+)
+
+/** What a Mihon-family import did: what it [imported], how many of its repos are new here, and why each refused repo was, by address. */
+data class SeriesImportResult(
+    val imported: SeriesImportPreview,
+    val reposAdded: Int = 0,
+    val repoProblems: Map<String, String> = emptyMap(),
+)
 
 data class ProfileBackupPreview(
     val createdAtEpochMs: Long,

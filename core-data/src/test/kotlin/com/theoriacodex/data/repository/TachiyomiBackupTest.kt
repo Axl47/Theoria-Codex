@@ -1,5 +1,10 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepo
+import com.theoriacodex.domain.series.ExtensionRepos
+import com.theoriacodex.domain.series.NewExtensionRepo
+import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.SeriesStatus
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
@@ -28,7 +33,7 @@ class TachiyomiBackupTest {
                 message(104) { string(1, "/a/2"); long(2, 900) }
                 message(104) { string(1, "/a/1"); long(2, 800) }
             }
-        }, now = 7)
+        }, now = 7).series
 
         val a = series.single()
         assertEquals("custom_mihon_42", a.series.series.id.source.id)
@@ -58,7 +63,7 @@ class TachiyomiBackupTest {
                 message(16) { string(1, "/j/2"); long(6, 4); long(800, 6); long(10, 1) }
                 message(16) { string(1, "/j/1"); bool(4, true); long(6, 9); long(800, 1); float(9, Float.POSITIVE_INFINITY); long(10, 2) }
             }
-        }, now = 0).single().entries
+        }, now = 0).series.single().entries
 
         assertEquals(listOf(1L, 5L, 10L), entries.map { it.position })
         assertEquals(listOf(20L, 10L, 10L), entries.map { it.length })
@@ -72,7 +77,7 @@ class TachiyomiBackupTest {
                 long(1, 9); string(2, "/watch/x"); string(3, "X")
                 message(16) { string(1, "ep1"); string(2, "Episode 1"); long(6, 211_000); long(16, 1_420_000) }
             }
-        }, now = 0)
+        }, now = 0).series
 
         val x = series.single()
         assertEquals("custom_aniyomi_9", x.series.series.id.source.id)
@@ -82,7 +87,7 @@ class TachiyomiBackupTest {
 
     @Test
     fun `Aniyomi's anime come from its own field`() {
-        val series = decodeTachiyomiBackup(backup { message(3) { long(1, 9); string(2, "/watch/y"); string(3, "Y") } }, now = 0)
+        val series = decodeTachiyomiBackup(backup { message(3) { long(1, 9); string(2, "/watch/y"); string(3, "Y") } }, now = 0).series
 
         assertEquals("custom_aniyomi_9", series.single().series.series.id.source.id)
     }
@@ -93,7 +98,7 @@ class TachiyomiBackupTest {
             message(1) { long(1, 1); string(2, "/untouched"); string(3, "U"); bool(100, false); message(16) { string(1, "/u/1") } }
             message(1) { long(1, 1); string(2, "/started"); string(3, "S"); bool(100, false); message(16) { string(1, "/s/1"); bool(4, true) } }
             message(1) { long(1, 0); string(2, "local.cbz"); string(3, "L") }
-        }, now = 0)
+        }, now = 0).series
 
         val started = series.single()
         assertEquals("/started", started.series.series.id.address)
@@ -108,7 +113,7 @@ class TachiyomiBackupTest {
                 message(16) { string(1, "/s/2"); long(10, 0) }
                 message(16) { string(1, "/s/1"); bool(4, true); long(10, 1) }
             }
-        }, now = 0)
+        }, now = 0).series
 
         assertEquals("/s/1", series.single().series.lastOpenedEntry)
     }
@@ -126,7 +131,7 @@ class TachiyomiBackupTest {
         val expected = SeriesImportPreview(manga = 1, anime = 1, chaptersRead = 1, episodesWatched = 0)
 
         assertEquals(BackupPreview.Series(expected), service.preview(bytes))
-        assertEquals(expected, service.importSeries(bytes))
+        assertEquals(SeriesImportResult(expected), service.importSeries(bytes))
         val merged = store.merged.single()
         assertEquals(2, merged.series.size)
         assertTrue(merged.codices.isEmpty() && merged.posts.isEmpty() && merged.likes.isEmpty())
@@ -134,6 +139,38 @@ class TachiyomiBackupTest {
         directory.resolve("restore.json").writeText("{}")
         assertThrows(IllegalStateException::class.java) { runBlocking { service.importSeries(bytes) } }
         assertEquals(1, store.merged.size)
+    }
+
+    @Test
+    fun `importing adds Mihon's and Anikku's repos and the preview names the sources still missing`() = runTest {
+        val bytes = backup {
+            message(1) { long(1, 1); string(2, "/m"); string(3, "M") }
+            message(1) { long(1, 2); string(2, "/n"); string(3, "N") }
+            message(1) { long(1, 2); string(2, "/o"); string(3, "O") }
+            message(101) { string(1, "MangaDex"); long(2, 1) }
+            message(101) { string(1, "Comick"); long(2, 2) }
+            message(106) { string(1, "https://manga.example/repo"); string(2, "Manga"); string(4, "https://manga.example"); string(5, "aa11") }
+            message(501) { long(1, 1); string(2, "/a"); string(3, "A") }
+            message(501) { long(1, 3); string(2, "/b"); string(3, "B") }
+            message(503) { string(1, "Gogoanime"); long(2, 1) }
+            message(505) { string(1, "https://anime.example/repo"); string(2, "Anime"); string(5, "bb22") }
+            message(505) { string(1, "https://manga.example/repo"); string(5, "aa11") }
+        }
+        val repos = RecordingRepos(refuse = "https://anime.example/repo")
+        val directory = temporary.newFolder()
+        // MangaDex is on here; the anime source numbered 3 is missing but the backup gives it no name.
+        val service = ProfileBackupService(InMemorySettingsRepository(), RecordingStore(), InMemorySavedSearchRepository(),
+            FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
+            extensionRepos = { repos }, extensionSources = { setOf(SourceKey.parseOrThrow("custom_mihon_1")) })
+
+        val preview = (service.preview(bytes) as BackupPreview.Series).preview
+        assertEquals(2, preview.repos)
+        assertEquals(listOf("Comick", "Gogoanime"), preview.missingSources)
+
+        val result = service.importSeries(bytes)
+        assertEquals(listOf(NewExtensionRepo("https://manga.example/repo", "aa11"), NewExtensionRepo("https://anime.example/repo", "bb22")), repos.given)
+        assertEquals(1, result.reposAdded)
+        assertEquals(mapOf("https://anime.example/repo" to "Now signed with another key"), result.repoProblems)
     }
 
     @Test
@@ -154,6 +191,22 @@ private class RecordingStore : ProfileBackupStore {
     val merged = mutableListOf<BackupLibrary>()
     override suspend fun snapshot(includeRecents: Boolean) = error("unused")
     override suspend fun merge(library: BackupLibrary): Int = 0.also { merged += library }
+}
+
+/** Adds every repo but [refuse], which it refuses as [ExtensionRepos.add] does a repo whose key changed. */
+private class RecordingRepos(private val refuse: String) : ExtensionRepos {
+    val given = mutableListOf<NewExtensionRepo>()
+    private val added = mutableListOf<ExtensionRepo>()
+    override suspend fun repos() = added.toList()
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> {
+        given += repos
+        added += repos.filter { it.url != refuse }.map { ExtensionRepo(it.url, it.url, it.signingKey.orEmpty()) }
+        return repos.filter { it.url == refuse }.associate { it.url to "Now signed with another key" }
+    }
+    override suspend fun remove(url: String) = error("unused")
+    override suspend fun available(refresh: Boolean): RepoListing = error("unused")
+    override suspend fun install(repo: String, packageName: String): String? = error("unused")
+    override suspend fun uninstall(id: String) = error("unused")
 }
 
 private fun backup(block: Proto.() -> Unit): ByteArray {

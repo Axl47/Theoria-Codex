@@ -7,6 +7,8 @@ import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +43,10 @@ class ProfileBackupService(
     private val codec: ProfileBackupCodec = ProfileBackupCodec(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val siteProfiles: SiteProfileRepository = InMemorySiteProfileRepository(),
+    /** Where a Mihon-family import adds its repos; null where no extensions run. Read at import, so it can be built later. */
+    private val extensionRepos: () -> ExtensionRepos? = { null },
+    /** The extension sources that are on, so a Mihon-family import can name the ones its series still need. */
+    private val extensionSources: suspend () -> Set<SourceKey> = { emptySet() },
 ) {
     private val mutex = Mutex()
 
@@ -72,22 +78,29 @@ class ProfileBackupService(
         if (includeRecents) statistics?.observeStatistics()?.first() else null
 
     /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
-    fun preview(bytes: ByteArray): BackupPreview =
-        if (isTachiyomiBackup(bytes)) BackupPreview.Series(decodeTachiyomiBackup(bytes, clock()).importPreview())
+    suspend fun preview(bytes: ByteArray): BackupPreview =
+        if (isTachiyomiBackup(bytes)) BackupPreview.Series(decodeTachiyomiBackup(bytes, clock()).importPreview(extensionSources()))
         else BackupPreview.Profiles(codec.decode(bytes).preview())
 
     /**
      * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
      * on the device is removed, each entry keeps the further progress of the two sides, and importing twice adds
-     * nothing more. One Room transaction holds it all, so it needs no journal. Returns what was imported.
+     * nothing more. One Room transaction holds it all, so it needs no journal. Then adds the repos the backup lists
+     * ([ExtensionRepos.add], which skips those already added and refuses one now signed with another key).
      */
-    suspend fun importSeries(bytes: ByteArray): SeriesImportPreview = withContext(Dispatchers.IO) {
-        mutex.withLock {
+    suspend fun importSeries(bytes: ByteArray): SeriesImportResult = withContext(Dispatchers.IO) {
+        val backup = mutex.withLock {
             check(!journalFile.exists()) { "Finish the pending restore first" }
-            val series = decodeTachiyomiBackup(bytes, clock())
-            store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = series))
-            series.importPreview()
+            decodeTachiyomiBackup(bytes, clock()).also {
+                store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = it.series))
+            }
         }
+        // Outside the lock: each repo is read over the network, and none touches the library.
+        val repos = extensionRepos()?.takeIf { backup.repos.isNotEmpty() }
+        val before = repos?.repos()?.size ?: 0
+        val problems = repos?.add(backup.repos).orEmpty()
+        val added = (repos?.repos()?.size ?: 0) - before
+        SeriesImportResult(backup.importPreview(extensionSources()), reposAdded = added, repoProblems = problems)
     }
 
     suspend fun restore(

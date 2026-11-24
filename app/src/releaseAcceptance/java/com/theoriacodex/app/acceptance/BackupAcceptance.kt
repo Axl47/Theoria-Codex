@@ -90,7 +90,7 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
 
     // Mihon-family backups decode through protobuf models, which R8 must keep with their field numbers.
     val series = withRestoreService(restore, store) { it.importSeries(Base64.getDecoder().decode(MIHON_BACKUP)) }
-    check(series == SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0))
+    check(series.imported == SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0, repos = 1, missingSources = listOf("Source")))
     check(imported.last().series.single().entries.single().read)
 }
 
@@ -198,5 +198,5 @@ private const val SHIPPED_PINS =
     """"excludeTerms":[],"includeTermGroups":[[{"value":"a & b","facet":"ARTIST",""" +
     """"sourceNamespace":"artist"}]]},"kind":"MULTI_SEARCH","sources":["GELBOORU","PIXIV"],"sourceTags":{}}}]}"""
 
-/** A Mihon backup following one manga, `/s` on source 7, with its one chapter read. */
-private const val MIHON_BACKUP = "H4sIAAAAAAAC/+MS4WAXYtIvlmIMbmLk4GLRL9Y3VGAEACrdYIsWAAAA"
+/** A Mihon backup following one manga, `/s` on source 7 (named "Source"), with its one chapter read and one repo. */
+private const val MIHON_BACKUP = "H4sIAAAAAAAC/+MS4WAXYtIvlmIMbmLk4GLRL9Y3VGBcxcbFxRacX1qUnCrAfolNiksko6SkoNhKX78otSBfL7UiMbcgJ1WLKTEJAPmDCotAAAAA"

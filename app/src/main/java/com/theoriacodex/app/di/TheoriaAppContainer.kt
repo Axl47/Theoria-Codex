@@ -423,6 +423,8 @@ internal class DefaultTheoriaAppContainer(
         statistics = statisticsStore,
         writeGuard = profileWriteGuard,
         siteProfiles = siteProfiles,
+        extensionRepos = { series?.repos },
+        extensionSources = { series?.sources?.invoke().orEmpty().mapTo(HashSet()) { it.key } },
     )
     private val autoBackup = AutoBackupWorkflow(
         store = SharedPreferencesAutoBackupStore(appContext),
