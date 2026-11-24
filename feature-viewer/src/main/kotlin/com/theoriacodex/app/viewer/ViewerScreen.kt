@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -187,7 +188,7 @@ private fun ViewerLoadedScreen(
         // Only episodes offer their tracks; no other video's player is followed for them.
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
     ) {
-        ViewerBackdrop(returnProgress, dismissDrag, onTouch = { screen.touchSerial += 1 }) {
+        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { screen.touchSerial += 1 }) {
             ViewerContentSurface(
                 frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
                 readReturnProgress, flingVelocity, quality, qualityHeight, videoPositions, host, config, scope,
@@ -275,12 +276,14 @@ private fun rememberViewerLoadMore(
 private fun ViewerBackdrop(
     returnProgress: State<Float>,
     dismissDrag: ViewerDismissDrag,
+    keepScreenOn: Boolean,
     onTouch: () -> Unit,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .then(if (keepScreenOn) Modifier.keepScreenOn() else Modifier)
             .pointerInput(onTouch) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
