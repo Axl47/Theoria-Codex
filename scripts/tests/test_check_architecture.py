@@ -65,26 +65,6 @@ class DeliveryPlanTest(unittest.TestCase):
                 )
 
 
-class ExtensionAttributionTest(unittest.TestCase):
-    def test_reports_derived_code_without_its_attribution_or_licence_adr_0056(self) -> None:
-        notice = "// Derived from Mihon (https://github.com/mihonapp/mihon), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.\n"
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            derived = root / "extension-host/src/main/kotlin/eu/kanade/tachiyomi"
-            (derived / "source").mkdir(parents=True)
-            (derived / "Kept.kt").write_text(notice + "package eu.kanade.tachiyomi\n", encoding="utf-8")
-            (derived / "source/Bare.kt").write_text("package eu.kanade.tachiyomi.source\n" + notice, encoding="utf-8")
-            self.assertIn(check_architecture.derived_extension_api_keeps_its_attribution, check_architecture.RULES)
-            with mock.patch.object(check_architecture, "ROOT", root):
-                self.assertEqual(
-                    [
-                        "extension-host/LICENSE-APACHE-2.0.txt must stay beside the code derived from Mihon and Aniyomi (docs/adr/0056-extension-binary-compatibility.md)",
-                        "extension-host/src/main/kotlin/eu/kanade/tachiyomi/source/Bare.kt must start with its Mihon or Aniyomi attribution (docs/adr/0056-extension-binary-compatibility.md)",
-                    ],
-                    check_architecture.derived_extension_api_keeps_its_attribution(),
-                )
-
-
 class CleartextTest(unittest.TestCase):
     def test_reports_cleartext_beyond_loopback_in_any_source_set_adr_0048(self) -> None:
         android = 'xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"'

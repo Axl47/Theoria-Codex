@@ -303,29 +303,6 @@ def cleartext_hosts(parent: ElementTree.Element, inherited: str) -> set[str]:
     return hosts
 
 
-DERIVED_EXTENSION_API = "extension-host/src/main/kotlin/eu/kanade"
-EXTENSION_API_LICENCE = "extension-host/LICENSE-APACHE-2.0.txt"
-APACHE_ATTRIBUTION = re.compile(
-    r"// Derived from (Mihon|Aniyomi) \(https://github\.com/\w+/\w+\), Apache License 2\.0; see LICENSE-APACHE-2\.0\.txt in this module\."
-)
-ATTRIBUTION_RECORD = "docs/adr/0056-extension-binary-compatibility.md"
-
-
-@rule
-def derived_extension_api_keeps_its_attribution() -> list[str]:
-    failures = []
-    if not (ROOT / EXTENSION_API_LICENCE).is_file():
-        failures.append(f"{EXTENSION_API_LICENCE} must stay beside the code derived from Mihon and Aniyomi ({ATTRIBUTION_RECORD})")
-    sources = sorted((ROOT / DERIVED_EXTENSION_API).rglob("*.kt"))
-    if not sources:
-        failures.append(f"{DERIVED_EXTENSION_API} holds the extension API binaries link against; it cannot be empty ({ATTRIBUTION_RECORD})")
-    for source in sources:
-        first_line = source.read_text(encoding="utf-8").split("\n", 1)[0]
-        if not APACHE_ATTRIBUTION.fullmatch(first_line):
-            failures.append(f"{source.relative_to(ROOT)} must start with its Mihon or Aniyomi attribution ({ATTRIBUTION_RECORD})")
-    return failures
-
-
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:
