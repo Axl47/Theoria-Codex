@@ -4,7 +4,6 @@
     android:id="@+id/player_view_texture"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:keepScreenOn="true"
     app:keep_content_on_player_reset="true"
     app:player_layout_id="@layout/player_surface_only"
     app:resize_mode="fit"

@@ -207,6 +207,7 @@ internal class ViewerSelection(
     val isSeekable = kind?.seekable == true
     val canDownload = kind == ViewerMediaKind.UGOIRA || !media?.url.isNullOrBlank()
     val isAnimated = kind?.animated == true
+    val isVideo = kind == ViewerMediaKind.VIDEO
     val overviewAvailable = viewerMediaOverviewAvailable(overviewItems)
 }
 
@@ -244,7 +245,6 @@ internal class ViewerFrame(
     /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
     val locked = uiState.controls.locked && watching && !inPictureInPicture
 
-    /** Whether the current session is reading a chapter. */
     val reading = uiState.series is ViewerSeries.Reading
 
     /**

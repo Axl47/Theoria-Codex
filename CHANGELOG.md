@@ -140,6 +140,7 @@
 
 ### Fixed
 
+- The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - Saved searches and Followed show their new posts first when you open them after the count says there are some. They used to show the posts from your last visit, and the new ones only turned up while scrolling, some jumping to the top.
 - A series you followed before its source listed any chapters now notifies you when its first ones come out, when the source dates its chapters. Before, those first chapters arrived silently.
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
