@@ -375,13 +375,13 @@ internal object StatisticsPolicies {
     }
 }
 
-val STATISTICS_WRITE_DELAY = 10.seconds
+internal val STATISTICS_WRITE_DELAY = 10.seconds
 
 class DataStoreStatisticsRepository private constructor(
     store: JsonDataStore<LifetimeStatistics>,
     clock: Clock,
     writeBehind: WriteBehind?,
-) : StatisticsRepository by CellStatisticsRepository(store.writeBehind(writeBehind), clock),
+) : StatisticsRepository by CellStatisticsRepository(store.writeBehind(writeBehind, STATISTICS_WRITE_DELAY), clock),
     AsynchronousStore by store {
     constructor(
         baseDirectory: File,
