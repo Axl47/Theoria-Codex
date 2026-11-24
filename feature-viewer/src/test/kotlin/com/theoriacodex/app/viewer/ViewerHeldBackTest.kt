@@ -48,27 +48,29 @@ class ViewerHeldBackTest {
 
     private fun pressBack() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
 
-    @Test fun `a Back pressed during the return runs once, after the return ends`() {
-        showReturningViewer()
-        pressBack()
-        pressBack()
-        compose.waitForIdle()
-        assertEquals(0, backsBehind)
-
-        holding.value = false
-        compose.waitForIdle()
-        assertEquals(1, backsBehind)
-    }
-
-    @Test fun `a Back held until the Viewer leaves runs on the screen behind it`() {
-        showReturningViewer()
-        pressBack()
-        compose.waitForIdle()
-        assertEquals(0, backsBehind)
-
+    private fun leave() {
         viewerShown.value = false
         compose.waitForIdle()
         shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    @Test fun `Backs pressed during the return run once, on the screen behind, after the Viewer leaves`() {
+        showReturningViewer()
+        pressBack()
+        pressBack()
+        compose.waitForIdle()
+        assertEquals(0, backsBehind)
+
+        leave()
         assertEquals(1, backsBehind)
+    }
+
+    @Test fun `a hold that ends while the Viewer stays drops its Back`() {
+        showReturningViewer()
+        pressBack()
+        holding.value = false
+        compose.waitForIdle()
+        leave()
+        assertEquals(0, backsBehind)
     }
 }

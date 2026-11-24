@@ -233,8 +233,9 @@ private fun ViewerBackHandlers(
 
 /**
  * Nothing may pop the route underneath a return that is already moving, so a Back pressed while [holding] is kept in
- * [ViewerScreenState.heldBack] and runs once the hold ends: when [holding] turns false, or when the Viewer leaves
- * composition at the end of its return. Two quick Backs therefore still mean two steps back. At most one held Back runs.
+ * [ViewerScreenState.heldBack] and runs when the Viewer leaves composition at the end of its return, so two quick Backs
+ * still mean two steps back. At most one held Back runs. A hold that ends while the Viewer stays, such as a new Viewer
+ * opening and clearing the return, drops it: the screen on top is no longer the one that Back was meant for.
  *
  * The hold is an overlay: it outranks every ordinary Back handler, including those the screen underneath registers as
  * it returns, and no lifecycle turns it off, since popping the Viewer stops its destination before the return ends.
@@ -253,10 +254,7 @@ internal fun ViewerHeldBackHandler(holding: Boolean, screen: ViewerScreenState) 
     }
     SideEffect { hold.isBackEnabled = holding }
     LaunchedEffect(holding) {
-        if (!holding && screen.heldBack) {
-            screen.heldBack = false
-            owner.onBackPressedDispatcher.onBackPressed()
-        }
+        if (!holding) screen.heldBack = false
     }
     DisposableEffect(events, hold) {
         events.addHandler(hold, NavigationEventDispatcher.PRIORITY_OVERLAY)
