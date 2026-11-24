@@ -6,8 +6,8 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
@@ -23,6 +23,10 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import androidx.navigationevent.NavigationEventDispatcher
+import androidx.navigationevent.NavigationEventDispatcherOwner
+import androidx.navigationevent.NavigationEventHandler
+import androidx.navigationevent.NavigationEventInfo
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerPageState
@@ -232,24 +236,32 @@ private fun ViewerBackHandlers(
  * [ViewerScreenState.heldBack] and runs once the hold ends: when [holding] turns false, or when the Viewer leaves
  * composition at the end of its return. Two quick Backs therefore still mean two steps back. At most one held Back runs.
  *
- * The hold follows the activity's lifecycle, not the Viewer destination's: popping the Viewer stops its destination
- * before the return ends, and a handler tied to it would let Back through to the screen underneath.
+ * The hold is an overlay: it outranks every ordinary Back handler, including those the screen underneath registers as
+ * it returns, and no lifecycle turns it off, since popping the Viewer stops its destination before the return ends.
  */
 @Composable
 internal fun ViewerHeldBackHandler(holding: Boolean, screen: ViewerScreenState) {
     val owner = LocalOnBackPressedDispatcherOwner.current ?: return
+    val events = (owner as? NavigationEventDispatcherOwner)?.navigationEventDispatcher ?: return
     val view = LocalView.current
-    CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-        BackHandler(enabled = holding) { screen.heldBack = true }
+    val hold = remember(screen) {
+        object : NavigationEventHandler<NavigationEventInfo.None>(NavigationEventInfo.None, false) {
+            override fun onBackCompleted() {
+                screen.heldBack = true
+            }
+        }
     }
+    SideEffect { hold.isBackEnabled = holding }
     LaunchedEffect(holding) {
         if (!holding && screen.heldBack) {
             screen.heldBack = false
             owner.onBackPressedDispatcher.onBackPressed()
         }
     }
-    DisposableEffect(owner, view) {
+    DisposableEffect(events, hold) {
+        events.addHandler(hold, NavigationEventDispatcher.PRIORITY_OVERLAY)
         onDispose {
+            hold.remove()
             if (!screen.heldBack) return@onDispose
             screen.heldBack = false
             // Posted so every handler leaving with the Viewer is gone first; a Viewer leaving with its activity drops it.

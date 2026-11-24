@@ -7,11 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -34,15 +34,15 @@ class ViewerHeldBackTest {
         override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.CREATED }
     }
 
+    /** The screen behind registers its Back handler after the Viewer's, as one returning to composition does. */
     private fun showReturningViewer() {
         compose.setContent {
-            // The screen behind the Viewer.
-            BackHandler { backsBehind++ }
             if (viewerShown.value) {
                 CompositionLocalProvider(LocalLifecycleOwner provides poppedDestination) {
                     ViewerHeldBackHandler(holding.value, remember { ViewerScreenState() })
                 }
             }
+            BackHandler { backsBehind++ }
         }
     }
 
@@ -64,6 +64,7 @@ class ViewerHeldBackTest {
         showReturningViewer()
         pressBack()
         compose.waitForIdle()
+        assertEquals(0, backsBehind)
 
         viewerShown.value = false
         compose.waitForIdle()
