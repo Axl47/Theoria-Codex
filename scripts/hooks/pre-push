@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rejects a push in seconds when the checked-out code breaks a line budget, the module layering, the
-# architecture rules or the comment ratchet, or, once scripts/detekt_changed.sh exists, a Detekt rule in
+# architecture rules or the comment ban, or, once scripts/detekt_changed.sh exists, a Detekt rule in
 # changed Kotlin files. It checks the working tree, not each pushed commit. scripts/check.sh installs it
 # through core.hooksPath; bypass with --no-verify.
 set -euo pipefail
@@ -25,7 +25,7 @@ fail() {
 line_budgets "$(diff_base 2>/dev/null || true)" > /dev/null || fail 'Line budget check'
 module_layering || fail 'Module layering check'
 architecture_rules || fail 'Architecture rules check'
-comment_ratchet "$(diff_base 2>/dev/null || true)" || fail 'Comment ratchet'
+comment_ban || fail 'Comment ban'
 adr_integrity "$(diff_base 2>/dev/null || true)" || fail 'ADR integrity'
 module_registration || fail 'Module registration check'
 if [[ -x scripts/detekt_changed.sh ]]; then

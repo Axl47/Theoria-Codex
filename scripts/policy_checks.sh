@@ -13,10 +13,9 @@ line_budgets() {
   python3 scripts/check_hotspots.py ${1:+--base "$1"}
 }
 
-# Kotlin and Java comments may only shrink; see config/quality/comment-baseline.json and docs/adr/.
-# Usage: comment_ratchet [<base>]
-comment_ratchet() {
-  python3 scripts/check_comments.py ${1:+--base "$1"}
+# Kotlin and Java sources carry no comments; see docs/adr/.
+comment_ban() {
+  python3 scripts/check_comments.py
 }
 
 # Every ADR's Applies-to paths exist and its symbols appear in them; see docs/adr/README.md. Usage: adr_integrity [<base>]
@@ -93,7 +92,7 @@ module_registration() {
 # if any did; the Verify merge-result job and Main policy workflow run it. Usage: policy_violations <base>
 policy_violations() {
   local check out failed=0
-  for check in "line_budgets $1" "comment_ratchet $1" "adr_integrity $1" module_layering architecture_rules module_registration; do
+  for check in "line_budgets $1" comment_ban "adr_integrity $1" module_layering architecture_rules module_registration; do
     out="$($check 2>&1)" || { printf '%s\n' "$out"; failed=1; }
   done
   return "$failed"

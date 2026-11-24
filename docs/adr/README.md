@@ -2,8 +2,8 @@
 
 Kotlin and Java sources carry no comments. When code depends on a decision a reader could not work out from
 the code itself, such as a platform constraint, a measured tradeoff or a rejected alternative, the decision is
-recorded here instead. `scripts/check_comments.py` enforces the ban; the comments that predate it are counted
-in `config/quality/comment-baseline.json`, which may only shrink.
+recorded here instead. `scripts/check_comments.py` enforces the ban: any comment in a tracked `.kt` or `.java`
+file fails, except the lint and formatter directives and licence notices the script lists.
 
 ## Format
 
