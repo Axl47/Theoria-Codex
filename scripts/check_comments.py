@@ -4,6 +4,10 @@
 Comments that predate the ban are counted per file in config/quality/comment-baseline.json. A file may
 never hold more comments than its baseline entry, and the baseline may only shrink: a file holding fewer
 fails until `--update` lowers its entry. `--update` never raises an entry or adds a file.
+
+A file git sees as renamed since the base revision keeps its old allowance under its new path, so moving a
+file never forces deleting its comments; `--update` moves the entry, and the old path's entry disappears. A file
+renamed again on the same branch takes the base's allowance, since only the base knows its original path.
 """
 
 from __future__ import annotations
@@ -176,6 +180,28 @@ def baseline_at(revision: str) -> dict[str, int] | None:
     return json.loads(shown.stdout) if shown.returncode == 0 else None
 
 
+def renames(revision: str) -> dict[str, str]:
+    """Old path to new path for each tracked file git sees as renamed between [revision] and the work tree."""
+    listed = subprocess.run(
+        ["git", "diff", "--find-renames", "--name-status", "--diff-filter=R", "-z", revision, "--"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split("\0")
+    return {listed[index + 1]: listed[index + 2] for index in range(0, len(listed) - 2, 3)}
+
+
+def carried(baseline: dict[str, int], moved: dict[str, str]) -> dict[str, int]:
+    """[baseline] with each renamed file's entry under its new path."""
+    return {moved.get(path, path): allowed for path, allowed in baseline.items()}
+
+
+def default_base() -> str | None:
+    """The merge base with origin/main, or None without one."""
+    merge_base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], capture_output=True, text=True)
+    return merge_base.stdout.strip() or None
+
+
 def write_baseline(counts: dict[str, int]) -> None:
     BASELINE.write_text(json.dumps(dict(sorted(counts.items())), indent=2) + "\n", encoding="utf-8")
 
@@ -186,11 +212,16 @@ def check(
     problems = [
         f"{path}: baseline raised to {allowed} from {base.get(path, 0)}. The baseline may only shrink."
         for path, allowed in sorted(baseline.items())
-        if base is not None and allowed > base.get(path, 0)
+        if base is not None and allowed > base.get(path, 0) and counts.get(path, 0)
     ]
     for path in sorted(set(baseline) | set(counts)):
         allowed, found = baseline.get(path, 0), counts.get(path, 0)
-        if found > allowed:
+        if base is not None and allowed < found <= base.get(path, 0):
+            problems.append(
+                f"{path}: {found} comments, baseline allows {allowed}, but the base allows {base[path]} here "
+                "(a moved file keeps its allowance). Carry it: python3 scripts/check_comments.py --update"
+            )
+        elif found > allowed:
             comments = counted_comments(pathlib.Path(path))
             listed = "".join(f"\n  {path}:{comment.line}: {comment.text.splitlines()[0]}" for comment in comments)
             problems.append(
@@ -208,14 +239,21 @@ def check(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--update", action="store_true", help="lower baseline entries to the current counts")
-    parser.add_argument("--base", help="revision whose baseline this one may not exceed")
+    parser.add_argument("--base", help="revision whose baseline this one may not exceed, and that renames are found against")
     args = parser.parse_args()
     counts = current_counts()
     baseline = read_baseline()
+    base_revision = args.base or (default_base() if args.update else None)
+    moved = renames(base_revision) if base_revision else {}
+    base = baseline_at(base_revision) if base_revision else None
     if args.update:
-        baseline = {path: min(count, allowed) for path, allowed in baseline.items() if (count := counts.get(path, 0))}
+        allowances = carried(baseline, moved)
+        for old, new in moved.items():
+            if base is not None and old in base:
+                allowances.setdefault(new, base[old])
+        baseline = {path: min(count, allowed) for path, allowed in allowances.items() if (count := counts.get(path, 0))}
         write_baseline(baseline)
-    problems = check(baseline, counts, baseline_at(args.base) if args.base else None)
+    problems = check(baseline, counts, carried(base, moved) if args.base and base is not None else None)
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0
