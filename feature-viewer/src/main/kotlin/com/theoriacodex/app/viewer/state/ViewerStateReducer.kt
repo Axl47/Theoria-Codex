@@ -415,7 +415,7 @@ private fun ViewerUiState.toggleChrome(): ViewerUiState {
 private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackCompleted): ViewerReduction {
     if (session != action.session || currentMedia?.key != action.key ||
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
-        (controls.playbackMode == ViewerPlaybackMode.LOOP && !controls.slideshow)) return ViewerReduction(this)
+        loopsPlayback) return ViewerReduction(this)
     if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) advanceInQueue()?.let { return it }
     return ViewerReduction(copy(controls = controls.copy(
         playback = controls.playback.copy(playing = false, completed = true),

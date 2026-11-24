@@ -25,6 +25,7 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.viewer.state.loopsPlayback
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.domain.model.GalleryReadingMode
@@ -279,7 +280,7 @@ private fun viewerRendererControls(
         isPreloading = preloading,
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
         showPassiveProgress = !frame.chromeVisible && active && !frame.inPictureInPicture,
-        loopPlayback = !watching && controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP && !controls.slideshow,
+        loopPlayback = frame.uiState.loopsPlayback,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,

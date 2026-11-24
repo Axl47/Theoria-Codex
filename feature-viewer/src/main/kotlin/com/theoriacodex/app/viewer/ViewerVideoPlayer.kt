@@ -113,7 +113,7 @@ internal fun ViewerVideoPlayer(
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
     ReportViewerPlaybackProgress(state, events.onPlaybackProgress)
-    CountViewerPlayingVideo(state.actuallyPlaying, looping = controls.loopPlayback)
+    CountViewerPlayingVideo(state.actuallyPlaying, looping = controls.loopPlayback && state.looped)
     FollowViewerActiveTracks(state.player, controls.isActive, loading = state.loading && !state.failed)
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
@@ -130,6 +130,7 @@ internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     var cues: List<Cue> = emptyList()
     var loading by mutableStateOf(true)
     var hasRenderedFirstFrame by mutableStateOf(false)
+    var looped by mutableStateOf(false)
     var pending by mutableStateOf(pending)
     var bindings by mutableIntStateOf(0)
     val failed get() = pending == ViewerRecoveryDecision.Fail
@@ -294,6 +295,10 @@ private fun viewerVideoListener(
             if (state.pending != null) return
             val decision = recovery.decide(ViewerRecoveryEvent.PlayerError(error.errorCode, player.currentPosition.coerceAtLeast(0L)))
             state.follow(decision, viewerVideoFailureMessage(error.errorCode, error.message), events)
+        }
+        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+            if (state.player !== player) return
+            if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION && player.repeatMode == Player.REPEAT_MODE_ONE) state.looped = true
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return

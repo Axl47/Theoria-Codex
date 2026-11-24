@@ -79,6 +79,9 @@ data class ViewerPlaybackControlsState(
     }
 }
 
+internal val ViewerUiState.loopsPlayback: Boolean
+    get() = controls.playbackMode == ViewerPlaybackMode.LOOP && !controls.slideshow && series !is ViewerSeries.Watching
+
 internal typealias ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode
 
 enum class ViewerPanel(
