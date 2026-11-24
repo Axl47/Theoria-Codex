@@ -10,9 +10,7 @@ import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.StoredMediaDurationKey
 import com.theoriacodex.data.repository.StoredMediaDurationState
-import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.data.repository.ViewerTranslationCacheKey
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -44,7 +42,6 @@ object RoomUpgradeScenario {
             val shared = post("shared")
             val durationKey = StoredMediaDurationKey(shared.id, "full-media-v1")
             val duration = StoredMediaDurationState.Known(12_000L, "PROVIDER")
-            val translationKey = ViewerTranslationCacheKey("google-nmt-v1", ViewerOcrLanguage.JAPANESE, "青い空")
 
             // Opening this factory, rather than passing individual migrations to the helper, proves
             // that an installed user's entire path is registered and Room accepts the final schema.
@@ -59,12 +56,12 @@ object RoomUpgradeScenario {
                     assertEquals(listOf("sky"), collections.observeLikes(profile).first().single().tags)
                     assertEquals(listOf(shared), collections.observeCodexPosts("likes-$profile", CodexSortMode.NEWEST_SAVED).first())
                 }
-                assertLegacyRecents(recents, startingVersion)
-                assertSpikeRowsDeleted(database, startingVersion)
-                val expectedRules = if (startingVersion >= 4) {
-                    listOf(CodexAutomaticTag(SourceKey.PIXIV, "cloud"), CodexAutomaticTag(SourceKey.PIXIV, "sky"))
-                } else emptyList()
-                assertEquals(expectedRules, collections.observeCodex("saved").first()?.automaticTags)
+                assertLegacyRecents(recents)
+                assertSpikeRowsDeleted(database)
+                assertEquals(
+                    listOf(CodexAutomaticTag(SourceKey.PIXIV, "cloud"), CodexAutomaticTag(SourceKey.PIXIV, "sky")),
+                    collections.observeCodex("saved").first()?.automaticTags,
+                )
 
                 collections.renameCodex("saved", "After upgrade")
                 collections.setAutomaticTag("saved", CodexAutomaticTag(SourceKey.PIXIV, "blue", groupIndex = 1), true)
@@ -73,7 +70,6 @@ object RoomUpgradeScenario {
                 recents.recordWatchedMediaProgress(shared, ViewerStreamSource.SEARCH, "search:sky", RecentPostSection.WATCHED, 3)
                 recents.recordSearch(query(), "new-search", RecentSearchKind.SOURCE, listOf(SourceKey.PIXIV))
                 RoomMediaDurationRepository(database).put(durationKey, duration)
-                RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
                 RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
                 RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
                 RoomSeriesRepository(database, clock = { 100L }).run {
@@ -81,9 +77,9 @@ object RoomUpgradeScenario {
                     setFollowed(seriesId, true)
                     recordProgress(seriesId, "/c/1", position = 4, length = 9)
                 }
-                assertEquals(21, database.openHelper.readableDatabase.version)
+                assertEquals(22, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
-                    "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
+                    "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata','viewer_translation_cache')",
                 ).use { assertFalse(it.moveToFirst()) }
                 database.openHelper.readableDatabase.query("PRAGMA foreign_key_check").use { assertFalse(it.moveToFirst()) }
             }
@@ -94,10 +90,10 @@ object RoomUpgradeScenario {
                 val saved = collections.observeCodex("saved").first()!!
                 assertEquals("After upgrade", saved.name)
                 assertEquals(
-                    if (startingVersion >= 4) listOf(
+                    listOf(
                         CodexAutomaticTag(SourceKey.PIXIV, "cloud"), CodexAutomaticTag(SourceKey.PIXIV, "sky"),
                         CodexAutomaticTag(SourceKey.PIXIV, "blue", groupIndex = 1),
-                    ) else listOf(CodexAutomaticTag(SourceKey.PIXIV, "blue")),
+                    ),
                     saved.automaticTags,
                 )
                 assertEquals(shared, collections.getPost(shared.id))
@@ -108,9 +104,6 @@ object RoomUpgradeScenario {
                 assertEquals(query(), recents.observeSearches().first().single { it.queryHash == "new-search" }.query)
                 assertEquals(duration, RoomMediaDurationRepository(database).get(durationKey))
                 assertNull(RoomMediaDurationRepository(database).get(durationKey.copy(mediaFingerprint = "full-media-v2")))
-                val translations = RoomViewerTranslationCacheRepository(database, clock = { 101L })
-                assertEquals(mapOf(translationKey to "Blue sky"), translations.getAll(setOf(translationKey)))
-                assertTrue(translations.getAll(setOf(translationKey.copy(backendVersion = "google-nmt-v2"))).isEmpty())
                 assertEquals(listOf(ForYouVerdictKind.SKIPPED), RoomForYouVerdictRepository(database).verdicts("a").map { it.kind })
                 assertEquals(mapOf(shared.id to PICTURE_HASH), RoomVisualSignatureRepository(database).observePictureHashes().first())
                 val series = RoomSeriesRepository(database)
@@ -152,7 +145,7 @@ object RoomUpgradeScenario {
     }
 
     /** The extension spike's posts are gone from every table, and the series tables that replace them open empty. */
-    private fun assertSpikeRowsDeleted(database: TheoriaRoomDatabase, startingVersion: Int) {
+    private fun assertSpikeRowsDeleted(database: TheoriaRoomDatabase) {
         val reader = database.openHelper.readableDatabase
         for (table in listOf("posts", "codex_items", "liked_posts", "recent_watched", "media_durations", "codex_automatic_tags")) {
             reader.query("SELECT COUNT(*) FROM `$table` WHERE source = 'custom_mihon_7'").use { rows ->
@@ -171,8 +164,7 @@ object RoomUpgradeScenario {
         }
         reader.query("SELECT COUNT(*) FROM recent_searches WHERE query_hash IN ('site-search', 'tag-search')").use { rows ->
             rows.moveToFirst()
-            // Version 1 had no recent searches to seed.
-            assertEquals(if (startingVersion >= 2) 2 else 0, rows.getInt(0))
+            assertEquals(2, rows.getInt(0))
         }
         for (table in listOf("series", "series_entries")) {
             reader.query("SELECT COUNT(*) FROM `$table`").use { rows ->
@@ -182,18 +174,13 @@ object RoomUpgradeScenario {
         }
     }
 
-    private suspend fun assertLegacyRecents(recents: RoomRecentsRepository, version: Int) {
+    private suspend fun assertLegacyRecents(recents: RoomRecentsRepository) {
         val watched = recents.observeWatchedPosts().first()
-        if (version < 2) {
-            assertTrue(watched.isEmpty())
-            assertTrue(recents.observeSearches().first().isEmpty())
-            return
-        }
         assertEquals(listOf("other", "shared"), watched.map { it.post.id.sourcePostId })
         assertEquals(listOf(RecentPostSection.CODEX, RecentPostSection.WATCHED), watched.map { it.section })
         assertEquals(listOf(ViewerStreamSource.CODEX, ViewerStreamSource.SEARCH), watched.map { it.origin })
         assertEquals(listOf(31L, 30L), watched.map { it.viewedAtEpochMs })
-        assertEquals(if (version >= 6) 2 else 1, watched.last().maxViewedMediaNumber)
+        assertEquals(2, watched.last().maxViewedMediaNumber)
         val search = recents.observeSearches().first().single { it.queryHash == "old-search" }
         assertEquals(query(), search.query)
         assertEquals(RecentSearchKind.SOURCE, search.kind)
@@ -221,36 +208,25 @@ object RoomUpgradeScenario {
         database.execSQL("INSERT INTO liked_posts VALUES('a','custom_mihon_7','L3M',5,'[]')")
         // Proof rows the retired importers wrote; the v11 migration drops their tables, so v1.9.2's schema 11 has neither.
         if (version < 11) database.execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
-        if (version >= 2) {
-            val sectionColumn = if (version >= 3) ",section" else ""
-            val progressColumn = if (version >= 6) ",max_viewed_media_number" else ""
-            for ((index, id) in listOf("shared", "other").withIndex()) {
-                val origin = if (index == 0) "SEARCH" else "CODEX"
-                val sectionValue = if (version >= 3) ",'${if (index == 0) "WATCHED" else "CODEX"}'" else ""
-                val progressValue = if (version >= 6) ",2" else ""
-                database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash$sectionColumn$progressColumn) " +
-                    "VALUES('PIXIV',?,${30 + index},${index + 1},?,'search:sky'$sectionValue$progressValue)", arrayOf(id, origin))
-            }
-            database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash$sectionColumn$progressColumn) " +
-                "VALUES('custom_mihon_7','L3M',29,9,'SEARCH','search:spike'${if (version >= 3) ",'WATCHED'" else ""}${if (version >= 6) ",1" else ""})")
-            database.execSQL("INSERT INTO recent_searches VALUES('spike-search',?,31,3)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_7")))
-            database.execSQL("INSERT INTO recent_searches VALUES('site-search',?,34,4)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_example_org")))
-            database.execSQL("INSERT INTO recent_searches VALUES('tag-search',?,35,5)", arrayOf(LEGACY_QUERY.replace("sky", "custom_mihon_7")))
-            database.execSQL("INSERT INTO recent_searches VALUES('old-search',?,32,1)", arrayOf(LEGACY_QUERY))
-            // For You history; the v12 migration deletes it, so only the rows above survive.
-            database.execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,33,2)", arrayOf(FOR_YOU_SEARCH))
-            if (version >= 3) {
-                database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section) " +
-                    "VALUES('PIXIV','other',34,3,'SEARCH','for_you:seed','FYP')")
-            }
-            if (version < 11) database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
+        for ((index, id) in listOf("shared", "other").withIndex()) {
+            val origin = if (index == 0) "SEARCH" else "CODEX"
+            val section = if (index == 0) "WATCHED" else "CODEX"
+            database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section,max_viewed_media_number) " +
+                "VALUES('PIXIV',?,${30 + index},${index + 1},?,'search:sky',?,2)", arrayOf(id, origin, section))
         }
-        if (version >= 4) {
-            // Version 7 added rule groups, with no default: every tag of a one-group rule is in group 0.
-            val (groupColumn, groupValue) = if (version >= 7) ",group_index" to ",0" else "" to ""
-            for (tag in listOf("sky", "cloud")) {
-                database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display$groupColumn) VALUES('saved','PIXIV',?,?$groupValue)", arrayOf(tag, tag))
-            }
+        database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section,max_viewed_media_number) " +
+            "VALUES('custom_mihon_7','L3M',29,9,'SEARCH','search:spike','WATCHED',1)")
+        database.execSQL("INSERT INTO recent_searches VALUES('spike-search',?,31,3)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_7")))
+        database.execSQL("INSERT INTO recent_searches VALUES('site-search',?,34,4)", arrayOf(LEGACY_QUERY.replace("PIXIV", "custom_mihon_example_org")))
+        database.execSQL("INSERT INTO recent_searches VALUES('tag-search',?,35,5)", arrayOf(LEGACY_QUERY.replace("sky", "custom_mihon_7")))
+        database.execSQL("INSERT INTO recent_searches VALUES('old-search',?,32,1)", arrayOf(LEGACY_QUERY))
+        // For You history; the v12 migration deletes it, so only the rows above survive.
+        database.execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,33,2)", arrayOf(FOR_YOU_SEARCH))
+        database.execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash,section) " +
+            "VALUES('PIXIV','other',34,3,'SEARCH','for_you:seed','FYP')")
+        if (version < 11) database.execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
+        for (tag in listOf("sky", "cloud")) {
+            database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display,group_index) VALUES('saved','PIXIV',?,?,0)", arrayOf(tag, tag))
         }
     }
 

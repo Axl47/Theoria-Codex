@@ -136,51 +136,6 @@ class RoomCollectionStorageTest {
         assertNull(repository.getPost(post("last").id))
     }
 
-    @Test fun `migration eight to nine retains likes and indexes reverse membership lookups`() {
-        val name = "collection-storage-migration-test"
-        migrationHelper.createDatabase(name, 8).apply {
-            execSQL("INSERT INTO liked_posts(profile_id,source,source_post_id,liked_at_epoch_ms,tags_json) VALUES('profile','PIXIV','saved',12,'[]')")
-            close()
-        }
-        val migrated = migrationHelper.runMigrationsAndValidate(name, 9, true, TheoriaRoomDatabase.MIGRATION_8_9)
-        migrated.query("SELECT source_post_id FROM liked_posts").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("saved", cursor.getString(0))
-        }
-        migrated.query("PRAGMA index_info(index_liked_posts_source_source_post_id)").use { cursor ->
-            val columns = buildList { while (cursor.moveToNext()) add(cursor.getString(2)) }
-            assertEquals(listOf("source", "source_post_id"), columns)
-        }
-        migrated.query("EXPLAIN QUERY PLAN SELECT 1 FROM liked_posts WHERE source='PIXIV' AND source_post_id='saved'").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertTrue(cursor.getString(3).contains("index_liked_posts_source_source_post_id"))
-        }
-        migrated.close()
-    }
-
-    @Test fun `migration nine to ten keeps memberships and serves saved-order Codex queries from one index`() {
-        val name = "collection-storage-migration-9-10-test"
-        migrationHelper.createDatabase(name, 9).apply {
-            execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
-            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','saved','{}')")
-            execSQL("INSERT INTO codex_items(codex_id,source,source_post_id,saved_at_epoch_ms) VALUES('saved','PIXIV','saved',12)")
-            close()
-        }
-        val migrated = migrationHelper.runMigrationsAndValidate(name, 10, true, TheoriaRoomDatabase.MIGRATION_9_10)
-        migrated.query("SELECT saved_at_epoch_ms FROM codex_items WHERE codex_id='saved'").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals(12L, cursor.getLong(0))
-        }
-        migrated.query(
-            "EXPLAIN QUERY PLAN SELECT source FROM codex_items WHERE codex_id='saved' ORDER BY saved_at_epoch_ms DESC",
-        ).use { cursor ->
-            val plan = buildList { while (cursor.moveToNext()) add(cursor.getString(3)) }
-            assertTrue(plan.toString(), plan.any { "index_codex_items_codex_id_saved_at_epoch_ms" in it })
-            assertTrue(plan.toString(), plan.none { "TEMP B-TREE" in it })
-        }
-        migrated.close()
-    }
-
     @Test fun `migration ten to eleven drops retired importer proof tables with or without rows`() {
         for (withProofRows in listOf(true, false)) {
             val name = "collection-storage-migration-10-11-$withProofRows-test"

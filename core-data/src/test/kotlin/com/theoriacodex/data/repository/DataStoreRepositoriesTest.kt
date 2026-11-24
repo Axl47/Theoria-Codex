@@ -95,13 +95,14 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
-    fun `settings ignore unknown OCR languages without resetting known preferences`() = runTest {
+    fun `settings with retired OCR keys load without resetting known preferences`() = runTest {
         val directory = tempFolder.newFolder("settings-unknown-ocr-language")
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
             """
             {
               "schemaVersion": 3,
               "settings": {
+                "invertMultiImageScrollDirection": true,
                 "viewerAutomaticTextTranslationEnabled": true,
                 "viewerEnabledOcrLanguages": ["JAPANESE", "FUTURE_SCRIPT"]
               },
@@ -112,8 +113,7 @@ class DataStoreRepositoriesTest {
         val scope = newScope()
         val settings = DataStoreSettingsRepository(directory, scope).observeSettings().first()
 
-        assertTrue(settings.viewer.automaticTextTranslationEnabled)
-        assertEquals(setOf(ViewerOcrLanguage.JAPANESE), settings.viewer.enabledOcrLanguages)
+        assertTrue(settings.viewer.invertMultiImageScrollDirection)
         closeScope(scope)
     }
 
