@@ -2,6 +2,8 @@ package com.theoriacodex.app.series
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -101,6 +103,8 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         assertEquals(LibraryShow.NOT_STARTED, viewModel.content.value.library.show)
         assertEquals(listOf("Beta Tale"), viewModel.content.value.following?.map { it.series.title })
+        // The filter's dot is heard as well as seen.
+        compose.onNodeWithContentDescription(SORT_AND_FILTER).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Filtered"))
     }
 
     @Test
