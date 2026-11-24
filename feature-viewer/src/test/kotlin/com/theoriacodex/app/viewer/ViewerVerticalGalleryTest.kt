@@ -195,6 +195,27 @@ class ViewerVerticalGalleryTest {
         compose.onNodeWithContentDescription("Loading pages").assertDoesNotExist()
     }
 
+    @Config(qualifiers = "w411dp-h891dp")
+    @Test fun `a push up that began on a loading chapter stays on it when its pages arrive mid-swipe (ADR 0168)`() {
+        val session = ViewerSessionIdentity("arriving")
+        state.value = createViewerUiState(
+            session, listOf(gallery.copy(media = listOf(page)), next), requiresResolution = { it.id == gallery.id },
+            series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL),
+        )
+        show(mapOf(gallery.id to GalleryReadingMode.VERTICAL, next.id to GalleryReadingMode.VERTICAL))
+
+        compose.onRoot().performTouchInput {
+            down(Offset(centerX, centerY + height / 4f))
+            repeat(10) { moveBy(Offset(0f, -height / 20f)) }
+        }
+        compose.runOnIdle { state.value = reduceViewerState(state.value, ViewerAction.ResolutionCompleted(session, gallery)).state }
+        compose.waitForIdle()
+        compose.onRoot().performTouchInput { up() }
+        compose.waitForIdle()
+
+        assertEquals(0, state.value.currentPageIndex)
+    }
+
     @Test fun `opening and closing the overview keeps a vertical gallery's scroll position`() {
         show()
         repeat(2) { compose.onRoot().performTouchInput { swipeUp(startY = centerY, endY = top) } }

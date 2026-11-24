@@ -99,6 +99,7 @@ class ExtensionImages(
         if (!fragment.startsWith(TAG)) return chain.proceed(chain.request())
         val untagged = url.newBuilder().fragment(null).build()
         if (chain.request().cacheControl.onlyIfCached) return chain.proceed(chain.request().newBuilder().url(untagged).build())
+        if (chain.call().isCanceled()) throw IOException(CANCELED)
         val (source, data) = issued(untagged, fragment) ?: return chain.proceed(chain.request().newBuilder().url(untagged).build())
         return failingAsIo { source.fetch(url.toString(), untagged, data, chain.call()) }
     }

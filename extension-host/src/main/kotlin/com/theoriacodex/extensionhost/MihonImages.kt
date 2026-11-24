@@ -66,7 +66,7 @@ internal class MihonImages(
         val response = try {
             call.executeFor(caller)
         } catch (failure: IOException) {
-            forget()
+            if (!caller.isCanceled()) forget()
             throw failure
         }
         if (!response.isSuccessful) forget()

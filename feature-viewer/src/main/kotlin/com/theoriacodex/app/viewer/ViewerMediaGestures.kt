@@ -144,12 +144,13 @@ internal fun Modifier.viewerGestures(config: ViewerGestureConfig, handler: Viewe
             if (!gesture.enabled || down.position.y > size.height - gesture.reservedBottomPx) return@awaitEachGesture
             val onBackEdge = down.position.x < systemGestures.getLeft(this, layoutDirection) ||
                 down.position.x > size.width - systemGestures.getRight(this, layoutDirection)
-            currentHandler.onPress()
-            when (val end = readViewerGesture(down, gesture, onBackEdge) { currentHandler }) {
-                is ViewerGestureEnd.Horizontal -> currentHandler.onHorizontalRelease(end.x, end.velocity)
-                is ViewerGestureEnd.Dismiss -> { currentHandler.onDismissRelease(end.velocityY); currentHandler.onGestureEnd() }
-                ViewerGestureEnd.Info -> { currentHandler.onInfoSwipe(); currentHandler.onGestureEnd() }
-                ViewerGestureEnd.None -> currentHandler.onGestureEnd()
+            val pressed = currentHandler
+            pressed.onPress()
+            when (val end = readViewerGesture(down, gesture, onBackEdge) { pressed }) {
+                is ViewerGestureEnd.Horizontal -> pressed.onHorizontalRelease(end.x, end.velocity)
+                is ViewerGestureEnd.Dismiss -> { pressed.onDismissRelease(end.velocityY); pressed.onGestureEnd() }
+                ViewerGestureEnd.Info -> { pressed.onInfoSwipe(); pressed.onGestureEnd() }
+                ViewerGestureEnd.None -> pressed.onGestureEnd()
             }
         }
     }

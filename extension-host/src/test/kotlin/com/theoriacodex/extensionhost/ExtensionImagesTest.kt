@@ -323,21 +323,46 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a page the app no longer wants never reaches its source (ADR 0059)`() = runTest {
+    fun `a page the app no longer wants never reaches its source (ADR 0059)`() {
+        val reader = PagePerImageSource()
+        val hosted = mihon(reader).also { images.publish(listOf(server, it)) }
+        val pages = hosted.images as MihonImages
+        val chapter = SChapter.create().apply { url = "/c/1" }
+        val addresses = listOf(
+            checkNotNull(pages.pageAddress(chapter, Page(0, "${reader.baseUrl}/p/1"))),
+            checkNotNull(pages.pageAddress(chapter, Page(1, imageUrl = "https://img.test/2.jpg"))),
+            images.tag(hosted.series.key, "${reader.baseUrl}/p/9", "9//c/1"),
+        )
+
+        for (address in addresses) {
+            val gone = appClient(images).newCall(Request.Builder().url(address).build()).apply { cancel() }
+            assertFailsWith<IOException> { gone.execute() }
+        }
+
+        assertEquals(emptyList<String>(), reader.listed)
+        assertEquals(emptyList<String>(), reader.asked)
+        assertEquals(0, reader.requests.get())
+    }
+
+    @Test
+    fun `a page cancelled while it loads keeps the image address its source named (ADR 0059)`() {
         val reader = PagePerImageSource()
         val pages = MihonImages(reader, MihonKind.sourceKey(reader.id), images)
         val chapter = SChapter.create().apply { url = "/c/1" }
-        val unnamed = checkNotNull(pages.pageAddress(chapter, Page(0, "${reader.baseUrl}/p/1")))
-        val named = checkNotNull(pages.pageAddress(chapter, Page(1, imageUrl = "https://img.test/2.jpg")))
-        val gone = caller.newCall(Request.Builder().url(named).build()).apply { cancel() }
+        val address = checkNotNull(pages.pageAddress(chapter, Page(0, "${reader.baseUrl}/p/1")))
+        val url = address.toHttpUrl().newBuilder().fragment(null).build()
+        val data = address.toHttpUrl().fragment!!.substringAfter('/')
+        reader.hangImages = true
+        val loading = caller.newCall(Request.Builder().url(url).build())
+        val fetch = Executors.newSingleThreadExecutor().submit<Result<Response>> { runCatching { pages.fetch(address, url, data, loading) } }
+        check(reader.imageStarted.await(5, TimeUnit.SECONDS))
 
-        for (address in listOf(unnamed, named)) {
-            val (url, data) = address.toHttpUrl().let { it.newBuilder().fragment(null).build() to it.fragment?.substringAfter('/', "")?.takeIf(String::isNotEmpty) }
-            assertFailsWith<IOException> { pages.fetch(address, url, data, gone) }
-        }
+        loading.cancel()
 
-        assertEquals(emptyList<String>(), reader.asked)
-        assertEquals(0, reader.requests.get())
+        assertTrue(fetch.get(5, TimeUnit.SECONDS).isFailure)
+        reader.hangImages = false
+        pages.fetch(address, url, data, caller.newCall(Request.Builder().url(url).build())).close()
+        assertEquals(listOf("/p/1"), reader.asked)
     }
 
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
@@ -362,9 +387,21 @@ class ExtensionImagesTest {
         val asked = mutableListOf<String>()
         val listed = mutableListOf<String>()
         val requests = AtomicInteger()
+        val imageStarted = CountDownLatch(1)
         var expired = false
 
+        @Volatile
+        var hangImages = false
+
         override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (hangImages && chain.request().url.host == "img.test") {
+                    imageStarted.countDown()
+                    while (!chain.call().isCanceled()) Thread.sleep(POLL_MS)
+                    throw IOException("Canceled")
+                }
+                chain.proceed(chain.request())
+            }
             .addInterceptor(
                 answering { request ->
                     requests.incrementAndGet()
@@ -420,10 +457,6 @@ class ExtensionImagesTest {
         override fun headersBuilder() = Headers.Builder()
 
         override fun pageListParse(response: Response): List<Page> = listOf(Page(0, imageUrl = "https://img.test/listed.jpg"))
-
-        private companion object {
-            const val POLL_MS = 10L
-        }
     }
 
     private class GatedPagesSource : HttpSource() {
@@ -486,6 +519,8 @@ class ExtensionImagesTest {
         }
     }
 }
+
+private const val POLL_MS = 10L
 
 private val caller = OkHttpClient()
 
