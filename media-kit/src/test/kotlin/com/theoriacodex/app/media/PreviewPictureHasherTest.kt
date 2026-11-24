@@ -4,20 +4,24 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PreviewPictureHasherTest {
-    @Test fun `a listing waits for its previews only as long as the budget, and the next listing has the late hashes`() = runTest {
-        val slow = CompletableDeferred<PictureHashResult>()
+    @Test fun `a listing waits for its previews only as long as the budget, and the next listing has the late hashes (ADR 0006)`() = runTest {
         val loads = mutableListOf<String>()
         val hasher = PreviewPictureHasher(backgroundScope, { candidate ->
             loads += candidate.url
             when {
-                "slow" in candidate.url -> slow.await()
+                "slow" in candidate.url -> {
+                    delay(150)
+                    PictureHashResult.Hashed(7)
+                }
                 "flat" in candidate.url -> PictureHashResult.Unhashable
                 else -> PictureHashResult.Hashed(candidate.url.length.toLong())
             }
@@ -27,7 +31,8 @@ class PreviewPictureHasherTest {
         val annotated = hasher.annotate(posts, budgetMs = 100)
 
         assertEquals(listOf(posts[0].preview.url!!.length.toLong(), null, null, null), annotated.map { it.pictureHash })
-        slow.complete(PictureHashResult.Hashed(7))
+        assertEquals(100L, currentTime)
+        advanceTimeBy(50)
         runCurrent()
 
         assertEquals(listOf(posts[0].preview.url!!.length.toLong(), 7L, null, null), hasher.annotate(posts).map { it.pictureHash })

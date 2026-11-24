@@ -55,17 +55,20 @@ class CreatorProfileViewModel(
     coroutineScope: CoroutineScope? = null,
     relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     reconnections: Flow<Unit> = emptyFlow(),
+    relatedPostsLog: (String) -> Unit = {},
 ) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect>, ViewerFeedOwner {
     constructor(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
         reconnections: Flow<Unit> = emptyFlow(),
+        relatedPostsLog: (String) -> Unit = {},
     ) : this(
         engine = coordinator,
         savedStateHandle = savedStateHandle,
         relatedPostsLoader = relatedPostsLoader,
         reconnections = reconnections,
+        relatedPostsLog = relatedPostsLog,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -79,7 +82,7 @@ class CreatorProfileViewModel(
     private val mutableState = MutableStateFlow(CreatorUiState())
     override val state: StateFlow<CreatorUiState> = mutableState.asStateFlow()
 
-    private val relatedDiagnostics = RelatedPostsDiagnostics("creator", this)
+    private val relatedDiagnostics = RelatedPostsDiagnostics("creator", this, relatedPostsLog)
     private val relatedPosts = RelatedPostsRouteController(
         scope = ownerScope,
         loader = relatedPostsLoader,
@@ -268,6 +271,7 @@ class CreatorProfileViewModel(
                     savedStateHandle = createSavedStateHandle(),
                     relatedPostsLoader = relatedPostsLoader,
                     reconnections = networkOnline.reconnections(),
+                    relatedPostsLog = RelatedPostsDiagnostics.logcat,
                 )
             }
         }

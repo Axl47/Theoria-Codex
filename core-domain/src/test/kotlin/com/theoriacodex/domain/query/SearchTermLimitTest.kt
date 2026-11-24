@@ -15,15 +15,16 @@ class SearchTermLimitTest {
     private val guestLimit = SearchTermLimit(maxTerms = 2, rankedSortUsesTerm = true)
 
     @Test
-    fun `ranked sorts spend one term on their order metatag`() {
+    fun `ranked sorts spend one term on their order metatag (ADR 0011)`() {
         assertEquals(2, guestLimit.budgetFor(SortMode.NEWEST))
         assertEquals(1, guestLimit.budgetFor(SortMode.TOP))
         assertEquals(1, guestLimit.budgetFor(SortMode.POPULAR))
         assertEquals(2, SearchTermLimit(maxTerms = 2).budgetFor(SortMode.TOP))
+        assertEquals(1, SearchTermLimit(maxTerms = 1, rankedSortUsesTerm = true).budgetFor(SortMode.TOP))
     }
 
     @Test
-    fun `an or group costs one term because its alternatives are requested separately`() {
+    fun `an or group costs one term because its alternatives are requested separately (ADR 0011)`() {
         val query = query(groups = listOf(listOf("cat", "dog"), listOf("sky")), excluded = emptyList())
         assertEquals(2, query.requestTermCount)
         assertTrue(guestLimit.allows(query))
@@ -31,7 +32,7 @@ class SearchTermLimitTest {
     }
 
     @Test
-    fun `limiting keeps required groups before exclusions`() {
+    fun `limiting keeps required groups before exclusions (ADR 0011)`() {
         val query = query(groups = listOf(listOf("cat"), listOf("sky")), excluded = listOf("comic"))
 
         val limited = query.withinTermLimit(guestLimit)

@@ -533,7 +533,6 @@ dependencies {
     testImplementation(testFixtures(project(":core-data")))
     testImplementation(testFixtures(project(":ui-kit")))
     testImplementation(testFixtures(project(":feed-kit")))
-    testImplementation(testFixtures(project(":feature-library")))
     testImplementation(testFixtures(project(":feature-settings")))
     testImplementation(testFixtures(project(":feature-viewer")))
     androidTestImplementation(libs.androidx.junit)

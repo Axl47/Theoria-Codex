@@ -85,7 +85,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `a lookup loads only the extension that last offered its source`() = runBlocking {
+    fun `a lookup loads only the extension that last offered its source (ADR 0007)`() = runBlocking {
         twoExtensionsOn()
         assertEquals("custom_mihon_2", registry.source(MihonKind.sourceKey(2))?.key?.id)
         assertEquals(listOf("/a.apk", "/b.apk"), loads)
@@ -162,7 +162,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `an extension that is off is listed without running its code`() = runBlocking {
+    fun `an extension that is off is listed without running its code (ADR 0007, 0189)`() = runBlocking {
         val listed = registry.installed().single()
 
         assertEquals(listOf("a 1.0 key-1", false), listOf("${listed.name} ${listed.versionName} ${listed.signer}", listed.on))
@@ -337,7 +337,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `a file replaced while the user was asked is not turned on`() = runBlocking {
+    fun `a file replaced while the user was asked is not turned on (ADR 0007)`() = runBlocking {
         val shown = registry.installed().single().signer!!
         onDevice = listOf(extension("a", signer = "key-2"))
 
@@ -396,7 +396,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `an extension without a signing certificate cannot be turned on`() = runBlocking {
+    fun `an extension without a signing certificate cannot be turned on (ADR 0007)`() = runBlocking {
         onDevice = listOf(extension("a", signer = null))
         store.choices = ExtensionChoices(trusted = mapOf("a" to ""))
 

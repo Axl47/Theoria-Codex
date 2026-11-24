@@ -24,3 +24,11 @@ Renaming a host does not change a site's id. New protocol families are added as 
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/source/CustomSites.kt`: `CustomSourceIds`, `SiteAddress`, `SiteHeaders`, `SiteCredentials`, `SiteProfile`, `SiteProbeResult`, `clearedChallenge`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/tags/SourceTagNormalization.kt`: `tagDialect`
+
+## Guarded by
+
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/source/CustomSitesTest.kt`: `addresses normalize to an HTTPS root and derive the planned ids (ADR 0004)`, `unusable addresses are rejected before any request (ADR 0004)`, `id validation accepts only the custom alphabet (ADR 0004)`, `profiles validate identity, label and headers and keep unknown families (ADR 0004)`, `site credentials never show in text (ADR 0004)`
+- `core-domain/src/main/kotlin/com/theoriacodex/domain/source/CustomSites.kt`: `data class SiteHeaders(val userAgent: String? = null, val referer: String? = null)`
+- `core-domain/src/test/kotlin/com/theoriacodex/domain/tags/SourceTagNormalizationTest.kt`: `custom sources spell tags the booru way (ADR 0004, 0010)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/custom/FamilyAdapterTest.kt`: `a stored site keeps its stored id whatever its address now derives (ADR 0004)`
+- Left to prose: `MAX_LENGTH`'s 255-byte bound depends on post-id and extension lengths that no code caps; encrypted, never-backed-up credential storage is device behaviour (the emulator lane's `AndroidCredentialEnvelopeStoreDeviceTest`); the compiler keeps `clearedChallenge` exhaustive and only review stops an `else` from weakening it; `CustomSitesControllerImpl` and `CustomSourceRuntime` keeping the stored id, and `CustomSourceRuntime` marking an unknown-family site unavailable, are `:app` code, deferred to the app batch.
