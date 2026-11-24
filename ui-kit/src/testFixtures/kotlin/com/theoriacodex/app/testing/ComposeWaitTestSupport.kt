@@ -29,3 +29,15 @@ fun ComposeTestRule.waitUntilSettled(
         }
     }
 }
+
+fun ComposeTestRule.waitUntilWithoutIdling(
+    timeoutMillis: Long = 10_000L,
+    conditionDescription: String? = null,
+    condition: () -> Boolean,
+) {
+    if (conditionDescription == null) {
+        waitUntil(timeoutMillis = timeoutMillis, condition = condition)
+    } else {
+        waitUntil(conditionDescription = conditionDescription, timeoutMillis = timeoutMillis, condition = condition)
+    }
+}

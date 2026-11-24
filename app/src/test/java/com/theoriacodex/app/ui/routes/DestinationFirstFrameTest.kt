@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
@@ -95,7 +96,7 @@ class DestinationFirstFrameTest {
                 composable("viewer") { BrowsingDestinationStateBoundary(data, graph.sources) { Text("viewer ready") } }
             }
         }
-        compose.waitUntil(10_000) { compose.onAllNodes(hasTextReady("home ready")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodes(hasTextReady("home ready")).fetchSemanticsNodes().isNotEmpty() }
         assertAppearsAtOnce("viewer ready") { navigation.navigate("viewer") }
     }
 
@@ -122,10 +123,10 @@ class DestinationFirstFrameTest {
                 composable("viewer") { Text("viewer") }
             }
         }
-        compose.waitUntil(10_000) { compose.onAllNodes(hasTextReady("still loading")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodes(hasTextReady("still loading")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("codex missing").assertDoesNotExist()
         release.complete(Unit)
-        compose.waitUntil(10_000) { compose.onAllNodes(hasTextReady("Kept Codex")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodes(hasTextReady("Kept Codex")).fetchSemanticsNodes().isNotEmpty() }
         compose.runOnIdle { navigation.navigate("viewer") }
         compose.waitForIdle()
         assertAppearsAtOnce("Kept Codex") { navigation.popBackStack() }
