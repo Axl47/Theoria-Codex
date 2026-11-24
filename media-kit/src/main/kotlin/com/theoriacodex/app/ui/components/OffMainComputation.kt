@@ -14,7 +14,13 @@ val LocalFeedComputationContext = staticCompositionLocalOf<CoroutineContext> { D
 
 class ListFrame<E, T>(val list: List<E>, val inputs: Array<out Any?>, val value: T)
 
-internal class FrameCache<E, T> {
+class RetainedFrames<E, T> {
+    fun at(name: String) = RetainedFrameKey(this, name)
+}
+
+data class RetainedFrameKey<E, T>(internal val frames: RetainedFrames<E, T>, internal val name: String)
+
+internal class FrameCache<E, T>(val frames: RetainedFrames<E, T>? = null) {
     var frame: ListFrame<E, T>? = null
 }
 
@@ -23,12 +29,12 @@ fun <E, T> rememberComputedOffMain(
     list: List<E>,
     vararg inputs: Any?,
     section: String? = null,
-    retainKey: String? = null,
+    retainKey: RetainedFrameKey<E, T>? = null,
     extend: ((previous: ListFrame<E, T>) -> T?)? = null,
     compute: () -> T,
 ): T {
     val cache = remember { FrameCache<E, T>() }
-    val retained = retainKey?.let { rememberRetainedFrameCache<E, T>(it) }
+    val retained = retainKey?.let { rememberRetainedFrameCache(it) }
     val published = remember { mutableIntStateOf(0) }
     val background = LocalFeedComputationContext.current
     published.intValue

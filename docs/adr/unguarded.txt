@@ -90,7 +90,6 @@
 0103-diagnostics-log-and-usage.md
 0104-duration-lookups.md
 0105-feed-media-delivery.md
-0106-feed-state-retained-across-viewer.md
 0107-frame-sampling-for-tagger.md
 0108-media-disk-caches.md
 0109-media-kit-device-and-fixture-tests.md
