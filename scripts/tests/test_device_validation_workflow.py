@@ -12,7 +12,7 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    def test_connected_lane_executes_and_retains_every_instrumentation_owner(self) -> None:
+    def test_connected_lane_executes_and_retains_every_instrumentation_owner_adr_0109(self) -> None:
         self.assertIn("script: bash scripts/verify_ci_emulator.sh debug", self.workflow)
         wrapper = (REPOSITORY_ROOT / "scripts/verify_ci_emulator.sh").read_text(encoding="utf-8")
         self.assertIn("scripts/verify_debug_device.sh all", wrapper)

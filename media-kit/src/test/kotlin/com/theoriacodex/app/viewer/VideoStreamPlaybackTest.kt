@@ -72,6 +72,28 @@ class VideoStreamPlaybackTest {
         )
     }
 
+    @Test fun `the fixture server refuses a request without the stream headers, answers 404 to an unknown path and serves a byte range (ADR 0109)`() {
+        val client = okhttp3.OkHttpClient()
+        fun get(path: String, headers: Map<String, String>, range: String? = null) = client.newCall(
+            okhttp3.Request.Builder().url("${server.base}$path")
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
+                .apply { range?.let { header("Range", it) } }
+                .build(),
+        ).execute().use { it.code to it.body.bytes().size }
+
+        assertEquals(403 to 0, get("/hls/master.m3u8", emptyMap()))
+        assertEquals(404 to 0, get("/hls/missing", STREAM_FIXTURE_HEADERS))
+        assertEquals(206 to 10, get("/hls/video0.ts", STREAM_FIXTURE_HEADERS, "bytes=0-9"))
+        assertEquals(
+            listOf(
+                StreamFixtureServer.Request("/hls/master.m3u8", authorised = false),
+                StreamFixtureServer.Request("/hls/missing", authorised = true),
+                StreamFixtureServer.Request("/hls/video0.ts", authorised = true),
+            ),
+            server.requests.toList(),
+        )
+    }
+
     @Test fun `an HLS episode sends its headers with every request it causes, across a redirect and relative addresses`() {
         val lease = pool.acquire(
             VideoPlaybackRequest(
