@@ -214,9 +214,9 @@ internal fun browseRows(
         .sortedBy { it.name.lowercase() }
 }
 
-/** Every language some extension offers, by name; "all" is left out, since those extensions show under each. */
+/** Every language some extension offers, by name; "all" is left out, since those extensions show under each, as are blank codes. */
 internal fun offeredLanguages(extensions: List<RepoExtension>): List<String> =
-    extensions.flatMap { it.languages }.distinct().filter { it != "all" }.sortedBy { languageName(it).lowercase() }
+    extensions.flatMap { it.languages }.distinct().filter { it.isNotBlank() && it != "all" }.sortedBy { languageName(it).lowercase() }
 
 /** The chosen language as a chip; tapping it offers the device's languages, every language, or any one offered. */
 @Composable
