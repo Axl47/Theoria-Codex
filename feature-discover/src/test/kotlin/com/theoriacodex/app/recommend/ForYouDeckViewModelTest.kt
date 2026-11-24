@@ -483,6 +483,36 @@ class ForYouDeckViewModelTest {
         assertEquals("a-0-0", owner.current.id.sourcePostId)
     }
 
+    @Test fun `skips read after the first deal still keep their posts out of later deals`() = runTest {
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("b", 0, 1).id, ForYouVerdictKind.SKIPPED, 1, null))
+        val slow = CompletableDeferred<Unit>()
+        val held = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId> {
+                slow.await()
+                return verdicts.skippedSince(profileId, sinceEpochMs, limit)
+            }
+        }
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, held)).also { it.synchronize(deckEnvironment()) }
+        assertTrue(owner.posts.isEmpty())
+        testScheduler.advanceTimeBy(2_000)
+        testScheduler.runCurrent()
+        assertEquals(4, owner.posts.size)
+
+        slow.complete(Unit)
+        owner.skip(2)
+        assertEquals(8, owner.posts.size)
+        assertFalse(lanePost("b", 0, 1) in owner.posts)
+    }
+
+    @Test fun `a trail still offers posts skipped in an earlier session`() = runTest {
+        val skipped = testPost(DECK_SOURCE, "t-1")
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, skipped.id, ForYouVerdictKind.SKIPPED, 1, null))
+        trails.creator = listOf(skipped, testPost(DECK_SOURCE, "t-2"))
+        val owner = owner(deckEnvironment(creatorBrowsingSources = setOf(DECK_SOURCE)))
+        owner.fork(TrailRequest.Creator(checkNotNull(owner.current.creatorProfile), owner.current))
+        assertEquals(listOf(skipped.id, PostId(DECK_SOURCE, "t-2")), owner.posts.map(Post::id))
+    }
+
     @Test fun `a session's skips stay out of a refreshed Mix`() {
         val owner = owner()
         val skipped = List(2) { owner.decide(TriageChoice.Skip) }
