@@ -57,11 +57,13 @@ public interface SeriesDao {
 
     /**
      * A stored entry takes the further progress of the two: read on either side, and the later page together with the
-     * page count it was recorded against, so a page is never shown beyond its count.
+     * page count it was recorded against. When that side has no count, as a Mihon backup's pages never do, it takes the
+     * other side's only if it reaches that page, so a page is never shown beyond its count.
      */
     @Query("UPDATE series_entries SET read = read OR :read, last_page = MAX(last_page, :lastPage), "
-            + "page_count = CASE WHEN :lastPage > last_page THEN COALESCE(:pageCount, page_count) "
-            + "ELSE COALESCE(page_count, :pageCount) END "
+            + "page_count = CASE WHEN :lastPage > last_page "
+            + "THEN COALESCE(:pageCount, CASE WHEN page_count >= :lastPage THEN page_count END) "
+            + "ELSE COALESCE(page_count, CASE WHEN :pageCount >= last_page THEN :pageCount END) END "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(String source, String seriesAddress, String address, boolean read, long lastPage, Long pageCount);
 

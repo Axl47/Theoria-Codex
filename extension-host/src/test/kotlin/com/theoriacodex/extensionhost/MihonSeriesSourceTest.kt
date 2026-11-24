@@ -8,6 +8,7 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesStatus
+import com.theoriacodex.domain.series.extensionSeriesStatus
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -92,7 +93,7 @@ class MihonSeriesSourceTest {
             SeriesStatus.UNKNOWN, SeriesStatus.ONGOING, SeriesStatus.COMPLETED, SeriesStatus.LICENSED,
             SeriesStatus.PUBLISHING_FINISHED, SeriesStatus.CANCELLED, SeriesStatus.ON_HIATUS, SeriesStatus.UPCOMING, SeriesStatus.UNKNOWN,
         )
-        assertEquals(expected, (0..8).map(::seriesStatus))
+        assertEquals(expected, (0..8).map(::extensionSeriesStatus))
     }
 
     @Test

@@ -3,6 +3,8 @@ package com.theoriacodex.app.backup
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.ProfileRestoreResult
+import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.BackupPreview
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
@@ -64,6 +66,21 @@ class BackupViewModelTest {
         assertFalse(actions.appliedPreferences)
         assertNull(owner.state.value.preview)
         assertTrue(owner.effects.first().contains("2 profiles and 3 Codices added"))
+    }
+
+    @Test
+    fun `a Mihon-family backup imports its series instead of restoring profiles`() = runTest {
+        actions.nextPreview = BackupPreview.Series(SeriesImportPreview(manga = 212, anime = 1, chaptersRead = 900, episodesWatched = 3))
+        val owner = owner()
+        owner.import("document")
+        advanceUntilIdle()
+        owner.restore()
+        advanceUntilIdle()
+
+        assertEquals(0, actions.restores)
+        assertEquals(1, actions.seriesImports)
+        assertNull(owner.state.value.preview)
+        assertEquals("Imported 212 manga · 1 anime.", owner.effects.first())
     }
 
     @Test
@@ -187,7 +204,7 @@ class BackupViewModelTest {
     private fun owner() = BackupViewModel(actions, documents, dispatcher).also { store.put("backup", it) }
 }
 
-private val preview = ProfileBackupPreview(1, listOf("Main", "Art"), 3, 8, 4, 2, 7, 1)
+private val preview = BackupPreview.Profiles(ProfileBackupPreview(1, listOf("Main", "Art"), 3, 8, 4, 2, 7, 1))
 
 private class FakeBackupActions : BackupActions {
     val exportedBytes = byteArrayOf(8, 9)
@@ -203,7 +220,10 @@ private class FakeBackupActions : BackupActions {
         return exportedBytes
     }
 
-    override fun preview(bytes: ByteArray) = preview
+    var nextPreview: BackupPreview = preview
+    var seriesImports = 0
+
+    override fun preview(bytes: ByteArray) = nextPreview
 
     override suspend fun restore(bytes: ByteArray, applyPreferences: Boolean): ProfileRestoreResult {
         restores++
@@ -212,6 +232,11 @@ private class FakeBackupActions : BackupActions {
         restoreGate?.await()
         restoreFailure?.let { throw it }
         return ProfileRestoreResult(2, 3)
+    }
+
+    override suspend fun importSeries(bytes: ByteArray): SeriesImportPreview {
+        seriesImports++
+        return (nextPreview as BackupPreview.Series).preview
     }
 }
 

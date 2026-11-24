@@ -106,7 +106,7 @@ internal fun rememberLibraryTransferTools(
     val tools = remember(downloads, downloadRemovals, backup, offline, export, import, autoBackup, autoBackupFolder) {
         LibraryTransferTools(downloads, downloadRemovals, backup, offline, autoBackup,
             chooseBackupDestination = { export.launch("theoria-backup.json") },
-            chooseBackup = { import.launch(arrayOf("application/json", "application/octet-stream")) },
+            chooseBackup = { import.launch(arrayOf("*/*")) },
             chooseAutoBackupFolder = { autoBackupFolder.launch(null) },
             turnOffAutoBackup = {
                 context.contentResolver.releaseAutoBackupFolder(autoBackup?.status?.value?.folderUri)

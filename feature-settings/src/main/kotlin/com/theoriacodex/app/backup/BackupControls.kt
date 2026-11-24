@@ -23,6 +23,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.SwitchRow
 import com.theoriacodex.data.repository.ProfileBackupPreview
+import com.theoriacodex.data.repository.SeriesImportPreview
+import com.theoriacodex.data.repository.BackupPreview
 
 @Composable
 fun BackupControls(state: BackupUiState, onIncludeRecents: (Boolean) -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
@@ -114,8 +116,10 @@ fun BackupDialogs(
     onApplyPreferences: (Boolean) -> Unit,
     onRestore: () -> Unit,
 ) {
-    state.preview?.let { preview ->
-        RestoreBackupDialog(preview, state, onDismiss, onApplyPreferences, onRestore)
+    when (val preview = state.preview) {
+        is BackupPreview.Profiles -> RestoreBackupDialog(preview.preview, state, onDismiss, onApplyPreferences, onRestore)
+        is BackupPreview.Series -> ImportSeriesDialog(preview.preview, state.busy, onDismiss, onRestore)
+        null -> Unit
     }
 }
 
@@ -153,6 +157,33 @@ private fun RestoreBackupDialog(
         },
         confirmButton = { TextButton(onClick = onRestore, enabled = !state.busy) { Text("Restore") } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !state.busy) { Text("Cancel") } },
+    )
+}
+
+/** A Mihon-family backup brings only series, so its preview says what of them comes along and nothing else. */
+@Composable
+private fun ImportSeriesDialog(preview: SeriesImportPreview, busy: Boolean, onDismiss: () -> Unit, onImport: () -> Unit) {
+    val counts = listOfNotNull(
+        preview.summary(),
+        countLabel(preview.chaptersRead, "chapter read", "chapters read").takeIf { preview.chaptersRead > 0 },
+        countLabel(preview.episodesWatched, "episode watched", "episodes watched").takeIf { preview.episodesWatched > 0 },
+    )
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Import series") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(counts.joinToString(" · "))
+                Text("Adds them to Series with their progress. Nothing you have is removed, and importing twice adds nothing more.")
+                Text("A series stays unavailable until its extension is on here.")
+                if (busy) Text("Importing…")
+            }
+        },
+        confirmButton = { TextButton(onClick = onImport, enabled = !busy) { Text("Import") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
     )
 }
 

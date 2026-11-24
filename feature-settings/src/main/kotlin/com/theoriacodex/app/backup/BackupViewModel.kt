@@ -4,11 +4,13 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.source.displayName
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.theoriacodex.data.repository.ProfileBackupPreview
 import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileRestoreResult
 import com.theoriacodex.data.repository.ProfileRestorePendingException
+import com.theoriacodex.data.repository.BackupPreview
+import com.theoriacodex.data.repository.SeriesImportPreview
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import java.text.NumberFormat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -22,21 +24,23 @@ import kotlinx.coroutines.withContext
 
 interface BackupActions {
     suspend fun export(includeRecents: Boolean): ByteArray
-    fun preview(bytes: ByteArray): ProfileBackupPreview
+    fun preview(bytes: ByteArray): BackupPreview
     suspend fun restore(bytes: ByteArray, applyPreferences: Boolean): ProfileRestoreResult
+    suspend fun importSeries(bytes: ByteArray): SeriesImportPreview
 }
 
 class ProfileBackupActions(private val service: ProfileBackupService) : BackupActions {
     override suspend fun export(includeRecents: Boolean) = service.export(includeRecents)
     override fun preview(bytes: ByteArray) = service.preview(bytes)
     override suspend fun restore(bytes: ByteArray, applyPreferences: Boolean) = service.restore(bytes, applyPreferences)
+    override suspend fun importSeries(bytes: ByteArray) = service.importSeries(bytes)
 }
 
 enum class BackupOperation { EXPORT, READ, RESTORE }
 
 data class BackupUiState(
     val operation: BackupOperation? = null,
-    val preview: ProfileBackupPreview? = null,
+    val preview: BackupPreview? = null,
     val applyPreferences: Boolean = false,
     val includeRecents: Boolean = true,
 ) {
@@ -115,18 +119,24 @@ class BackupViewModel(
 
     fun restore() {
         val bytes = selectedBytes ?: return
-        if (state.value.busy || state.value.preview == null) return
+        val preview = state.value.preview
+        if (state.value.busy || preview == null) return
         val applyPreferences = state.value.applyPreferences
         mutableState.update { it.copy(operation = BackupOperation.RESTORE) }
         viewModelScope.launch {
             val result = runCatchingPreservingCancellation {
-                withContext(ioDispatcher) { actions.restore(bytes, applyPreferences) }
+                withContext(ioDispatcher) {
+                    when (preview) {
+                        is BackupPreview.Profiles -> actions.restore(bytes, applyPreferences).message()
+                        is BackupPreview.Series -> "Imported ${actions.importSeries(bytes).summary()}."
+                    }
+                }
             }
             mutableState.update { it.copy(operation = null) }
             result.fold(
-                onSuccess = { restored ->
+                onSuccess = { message ->
                     dismissDialog()
-                    messages.send(restored.message())
+                    messages.send(message)
                 },
                 onFailure = { failure ->
                     messages.send(failure.backupMessage("Could not restore the backup. Please try again."))
@@ -159,8 +169,13 @@ private fun ProfileRestoreResult.message(): String {
     return if (kept.isEmpty()) restored else "$restored Kept this device's settings for ${kept.joinToString()}."
 }
 
-/** "1 profile", "2 profiles": [count] with [noun] or [plural]; used by the restore preview and its messages. */
-internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "$count ${if (count == 1) noun else plural}"
+/** "212 manga · 1 anime", leaving out a kind the backup does not follow; "series progress" when it follows none. */
+internal fun SeriesImportPreview.summary(): String =
+    listOfNotNull(countLabel(manga, "manga", "manga").takeIf { manga > 0 }, countLabel(anime, "anime", "anime").takeIf { anime > 0 })
+        .joinToString(" · ").ifEmpty { "series progress" }
+
+/** "1 profile", "2 profiles", "1,204 chapters": [count] with [noun] or [plural]; used by the restore previews and their messages. */
+internal fun countLabel(count: Int, noun: String, plural: String = "${noun}s") = "${NumberFormat.getIntegerInstance().format(count)} ${if (count == 1) noun else plural}"
 
 private fun Throwable.backupMessage(fallback: String): String =
     when (this) {

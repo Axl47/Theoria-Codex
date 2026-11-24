@@ -71,7 +71,24 @@ class ProfileBackupService(
     private suspend fun statisticsFor(includeRecents: Boolean): LifetimeStatistics? =
         if (includeRecents) statistics?.observeStatistics()?.first() else null
 
-    fun preview(bytes: ByteArray): ProfileBackupPreview = codec.decode(bytes).preview()
+    /** Tells the two kinds of backup apart by their bytes: Mihon-family backups are gzip, Theoria's are plain JSON. */
+    fun preview(bytes: ByteArray): BackupPreview =
+        if (isTachiyomiBackup(bytes)) BackupPreview.Series(decodeTachiyomiBackup(bytes, clock()).importPreview())
+        else BackupPreview.Profiles(codec.decode(bytes).preview())
+
+    /**
+     * Adds the series of a Mihon-family backup ([decodeTachiyomiBackup]) as a restore adds a backup's series: nothing
+     * on the device is removed, each entry keeps the further progress of the two sides, and importing twice adds
+     * nothing more. One Room transaction holds it all, so it needs no journal. Returns what was imported.
+     */
+    suspend fun importSeries(bytes: ByteArray): SeriesImportPreview = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            check(!journalFile.exists()) { "Finish the pending restore first" }
+            val series = decodeTachiyomiBackup(bytes, clock())
+            store.merge(BackupLibrary(emptyList(), emptyList(), emptyList(), emptyList(), series = series))
+            series.importPreview()
+        }
+    }
 
     suspend fun restore(
         bytes: ByteArray,

@@ -1,7 +1,6 @@
 package com.theoriacodex.extensionhost
 
 import android.content.pm.PackageInfo
-import com.theoriacodex.domain.series.ANIYOMI_SOURCE_ID_PREFIX
 import com.theoriacodex.domain.series.SeriesKind
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
@@ -21,7 +20,6 @@ object AniyomiKind : ExtensionKind {
     /** Extensions label themselves "Aniyomi: <name>". */
     override val labelPrefix = "Aniyomi: "
     override val seriesKind = SeriesKind.ANIME
-    override val sourceIdPrefix = ANIYOMI_SOURCE_ID_PREFIX
 
     /**
      * The interface version is the major part of the version name ("14.25" is 14), as Aniyomi reads it. One host

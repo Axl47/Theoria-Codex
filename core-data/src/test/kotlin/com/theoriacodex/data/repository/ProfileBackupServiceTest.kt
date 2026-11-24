@@ -395,7 +395,7 @@ class ProfileBackupServiceTest {
         assertTrue(exported.library.searches.isEmpty())
         assertTrue(exported.readingPositions.isEmpty())
         assertEquals(1, exported.savedSearches.size)
-        assertEquals(1, harness.service.preview(codec.encode(exported)).savedPostCount)
+        assertEquals(1, (harness.service.preview(codec.encode(exported)) as BackupPreview.Profiles).preview.savedPostCount)
     }
 
     private fun encodedTree(backup: ProfileBackup): JsonObject =
