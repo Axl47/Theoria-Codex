@@ -243,16 +243,14 @@ internal class ViewerFrame(
     /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
     val locked = uiState.controls.locked && watching && !inPictureInPicture
 
-    private val reading = uiState.series is ViewerSeries.Reading
+    /** Whether the current session is reading a chapter. */
+    val reading = uiState.series is ViewerSeries.Reading
 
     /**
      * Whether animated and video pages drop their portrait top gap: in landscape and in PiP, where it would frame the
      * media in black bars, and while reading a chapter. Still images always fill the page; see [ViewerMediaLayout].
      */
     val mediaEdgeToEdge = isLandscape || inPictureInPicture || reading
-
-    /** A running slideshow or an open chapter keeps the screen on. */
-    val keepsScreenAwake = uiState.controls.slideshow || reading
 
     /**
      * Whether the selected video may take the system's media controls and picture-in-picture: not while the Viewer
