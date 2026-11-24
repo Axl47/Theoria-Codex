@@ -176,10 +176,13 @@ internal fun ShellIncomingUriEffects(
     }
     LaunchedEffect(shell.navReady) {
         if (!shell.navReady) return@LaunchedEffect
-        // Always a new page: reusing the one on top would keep the series that page was opened for.
-        SeriesNotificationActivity.opened.filterNotNull().collect { id ->
+        // Always a new page: reusing the one on top would keep the series that page was opened for. An announced entry
+        // opens in the Viewer over it, so Back lands on the series.
+        SeriesNotificationActivity.opened.filterNotNull().collect { link ->
             SeriesNotificationActivity.opened.value = null
-            shell.navController.navigate(AppRoute.series(id))
+            shell.navController.navigate(AppRoute.series(link.series))
+            val session = link.entry?.let { shell.seriesReader?.session(link.series, it) } ?: return@collect
+            shell.launchViewer(session, saveContext = false, singleTop = true)
         }
     }
 }

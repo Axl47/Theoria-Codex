@@ -21,9 +21,11 @@ enum class EntryWords(
     val notDone: String,
     /** What the user does with an entry: "reading", "watching". */
     val doing: String,
+    /** The action that opens an entry: "Read", "Watch". */
+    val open: String,
 ) {
-    CHAPTERS("chapter", "chapters", "read", "unread", "reading"),
-    EPISODES("episode", "episodes", "watched", "unwatched", "watching"),
+    CHAPTERS("chapter", "chapters", "read", "unread", "reading", "Read"),
+    EPISODES("episode", "episodes", "watched", "unwatched", "watching", "Watch"),
     ;
 
     /** "1 chapter", "12 episodes". */

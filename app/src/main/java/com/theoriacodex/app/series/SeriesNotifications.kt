@@ -30,7 +30,7 @@ private const val SUMMARY_NOTIFICATION_ID = 2
 
 /**
  * Posts [update]'s local notification, and the group's summary once two series have one showing. Tapping it opens
- * that series' page. Without the notification permission nothing is posted; the new entries are stored either way.
+ * that series' page; when it announces one entry, its Read or Watch action opens that entry in the Viewer. Without the notification permission nothing is posted; the new entries are stored either way.
  * Both kinds share one channel, kept under its first id so the user's choices for it carry over.
  */
 internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
@@ -42,16 +42,21 @@ internal fun notifySeriesUpdate(context: Context, update: SeriesUpdate) {
         .setGroup(NEW_CHAPTERS_GROUP)
         .setAutoCancel(true)
     val tag = update.series.id.toString()
-    val open = Intent(Intent.ACTION_VIEW, seriesUri(update.series.id), context, SeriesNotificationActivity::class.java)
-    manager.notify(
-        tag,
-        SERIES_NOTIFICATION_ID,
-        notification()
-            .setContentTitle(update.series.title)
-            .setContentText(newEntriesText(update))
-            .setContentIntent(PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-            .build(),
+    fun opening(entry: String?) = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(Intent.ACTION_VIEW, seriesUri(update.series.id, entry), context, SeriesNotificationActivity::class.java),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+    val builder = notification()
+        .setContentTitle(update.series.title)
+        .setContentText(newEntriesText(update))
+        .setContentIntent(opening(entry = null))
+    update.newEntries.singleOrNull()?.let { entry ->
+        val action = update.series.id.source.seriesKind.words.open
+        builder.addAction(Notification.Action.Builder(null, action, opening(entry.address)).build())
+    }
+    manager.notify(tag, SERIES_NOTIFICATION_ID, builder.build())
     // Counted with this one by name: the system may not list a notification the moment it is posted.
     val showing = manager.activeNotifications.filter { it.id == SERIES_NOTIFICATION_ID }.mapTo(mutableSetOf(tag)) { it.tag }
     if (showing.size > 1) {
@@ -168,37 +173,42 @@ private fun downloadNotification(context: Context): Notification.Builder {
 }
 
 /**
- * Where a new-chapters or download notification lands: it names the series for the running app and brings the app
- * forward. It is not exported, so only this app's notifications reach it, and [opened] is the only way to a series from
- * outside the app's own screens: a link another app sends cannot name one.
+ * Where a new-chapters or download notification lands: it names the series (and maybe an entry) for the running app
+ * and brings the app forward. It is not exported, so only this app's notifications reach it, and [opened] is the only
+ * way to a series from outside the app's own screens: a link another app sends cannot name one.
  */
 class SeriesNotificationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        opened.value = intent.data?.let(::seriesIdOfUri)
+        opened.value = intent.data?.let(::seriesLinkOfUri)
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
 
     internal companion object {
-        /** The series a tapped notification named, until the app has opened its page. */
-        val opened = MutableStateFlow<SeriesId?>(null)
+        /** What a tapped notification named, until the app has opened it. */
+        val opened = MutableStateFlow<SeriesLink?>(null)
     }
 }
+
+/** What a notification opens: a series' page, and with an [entry] address that entry in the Viewer over it. */
+internal data class SeriesLink(val series: SeriesId, val entry: String? = null)
 
 /** The new entry's name, or how many there are, as chapters or episodes by the series' kind. */
 internal fun newEntriesText(update: SeriesUpdate): String =
     update.newEntries.singleOrNull()?.name ?: update.series.id.source.seriesKind.words.new(update.newEntries.size)
 
-/** The address a notification's intent carries to [SeriesNotificationActivity]; [seriesIdOfUri] reads it back. */
-internal fun seriesUri(id: SeriesId): Uri = Uri.Builder().scheme(SERIES_URI_SCHEME).authority(SERIES_URI_HOST)
-    .appendQueryParameter("source", id.source.id).appendQueryParameter("address", id.address).build()
+/** The address a notification's intent carries to [SeriesNotificationActivity]; [seriesLinkOfUri] reads it back. */
+internal fun seriesUri(id: SeriesId, entry: String? = null): Uri = Uri.Builder().scheme(SERIES_URI_SCHEME).authority(SERIES_URI_HOST)
+    .appendQueryParameter("source", id.source.id).appendQueryParameter("address", id.address)
+    .apply { entry?.let { appendQueryParameter("entry", it) } }
+    .build()
 
-/** The series a [seriesUri] names; null for any other address. */
-internal fun seriesIdOfUri(uri: Uri): SeriesId? {
+/** The series, and entry if any, a [seriesUri] names; null for any other address. */
+internal fun seriesLinkOfUri(uri: Uri): SeriesLink? {
     if (uri.scheme != SERIES_URI_SCHEME || uri.authority != SERIES_URI_HOST) return null
     val source = uri.getQueryParameter("source")?.let(SourceKey::parse) ?: return null
-    return SeriesId(source, uri.getQueryParameter("address") ?: return null)
+    return SeriesLink(SeriesId(source, uri.getQueryParameter("address") ?: return null), uri.getQueryParameter("entry"))
 }
 
 private const val SERIES_URI_SCHEME = "theoriacodex"

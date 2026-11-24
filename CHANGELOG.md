@@ -66,6 +66,7 @@
 - Subtitles come on by themselves, in your phone's language when the episode has it. Off stays off for the episodes that follow.
 - When a stream doesn't start, the next one is tried for you; when one stops partway because its link expired, a fresh link is fetched and playback picks up where it was. Retry fetches fresh links too.
 - New episodes of an anime you follow are checked and notified like new chapters.
+- A notification for one new chapter or episode has a Read or Watch button that opens it in the Viewer; tapping the notification still opens the series.
 - Switch source works for anime too, between anime sources, and keeps the episodes you've watched and where you stopped in each. An episode the old source didn't have stays unwatched.
 - Extensions that stream by torrent are listed but can't be turned on, and an anime its source splits into seasons says seasons aren't supported yet. Episodes can't be downloaded yet.
 - Following has Sort & filter: show All, Unread, Not started, In progress, Caught up or Completed series, and sort by Most unread, Last updated, Recently read, Recently added or Title. Your choice is kept, a dot on the button shows while a filter hides series, and No matches offers Show all.
