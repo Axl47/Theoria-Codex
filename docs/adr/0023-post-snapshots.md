@@ -20,3 +20,10 @@ Clearing a field requires an explicit replace, not a merge.
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/PortablePostSnapshot.kt`: `portablePostSnapshot`, `portableMediaUrl`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/PostMergePolicy.kt`: `mergeSparsePost`, `mergeTaxonomyTerm`, `mergeCreatorProfile`, `mergeStableBy`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/PortablePostSnapshotTest.kt`: `a portable URL is plain http or https with a host and no user, query or fragment (ADR 0023)`, `a portable snapshot carries no stream addresses (ADR 0023)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: `export strips device paths signed URLs and transient settings (ADR 0023)`, `canonical booru post links survive while arbitrary credential queries do not (ADR 0023)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/PostStorageRecordsTest.kt`: `merging a ref without a thumbnail keeps the stored one (ADR 0023)`, `merging a snapshot without a hash keeps the stored hash only for the same file (ADR 0023)`, `merging tags without counts or translations keeps the stored ones (ADR 0023)`, `merging creators without links keeps the stored links (ADR 0023)`, `stored video renditions survive a merge only while the full file's address is absent or unchanged (ADR 0023)`, `a creator from another source replaces the stored profile whole (ADR 0023)`, `a merge lists incoming entries first, then stored entries the snapshot lacks (ADR 0023)`
+- Left to prose: credentials carried in a URL path are knowingly not detected; clearing a field by explicit replace is a rule for callers.

@@ -24,3 +24,11 @@ A new rule belongs in the shared policy, not in a backing. A new backing must pa
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileListPolicy.kt`: `SiteProfileListPolicy`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SiteProfileRepository.kt`: `CellSiteProfileRepository`
 - `core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/LibraryRepositoryContract.kt`: `LibraryRepositoryContract`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/StateCellTest.kt`: `an unchanged value is not written (ADR 0035)`, `a failed or cancelled write keeps the value and preserves the failure (ADR 0035)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `concurrent settings mutations are serialized without lost profile state (ADR 0035)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/SiteProfileRecordsTest.kt`: `in-memory repository enforces identity, the site limit and restore semantics (ADR 0035)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreSiteProfileRepositoryTest.kt`: `mutations follow the shared list rules (ADR 0035)`
+- Left to prose: the fakes stay in step with Room because `InMemoryLibraryContractTest` and `RoomLibraryContractTest` both extend `LibraryRepositoryContract`, a test-class declaration no guard line can pin; that a new backing passes the contract and a new rule goes in the shared policy are rules for authors.

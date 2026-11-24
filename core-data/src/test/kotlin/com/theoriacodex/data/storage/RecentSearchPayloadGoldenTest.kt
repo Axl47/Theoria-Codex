@@ -20,12 +20,12 @@ class RecentSearchPayloadGoldenTest {
     }
 
     @Test
-    fun `a Gson-written For You row reads as Unified and keeps its tags by source`() {
+    fun `a Gson-written For You row reads as Unified and keeps its tags by source (ADR 0038)`() {
         assertEquals(fyp, RecentSearchPayloadCodec.decodeJson(golden("fyp.json")))
     }
 
     @Test
-    fun `a bare Query row infers its source metadata`() {
+    fun `a bare Query row infers its source metadata (ADR 0038)`() {
         val query = Query(
             mode = QueryMode.Source(SourceKey.PIXIV),
             includeTags = listOf("a & b"),

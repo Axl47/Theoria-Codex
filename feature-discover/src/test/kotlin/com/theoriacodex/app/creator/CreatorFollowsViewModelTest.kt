@@ -5,8 +5,10 @@ import com.theoriacodex.app.search.TestAdapter
 import com.theoriacodex.app.search.TestRegistry
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.undo.UndoSlot
+import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
+import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -64,7 +66,36 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `undoing an unfollow restores the same record in its place`() = runTest {
+    @Test fun `a refresh of 60 follows records each batch of 25 checks before checking the next (ADR 0019)`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            repeat(60) { repository.follow(CreatorProfile(SourceKey.PIXIV, "C$it", "$it", uploadsQuery = "user:$it"), emptyList()) }
+            val events = mutableListOf<String>()
+            val counting = object : SettingsRepository by settings {
+                override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
+                    events += "write"
+                    settings.updateSettings(transform)
+                }
+            }
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    events += "check"
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(counting, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf(25, 25, 10).flatMap { List(it) { "check" } + "write" }, events)
+            assertTrue(repository.observe().first().all { it.checkedAtEpochMs != null })
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `undoing an unfollow restores the same record in its place (ADR 0019)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -92,7 +123,7 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `leaving the app cancels the automatic check but not one the user started`() = runTest {
+    @Test fun `leaving the app cancels the automatic check but not one the user started (ADR 0019)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -120,7 +151,7 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `cancelling the automatic check keeps previous durable results and leaves it due`() = runTest {
+    @Test fun `cancelling the automatic check keeps previous durable results and leaves it due (ADR 0019)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -147,7 +178,7 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `app-open checks wait out the interval even after a failure`() = runTest {
+    @Test fun `app-open checks wait out the interval even after a failure (ADR 0019)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -206,7 +237,7 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `a manual refresh during the automatic check also checks the follows it skipped`() = runTest {
+    @Test fun `a manual refresh during the automatic check also checks the follows it skipped (ADR 0019)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {

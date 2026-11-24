@@ -110,7 +110,7 @@ class AppUsageTrackerTest {
     }
 
     @Test
-    fun `foreground timing uses mutually exclusive categories and ignores duplicate lifecycle events`() = runTest {
+    fun `foreground timing uses mutually exclusive categories and ignores duplicate lifecycle events (ADR 0030)`() = runTest {
         var elapsedMs = 0L
         val repository = InMemoryStatisticsRepository()
         val tracker = AppUsageTracker(
@@ -159,7 +159,7 @@ class AppUsageTrackerTest {
     }
 
     @Test
-    fun `returning from background records one new open and uncategorized time remains total only`() = runTest {
+    fun `returning from background records one new open and uncategorized time remains total only (ADR 0030)`() = runTest {
         var elapsedMs = 10L
         val repository = InMemoryStatisticsRepository()
         val tracker = AppUsageTracker(repository, this, { elapsedMs }, tickIntervalMs = 0L)
@@ -186,7 +186,7 @@ class AppUsageTrackerTest {
     }
 
     @Test
-    fun `route categories map home tabs and secondary destinations without overlap`() {
+    fun `route categories map home tabs and secondary destinations without overlap (ADR 0030)`() {
         val codices = LibrarySection.Codices
         assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "search", codices))
         assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("home", "for_you", codices))

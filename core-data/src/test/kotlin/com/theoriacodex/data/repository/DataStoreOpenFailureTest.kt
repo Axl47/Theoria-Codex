@@ -44,7 +44,7 @@ class DataStoreOpenFailureTest {
     )
 
     @Test
-    fun `a store a newer build wrote fails to open, keeps its file, and opens on retry once readable`() {
+    fun `a store a newer build wrote fails to open, keeps its file, and opens on retry once readable (ADR 0032)`() {
         stores.forEach { (fileName, open) ->
             val directory = tempFolder.newFolder()
             val file = directory.resolve(fileName).apply { writeText("""{"schemaVersion":99}""") }
@@ -58,7 +58,7 @@ class DataStoreOpenFailureTest {
     }
 
     @Test
-    fun `a store whose unreadable file cannot be set aside fails to open and keeps its file`() {
+    fun `a store whose unreadable file cannot be set aside fails to open and keeps its file (ADR 0032)`() {
         stores.forEach { (fileName, open) ->
             val directory = tempFolder.newFolder()
             val broken = "{broken".encodeToByteArray()
@@ -73,7 +73,7 @@ class DataStoreOpenFailureTest {
     }
 
     @Test
-    fun `a set-aside file that no longer matches its name is left unlisted and its store still opens`() {
+    fun `a set-aside file that no longer matches its name is left unlisted and its store still opens (ADR 0032)`() {
         stores.forEach { (fileName, open) ->
             val directory = tempFolder.newFolder()
             val named = "{set aside".encodeToByteArray()

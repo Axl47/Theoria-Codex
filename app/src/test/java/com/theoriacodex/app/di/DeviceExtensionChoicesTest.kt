@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
 class DeviceExtensionChoicesTest {
     @get:Rule val folder = TemporaryFolder()
 
-    @Test fun `nothing is on until it is turned on here and choices are kept in the device file`() = runTest {
+    @Test fun `nothing is on until it is turned on here and choices are kept in the device file (ADR 0189)`() = runTest {
         val file = File(folder.root, "extension_choices.json")
         val choices = DeviceExtensionChoices(file)
         assertEquals(ExtensionChoices(), choices.choices())

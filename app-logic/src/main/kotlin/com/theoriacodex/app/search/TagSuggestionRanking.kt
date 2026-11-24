@@ -114,8 +114,8 @@ fun rankSearchedTags(
             token.matchQuality(normalizedPrefix)?.let { quality -> SearchedTag(key.term, token, quality, count) }
         }
         .groupBy { searched -> searched.term.tagType to searched.token }
-        .map { (_, spellings) -> spellings.maxBy(SearchedTag::count) }
-        .sortedWith(compareBy(SearchedTag::quality).thenByDescending(SearchedTag::count).thenBy(SearchedTag::token))
+        .map { (_, spellings) -> spellings.minWith(compareByDescending(SearchedTag::count).then(SEARCHED_TERM_ORDER)) }
+        .sortedWith(compareBy(SearchedTag::quality).thenByDescending(SearchedTag::count).thenBy(SearchedTag::token).then(SEARCHED_TERM_ORDER))
         .take(limit)
         .map(SearchedTag::term)
 }
@@ -151,6 +151,12 @@ private data class RankedSuggestion<T>(
     val quality: MatchQuality,
     val originalIndex: Int,
 )
+
+private val SEARCHED_TERM_ORDER: Comparator<SearchedTag> =
+    compareBy<SearchedTag> { it.term.value != it.term.value.lowercase() }
+        .thenBy { it.term.value }
+        .thenBy { it.term.facet }
+        .thenBy(nullsFirst()) { it.term.sourceNamespace }
 
 private data class SearchedTag(
     val term: SearchTerm,
