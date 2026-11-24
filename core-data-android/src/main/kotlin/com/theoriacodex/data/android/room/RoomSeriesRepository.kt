@@ -36,7 +36,18 @@ class RoomSeriesRepository(
     private val dao = database.seriesDao()
 
     override fun observeFollowed(): Flow<List<FollowedSeries>> = dao.observeFollowed()
-        .map { rows -> rows.map { row -> FollowedSeries(row.series.toStored().series, row.unreadCount) } }
+        .map { rows ->
+            rows.map { row ->
+                FollowedSeries(
+                    series = row.series.toStored().series,
+                    unreadCount = row.unreadCount,
+                    followedAtEpochMs = row.series.followedAtEpochMs,
+                    lastReadAtEpochMs = row.lastReadAtEpochMs,
+                    lastUpdatedAtEpochMs = row.lastUpdatedAtEpochMs,
+                    started = row.started,
+                )
+            }
+        }
         .distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = dao.observeSeries(id.source.id, id.address)
@@ -100,7 +111,9 @@ class RoomSeriesRepository(
         return if (stored.lastCheckedAtEpochMs == null) emptyList() else newEntries
     }
 
-    override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) { it.copy(followed = followed) }
+    override suspend fun setFollowed(id: SeriesId, followed: Boolean) = update(id) {
+        if (it.followed == followed) it else it.copy(followed = followed, followedAtEpochMs = if (followed) clock() else null)
+    }
 
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = update(id) { it.copy(readingMode = mode) }
 
@@ -166,10 +179,12 @@ class RoomSeriesRepository(
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
             val series = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction
-            // Unchanged rows are not written, so observers are not woken on every page of a chapter already recorded.
-            if (series.lastOpenedEntry != entryAddress) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
+            // Unchanged rows are not written, so observers are not woken by a chapter reopened where it was left. The entry
+            // takes the read time whenever it is written: when it is opened, or its place moves.
+            val opened = series.lastOpenedEntry != entryAddress
+            if (opened) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
             val progressed = if (length == null || length <= 0) entry else entry.withProgress(position, length, id.source.seriesKind)
-            if (progressed != entry) dao.upsertEntries(listOf(progressed.toEntity(id)))
+            if (opened || progressed != entry) dao.upsertEntries(listOf(progressed.copy(lastReadAtEpochMs = clock()).toEntity(id)))
         }
     }
 
@@ -241,6 +256,7 @@ internal fun SeriesEntity.toStored() = StoredSeries(
     lastCheckedAtEpochMs = lastCheckedAtEpochMs,
     downloadNewChapters = downloadNew,
     chaptersShareFirstPage = chaptersShareFirstPage,
+    followedAtEpochMs = followedAtEpochMs,
 )
 
 internal fun StoredSeries.toEntity() = SeriesEntity(
@@ -259,6 +275,7 @@ internal fun StoredSeries.toEntity() = SeriesEntity(
     series.status.takeUnless { it == SeriesStatus.UNKNOWN }?.name,
     downloadNewChapters,
     chaptersShareFirstPage,
+    followedAtEpochMs,
 )
 
 /**
@@ -277,6 +294,7 @@ internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     read = read,
     position = lastPage,
     length = pageCount,
+    lastReadAtEpochMs = lastReadAtEpochMs,
 )
 
 internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
@@ -292,4 +310,5 @@ internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     read,
     position,
     length,
+    lastReadAtEpochMs,
 )

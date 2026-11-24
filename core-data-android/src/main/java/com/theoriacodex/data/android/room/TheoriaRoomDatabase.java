@@ -31,7 +31,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 18,
+        version = 19,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -205,6 +205,19 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
+    // When a series was followed and each entry last read, for the Following sorts. A series followed before has no
+    // follow time; the earliest time any of its entries was first seen, when it was first stored, stands in. Read times
+    // were never kept, so they start empty.
+    public static final Migration MIGRATION_18_19 = new Migration(18, 19) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series` ADD COLUMN `followed_at_epoch_ms` INTEGER");
+            database.execSQL("ALTER TABLE `series_entries` ADD COLUMN `last_read_at_epoch_ms` INTEGER");
+            database.execSQL("UPDATE `series` SET `followed_at_epoch_ms` = (SELECT MIN(`first_seen_at_epoch_ms`) FROM `series_entries` "
+                    + "WHERE `series_entries`.`source` = `series`.`source` AND `series_entries`.`series_address` = `series`.`address`) "
+                    + "WHERE `followed` = 1");
+        }
+    };
+
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -222,7 +235,8 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_14_15,
             MIGRATION_15_16,
             MIGRATION_16_17,
-            MIGRATION_17_18
+            MIGRATION_17_18,
+            MIGRATION_18_19
     };
 
     public abstract CodexLikesDao codexLikesDao();

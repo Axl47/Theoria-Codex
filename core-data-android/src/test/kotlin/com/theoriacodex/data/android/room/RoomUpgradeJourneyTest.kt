@@ -46,4 +46,28 @@ class RoomUpgradeJourneyTest {
             }
         }
     }
+
+    @Test fun `a series followed before follow times takes its first stored time, and nothing is read yet`() {
+        val name = "series-following.db"
+        helper.createDatabase(name, 18).use {
+            it.execSQL("INSERT INTO series (source, address, title, genres, language, followed) VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1)")
+            it.execSQL("INSERT INTO series (source, address, title, genres, language, followed) VALUES ('custom_mihon_7', '/b', 'B', '', 'en', 0)")
+            for ((address, seen) in listOf("/a/1" to 30L, "/a/2" to 10L)) {
+                it.execSQL(
+                    "INSERT INTO series_entries (source, series_address, address, name, source_order, first_seen_at_epoch_ms, read, last_page) " +
+                        "VALUES ('custom_mihon_7', '/a', '$address', 'Chapter', 0, $seen, 0, 0)",
+                )
+            }
+        }
+        helper.runMigrationsAndValidate(name, 19, true, TheoriaRoomDatabase.MIGRATION_18_19).use { database ->
+            database.query("SELECT address, followed_at_epoch_ms FROM series ORDER BY address").use {
+                val rows = buildList { while (it.moveToNext()) add(it.getString(0) to it.getString(1)) }
+                assertEquals(listOf("/a" to "10", "/b" to null), rows)
+            }
+            database.query("SELECT COUNT(*) FROM series_entries WHERE last_read_at_epoch_ms IS NULL").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(2, it.getInt(0))
+            }
+        }
+    }
 }

@@ -39,12 +39,16 @@ internal class SeriesLiveDriver {
         assumeTrue("The live Series tests require $OPT_IN=true", enabled)
     }
 
-    /** Launches the app afresh on the Series tab, which also proves the tab is in the bar, and waits for [shown]. */
-    fun openSeriesTab(shown: BySelector = By.text("Browse")) {
+    /**
+     * Launches the app afresh on the Series tab, which also proves the tab is in the bar, switches to [view] unless it is
+     * null (the tab opens on Following when anything is followed), and waits for [shown].
+     */
+    fun openSeriesTab(shown: BySelector = By.text(BROWSE), view: String? = BROWSE) {
         // A task of its own, cleared: the app opens on its first screen. The shell can start another package's activity.
         val flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         device.executeShellCommand("am start -W -n $targetPackage/$MAIN_ACTIVITY -f $flags")
         tap("the Series tab", By.desc(TopLevelDestination.Series.label), LAUNCH_TIMEOUT_MS)
+        if (view != null) tap("the $view view", By.text(view), RESULTS_TIMEOUT_MS)
         waitFor("the Series tab's content", shown, RESULTS_TIMEOUT_MS)
     }
 
@@ -93,6 +97,8 @@ internal class SeriesLiveDriver {
 
     companion object {
         const val OPT_IN = "extensionSourceLive"
+        const val BROWSE = "Browse"
+        const val FOLLOWING = "Following"
         const val TARGET_PACKAGE = "targetPackage"
         private const val MAIN_ACTIVITY = "com.theoriacodex.app.MainActivity"
         const val CONTROLS_WAIT_MS = 2_500L

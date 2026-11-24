@@ -194,8 +194,8 @@ class ExtensionSourceLiveTest {
         val signer = checkNotNull(extension.signer)
         runBlocking { series.extensions.setOn(extension.id, signer, false) }
         try {
-            live.openSeriesTab(By.text("Following"))
-            live.tap("the followed series on the shelf", By.text(followed.series.title))
+            live.openSeriesTab(view = SeriesLiveDriver.FOLLOWING)
+            live.tap("the followed series in Following", By.text(followed.series.title))
             live.waitFor("the page saying its extension cannot be used", By.text("Extension unavailable"))
             live.waitFor("the button to the Extensions page", By.text("Extensions"))
             live.waitFor("the stored chapter list", By.text(CHAPTER_COUNT))
@@ -255,11 +255,10 @@ class ExtensionSourceLiveTest {
         val followed = runBlocking { series.repository.observeFollowed().first() }
         assertTrue("A series was followed before the restart", followed.isNotEmpty())
 
-        live.openSeriesTab()
-        live.waitFor("the Following shelf", By.text("Following"))
+        live.openSeriesTab(view = SeriesLiveDriver.FOLLOWING)
         val shelved = followed.first()
-        live.waitFor("the followed series on the shelf", By.text(shelved.series.title))
-        live.report("shelf", "\"${shelved.series.title}\" is on the shelf, unread=${shelved.unreadCount}")
+        live.waitFor("the followed series in Following", By.text(shelved.series.title))
+        live.report("shelf", "\"${shelved.series.title}\" is in Following, unread=${shelved.unreadCount}")
     }
 
     /**
@@ -322,8 +321,8 @@ class ExtensionSourceLiveTest {
         val followed = runBlocking { series.repository.observeFollowed().first() }
         assertTrue("Exactly one series is followed", followed.size == 1)
         live.report("job", "before: scheduled every ${awaitCheckJob(scheduled = true)?.intervalMillis?.milliseconds}")
-        live.openSeriesTab()
-        live.tap("the followed series on the shelf", By.text(followed.single().series.title))
+        live.openSeriesTab(view = SeriesLiveDriver.FOLLOWING)
+        live.tap("the followed series in Following", By.text(followed.single().series.title))
         live.tap("Following, to unfollow", By.text("Following"))
         live.waitFor("the series to read as not followed", By.text("Follow"))
         awaitCheckJob(scheduled = false)

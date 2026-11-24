@@ -22,7 +22,7 @@ class TachiyomiBackupTest {
     fun `manga keep their source, follow and progress, in Theoria's units`() {
         val series = decodeTachiyomiBackup(backup {
             message(1) {
-                long(1, 42); string(2, "/series/a"); string(3, "A"); string(5, "Author"); string(7, "Action"); long(8, 1)
+                long(1, 42); string(2, "/series/a"); string(3, "A"); string(5, "Author"); string(7, "Action"); long(8, 1); long(13, 300)
                 message(16) { string(1, "/a/2"); string(2, "Chapter 2"); long(6, 4); long(7, 500); float(9, 2f); long(10, 0) }
                 message(16) { string(1, "/a/1"); string(2, "Chapter 1"); bool(4, true); long(8, 100); float(9, 1f); long(10, 1) }
                 message(104) { string(1, "/a/2"); long(2, 900) }
@@ -36,6 +36,8 @@ class TachiyomiBackupTest {
         assertTrue("Mihon writes no favorite flag for a series in the library", a.series.followed)
         assertEquals(SeriesStatus.ONGOING, a.series.series.status)
         assertEquals("/a/2", a.series.lastOpenedEntry)
+        assertEquals(300L, a.series.followedAtEpochMs)
+        assertEquals(listOf(900L, 800L), a.entries.map { it.lastReadAtEpochMs })
         val (second, first) = a.entries
         assertEquals(5L, second.position) // Mihon's page index 4 is page 5.
         assertFalse(second.read)

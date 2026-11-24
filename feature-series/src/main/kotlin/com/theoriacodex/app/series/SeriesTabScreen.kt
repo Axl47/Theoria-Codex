@@ -1,7 +1,9 @@
 package com.theoriacodex.app.series
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,19 +11,19 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
@@ -29,16 +31,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,12 +50,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
@@ -63,7 +61,7 @@ import com.theoriacodex.app.ui.components.CollapsingSearchChrome
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
-import com.theoriacodex.app.ui.components.rememberQuickReturn
+import com.theoriacodex.app.ui.components.SearchBarMinHeight
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
@@ -71,11 +69,11 @@ import com.theoriacodex.domain.series.SeriesKind
 import java.util.Locale
 
 /**
- * The Series tab: a collapsing search across every source, the followed series, and one source's popular or latest
- * series (or filtered search) to browse. A search across sources replaces the shelf and browse grid with one section
- * per source; tapping a source's header opens its dedicated search. Pulling down checks followed series for updates.
- * With series of both kinds, an All / Manga / Anime filter at the top narrows the shelf, the sources to browse and the
- * search results to one kind.
+ * The Series tab, in two views: Following, the followed series to sort and filter, and Browse, one source's popular
+ * or latest series (or filtered search). The collapsing search filters Following by title as it is typed, and on
+ * Browse searches every source, replacing the listing with one section per source; tapping a source's header opens
+ * its dedicated search. With series of both kinds, an All / Manga / Anime filter narrows Following and the search
+ * results to one kind.
  */
 @Composable
 fun SeriesTabScreen(
@@ -87,19 +85,17 @@ fun SeriesTabScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
-    val followedIds = remember(content.followed) { content.followed.mapTo(HashSet()) { it.series.id } }
     val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
     // Hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
     var query by rememberSaveable { mutableStateOf(state.searchQuery) }
     LaunchedEffect(state.searchQuery) { query = state.searchQuery }
-    val grid = rememberLazyGridState()
-    val searchList = rememberLazyListState()
+    val grids = SeriesGrids(rememberLazyGridState(), rememberLazyGridState(), rememberLazyListState())
     val dedicated = state.dedicated
 
     if (dedicated != null) {
         DedicatedSourceSearchView(
             dedicated = dedicated,
-            followedIds = followedIds,
+            followedIds = content.followedIds,
             supportsLatest = state.sources?.firstOrNull { it.key == dedicated.source.key }?.supportsLatest == true,
             oldSearchBar = oldSearchBar,
             onBack = viewModel::closeDedicatedSearch,
@@ -115,11 +111,9 @@ fun SeriesTabScreen(
         SeriesTabHomeContent(
             state = state,
             content = content,
-            followedIds = followedIds,
             query = query,
             onQueryChange = { query = it },
-            grid = grid,
-            searchList = searchList,
+            grids = grids,
             viewModel = viewModel,
             oldSearchBar = oldSearchBar,
             onOpenSeries = open,
@@ -135,15 +129,16 @@ fun SeriesTabScreen(
     }
 }
 
+/** The scroll positions the tab keeps for each view, and for search results across sources. */
+private class SeriesGrids(val following: LazyGridState, val browse: LazyGridState, val search: LazyListState)
+
 @Composable
 private fun SeriesTabHomeContent(
     state: SeriesTabState,
     content: SeriesTabContent,
-    followedIds: Set<SeriesId>,
     query: String,
     onQueryChange: (String) -> Unit,
-    grid: LazyGridState,
-    searchList: LazyListState,
+    grids: SeriesGrids,
     viewModel: SeriesTabViewModel,
     oldSearchBar: Boolean,
     onOpenSeries: (Series) -> Unit,
@@ -152,28 +147,22 @@ private fun SeriesTabHomeContent(
 ) {
     var searchBarDismissed by rememberSaveable { mutableStateOf(false) }
     var focusRequest by remember { mutableIntStateOf(0) }
-    var browseControlsVisible by remember { mutableStateOf(true) }
-    val clearSearch = {
-        onQueryChange("")
-        searchBarDismissed = false
-        viewModel.clearSearch()
-    }
+    val search = searchBinding(state, content, query, onQueryChange, viewModel) { searchBarDismissed = false }
     val extensionsButton: @Composable () -> Unit = {
         IconButton(onClick = onOpenExtensions) { Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE) }
     }
+    val scrollable = grids.shown(content.view, state.search != null)
 
-    LaunchedEffect(state.browse?.key, state.browseKind) { browseControlsVisible = true }
-    SeriesScrollChromeEffect(
-        scrollable = if (state.search != null) searchList else grid,
-        onScrollStarted = { searchBarDismissed = true },
-        onAtTop = { browseControlsVisible = true },
-    )
+    SeriesScrollChromeEffect(scrollable = scrollable, onScrollStarted = { searchBarDismissed = true }, onAtTop = {})
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
+        when (scrollable) {
+            is LazyGridState -> scrollable.animateScrollToItem(0)
+            is LazyListState -> scrollable.animateScrollToItem(0)
+        }
+        // After the scroll, which collapses the bar as any scroll does.
         searchBarDismissed = false
-        browseControlsVisible = true
-        if (state.search != null) searchList.animateScrollToItem(0) else grid.animateScrollToItem(0)
     }
-    BackHandler(enabled = state.search != null, onBack = clearSearch)
+    BackHandler(enabled = search.searching, onBack = search.onClear)
 
     CollapsingSearchChrome(
         expanded = !searchBarDismissed,
@@ -188,96 +177,150 @@ private fun SeriesTabHomeContent(
         modifier = modifier.fillMaxSize().padding(top = if (oldSearchBar) 6.dp else 0.dp),
         inputField = {
             SeriesSearchBar(
-                query = query,
-                placeholder = "Search all sources",
-                searching = state.search != null,
+                query = search.query,
+                placeholder = search.placeholder,
+                searching = search.searching,
                 focusRequest = focusRequest,
-                onQueryChange = onQueryChange,
-                onSearch = viewModel::search,
-                onClear = clearSearch,
+                onQueryChange = search.onQueryChange,
+                onSearch = search.onSearch,
+                onClear = search.onClear,
                 trailing = { if (oldSearchBar) extensionsButton() },
             )
         },
     ) {
-        SeriesTabBody(state, content, followedIds, grid, searchList, browseControlsVisible, { browseControlsVisible = it }, viewModel, onOpenSeries, onOpenExtensions)
+        SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
+        SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions)
     }
 }
 
-@Composable
-private fun SeriesTabBody(
+/** What the search bar holds and does in the view on screen. */
+private class SearchBinding(
+    val query: String,
+    val placeholder: String,
+    val searching: Boolean,
+    val onQueryChange: (String) -> Unit,
+    val onSearch: (String) -> Unit,
+    val onClear: () -> Unit,
+)
+
+/**
+ * On Following the bar narrows the grid by title as it is typed; on Browse it holds [query] until sent, then searches
+ * every source. Clearing either also runs [onCleared].
+ */
+private fun searchBinding(
     state: SeriesTabState,
     content: SeriesTabContent,
-    followedIds: Set<SeriesId>,
-    grid: LazyGridState,
-    searchList: LazyListState,
-    controlsVisible: Boolean,
-    onRevealControls: (Boolean) -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    viewModel: SeriesTabViewModel,
+    onCleared: () -> Unit,
+): SearchBinding = when (content.view) {
+    SeriesView.FOLLOWING -> SearchBinding(
+        query = content.followingQuery,
+        placeholder = "Search following",
+        searching = content.followingQuery.isNotEmpty(),
+        onQueryChange = viewModel::filterFollowing,
+        onSearch = {},
+        onClear = {
+            viewModel.filterFollowing("")
+            onCleared()
+        },
+    )
+    SeriesView.BROWSE -> SearchBinding(
+        query = query,
+        placeholder = SEARCH_ALL_SOURCES,
+        searching = state.search != null,
+        onQueryChange = onQueryChange,
+        onSearch = viewModel::search,
+        onClear = {
+            onQueryChange("")
+            viewModel.clearSearch()
+            onCleared()
+        },
+    )
+}
+
+/** The scrolling list on screen: [view]'s grid, or on Browse the results of a search across sources while one shows. */
+private fun SeriesGrids.shown(view: SeriesView, searching: Boolean): ScrollableState = when {
+    view == SeriesView.FOLLOWING -> following
+    searching -> search
+    else -> browse
+}
+
+@Composable
+private fun SeriesTabViewBody(
+    state: SeriesTabState,
+    content: SeriesTabContent,
+    grids: SeriesGrids,
     viewModel: SeriesTabViewModel,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
 ) {
     val search = content.search
-    if (search != null) {
-        GlobalSearchBody(
+    when {
+        content.view == SeriesView.FOLLOWING -> FollowingBody(
+            content = content,
+            refreshing = state.refreshing,
+            grid = grids.following,
+            onRefresh = viewModel::refresh,
+            onChooseKind = viewModel::chooseKind,
+            onChooseLibrary = viewModel::chooseLibrary,
+            onShowAll = viewModel::showAllFollowing,
+            onSearchAll = viewModel::searchAllSources,
+            onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
+            onOpenSeries = onOpenSeries,
+        )
+        search != null -> GlobalSearchBody(
             sourcesLoaded = state.sources != null,
             results = search,
             content = content,
             onChooseKind = viewModel::chooseKind,
-            followedIds = followedIds,
-            listState = searchList,
+            listState = grids.search,
             onOpenSeries = onOpenSeries,
             onOpenSource = viewModel::openDedicatedSearch,
             onRetry = viewModel::retrySearch,
             onMore = viewModel::searchMore,
         )
-    } else {
-        BrowseTabBody(state, content, followedIds, grid, controlsVisible, rememberQuickReturn(onRevealControls), viewModel, onOpenSeries, onOpenExtensions)
+        else -> BrowseBody(
+            state = state,
+            content = content,
+            grid = grids.browse,
+            supportsLatest = state.sources?.firstOrNull { it.key == content.browse?.key }?.supportsLatest == true,
+            onBrowse = viewModel::browse,
+            onChoose = viewModel::choose,
+            onFilter = viewModel::openFilters,
+            onRetry = viewModel::retryBrowse,
+            onMore = viewModel::browseMore,
+            onOpenSeries = onOpenSeries,
+            onOpenExtensions = onOpenExtensions,
+        )
     }
 }
 
+/**
+ * Following or Browse. Beside the collapsed search corner it stops short of it, so the two share the top line; under
+ * the open search bar it takes the full width.
+ */
 @Composable
-private fun BrowseTabBody(
-    state: SeriesTabState,
-    content: SeriesTabContent,
-    followedIds: Set<SeriesId>,
-    grid: LazyGridState,
-    controlsVisible: Boolean,
-    quickReturn: NestedScrollConnection,
-    viewModel: SeriesTabViewModel,
-    onOpenSeries: (Series) -> Unit,
-    onOpenExtensions: () -> Unit,
-) {
-    val browsed = content.browse
-    val supportsLatest = state.sources?.firstOrNull { it.key == browsed?.key }?.supportsLatest == true
-    PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().nestedScroll(quickReturn)) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(CARD_WIDTH),
-                state = grid,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 8.dp,
-                    bottom = if (browsed != null) BROWSE_GRID_BOTTOM_PADDING else 16.dp,
-                ),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (content.offersFilter) fullWidth("kinds") { KindFilter(content.filter, viewModel::chooseKind) }
-                followingShelf(content, onOpenSeries)
-                browse(state, content, followedIds, viewModel, onOpenSeries, onOpenExtensions)
-            }
-            if (browsed != null) {
-                BrowseControlsBar(
-                    kind = state.browseKind,
-                    latest = supportsLatest,
-                    visible = controlsVisible,
-                    onChoose = viewModel::choose,
-                    onFilter = viewModel::openFilters,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp),
-                )
-            }
+private fun SeriesViewSwitch(view: SeriesView, besideCollapsedSearch: Boolean, onChoose: (SeriesView) -> Unit) {
+    val end by animateDpAsState(if (besideCollapsedSearch) COLLAPSED_SEARCH_CLEARANCE else 16.dp, label = "Series view switch end")
+    SingleChoiceSegmentedButtonRow(
+        Modifier
+            .fillMaxWidth()
+            // Beside the collapsed search corner it shares that line's height; under the open bar it keeps its own.
+            .heightIn(min = if (besideCollapsedSearch) SearchBarMinHeight else 0.dp)
+            .padding(start = 16.dp, end = end)
+            .wrapContentHeight(Alignment.CenterVertically),
+    ) {
+        SeriesView.entries.forEachIndexed { index, entry ->
+            SegmentedButton(
+                selected = entry == view,
+                onClick = { onChoose(entry) },
+                shape = SegmentedButtonDefaults.itemShape(index, SeriesView.entries.size),
+                modifier = Modifier.testTag(seriesViewTag(entry)),
+                // No checkmark, so segments keep their width when the selection changes.
+                icon = {},
+            ) { Text(entry.label, maxLines = 1) }
         }
     }
 }
@@ -288,7 +331,6 @@ private fun GlobalSearchBody(
     results: List<SeriesSourceListing>,
     content: SeriesTabContent,
     onChooseKind: (SeriesKind?) -> Unit,
-    followedIds: Set<SeriesId>,
     listState: LazyListState,
     onOpenSeries: (Series) -> Unit,
     onOpenSource: (SourceKey) -> Unit,
@@ -305,88 +347,21 @@ private fun GlobalSearchBody(
         if (!sourcesLoaded) {
             item(key = "search-waiting") { LoadingState() }
         } else {
-            searchResults(results, content, followedIds, onOpenSeries, onOpenSource, onRetry, onMore)
+            searchResults(results, content, onOpenSeries, onOpenSource, onRetry, onMore)
         }
     }
 }
 
-/** All, Manga or Anime: what the shelf, the sources to browse and the search results are narrowed to. */
+/** All, Manga or Anime: what the Following grid and the search results are narrowed to. */
 @Composable
-private fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, modifier: Modifier = Modifier) {
+internal fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChoiceChip("All", selected = chosen == null) { onChoose(null) }
         SeriesKind.entries.forEach { kind -> FilterChoiceChip(kind.label, selected = chosen == kind) { onChoose(kind) } }
     }
 }
 
-private fun LazyGridScope.followingShelf(content: SeriesTabContent, open: (Series) -> Unit) {
-    val followed = content.followed
-    if (followed.isEmpty()) return
-    fullWidth("following-title") { SectionTitle("Following") }
-    fullWidth("following") {
-        SeriesRow(
-            items = followed,
-            key = { it.series.id.toString() },
-            modifier = Modifier.bleedHorizontal(16.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-        ) { item ->
-            SeriesCard(item.series, { open(item.series) }, Modifier.width(CARD_WIDTH), item.unreadCount, marked = content.marked)
-        }
-    }
-}
-
-/** [state]'s sources label the chips, so two sources sharing a name stay told apart under any filter. */
-private fun LazyGridScope.browse(
-    state: SeriesTabState,
-    content: SeriesTabContent,
-    followedIds: Set<SeriesId>,
-    viewModel: SeriesTabViewModel,
-    open: (Series) -> Unit,
-    onOpenExtensions: () -> Unit,
-) {
-    val sources = content.sources
-    when {
-        sources == null -> fullWidth("sources-loading") { LoadingState() }
-        sources.isEmpty() -> fullWidth("sources-empty") {
-            EmptyState(noExtensionsOn(content.filter), actionLabel = EXTENSIONS_TITLE, onAction = onOpenExtensions)
-        }
-        else -> {
-            fullWidth("browse-title") { SectionTitle("Browse") }
-            fullWidth("browse-sources") {
-                LazyRow(
-                    modifier = Modifier.bleedHorizontal(16.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(sources, key = { it.key.id }) { source ->
-                        SourceChip(source.label(state.sources.orEmpty()), selected = source.key == content.browse?.key, marked = content.marked && source.kind == SeriesKind.ANIME) {
-                            viewModel.browse(source.key)
-                        }
-                    }
-                }
-            }
-            content.browse?.let { browse ->
-                browseListing(browse, state.browseRun, followedIds, viewModel::retryBrowse, viewModel::browseMore, open, marked = content.marked)
-            }
-        }
-    }
-}
-
-/** A source to browse; an anime source is [marked] with a play glyph. */
-@Composable
-private fun SourceChip(label: String, selected: Boolean, marked: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = if (marked) { { Icon(Icons.Default.PlayArrow, contentDescription = SeriesKind.ANIME.label, Modifier.size(FilterChipDefaults.IconSize)) } } else null,
-    )
-}
-
-/**
- * [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it.
- * [marked] marks anime covers apart.
- */
+/** [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it. */
 internal fun LazyGridScope.browseListing(
     browse: SeriesSourceListing,
     run: Int,
@@ -394,7 +369,6 @@ internal fun LazyGridScope.browseListing(
     onRetry: () -> Unit,
     onMore: () -> Unit,
     open: (Series) -> Unit,
-    marked: Boolean = false,
 ) {
     when (val listing = browse.listing) {
         SeriesListing.Loading -> fullWidth("browse-loading") { LoadingState() }
@@ -404,7 +378,7 @@ internal fun LazyGridScope.browseListing(
         is SeriesListing.Loaded -> {
             if (listing.series.isEmpty()) fullWidth("browse-empty") { EmptyState("No series") }
             items(listing.series, key = { it.id.toString() }) { series ->
-                SeriesCard(series, { open(series) }, followed = series.id in followedIds, marked = marked)
+                SeriesCard(series, { open(series) }, followed = series.id in followedIds)
             }
             when {
                 listing.moreFailed -> fullWidth("browse-more-failed") {
@@ -423,19 +397,20 @@ internal fun LazyGridScope.browseListing(
 private fun LazyListScope.searchResults(
     results: List<SeriesSourceListing>,
     content: SeriesTabContent,
-    followedIds: Set<SeriesId>,
     open: (Series) -> Unit,
     openSource: (SourceKey) -> Unit,
     retry: (SourceKey) -> Unit,
     more: (SourceKey) -> Unit,
 ) {
     if (results.isEmpty()) item(key = "search-no-sources") { EmptyState(noExtensionsOn(content.filter)) }
+    // A language tells sources apart only when they do not all share one.
+    val languages = results.distinctBy { it.language }.size > 1
     results.forEach { result ->
         val listing = result.listing
         item(key = "search-title-${result.key.id}") {
             SourceSearchHeader(
                 title = result.sourceName,
-                subtitle = result.languageSubtitle,
+                subtitle = result.languageSubtitle.takeIf { languages },
                 onClick = { openSource(result.key) },
             )
         }
@@ -465,7 +440,7 @@ private fun LazyListScope.searchResults(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
                                 after = moreResults(listing, result) { more(result.key) },
                             ) { series ->
-                                SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH), followed = series.id in followedIds, marked = content.marked)
+                                SeriesCard(series, { open(series) }, Modifier.width(CARD_WIDTH), followed = series.id in content.followedIds, marked = content.marked)
                             }
                         }
                 }
@@ -540,11 +515,6 @@ private fun <T> SeriesRow(
     }
 }
 
-@Composable
-private fun SectionTitle(title: String) {
-    Text(title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
-}
-
 /** One line for a source that failed, where a full-height failure would push the other sources away; Retry when [onRetry] is given. */
 @Composable
 internal fun FailureRow(onRetry: (() -> Unit)?, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
@@ -554,22 +524,16 @@ internal fun FailureRow(onRetry: (() -> Unit)?, modifier: Modifier = Modifier, m
     }
 }
 
-/** Extends a full-width item inside a padded grid to reach the screen's horizontal edges. */
-private fun Modifier.bleedHorizontal(padding: Dp): Modifier = layout { measurable, constraints ->
-    val extra = padding.roundToPx()
-    val placeable = measurable.measure(constraints.copy(maxWidth = constraints.maxWidth + extra * 2))
-    layout(constraints.maxWidth, placeable.height) {
-        placeable.place(-extra, 0)
-    }
-}
-
-private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) {
+internal fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) {
     item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
 }
 
 internal val CARD_WIDTH = 104.dp
-internal val BROWSE_GRID_BOTTOM_PADDING = 80.dp
+/** The collapsed search corner's width (two icon buttons and their padding) and a gap before it. */
+private val COLLAPSED_SEARCH_CLEARANCE = 128.dp
 private val FAILURE_WIDTH = 280.dp
 /** "No extensions on", or under the kind filter "No anime extensions on". */
 private fun noExtensionsOn(kind: SeriesKind?): String =
     kind?.let { "No ${it.label.lowercase(Locale.getDefault())} extensions on" } ?: "No extensions on"
+
+internal fun seriesViewTag(view: SeriesView) = "series-view-${view.name.lowercase()}"

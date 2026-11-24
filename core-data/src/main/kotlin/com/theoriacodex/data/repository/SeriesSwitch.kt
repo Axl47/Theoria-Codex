@@ -54,6 +54,8 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
     followed = followed || from.followed,
     readingMode = from.readingMode ?: readingMode,
     downloadNewChapters = downloadNewChapters || from.downloadNewChapters,
+    // Followed since the earlier of the two.
+    followedAtEpochMs = listOfNotNull(followedAtEpochMs.takeIf { followed }, from.followedAtEpochMs.takeIf { from.followed }).minOrNull(),
 )
 
 /**
@@ -61,7 +63,8 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
  * same work on another source. Returns the series, with [from]'s settings, and only the entries that changed.
  *
  * The entry [from] opened last is where the user is. Its [matchingEntry] takes its read state and last page (capped at
- * a known page count) and becomes the entry opened last. Entries numbered below it are read; any other entry is read
+ * a known page count) and becomes the entry opened last. Every entry [from] has a read time for passes it to its
+ * [matchingEntry], the later of the two winning. Entries numbered below it are read; any other entry is read
  * only when [from] read that same chapter: one of its number, or, where either lacks a number, of its name. When the
  * entry opened last has no match, the furthest entry this marks read becomes the entry opened last, so Continue goes
  * on after it.
@@ -102,12 +105,29 @@ fun carryProgress(
             readThere(stored.entry) -> stored.copy(read = true)
             else -> stored
         }
-    }
+    }.withReadTimesOf(fromEntries, olds, targets)
     val own = carried.indexOfFirst { it.entry.address == to.lastOpenedEntry }
     val reached = if (resumed != null) carried.indexOfFirst { it.entry.address == resumed.address }
     else carried.indices.lastOrNull { carried[it].read && !ordered[it].read } ?: -1
     val lastOpened = if (reached > own) carried[reached].entry.address else to.lastOpenedEntry
     return to.withSettingsOf(from).copy(lastOpenedEntry = lastOpened) to carried.filterIndexed { index, entry -> entry != ordered[index] }
+}
+
+/** [this] with each read time in [fromEntries] on the entry it matches, where it is later than the entry's own. */
+private fun List<StoredSeriesEntry>.withReadTimesOf(
+    fromEntries: List<StoredSeriesEntry>,
+    olds: List<SeriesEntry>,
+    targets: List<SeriesEntry>,
+): List<StoredSeriesEntry> {
+    val readAt = HashMap<String, Long>()
+    fromEntries.forEach { old ->
+        val at = old.lastReadAtEpochMs ?: return@forEach
+        matchingEntry(old.entry, olds, targets)?.let { readAt.merge(it.address, at, ::maxOf) }
+    }
+    return map { stored ->
+        val at = readAt[stored.entry.address] ?: return@map stored
+        if (stored.lastReadAtEpochMs != null && stored.lastReadAtEpochMs >= at) stored else stored.copy(lastReadAtEpochMs = at)
+    }
 }
 
 /**

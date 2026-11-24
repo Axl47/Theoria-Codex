@@ -28,6 +28,8 @@ public final class SeriesEntity {
     @ColumnInfo(name = "download_new", defaultValue = "0") private final boolean downloadNew;
     /** Whether two of its chapters were found to open on the same page, so the Viewer pictures them by their second. */
     @ColumnInfo(name = "chapters_share_first_page", defaultValue = "0") private final boolean chaptersShareFirstPage;
+    /** When the user last followed it; null while not followed. */
+    @Nullable @ColumnInfo(name = "followed_at_epoch_ms") private final Long followedAtEpochMs;
 
     public SeriesEntity(
             @NonNull String source,
@@ -44,7 +46,8 @@ public final class SeriesEntity {
             @Nullable String description,
             @Nullable String status,
             boolean downloadNew,
-            boolean chaptersShareFirstPage
+            boolean chaptersShareFirstPage,
+            @Nullable Long followedAtEpochMs
     ) {
         this.source = source;
         this.address = address;
@@ -61,6 +64,7 @@ public final class SeriesEntity {
         this.status = status;
         this.downloadNew = downloadNew;
         this.chaptersShareFirstPage = chaptersShareFirstPage;
+        this.followedAtEpochMs = followedAtEpochMs;
     }
 
     @NonNull public String getSource() { return source; }
@@ -78,4 +82,5 @@ public final class SeriesEntity {
     @Nullable public String getStatus() { return status; }
     public boolean getDownloadNew() { return downloadNew; }
     public boolean getChaptersShareFirstPage() { return chaptersShareFirstPage; }
+    @Nullable public Long getFollowedAtEpochMs() { return followedAtEpochMs; }
 }

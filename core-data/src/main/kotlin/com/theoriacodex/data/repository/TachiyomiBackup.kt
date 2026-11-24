@@ -70,11 +70,13 @@ private fun gunzip(bytes: ByteArray): ByteArray = GZIPInputStream(bytes.inputStr
  * the last page's index from 0, so page 0 is untouched; Aniyomi keeps milliseconds, though its fields say seconds.
  *
  * The entry opened last is the one history read last, else the furthest one with progress. A series therefore keeps
- * one whenever it has progress, which is also what keeps an unfollowed series in Theoria's own backups.
+ * one whenever it has progress, which is also what keeps an unfollowed series in Theoria's own backups. Each entry's
+ * read time is its history's, and a followed series counts as followed from when the app added it, else from [now].
  */
 private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries? {
     if (source <= 0) return null
-    val stored = entries.filter { it.url.isNotBlank() }.distinctBy { it.url }.map { it.toStored(kind, now) }
+    val readAt = history.filter { it.lastRead > 0 }.groupBy({ it.url }, { it.lastRead }).mapValues { (_, times) -> times.max() }
+    val stored = entries.filter { it.url.isNotBlank() }.distinctBy { it.url }.map { it.toStored(kind, now, readAt[it.url]) }
     val addresses = stored.mapTo(HashSet()) { it.entry.address }
     val lastOpened = history.filter { it.url in addresses }.maxByOrNull { it.lastRead }?.url
         ?: stored.filter { it.read || it.position > 0 }.minByOrNull { it.sourceOrder }?.entry?.address
@@ -88,10 +90,11 @@ private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries?
         description = description?.trim()?.ifBlank { null },
         status = extensionSeriesStatus(status),
     )
-    return BackupSeries(StoredSeries(series, followed = favorite, lastOpenedEntry = lastOpened), stored)
+    val followedAt = if (favorite) dateAdded.takeIf { it > 0 } ?: now else null
+    return BackupSeries(StoredSeries(series, followed = favorite, lastOpenedEntry = lastOpened, followedAtEpochMs = followedAt), stored)
 }
 
-private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long): StoredSeriesEntry {
+private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long, readAt: Long?): StoredSeriesEntry {
     val (position, length) = when (kind) {
         // Page index 0 is also an untouched chapter's, unless TachiyomiJ2K's pages left says it was opened.
         SeriesKind.MANGA -> (if (lastPosition > 0 || pagesLeft > 0) lastPosition + 1 else 0L) to (lastPosition + pagesLeft).takeIf { pagesLeft > 0 }
@@ -104,6 +107,7 @@ private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long): StoredSeriesEn
         read = read,
         position = position,
         length = length,
+        lastReadAtEpochMs = readAt,
     )
 }
 
@@ -129,6 +133,7 @@ private class TachiyomiSeries(
     @ProtoNumber(7) val genres: List<String> = emptyList(),
     @ProtoNumber(8) val status: Int = 0,
     @ProtoNumber(9) val thumbnailUrl: String? = null,
+    @ProtoNumber(13) val dateAdded: Long = 0,
     @ProtoNumber(16) val entries: List<TachiyomiEntry> = emptyList(),
     /** Mihon writes it only when false, so a series without it is in the library. */
     @ProtoNumber(100) val favorite: Boolean = true,

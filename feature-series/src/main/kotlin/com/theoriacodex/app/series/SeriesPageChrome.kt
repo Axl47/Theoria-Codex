@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,7 +39,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,18 +46,16 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -70,11 +66,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,8 +76,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.theoriacodex.app.ui.components.ExpandedBottomSheet
-import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.SeriesDownloads
@@ -366,88 +358,22 @@ internal fun ChapterOptionsSheet(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ExpandedBottomSheet(onDismiss = onDismiss) {
-        SheetHeader("Sort & filter", closeDescription = "Close", onDismiss = onDismiss) {
-            if (hasActiveOptions) {
-                TextButton(onClick = onReset) { Text("Reset") }
-            }
-        }
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            ChapterFilterSection(filter, canDownload, words, onSelectFilter)
-            HorizontalDivider()
-            ChapterSortSection(sort, descending, words, onSelectSort)
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ChapterFilterSection(
-    selected: ChapterFilter,
-    canDownload: Boolean,
-    words: EntryWords,
-    onSelect: (ChapterFilter) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Filter", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val options = buildList {
-                add(ChapterFilter.ALL to "All")
-                add(ChapterFilter.UNREAD to words.notDone.capitalized())
-                if (canDownload) add(ChapterFilter.DOWNLOADED to "Downloaded")
-            }
-            options.forEach { (option, label) ->
-                FilterChip(
-                    selected = selected == option,
-                    onClick = { onSelect(option) },
-                    label = { Text(label) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChapterSortSection(
-    selected: ChapterSort,
-    descending: Boolean,
-    words: EntryWords,
-    onSelect: (ChapterSort) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Sort", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(2.dp))
-        ChapterSort.entries.forEach { option ->
-            ChapterSortRow(label = option.label(words), active = selected == option, descending = descending) {
-                onSelect(option)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChapterSortRow(label: String, active: Boolean, descending: Boolean, onClick: () -> Unit) {
-    val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    val weight = if (active) FontWeight.Medium else FontWeight.Normal
-    val icon = if (descending) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward
-    val direction = if (descending) "Descending" else "Ascending"
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-            if (active) Icon(icon, contentDescription = direction, tint = color, modifier = Modifier.size(18.dp))
-        }
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = color, fontWeight = weight)
-    }
+    SortFilterSheet(
+        filters = buildList {
+            add(SheetChoice(ChapterFilter.ALL, "All"))
+            add(SheetChoice(ChapterFilter.UNREAD, words.notDone.capitalized()))
+            if (canDownload) add(SheetChoice(ChapterFilter.DOWNLOADED, "Downloaded"))
+        },
+        filter = filter,
+        onFilter = onSelectFilter,
+        sorts = ChapterSort.entries.map { SheetChoice(it, it.label(words)) },
+        sort = sort,
+        onSort = onSelectSort,
+        sortMark = if (descending) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+        sortMarkDescription = if (descending) "Descending" else "Ascending",
+        onReset = onReset.takeIf { hasActiveOptions },
+        onDismiss = onDismiss,
+    )
 }
 
 /** Removable pills below the entry header showing active filters, non-default sorts, or search text. */

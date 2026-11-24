@@ -36,6 +36,8 @@ public final class SeriesEntryEntity {
     @ColumnInfo(name = "last_page") private final long lastPage;
     /** The page count or duration that the position counts within. */
     @Nullable @ColumnInfo(name = "page_count") private final Long pageCount;
+    /** When the user last read or watched in it; null before that was kept. */
+    @Nullable @ColumnInfo(name = "last_read_at_epoch_ms") private final Long lastReadAtEpochMs;
 
     public SeriesEntryEntity(
             @NonNull String source,
@@ -49,7 +51,8 @@ public final class SeriesEntryEntity {
             long firstSeenAtEpochMs,
             boolean read,
             long lastPage,
-            @Nullable Long pageCount
+            @Nullable Long pageCount,
+            @Nullable Long lastReadAtEpochMs
     ) {
         this.source = source;
         this.seriesAddress = seriesAddress;
@@ -63,6 +66,7 @@ public final class SeriesEntryEntity {
         this.read = read;
         this.lastPage = lastPage;
         this.pageCount = pageCount;
+        this.lastReadAtEpochMs = lastReadAtEpochMs;
     }
 
     @NonNull public String getSource() { return source; }
@@ -77,4 +81,5 @@ public final class SeriesEntryEntity {
     public boolean getRead() { return read; }
     public long getLastPage() { return lastPage; }
     @Nullable public Long getPageCount() { return pageCount; }
+    @Nullable public Long getLastReadAtEpochMs() { return lastReadAtEpochMs; }
 }

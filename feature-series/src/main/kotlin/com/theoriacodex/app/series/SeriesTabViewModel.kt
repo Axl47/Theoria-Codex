@@ -30,7 +30,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -105,7 +107,10 @@ data class DedicatedSourceState(
  * null otherwise; a search sent before the extensions have loaded is empty until they have, and then runs.
  * [dedicated] is a single source's search opened from [search], keeping [search] intact underneath until Back.
  * [refreshing] is true while a refresh by hand checks the followed series for new entries. [kind] is the kind filter's
- * choice, null for both; [SeriesTabContent] says when it applies.
+ * choice, null for both; [SeriesTabContent] says when it applies. [view] is null until the followed series are first
+ * read, then Following when there are any; after that it changes only when chosen. [library] orders and narrows the
+ * Following grid once [libraryLoaded] says the saved choice has arrived, and [followingQuery] narrows it to titles
+ * holding it.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
@@ -118,35 +123,57 @@ data class SeriesTabState(
     val dedicated: DedicatedSourceState? = null,
     val refreshing: Boolean = false,
     val kind: SeriesKind? = null,
+    val view: SeriesView? = null,
+    val library: LibraryOptions = LibraryOptions(),
+    val libraryLoaded: Boolean = false,
+    val followingQuery: String = "",
 )
 
 /**
  * What the tab shows of its state and the followed series. [kinds] are the kinds of series the user has, among the
  * sources that are on and the followed series. The kind filter is offered only while there are both, and only then
- * narrows the shelf, the sources to browse, the browsed listing and the search results to its [filter]. In the mixed
- * list anime are [marked] apart from manga; under one kind the marks would say nothing.
+ * narrows the Following grid and the search results to its [filter]; Browse lists every source, grouped by kind. In a
+ * mixed list anime are [marked] apart from manga; under one kind the marks would say nothing.
+ *
+ * [following] is the Following grid: the followed series of [filter] that [library] and the title query show, in
+ * [library]'s order; null until the followed series have been read. [followsAny] says whether anything is followed at
+ * all, and [followedIds] holds every followed series, which Browse and search mark. [words] name entries in the
+ * Following controls: a tab of only anime, or narrowed to anime, speaks of episodes.
  */
 data class SeriesTabContent(
     val kinds: Set<SeriesKind>,
     val filter: SeriesKind?,
-    val followed: List<FollowedSeries>,
+    val view: SeriesView,
+    val following: List<FollowedSeries>?,
+    val followsAny: Boolean,
+    val followedIds: Set<SeriesId>,
+    val library: LibraryOptions,
+    val followingQuery: String,
     val sources: List<SeriesSource>?,
     val browse: SeriesSourceListing?,
     val search: List<SeriesSourceListing>?,
 ) {
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
+    val words: EntryWords get() = (filter ?: kinds.singleOrNull() ?: SeriesKind.MANGA).words
 }
 
-internal fun SeriesTabState.content(followed: List<FollowedSeries>): SeriesTabContent {
-    val kinds = (sources.orEmpty().map { it.key.seriesKind } + followed.map { it.series.id.source.seriesKind }).toSet()
+/** [followed] is null until the followed series have been read. */
+internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabContent {
+    val all = followed.orEmpty()
+    val kinds = (sources.orEmpty().map { it.key.seriesKind } + all.map { it.series.id.source.seriesKind }).toSet()
     val filter = kind.takeIf { kinds.size > 1 }
     return SeriesTabContent(
         kinds = kinds,
         filter = filter,
-        followed = followed.filter { filter.admits(it.series.id.source) },
-        sources = sources?.filter { filter.admits(it.key) },
-        browse = browse?.takeIf { filter.admits(it.key) },
+        view = view ?: SeriesView.FOLLOWING,
+        following = followed?.filter { filter.admits(it.series.id.source) }?.arranged(library, followingQuery),
+        followsAny = all.isNotEmpty(),
+        followedIds = all.mapTo(HashSet()) { it.series.id },
+        library = library,
+        followingQuery = followingQuery,
+        sources = sources,
+        browse = browse,
         search = search?.filter { filter.admits(it.key) },
     )
 }
@@ -154,14 +181,16 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>): SeriesTabCo
 /**
  * [sourcesChanged] emits once at the start and again whenever [loadSources] may answer differently. [saved] keeps the
  * search on screen and the browsed source across process death; both show again once the sources have loaded. The
- * browsed listing, its filters, dedicated search, the filter sheet and the kind filter are kept only in memory: after
- * process death they start again at the source's popular series of both kinds.
+ * browsed listing, its filters, dedicated search, the filter sheet, the kind filter and the view are kept only in
+ * memory: after process death they start again at the source's popular series of both kinds. [library] keeps the
+ * Following grid's sort and filter across launches.
  */
 class SeriesTabViewModel(
     private val repository: SeriesRepository,
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
+    private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
     /** Stores the followed series' new entries, which changes the shelf's unread counts. */
     private val checkFollowed: suspend () -> Unit,
 ) : ViewModel() {
@@ -181,19 +210,68 @@ class SeriesTabViewModel(
 
     /** Follows whether the tab shows; see [followShown]. */
     private var shownWatch: Job? = null
-    private val mutableState = MutableStateFlow(SeriesTabState(search = searchText?.let { emptyList() }, searchQuery = searchText.orEmpty()))
+    private val mutableState = MutableStateFlow(
+        SeriesTabState(
+            search = searchText?.let { emptyList() },
+            searchQuery = searchText.orEmpty(),
+            // Kept across process death with the search, which shows only on Browse.
+            view = saved.get<String>(SAVED_VIEW)?.let { name -> SeriesView.entries.firstOrNull { it.name == name } },
+        ),
+    )
     val state: StateFlow<SeriesTabState> = mutableState
 
     /**
      * What the screen shows: [state] with the followed series, under the kind filter while it applies. The rest shows
      * before the followed series have been read.
      */
-    val content: StateFlow<SeriesTabContent> = combine(mutableState, repository.observeFollowed().onStart { emit(emptyList()) }) { state, followed ->
-        state.content(followed)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(emptyList()))
+    val content: StateFlow<SeriesTabContent> = combine(
+        mutableState,
+        repository.observeFollowed().map<List<FollowedSeries>, List<FollowedSeries>?> { it }.onStart { emit(null) },
+    ) { state, followed ->
+        // Held back until the saved sort and filter have arrived, so the grid never shows under the defaults first.
+        state.content(followed.takeIf { state.libraryLoaded })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(null))
 
     init {
         viewModelScope.launch { sourcesChanged.collectLatest { showSources(loadSources()) } }
+        // Nothing shows until the view is chosen, so the saved sort and filter arrive with it.
+        viewModelScope.launch {
+            val options = library.read()
+            val following = repository.observeFollowed().firstOrNull().orEmpty().isNotEmpty()
+            val opening = state.value.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE
+            saved[SAVED_VIEW] = opening.name
+            mutableState.update { it.copy(view = it.view ?: opening, library = options, libraryLoaded = true) }
+        }
+    }
+
+    fun chooseView(view: SeriesView) {
+        saved[SAVED_VIEW] = view.name
+        mutableState.update { it.copy(view = view) }
+    }
+
+    /** Orders and narrows the Following grid by [options], and remembers them. */
+    fun chooseLibrary(options: LibraryOptions) {
+        mutableState.update { it.copy(library = options) }
+        library.write(options)
+    }
+
+    /** Clears every filter on the Following grid: kind, Sort & filter's filter and the title query. */
+    fun showAllFollowing() {
+        chooseLibrary(state.value.library.copy(show = LibraryShow.ALL))
+        mutableState.update { it.copy(kind = null, followingQuery = "") }
+    }
+
+    /** Narrows the Following grid to titles holding [query], as it is typed. */
+    fun filterFollowing(query: String) {
+        mutableState.update { it.copy(followingQuery = query) }
+    }
+
+    /** Takes the Following title query to Browse and searches every source, of both kinds, for it. */
+    fun searchAllSources() {
+        val query = state.value.followingQuery
+        chooseView(SeriesView.BROWSE)
+        mutableState.update { it.copy(followingQuery = "", kind = null) }
+        search(query)
     }
 
     /** Checks the followed series for new entries, unless a check is already running. */
@@ -210,8 +288,7 @@ class SeriesTabViewModel(
     }
 
     /**
-     * Keeps what is on screen for the sources still on offer, and browses the first (of the kind the tab is narrowed
-     * to, when it is) when the browsed one is gone. A browsed source that was replaced (its extension updated) is
+     * Keeps what is on screen for the sources still on offer, and browses the first when the browsed one is gone. A browsed source that was replaced (its extension updated) is
      * browsed afresh, as if chosen again. A search on screen, or one sent while the extensions were loading, runs in
      * every source that is new or replaced.
      */
@@ -247,15 +324,12 @@ class SeriesTabViewModel(
             source(currentDedicated.source.key)?.let { showIn(ListingSlot.Dedicated, it, currentDedicated.kind) }
         }
         val browsedKey = state.value.browse?.key
-        val kind = state.value.kind
         when {
             browsedKey != null && fresh.any { it.key == browsedKey } -> browse(browsedKey)
             browsedKey == null -> {
                 val browsed = saved.get<String>(SAVED_BROWSE)
-                (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull { kind.admits(it.key) } ?: sources.firstOrNull())?.let { browse(it.key) }
+                (sources.firstOrNull { it.key.id == browsed } ?: sources.firstOrNull())?.let { browse(it.key) }
             }
-            // The first source of the kind the tab is narrowed to came on while one of the other kind stayed browsed.
-            !kind.admits(browsedKey) -> sources.firstOrNull { kind.admits(it.key) }?.let { browse(it.key) }
         }
         if (query != null) fresh.forEach { searchIn(it, query) }
         pendingGenre?.let { (genreSource, genre) ->
@@ -272,14 +346,9 @@ class SeriesTabViewModel(
         showIn(ListingSlot.Browse, source, BrowseKind.Popular)
     }
 
-    /**
-     * Narrows the tab to [kind], or shows both with null. A browsed source of the other kind gives way to the first of
-     * [kind]; with none of [kind] on, it stays browsed for when both show again.
-     */
+    /** Narrows the Following grid and search results to [kind], or shows both with null. */
     fun chooseKind(kind: SeriesKind?) {
         mutableState.update { it.copy(kind = kind) }
-        val browsed = state.value.browse?.key ?: return
-        if (!kind.admits(browsed)) state.value.sources.orEmpty().firstOrNull { kind.admits(it.key) }?.let { browse(it.key) }
     }
 
     /** Shows the browsed source's [kind] listing from the first page. */
@@ -669,5 +738,6 @@ internal fun failureLine(error: Exception): String = when (error) {
 
 private const val SAVED_SEARCH = "search"
 private const val SAVED_BROWSE = "browse"
+private const val SAVED_VIEW = "view"
 
 internal const val LOAD_FAILED = "Couldn't load"
