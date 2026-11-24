@@ -41,7 +41,7 @@ class SeriesFilterTest {
     }
 
     @Test
-    fun `a value that no longer lines up keeps the default`() {
+    fun `a value that no longer lines up keeps the default (ADR 0007)`() {
         val chosen = listOf(
             Check("Options", true),
             Separator,
@@ -58,7 +58,7 @@ class SeriesFilterTest {
     }
 
     @Test
-    fun `options are matched by label when the source reorders them`() {
+    fun `options are matched by label when the source reorders them (ADR 0007)`() {
         val reordered = listOf(Select("Status", listOf("Ended", "Any", "Ongoing"), 1))
 
         val merged = reordered.withChoices(listOf(Select("Status", listOf("Any", "Ongoing", "Ended"), 1)))
@@ -67,7 +67,7 @@ class SeriesFilterTest {
     }
 
     @Test
-    fun `an option whose label repeats keeps its own place, and moves only to a label that does not`() {
+    fun `an option whose label repeats keeps its own place, and moves only to a label that does not (ADR 0007)`() {
         val options = listOf("Any", "Manga", "Any")
         val chosen = listOf(Select("Type", options, 2))
 
@@ -83,7 +83,7 @@ class SeriesFilterTest {
     }
 
     @Test
-    fun `a shorter or longer list on either side keeps what lines up`() {
+    fun `a shorter or longer list on either side keeps what lines up (ADR 0007)`() {
         val first = listOf(Header("Press reset to load tags"))
         val later = listOf(Header("Press reset to load tags"), Check("Completed", false))
 

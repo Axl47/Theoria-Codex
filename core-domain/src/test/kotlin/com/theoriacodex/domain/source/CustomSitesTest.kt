@@ -10,7 +10,7 @@ import org.junit.Test
 
 class CustomSitesTest {
     @Test
-    fun `addresses normalize to an HTTPS root and derive the planned ids`() {
+    fun `addresses normalize to an HTTPS root and derive the planned ids (ADR 0004)`() {
         val cases = listOf(
             Triple("safebooru.org", "https://safebooru.org", "custom_safebooru_org"),
             Triple(
@@ -49,7 +49,7 @@ class CustomSitesTest {
     }
 
     @Test
-    fun `unusable addresses are rejected before any request`() {
+    fun `unusable addresses are rejected before any request (ADR 0004)`() {
         val cases = mapOf(
             "" to SiteAddressError.MALFORMED,
             "   " to SiteAddressError.MALFORMED,
@@ -73,7 +73,7 @@ class CustomSitesTest {
     }
 
     @Test
-    fun `id validation accepts only the custom alphabet`() {
+    fun `id validation accepts only the custom alphabet (ADR 0004)`() {
         listOf(
             "custom_safebooru_org",
             "custom_example-booru_net",
@@ -112,7 +112,7 @@ class CustomSitesTest {
     }
 
     @Test
-    fun `profiles validate identity, label and headers and keep unknown families`() {
+    fun `profiles validate identity, label and headers and keep unknown families (ADR 0004)`() {
         val address = valid("safebooru.org")
         val profile = SiteProfile(
             sourceId = address.derivedSourceId,

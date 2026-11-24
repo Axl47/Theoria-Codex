@@ -11,7 +11,7 @@ import org.junit.Test
 
 class PixivTagsTest {
     @Test
-    fun `search tokens rewrite booru spellings and keep native tags`() {
+    fun `search tokens rewrite booru spellings and keep native tags (ADR 0010)`() {
         assertEquals("hatsune miku", pixivSearchToken("hatsune_miku"))
         assertEquals("saber", pixivSearchToken("-saber_(fate) (cosplay)"))
         assertEquals("ラム(リゼロ)", pixivSearchToken("ラム(リゼロ)"))
@@ -19,7 +19,7 @@ class PixivTagsTest {
     }
 
     @Test
-    fun `legacy pixiv payloads recover translation pairs from canonical order`() {
+    fun `legacy pixiv payloads recover translation pairs from canonical order (ADR 0010)`() {
         val legacy = pixivPost(
             raw = listOf("初音ミク", "オリジナル", "猫"),
             canonical = listOf("初音ミク", "Hatsune Miku", "オリジナル", "猫", "cat"),
@@ -36,7 +36,7 @@ class PixivTagsTest {
     }
 
     @Test
-    fun `posts that already carry translations or have none are unchanged`() {
+    fun `posts that already carry translations or have none are unchanged (ADR 0010)`() {
         val untranslated = pixivPost(raw = listOf("猫"), canonical = listOf("猫"))
         val current = pixivPost(raw = listOf("猫"), canonical = listOf("猫", "cat"))
             .copy(taxonomy = listOf(PostTaxonomyTerm("猫", translation = "cat")))

@@ -40,7 +40,7 @@ class QueryHashTest {
     }
 
     @Test
-    fun `media filter adds to the hash only when animated`() {
+    fun `media filter adds to the hash only when animated (ADR 0009)`() {
         val any = Query(
             mode = QueryMode.Source(SourceKey.DANBOORU),
             includeTerms = listOf(SearchTerm("landscape")),

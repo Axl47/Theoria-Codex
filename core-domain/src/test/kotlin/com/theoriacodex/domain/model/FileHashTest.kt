@@ -25,7 +25,7 @@ class FileHashTest {
     )
 
     @Test
-    fun `booru file, sample and thumbnail URLs name the original's MD5`() {
+    fun `booru file, sample and thumbnail URLs name the original's MD5 (ADR 0006)`() {
         assertEquals(MD5, post(full = "https://cdn.donmai.us/original/01/23/$MD5.jpg").fileHash)
         assertEquals(MD5, post(preview = "https://cdn.donmai.us/360x360/01/23/$MD5.webp").fileHash)
         assertEquals(MD5, post(preview = "https://img.gelbooru.com/samples/01/23/sample_$MD5.jpg").fileHash)
@@ -34,13 +34,13 @@ class FileHashTest {
     }
 
     @Test
-    fun `a reported hash wins and the original file comes before lighter renditions`() {
+    fun `a reported hash wins and the original file comes before lighter renditions (ADR 0006)`() {
         assertEquals(OTHER, post(full = "https://cdn.donmai.us/original/01/23/$MD5.jpg", hash = OTHER).fileHash)
         assertEquals(MD5, post(full = "https://x.test/$MD5.jpg", preview = "https://x.test/$OTHER.jpg").fileHash)
     }
 
     @Test
-    fun `tokens that are not a bounded 32-digit path segment never count`() {
+    fun `tokens that are not a bounded 32-digit path segment never count (ADR 0006)`() {
         assertNull(post(full = "https://safebooru.org/images/1/${MD5}abcdef01.png").fileHash)
         assertNull(post(full = "https://ltn.hitomi.la/webp/1/23/$MD5$MD5.webp").fileHash)
         assertNull(post(full = "https://x.test/images/${MD5.drop(1)}.jpg").fileHash)
