@@ -158,8 +158,8 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
     fun isDealt(id: PostId): Boolean = id in dealt
 
     /** Whether a deal would pass [post] over: it, or a copy of it, was [seen] or dealt already. */
-    fun passesOver(post: Post, seen: Set<PostId>): Boolean =
-        post.id in seen || post.id in dealt || copiesOf(post).any { it in seen || it in dealt }
+    fun passesOver(post: Post, seen: (PostId) -> Boolean): Boolean =
+        seen(post.id) || post.id in dealt || copiesOf(post).any { seen(it) || it in dealt }
 
     /** Deals up to [size] cards nobody has [seen], once a lane has opened; a copy of a seen or dealt post counts as seen. */
     fun deal(size: Int, seen: Set<PostId>) {

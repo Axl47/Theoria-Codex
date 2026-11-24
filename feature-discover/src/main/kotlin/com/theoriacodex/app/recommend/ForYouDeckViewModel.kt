@@ -413,7 +413,7 @@ class ForYouDeckViewModel(
 
     /** Settles [post], the next of [lane] to vet: tagged, dropped, or (while the model will not load) left to retry. */
     private suspend fun vetOne(mix: ForYouMix, lane: MixLane, post: Post) {
-        val passed = mix.passesOver(post, seen + kept)
+        val passed = mix.passesOver(post, ::isKnown)
         if (passed || !vetsPictures) return lane.vetted(post, !passed && shows(post))
         when (wiring.pictures.look(post)) {
             is PictureLook.Seen -> lane.vetted(post, shows(post))
@@ -527,7 +527,7 @@ class ForYouDeckViewModel(
                 if (ui.value.mix == ForYouMixState.Failed) rebuild() else retrySource()
             }
         }
-        return level("for_you:$session:mix:$level", "Mix", fork = null, query = null, source, DECK_PAGE_AHEAD) { event -> onMixDecision(level, event) }
+        return level("$LEVEL_ID_PREFIX$session:mix:$level", "Mix", fork = null, query = null, source, DECK_PAGE_AHEAD) { event -> onMixDecision(level, event) }
     }
 
     /** Opens [spec] as a level. It leaves out what was decided, liked or saved before it opened, and what is hidden. */
@@ -535,9 +535,9 @@ class ForYouDeckViewModel(
         val scope = levelScope()
         // Not read live: a card decided on this trail must stay in its deck for Undo.
         val known = seen + kept
-        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { !it.copyOfAny(known) && shows(it) } }
+        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { !it.copyOfAny(known::contains) && shows(it) } }
         relatedPosts.clear("level opened")
-        stack.update { it + level("for_you:$session:trail:${++trailCount}", spec.label, request, spec.query, source, scope = scope, onDecision = ::onTrailDecision) }
+        stack.update { it + level("$LEVEL_ID_PREFIX$session:trail:${++trailCount}", spec.label, request, spec.query, source, scope = scope, onDecision = ::onTrailDecision) }
     }
 
     /**
@@ -619,7 +619,10 @@ class ForYouDeckViewModel(
     }
 
     /** Whether [this] post, or a copy of it on another site, is one of [ids]. */
-    private fun Post.copyOfAny(ids: Set<PostId>): Boolean = id in ids || wiring.copiesOf(this).any(ids::contains)
+    private fun Post.copyOfAny(ids: (PostId) -> Boolean): Boolean = ids(id) || wiring.copiesOf(this).any(ids)
+
+    /** Decided, Liked or saved, read live: testing one post copies neither set. */
+    private fun isKnown(id: PostId): Boolean = id in seen || id in kept
 
     /**
      * Steers the Mix by a decision of the Mix deck numbered [level]. A deck that was replaced since (its writes may
@@ -635,7 +638,7 @@ class ForYouDeckViewModel(
                 val origin = mix.origins[post.id] ?: return
                 lastDecision = post.id to mix.steering
                 mix.steering = mix.steering.after(signal, origin)
-                if (signal == DeckSignal.Liked || signal == DeckSignal.Saved) askForMore(mix, post)
+                if (signal == DeckSignal.Liked || signal == DeckSignal.Saved) askForMore(mix, post, saved = signal == DeckSignal.Saved)
             }
             is TriageDecisionEvent.Reverted -> {
                 asking.remove(post.id)?.cancel()
@@ -648,22 +651,22 @@ class ForYouDeckViewModel(
         }
     }
 
-    /** Queues up to [INJECTED] posts like the liked or saved [post] ahead of the lanes' next cards. */
-    private fun askForMore(mix: ForYouMix, post: Post) {
+    /** Queues up to [INJECTED] posts like the liked or [saved] [post] ahead of the lanes' next cards. */
+    private fun askForMore(mix: ForYouMix, post: Post, saved: Boolean) {
         val animatedOnly = inputs?.animatedOnly == true
         val creator = creatorProfileActions(post, creatorSources).firstNotNullOfOrNull { it.profile }
         // Registered until it ends, so Undo of the Like or Save can still stop it while its cards are vetted.
         val job = workScope.launch(start = CoroutineStart.LAZY) {
             val similar = wiring.trails(TrailRequest.Similar(post), animatedOnly)
             val (spec, origin) = when {
-                similar != null -> similar to DeckOrigin.Similar(post.id)
+                similar != null -> similar to DeckOrigin.Similar(post.id, saved)
                 creator != null -> wiring.trails(TrailRequest.Creator(creator, post), animatedOnly) to DeckOrigin.Creator(post.id, creator.displayName)
                 else -> null to null
             }
             val page = withContext(wiring.fetchContext) { spec?.pager?.nextOrNull() }
             val found = if (origin == null) emptyList() else page?.posts.orEmpty().map { DeckCard(it, origin) }
             val fresh = vetted(found.filter { card ->
-                !card.post.copyOfAny(seen + kept + post.id) && !mix.isDealt(card.post.id) && shows(card.post)
+                !card.post.copyOfAny { it == post.id || isKnown(it) } && !mix.isDealt(card.post.id) && shows(card.post)
             }.distinctBy { it.post.id })
             if (fresh.isEmpty()) return@launch
             mix.steering = mix.steering.inject(fresh)
@@ -722,3 +725,6 @@ private fun TrailRequest.name(): String = when (this) {
     is TrailRequest.Creator -> creator.displayName
     is TrailRequest.Similar -> "similar posts"
 }
+
+/** What every level's id starts with, so the screen can tell its levels' retained feeds from others. */
+internal const val LEVEL_ID_PREFIX = "for_you:"
