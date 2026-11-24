@@ -1,4 +1,4 @@
-# 0041. Series notifications: one frozen channel, per-series tags, and a private trampoline
+# 0207. Series notifications: one frozen channel, per-series tags, and a private trampoline
 
 Status: Accepted
 
