@@ -59,7 +59,7 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `decoder publishes the first frame immediately and reuses it for complete playback`() = runTest {
+    fun `decoder publishes the first frame immediately and reuses it for complete playback (ADR 0112)`() = runTest {
         val archive = temporaryFolder.newFile("frames.zip")
         val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
         val bytes = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
@@ -94,7 +94,7 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `disk metadata rejects damaged or replaced cache pairs`() {
+    fun `disk metadata rejects damaged or replaced cache pairs (ADR 0112)`() {
         val archive = temporaryFolder.newFile("cached.zip").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val specs = listOf(UgoiraFrameSpec("frame.jpg", 50))
         writeUgoiraFrameMetadata(archive, specs)
@@ -107,7 +107,7 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `disk metadata the Gson writer stored still matches its archive`() {
+    fun `disk metadata the Gson writer stored still matches its archive (ADR 0112)`() {
         val archive = temporaryFolder.newFile("ugoira-123.zip").apply {
             writeBytes(ByteArray(64) { it.toByte() })
             setLastModified(1_700_000_000_000L)

@@ -86,8 +86,6 @@
 0099-ui-test-fixtures.md
 0100-undo-offers-and-deferred-removals.md
 0101-visual-model-files.md
-0111-picture-hashing.md
-0112-pixiv-ugoira-playback.md
 0113-post-download-queue.md
 0114-site-browser-checks.md
 0115-source-presentation-catalog.md
