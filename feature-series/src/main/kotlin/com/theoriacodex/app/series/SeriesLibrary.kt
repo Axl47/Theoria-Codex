@@ -21,7 +21,7 @@ enum class LibrarySort {
     ;
 
     fun label(words: EntryWords): String = when (this) {
-        UNREAD -> words.notDone.capitalized()
+        UNREAD -> "Most ${words.notDone}"
         LAST_UPDATED -> "Last updated"
         RECENTLY_READ -> "Recently ${words.done}"
         RECENTLY_ADDED -> "Recently added"
