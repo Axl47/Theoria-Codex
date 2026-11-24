@@ -23,6 +23,7 @@ import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.data.repository.SettingDestinations
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -91,9 +92,9 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
 }
 
 /**
- * The followed series, read from the device alone, each opening its page. A row names its source once that source's
- * extension has loaded, which only the extensions of followed series do; until then, or when the source is not on,
- * it names only the kind.
+ * The followed series, read from the device alone, each opening its page. A row names its source, as the Series tab
+ * does, once that source's extension has loaded, which only the extensions of followed series do; until then, or when
+ * the source is not on or fails to load, it names only the kind.
  */
 @Composable
 private fun rememberFollowedSeriesEntries(shell: TheoriaShell): List<OmniboxEntry> {
@@ -101,7 +102,8 @@ private fun rememberFollowedSeriesEntries(shell: TheoriaShell): List<OmniboxEntr
     val followed = rememberRetained("omnibox-followed-series") { dependencies.repository.observeFollowed() }.value.orEmpty()
     val keys = remember(followed) { followed.mapTo(LinkedHashSet()) { it.series.id.source } }
     val names by produceState(emptyMap<SourceKey, String>(), dependencies, keys) {
-        value = keys.mapNotNull { key -> dependencies.source(key)?.let { key to it.name } }.toMap()
+        val found = keys.mapNotNull { key -> runCatchingPreservingCancellation { dependencies.source(key) }.getOrNull() }
+        value = found.associate { it.key to it.label(found) }
     }
     return remember(shell, followed, names) {
         followedSeriesEntries(followed.map(FollowedSeries::series), names, dependencies.covers) { id ->
