@@ -352,6 +352,23 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
+    fun `undoing Likes clear fills a payload recreated sparsely after the clear`() = runTest {
+        val repository = repository()
+        val liked = post("liked")
+        val other = repository.createCodex("Other")
+        repository.toggleLikeAndSyncSystemCodex("profile-main", "system_likes_codex", "Likes", liked, listOf("tag"))
+        val cleared = repository.clearLikesAndLikedMemberships("profile-main", "system_likes_codex")
+        assertNull(repository.getPost(liked.id))
+        repository.addItem(other.codexId, liked.copy(title = "Newer title", full = null))
+
+        repository.restoreClearedLikes(requireNotNull(cleared.undo))
+
+        val restored = repository.getPost(liked.id)
+        assertEquals("Newer title", restored?.title)
+        assertEquals(liked.full, restored?.full)
+    }
+
+    @Test
     fun `undoing Likes clear for a retired profile restores nothing`() = runTest {
         val guard = ProfileLibraryWriteGuard()
         val repository = RoomCodexLikesRepository(database, clock = { now++ }, newId = { "codex-${id++}" }, writeGuard = guard)

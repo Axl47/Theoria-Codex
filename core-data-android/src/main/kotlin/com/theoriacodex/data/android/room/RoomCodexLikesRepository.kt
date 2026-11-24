@@ -295,7 +295,7 @@ class RoomCodexLikesRepository(
                     dao.codex(item.codexId) != null &&
                     dao.codexItem(item.codexId, item.postId.source.id, item.postId.sourcePostId) == null
                 ) {
-                    if (sharedPosts.insertIfMissing(post)) rememberPicture(post)
+                    if (sharedPosts.restore(post)) rememberPicture(post)
                     insertItem(item.codexId, post.id, item.savedAtEpochMs)
                 }
             }
@@ -436,7 +436,7 @@ class RoomCodexLikesRepository(
             restoreItems(snapshot.items, snapshot.posts)
             val postsById = snapshot.posts.associateBy(Post::id)
             snapshot.likes.forEach { like ->
-                postsById[like.postId]?.let(sharedPosts::insertIfMissing)
+                postsById[like.postId]?.let(sharedPosts::restore)
                 dao.insertLike(like.toEntity())
             }
         }
