@@ -118,12 +118,9 @@ internal fun ViewerFrameEffects(
     val showInfoSheet = uiState.controls.panel == ViewerPanel.INFO && !frame.inPictureInPicture
     ViewerSelectionEffects(frame, screen, controls, swipe.settling, onAction)
     ViewerBackHandlers(frame, screen, controls, dismissDrag)
-    // A vertical gallery fills the window's width, as its pages' own requests assume (ViewerImageRenderer).
-    val windowWidth = LocalWindowInfo.current.containerSize.width
-    val verticalPageWidthPx = windowWidth.takeIf { config.readingModeOf(uiState.currentPage, uiState.series) == GalleryReadingMode.VERTICAL }
     ViewerNavigationEffects(
         frame, swipe, postPagerState, controls, canLoadMoreFromSource, loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged,
-        verticalPageWidthPx,
+        config,
     )
     ViewerChromeAutoHideEffect(
         chromeVisible = frame.chromeVisible,
@@ -235,7 +232,7 @@ private fun ViewerNavigationEffects(
     loadMoreFromStrip: () -> Unit,
     onAction: (ViewerAction) -> Unit,
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
-    verticalPageWidthPx: Int?,
+    config: ViewerScreenConfig,
 ) {
     val uiState = frame.uiState
     val navigation = frame.navigation
@@ -247,11 +244,17 @@ private fun ViewerNavigationEffects(
     LaunchedEffect(swipeLoadPost?.id) {
         swipeLoadPost?.let { onAction(ViewerAction.RequestPageResolution(it.id)) }
     }
-    LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget, verticalPageWidthPx) {
+    // A vertical gallery fills the window's width, as its pages' own requests assume (ViewerImageRenderer).
+    val windowWidth = LocalWindowInfo.current.containerSize.width
+    LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget, windowWidth, config, uiState.series) {
         val targetKey = swipeLoadTarget?.let { target ->
             pages.getOrNull(target.postIndex)?.media?.getOrNull(target.mediaIndex)?.key
         }
-        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey, verticalPageWidthPx))
+        onAction(
+            viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey) { page ->
+                windowWidth.takeIf { config.readingModeOf(page, uiState.series) == GalleryReadingMode.VERTICAL }
+            },
+        )
     }
     LaunchedEffect(navigation.originalPosts.size, navigation.stripAnchorIndex, canLoadMoreFromSource, loadingMoreFromSource) {
         if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect

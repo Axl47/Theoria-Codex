@@ -157,7 +157,7 @@ private fun ViewerImageUpgrade(
     candidates: List<MediaDeliveryCandidate>, state: ViewerImageState, source: SourceKey, session: ViewerImageSession, pageWidthPx: Int?,
 ) {
     val context = LocalContext.current
-    LaunchedEffect(candidates, state.index, state.visible, source) {
+    LaunchedEffect(candidates, state.index, state.visible, source, pageWidthPx) {
         if (!state.visible) return@LaunchedEffect
         val next = candidates.getOrNull(state.index + 1) ?: return@LaunchedEffect
         if (next.activation != MediaDeliveryActivation.QUALITY_UPGRADE) return@LaunchedEffect
