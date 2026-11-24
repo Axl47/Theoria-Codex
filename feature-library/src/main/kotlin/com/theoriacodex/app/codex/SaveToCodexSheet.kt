@@ -58,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +68,8 @@ import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.data.repository.CodexLibrarySort
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Codex
+
+const val SAVE_TO_CODEX_SHEET_TAG = "Save to Codex sheet"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -224,6 +227,7 @@ private fun SaveToCodexSheetLayout(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(SAVE_TO_CODEX_SHEET_TAG),
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         sheetMaxWidth = if (landscape) Dp.Unspecified else BottomSheetDefaults.SheetMaxWidth,
         dragHandle = null,
