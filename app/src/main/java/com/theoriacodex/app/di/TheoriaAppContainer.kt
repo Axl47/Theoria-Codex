@@ -162,12 +162,9 @@ data class DataDependencies(
     val readingPositions: ReadingPositionRepository = InMemoryReadingPositionRepository(),
     val galleryReadingModes: GalleryReadingModeRepository = InMemoryGalleryReadingModeRepository(),
     val savedSearches: SavedSearchRepository = InMemorySavedSearchRepository(),
-    /** This session's copies of one file across sites; feeds teach it what they list. */
     val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
     val librarySections: LibrarySectionStore = LibrarySectionStore(uiRestoreRepository),
-    /** Every For You swipe, kept for a later taste model; nothing reads it yet. */
     val forYouVerdicts: ForYouVerdictRepository,
-    /** The Library's picture hashes, so a repost of a liked or saved post elsewhere counts as one. */
     val visualSignatures: VisualSignatureRepository,
 )
 
@@ -181,13 +178,9 @@ data class SourceDependencies(
     val availableSources: StateFlow<Set<SourceKey>>,
     val networkOnline: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true),
     val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
-    /** Hosts known to be down this session; shared by the built-in and custom-site clients. */
     val outages: HostOutageTracker = HostOutageTracker(),
-    /** The light per-site check, sharing the app's client so it carries browser-verified cookies. */
     val healthCheck: SiteHealthCheck = SiteHealthCheck(outages),
-    /** Opens connections to recently used hosts, on networks where the traffic costs nothing. */
     val warmConnections: suspend () -> Unit = {},
-    /** One in-flight detail request per post, shared by the feed and the Viewer. */
     val postResolutions: PostResolutionFlights = PostResolutionFlights(),
 )
 
@@ -200,7 +193,6 @@ data class UpdateDependencies(
 data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
-    /** The active profile's tag affinity, built once for the app session; see [shareTagAffinityInputs]. */
     val tagAffinity: SharedTagAffinity,
     val relatedPosts: RelatedPostsLoader,
     val comments: CommentsLoading,
@@ -208,9 +200,7 @@ data class FeatureDependencies(
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
     val offlineMedia: OfflineMediaCoordinator,
-    /** The one download queue every Activity instance uses (see [appPostDownloads]). */
     val postDownloads: PostDownloads,
-    /** What the opt-in picture tagger predicts; [PictureTags.None] while there is no model or no tagger. */
     val pictureTags: PictureTags = PictureTags.None,
 )
 
@@ -230,19 +220,14 @@ interface TheoriaAppContainer {
     val features: FeatureDependencies
     val workflows: WorkflowDependencies
 
-    /** Settings → Sites: user-added booru sites. */
     val customSites: CustomSitesController
 
-    /** The Series area; null in a container with no extension host. */
     val series: SeriesDependencies? get() = null
 
-    /** The extension sources' sites and client, for their browser checks; null with no extension host. */
     val extensionSites: ExtensionSites? get() = null
 
-    /** The Library's picture indexing and the opt-in picture tagger; null in a container without them. */
     val pictures: AppPictures? get() = null
 
-    /** Lives as long as the process: work that must finish after the screen or Activity that started it. */
     val applicationScope: CoroutineScope
 }
 
@@ -270,8 +255,6 @@ internal class DefaultTheoriaAppContainer(
     override val applicationScope: CoroutineScope get() = durableStoreScope
     private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
     private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
-    // Opened before anything starts background work: a pins file from a newer build fails construction, and a retry
-    // builds a new container while this one's stores would still be open.
     private val savedSearches = FileBackedSavedSearchRepository(
         storageDirectory, recoveryRegistry = fileStoreRecoveryRegistry, sourceName = { it.displayName() },
     )
@@ -336,7 +319,6 @@ internal class DefaultTheoriaAppContainer(
         scope = durableStoreScope,
         publishMediaKeys = cookieBridge::updateMediaKeys,
     )
-    /** Opened at the end of [awaitDurableStores]: restored downloads and offline jobs wait on it. */
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
     private val fileMirrors = FileMirrorIndex()
     private val listingPictures = ListingPictures(appContext, durableStoreScope, fileMirrors)
@@ -346,7 +328,6 @@ internal class DefaultTheoriaAppContainer(
         custom = customSourceRuntime.snapshot,
         annotateListing = listingPictures::annotate,
     )
-    /** Built-ins the account store allows plus usable custom sites; Settings intersects saves with it. */
     private val availableSources: StateFlow<Set<SourceKey>> =
         combine(accountStore.availableSources, customSourceRuntime.snapshot) { builtIns, custom -> builtIns + custom.adapters.keys }
             .stateIn(durableStoreScope, SharingStarted.Eagerly, accountStore.availableSources.value)
@@ -416,19 +397,16 @@ internal class DefaultTheoriaAppContainer(
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
-    // Before the backup service, which adds an imported backup's extension repos.
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)
         val repository = RoomSeriesRepository(contentDatabase)
-        // Neither Android's backup nor device transfer carries the queue (noBackupFilesDir) or the offline copies.
         val downloads = SeriesDownloads(
             store = offlineStore,
             queueFile = File(appContext.noBackupFilesDir, "series_download_queue.json"),
             repository = repository,
             source = host::source,
             covers = host.covers,
-            // The client that carries the extension interceptor, as the Viewer's image loader does.
             fetch = { url, file -> downloadChapterPage(url, file, httpClients.downloads) },
             scheduler = SeriesDownloadScheduler(appContext) { settingsRepository.observeSettings().first().cache },
             deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
@@ -556,7 +534,6 @@ internal class DefaultTheoriaAppContainer(
         forYou = ForYouCoordinator(
             registry = sourceRegistry,
             statisticsRepository = statisticsRepository,
-            // Deleting the model plans lanes again at once, before the shared inputs drop its evidence.
             tagAffinity = { profile ->
                 tagAffinity.forProfile(profile).let { if (pictures.tagger.ready.value) it else it.copy(pictures = PictureEvidence()) }
             },
@@ -602,7 +579,6 @@ internal class DefaultTheoriaAppContainer(
 
     override val extensionSites: ExtensionSites? get() = extensionHost
 
-    /** Keeps the new-chapter check scheduled; started by [awaitDurableStores], once. */
     private var seriesScheduling: Job? = null
 
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
@@ -625,22 +601,14 @@ internal class DefaultTheoriaAppContainer(
         },
     )
 
-    /** Keeps the bridge's allowed hosts equal to the saved sites; [awaitDurableStores] seeds them first. */
     init {
         durableStoreScope.launch {
             siteProfiles.observeProfiles().map(::siteHosts).collect(cookieBridge::updateSiteHosts)
         }
     }
 
-    /**
-     * Complete typed-store migration before any route can observe default placeholder state. Every DataStore must be
-     * awaited here: one that cannot open throws, which shows the startup failure screen, while collectors started
-     * during construction wait for it instead of crashing. Retry calls this again on the same container.
-     */
     suspend fun awaitDurableStores() = coroutineScope {
-        // The old stored host list; allowed hosts now come from the saved sites.
         appContext.deleteSharedPreferences("browser_verified_sites")
-        // Before the app is ready: a request racing an empty list would be challenged and trip a 10-minute outage.
         siteProfiles.awaitReady()
         cookieBridge.updateSiteHosts(siteHosts(siteProfiles.observeProfiles().first()))
         cookieBridge.updateBuiltInAgents(builtInAgents.read())
@@ -658,14 +626,11 @@ internal class DefaultTheoriaAppContainer(
         sourceReadiness.open()
         if (series != null) {
             durableStoreScope.launch {
-                // Chapters downloaded before they moved into the offline store; no release had them.
-                // Remove once v1.10.0 has shipped.
                 File(appContext.noBackupFilesDir, "series_downloads").deleteRecursively()
                 runCatchingPreservingCancellation { forgetLegacyExtensionData(appContext, settingsRepository) }
                     .onFailure { Diagnostics.report("extensions", "Old extension data could not be removed", it) }
             }
         }
-        // Only now: watching followed series opens Room, which must first get the chance to fail into the startup screen.
         if (seriesScheduling == null) {
             seriesScheduling = series?.let { series ->
                 durableStoreScope.launch {
@@ -694,7 +659,6 @@ internal class DefaultTheoriaAppContainer(
             runCatchingPreservingCancellation { pictures.tags.writeThrough() }
                 .onFailure { Diagnostics.report("vision", "This session's picture tags could not be stored", it) }
         }
-        // Off the startup path: searched-tag suggestions start from what Recents remembers.
         durableStoreScope.launch {
             runCatchingPreservingCancellation {
                 statisticsRepository.seedSearchedTags(recentsRepository.observeSearches().first())
@@ -705,5 +669,4 @@ internal class DefaultTheoriaAppContainer(
 
 private fun siteHosts(profiles: List<SiteProfile>): Set<String> = profiles.mapTo(HashSet()) { it.address.host }
 
-/** Matches the built-in client's read timeout; probes keep the custom client's 10 s default. */
 private const val CUSTOM_SITE_READ_TIMEOUT_MS = 20_000

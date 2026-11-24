@@ -68,13 +68,6 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import java.util.Locale
 
-/**
- * The Series tab, in two views: Following, the followed series to sort and filter, and Browse, one source's popular
- * or latest series (or filtered search). The collapsing search filters Following by title as it is typed, and on
- * Browse searches every source, replacing the listing with one section per source; tapping a source's header opens
- * its dedicated search. With series of both kinds, an All / Manga / Anime filter narrows Following and the search
- * results to one kind.
- */
 @Composable
 fun SeriesTabScreen(
     viewModel: SeriesTabViewModel,
@@ -86,7 +79,6 @@ fun SeriesTabScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
     val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
-    // Hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
     var query by rememberSaveable { mutableStateOf(state.searchQuery) }
     LaunchedEffect(state.searchQuery) { query = state.searchQuery }
     val grids = SeriesGrids(rememberLazyGridState(), rememberLazyGridState(), rememberLazyListState())
@@ -129,7 +121,6 @@ fun SeriesTabScreen(
     }
 }
 
-/** The scroll positions the tab keeps for each view, and for search results across sources. */
 private class SeriesGrids(val following: LazyGridState, val browse: LazyGridState, val search: LazyListState)
 
 @Composable
@@ -159,7 +150,6 @@ private fun SeriesTabHomeContent(
             is LazyGridState -> scrollable.animateScrollToItem(0)
             is LazyListState -> scrollable.animateScrollToItem(0)
         }
-        // After the scroll, which collapses the bar as any scroll does.
         searchBarDismissed = false
     }
     BackHandler(enabled = search.searching, onBack = search.onClear)
@@ -193,7 +183,6 @@ private fun SeriesTabHomeContent(
     }
 }
 
-/** What the search bar holds and does in the view on screen. */
 private class SearchBinding(
     val query: String,
     val placeholder: String,
@@ -203,10 +192,6 @@ private class SearchBinding(
     val onClear: () -> Unit,
 )
 
-/**
- * On Following the bar narrows the grid by title as it is typed; on Browse it holds [query] until sent, then searches
- * every source. Clearing either also runs [onCleared].
- */
 private fun searchBinding(
     state: SeriesTabState,
     content: SeriesTabContent,
@@ -240,7 +225,6 @@ private fun searchBinding(
     )
 }
 
-/** The scrolling list on screen: [view]'s grid, or on Browse the results of a search across sources while one shows. */
 private fun SeriesGrids.shown(view: SeriesView, searching: Boolean): ScrollableState = when {
     view == SeriesView.FOLLOWING -> following
     searching -> search
@@ -299,17 +283,12 @@ private fun SeriesTabViewBody(
     }
 }
 
-/**
- * Following or Browse. Beside the collapsed search corner it stops short of it, so the two share the top line; under
- * the open search bar it takes the full width.
- */
 @Composable
 private fun SeriesViewSwitch(view: SeriesView, besideCollapsedSearch: Boolean, onChoose: (SeriesView) -> Unit) {
     val end by animateDpAsState(if (besideCollapsedSearch) COLLAPSED_SEARCH_CLEARANCE else 16.dp, label = "Series view switch end")
     SingleChoiceSegmentedButtonRow(
         Modifier
             .fillMaxWidth()
-            // Beside the collapsed search corner it shares that line's height; under the open bar it keeps its own.
             .heightIn(min = if (besideCollapsedSearch) SearchBarMinHeight else 0.dp)
             .padding(start = 16.dp, end = end)
             .wrapContentHeight(Alignment.CenterVertically),
@@ -320,7 +299,6 @@ private fun SeriesViewSwitch(view: SeriesView, besideCollapsedSearch: Boolean, o
                 onClick = { onChoose(entry) },
                 shape = SegmentedButtonDefaults.itemShape(index, SeriesView.entries.size),
                 modifier = Modifier.testTag(seriesViewTag(entry)),
-                // No checkmark, so segments keep their width when the selection changes.
                 icon = {},
             ) { Text(entry.label, maxLines = 1) }
         }
@@ -354,7 +332,6 @@ private fun GlobalSearchBody(
     }
 }
 
-/** All, Manga or Anime: what the Following grid and the search results are narrowed to. */
 @Composable
 internal fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -363,7 +340,6 @@ internal fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, mo
     }
 }
 
-/** [run] keys the next page's request, so a listing that replaced another with the same next page still asks for it. */
 internal fun LazyGridScope.browseListing(
     browse: SeriesSourceListing,
     run: Int,
@@ -395,7 +371,6 @@ internal fun LazyGridScope.browseListing(
     }
 }
 
-/** [results] are [content]'s search results: those of the sources of the kind the tab is narrowed to, when it is. */
 private fun LazyListScope.searchResults(
     results: List<SeriesSourceListing>,
     content: SeriesTabContent,
@@ -405,7 +380,6 @@ private fun LazyListScope.searchResults(
     more: (SourceKey) -> Unit,
 ) {
     if (results.isEmpty()) item(key = "search-no-sources") { EmptyState(noExtensionsOn(content.filter)) }
-    // A language tells sources apart only when they do not all share one.
     val languages = results.distinctBy { it.language }.size > 1
     results.forEach { result ->
         val listing = result.listing
@@ -451,7 +425,6 @@ private fun LazyListScope.searchResults(
     }
 }
 
-/** Section header for a source in global search: name above language subtitle, with an arrow leading to its search. */
 @Composable
 private fun SourceSearchHeader(title: String, subtitle: String?, onClick: () -> Unit) {
     Row(
@@ -487,16 +460,13 @@ private fun SourceSearchHeader(title: String, subtitle: String?, onClick: () -> 
     }
 }
 
-/** What ends a source's row of results: its next page's button, progress or failure; null once the source has no more. */
 private fun moreResults(listing: SeriesListing.Loaded, result: SeriesSourceListing, onMore: () -> Unit): (@Composable () -> Unit)? = when {
     listing.loadingMore -> { { CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(24.dp), strokeWidth = 2.dp) } }
-    // Bounded, so the line can wrap at a row's end.
     listing.moreFailed -> { { SourceLoadFailure(LOAD_FAILED, result.key, result.name, onMore, Modifier.widthIn(max = FAILURE_WIDTH), compact = true) } }
     listing.nextPage != null -> { { TextButton(onClick = onMore) { Text("More") } } }
     else -> null
 }
 
-/** A sideways row of cards, with [after] at its end. */
 @Composable
 private fun <T> SeriesRow(
     items: List<T>,
@@ -517,7 +487,6 @@ private fun <T> SeriesRow(
     }
 }
 
-/** One line for a source that failed, where a full-height failure would push the other sources away; Retry when [onRetry] is given. */
 @Composable
 internal fun FailureRow(onRetry: (() -> Unit)?, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -531,10 +500,8 @@ internal fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Uni
 }
 
 internal val CARD_WIDTH = 104.dp
-/** The collapsed search corner's width (two icon buttons and their padding) and a gap before it. */
 private val COLLAPSED_SEARCH_CLEARANCE = 128.dp
 private val FAILURE_WIDTH = 280.dp
-/** "No extensions on", or under the kind filter "No anime extensions on". */
 private fun noExtensionsOn(kind: SeriesKind?): String =
     kind?.let { "No ${it.label.lowercase(Locale.getDefault())} extensions on" } ?: "No extensions on"
 

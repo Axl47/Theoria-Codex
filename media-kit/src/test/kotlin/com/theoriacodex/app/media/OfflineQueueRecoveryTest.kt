@@ -104,7 +104,6 @@ class OfflineQueueRecoveryTest {
                 pendingStore = pending, awaitSources = { waiting++; sources.await() })
             owner.recoverPendingJobs()
             owner.saveOnCollectionSave(post("c"))
-            // Every job has saved the queue once it waits for sources.
             while (waiting < 3 && resolved.isEmpty()) kotlinx.coroutines.yield()
             assertEquals(setOf("codex:first", "codex:second", AUTOMATIC_OFFLINE_OWNER), pending.loadNow().keys)
             assertEquals(emptyList<String>(), resolved)
@@ -137,10 +136,6 @@ class OfflineQueueRecoveryTest {
         }
     }
 
-    /**
-     * Reads the queue without leaving the test thread. Suspending for its real file read would leave runTest
-     * with nothing to run, and it would then skip virtual time to the timeout of the post still being acquired.
-     */
     private fun OfflinePendingJobStore.loadNow() = runBlocking { load() }
 
     private fun post(id: String): Post = Post(PostId(SourceKey.PIXIV, id), ImageRef(null, null, null), null,

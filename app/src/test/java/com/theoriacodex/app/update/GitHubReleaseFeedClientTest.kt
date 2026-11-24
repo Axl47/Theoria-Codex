@@ -131,7 +131,6 @@ class GitHubReleaseFeedClientTest {
         assertEquals("https://example.com/main.apk", remote.assetDownloadUrl)
     }
 
-    // The updater is how installs receive fixes, so one malformed entry must not hide a good release.
     @Test
     fun `release parser skips a malformed release or asset and keeps the good release`() {
         val json = """

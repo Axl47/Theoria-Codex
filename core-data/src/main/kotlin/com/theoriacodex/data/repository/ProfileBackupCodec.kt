@@ -17,12 +17,6 @@ import kotlinx.serialization.json.put
 
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
-/**
- * 2 added the optional `customSources` list, 3 the optional `library.series` list and 4 the optional `extensionRepos`
- * list; older apps refuse a version they do not know with their "newer version" message. A backup is written with the
- * lowest version that holds what it has, so the previous release still reads one without repos (or series), and no
- * app restores one with them and silently leaves them out.
- */
 private const val PROFILE_BACKUP_VERSION = 4
 
 private fun ProfileBackup.version() = when {
@@ -31,24 +25,16 @@ private fun ProfileBackup.version() = when {
     else -> 2
 }
 
-/** A sanity bound on the repos a backup lists. */
 private const val MAX_BACKUP_EXTENSION_REPOS = 256
 
-/** A sanity bound; a device allows [SiteProfile.MAX_CUSTOM_SITES] plus any added during a restore. */
 private const val MAX_BACKUP_SITE_PROFILES = 256
 
-/**
- * Versioned, bounded metadata document; no reflected backup-specific models or device files. The frame is a JSON
- * tree checked field by field; settings, statistics, posts, and sites are their storage records through [DurableJson],
- * which writes the keys, omitted nulls, and present defaults that older builds read.
- */
 class ProfileBackupCodec {
     fun encode(backup: ProfileBackup): ByteArray =
         encodeDocument(backup).toString().toByteArray(Charsets.UTF_8).also {
             require(it.size <= PROFILE_BACKUP_MAX_BYTES) { "Backup exceeds the 32 MiB metadata limit" }
         }
 
-    /** The validated document [encode] writes, for the restore journal to embed. */
     internal fun encodeDocument(written: ProfileBackup): JsonObject {
         val backup = written.copy(library = written.library.copy(series = written.library.series.writable()))
         validate(backup)
@@ -99,7 +85,6 @@ class ProfileBackupCodec {
         return decodeDocument(parseBackupObject(raw))
     }
 
-    /** Decodes a parsed backup document; the restore journal embeds one. */
     internal fun decodeDocument(root: JsonObject): ProfileBackup = rejectMalformedBackup {
         require(root.backupString("format") == "theoria-profile-backup") { "This is not a Theoria profile backup" }
         require(root.backupInt("version") in 1..PROFILE_BACKUP_VERSION) { "This backup needs a newer version of Theoria" }
@@ -125,7 +110,6 @@ class ProfileBackupCodec {
         ).also(::validate)
     }
 
-    /** Strict, like the rest of the codec: one invalid profile rejects the backup before anything is written. */
     private fun decodeCustomSources(root: JsonObject): List<SiteProfile> {
         if (!root.containsKey("customSources")) return emptyList()
         return root.backupObjects("customSources", MAX_BACKUP_SITE_PROFILES).map { record ->
@@ -162,7 +146,6 @@ class ProfileBackupCodec {
             putId(entry.post.id)
             put("viewedAt", entry.viewedAtEpochMs)
             put("origin", entry.origin.name)
-            // Written as an explicit null when absent, as the Gson tree did.
             put("queryHash", entry.originQueryHash)
             put("section", entry.section.name)
             put("highestMedia", entry.maxViewedMediaNumber)
@@ -224,7 +207,6 @@ class ProfileBackupCodec {
     private fun portableSettings(settings: AppSettings): AppSettings = settings.copy(
         followedCreators = settings.followedCreators.map { it.copy(creator = portableBackupCreator(it.creator)) },
         providerHealth = emptyMap(),
-        // Trust is given on a device, for the extensions on it: a backup file must not be able to turn one on.
         extensions = ExtensionChoices(),
         scenarioPreset = ScenarioPreset.NORMAL,
     )
@@ -267,5 +249,4 @@ private fun validate(backup: ProfileBackup) {
     }
 }
 
-/** Older backups can hold rows of the retired For You history section; they are dropped on import. */
 private fun List<JsonObject>.withoutForYouSection(): List<JsonObject> = filterNot { it.backupString("section") == "FYP" }

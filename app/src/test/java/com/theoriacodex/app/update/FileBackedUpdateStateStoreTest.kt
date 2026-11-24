@@ -92,7 +92,6 @@ class FileBackedUpdateStateStoreTest {
         val priorBody = file.readText()
         val store = FileBackedUpdateStateStore(file)
         store.snapshot()
-        // The replacement's temp file cannot be created beside a read-only target.
         check(file.parentFile.setWritable(false))
         val failure = try {
             runCatching { store.update { current -> current.copy(ignoredReleaseId = 801L) } }.exceptionOrNull()
@@ -119,7 +118,6 @@ class FileBackedUpdateStateStoreTest {
         }
         val priorBody = file.readText()
         val store = FileBackedUpdateStateStore(file)
-        // Cancelled after the transform, so the write itself observes the cancellation.
         val caller = Job()
 
         val failure = runCatching {

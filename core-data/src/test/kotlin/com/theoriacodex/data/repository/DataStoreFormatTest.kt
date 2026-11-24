@@ -3,10 +3,6 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.data.storage.assertStoredFormat
 import org.junit.Test
 
-/**
- * Each DataStore file has a golden, captured from the kotlinx store's output, that sets every property; it must keep
- * decoding to the same record. DataStoreGoldenTest pins how partial, quoted, retired-key, and damaged files load.
- */
 class DataStoreFormatTest {
     @Test
     fun `settings file keeps every stored key`() {
@@ -116,7 +112,6 @@ class DataStoreFormatTest {
             translatedSourceCharacterCount = 13L,
         )
         val full = StatisticsDataStoreFile(statistics = statistics)
-        // statistics-full.json predates series time, so it also pins that a file without it reads as zero.
         val series = StatisticsDataStoreFile(
             statistics = StatisticsStoreRecord(
                 history = mapOf(

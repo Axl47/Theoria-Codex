@@ -25,29 +25,20 @@ interface CodexRepository {
     suspend fun createCodex(name: String): Codex
     suspend fun renameCodex(codexId: String, name: String)
     suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean)
-    /** Deletes atomically and returns what Undo needs, or null when the Codex is already gone. */
     suspend fun deleteCodexForUndo(codexId: String): DeletedCodexSnapshot?
     suspend fun restoreDeletedCodex(snapshot: DeletedCodexSnapshot)
-    /** Deletes the Codex only while it holds no posts, checked in the same transaction; returns whether it did. */
     suspend fun deleteCodexIfEmpty(codexId: String): Boolean
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
-    /** Orders by save time, or by source then save time; any other [sort] comes back newest saved first. */
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
-    /**
-     * A unique saved-library snapshot for read models that do not need per-collection memberships. It may refresh only
-     * when membership changes, so a later edit to a saved post's stored data can wait for the next save or removal.
-     */
     fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> = if (codexIds.isEmpty()) flowOf(emptyList()) else
         combine(codexIds.sorted().map { observeCodexPosts(it, CodexSortMode.NEWEST_SAVED) }) { lists ->
             lists.flatMap { it }.distinctBy(Post::id)
         }
     suspend fun getPost(postId: com.theoriacodex.domain.model.PostId): Post?
-    /** Commits the unique selection atomically; missing collections fail, duplicates return zero. */
     suspend fun addItems(codexId: String, posts: List<Post>): Int
     suspend fun addItem(codexId: String, post: Post) {
         addItems(codexId, listOf(post))
     }
-    /** Counts every membership but hydrates only the newest bounded covers of selected collections. */
     fun observeCodexSummaries(codexIds: Set<String>, coverLimit: Int = 8): Flow<List<CodexSummary>>
     fun observeSavedPostIds(codexIds: Set<String>): Flow<Set<PostId>>
     suspend fun updatePost(post: Post)
@@ -55,7 +46,6 @@ interface CodexRepository {
     suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>)
 }
 
-/** Everything needed to undo a Codex deletion, including its place in the Library. Process-only. */
 data class DeletedCodexSnapshot(
     val codex: Codex,
     val position: Int,
@@ -63,7 +53,6 @@ data class DeletedCodexSnapshot(
     val posts: List<Post>,
 )
 
-/** Exact rows removed by clearing a profile's Likes; process-only authority for Undo. */
 data class ClearedLikesSnapshot(
     val items: List<CodexItem>,
     val posts: List<Post>,
@@ -76,7 +65,6 @@ data class CodexSummary(
     val coverPosts: List<Post>,
 )
 
-/** How a Codex orders its posts; persisted by name, so renaming an entry resets saved choices. */
 enum class CodexSortMode {
     NEWEST_SAVED,
     OLDEST_SAVED,
@@ -128,10 +116,8 @@ data class RecentSearchEntry(
     val searchedAtEpochMs: Long,
     val kind: RecentSearchKind = query.defaultRecentSearchKind(),
     val sources: List<SourceKey> = query.defaultRecentSearchSources(),
-    /** Each source's tags; only a For You search read from old data has them, until it is converted. */
     val sourceTags: Map<SourceKey, List<String>> = emptyMap(),
 ) {
-    /** A For You search from before the shelves page was removed; saved ones become source searches on load. */
     val isRetiredForYouSearch: Boolean get() = sourceTags.isNotEmpty()
 }
 
@@ -195,12 +181,9 @@ interface RecentsRepository {
         watchedPosts: List<RecentPostEntry> = emptyList(),
         searches: List<RecentSearchEntry> = emptyList(),
     )
-    /** Removes one post from one History section; [restoreEntries] with the removed entry puts it back. */
     suspend fun removeWatchedPost(postId: PostId, section: RecentPostSection)
-    /** Removes one search; [restoreEntries] with the removed entry puts it back. */
     suspend fun removeSearch(queryHash: String)
     suspend fun clearWatchedPosts(section: RecentPostSection)
-    /** Removes every search and captures the exact Undo payload in the same transaction. */
     suspend fun clearSearches(): List<RecentSearchEntry>
     suspend fun clearAll()
 }
@@ -210,24 +193,17 @@ data class StatisticsTagKey(
     val tag: String,
 )
 
-/** A term counted as searched on [source], with its facet and namespace, so an artist stays an artist. */
 data class SearchedTagKey(
     val source: SourceKey,
     val term: SearchTerm,
 )
 
-/**
- * Foreground time to add to statistics. [totalMs] counts every screen; at most one category beside it holds the
- * same time, since categories are mutually exclusive and screens such as Settings have none.
- */
 data class UsageDurationDelta(
     val totalMs: Long = 0L,
     val browsingMs: Long = 0L,
     val watchingMs: Long = 0L,
     val codexMs: Long = 0L,
-    /** In a series session that reads chapters. */
     val readingMs: Long = 0L,
-    /** In a series session that plays episodes. */
     val animeMs: Long = 0L,
     val dailyUsage: List<DailyUsageDuration> = emptyList(),
 )
@@ -250,7 +226,6 @@ data class CodexStatistics(
 data class CodexUsageTarget(val codexId: String, val postKey: String? = null, val video: Boolean = false)
 
 data class LifetimeStatistics(
-    /** Process projection of durable private files; not serialized into the totals store. */
     val thumbnails: Map<String, String> = emptyMap(),
     val history: Map<java.time.LocalDate, DailyActivity> = emptyMap(),
     val codexStatistics: Map<String, CodexStatistics> = emptyMap(),
@@ -266,11 +241,8 @@ data class LifetimeStatistics(
     val watchedByTag: Map<StatisticsTagKey, Long> = emptyMap(),
     val searchCount: Long = 0L,
     val searchesBySource: Map<SourceKey, Long> = emptyMap(),
-    /** How many searches required each term, counted under every source the search ran on. */
     val searchesByTag: Map<SearchedTagKey, Long> = emptyMap(),
-    /** Whether [searchesByTag] has taken in the portable general tags Recents held when tag counting began. */
     val searchesByTagSeeded: Boolean = false,
-    /** Whether [searchesByTag] has taken in the other terms Recents held when typed terms began to count. */
     val searchesByTypedTagSeeded: Boolean = false,
     val forYouSearchCount: Long = 0L,
     val forYouSaveCount: Long = 0L,
@@ -280,29 +252,22 @@ data class LifetimeStatistics(
     val translatedSourceCharacterCount: Long = 0L,
 )
 
-/** A post opened from a Codex, counted under that Codex's statistics. */
 data class CodexPostOpen(val codexId: String, val postKey: String, val label: String)
 
-/** Local-only cumulative statistics. Feature data remains authoritative for current library composition. */
 interface StatisticsRepository {
-    /** Supply already available post data; never resolves a post remotely. */
     suspend fun recordPostAvailable(post: Post) = Unit
     fun observeStatistics(): Flow<LifetimeStatistics>
     suspend fun addCodexUsage(target: CodexUsageTarget, durationMs: Long)
     suspend fun recordCodexPostOpen(codexId: String, postKey: String, label: String)
     suspend fun recordAppOpen()
     suspend fun addUsageDuration(delta: UsageDurationDelta)
-    /** Records a viewed post; [codexOpen] also counts it as opened from that Codex in the same write. */
     suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>, codexOpen: CodexPostOpen? = null)
-    /** Records one completed search over [sources]; [terms] are the terms it ran, see [Query.searchedTerms]. */
     suspend fun recordSearch(sources: Set<SourceKey>, terms: Set<SearchTerm> = emptySet())
-    /** Once per kind of term, counts the terms of [recentSearches] into [LifetimeStatistics.searchesByTag]. */
     suspend fun seedSearchedTags(recentSearches: List<RecentSearchEntry>)
     suspend fun recordForYouSave()
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
     suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long)
-    /** Keeps the larger value of every counter, so restoring the same backup twice changes nothing. */
     suspend fun mergeRestored(imported: LifetimeStatistics)
 }
 
@@ -320,50 +285,32 @@ interface LikesRepository {
 
 data class CodexBulkImportResult(
     val codex: Codex,
-    /** Valid unique posts accepted by the transaction, including existing membership. */
     val acceptedPosts: Int,
-    /** Membership rows newly inserted by this transaction. */
     val insertedMemberships: Int,
 )
 
 data class CodexBulkReorderResult(
-    /** False when the requested ids were not one complete, duplicate-free permutation. */
     val applied: Boolean,
     val movedCodices: Int,
 )
 
 data class CodexLikeSyncResult(
     val nowLiked: Boolean,
-    /** Whether system-Codex membership changed along with the like. */
     val membershipChanged: Boolean,
-    /** Number of profile-owned automatic Codices that received a new membership. */
     val automaticMembershipsAdded: Int = 0,
 )
 
 data class CodexLikesClearResult(
     val clearedLikes: Int,
-    /** Only memberships matching the profile's liked post ids are removed. */
     val removedMemberships: Int,
-    /** Null when there was nothing to clear. */
     val undo: ClearedLikesSnapshot? = null,
 )
 
-/**
- * Optional repository capability for operations that cross Codex and Likes ownership.
- *
- * Implementations must commit each method atomically. Ordinary [CodexRepository] and
- * [LikesRepository] expose collection operations and Likes observation respectively.
- * Callers can opt into this capability when both repositories are backed by one transactional
- * store, without making Room or another database part of the domain-facing API.
- */
 interface CodexLikesTransactions {
-    /** Atomically snapshots and removes target memberships also present in any comparison Codex. */
     suspend fun cleanCodex(request: CodexCleaningRequest): CodexCleaningSnapshot
 
-    /** Restores removed rows without overwriting newer memberships or Likes. */
     suspend fun restoreCleanedCodex(snapshot: CodexCleaningSnapshot)
 
-    /** Deletes every profile-owned collection and Like in one transaction, preserving shared Posts. */
     suspend fun removeProfileLibrary(profileId: String)
 
     suspend fun importCodex(
@@ -372,7 +319,6 @@ interface CodexLikesTransactions {
         posts: List<Post>,
     ): CodexBulkImportResult
 
-    /** Applies one complete order in one commit; partial or duplicate orders are rejected. */
     suspend fun reorderCodices(codexIdsInOrder: List<String>): CodexBulkReorderResult
 
     suspend fun toggleLikeAndSyncSystemCodex(
@@ -384,10 +330,6 @@ interface CodexLikesTransactions {
         eligibleAutomaticCodexIds: Set<String> = emptySet(),
     ): CodexLikeSyncResult
 
-    /**
-     * Clears a profile's likes and removes only the corresponding system-Codex memberships.
-     * Any independently saved membership in that Codex is retained.
-     */
     suspend fun clearLikesAndLikedMemberships(
         profileId: String,
         systemCodexId: String,
@@ -416,7 +358,6 @@ private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
 data class SourceRuntimeSettings(
     val enabledSources: Set<SourceKey> = SourceKey.builtIns.toSet(),
     val sourceWeights: Map<SourceKey, Double> = DEFAULT_SOURCE_WEIGHTS,
-    /** Normalized weights keyed by the sorted ids of an exact enabled-source combination. */
     val sourceWeightsByConfiguration: Map<String, Map<SourceKey, Double>> = emptyMap(),
 )
 
@@ -453,7 +394,6 @@ data class ViewerSettings(
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val instantSeek: Boolean = false,
-    /** Rotate to fit a video the Viewer opens on, when the video is clearly wide or tall. */
     val autoRotateVideos: Boolean = true,
     val commentOrder: com.theoriacodex.domain.model.CommentOrder = com.theoriacodex.domain.model.CommentOrder.OLDEST,
 )
@@ -468,10 +408,6 @@ data class ForYouBlacklistEntry(
     val tags: List<String>,
 )
 
-/**
- * A saved tag, or an "or" group of saved tags that matches posts carrying any one of [tags].
- * A group may carry a [name] to show in place of its tags; a single tag never does.
- */
 data class FavoriteTagEntry(
     val source: SourceKey,
     val tags: List<String>,
@@ -489,7 +425,6 @@ fun defaultRecommendationProfiles(): List<RecommendationProfile> {
     return DEFAULT_RECOMMENDATION_PROFILES
 }
 
-/** Display order for the Codex Library; automatic sorts never overwrite the stored manual order. */
 enum class CodexLibrarySort {
     MANUAL,
     NAME_ASCENDING,
@@ -502,7 +437,6 @@ enum class CodexLibrarySort {
     MOST_OPENED,
 }
 
-/** How often followed series are checked for new chapters in the background; [hours] is null when they never are. */
 enum class SeriesUpdateInterval(val hours: Int?) {
     OFF(null),
     HOURS_6(6),
@@ -513,7 +447,6 @@ enum class SeriesUpdateInterval(val hours: Int?) {
 data class AppSettings(
     val oldSearchBar: Boolean = false,
     val seriesUpdateInterval: SeriesUpdateInterval = SeriesUpdateInterval.HOURS_12,
-    /** Deletes a downloaded chapter once it is read and the reader has left it. */
     val seriesDeleteAfterReading: Boolean = false,
     val codexLibrarySort: CodexLibrarySort = CodexLibrarySort.MANUAL,
     val followedCreators: List<FollowedCreator> = emptyList(),
@@ -527,7 +460,6 @@ data class AppSettings(
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
     val providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
-    /** Where debug builds kept extension choices before the first release with extensions; never read, and emptied at startup. */
     val extensions: ExtensionChoices = ExtensionChoices(),
 )
 
@@ -548,16 +480,12 @@ interface SettingsRepository {
     suspend fun setScenarioPreset(preset: ScenarioPreset)
     suspend fun setActiveProfile(profileId: String)
     suspend fun addRecommendationProfile(name: String): RecommendationProfile
-    /** A blank name or unknown profile changes nothing and returns false. */
     suspend fun renameRecommendationProfile(profileId: String, name: String): Boolean
     suspend fun removeRecommendationProfile(profileId: String): Boolean
     suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
-    /** Saves one tag, or several as an "or" group; false when the same entry is already saved. */
     suspend fun addFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String? = null): Boolean
-    /** Removes the entry holding exactly [tags], in any order. */
     suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tags: List<String>): Boolean
-    /** Names the saved group holding exactly [tags]; a blank [name] clears it. False when nothing changed. */
     suspend fun renameFavoriteTag(profileId: String, source: SourceKey, tags: List<String>, name: String?): Boolean
 }
 
@@ -569,7 +497,6 @@ data class CacheSnapshot(
 )
 
 interface CacheRepository {
-    /** Process-only invalidation for named covers, including URL-pointer writes with unchanged byte counts. */
     fun observeNamedThumbnailRevisions(): Flow<Long> = flowOf(0L)
     fun observeSnapshot(): Flow<CacheSnapshot>
     suspend fun cacheThumbnail(post: Post)
@@ -588,13 +515,8 @@ enum class ViewerStreamSource {
     CODEX,
     CREATOR_PROFILE,
     RECENTS,
-    /** A Trail: a Viewer level forked from a post by tag, creator or similarity. History stores it as [SEARCH]. */
     TRAIL,
 
-    /**
-     * One series' entries (chapters) in reading order. They are read, not collected: History, statistics, stored
-     * posts, Like and Save all leave this stream alone, and its progress and reading mode belong to the series.
-     */
     SERIES,
 }
 
@@ -642,13 +564,11 @@ data class FeedFabRestoreState(
     @SerialName("source") val source: String? = null,
     @SerialName("language") val language: String? = null,
     @SerialName("fullColorOnly") val fullColorOnly: Boolean = false,
-    /** For You shows its posts as a grid instead of the swipe deck. */
     @SerialName("grid") val grid: Boolean = false,
     @SerialName("searchAnimationByScope")
     val searchAnimationByScope: Map<String, SearchAnimationFilterRestoreState> = emptyMap(),
 )
 
-/** Search's duration filter per scope; "animated only" moved into the query itself, so stored copies ignore it. */
 @Serializable
 data class SearchAnimationFilterRestoreState(
     @SerialName("durationMinBucket") val durationMinBucket: Int = 0,
@@ -659,11 +579,9 @@ interface UiRestoreRepository {
     suspend fun setLastTab(route: String)
     suspend fun getLastTab(): String?
 
-    /** The Library tab's section, stored by name; null until one is chosen. */
     suspend fun setLibrarySection(section: String)
     suspend fun getLibrarySection(): String?
 
-    /** Saved searches' new-post marks; kept with UI state because they are device-local and disposable. */
     fun observeSavedSearchNewPosts(): Flow<SavedSearchNewPosts>
     suspend fun updateSavedSearchNewPosts(transform: (SavedSearchNewPosts) -> SavedSearchNewPosts)
     suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
@@ -674,11 +592,6 @@ interface UiRestoreRepository {
     suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
 }
 
-/**
- * Whether this device already holds library data for a source. Adding a custom site whose derived
- * id answers true asks the user before reconnecting (plan D2). Likes, Codex items and Recents all
- * reference stored posts, so the posts table answers for all of them.
- */
 fun interface SourceLibraryPresence {
     suspend fun hasLibraryData(source: SourceKey): Boolean
 }

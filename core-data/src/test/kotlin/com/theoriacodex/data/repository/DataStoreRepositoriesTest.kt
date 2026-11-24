@@ -118,7 +118,6 @@ class DataStoreRepositoriesTest {
     @Test
     fun `retired legacy files and import proofs are ignored without resetting either store`() = runTest {
         val directory = tempFolder.newFolder("retired-legacy-imports")
-        // Proof entries written by the retired importers; this one would have failed their validation.
         val proofs = """[{"sourceFileName":"settings_store.json","sourceSchemaVersion":2,""" +
             """"destinationSchemaVersion":9,"sourceSha256":"not-a-hash","importedCounts":{"profiles":1}}]"""
         directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
@@ -208,7 +207,6 @@ class DataStoreRepositoriesTest {
         val storeFile = directory.resolve(DATASTORE_SETTINGS_FILE_NAME)
         val broken = "{broken".encodeToByteArray()
         storeFile.writeBytes(broken)
-        // A directory already holds the set-aside name, so the file cannot be moved there.
         directory.resolve("${storeFile.name}.corrupt-${broken.size}-${broken.sha256()}").mkdir()
         val scope = newDataStoreScope()
         val repository = DataStoreSettingsRepository(directory, scope)
@@ -466,13 +464,11 @@ class DataStoreRepositoriesTest {
     }
 }
 
-/** Asserts that [recoveries] reports exactly [setAside], under the Settings label [logicalStore]. */
 internal fun assertRecorded(recoveries: FileStoreRecoveryRegistry, logicalStore: String, setAside: File) {
     val recovery = recoveries.recoveries.value.single()
     assertEquals(logicalStore, recovery.logicalStore)
     assertEquals(setAside.absolutePath, recovery.backupPath)
 }
 
-/** Files a store set aside beside [storeFileName] in this directory, oldest name first. */
 internal fun File.setAsideCopiesOf(storeFileName: String): List<File> =
     listFiles().orEmpty().filter { it.name.startsWith("$storeFileName.corrupt") }.sortedBy(File::getName)

@@ -30,10 +30,6 @@ import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 
-/**
- * One source's dedicated search, opened by tapping a source header in global search. The source header hides on
- * downward scroll and returns at the top, alongside the collapsing search bar; the listing's controls stay above it.
- */
 @Composable
 internal fun DedicatedSourceSearchView(
     dedicated: DedicatedSourceState,
@@ -60,7 +56,6 @@ internal fun DedicatedSourceSearchView(
     SeriesScrollChromeEffect(grid, onScrollStarted = { searchBarDismissed = true })
     ScrollToTopOnTabReselect(TopLevelDestination.Series) {
         grid.animateScrollToItem(0)
-        // After the scroll, which collapses the bar as any scroll does.
         searchBarDismissed = false
     }
     BackHandler(onBack = onBack)
@@ -126,7 +121,6 @@ private fun DedicatedSourceGridBody(
         filterCount = (dedicated.kind as? BrowseKind.Filtered)?.changed ?: 0,
         onChoose = onChoose,
         onFilter = onFilter,
-        // Beside the collapsed search corner the filter button stops short of it, as the home view's switch does.
         modifier = Modifier.padding(start = 16.dp, end = end),
     )
     LazyVerticalGrid(
@@ -143,5 +137,4 @@ private fun DedicatedSourceGridBody(
 
 internal const val DEDICATED_HEADER_TAG = "Dedicated source header"
 
-/** The collapsed search corner's width here (one icon button and its padding) and a gap before it. */
 private val DEDICATED_SEARCH_CLEARANCE = 72.dp

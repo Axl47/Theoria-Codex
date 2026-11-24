@@ -43,10 +43,6 @@ class DataStoreSettingsRepository private constructor(
     )
 }
 
-/**
- * Settings over a [StateCell], shared by the DataStore store and the in-memory default. Every change is normalized,
- * admitted against the settings capacity, and bounded like the settings file ([normalizeDataStoreSettings]).
- */
 internal class CellSettingsRepository(
     private val cell: StateCell<AppSettings>,
     private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),

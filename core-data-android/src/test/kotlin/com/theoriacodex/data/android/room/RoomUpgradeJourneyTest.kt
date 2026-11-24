@@ -23,7 +23,6 @@ class RoomUpgradeJourneyTest {
         RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 10)
     }
 
-    // Schema 11 is what v1.9.2, the last production release, shipped.
     @Test fun `a library from the shipped schema keeps likes, collections, automatic tags and recents through every later write`() = runTest {
         RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 11)
     }

@@ -127,7 +127,6 @@ class RoomCollectionStorageTest {
         repository.addItems("saved", listOf(saved))
         recents.recordWatchedPost(saved, ViewerStreamSource.SEARCH, null)
         val liked = post("liked")
-        // Legacy Likes can exist without system-Codex membership; they still retain the Post.
         dao.insertLike(LikedPostEntity("legacy-profile", "PIXIV", "liked", now++, "[]"))
         recents.recordWatchedPost(liked, ViewerStreamSource.SEARCH, null)
         recents.clearAll()
@@ -147,7 +146,6 @@ class RoomCollectionStorageTest {
                 }
                 close()
             }
-            // Validation also fails if a table the v11 schema no longer declares survives.
             val migrated = migrationHelper.runMigrationsAndValidate(name, 11, true, TheoriaRoomDatabase.MIGRATION_10_11)
             migrated.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
                 assertTrue(cursor.moveToFirst())

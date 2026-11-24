@@ -38,12 +38,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Installed only in the acceptance APK: drives the picture tagger through the app's own container, one phase per
- * launch, and logs `PASS:<phase>:<numbers>` or `FAIL:<phase>:<reason>` under [TAG]. Posts are fixtures whose pictures
- * (synthetic line drawings) and model files come from the host's loopback server at [BuildConfig.VISION_MODEL_BASE_URL].
- * scripts/verify_vision_acceptance_device.sh runs the phases in order, switching charging between them.
- */
 class VisionAcceptanceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,13 +63,10 @@ private class VisionPhases(
 ) {
     private val library = List(FIXTURES) { fixturePost("vision-$it", it) }
 
-    // Not in the Library and without provider tags, like a For You candidate a source left untagged.
     private val untagged = fixturePost("vision-untagged", FIXTURES)
 
-    // The same picture, tagged as richly as a booru post (none of the tags is hidden).
     private val wellTagged = fixturePost("vision-well-tagged", FIXTURES).copy(canonicalTags = WELL_TAGGED_TAGS)
 
-    // Videos of line drawings behind a colour poster: only their frames read as monochrome.
     private val videos = VIDEOS.map(::videoPost)
 
     suspend fun run(phase: String): String = when (phase) {
@@ -108,7 +99,6 @@ private class VisionPhases(
         return "added=$added"
     }
 
-    /** On battery: the indexing job is scheduled, but after [IDLE_WAIT_MS] nothing has been tagged. */
     private suspend fun idle(): String {
         delay(IDLE_WAIT_MS)
         val progress = pictures.progress.first()
@@ -116,10 +106,6 @@ private class VisionPhases(
         return "analysed=${progress.analysed} total=${progress.total}"
     }
 
-    /**
-     * Charging with the app on screen: every post is indexed from its still, the videos from their colour posters, so no
-     * video carries the monochrome that only its frames show. Progress leaves the videos out until their frames are read.
-     */
     private suspend fun stills(): String {
         pictures.progress.first { it.analysed >= FIXTURES }
         val index = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
@@ -133,14 +119,12 @@ private class VisionPhases(
     private suspend fun check(): String {
         val progress = pictures.progress.first { it.analysed >= FIXTURES + videos.size }
         val monochrome = normalizeMatchToken("monochrome")
-        // The idle job replaced each video's still analysis with one that read its line-drawing frames.
         val stored = withTimeoutOrNull(IDLE_WAIT_MS) {
             pictures.tagger.library.first { index -> videos.all { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) } }
         } ?: pictures.tagger.library.value
         val framed = videos.count { monochrome in stored[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }
         check(framed == videos.size) { "monochrome on $framed of ${videos.size} videos" }
         val index = pictures.tagger.library.first { index -> library.all { index[it.id] != null } }
-        // The line drawings read as monochrome and greyscale; the colour pictures do not.
         val expected = listOf("monochrome", "greyscale").map(::normalizeMatchToken)
         val (drawings, colour) = library.partition { post -> index[post.id].orEmpty().tokens(PredictedTagUse.EVIDENCE).keys.containsAll(expected) }
         check(drawings.size == COLOUR_FROM && colour.all { it.id.sourcePostId.removePrefix("vision-").toInt() >= COLOUR_FROM }) {
@@ -150,10 +134,6 @@ private class VisionPhases(
         return "analysed=${progress.analysed}/${progress.total} tagged=$tagged videosFromFrames=$framed ${forYou()} ${hidden()}"
     }
 
-    /**
-     * Each fixture video sampled as the job does it, timed, with the frames from different points told apart (each
-     * second shows another drawing); the host counts the bytes each fetched.
-     */
     private suspend fun sample(): String = buildList {
         for (file in VIDEOS) {
             val started = SystemClock.elapsedRealtime()
@@ -170,7 +150,6 @@ private class VisionPhases(
         }
     }.joinToString(" ")
 
-    /** The Library's predicted tags reach the For You profile, and lead a Danbooru lane with no provider tags at all. */
     private suspend fun forYou(): String {
         val inputs = container.features.tagAffinity.latest.first { it.pictures.kept >= FIXTURES }
         val token = normalizeMatchToken("monochrome")
@@ -184,10 +163,6 @@ private class VisionPhases(
         return "candidates=${inputs.pictures.candidates.size} score=${"%.2f".format(java.util.Locale.ROOT, affinity.score)} lanes=${interests.size}"
     }
 
-    /**
-     * An untagged post is caught by a hidden tag only through what the tagger sees in its picture; the same picture on a
-     * post its provider tagged richly is left to its own tags.
-     */
     private suspend fun hidden(): String {
         check(untagged.canonicalTags.isEmpty() && untagged.rawTags.isEmpty())
         val rules = mapOf(SourceKey.DANBOORU to setOf(normalizeMatchToken("no_humans")))
@@ -204,7 +179,6 @@ private class VisionPhases(
         pictures.model.delete()
         check(pictures.model.states.value == ModelState.Absent)
         check(!pictures.model.modelFile.exists() && !pictures.model.vocabularyFile.exists())
-        // The index empties as the tagger sees the model go, a moment after the delete returns.
         checkNotNull(withTimeoutOrNull(IDLE_WAIT_MS) { pictures.tagger.library.first { it == PredictedTagIndex.Empty } }) { "index kept" }
         val progress = pictures.progress.first()
         check(progress.analysed == 0) { "after delete: $progress" }
@@ -218,7 +192,6 @@ private class VisionPhases(
 
 private fun videoUrl(file: String) = "${BuildConfig.VISION_MODEL_BASE_URL}fixtures/$file"
 
-/** A Danbooru-like video post: the colour fixture [COLOUR_FROM] as its poster, the video as its full media. */
 private fun videoPost(file: String): Post {
     val video = ImageRef(videoUrl(file), null, if (file.endsWith(".webm")) "video/webm" else "video/mp4")
     return fixturePost("vision-$file", COLOUR_FROM).copy(full = video, media = listOf(video))
@@ -241,10 +214,6 @@ private fun fixturePost(id: String, picture: Int): Post {
     )
 }
 
-/**
- * Pictures 0 until [FIXTURES] fill the Library, [COLOUR_FROM] onwards in colour (scripts/vision_fixtures.py), so
- * monochrome is on three quarters of it: common, not universal. One more line drawing is the untagged candidate.
- */
 private const val FIXTURES = 24
 private val WELL_TAGGED_TAGS = listOf(
     "1girl", "solo", "long_hair", "smile", "looking_at_viewer", "monochrome", "greyscale", "lineart", "white_background",
@@ -256,5 +225,4 @@ private const val TAG = "TheoriaVision"
 private const val PHASE_TIMEOUT_MS = 300_000L
 private const val IDLE_WAIT_MS = 10_000L
 
-/** Of the six points across a six-drawing video, at least this many must show different drawings. */
 private const val MIN_DISTINCT_FRAMES = 4

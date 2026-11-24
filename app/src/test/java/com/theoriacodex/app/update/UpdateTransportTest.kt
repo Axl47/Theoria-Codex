@@ -66,7 +66,7 @@ class UpdateTransportTest {
                 if (readOnce) return -1
                 started.countDown()
                 while (true) {
-                    try { release.await(); break } catch (_: InterruptedException) { /* Simulate a non-interruptible platform read. */ }
+                    try { release.await(); break } catch (_: InterruptedException) { }
                 }
                 readOnce = true
                 "old".toByteArray().copyInto(buffer, offset)

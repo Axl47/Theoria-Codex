@@ -49,7 +49,6 @@ class RoomVisualSimilarityStorageTest {
 
         guard.retire("a")
         RoomCodexLikesRepository(database, writeGuard = guard).removeProfileLibrary("a")
-        // A swipe still on its way when the profile was deleted does not bring it back.
         assertTrue(runCatching { verdicts.record(verdict("a", "4", ForYouVerdictKind.LIKED, at = 6)) }.isFailure)
         assertTrue(verdicts.verdicts("a").isEmpty())
         assertEquals(listOf("1"), verdicts.verdicts("b").map { it.postId.sourcePostId })
@@ -131,7 +130,6 @@ class RoomVisualSimilarityStorageTest {
 
         assertEquals(setOf(id("clip"), id("flaky"), id("gone")), awaiting())
         assertEquals(2, signatures.libraryPostsAwaitingFrames("m1", limit = 10, skip = 1).size)
-        // Progress counts a post once its frames are read too.
         assertEquals(VisionProgress(analysed = 1, total = 4), signatures.observeVisionProgress("m1").first())
         assertTrue(signatures.libraryPostsAwaitingFrames("m2", limit = 10).isEmpty())
         signatures.putVision(listOf(vision("clip", "m1", frames = VisionFrames.READ)))
@@ -142,9 +140,7 @@ class RoomVisualSimilarityStorageTest {
         signatures.failFrames(id("flaky"), "m1", permanently = false)
         assertTrue(awaiting().isEmpty())
 
-        // The still analyses stand: nothing about a failed read removes tags.
         assertEquals(4, signatures.observeVisionProgress("m1").first().analysed)
-        // Clearing the model starts every post over.
         signatures.clearVision()
         assertTrue(awaiting().isEmpty())
     }

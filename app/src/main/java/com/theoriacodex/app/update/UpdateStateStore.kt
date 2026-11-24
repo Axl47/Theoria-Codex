@@ -23,7 +23,6 @@ data class PendingPostInstallChangelog(
     val changelogSections: List<ChangelogSection> = emptyList(),
 )
 
-/** update_state.json, read and written with kotlinx.serialization; UpdateStateGoldenTest pins files older builds wrote. */
 @Serializable
 data class UpdateStateSnapshot(
     @SerialName("lastSeenReleaseId")

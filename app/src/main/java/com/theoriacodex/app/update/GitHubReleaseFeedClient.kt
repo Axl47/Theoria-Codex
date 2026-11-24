@@ -112,7 +112,6 @@ class GitHubReleaseFeedClient(
     }
 }
 
-/** One entry of GitHub's list-releases response; only the fields the updater reads. Entries decode one at a time. */
 @Serializable
 private class GitHubRelease(
     @SerialName("id")
@@ -131,7 +130,6 @@ private class GitHubRelease(
     val name: String? = null,
     @SerialName("body")
     val body: String? = null,
-    /** Decoded one at a time, so a malformed asset is skipped instead of hiding the release. */
     @SerialName("assets")
     val assets: List<JsonElement> = emptyList(),
 )

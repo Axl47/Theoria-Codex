@@ -11,7 +11,6 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The verdict log in Room; a swipe that lands after its profile was deleted is refused ([writeGuard]). */
 class RoomForYouVerdictRepository(
     private val database: TheoriaRoomDatabase,
     private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
