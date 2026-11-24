@@ -41,12 +41,11 @@ import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
 import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
 import com.theoriacodex.sources.common.requestWithChallengeFallback
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.http.RequestPacer
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
-import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import com.theoriacodex.sources.common.objects
@@ -314,11 +313,7 @@ class NhentaiSourceAdapter(
         pacer.awaitTurn()
         suspend fun get() = httpClient.get(url = url, query = query, headers = NHENTAI_DEFAULT_HEADERS)
         if (mirrorOnChallenge) return requestWithChallengeFallback("NHentai") { get() }
-        return try {
-            get()
-        } catch (error: IOException) {
-            sourceNetworkFailure("NHentai", error)
-        }
+        return sourceRequest("NHentai") { get() }
     }
 
     private suspend fun requestJsonPost(
@@ -326,14 +321,12 @@ class NhentaiSourceAdapter(
         body: String,
     ): SourceHttpResponse {
         pacer.awaitTurn()
-        return try {
+        return sourceRequest("NHentai") {
             httpClient.postJson(
                 url = url,
                 body = body,
                 headers = NHENTAI_JSON_POST_HEADERS,
             )
-        } catch (error: IOException) {
-            sourceNetworkFailure("NHentai", error)
         }
     }
 

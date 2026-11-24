@@ -18,19 +18,19 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.elementsOrEmpty
+import com.theoriacodex.sources.common.getCheckedOrNull
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.optionalJsonArray
+import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.parseXml
-import com.theoriacodex.sources.common.requireSuccess
+import com.theoriacodex.sources.common.percentEncode
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 import java.util.Locale
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +131,7 @@ class KvsVideoSourceAdapter(
         prefixes.forEach { prefix ->
             if (suggestions.size >= limit) return@forEach
             runCatchingPreservingCancellation {
-                request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${encodePathSegment(prefix)}")
+                request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${prefix.percentEncode()}")
             }.getOrNull()
                 ?.let { body -> parseTagSuggestionsFromSelect2(body, gson, "trending") }
                 ?.forEach { suggestion ->
@@ -147,7 +147,7 @@ class KvsVideoSourceAdapter(
         val normalized = prefix.trim()
         if (normalized.isBlank() || limit <= 0) return@sourceCall emptyList()
         runCatchingPreservingCancellation {
-            request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${encodePathSegment(normalized)}")
+            request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${normalized.percentEncode()}")
         }.map { body ->
             parseTagSuggestionsFromSelect2(body, gson, "tag").take(limit)
         }.getOrDefault(emptyList())
@@ -222,7 +222,7 @@ class KvsVideoSourceAdapter(
         )
     }
 
-    private fun searchUrl(queryText: String): String = "$baseUrl/search/${encodePathSegment(queryText)}/"
+    private fun searchUrl(queryText: String): String = "$baseUrl/search/${queryText.percentEncode()}/"
 
     private fun nextPageToken(document: Document, queryText: String): String? = when (site.paging) {
         KvsPaging.DATA_BLOCK_NEXT ->
@@ -312,16 +312,8 @@ class KvsVideoSourceAdapter(
     }
 
     /** A page's body; a missing page is empty. */
-    private suspend fun request(url: String): String {
-        val response = sourceRequest(baseUrl) {
-            httpClient.get(
-                url = url,
-                headers = RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/"),
-            )
-        }
-        if (response.statusCode == 404) return ""
-        return response.requireSuccess("$baseUrl request failed").body
-    }
+    private suspend fun request(url: String): String =
+        httpClient.getCheckedOrNull(baseUrl, url, RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/")).orEmpty()
 }
 
 /** Turns a pager's `key:value;a+b:value` parameters into a query string, giving joined keys the same value. */
@@ -334,10 +326,10 @@ private fun decodeDataParameters(raw: String): String {
             val value = segment.substringAfter(':', "").trim()
             if ('+' in key) {
                 key.split('+').joinToString("&") { nestedKey ->
-                    "${nestedKey.trim()}=${encodePathSegment(value)}"
+                    "${nestedKey.trim()}=${value.percentEncode()}"
                 }
             } else {
-                "$key=${encodePathSegment(value)}"
+                "$key=${value.percentEncode()}"
             }
         }
 }
@@ -369,13 +361,7 @@ private fun parseTagSuggestionsFromSelect2(
     }
 }
 
-private fun parseVideoSitePubDateEpochMs(raw: String?): Long? {
-    val value = raw?.trim().orEmpty()
-    if (value.isBlank()) return null
-    val formatter = DateTimeFormatter.ofPattern("EEE dd MMM uuuu HH:mm:ss Z", Locale.US)
-    return try {
-        ZonedDateTime.parse(value, formatter).toInstant().toEpochMilli()
-    } catch (_: DateTimeParseException) {
-        parseRfc1123EpochMs(value)
-    }
-}
+private val KVS_PUB_DATE = DateTimeFormatter.ofPattern("EEE dd MMM uuuu HH:mm:ss Z", Locale.US)
+
+private fun parseVideoSitePubDateEpochMs(raw: String?): Long? =
+    parseEpochMs(raw) { ZonedDateTime.parse(it, KVS_PUB_DATE).toInstant() } ?: parseRfc1123EpochMs(raw)

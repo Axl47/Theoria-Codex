@@ -15,17 +15,19 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asStringOrNull
 import com.theoriacodex.sources.common.canonicalPostPage
+import com.theoriacodex.sources.common.getChecked
+import com.theoriacodex.sources.common.getCheckedOrNull
 import com.theoriacodex.sources.common.normalizeBooruTag
+import com.theoriacodex.sources.common.parseEpochMs
 import com.theoriacodex.sources.common.parseHtml
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseXml
-import com.theoriacodex.sources.common.requireSuccess
+import com.theoriacodex.sources.common.percentEncode
 import com.theoriacodex.sources.common.sourceCall
-import com.theoriacodex.sources.common.sourceRequest
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
-import java.time.OffsetDateTime
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -59,9 +61,9 @@ class Rule34PahealSourceAdapter(
             ?: if (normalizedQuery.isBlank()) {
                 "$RULE34PAHEAL_BASE_URL/post/list"
             } else {
-                "$RULE34PAHEAL_BASE_URL/rss/images/${encodePathSegment(normalizedQuery)}/1"
+                "$RULE34PAHEAL_BASE_URL/rss/images/${normalizedQuery.percentEncode()}/1"
             }
-        val body = request(url) ?: return@sourceCall canonicalPostPage(items = emptyList(), nextPageToken = null)
+        val body = httpClient.getChecked(PAHEAL_LABEL, url, headers = PAHEAL_HEADERS)
         if (body.trimStart().startsWith("<?xml") || body.contains("<rss")) {
             parseRssPage(body, limit = 40)
         } else {
@@ -72,7 +74,7 @@ class Rule34PahealSourceAdapter(
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = sourceCall {
         if (limit <= 0) return@sourceCall emptyList()
         runCatchingPreservingCancellation {
-            val html = request("$RULE34PAHEAL_BASE_URL/post/list") ?: return@sourceCall emptyList()
+            val html = httpClient.getChecked(PAHEAL_LABEL, "$RULE34PAHEAL_BASE_URL/post/list", headers = PAHEAL_HEADERS)
             val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
             val counts = linkedMapOf<String, Int>()
             doc.select("div.shm-thumb.thumb[data-tags]").forEach { thumb ->
@@ -96,10 +98,7 @@ class Rule34PahealSourceAdapter(
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = sourceCall {
         val normalized = prefix.trim()
         if (normalized.isBlank() || limit <= 0) return@sourceCall emptyList()
-        val response = request(
-            "$RULE34PAHEAL_BASE_URL/browser_search/${encodePathSegment(normalized)}",
-            headers = emptyMap(),
-        ) ?: return@sourceCall emptyList()
+        val response = httpClient.getChecked(PAHEAL_LABEL, "$RULE34PAHEAL_BASE_URL/browser_search/${normalized.percentEncode()}")
         val root = parseJsonArray(response, gson, "rule34.paheal.net browser search")
         val values = root.get(1)?.takeIf { it.isJsonArray }?.asJsonArray?.toList().orEmpty()
         values.mapNotNull { item ->
@@ -110,22 +109,10 @@ class Rule34PahealSourceAdapter(
 
     override suspend fun resolvePost(id: PostId): Post? = sourceCall {
         if (id.source != SourceKey.RULE34PAHEAL) return@sourceCall null
-        val html = request("$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}", allowNotFound = true) ?: return@sourceCall null
+        val html = httpClient.getCheckedOrNull(PAHEAL_LABEL, "$RULE34PAHEAL_BASE_URL/post/view/${id.sourcePostId}", PAHEAL_HEADERS)
+            ?: return@sourceCall null
         val doc = parseHtml(html, RULE34PAHEAL_BASE_URL)
         parsePostDocument(doc, id.sourcePostId)
-    }
-
-    private suspend fun request(
-        url: String,
-        allowNotFound: Boolean = false,
-        headers: Map<String, String> = RULE34_BROWSER_HEADERS + ("Referer" to "$RULE34PAHEAL_BASE_URL/"),
-    ): String? {
-        val response = sourceRequest("rule34.paheal.net") { httpClient.get(url = url, headers = headers) }
-
-        if (allowNotFound && response.statusCode == 404) {
-            return null
-        }
-        return response.requireSuccess("rule34.paheal.net request failed").body
     }
 
     private fun parseRssPage(body: String, limit: Int): Page<Post> {
@@ -288,17 +275,10 @@ private fun pahealDimensions(title: String): Pair<Int?, Int?> {
     return match?.groupValues?.getOrNull(1)?.toIntOrNull() to match?.groupValues?.getOrNull(2)?.toIntOrNull()
 }
 
-private fun parsePahealThumbDateEpochMs(raw: String?): Long? {
-    val value = raw?.trim().orEmpty()
-    if (value.isBlank()) return null
-    val formatter = DateTimeFormatter.ofPattern("MMMM d, uuuu; HH:mm", Locale.US)
-    return runCatching {
-        OffsetDateTime.of(
-            java.time.LocalDateTime.parse(value, formatter),
-            ZoneOffset.UTC,
-        ).toInstant().toEpochMilli()
-    }.getOrNull()
-}
+private val PAHEAL_THUMB_DATE = DateTimeFormatter.ofPattern("MMMM d, uuuu; HH:mm", Locale.US)
+
+private fun parsePahealThumbDateEpochMs(raw: String?): Long? =
+    parseEpochMs(raw) { LocalDateTime.parse(it, PAHEAL_THUMB_DATE).toInstant(ZoneOffset.UTC) }
 
 /** Paheal's URLs have no extensions, so this is the only word on a file's type: `image/gif; animated=true` or an older `data-ext`. */
 private fun Element.pahealFileMime(): String? =
@@ -310,3 +290,5 @@ private val RULE34PAHEAL_DIMENSION_REGEX = Regex("""(\d+)\s*x\s*(\d+)""")
 private val RULE34PAHEAL_STYLE_WIDTH_REGEX = Regex("""width:\s*(\d+)px""")
 private val RULE34PAHEAL_STYLE_HEIGHT_REGEX = Regex("""height:\s*(\d+)px""")
 private const val RULE34PAHEAL_BASE_URL = "https://rule34.paheal.net"
+private const val PAHEAL_LABEL = "rule34.paheal.net"
+private val PAHEAL_HEADERS = RULE34_BROWSER_HEADERS + ("Referer" to "$RULE34PAHEAL_BASE_URL/")
