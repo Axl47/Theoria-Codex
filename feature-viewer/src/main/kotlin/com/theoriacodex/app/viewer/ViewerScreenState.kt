@@ -228,8 +228,11 @@ internal class ViewerFrame(
 ) {
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 
+    /** Whether the current session is watching long-form episodes. */
+    val watching = uiState.series is ViewerSeries.Watching
+
     /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
-    val locked = uiState.controls.locked && uiState.series is ViewerSeries.Watching && !inPictureInPicture
+    val locked = uiState.controls.locked && watching && !inPictureInPicture
 
     // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture

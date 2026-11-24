@@ -67,7 +67,7 @@ class ViewerLockTest {
         state = reduceViewerState(state, ViewerAction.SetLocked(true)).state
 
         assertTrue(state.controls.locked)
-        assertTrue(state.controls.episode.fillScreen)
+        assertTrue(state.controls.fillScreen)
         assertNull(state.controls.panel)
         // Locking does not mutate chromeVisible (viewerChromeVisible gates on !locked).
         assertTrue(state.controls.chromeVisible)
@@ -77,15 +77,15 @@ class ViewerLockTest {
         state = reduceViewerState(state, ViewerAction.PlaybackCompleted(identity, key0, 0L)).state
         assertEquals(1, state.currentPageIndex)
         assertTrue(state.controls.locked)
-        assertTrue(state.controls.episode.fillScreen)
+        assertTrue(state.controls.fillScreen)
 
-        // Live same-session ReplaceSession preserves lock and episode choices.
+        // Live same-session ReplaceSession preserves lock and fillScreen.
         state = reduceViewerState(
             state,
             ViewerAction.ReplaceSession(identity, resolvedEpisodes, initialPageIndex = 1, series = ViewerSeries.Watching(seriesTitle = "Series")),
         ).state
         assertTrue(state.controls.locked)
-        assertTrue(state.controls.episode.fillScreen)
+        assertTrue(state.controls.fillScreen)
 
         // PrepareDismiss clears lock.
         val dismissed = reduceViewerState(state, ViewerAction.PrepareDismiss).state
@@ -97,7 +97,7 @@ class ViewerLockTest {
             ViewerAction.ReplaceSession(ViewerSessionIdentity("other"), resolvedEpisodes, series = ViewerSeries.Watching(seriesTitle = "Series")),
         ).state
         assertFalse(fresh.controls.locked)
-        assertFalse(fresh.controls.episode.fillScreen)
+        assertFalse(fresh.controls.fillScreen)
     }
 
     @Test fun `locking hides chrome, blocks gestures, reveals icon-only unlock on tap, and unlocks cleanly`() {

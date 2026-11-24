@@ -172,16 +172,16 @@ private fun ViewerLoadedScreen(
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
-    val watching = uiState.series is ViewerSeries.Watching
-    val timelineInset = viewerTimelineInset(chromeVisible, watching)
-    val subtitleBottomLift = viewerSubtitleBottomLift(selection, chromeVisible, watching, timelineInset)
+    val timelineInset = viewerTimelineInset(chromeVisible, frame.watching)
+    val bottomRowHeight = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
+    val subtitleBottomLift = viewerFooterHeight(selection, chromeVisible, bottomRowHeight, timelineInset)
     CompositionLocalProvider(
         LocalViewerTimelineInset provides timelineInset,
         LocalViewerSubtitleBottomLift provides subtitleBottomLift,
         LocalViewerAccent provides viewerAccent,
         LocalViewerHoldScrub provides holdScrub,
         // Only episodes offer their tracks; no other video's player is followed for them.
-        LocalViewerActiveTracks provides screen.activeTracks.takeIf { watching },
+        LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
     ) {
         ViewerBackdrop(returnProgress, dismissDrag) {
             ViewerContentSurface(
@@ -204,18 +204,6 @@ private fun viewerTimelineInset(chromeVisible: Boolean, watching: Boolean): andr
     !chromeVisible -> 0.dp
     watching -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     else -> viewerDockInset()
-}
-
-@Composable
-private fun viewerSubtitleBottomLift(
-    selection: ViewerSelection,
-    chromeVisible: Boolean,
-    watching: Boolean,
-    timelineInset: androidx.compose.ui.unit.Dp,
-): androidx.compose.ui.unit.Dp {
-    if (!chromeVisible) return 0.dp
-    val bottomRowHeight = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
-    return timelineInset + viewerFooterBarHeight(selection) + bottomRowHeight
 }
 
 @Composable

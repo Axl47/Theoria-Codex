@@ -309,7 +309,7 @@ internal fun ViewerEpisodeBar(
     onAction: (ViewerAction) -> Unit,
 ) {
     val rate = closestViewerPlaybackRate(frame.uiState.controls.playback.playbackRate)
-    val fillScreen = frame.uiState.controls.episode.fillScreen
+    val fillScreen = frame.uiState.controls.fillScreen
     ViewerEpisodeControls(
         playbackRate = rate,
         speedEnabled = frame.uiState.controls.playback.available,

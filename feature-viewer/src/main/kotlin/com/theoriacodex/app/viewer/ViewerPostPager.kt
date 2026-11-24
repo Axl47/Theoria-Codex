@@ -289,7 +289,7 @@ private fun viewerRendererControls(
     frame: ViewerFrame, active: Boolean, preloading: Boolean, loadGeneration: Long, expectedDurationMs: Long?,
 ): ViewerRendererControls {
     val controls = frame.uiState.controls
-    val watching = frame.uiState.series is ViewerSeries.Watching
+    val watching = frame.watching
     return ViewerRendererControls(
         isActive = active,
         isPlaying = controls.playback.playing,
@@ -306,7 +306,7 @@ private fun viewerRendererControls(
         showLeadingPlaybackButton = !watching,
         showSpeedChip = !watching,
         dimBackdrop = watching,
-        fillScreen = watching && controls.episode.fillScreen && frame.isLandscape && !frame.inPictureInPicture,
+        fillScreen = watching && controls.fillScreen && frame.isLandscape && !frame.inPictureInPicture,
     )
 }
 

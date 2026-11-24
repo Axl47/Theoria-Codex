@@ -179,7 +179,9 @@ private fun ViewerUiState.reduceEpisodeAction(action: ViewerAction): ViewerUiSta
     is ViewerAction.ChooseSubtitle -> chooseEpisodeTracks { copy(subtitle = action.choice) }
     is ViewerAction.ChooseAudio -> chooseEpisodeTracks { copy(audioLabel = action.label) }
     is ViewerAction.SetLocked -> setLocked(action.locked)
-    ViewerAction.ToggleFillScreen -> copy(controls = controls.copy(episode = controls.episode.copy(fillScreen = !controls.episode.fillScreen)))
+    ViewerAction.ToggleFillScreen -> if (series is ViewerSeries.Watching) {
+        copy(controls = controls.copy(fillScreen = !controls.fillScreen))
+    } else this
     else -> error("Not an episode action: $action")
 }
 
@@ -229,8 +231,9 @@ private fun ViewerUiState.replaceSession(action: ViewerAction.ReplaceSession): V
                     chromeVisible = if (session == action.session) controls.chromeVisible else replacement.controls.chromeVisible,
                     // Nor may it end a running slideshow; a new session starts without one.
                     slideshow = session == action.session && controls.slideshow,
-                    // Lock and episode choices (stream, subtitles, fillScreen) survive a live update of the same session.
+                    // Lock, fillScreen and episode track choices survive a live update of the same session.
                     locked = session == action.session && controls.locked && action.series is ViewerSeries.Watching,
+                    fillScreen = session == action.session && controls.fillScreen && action.series is ViewerSeries.Watching,
                     episode = if (session == action.session) controls.episode else ViewerEpisodeChoice(),
                 ),
                 // A live update keeps the branch the user entered; a new session starts on its original feed.

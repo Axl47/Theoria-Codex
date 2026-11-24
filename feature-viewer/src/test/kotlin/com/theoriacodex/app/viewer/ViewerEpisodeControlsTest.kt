@@ -242,7 +242,7 @@ class ViewerEpisodeControlsTest {
                         speedEnabled = state.value.controls.playback.available,
                         rotationOffer = null,
                         showFillToggle = false,
-                        fillScreen = state.value.controls.episode.fillScreen,
+                        fillScreen = state.value.controls.fillScreen,
                         onLock = { onAction(ViewerAction.SetLocked(true)) },
                         onRotate = {},
                         onOpenSpeed = { onAction(ViewerAction.ShowPanel(ViewerPanel.PLAYBACK_SETTINGS)) },

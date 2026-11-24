@@ -93,7 +93,7 @@ internal fun BoxScope.ViewerChromeOverlays(
 ) {
     val selection = frame.selection
     val navigation = frame.navigation
-    val watching = frame.uiState.series is ViewerSeries.Watching
+    val watching = frame.watching
     OpenInfoSheetForFocusedComment(comments, selection.post, frame.uiState.controls.panel == ViewerPanel.INFO, controls)
     LaunchedEffect(selection.post.id) { screen.trailForks.follow(selection.post.id) }
     // The selection changes only once a swipe lands; a fork that came back during the slide would open over the post being left.
@@ -388,7 +388,7 @@ private fun BoxScope.ViewerFooterButtons(
     onAction: (ViewerAction) -> Unit,
 ) {
     val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
-    val watching = frame.uiState.series is ViewerSeries.Watching
+    val watching = frame.watching
     // A running slideshow, active lock, or visible episode bar (which has Rotate inline) suppresses the floating rotate button.
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
     val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
