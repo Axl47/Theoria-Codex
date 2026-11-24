@@ -71,7 +71,7 @@ class OfflineQueueRecoveryTest {
         } finally { scope.cancel(); directory.deleteRecursively() }
     }
 
-    @Test fun `recovery registers every retained owner before checkpointing acquisition (ADR 0110)`() = runTest {
+    @Test fun `recovery registers every retained owner before checkpointing acquisition`() = runTest {
         val directory = Files.createTempDirectory("offline-multiple-owners").toFile()
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
         try {

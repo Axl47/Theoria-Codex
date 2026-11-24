@@ -91,7 +91,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `recent hosts stay newest first and bounded (ADR 0102)`() {
+    fun `recent hosts stay newest first and bounded`() {
         repeat(14) { memory.connectEnd(call, InetSocketAddress(v4("host$it.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2) }
         memory.connectEnd(call, InetSocketAddress(v4("host5.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2)
 

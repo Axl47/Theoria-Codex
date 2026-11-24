@@ -215,7 +215,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a cancelled request stays stopped when posts are saved until Retry runs it with them (ADR 0110)`() = runTest {
+    fun `a cancelled request stays stopped when posts are saved until Retry runs it with them`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
