@@ -121,7 +121,7 @@ private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries?
     val stored = entries.filter { it.url.isNotBlank() }.distinctBy { it.url }.map { it.toStored(kind, now, readAt[it.url]) }
     val addresses = stored.mapTo(HashSet()) { it.entry.address }
     val lastOpened = history.filter { it.url in addresses }.maxByOrNull { it.lastRead }?.url
-        ?: stored.filter { it.read || it.position > 0 }.minByOrNull { it.sourceOrder }?.entry?.address
+        ?: stored.filter(StoredSeriesEntry::hasProgress).minByOrNull { it.sourceOrder }?.entry?.address
     if (!favorite && lastOpened == null) return null
     val series = Series(
         id = SeriesId(kind.extensionSourceKey(source), url),
