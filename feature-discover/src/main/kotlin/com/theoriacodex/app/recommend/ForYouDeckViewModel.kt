@@ -288,17 +288,14 @@ class ForYouDeckViewModel(
 
     private suspend fun readRecentSkips(profileId: String) {
         val since = wiring.clock() - SKIP_MEMORY_MS
-        val read = workScope.async {
+        val read = workScope.launch {
             verdictWrites.withLock {}
-            wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT)
-        }
-        val skips = withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) {
-            runCatchingPreservingCancellation { read.await() }
+            recentSkips = runCatchingPreservingCancellation { wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT) }
                 .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
-                .getOrNull()
-        } ?: return
-        recentSkips = skips
-        skipsReadFor = profileId
+                .getOrNull() ?: return@launch
+            skipsReadFor = profileId
+        }
+        withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) { read.join() }
     }
 
     /** What the lanes are planned for now; null before the route has synchronized. */
@@ -569,7 +566,7 @@ class ForYouDeckViewModel(
     private fun push(request: TrailRequest, spec: TrailSpec) {
         val scope = levelScope()
         // Not read live: a card decided on this trail must stay in its deck for Undo.
-        val known = seen + kept + recentSkips
+        val known = seen + kept
         val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { !it.copyOfAny(known::contains) && shows(it) } }
         relatedPosts.clear("level opened")
         stack.update { it + level("$LEVEL_ID_PREFIX$session:trail:${++trailCount}", spec.label, request, spec.query, source, scope = scope, onDecision = ::onTrailDecision) }
