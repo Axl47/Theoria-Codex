@@ -8,7 +8,6 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.AppJob
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesUpdateInterval
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
@@ -33,8 +32,8 @@ import org.robolectric.RobolectricTestRunner
 class SeriesUpdateScheduleTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val scheduler = context.getSystemService(JobScheduler::class.java)
-    private val one = listOf(FollowedSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/a"), "Series"), unreadCount = 0))
-    private val followed = MutableStateFlow(emptyList<FollowedSeries>())
+    private val series = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/a"), "Series")
+    private val followed = MutableStateFlow(false)
     private val settings = MutableStateFlow(AppSettings())
 
     private fun job(): JobInfo? = scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)
@@ -44,7 +43,7 @@ class SeriesUpdateScheduleTest {
         val keeping = launch { keepSeriesUpdatesScheduled(context, followed, settings) }
         assertNull(job())
 
-        followed.value = one
+        followed.value = true
         val scheduled = job()!!
         assertEquals(12.hours.inWholeMilliseconds, scheduled.intervalMillis)
         assertTrue(scheduled.isPersisted)
@@ -57,7 +56,7 @@ class SeriesUpdateScheduleTest {
         assertNull(job())
 
         settings.value = AppSettings()
-        followed.value = emptyList()
+        followed.value = false
         assertNull(job())
         keeping.cancel()
     }
@@ -79,7 +78,7 @@ class SeriesUpdateScheduleTest {
         val other = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/b"), "Other")
         fun summaries() = manager.activeNotifications.count { it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
 
-        notifySeriesUpdate(context, SeriesUpdate(one.single().series, listOf(SeriesEntry("/c/5", "Chapter 5"))))
+        notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/5", "Chapter 5"))))
         assertEquals(0, summaries())
         notifySeriesUpdate(context, SeriesUpdate(other, listOf(SeriesEntry("/c/2", "Chapter 2"))))
         assertEquals(1, summaries())
@@ -88,7 +87,7 @@ class SeriesUpdateScheduleTest {
 
     @Test
     fun `a notification's address names its series`() {
-        val id = one.single().series.id
+        val id = series.id
         assertEquals(id, seriesIdOfUri(seriesUri(id)))
     }
 }

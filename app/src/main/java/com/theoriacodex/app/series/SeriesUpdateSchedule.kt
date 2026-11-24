@@ -5,7 +5,6 @@ import android.app.job.JobScheduler
 import android.content.Context
 import com.theoriacodex.app.AppJob
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.FollowedSeries
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -15,8 +14,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * Keeps the background check scheduled exactly while a series is followed and the interval setting is on, and
  * cancelled otherwise. Runs for as long as it is collected.
  */
-internal suspend fun keepSeriesUpdatesScheduled(context: Context, followed: Flow<List<FollowedSeries>>, settings: Flow<AppSettings>) {
-    combine(followed, settings) { series, current -> current.seriesUpdateInterval.hours.takeIf { series.isNotEmpty() } }
+internal suspend fun keepSeriesUpdatesScheduled(context: Context, anyFollowed: Flow<Boolean>, settings: Flow<AppSettings>) {
+    combine(anyFollowed, settings) { followed, current -> current.seriesUpdateInterval.hours.takeIf { followed } }
         .distinctUntilChanged()
         .collect { hours -> scheduleSeriesUpdates(context, hours) }
 }
