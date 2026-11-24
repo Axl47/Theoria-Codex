@@ -121,8 +121,11 @@
                 <data android:mimeType="text/json" />
             </intent-filter>
         </activity>
+        <!-- Its own empty task: a tap whose intent matches the task the app was cold-started from would otherwise only
+             bring that task forward without delivering the series or entry it names. -->
         <activity android:name=".series.SeriesNotificationActivity"
-            android:exported="false" android:theme="@android:style/Theme.NoDisplay" />
+            android:exported="false" android:theme="@android:style/Theme.NoDisplay"
+            android:taskAffinity="" android:excludeFromRecents="true" />
         <service android:name=".series.SeriesUpdateJobService"
             android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".series.SeriesDownloadJobService"

@@ -25,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.media3.common.text.Cue
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEpisodeChoice
@@ -63,10 +64,10 @@ class ViewerEpisodeControlsTest {
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).assert(hasText("1080p · A")).assert(hasContentDescription("Stream"))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).performClick()
-        waitUntil { state.value.controls.panel == ViewerPanel.EPISODE_STREAM }
+        awaitState { state.value.controls.panel == ViewerPanel.EPISODE_STREAM }
         compose.onNodeWithText("Servers").assertExists()
         compose.onNodeWithTag("$VIEWER_EPISODE_STREAM_TAG:720p · B").performClick()
-        waitUntil { state.value.controls.episode.streamLabel == "720p · B" }
+        awaitState { state.value.controls.episode.streamLabel == "720p · B" }
         assertNull(state.value.controls.panel)
         compose.onNodeWithTag(VIEWER_EPISODE_STREAM_TAG).assert(hasText("720p · B"))
     }
@@ -79,10 +80,10 @@ class ViewerEpisodeControlsTest {
         compose.onNodeWithContentDescription("Subtitles").performClick()
         compose.onNodeWithText("Subtitles").assertExists()
         compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Off").performClick()
-        waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Off }
+        awaitState { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Off }
         compose.onNodeWithContentDescription("Subtitles").performClick()
         compose.onNodeWithTag("$VIEWER_EPISODE_SUBTITLES_TAG:Signs").performClick()
-        waitUntil { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Signs") }
+        awaitState { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Signs") }
     }
 
     @Test fun `audio is offered only with more than one track`() {
@@ -93,7 +94,7 @@ class ViewerEpisodeControlsTest {
         tracks.value = PlaybackTracks(audio = tracks.value.audio + PlaybackTrack("2:0/0", "English", selected = false))
         compose.onNodeWithContentDescription("Audio").performClick()
         compose.onNodeWithTag("$VIEWER_EPISODE_AUDIO_TAG:English").performClick()
-        waitUntil { state.value.controls.episode.audioLabel == "English" }
+        awaitState { state.value.controls.episode.audioLabel == "English" }
     }
 
     @Test fun `a watched series omits the bottom dock, shows center prev and next, and disables edge buttons`() {
@@ -111,12 +112,12 @@ class ViewerEpisodeControlsTest {
         compose.onNodeWithTag(VIEWER_EPISODE_SPEED_TAG).assertIsNotEnabled()
 
         compose.onNodeWithContentDescription("Next episode").performClick()
-        waitUntil { state.value.currentPageIndex == 1 }
+        awaitState { state.value.currentPageIndex == 1 }
         compose.onNodeWithTag("viewer-episode-previous").assertIsEnabled()
         compose.onNodeWithTag("viewer-episode-next").assertIsNotEnabled()
 
         compose.onNodeWithContentDescription("Previous episode").performClick()
-        waitUntil { state.value.currentPageIndex == 0 }
+        awaitState { state.value.currentPageIndex == 0 }
     }
 
     @Test fun `subtitle overlay stays owned by PlayerView and reconnects across in-place retries and server switches`() {
@@ -290,8 +291,5 @@ class ViewerEpisodeControlsTest {
 
     private fun stateDescription(value: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value)
 
-    private fun waitUntil(condition: () -> Boolean) = compose.waitUntil(5_000) {
-        compose.waitForIdle()
-        condition()
-    }
+    private fun awaitState(condition: () -> Boolean) = compose.waitUntilSettled(5_000, condition = condition)
 }

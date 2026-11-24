@@ -66,6 +66,7 @@
 - Subtitles come on by themselves, in your phone's language when the episode has it. Off stays off for the episodes that follow.
 - When a stream doesn't start, the next one is tried for you; when one stops partway because its link expired, a fresh link is fetched and playback picks up where it was. Retry fetches fresh links too.
 - New episodes of an anime you follow are checked and notified like new chapters.
+- A notification for one new chapter or episode has a Read or Watch button that opens it in the Viewer; tapping the notification still opens the series.
 - Switch source works for anime too, between anime sources, and keeps the episodes you've watched and where you stopped in each. An episode the old source didn't have stays unwatched.
 - Extensions that stream by torrent are listed but can't be turned on, and an anime its source splits into seasons says seasons aren't supported yet. Episodes can't be downloaded yet.
 - Following has Sort & filter: show All, Unread, Not started, In progress, Caught up or Completed series, and sort by Most unread, Last updated, Recently read, Recently added or Title. Your choice is kept, a dot on the button shows while a filter hides series, and No matches offers Show all.
@@ -139,6 +140,7 @@
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
 - Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.
 - A turned-off or removed extension no longer holds up other chapter downloads: chapters from other sources keep downloading, and a notification says how many chapters wait for their extension.
+- A series notification opens its series even when the app was last opened from a notification for the same series. It used to only bring the app forward.
 - When chapter downloads fail within one series, the notification opens that series, and names the chapter when only one failed.
 - Pulling down on Following says when followed series couldn't be checked, with Retry, instead of looking the same as finding nothing new.
 - The Series tab no longer loads a source's listing while it shows Following or a search.

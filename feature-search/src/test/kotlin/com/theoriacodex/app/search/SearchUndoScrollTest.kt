@@ -23,6 +23,7 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -108,7 +109,7 @@ class SearchUndoScrollTest {
 
     /** Waits until no search runs, no scroll request is open, and [done] holds. */
     private fun settle(done: (SearchUiState) -> Boolean) {
-        compose.waitUntil(5_000) {
+        compose.waitUntilSettled(5_000) {
             // Main-thread delays (the request timeout among them) run only as Robolectric's clock moves.
             ShadowLooper.idleMainLooper(10, TimeUnit.MILLISECONDS)
             val state = owner.state.value

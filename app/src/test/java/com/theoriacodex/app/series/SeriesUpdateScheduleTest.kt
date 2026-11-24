@@ -75,6 +75,29 @@ class SeriesUpdateScheduleTest {
     }
 
     @Test
+    fun `one announced entry gets an action that opens it, by its kind's verb, unless several are new or one is replaced`() {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val anime = Series(SeriesId(SourceKey.parseOrThrow("custom_aniyomi_1"), "/anime/a"), "Anime")
+        fun posted(series: Series) = manager.activeNotifications.single { it.tag == series.id.toString() }.notification
+
+        notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/5", "Chapter 5"))))
+        val read = posted(series).actions.single()
+        assertEquals("Read", read.title.toString())
+        assertEquals(SeriesLink(series.id, "/c/5"), seriesLinkOfUri(checkNotNull(shadowOf(read.actionIntent).savedIntent.data)))
+        assertEquals(SeriesLink(series.id), seriesLinkOfUri(checkNotNull(shadowOf(posted(series).contentIntent).savedIntent.data)))
+
+        notifySeriesUpdate(context, SeriesUpdate(anime, listOf(SeriesEntry("/e/2", "Episode 2"))))
+        assertEquals("Watch", posted(anime).actions.single().title.toString())
+
+        notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/7", "7"), SeriesEntry("/c/6", "6"))))
+        assertNull(posted(series).actions)
+
+        // Replacing a notification still showing, which may have announced an unread entry, offers no Read.
+        notifySeriesUpdate(context, SeriesUpdate(series, listOf(SeriesEntry("/c/8", "8"))))
+        assertNull(posted(series).actions)
+    }
+
+    @Test
     fun `series announced by separate checks are grouped under one summary`() {
         val manager = context.getSystemService(NotificationManager::class.java)
         val other = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/series/b"), "Other")
@@ -96,7 +119,7 @@ class SeriesUpdateScheduleTest {
         val posted = context.getSystemService(NotificationManager::class.java).activeNotifications.single().notification
         assertEquals("Title", posted.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         assertEquals("Chapter 5 could not be downloaded", posted.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
-        assertEquals(id, seriesIdOfUri(checkNotNull(shadowOf(posted.contentIntent).savedIntent.data)))
+        assertEquals(SeriesLink(id), seriesLinkOfUri(checkNotNull(shadowOf(posted.contentIntent).savedIntent.data)))
         val across = listOf(ChapterName(id, "Title", "Chapter 5"), ChapterName(other, "Other", "Chapter 2"))
         assertEquals(ChaptersNotice("2 chapters could not be downloaded", null, null), failedNotice(across))
         assertEquals(ChaptersNotice("Title", "2 chapters waiting · Extension unavailable", id), waitingNotice(2, Series(id, "Title")))
@@ -105,6 +128,7 @@ class SeriesUpdateScheduleTest {
     @Test
     fun `a notification's address names its series`() {
         val id = series.id
-        assertEquals(id, seriesIdOfUri(seriesUri(id)))
+        assertEquals(SeriesLink(id), seriesLinkOfUri(seriesUri(id)))
+        assertEquals(SeriesLink(id, "/c/5?x=1&y"), seriesLinkOfUri(seriesUri(id, "/c/5?x=1&y")))
     }
 }

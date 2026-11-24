@@ -87,27 +87,27 @@ class HideLikedRelatedPostsJourneyTest {
                 SideEffect { viewModelOwner = owner }
                 if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
-            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Library").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(librarySectionTag(LibrarySection.History)).performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
+            compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("Filter History by section").isDisplayed() }
             compose.onNodeWithContentDescription("Filter History by section").performClick()
             compose.onNodeWithText("Searches").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag("Recent search:likes-query").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag("Recent search:likes-query").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("Recent search:likes-query").performClick()
             val verticalGrid = hasScrollToIndexAction() and
                 SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
             val seed = posts[6]
             val recommendation = posts[0]
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isNotEmpty() }
             for (post in listOf(seed, recommendation)) {
                 likeAndVerifyRetained(post, seed, fullscreen, verticalGrid, graph)
             }
             compose.onNode(verticalGrid).performScrollToNode(hasText("Dismiss"))
             compose.onNodeWithText("Dismiss").performClick()
             // Releasing the retained likes changes the feed's filter inputs, which refilter off the main thread.
-            compose.waitUntil(5_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isEmpty() }
+            compose.waitUntilSettled(5_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isEmpty() }
             compose.onNode(verticalGrid).performScrollToIndex(0)
             compose.onNodeWithTag(searchCardTestTag(seed.id)).assertDoesNotExist()
             compose.onNodeWithTag(searchCardTestTag(recommendation.id)).assertDoesNotExist()
@@ -141,7 +141,7 @@ class HideLikedRelatedPostsJourneyTest {
         compose.onNode(verticalGrid).performScrollToNode(hasTestTag(tag))
         if (fullscreen) {
             compose.onNodeWithTag(tag).performClick()
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+            compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
             compose.onNodeWithContentDescription("Like post").performClick()
         } else {
             compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
@@ -155,12 +155,12 @@ class HideLikedRelatedPostsJourneyTest {
         }
         if (fullscreen) {
             // Room persistence can complete before the separate liked-post flow reaches Viewer.
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
+            compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
             compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
         }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(verticalGrid).performScrollToIndex(0)
         compose.onNodeWithTag(searchCardTestTag(seed.id)).assertIsDisplayed()
         compose.onNodeWithTag(tag).assertIsDisplayed()
