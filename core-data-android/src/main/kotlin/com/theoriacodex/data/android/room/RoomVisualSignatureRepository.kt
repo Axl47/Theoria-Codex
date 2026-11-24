@@ -1,9 +1,10 @@
 package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
+import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.PredictedTagCodec
-import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+@OptIn(VisionCommit::class)
 class RoomVisualSignatureRepository(
     private val database: TheoriaRoomDatabase,
     private val clock: () -> Long = System::currentTimeMillis,

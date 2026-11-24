@@ -1,6 +1,7 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -42,7 +43,7 @@ sealed interface PictureResult {
     data object Unavailable : PictureResult
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class, VisionCommit::class)
 class PictureTagger(
     private val store: VisualModelStore,
     private val signatures: VisualSignatureRepository,

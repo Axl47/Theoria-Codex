@@ -163,5 +163,25 @@ class RoomMigrationRuleTest(unittest.TestCase):
                 self.assertEqual(1, len(check_architecture.room_migrations_have_host_tests()))
 
 
+class VisionCommitRuleTest(unittest.TestCase):
+    def test_reports_vision_results_written_outside_the_tagger_adr_0097(self) -> None:
+        self.assertIn(check_architecture.vision_results_are_written_under_commits, check_architecture.RULES)
+        with main_sources({
+            "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt": "@OptIn(VisionCommit::class)\nclass PictureTagger\n",
+            "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt": "@OptIn(VisionCommit::class)\nfun writeAround() = Unit\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt": "@file:OptIn(com.theoriacodex.data.repository.VisionCommit::class)\n",
+            "vision-kit/build.gradle.kts": "kotlin { compilerOptions { optIn.add(\"com.theoriacodex.data.repository.VisionCommit\") } }\n",
+            "vision-kit/build/generated/Stale.gradle.kts": "VisionCommit\n",
+        }):
+            failures = check_architecture.vision_results_are_written_under_commits()
+        self.assertEqual(
+            [
+                "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt",
+                "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt",
+                "vision-kit/build.gradle.kts",
+            ],
+            [failure.split(" ", 1)[0] for failure in failures],
+        )
+
 if __name__ == "__main__":
     unittest.main()

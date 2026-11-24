@@ -275,6 +275,28 @@ def room_migrations_have_host_tests() -> list[str]:
     ]
 
 
+VISION_COMMIT = re.compile(r"\bVisionCommit\b")
+VISION_COMMITTERS = (
+    "core-data/src/main/kotlin/com/theoriacodex/data/repository/VisualSignatureRepository.kt",
+    "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomVisualSignatureRepository.kt",
+    "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt",
+)
+
+
+@rule
+def vision_results_are_written_under_commits() -> list[str]:
+    build_scripts = tuple(
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
+        for path in sorted(ROOT.glob("**/*.gradle.kts"))
+        if "build" not in path.relative_to(ROOT).parts[:-1]
+    )
+    return [
+        f"{relative} opts into VisionCommit; only PictureTagger writes vision results, under its commits lock "
+        "(docs/adr/0097-picture-tagger-session-and-commits.md)"
+        for relative in references_outside(main_kotlin_sources() + build_scripts, VISION_COMMIT, VISION_COMMITTERS)
+    ]
+
+
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:

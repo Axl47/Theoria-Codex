@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.domain.model.ImageRef
@@ -30,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
+@OptIn(VisionCommit::class)
 @RunWith(RobolectricTestRunner::class)
 class RoomVisualSimilarityStorageTest {
     private val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), TheoriaRoomDatabase::class.java)

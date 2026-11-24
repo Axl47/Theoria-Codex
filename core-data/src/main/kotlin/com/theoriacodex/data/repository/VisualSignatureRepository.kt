@@ -5,6 +5,11 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.Flow
 
+@RequiresOptIn(message = "Only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)")
+@Retention(AnnotationRetention.BINARY)
+@Target(AnnotationTarget.FUNCTION)
+annotation class VisionCommit
+
 interface VisualSignatureRepository {
     fun observePictureHashes(): Flow<Map<PostId, Long>>
 
@@ -12,14 +17,17 @@ interface VisualSignatureRepository {
 
     suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int = 0): List<Post>
 
+    @VisionCommit
     suspend fun putVision(entries: List<PictureVision>)
 
     suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post>
 
     suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int = 0): List<Post>
 
+    @VisionCommit
     suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean)
 
+    @VisionCommit
     suspend fun unwantFrames(postIds: List<PostId>, modelId: String)
 
     fun observeVisionChanges(): Flow<Unit>
@@ -30,6 +38,7 @@ interface VisualSignatureRepository {
 
     fun observeLibraryTotal(): Flow<Int>
 
+    @VisionCommit
     suspend fun clearVision()
 }
 

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.ImageRef
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+@OptIn(VisionCommit::class)
 class LibraryPictureBackfillTest {
     @Test fun `the Library is hashed until done, and a preview that fails is skipped`() = runTest {
         val library = FakeSignatures(listOf(post("hashed"), post("flat"), post("offline")))
