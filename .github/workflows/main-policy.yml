@@ -35,13 +35,21 @@ jobs:
               out="$($check 2>&1)" || printf '%s\n' "$out"
             done
           }
-          git cat-file -e "$BEFORE^{commit}" 2>/dev/null || BEFORE="$(git rev-parse HEAD^1)"
+          [[ "$BEFORE" =~ ^0+$ ]] || git cat-file -e "$BEFORE^{commit}" 2>/dev/null || git fetch -q --depth=1 origin "$BEFORE" 2>/dev/null || true
+          if [[ "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            now="$(violations HEAD^1 2>/dev/null || violations HEAD)"
+            [[ -z "$now" ]] && exit 0
+            echo "::error::main fails these policy checks; the commit main pointed at before this push is unknown."
+            printf '%s\n' "$now"
+            exit 1
+          fi
           now="$(violations "$BEFORE")"
           [[ -z "$now" ]] && exit 0
           previous="$(mktemp -d)/previous"
           git worktree add -q --detach "$previous" "$BEFORE"
           before="$(cd "$previous" && violations HEAD^1)"
-          introduced="$(grep -vxF -f <(printf '%s\n' "$before") <<< "$now" || true)"
+          # Indented lines list where each comment sits, which moves with unrelated edits; compare the summaries.
+          introduced="$(grep -v '^  ' <<< "$now" | grep -vxF -f <(grep -v '^  ' <<< "$before"; echo) || true)"
           if [[ -n "$introduced" ]]; then
             echo "::error::Pushing $(git log -1 --format='%h %s') broke a policy check on main. Fix it in a follow-up PR."
             printf '%s\n' "$introduced"
