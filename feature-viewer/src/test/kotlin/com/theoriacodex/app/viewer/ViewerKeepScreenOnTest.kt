@@ -2,9 +2,11 @@ package com.theoriacodex.app.viewer
 
 import android.app.Application
 import android.view.View
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import org.junit.Assert.assertFalse
@@ -21,6 +23,10 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -33,17 +39,38 @@ import org.robolectric.annotation.Config
 class ViewerKeepScreenOnTest {
     @get:Rule val compose = createComposeRule()
     private val slideshow = mutableStateOf(false)
+    private val videoPlaying = mutableStateOf(false)
     private val activity = mutableIntStateOf(0)
+    private val lifecycle = object : LifecycleOwner {
+        val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+        override val lifecycle: Lifecycle = registry
+    }
     private lateinit var view: View
 
-    private fun show(reading: Boolean, slideshow: Boolean = false) {
+    private fun show(reading: Boolean, slideshow: Boolean = false, videoPlaying: Boolean = false) {
         this.slideshow.value = slideshow
+        this.videoPlaying.value = videoPlaying
         compose.mainClock.autoAdvance = false
         compose.setContent {
             view = LocalView.current
-            ViewerKeepScreenOnEffect(this.slideshow.value, reading) { activity.intValue }
+            CompositionLocalProvider(LocalLifecycleOwner provides lifecycle) {
+                ViewerKeepScreenOnEffect(this.slideshow.value, reading, this.videoPlaying.value) { activity.intValue }
+            }
         }
         compose.mainClock.advanceTimeByFrame()
+    }
+
+    private fun moveTo(state: Lifecycle.State) {
+        compose.runOnUiThread { lifecycle.registry.currentState = state }
+        repeat(2) { compose.mainClock.advanceTimeByFrame() }
+    }
+
+    private fun setVideoPlaying(playing: Boolean) {
+        compose.runOnUiThread {
+            videoPlaying.value = playing
+            Snapshot.sendApplyNotifications()
+        }
+        repeat(2) { compose.mainClock.advanceTimeByFrame() }
     }
 
     private fun idleFor(millis: Long) = compose.mainClock.advanceTimeBy(millis)
@@ -105,5 +132,32 @@ class ViewerKeepScreenOnTest {
         show(reading = true, slideshow = true)
         idleFor(VIEWER_READING_IDLE_MS * 3)
         assertTrue(view.keepScreenOn)
+    }
+
+    @Test fun `a playing video keeps the screen on past the reading idle, and a paused one lets it sleep`() {
+        show(reading = false, videoPlaying = true)
+        idleFor(VIEWER_READING_IDLE_MS * 3)
+        assertTrue(view.keepScreenOn)
+        setVideoPlaying(false)
+        assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `a video playing in picture-in-picture keeps the screen on while reading and slideshows release it`() {
+        show(reading = true, slideshow = true, videoPlaying = true)
+        moveTo(Lifecycle.State.STARTED)
+        assertTrue(view.keepScreenOn)
+        setVideoPlaying(false)
+        assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `backgrounding releases the screen even while a video plays`() {
+        show(reading = false, videoPlaying = true)
+        moveTo(Lifecycle.State.CREATED)
+        assertFalse(view.keepScreenOn)
+    }
+
+    @Test fun `a feed or Viewer player view does not hold the screen on by itself`() {
+        compose.setContent { view = createTexturePlayerView(LocalContext.current) }
+        assertFalse(view.keepScreenOn)
     }
 }
