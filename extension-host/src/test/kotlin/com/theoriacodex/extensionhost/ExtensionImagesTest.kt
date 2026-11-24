@@ -273,16 +273,21 @@ class ExtensionImagesTest {
         val reader = GatedPagesSource()
         val pages = MihonImages(reader, MihonKind.sourceKey(reader.id), images) { reader.arrived.countDown(); null }
         val pageUrl = "https://reader.test/p/x".toHttpUrl()
+        val callers = Executors.newFixedThreadPool(waiting)
         fun loadAll() = (0 until waiting).also { reader.arrived = CountDownLatch(waiting) }.map { index ->
-            Executors.newSingleThreadExecutor().submit<Result<String>> {
+            callers.submit<Result<String>> {
                 runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1").use { it.body.string() } }
             }
         }.map { it.get(5, TimeUnit.SECONDS) }
 
-        reader.failing = true
-        val failed = loadAll()
-        reader.failing = false
-        val loaded = loadAll()
+        val (failed, loaded) = try {
+            reader.failing = true
+            val failed = loadAll()
+            reader.failing = false
+            failed to loadAll()
+        } finally {
+            callers.shutdownNow()
+        }
 
         assertTrue(failed.all { it.exceptionOrNull() != null })
         assertEquals((0 until waiting).map { "image https://img.test/p$it.jpg" }, loaded.map { it.getOrThrow() })
