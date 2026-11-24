@@ -663,7 +663,6 @@
   "feature-search/src/test/kotlin/com/theoriacodex/app/search/SearchUndoScrollTest.kt": 6,
   "feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreGoldenTest.kt": 2,
   "feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreSemanticsTest.kt": 7,
-  "feature-series/src/main/kotlin/com/theoriacodex/app/series/ExtensionReposScreen.kt": 9,
   "feature-series/src/main/kotlin/com/theoriacodex/app/series/ExtensionSettingRows.kt": 3,
   "feature-series/src/main/kotlin/com/theoriacodex/app/series/ExtensionsScreen.kt": 10,
   "feature-series/src/main/kotlin/com/theoriacodex/app/series/ExtensionsViewModel.kt": 16,
