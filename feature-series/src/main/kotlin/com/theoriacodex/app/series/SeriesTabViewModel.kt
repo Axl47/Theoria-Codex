@@ -109,7 +109,8 @@ data class DedicatedSourceState(
  * [refreshing] is true while a refresh by hand checks the followed series for new entries. [kind] is the kind filter's
  * choice, null for both; [SeriesTabContent] says when it applies. [view] is null until the followed series are first
  * read, then Following when there are any; after that it changes only when chosen. [library] orders and narrows the
- * Following grid, and [followingQuery] narrows it to titles holding it.
+ * Following grid once [libraryLoaded] says the saved choice has arrived, and [followingQuery] narrows it to titles
+ * holding it.
  */
 data class SeriesTabState(
     val sources: List<SeriesSource>? = null,
@@ -124,6 +125,7 @@ data class SeriesTabState(
     val kind: SeriesKind? = null,
     val view: SeriesView? = null,
     val library: LibraryOptions = LibraryOptions(),
+    val libraryLoaded: Boolean = false,
     val followingQuery: String = "",
 )
 
@@ -221,8 +223,8 @@ class SeriesTabViewModel(
         mutableState,
         repository.observeFollowed().map<List<FollowedSeries>, List<FollowedSeries>?> { it }.onStart { emit(null) },
     ) { state, followed ->
-        // Held back until the view is chosen, when the saved sort and filter have arrived.
-        state.content(followed.takeIf { state.view != null })
+        // Held back until the saved sort and filter have arrived, so the grid never shows under the defaults first.
+        state.content(followed.takeIf { state.libraryLoaded })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(null))
 
     init {
@@ -232,7 +234,7 @@ class SeriesTabViewModel(
             val options = library.read()
             val following = repository.observeFollowed().firstOrNull().orEmpty().isNotEmpty()
             mutableState.update {
-                it.copy(view = it.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE, library = options)
+                it.copy(view = it.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE, library = options, libraryLoaded = true)
             }
         }
     }

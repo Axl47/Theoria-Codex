@@ -423,6 +423,10 @@ class SeriesTabViewModelTest {
         val collecting = launch { viewModel.content.collect {} }
         advanceUntilIdle()
         assertEquals(null, viewModel.content.value.following)
+        // Choosing Following before the read does not show the grid early either.
+        viewModel.chooseView(SeriesView.FOLLOWING)
+        advanceUntilIdle()
+        assertEquals(null, viewModel.content.value.following)
 
         saved.complete(LibraryOptions(sort = LibrarySort.TITLE))
         advanceUntilIdle()
