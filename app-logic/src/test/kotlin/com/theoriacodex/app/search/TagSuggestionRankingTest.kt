@@ -73,6 +73,18 @@ class TagSuggestionRankingTest {
     }
 
     @Test
+    fun `equal-count spellings of one tag pick the same spelling in any map order`() {
+        val spellings = listOf(
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("Wolf")) to 1L,
+        )
+
+        listOf(spellings, spellings.reversed()).forEach { ordered ->
+            assertEquals(listOf(SearchTerm("Wolf")), rankSearchedTags(ordered.toMap(), setOf(SourceKey.GELBOORU), "wo", 10) { true })
+        }
+    }
+
+    @Test
     fun `null-count provider order is stable`() {
         val providerOrder = listOf(suggestion("blue archive"), suggestion("blue eyes"))
 

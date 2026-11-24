@@ -114,7 +114,7 @@ fun rankSearchedTags(
             token.matchQuality(normalizedPrefix)?.let { quality -> SearchedTag(key.term, token, quality, count) }
         }
         .groupBy { searched -> searched.term.tagType to searched.token }
-        .map { (_, spellings) -> spellings.maxBy(SearchedTag::count) }
+        .map { (_, spellings) -> spellings.minWith(compareByDescending(SearchedTag::count).thenBy { it.term.value }) }
         .sortedWith(compareBy(SearchedTag::quality).thenByDescending(SearchedTag::count).thenBy(SearchedTag::token))
         .take(limit)
         .map(SearchedTag::term)
