@@ -54,7 +54,7 @@ val SeriesKind.words: EntryWords
     }
 
 /** What the kind filter and the Extensions page call this kind. */
-internal val SeriesKind.label: String
+val SeriesKind.label: String
     get() = when (this) {
         SeriesKind.MANGA -> "Manga"
         SeriesKind.ANIME -> "Anime"

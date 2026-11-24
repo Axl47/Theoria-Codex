@@ -1,33 +1,43 @@
 package com.theoriacodex.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.codex.codexPostCount
 import com.theoriacodex.app.codex.markSavedSearchesSeen
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
+import com.theoriacodex.app.series.label
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.app.ui.routes.BrowsingDestinationState
 import com.theoriacodex.app.ui.routes.rememberCodexCollection
 import com.theoriacodex.app.ui.routes.rememberRetained
+import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesCovers
+import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.launch
 
 /** Creators of recently watched posts the one box offers after the followed ones. */
 private const val RECENT_CREATOR_LIMIT = 20
 
 /**
- * Everything besides tags that Search's composer matches typed text against: the active profile's Codices,
- * followed creators and those of recently watched posts, saved and recent searches, and every setting definition
- * (see [SETTING_BINDINGS]), each bound to what picking it does.
+ * Everything besides tags that Search's composer matches typed text against: the active profile's Codices, followed
+ * series, followed creators and those of recently watched posts, saved and recent searches, and every setting
+ * definition (see [SETTING_BINDINGS]), each bound to what picking it does.
  */
 @Composable
 internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDestinationState): List<OmniboxEntry> {
@@ -39,7 +49,8 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
     val watched = rememberRetained("omnibox-watched-posts") { shell.data.recentsRepository.observeWatchedPosts() }.value.orEmpty()
     val saved = shell.savedSearches
     val hiddenTags = LocalHiddenTagsOpener.current
-    return remember(shell, codices, collection, recents, watched, saved, state.settings, profileId, hiddenTags) {
+    val series = rememberFollowedSeriesEntries(shell)
+    return remember(shell, codices, collection, series, recents, watched, saved, state.settings, profileId, hiddenTags) {
         buildList {
             codices.mapTo(this) { codex ->
                 OmniboxEntry.Action(
@@ -49,6 +60,7 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
                     cover = collection.coverCandidates[codex.codexId].orEmpty(),
                 ) { shell.navController.navigate(AppRoute.codexDetail(codex.codexId)) }
             }
+            addAll(series)
             val followed = state.settings.followedCreators.map { it.creator }
             (followed + recentCreators(watched, followed)).mapTo(this) { creator ->
                 OmniboxEntry.Action(OmniboxKind.CREATOR, creator.displayName, creator.source.displayName()) {
@@ -76,6 +88,42 @@ internal fun rememberSearchOmniboxEntries(shell: TheoriaShell, state: BrowsingDe
             })
         }
     }
+}
+
+/**
+ * The followed series, read from the device alone, each opening its page. A row names its source once that source's
+ * extension has loaded, which only the extensions of followed series do; until then, or when the source is not on,
+ * it names only the kind.
+ */
+@Composable
+private fun rememberFollowedSeriesEntries(shell: TheoriaShell): List<OmniboxEntry> {
+    val dependencies = shell.container.series ?: return emptyList()
+    val followed = rememberRetained("omnibox-followed-series") { dependencies.repository.observeFollowed() }.value.orEmpty()
+    val keys = remember(followed) { followed.mapTo(LinkedHashSet()) { it.series.id.source } }
+    val names by produceState(emptyMap<SourceKey, String>(), dependencies, keys) {
+        value = keys.mapNotNull { key -> dependencies.source(key)?.let { key to it.name } }.toMap()
+    }
+    return remember(shell, followed, names) {
+        followedSeriesEntries(followed.map(FollowedSeries::series), names, dependencies.covers) { id ->
+            shell.navController.navigate(AppRoute.series(id))
+        }
+    }
+}
+
+/** A row per series in [series]: its kind and, when [sourceNames] has it, source under the title, and its cover. */
+internal fun followedSeriesEntries(
+    series: List<Series>,
+    sourceNames: Map<SourceKey, String>,
+    covers: SeriesCovers,
+    open: (SeriesId) -> Unit,
+): List<OmniboxEntry> = series.map { item ->
+    val source = item.id.source
+    OmniboxEntry.Action(
+        OmniboxKind.SERIES,
+        item.title,
+        detail = listOfNotNull(source.seriesKind.label, sourceNames[source]).joinToString(" · "),
+        cover = covers.address(item)?.let { listOf(CodexCoverCandidate.RemoteImage(source, it)) }.orEmpty(),
+    ) { open(item.id) }
 }
 
 /** The creators of [watched] posts, latest first and each once, leaving out those already [followed]. */
