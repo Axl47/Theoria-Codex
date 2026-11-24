@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -312,7 +313,7 @@ private class Seasons(override val key: SourceKey) : SeriesSource {
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = popular(page)
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series): List<SeriesEntry> = throw UnsupportedEntriesException(MESSAGE)
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries = throw UnsupportedEntriesException(MESSAGE)
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Streams(emptyList())
 
     companion object {
@@ -339,7 +340,7 @@ private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) :
     override suspend fun series(id: SeriesId): StoredSeries? = storedFlow.value
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = entryFlow.value
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
-    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>) = emptyList<SeriesEntry>()
+    override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
@@ -385,7 +386,7 @@ private class WebSeriesSource(override val key: SourceKey, private val baseUrl: 
     override suspend fun popular(page: Int) = SeriesPage(emptyList(), false)
     override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) = SeriesPage(emptyList(), false)
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series) = emptyList<SeriesEntry>()
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
     override fun webUrl(series: Series): String = "$baseUrl${series.id.address}"
 }

@@ -109,9 +109,10 @@ interface SeriesRepository {
 
     /**
      * Replaces the stored entry list of the series [id] with [entries], as [store] does, leaving what is stored about
-     * the series itself as it is. Does nothing for a series that is not stored.
+     * the series itself as it is apart from its memo, which [seriesMemo] replaces when given, also with an empty list.
+     * Does nothing for a series that is not stored.
      */
-    suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>): List<SeriesEntry>
+    suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String? = null): List<SeriesEntry>
 
     suspend fun setFollowed(id: SeriesId, followed: Boolean)
 

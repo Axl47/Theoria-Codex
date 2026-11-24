@@ -6,6 +6,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
@@ -202,9 +203,9 @@ private class Finding(
         return SeriesPage(titles.mapIndexed { index, title -> Series(SeriesId(key, "/$index"), title) }, hasNextPage = false)
     }
     override suspend fun details(series: Series) = series
-    override suspend fun entries(series: Series): List<SeriesEntry> {
+    override suspend fun entries(series: Series, stored: List<SeriesEntry>): SeriesEntries {
         counted++
-        return List(chapters) { SeriesEntry("/c$it", "Chapter $it") }
+        return SeriesEntries(List(chapters) { SeriesEntry("/c$it", "Chapter $it") })
     }
     override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
 }
