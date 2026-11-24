@@ -31,3 +31,11 @@ Hash and tagger passes can run independently and resume. Adding a frame state or
 - `core-data-android/src/main/java/com/theoriacodex/data/android/room/VisualSignatureDao.java`: `observeHashed`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/VisualSignatureRepository.kt`: `VisualSignatureRepository`, `PictureVision`, `VisionFrames`, `MAX_FRAME_ATTEMPTS`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/PredictedTagCodec.kt`: `PredictedTagCodec`
+
+## Guarded by
+
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomVisualSimilarityStorageTest.kt`: `a profile keeps its newest verdict per post up to the cap, and undo or removal forgets them (ADR 0017)`, `signatures exist only for stored posts and list the library posts still missing one (ADR 0017)`, `vision rows follow their post when it is deleted (ADR 0017)`, `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried (ADR 0017)`, `a hash written after the tagger keeps its vision, and vision written after a hash keeps the hash (ADR 0017)`, `a still analysis awaiting frames is listed until its frames are read or its reads run out (ADR 0017)`, `analyses of posts that do not play stop waiting for frames and count as analysed (ADR 0017)`, `frame states are stored as 0 for a still, 1 for frames to read and 2 for frames read (ADR 0017)`, `clearing vision keeps hashes and drops rows that held only vision (ADR 0017)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomUpgradeJourneyTest.kt`: `version 13 adds a verdict log without a post and signatures that follow their post (ADR 0017)`
+- `core-data-android/src/main/java/com/theoriacodex/data/android/room/VisualSignatureDao.java`: `Flow<List<HashRow>> observeHashed();`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/PredictedTagCodecTest.kt`: `tags with punctuation survive a round trip at per-mille precision (ADR 0017)`, `scores are clamped on encode and malformed lines are skipped on decode (ADR 0017)`
+- Left to prose: that signatures and verdicts are never backed up rests on `BackupLibrary` having no field for them, which only review of a new field would catch; the pin keeps `observeHashed` on `HashRow`, not `HashRow` free of an embedding column; the embedding being opaque bytes is a usage rule.
