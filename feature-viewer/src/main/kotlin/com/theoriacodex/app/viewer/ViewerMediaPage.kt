@@ -47,6 +47,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.media.awaitsVideoStream
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -128,7 +129,9 @@ internal fun ViewerMediaPage(
             translationY = current.panY
         }
     }
-    val topGap = if (animated && !layout.edgeToEdge) VIEWER_ANIMATED_TOP_GAP else 0.dp
+    // A video whose stream is still resolving shows its poster as a still; it keeps the gap so it doesn't shift on arrival.
+    val playsMotion = animated || (mediaIndex == 0 && post.awaitsVideoStream)
+    val topGap = if (playsMotion && !layout.edgeToEdge) VIEWER_ANIMATED_TOP_GAP else 0.dp
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
     val transformAspectRatio = if (controls.fillScreen) null else viewerMediaAspectRatio(post, media)
     val overlayAspectRatio = if (controls.fillScreen) null else viewerAspectRatio(post)
