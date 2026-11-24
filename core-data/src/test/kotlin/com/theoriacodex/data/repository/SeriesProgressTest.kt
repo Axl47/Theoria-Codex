@@ -34,7 +34,7 @@ class SeriesProgressTest {
     }
 
     @Test
-    fun `an episode is watched from 85 percent of its length, stays watched, and resumes where it was left short of its last 2 minutes`() {
+    fun `an episode is watched from 85 percent of its length, stays watched, and resumes where it was left short of its last 2 minutes (ADR 0028)`() {
         val length = 1_200_000L
         val midway = entry("e1", order = 0).withProgress(position = 1_019_999, length = length, SeriesKind.ANIME)
         assertFalse("Short of 85%", midway.read)
@@ -74,14 +74,14 @@ class SeriesProgressTest {
     }
 
     @Test
-    fun `continue resumes the entry opened last while it is unfinished`() {
+    fun `continue resumes the entry opened last while it is unfinished (ADR 0028)`() {
         val entries = listOf(entry("c3", order = 0), entry("c2", order = 1, position = 4), entry("c1", order = 2))
 
         assertEquals("c2", continueEntry(series(lastOpened = "c2"), entries)?.entry?.address)
     }
 
     @Test
-    fun `continue moves to the first unread entry in reading order once the last one is finished`() {
+    fun `continue moves to the first unread entry in reading order once the last one is finished (ADR 0028)`() {
         val entries = listOf(entry("c3", order = 0), entry("c2", order = 1), entry("c1", order = 2, read = true))
 
         assertEquals("c2", continueEntry(series(lastOpened = "c1"), entries)?.entry?.address)
@@ -89,7 +89,7 @@ class SeriesProgressTest {
     }
 
     @Test
-    fun `after a finished entry, continue takes the next while unread, else one partway through, else the first unread`() {
+    fun `after a finished entry, continue takes the next while unread, else one partway through, else the first unread (ADR 0028)`() {
         val newestFinished = listOf(entry("c4", order = 0, read = true), entry("c3", order = 1, position = 5), entry("c2", order = 2, position = 1), entry("c1", order = 3))
         assertEquals("c3", continueEntry(series(lastOpened = "c4"), newestFinished)?.entry?.address)
 
@@ -104,7 +104,7 @@ class SeriesProgressTest {
     }
 
     @Test
-    fun `continue returns to the entry opened last when everything is read, and nothing without entries`() {
+    fun `continue returns to the entry opened last when everything is read, and nothing without entries (ADR 0028)`() {
         val entries = listOf(entry("c2", order = 0, read = true), entry("c1", order = 1, read = true))
 
         assertEquals("c1", continueEntry(series(lastOpened = "c1"), entries)?.entry?.address)

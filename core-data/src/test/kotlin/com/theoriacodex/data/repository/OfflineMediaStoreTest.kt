@@ -113,7 +113,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `removing one post from an owner keeps its other posts, another owner's copy and its admitted work`() = runTest {
+    fun `removing one post from an owner keeps its other posts, another owner's copy and its admitted work (ADR 0022)`() = runTest {
         val store = OfflineMediaStore(tempDir("one-post"))
         val (a, b, c) = listOf("a", "b", "c").map { samplePost(it, null) }
         val admission = store.admit("series")
@@ -143,7 +143,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a delete stopped partway leaves no copy that opens after a restart`() = runTest {
+    fun `a delete stopped partway leaves no copy that opens after a restart (ADR 0022)`() = runTest {
         val directory = tempDir("stopped-delete")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
@@ -163,7 +163,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a folder without a manifest is removed on load, and one with an unreadable manifest is kept`() = runTest {
+    fun `a folder without a manifest is removed on load, and one with an unreadable manifest is kept (ADR 0022)`() = runTest {
         val directory = tempDir("no-manifest")
         val (kept, stopped) = listOf("kept", "stopped").map { samplePost(it, null) }
         for (post in listOf(kept, stopped)) {
@@ -181,7 +181,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `failed replacement and cancelled gallery leave completed bytes intact`() = runTest {
+    fun `failed replacement and cancelled gallery leave completed bytes intact (ADR 0022)`() = runTest {
         val directory = tempDir("failed")
         val post = gallery()
         val store = OfflineMediaStore(directory)
@@ -210,7 +210,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `clear or owner removal invalidates an already running acquisition`() = runTest {
+    fun `clear or owner removal invalidates an already running acquisition (ADR 0022)`() = runTest {
         for (clearAll in listOf(false, true)) {
             val store = OfflineMediaStore(tempDir("clear-$clearAll"))
             val post = gallery()
@@ -235,7 +235,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `missing truncated and incomplete media never appears available`() = runTest {
+    fun `missing truncated and incomplete media never appears available (ADR 0022)`() = runTest {
         val directory = tempDir("integrity")
         val store = OfflineMediaStore(directory)
         val post = gallery()
@@ -376,7 +376,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a version 2 manifest is not a usable copy and a later save keeps its owners`() = runTest {
+    fun `a version 2 manifest is not a usable copy and a later save keeps its owners (ADR 0022)`() = runTest {
         val directory = tempDir("v2")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
@@ -399,7 +399,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a version 3 manifest whose post cannot be decoded keeps its valid owners`() = runTest {
+    fun `a version 3 manifest whose post cannot be decoded keeps its valid owners (ADR 0022)`() = runTest {
         val directory = tempDir("v3-undecodable")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
@@ -429,7 +429,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `removing the last owner of an undecodable copy deletes it, even after a restart`() = runTest {
+    fun `removing the last owner of an undecodable copy deletes it, even after a restart (ADR 0022)`() = runTest {
         val directory = tempDir("undecodable-removal")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
@@ -481,7 +481,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a manifest whose id does not hash to its folder is rejected`() = runTest {
+    fun `a manifest whose id does not hash to its folder is rejected (ADR 0022)`() = runTest {
         val directory = tempDir("misplaced")
         val post = gallery()
         OfflineMediaStore(directory).save(post, post.media, "codex:a") { _, file -> file.writeText("bytes"); null }
@@ -496,7 +496,7 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     }
 
     @Test
-    fun `a page outside its copy's folder is not a usable copy`() = runTest {
+    fun `a page outside its copy's folder is not a usable copy (ADR 0022)`() = runTest {
         val outside = tempDir("outside").resolve("page.png").apply { writeText("bytes") }
         for ((name, escape) in listOf<Pair<String, (File) -> String>>(
             "dot-dot" to { page -> "${page.parent}/../../../escaped.png" },

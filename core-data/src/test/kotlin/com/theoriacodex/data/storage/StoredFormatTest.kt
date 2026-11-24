@@ -11,22 +11,62 @@ class StoredFormatTest {
         """{"name":"a","count":3,"children":[{"label":"x"}],"groups":[[{"label":"g"}]],"byKey":{"k":{"label":"y"}},"retired":1}"""
 
     @Test
-    fun `goldens that hold every property pass, retired keys and older partial files included`() {
+    fun `goldens that hold every property pass, retired keys and older partial files included (ADR 0034)`() {
         assertStoredFormat(
             full to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
             """{"name":"old","count":"5"}""" to Record("old", 5),
+            retiredKeys = setOf("retired"),
         )
     }
 
     @Test
-    fun `a golden that decodes differently fails`() {
+    fun `a golden that decodes differently fails (ADR 0034)`() {
         val failure = assertThrows(AssertionError::class.java) { assertStoredFormat(full to Record("b")) }
 
         assertTrue(failure.message, "golden 0 decodes differently" in failure.message.orEmpty())
     }
 
     @Test
-    fun `properties no golden holds fail by path, inside nested lists and map values too`() {
+    fun `a key the model does not declare fails by path unless it is listed as retired (ADR 0034)`() {
+        val stale = full.replace("""{"label":"x"}""", """{"label":"x","stale":true}""")
+            .replace("""{"label":"y"}""", """{"label":"y","stale":true}""")
+        val failure = assertThrows(AssertionError::class.java) {
+            assertStoredFormat(
+                stale to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
+                retiredKeys = setOf("retired"),
+            )
+        }
+
+        assertTrue(failure.message, "[children[].stale, byKey{}.stale]" in failure.message.orEmpty())
+    }
+
+    @Test
+    fun `a retired key that no golden holds fails (ADR 0034)`() {
+        val failure = assertThrows(AssertionError::class.java) {
+            assertStoredFormat(
+                full to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
+                retiredKeys = setOf("retired", "gone"),
+            )
+        }
+
+        assertTrue(failure.message, "retiredKeys lists [gone]" in failure.message.orEmpty())
+    }
+
+    @Test
+    fun `a retired nested path never excuses a key spelled like it (ADR 0034)`() {
+        val literal = full.replace(""""retired":1""", """"retired":1,"children[].stale":true""")
+        val failure = assertThrows(AssertionError::class.java) {
+            assertStoredFormat(
+                literal to Record("a", 3, listOf(Child("x")), listOf(listOf(Child("g"))), mapOf("k" to Child("y"))),
+                retiredKeys = setOf("retired", "children[].stale"),
+            )
+        }
+
+        assertTrue(failure.message, """[children\[\]\.stale]""" in failure.message.orEmpty())
+    }
+
+    @Test
+    fun `properties no golden holds fail by path, inside nested lists and map values too (ADR 0034)`() {
         val failure = assertThrows(AssertionError::class.java) {
             assertStoredFormat(
                 """{"name":"a","count":null,"children":[{}],"groups":[[{}]],"byKey":{"k":{}}}""" to

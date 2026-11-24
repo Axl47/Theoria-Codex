@@ -152,7 +152,7 @@ class RoomProfileBackupStoreTest {
         restoredDatabase.close()
     }
 
-    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks`() = runTest {
+    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks (ADR 0025)`() = runTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
         val title = Series(id, "Title", language = "en")
@@ -294,7 +294,7 @@ class RoomProfileBackupStoreTest {
         assertFalse(content.observeCodices().first().isNotEmpty())
     }
 
-    @Test fun `a restore that trims Recents deletes posts only the trimmed rows held`() = runTest {
+    @Test fun `a restore that trims Recents deletes posts only the trimmed rows held (ADR 0025)`() = runTest {
         val posts = (0..DEFAULT_RECENT_WATCHED_LIMIT).map { index -> post("watched-$index") }
         val watched = posts.mapIndexed { index, post ->
             RecentPostEntry(post, viewedAtEpochMs = index + 1L, ViewerStreamSource.SEARCH, null)

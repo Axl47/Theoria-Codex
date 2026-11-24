@@ -73,6 +73,24 @@ class TagSuggestionRankingTest {
     }
 
     @Test
+    fun `equal-count spellings of one tag pick the same spelling in any map order`() {
+        val spellings = listOf(
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("Wolf")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf", sourceNamespace = "tag")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf", sourceNamespace = "")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("Wolf", sourceNamespace = "tag")) to 1L,
+            SearchedTagKey(SourceKey.GELBOORU, SearchTerm("wolf", SearchFacet.ARTIST, "artist")) to 1L,
+        )
+
+        listOf(spellings, spellings.reversed()).forEach { ordered ->
+            fun rank(limit: Int) = rankSearchedTags(ordered.toMap(), setOf(SourceKey.GELBOORU), "wo", limit) { true }
+            assertEquals(listOf(SearchTerm("wolf"), SearchTerm("wolf", SearchFacet.ARTIST, "artist")), rank(10))
+            assertEquals(listOf(SearchTerm("wolf")), rank(1))
+        }
+    }
+
+    @Test
     fun `null-count provider order is stable (ADR 0083)`() {
         val providerOrder = listOf(suggestion("blue archive"), suggestion("blue eyes"))
 

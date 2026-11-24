@@ -1,18 +1,23 @@
 package com.theoriacodex.app.related
 
-import android.app.Application
 import com.theoriacodex.app.testing.testPost
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowLog
 
-@RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class)
 class RelatedPostsDiagnosticsTest {
+    @Test
+    fun `records each event through the injected log`() {
+        val lines = mutableListOf<String>()
+        val owner = Any()
+        val diagnostics = RelatedPostsDiagnostics("Search", owner, lines::add)
+
+        diagnostics.record("owner created", RelatedPostsUiState.Idle)
+
+        val label = "Search owner=${System.identityHashCode(owner).toString(16)}"
+        assertEquals(listOf("$label owner created state=Idle source=null generation=null pages=0 selected=-1"), lines)
+    }
+
     @Test
     fun `a lifecycle line names no post, tag, address or account (ADR 0077)`() {
         val seed = testPost(sourcePostId = "seed-4711", canonicalTags = listOf("secret_tag"), authorName = "private_artist")
@@ -26,12 +31,11 @@ class RelatedPostsDiagnosticsTest {
             RelatedPostsUiState.Empty(request, retained),
             RelatedPostsUiState.Failed(request, "GET https://example.com/u/private_artist failed for user@example.com", retained),
         )
-        val diagnostics = RelatedPostsDiagnostics("search", Any())
-        ShadowLog.clear()
+        val lines = mutableListOf<String>()
+        val diagnostics = RelatedPostsDiagnostics("search", Any(), lines::add)
 
         states.forEach { state -> diagnostics.record("event", state) }
 
-        val lines = ShadowLog.getLogsForTag("RelatedPosts").map { it.msg }
         assertEquals(states.size, lines.size)
         lines.forEach { line ->
             listOf(

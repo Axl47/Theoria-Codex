@@ -63,7 +63,6 @@ import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
-import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
@@ -177,7 +176,6 @@ private fun SettingsHome(
             })
         }
         SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, showSeries, appLock, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
-        if (state.showDeveloperScenarios) DeveloperScenarios(state, onAction)
     }
     if (showAddProfile) {
         NameEntryDialog(
@@ -490,24 +488,6 @@ private fun FallbackCacheControls(state: SettingsUiState, onAction: (SettingsAct
 }
 
 @Composable
-private fun DeveloperScenarios(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
-    SettingsGroup("Developer scenarios") {
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ScenarioPreset.entries.forEach { scenario ->
-                FilterChip(
-                    selected = state.settings.scenarioPreset == scenario,
-                    onClick = { onAction(SettingsAction.SetScenarioPreset(scenario)) },
-                    label = { Text(scenarioLabel(scenario)) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun ProfileDeleteDialog(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     val profile = state.profileDeleteTargetId?.let { targetId ->
         state.settings.recommendationProfiles.firstOrNull { it.profileId == targetId }
@@ -547,13 +527,6 @@ internal fun sourceAccountsSummary(accounts: SettingsAccountUiState): String {
 internal fun cacheSummary(thumbnailCount: Int, fullImageCount: Int): String {
     val itemCount = thumbnailCount + fullImageCount
     return "$itemCount cached ${if (itemCount == 1) "item" else "items"}"
-}
-
-internal fun scenarioLabel(scenario: ScenarioPreset): String = when (scenario) {
-    ScenarioPreset.NORMAL -> "Normal"
-    ScenarioPreset.PARTIAL_FAILURE -> "Partial failure"
-    ScenarioPreset.EMPTY_RESULTS -> "Empty results"
-    ScenarioPreset.SLOW_NETWORK -> "Slow network"
 }
 
 internal fun statsSummary(statistics: StatisticsSummary): String =
