@@ -42,6 +42,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Owns For You: the Mix, dealt in small batches from the profile's lanes, and the trails forked from its cards, as a
@@ -69,10 +71,11 @@ import kotlinx.coroutines.withContext
  *
  * Swipes on the Mix steer what it deals next ([DeckSteering]): a run of skips lowers a lane, and a like or save asks
  * for two posts like it, which arrive a few cards later. Steering lives in memory, so a recreated owner starts from a
- * fresh Mix. Trails do not steer, but a post decided on any level, or a copy of it on another site, is never dealt
- * again this session. Every level's like, save, skip and hide is also logged per profile ([ForYouDeckWiring.verdicts])
- * as a label for a future taste model; Undo removes it. Everything here runs on the main thread, which is also where
- * the decks report their decisions.
+ * fresh Mix. Trails do not steer, but a post decided on any level, or a copy of it on another site, is not dealt
+ * again this session, nor is a post the profile skipped in the last 30 days, until [startOver]. Every level's like,
+ * save, skip and hide is logged per profile ([ForYouDeckWiring.verdicts]), which is where those skips are read back,
+ * and as a label for a future taste model; Undo removes it. Everything here runs on the main thread, which is also
+ * where the decks report their decisions.
  *
  * While the picture tagger ([ForYouDeckWiring.pictures]) is ready, each lane's posts are vetted before they can be dealt:
  * their pictures are tagged a few posts ahead of the deal, one at a time, and a post whose predicted tags carry a hidden
@@ -126,6 +129,9 @@ class ForYouDeckViewModel(
 
     /** Posts decided on any level this session. */
     private val seen = mutableSetOf<PostId>()
+
+    private var recentSkips: Set<PostId> = emptySet()
+    private var skipsReadFor: String? = null
 
     /**
      * The verdict each decision logged, so its Undo removes that verdict and no later one. Keyed by the decision itself:
@@ -224,7 +230,11 @@ class ForYouDeckViewModel(
         }
         when {
             previous != next -> {
-                if (previous?.profileId != next.profileId) seen.clear()
+                if (previous?.profileId != next.profileId) {
+                    seen.clear()
+                    recentSkips = emptySet()
+                    skipsReadFor = null
+                }
                 rebuild()
             }
             hiddenChanged -> {
@@ -234,9 +244,17 @@ class ForYouDeckViewModel(
         }
     }
 
+    fun startOver() {
+        seen.clear()
+        recentSkips = emptySet()
+        skipsReadFor = inputs?.profileId
+        rebuild()
+    }
+
     /** Starts a fresh Mix for the current inputs: every level closes, and steering starts over. */
     fun rebuild() {
         val request = request() ?: return
+        val profileId = request.settings.activeProfileId
         work.cancelChildren()
         asking.clear()
         vetting = null
@@ -249,10 +267,12 @@ class ForYouDeckViewModel(
         // The model loads while the lanes are planned and their first pages fetched, so the first check need not wait.
         if (vetsPictures) workScope.launch { wiring.pictures.prepare() }
         workScope.launch {
+            val skips = if (skipsReadFor == profileId) null else async { readRecentSkips(profileId) }
             val lanes = runCatchingPreservingCancellation { engine.lanes(request) }.getOrElse { error ->
                 Diagnostics.report("for-you", "For You could not build its lanes", error)
                 return@launch settle(ForYouMixState.Failed, error.message)
             }
+            skips?.await()
             if (lanes.isEmpty()) return@launch settle(ForYouMixState.NoLanes)
             val built = ForYouMix(lanes, wiring.copiesOf)
             mix = built
@@ -264,6 +284,19 @@ class ForYouDeckViewModel(
             if (built.wanted) makeUp(built)
             vet(built)
         }
+    }
+
+    private suspend fun readRecentSkips(profileId: String) {
+        val until = wiring.clock()
+        val since = until - SKIP_MEMORY_MS
+        val read = workScope.launch {
+            verdictWrites.withLock {}
+            recentSkips = runCatchingPreservingCancellation { wiring.verdicts.skippedBetween(profileId, since, until, SKIP_READ_LIMIT) }
+                .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
+                .getOrNull() ?: return@launch
+            skipsReadFor = profileId
+        }
+        withTimeoutOrNull(SKIP_READ_TIMEOUT_MS) { read.join() }
     }
 
     /** What the lanes are planned for now; null before the route has synchronized. */
@@ -621,8 +654,8 @@ class ForYouDeckViewModel(
     /** Whether [this] post, or a copy of it on another site, is one of [ids]. */
     private fun Post.copyOfAny(ids: (PostId) -> Boolean): Boolean = ids(id) || wiring.copiesOf(this).any(ids)
 
-    /** Decided, Liked or saved, read live: testing one post copies neither set. */
-    private fun isKnown(id: PostId): Boolean = id in seen || id in kept
+    /** Decided, recently skipped, liked or saved, read live: testing one post copies no set. */
+    private fun isKnown(id: PostId): Boolean = id in seen || id in recentSkips || id in kept
 
     /**
      * Steers the Mix by a decision of the Mix deck numbered [level]. A deck that was replaced since (its writes may
@@ -702,6 +735,10 @@ class ForYouDeckViewModel(
 
         /** Vetted posts each lane keeps ready ahead of the deal: about a deal's worth across a Mix's lanes. */
         const val VET_AHEAD = 3
+
+        const val SKIP_MEMORY_MS = 30L * 24 * 60 * 60 * 1000
+        const val SKIP_READ_LIMIT = 5_000
+        const val SKIP_READ_TIMEOUT_MS = 1_500L
     }
 }
 
