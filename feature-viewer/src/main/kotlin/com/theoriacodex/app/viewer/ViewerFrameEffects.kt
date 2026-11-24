@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +41,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @Composable
@@ -147,24 +149,28 @@ internal fun ViewerFrameEffects(
     ViewerKeepScreenOnEffect(
         slideshow = uiState.controls.slideshow,
         reading = frame.reading,
-        activity = Triple(screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex),
+        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
     )
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
 }
 
 /**
  * Keeps the screen on during a running [slideshow], or while [reading] a chapter until [VIEWER_READING_IDLE_MS] pass
- * without a change of [activity] (an interaction or a page change), so a reader who falls asleep lets it sleep too.
- * Released once the Viewer pauses or leaves.
+ * without a change of [activity] (a touch, a control used, or a page change), so a reader who falls asleep lets it
+ * sleep too. [activity] is read in a snapshot flow, so a touch does not recompose the caller. Released once the
+ * Viewer pauses or leaves.
  */
 @Composable
-internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, activity: Any) {
+internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, activity: () -> Any) {
     val view = LocalView.current
     val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
     var readingIdle by remember { mutableStateOf(false) }
-    LaunchedEffect(reading, resumed, activity) {
+    val currentActivity by rememberUpdatedState(activity)
+    LaunchedEffect(reading, resumed) {
         readingIdle = false
-        if (reading && resumed) {
+        if (!reading || !resumed) return@LaunchedEffect
+        snapshotFlow { currentActivity() }.collectLatest {
+            readingIdle = false
             delay(VIEWER_READING_IDLE_MS)
             readingIdle = true
         }

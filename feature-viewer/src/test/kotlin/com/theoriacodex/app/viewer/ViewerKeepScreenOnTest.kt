@@ -28,7 +28,7 @@ class ViewerKeepScreenOnTest {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             view = LocalView.current
-            ViewerKeepScreenOnEffect(this.slideshow.value, reading, activity.intValue)
+            ViewerKeepScreenOnEffect(this.slideshow.value, reading) { activity.intValue }
         }
         compose.mainClock.advanceTimeByFrame()
     }
