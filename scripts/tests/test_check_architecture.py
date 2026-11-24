@@ -94,6 +94,30 @@ class DiagnosticsRulesTest(unittest.TestCase):
                 )
 
 
+class DownloadManagerRuleTest(unittest.TestCase):
+    def test_reports_animation_export_through_download_manager_adr_0110(self) -> None:
+        files = {
+            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/UgoiraMp4Export.kt":
+                "val queue = context.getSystemService(DownloadManager::class.java)\n",
+            "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Export.kt":
+                "val queue = context.getSystemService(Context.DOWNLOAD_SERVICE)\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadService.kt":
+                "import android.app.DownloadManager\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadManagerHints.kt": "val hint = 1\n",
+        }
+        with main_sources(files):
+            self.assertIn(check_architecture.only_post_downloads_use_download_manager, check_architecture.RULES)
+            self.assertEqual(
+                [f"{path} uses Android's DownloadManager; only post downloads queue there, and animation export uses the "
+                 "app's own transport (docs/adr/0110-offline-media-jobs.md)"
+                 for path in [
+                     "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Export.kt",
+                     "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/UgoiraMp4Export.kt",
+                 ]],
+                check_architecture.only_post_downloads_use_download_manager(),
+            )
+
+
 class CoreDomainRulesTest(unittest.TestCase):
     def test_reports_off_main_notes_outside_the_start_of_a_parse_helper_adr_0002(self) -> None:
         self.assertIn(check_architecture.off_main_notes_run_where_work_runs, check_architecture.RULES)

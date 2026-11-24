@@ -266,6 +266,21 @@ def no_manifest_reads_other_apps_logs() -> list[str]:
     ]
 
 
+DOWNLOAD_MANAGER = re.compile(r"\bDownloadManager\b|\bDOWNLOAD_SERVICE\b")
+DOWNLOAD_MANAGER_OWNERS = re.compile(r"media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownload\w*\.kt")
+
+
+@rule
+def only_post_downloads_use_download_manager() -> list[str]:
+    return [
+        f"{relative} uses Android's DownloadManager; only post downloads queue there, and animation export uses the "
+        "app's own transport (docs/adr/0110-offline-media-jobs.md)"
+        for path in sorted(ROOT.glob("*/src/main/**/*.kt"))
+        if not DOWNLOAD_MANAGER_OWNERS.fullmatch(relative := path.relative_to(ROOT).as_posix())
+        and DOWNLOAD_MANAGER.search(path.read_text(encoding="utf-8"))
+    ]
+
+
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]
     for failure in failures:

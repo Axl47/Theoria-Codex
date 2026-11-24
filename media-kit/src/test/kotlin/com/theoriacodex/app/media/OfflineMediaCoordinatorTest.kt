@@ -91,7 +91,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `cache on save stores actual bytes independently from disposable caches`() = runTest {
+    fun `cache on save stores actual bytes independently from disposable caches (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { _, _, file ->
             file.writeText("real media")
@@ -105,7 +105,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `automatic saves return promptly accumulate during acquisition and drain without loss`() = runTest {
+    fun `automatic saves return promptly accumulate during acquisition and drain without loss (ADR 0110)`() = runTest {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
         val coordinator = OfflineMediaCoordinator(
@@ -129,7 +129,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `clear and owner removal cancel automatic saves still resolving and discard queued posts`() = runTest {
+    fun `clear and owner removal cancel automatic saves still resolving and discard queued posts (ADR 0110)`() = runTest {
         for (clearAll in listOf(false, true)) {
             val started = CompletableDeferred<Unit>()
             val coordinator = OfflineMediaCoordinator(
@@ -172,7 +172,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `posts saved into a kept owner download alone and other owners are left alone`() = runTest {
+    fun `posts saved into a kept owner download alone and other owners are left alone (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
@@ -193,7 +193,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `posts saved before the first scan finishes wait for it to tell kept owners apart`() = runTest {
+    fun `posts saved before the first scan finishes wait for it to tell kept owners apart (ADR 0110)`() = runTest {
         val directory = temporary.newFolder()
         val acquisitions = mutableListOf<String>()
         val acquire: suspend (Post, ImageRef, java.io.File) -> Unit = { post, _, file ->
@@ -215,7 +215,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a cancelled request stays stopped when posts are saved until Retry runs it with them`() = runTest {
+    fun `a cancelled request stays stopped when posts are saved until Retry runs it with them (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
@@ -236,7 +236,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `an owner with neither copies nor a running job gets nothing when posts are saved`() = runTest {
+    fun `an owner with neither copies nor a running job gets nothing when posts are saved (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, _ ->
@@ -254,7 +254,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a replaced preparation that already loaded cannot start a job after the removal`() = runTest {
+    fun `a replaced preparation that already loaded cannot start a job after the removal (ADR 0110)`() = runTest {
         val (coordinator, store) = gatedCoordinator()
         val proceed = loadedPreparation(coordinator)
         coordinator.prepare("codex:a") { awaitCancellation() }
@@ -266,7 +266,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a cancelled preparation that already loaded cannot start a job`() = runTest {
+    fun `a cancelled preparation that already loaded cannot start a job (ADR 0110)`() = runTest {
         val (coordinator, _) = gatedCoordinator()
         val proceed = loadedPreparation(coordinator)
         coordinator.cancel("codex:a")
@@ -276,7 +276,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a save while clear waits on a preparation starts no job and leaves no copy`() = runTest {
+    fun `a save while clear waits on a preparation starts no job and leaves no copy (ADR 0110)`() = runTest {
         val (coordinator, store) = gatedCoordinator()
         val proceed = loadedPreparation(coordinator)
         val clearing = launch { coordinator.clear() }

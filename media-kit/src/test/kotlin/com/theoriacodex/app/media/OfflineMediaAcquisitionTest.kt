@@ -20,7 +20,7 @@ class OfflineMediaAcquisitionTest {
     @get:Rule val temporary = TemporaryFolder()
 
     @Test
-    fun `streaming uses request headers and verifies complete bytes`() = runTest {
+    fun `streaming uses request headers and verifies complete bytes (ADR 0110)`() = runTest {
         val server = FakeServer()
         val output = temporary.newFile()
         downloadMediaFile(
@@ -32,7 +32,7 @@ class OfflineMediaAcquisitionTest {
     }
 
     @Test
-    fun `partial responses oversized files and provider error pages are rejected`() = runTest {
+    fun `partial responses oversized files and provider error pages are rejected (ADR 0110)`() = runTest {
         val invalid = listOf(
             FakeServer(length = 20L),
             FakeServer(status = 403),
