@@ -117,11 +117,14 @@ class RoomVisualSimilarityStorageTest {
         suspend fun awaiting() = signatures.libraryPostsAwaitingFrames("m1", limit = 10).map(Post::id).toSet()
 
         assertEquals(setOf(id("clip"), id("flaky"), id("gone")), awaiting())
+        // Progress counts a post once its frames are read too.
+        assertEquals(VisionProgress(analysed = 1, total = 4), signatures.observeVisionProgress("m1").first())
         assertTrue(signatures.libraryPostsAwaitingFrames("m2", limit = 10).isEmpty())
         signatures.putVision(listOf(vision("clip", "m1", frames = VisionFrames.READ)))
         signatures.failFrames(id("gone"), "m1", permanently = true)
         repeat(MAX_FRAME_ATTEMPTS - 1) { signatures.failFrames(id("flaky"), "m1", permanently = false) }
         assertEquals(setOf(id("flaky")), awaiting())
+        assertEquals(3, signatures.observeVisionProgress("m1").first().analysed)
         signatures.failFrames(id("flaky"), "m1", permanently = false)
         assertTrue(awaiting().isEmpty())
 

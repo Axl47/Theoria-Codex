@@ -84,5 +84,5 @@ enum class VisionFrames { NONE, WANTED, READ }
 /** Failed frame reads after which a post's still analysis stands for good. */
 const val MAX_FRAME_ATTEMPTS = 3
 
-/** [analysed] of the [total] liked or saved posts have been through the model. */
+/** [analysed] of the [total] liked or saved posts have been through the model, frames included where they play. */
 data class VisionProgress(val analysed: Int, val total: Int)
