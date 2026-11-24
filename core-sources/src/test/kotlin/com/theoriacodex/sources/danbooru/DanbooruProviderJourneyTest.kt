@@ -16,7 +16,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-/** Journeys through AIBooru, one of the sites served by the shared Danbooru adapter. */
 class DanbooruProviderJourneyTest {
     @Test
     fun `filtered scored search keeps paging after duplicates and can retry a failed detail request`() = runTest {

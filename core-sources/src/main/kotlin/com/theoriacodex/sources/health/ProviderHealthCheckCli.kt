@@ -37,7 +37,6 @@ fun main(args: Array<String>) = runBlocking {
     }
 }
 
-/** Probes the selected providers over the network. */
 private suspend fun liveReport(publicSafe: Boolean): ProviderHealthReport {
     val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
     val httpClient = ChallengeObservingHttpClient(
@@ -125,7 +124,6 @@ private fun loadProbeCases(): List<ProviderProbeCase> {
     return ProviderProbeCases.fromJson(caseFile.readText())
 }
 
-/** Sources whose credentials [EnvironmentCredentialsProvider] supplies. */
 private suspend fun credentialedSourcesFromEnvironment(): Set<SourceKey> = buildSet {
     if (EnvironmentCredentialsProvider.getPixivTokens() != null) add(SourceKey.PIXIV)
     if (EnvironmentCredentialsProvider.userApiKey(SourceKey.RULE34XXX) != null) add(SourceKey.RULE34XXX)
@@ -164,10 +162,6 @@ internal fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>):
         }
 }
 
-/**
- * Console output for runs whose logs are public: one `<source id>: <status> <reason>` line per
- * source and nothing provider-derived (no URLs, messages, ids, counts, or latencies).
- */
 internal fun publicSafeSummaryLines(report: ProviderHealthReport): List<String> {
     if (!report.liveProvidersEnabled) return listOf("Provider health skipped: live providers disabled.")
     return report.results.map { result ->

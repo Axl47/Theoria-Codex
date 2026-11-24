@@ -87,12 +87,9 @@ class Rule34GroupedSearchMetadataTest {
         assertEquals(listOf("42", "43"), http.resolvedIds)
     }
 
-    /** Provider calls stay on the test's dispatcher, so request order stays deterministic. */
     private fun orchestrator(adapters: Map<SourceKey, SourceAdapter> = emptyMap()) =
         UnifiedSearchOrchestrator(adapters, providerContext = EmptyCoroutineContext)
 
-    // The orchestrator's deadlines run on the virtual clock and hydration runs two posts at once, so the
-    // adapter stays on the test dispatcher too.
     private fun adapter(http: SourceHttpClient, gen: Boolean): KvsVideoSourceAdapter =
         if (gen) {
             KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, http, callContext = EmptyCoroutineContext)

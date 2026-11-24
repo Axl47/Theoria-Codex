@@ -34,8 +34,6 @@ import java.util.Locale
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-/** Not a [com.theoriacodex.domain.adapter.FileHashLookupSourceAdapter]: its posts carry a file hash, but Shimmie's
- * `hash=` search is unverified through this RSS/HTML path, so other sites' "Find on other sites" skips Paheal. */
 class Rule34PahealSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
@@ -230,7 +228,6 @@ class Rule34PahealSourceAdapter(
     }
 }
 
-/** A Paheal post, whose first tag stands in for its author; a blank [pageUrl] falls back to the post's own page. */
 private fun pahealPost(
     sourcePostId: String,
     preview: ImageRef,
@@ -257,19 +254,15 @@ private fun pahealPost(
     title = title,
 )
 
-/** A listing's thumbnail; a blank [url] is none. */
 private fun pahealThumbnail(url: String) = ImageRef(url = url.ifBlank { null }, localPath = null, mime = PAHEAL_THUMBNAIL_MIME)
 
-/** A thumbnail's space-separated `data-tags`. */
 private fun Element.pahealTags(): List<String> = attr("data-tags").split(' ').map(String::trim).filter(String::isNotBlank)
 
-/** The address behind a listing's "File Only" link, or blank. */
 private fun Element.fileOnlyUrl(): String = select("a")
     .firstOrNull { anchor -> anchor.text().contains("file only", ignoreCase = true) }
     ?.attr("abs:href")
     .orEmpty()
 
-/** Width and height from a thumbnail title such as `1920x1080`; nulls when it names none. */
 private fun pahealDimensions(title: String): Pair<Int?, Int?> {
     val match = RULE34PAHEAL_DIMENSION_REGEX.find(title)
     return match?.groupValues?.getOrNull(1)?.toIntOrNull() to match?.groupValues?.getOrNull(2)?.toIntOrNull()
@@ -280,11 +273,9 @@ private val PAHEAL_THUMB_DATE = DateTimeFormatter.ofPattern("MMMM d, uuuu; HH:mm
 private fun parsePahealThumbDateEpochMs(raw: String?): Long? =
     parseEpochMs(raw) { LocalDateTime.parse(it, PAHEAL_THUMB_DATE).toInstant(ZoneOffset.UTC) }
 
-/** Paheal's URLs have no extensions, so this is the only word on a file's type: `image/gif; animated=true` or an older `data-ext`. */
 private fun Element.pahealFileMime(): String? =
     attr("data-mime").substringBefore(';').trim().ifBlank { null } ?: mimeFromFileExt(attr("data-ext"))
 
-/** Paheal's thumbnails are JPEGs whatever the post is, and their URLs can't say so. */
 private const val PAHEAL_THUMBNAIL_MIME = "image/jpeg"
 private val RULE34PAHEAL_DIMENSION_REGEX = Regex("""(\d+)\s*x\s*(\d+)""")
 private val RULE34PAHEAL_STYLE_WIDTH_REGEX = Regex("""width:\s*(\d+)px""")

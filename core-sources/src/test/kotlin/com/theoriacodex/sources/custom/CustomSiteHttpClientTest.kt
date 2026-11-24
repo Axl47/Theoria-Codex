@@ -22,7 +22,6 @@ import org.junit.Test
 class CustomSiteHttpClientTest {
     private val requested = mutableListOf<String>()
 
-    /** Serves `routes[url]`, or 200 "ok" for any other URL. */
     private fun client(routes: Map<String, SourceByteResponse>) = CustomSiteHttpClient(3) { spec ->
         requested += spec.url
         routes[spec.url] ?: SourceByteResponse(200, "ok".toByteArray())

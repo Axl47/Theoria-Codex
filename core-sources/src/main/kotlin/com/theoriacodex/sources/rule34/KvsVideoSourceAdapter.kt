@@ -36,30 +36,22 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import org.jsoup.nodes.Document
 
-/** How a KVS site links the next page of search results. */
 enum class KvsPaging {
-    /** The next block's address sits in a `data-block-next` attribute. */
     DATA_BLOCK_NEXT,
 
-    /** The pager's next link carries `data-parameters` for the site's async block endpoint. */
     ASYNC_PAGER,
 }
 
-/** Where a KVS site's newest posts come from, for a search with no tags. */
 enum class KvsLatest {
     RSS,
 
-    /** The latest-updates listing, for a site whose RSS links thumbnails that answer 404. */
     LISTING,
 }
 
-/** A Kernel Video Sharing site: everything that differs between the KVS sources. */
 enum class KvsVideoSite(
     val source: SourceKey,
     val baseUrl: String,
-    /** The anchors of a search page's result cards. */
     val cardSelector: String,
-    /** Whether a card without a `data-preview` element may carry its preview clip on the thumbnail image. */
     val imgPreviewFallback: Boolean,
     val paging: KvsPaging,
     val latest: KvsLatest,
@@ -82,12 +74,10 @@ enum class KvsVideoSite(
     ),
 }
 
-/** Searches, resolves and suggests tags on one [KvsVideoSite]. */
 class KvsVideoSourceAdapter(
     private val site: KvsVideoSite,
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
-    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
     private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, SearchMetadataSourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = site.source
@@ -213,7 +203,6 @@ class KvsVideoSourceAdapter(
         }
     }
 
-    /** The newest posts, for a search with no tags. */
     private suspend fun latestPage(): Page<Post> = when (site.latest) {
         KvsLatest.RSS -> parseLatestRss(request("$baseUrl/rss/"))
         KvsLatest.LISTING -> canonicalPostPage(
@@ -311,12 +300,10 @@ class KvsVideoSourceAdapter(
         )
     }
 
-    /** A page's body; a missing page is empty. */
     private suspend fun request(url: String): String =
         httpClient.getCheckedOrNull(baseUrl, url, RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/")).orEmpty()
 }
 
-/** Turns a pager's `key:value;a+b:value` parameters into a query string, giving joined keys the same value. */
 private fun decodeDataParameters(raw: String): String {
     return raw
         .split(';')

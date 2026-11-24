@@ -1,5 +1,4 @@
 // Derived from Aniyomi (https://github.com/aniyomiorg/aniyomi), Apache License 2.0; see LICENSE-APACHE-2.0.txt in this module.
-// Trimmed to what extension binaries call. Package, class and member names are fixed by those binaries.
 package eu.kanade.tachiyomi.animesource.online
 
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -12,7 +11,6 @@ import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-/** An [AnimeHttpSource] that parses HTML pages by CSS selectors; most interface-14 extensions extend it. */
 @Suppress("TooManyFunctions")
 abstract class ParsedAnimeHttpSource : AnimeHttpSource() {
     override fun popularAnimeParse(response: Response): AnimesPage =

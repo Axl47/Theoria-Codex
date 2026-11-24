@@ -54,7 +54,6 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
-    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
     private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter, CreatorPostsSourceAdapter,
     CommentsSourceAdapter {
@@ -119,7 +118,6 @@ class NhentaiSourceAdapter(
         )
     }
 
-    /** A single include tag nhentai knows, for its tag endpoint; random sort and failed lookups use plain search. */
     private suspend fun exactTagFor(query: Query): NhentaiTagInfo? {
         if (query.sort == SortMode.RANDOM) return null
         val tag = query.singleIncludeTagCandidate() ?: return null
@@ -187,7 +185,6 @@ class NhentaiSourceAdapter(
             .take(NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE)
             .toList()
         val detailedGalleries = galleryIds.mapConcurrent { galleryId ->
-            // A gallery removed since the listing loaded is skipped.
             val response = requestDirect(url = "$NHENTAI_GALLERIES_URL/$galleryId", query = emptyMap())
             if (response.statusCode == 404) null else parseJsonObject(response.ensureNhentaiOk())
         }
@@ -262,7 +259,6 @@ class NhentaiSourceAdapter(
         parseNhentaiGallery(parseJsonObject(response.ensureNhentaiOk()))
     }
 
-    /** Uses the site's More like this recommendations without substituting a tag search. */
     override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = sourceCall(callContext) {
         if (seed.source != SourceKey.NHENTAI || limit <= 0) return@sourceCall emptyList()
         val galleryId = seed.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return@sourceCall emptyList()
@@ -279,10 +275,6 @@ class NhentaiSourceAdapter(
             .toList()
     }
 
-    /**
-     * Comments exist only on the direct API; the mirrors do not carry them, so a blocked request
-     * fails instead of falling back. Replies do not exist on nhentai, so [parent] is ignored.
-     */
     override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall(callContext) {
         val galleryId = post.id.sourcePostId.trim().takeIf { post.id.source == sourceKey && it.isDigitsOnly() }
             ?: return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
@@ -304,7 +296,6 @@ class NhentaiSourceAdapter(
         body: String,
     ): JsonArray = parseSourceJsonArray(jsonBody(requestJsonPost(url = url, body = body).ensureNhentaiOk()), gson, "NHentai")
 
-    /** With [mirrorOnChallenge], a challenge the HTTP client turned into an outage answers like one, for the mirror. */
     private suspend fun requestDirect(
         url: String,
         query: Map<String, String>,
@@ -366,7 +357,6 @@ class NhentaiSourceAdapter(
     private fun parseJsonObject(response: SourceHttpResponse): JsonObject =
         parseSourceJsonObject(jsonBody(response), gson, "NHentai")
 
-    /** The trimmed body, refusing an HTML page: nhentai answers a blocked request with one. */
     private fun jsonBody(response: SourceHttpResponse): String {
         val trimmed = response.body.trimStart()
         if (trimmed.startsWith("<")) {
@@ -425,7 +415,6 @@ class NhentaiSourceAdapter(
     }
 }
 
-/** Each cached tag fills two keys (name and slug), so this keeps about a thousand tags. */
 private const val TAG_CACHE_MAX_KEYS = 2_000
 
 private data class NhentaiTagInfo(
@@ -467,7 +456,6 @@ internal fun String.nhentaiTaxonomyNamespace(): String? {
         .takeIf(String::isNotBlank)
 }
 
-/** This response, or the failure nhentai's status means: 401 and 403 are not credential problems here. */
 internal fun SourceHttpResponse.ensureNhentaiOk(label: String = "NHentai"): SourceHttpResponse {
     if (isSuccessful()) return this
     throw SourceAdapterException(
@@ -480,7 +468,6 @@ internal fun SourceHttpResponse.ensureNhentaiOk(label: String = "NHentai"): Sour
     )
 }
 
-/** API gallery records in [this] array, skipping entries that are not galleries. */
 private fun JsonArray?.galleryPosts(): List<Post> = objects().mapNotNull(::parseNhentaiGallery)
 
 internal fun imageExtension(type: String?): String {

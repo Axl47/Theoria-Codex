@@ -63,7 +63,6 @@ class PixivSourceAdapter(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
     private val ugoiraMetadataCache: PixivUgoiraMetadataCache = PixivUgoiraMetadataCache(),
-    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
     private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter, DurationMetadataSourceAdapter,
     CommentsSourceAdapter, AccountProfileSourceAdapter {
@@ -75,14 +74,11 @@ class PixivSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = false,
-        // The ugoira tag: nearly every match is an ugoira, though it finds only most of them, checked live 2026-11.
         animatedTerm = AnimatedSearchTerm(SearchTerm("うごイラ")),
     )
 
-    /** Feed pages and settings lookups; background duration lookups never queue in front of them. */
     private val browsePacer = RequestPacer(minRequestIntervalMs, clock)
 
-    /** Ugoira duration lookups are already paced per source by the duration engine; this lane keeps them apart. */
     private val durationPacer = RequestPacer(minRequestIntervalMs, clock)
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = sourceCall(callContext) {
@@ -174,7 +170,6 @@ class PixivSourceAdapter(
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
         if (accountUserId(creator) == null) emptyList() else listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES)
 
-    /** `/v1/user/detail`; its shape is the documented one and has not been checked against a live account. */
     override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall(callContext) {
         val userId = accountUserId(creator) ?: return@sourceCall null
         val response = authorizedGet(
@@ -192,14 +187,9 @@ class PixivSourceAdapter(
         }
     }
 
-    /** Only creators with a Pixiv user id are accounts; artist names alone are not. */
     private fun accountUserId(creator: CreatorProfile): String? =
         creator.profileId?.trim()?.takeIf { creator.source == SourceKey.PIXIV && it.isNotBlank() }
 
-    /**
-     * Public bookmarks newest first. Pixiv pages them by `max_bookmark_id`, so a page token is the
-     * previous response's absolute `next_url`, requested as given.
-     */
     private suspend fun publicBookmarks(userId: String, pageToken: String?): Page<Post> {
         val illusts = if (pageToken == null) {
             fetchIllusts(
@@ -212,13 +202,11 @@ class PixivSourceAdapter(
         return canonicalPostPage(items = illusts.posts, nextPageToken = illusts.nextUrl?.trim()?.takeIf(String::isNotBlank))
     }
 
-    /** One authorized illustration list and the response's `next_url`. */
     private suspend fun fetchIllusts(url: String, query: Map<String, String>, label: String = "Pixiv"): PixivIllusts {
         val root = parseJsonObject(authorizedGet(url, query), gson, label)
         return PixivIllusts(posts = root.pixivIllusts(), nextUrl = root.stringValue("next_url"))
     }
 
-    /** The bearer token only ever goes to Pixiv's own API, so a stored `next_url` must point there. */
     private fun trustedPixivLink(url: String): String {
         if (!url.startsWith("$PIXIV_API_BASE/")) {
             throw SourceAdapterException(SourceFailureReason.PARSE, "Pixiv returned an unexpected next-page link")
@@ -226,12 +214,6 @@ class PixivSourceAdapter(
         return url
     }
 
-    /**
-     * A page token is the previous response's absolute `next_url` and is requested as given, for
-     * top-level comments and replies alike. Without a token, [parent] selects its replies, and
-     * otherwise the first page also reads the illustration's comment total; a failed total lookup
-     * leaves it null instead of failing the page.
-     */
     override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall(callContext) {
         if (post.id.source != SourceKey.PIXIV) return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         pageToken?.let { nextUrl ->
@@ -265,7 +247,6 @@ class PixivSourceAdapter(
         }
     }
 
-    /** Sends one authorized GET; a 401/403 refreshes the token (unless another call already did) and retries once. */
     private suspend fun authorizedGet(
         url: String,
         query: Map<String, String>,
@@ -298,13 +279,11 @@ class PixivSourceAdapter(
         sourceNetworkFailure(failureLabel, error)
     }
 
-    /** Translations are always requested in English so they line up with the booru vocabulary. */
     private fun authorizedHeaders(accessToken: String): Map<String, String> = mapOf(
         "Authorization" to "Bearer $accessToken",
         "Accept-Language" to PIXIV_TRANSLATION_LANGUAGE,
     )
 
-    /** Search pages omit ugoira frames; failures propagate so the engine can retry them later. */
     override suspend fun resolveDurationMetadata(post: Post): DurationMetadataSourceResult = sourceCall(callContext) {
         val isUgoira = post.id.source == SourceKey.PIXIV &&
             (post.full?.mime == PIXIV_UGOIRA_MIME || post.media.any { it.mime == PIXIV_UGOIRA_MIME })
@@ -335,7 +314,6 @@ class PixivSourceAdapter(
 
 private class PixivIllusts(val posts: List<Post>, val nextUrl: String?)
 
-/** Query parameters for an offset-paged feed; the page token is the offset, omitted on the first page. */
 private fun offsetPageParams(pageToken: String?, vararg params: Pair<String, String>): MutableMap<String, String> =
     linkedMapOf(*params).apply {
         val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0

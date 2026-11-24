@@ -54,12 +54,10 @@ class PixivAuthApi(
         )
     }
 
-    /** Callers serialize refreshes themselves; [PixivTokenCoordinator] holds one lock across read, refresh and commit. */
     suspend fun refresh(refreshToken: String): PixivAuthTokens = sourceCall {
         requestTokens(step = "refresh", grant = mapOf("grant_type" to "refresh_token", "refresh_token" to refreshToken))
     }
 
-    /** Posts one OAuth token grant; [step] names it in failures ("Pixiv token exchange failed (400)"). */
     private suspend fun requestTokens(step: String, grant: Map<String, String>): PixivAuthTokens {
         val response = try {
             httpClient.postForm(

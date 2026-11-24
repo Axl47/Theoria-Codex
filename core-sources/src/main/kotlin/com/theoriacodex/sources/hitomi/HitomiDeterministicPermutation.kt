@@ -1,6 +1,5 @@
 package com.theoriacodex.sources.hitomi
 
-/** Stable affine permutation over every index in an arbitrary non-empty source array. */
 internal class HitomiDeterministicPermutation(
     private val size: Int,
     seed: Long,

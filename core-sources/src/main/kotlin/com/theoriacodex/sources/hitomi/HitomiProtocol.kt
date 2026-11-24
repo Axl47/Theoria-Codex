@@ -123,10 +123,6 @@ object HitomiProtocol {
         throw HitomiProtocolException("Hitomi $label was malformed JSON: ${error.message}", error)
     }
 
-    /**
-     * Extracts the provider's JavaScript assignment without relying on regex features whose
-     * implementation differs between the desktop JVM and Android's ICU regex engine.
-     */
     private fun galleryAssignmentBody(script: String): String? {
         val normalized = script.trim().removeSuffix(";").trimEnd()
         val equalsIndex = normalized.indexOf('=')

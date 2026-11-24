@@ -24,7 +24,6 @@ enum class ProviderHealthStatus {
     FAILED,
     SKIPPED,
 
-    /** A browser challenge answered instead of the provider, so its health is unknown. */
     CANNOT_CHECK,
 }
 

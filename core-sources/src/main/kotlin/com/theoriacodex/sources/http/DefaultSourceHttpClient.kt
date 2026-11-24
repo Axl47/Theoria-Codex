@@ -14,7 +14,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
-/** How long one connection attempt may take. OkHttp races a host's addresses, so a dead one costs far less than this. */
 internal const val CONNECT_TIMEOUT_MS = 3_000
 
 class DefaultSourceHttpClient(
@@ -22,11 +21,8 @@ class DefaultSourceHttpClient(
     readTimeoutMs: Int = 20_000,
     maxRetries: Int = SourceRetryPolicy.DEFAULT_MAX_RETRIES,
     retryBaseDelayMs: Long = SourceRetryPolicy.DEFAULT_RETRY_BASE_DELAY_MS,
-    /** When set, known-down hosts fail at once and outage answers throw [HostUnavailableException]. */
     private val outages: HostOutageTracker? = null,
-    /** The User-Agent a site's browser clearance is bound to, replacing the request's own; null keeps it. */
     private val userAgentFor: (url: String) -> String? = { null },
-    /** The app passes its shared client, so these calls reuse the process's connections and carry its cookies. */
     okHttpClient: OkHttpClient = defaultSourceOkHttpClient,
 ) : SourceHttpClient {
     private val retryPolicy = SourceRetryPolicy(maxRetries, retryBaseDelayMs)
@@ -135,10 +131,6 @@ class DefaultSourceHttpClient(
     )
 }
 
-/**
- * A dispatcher that never queues, for clients that make provider requests: whole pages of metadata arrive in bursts
- * to one host, and queueing them behind OkHttp's default of five per host would serialize what HTTP/2 can multiplex.
- */
 fun unqueuedSourceDispatcher(): Dispatcher = Dispatcher().apply {
     maxRequests = MAX_CONCURRENT_SOURCE_REQUESTS
     maxRequestsPerHost = MAX_CONCURRENT_SOURCE_REQUESTS
@@ -146,7 +138,6 @@ fun unqueuedSourceDispatcher(): Dispatcher = Dispatcher().apply {
 
 private const val MAX_CONCURRENT_SOURCE_REQUESTS = 128
 
-/** For callers outside the app: tests and the provider health CLI. */
 internal val defaultSourceOkHttpClient: OkHttpClient by lazy {
     OkHttpClient.Builder()
         .dispatcher(unqueuedSourceDispatcher())
@@ -154,7 +145,6 @@ internal val defaultSourceOkHttpClient: OkHttpClient by lazy {
         .build()
 }
 
-/** One HTTP exchange as an [httpTransport] performs it; shared by every [SourceHttpClient]. */
 internal class HttpRequestSpec(
     val method: String,
     val url: String,
@@ -163,11 +153,6 @@ internal class HttpRequestSpec(
     val maxBodyBytes: Int,
 )
 
-/**
- * Sends each request on [okHttpClient], configured once with these timeouts: one cancellable exchange
- * with a bounded body, no retries. [followRedirects] false returns a 3xx as-is, so the caller can vet
- * `Location` before following it.
- */
 internal fun httpTransport(
     okHttpClient: OkHttpClient,
     connectTimeoutMs: Int,
@@ -178,13 +163,11 @@ internal fun httpTransport(
         .connectTimeout(connectTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
         .readTimeout(readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
         .followRedirects(followRedirects)
-        // A redirect never crosses between HTTPS and HTTP, so query-string API keys cannot leave TLS.
         .followSslRedirects(false)
         .build()
     return { spec -> client.newCall(spec.toRequest()).await { response -> response.toSourceResponse(spec.maxBodyBytes) } }
 }
 
-/** Malformed input surfaces as the transport failure adapters already handle. */
 private fun HttpRequestSpec.toRequest(): Request = try {
     val builder = Request.Builder().url(requireNotNull(url.toHttpUrlOrNull()) { "Malformed URL" })
     headers.forEach { (name, value) -> builder.header(name, value) }
@@ -205,13 +188,11 @@ private fun Response.toSourceResponse(maxBodyBytes: Int): SourceByteResponse {
     )
 }
 
-/** HTTP/2 sends lower-case names and HTTP/1.1 whatever the server wrote, so lookups must not depend on either. */
 private fun Headers.toCaseInsensitiveMap(): Map<String, List<String>> =
     TreeMap<String, MutableList<String>>(String.CASE_INSENSITIVE_ORDER).also { map ->
         forEach { (name, value) -> map.getOrPut(name) { mutableListOf() } += value }
     }
 
-/** Keeps the agent these requests always sent where a source sets none; some providers reject library agents. */
 private const val PLATFORM_AGENT_PROPERTY = "http.agent"
 private const val USER_AGENT_HEADER = "User-Agent"
 
@@ -254,6 +235,5 @@ private fun encodeForm(values: Map<String, String>): String {
 
 private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name())
-        // Query-component spaces should be encoded as %20 for broader API compatibility.
         .replace("+", "%20")
 }

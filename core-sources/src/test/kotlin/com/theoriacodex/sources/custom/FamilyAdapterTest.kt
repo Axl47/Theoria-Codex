@@ -20,7 +20,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Adapters built from stored profiles under their custom identities. */
 class FamilyAdapterTest {
     private val http = ScriptedHttpClient()
 

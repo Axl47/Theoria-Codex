@@ -8,23 +8,13 @@ import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.animesource.sourcePreferences
 
-/**
- * Aniyomi's anime extensions: packages that declare the `tachiyomi.animeextension` feature and are built against
- * extension interface 14 or 16. Their sources implement `eu.kanade.tachiyomi.animesource.AnimeSource`, presented to the
- * app by [AniyomiSeriesSource]. Extensions that stream by torrent need an engine the app does not have.
- */
 object AniyomiKind : ExtensionKind {
     override val feature = "tachiyomi.animeextension"
     override val sourceClassesKey = "tachiyomi.animeextension.class"
 
-    /** Extensions label themselves "Aniyomi: <name>". */
     override val labelPrefix = "Aniyomi: "
     override val seriesKind = SeriesKind.ANIME
 
-    /**
-     * The interface version is the major part of the version name ("14.25" is 14), as Aniyomi reads it. One host
-     * serves both versions: nearly every extension that declares 14 is built against 16's server-list API anyway.
-     */
     override fun unsupported(info: PackageInfo): String? {
         val version = info.versionName?.substringBefore('.')?.toIntOrNull()
         return when {
@@ -43,7 +33,6 @@ object AniyomiKind : ExtensionKind {
         else -> null
     }?.map { hosted(it, host) }
 
-    /** A source's name, language and id are its code too, so they are read here, within the load's limit. */
     internal fun hosted(source: AnimeSource, host: HostServices): HostedSource {
         val series = AniyomiSeriesSource(source, host)
         return HostedSource(

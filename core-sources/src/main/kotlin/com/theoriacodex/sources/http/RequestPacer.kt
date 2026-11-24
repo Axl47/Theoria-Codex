@@ -4,10 +4,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * Spaces one request lane at least [minIntervalMs] apart: callers take turns, and each waits out
- * whatever remains of the interval since the previous turn was granted. A source keeps one pacer per lane.
- */
 internal class RequestPacer(
     private val minIntervalMs: Long,
     private val clock: () -> Long = System::currentTimeMillis,

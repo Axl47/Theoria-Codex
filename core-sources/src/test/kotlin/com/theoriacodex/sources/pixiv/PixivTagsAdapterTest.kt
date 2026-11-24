@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Pixiv tag handling: native tags, English translations and search tokens. */
 class PixivTagsAdapterTest {
     @Test
     fun `autocomplete and trending preserve native tags with translated labels`() = runTest {

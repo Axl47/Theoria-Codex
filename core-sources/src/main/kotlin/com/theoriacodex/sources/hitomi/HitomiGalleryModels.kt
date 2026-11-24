@@ -17,10 +17,8 @@ internal data class ParsedHitomiFile(
     val height: Int?,
 )
 
-/** The field's text, trimmed; null when absent, blank, JSON null, or an array or object. */
 internal fun JsonObject.stringValue(name: String): String? = get(name).asStringOrNull()?.trim()?.takeIf(String::isNotBlank)
 
-/** Hitomi flags arrive as "1"/"", 1/0, or booleans: any non-blank string, true, or non-zero number counts. */
 internal fun JsonObject.truthy(name: String): Boolean {
     val primitive = get(name) as? JsonPrimitive ?: return false
     return when {

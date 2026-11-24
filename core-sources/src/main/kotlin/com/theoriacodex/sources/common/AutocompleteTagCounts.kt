@@ -9,7 +9,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** Explicit counted providers can reuse autocomplete; prefix neighbors never become exact counts. */
 internal suspend fun autocompleteTagCounts(
     source: SourceKey,
     tags: List<String>,

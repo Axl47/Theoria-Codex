@@ -23,7 +23,6 @@ class ChallengePassTest {
     private val challengedHosts = mutableSetOf<String>()
     private val passableHosts = mutableSetOf("site.test", "cdn.other.test")
 
-    /** What the hidden browser leaves in the store when it loads a challenge; null leaves it as it is. */
     private var earned: String? = "new"
     private var mainThread = false
     private var browser: ChallengeBrowser = object : ChallengeBrowser {
@@ -36,18 +35,15 @@ class ChallengePassTest {
         }
     }
 
-    /** The site's answers to what was sent, cookies included, in order; once only one is left it is repeated. */
     private val answers = ArrayDeque<(Interceptor.Chain, Request) -> Response>()
     private val browsers by lazy { ChallengeBrowsers(cookies, browser) }
     private val client by lazy { client() }
 
-    /** A client of its own, sharing [browsers] with every other, that loads [page] for a challenge. */
     private fun client(page: (Request) -> Request = { it }) = OkHttpClient.Builder()
         .addInterceptor(
             ChallengePass(browsers, isChallenged = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains, page = page),
         )
         .addInterceptor { chain ->
-            // Stands in for the cookie jar, which adds the store's cookies after application interceptors.
             val request = chain.request().newBuilder().apply { cookies.cookieHeader("")?.let { header("Cookie", it) } }.build()
             sent += request.url.toString()
             synchronized(answers) { if (answers.size > 1) answers.removeFirst() else answers.first() }(chain, request)
@@ -109,7 +105,6 @@ class ChallengePassTest {
     fun `a clearance stored while the challenge was on its way is used, not deleted`() {
         cookies.values["cf_clearance"] = "old"
         answers += { _, request ->
-            // Another request's pass finishes after this one left with the old cookie.
             cookies.values["cf_clearance"] = "fresh"
             challenge(request)
         }
@@ -199,11 +194,9 @@ class ChallengePassTest {
         passableHosts += hosts
         answers += { _, request -> challenge(request) }
 
-        // The app's client and the extensions' share one set of browsers.
         val clients = listOf(client, client(), client())
         val calls = hosts.zip(clients) { host, client -> thread { call("https://$host/", client).close() } }
         assertTrue(started.await(5, TimeUnit.SECONDS))
-        // Long enough for a third browser to start, were it allowed to.
         Thread.sleep(300)
         release.countDown()
         calls.forEach(Thread::join)
@@ -231,7 +224,6 @@ class ChallengePassTest {
         val first = thread { call("https://site.test/a").close() }
         assertTrue(started.await(5, TimeUnit.SECONDS))
         val second = thread { call("https://site.test/b").close() }
-        // Long enough for the second request to be challenged and queue behind the first one's pass.
         Thread.sleep(500)
         release.countDown()
         listOf(first, second).forEach(Thread::join)
@@ -257,7 +249,6 @@ class ChallengePassTest {
         .body(body.toResponseBody())
         .build()
 
-    /** One site's cookies by name, written and expired as the WebView's store would. */
     private class FakeCookies : BrowserCookieStore {
         val values: MutableMap<String, String> = java.util.Collections.synchronizedMap(linkedMapOf())
         var flushes = 0

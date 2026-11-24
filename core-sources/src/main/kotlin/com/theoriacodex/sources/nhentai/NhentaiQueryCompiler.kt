@@ -107,7 +107,6 @@ internal const val NHENTAI_GROUP_NAMESPACE = "group"
 internal const val NHENTAI_TYPE_NAMESPACE = "category"
 internal const val NHENTAI_LANGUAGE_NAMESPACE = "language"
 
-/** nhentai's namespaces by facet; series are "parody" and types "category". */
 internal val NHENTAI_FACETS = FacetNamespaces(
     NHENTAI_TAG_NAMESPACE to SearchFacet.TAG,
     NHENTAI_ARTIST_NAMESPACE to SearchFacet.ARTIST,

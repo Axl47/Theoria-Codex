@@ -12,13 +12,8 @@ import com.theoriacodex.sources.common.optionalJsonObject
 import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.common.objects
 
-/** Comments are requested 50 to a page, the largest size the API accepts. */
 internal const val NHENTAI_COMMENTS_PER_PAGE = 50
 
-/**
- * Maps one `/galleries/{id}/comments` response. Pages are numbered from 1; [pageIndex] is the page
- * that was requested, so the next token exists only while `num_pages` says more follow.
- */
 internal fun parseNhentaiCommentPage(root: JsonObject, pageIndex: Int): CommentPage {
     val comments = root.objects("result").mapNotNull(::parseNhentaiComment)
     val totalPages = root.get("num_pages").asIntOrNull()
@@ -37,12 +32,10 @@ private fun parseNhentaiComment(raw: JsonObject): PostComment? {
     return PostComment(
         id = id,
         authorName = username,
-        // Avatar paths are relative to the image host, which serves them at its root.
         authorAvatarUrl = poster?.stringValue("avatar_url")?.trim()?.takeIf(String::isNotBlank)
             ?.let { "$NHENTAI_IMAGES_BASE/${it.trimStart('/')}" },
         body = raw.stringValue("body").orEmpty().trim(),
         createdAtEpochMs = raw.longValue("post_date")?.times(MS_PER_SECOND),
-        // The profile page is a site account, not a searchable tag, so there is no uploads query.
         author = userId?.let {
             val slug = poster.stringValue("slug")?.trim()?.takeIf(String::isNotBlank)
             CreatorProfile(

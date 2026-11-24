@@ -57,3 +57,29 @@ and link the record that replaces it.
 | [0037](0037-statistics-thumbnail-store.md) | Statistics thumbnails are private files owned by the top lists and fetched only for promoted or opened posts |
 | [0038](0038-stored-record-compatibility.md) | Durable records are separate from domain models and keep decoding every shape this app ever stored |
 | [0039](0039-tachiyomi-backup-import.md) | Mihon-family backups are decoded from their protobuf wire format and import their followed or started series |
+| [0040](0040-custom-site-probing.md) | Adding a custom site runs a bounded read-only probe over protocol families |
+| [0041](0041-danbooru-adapter.md) | The Danbooru adapter works within guest limits and id paging |
+| [0042](0042-gelbooru-adapter.md) | The Gelbooru adapter tolerates per-fork API differences and latches detected quirks |
+| [0043](0043-hitomi-provider.md) | Hitomi is read from Nozomi indexes with single-flight, version-bound caches and in-memory tokens |
+| [0044](0044-nhentai-adapter.md) | nhentai falls back to mirrors for metadata but never for comments |
+| [0045](0045-paging-by-raw-records.md) | A page is full when the raw record count says so, before filtering |
+| [0046](0046-pixiv-provider.md) | Pixiv credential refreshes are serialized and fenced by a session revision |
+| [0047](0047-provider-health-probes.md) | Provider health probes report CANNOT_CHECK behind a challenge and keep public output free of provider data |
+| [0048](0048-provider-media-urls.md) | Provider media loads over HTTPS and prefers small renditions for cards |
+| [0049](0049-source-calls-off-main-thread.md) | Source entry points run on a background dispatcher through sourceCall |
+| [0050](0050-source-host-outages-and-challenges.md) | Host outages are tracked per host and Cloudflare checks are passed by a shared hidden browser |
+| [0051](0051-source-http-transport.md) | Source HTTP stays HTTPS-only, byte-exact, unqueued and cancellable |
+| [0052](0052-kvs-site-scraping.md) | KVS sites list latest posts through the listing when RSS thumbnails fail, and read lazy thumbnails from data-rd-src |
+| [0053](0053-paheal-source-limits.md) | Paheal is excluded from hash lookup and infers file type from data attributes |
+| [0054](0054-source-parsing-compat.md) | Source parsers keep provider and stored-data compatibility |
+| [0055](0055-aniyomi-stream-resolution.md) | Anime streams resolve from all servers concurrently, with per-server and list time limits |
+| [0056](0056-extension-binary-compatibility.md) | The host reproduces the Mihon and Aniyomi extension API under the names extension binaries expect |
+| [0057](0057-extension-challenge-handling.md) | Extensions get a Mihon-like HTTP client that shares browser cookies and never lets a challenge page through |
+| [0058](0058-extension-device-harness.md) | The real-extension device harness reports text only and measures extensions without the app's browser |
+| [0059](0059-extension-image-tags.md) | Extension images are fetched through the source's own client, selected by an HMAC-signed address tag |
+| [0060](0060-extension-isolation-and-failures.md) | Extension code runs off the caller's thread, and its failures become source failures without leaking detail |
+| [0061](0061-extension-preferences-storage.md) | Extension preferences live in no-backup JSON files, written before apply returns |
+| [0062](0062-extension-registry-loading.md) | The registry loads extensions lazily, per source lookup, and publishes one consistent offer |
+| [0063](0063-extension-repos-and-install.md) | Extensions install only from a repo's named key, into a private folder, and load only from verified read-only copies |
+| [0064](0064-extension-source-state.md) | Adapters hand sources back their own objects, memos and filters, and merge details additively |
+| [0065](0065-extension-source-ids.md) | Source ids are the first eight bytes of MD5 of name/lang/versionId, as Mihon and Aniyomi derive them |

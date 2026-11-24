@@ -36,11 +36,6 @@ import java.util.Locale
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 
-/**
- * Hitomi's search pages are metadata shells. This adapter reads the provider's binary Nozomi
- * indexes directly, performs exact typed intersections/subtractions, and hydrates only the IDs
- * needed for the current page.
- */
 class HitomiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val mediaUrlResolver: HitomiMediaUrlResolver = HitomiMediaUrlResolver(httpClient),
@@ -59,7 +54,6 @@ class HitomiSourceAdapter(
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
-    /** Where entry points run; tests pass EmptyCoroutineContext to keep virtual time. Production never sets it. */
     private val callContext: CoroutineContext = Dispatchers.Default,
 ) : SourceAdapter, FacetedSearchSourceAdapter, CreatorPostsSourceAdapter, MediaRecoverySourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.HITOMI
@@ -70,7 +64,6 @@ class HitomiSourceAdapter(
         supportsSortTop = true,
         supportsSortRandom = true,
         supportsExcludeTagsServerSide = true,
-        // Anime galleries are the ones the Viewer plays as video.
         animatedTerm = AnimatedSearchTerm(SearchTerm("anime", SearchFacet.TYPE, HITOMI_TYPE_NAMESPACE)),
     )
 
@@ -316,7 +309,6 @@ class HitomiSourceAdapter(
         private const val DEFAULT_PAGE_SIZE = 25
         private const val MAX_PAGE_SIZE = 100
 
-        /** One per card: a page multiplexes over a single HTTP/2 connection, as Hitomi's own gallery list does. */
         private const val DEFAULT_HYDRATION_CONCURRENCY = DEFAULT_PAGE_SIZE
         private const val MAX_HYDRATION_CONCURRENCY = MAX_PAGE_SIZE
         private const val HITOMI_AUTOCOMPLETE_LIMIT = 10

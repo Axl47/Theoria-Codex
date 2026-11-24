@@ -221,7 +221,6 @@ internal class NhentaiSuggestionSourceAdapterTest : NhentaiSourceAdapterTestFixt
                 """.trimIndent(),
             ),
         )
-        // The queued detail responses must be taken in gallery order, which only one thread guarantees.
         val adapter = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L, callContext = EmptyCoroutineContext)
 
         val suggestions = adapter.trendingTags(limit = 3)

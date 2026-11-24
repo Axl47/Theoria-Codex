@@ -33,21 +33,6 @@ import kotlinx.serialization.SerializationException
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * The user's extension repos and installing from them. Repos are kept with the user's other choices about extensions
- * ([ExtensionChoiceStore]), on this device only, each with the signing key it named when it was added: an APK is
- * installed only when it is the package the index named and is signed by that key, and a repo that names another key
- * later is skipped until it is added again.
- *
- * Installing writes the APK into [folder] as `<package>.apk`, where [ExtensionPackages] lists it as a private copy that
- * stands in for an installed package of the same name. Only this class writes there, after those checks, so release
- * builds load code from it. An extension installed here that was not on the device before is turned on, being the
- * one the user chose from a repo they added; an update keeps its choice. Android sends no broadcast for this folder,
- * so [onChanged] runs after each change, once the extension's choice is stored.
- *
- * @param packages the extensions on the device, as [ExtensionPackages.list] reads them
- * @param read the extension in a downloaded APK, as [ExtensionPackages.read] reads it
- */
 class ExtensionCatalog(
     private val choices: ExtensionChoiceStore,
     private val client: OkHttpClient,
@@ -57,10 +42,8 @@ class ExtensionCatalog(
     private val folder: File,
     private val onChanged: suspend () -> Unit = {},
 ) : ExtensionRepos {
-    /** Per repo address, its index as last read in this process. */
     private val indexes = ConcurrentHashMap<String, RepoIndex>()
 
-    /** One change to [folder] at a time. */
     private val installing = Mutex()
 
     override suspend fun repos(): List<ExtensionRepo> = choices.choices().repos
@@ -80,7 +63,6 @@ class ExtensionCatalog(
         val accepted = LinkedHashMap<String, ExtensionRepo>()
         for (repo in repos) {
             val url = storedRepoAddress(repo.url)
-            // Lowercase, as an index's key is read, so later reads compare equal to what was stored.
             val key = repo.signingKey.lowercase()
             when {
                 !url.startsWith("https://") -> problems[repo.url] = "Not an https address"
@@ -95,13 +77,11 @@ class ExtensionCatalog(
         return problems
     }
 
-    /** Reads the repo at [url] and keeps it with the key it names, which must be [knownKey] when a backup knew one. */
     private suspend fun addOne(url: String, knownKey: String?) {
         if (!url.startsWith("https://")) throw RepoProblem("Not an https address")
         val index = RepoReader.read(url, ::get)
         if (!index.signingKey.matches(FINGERPRINT)) throw RepoProblem("Names no signing key")
         if (knownKey != null && !knownKey.equals(index.signingKey, ignoreCase = true)) throw RepoProblem("Now signed with another key")
-        // A key names a publisher, not a repo: Yūzōnō's manga and anime repos share their name and key.
         choices.update { current ->
             if (current.repos.any { it.url == url }) current
             else current.copy(repos = current.repos + ExtensionRepo(url, index.name.ifBlank { url }, index.signingKey))
@@ -120,7 +100,6 @@ class ExtensionCatalog(
             repos.map { repo -> async { repo to runCatchingPreservingCancellation { index(repo, refresh) } } }.awaitAll()
         }
         val onDevice = packages().filter { it.origin != ExtensionOrigin.FILE }.associateBy(ExtensionPackage::packageName)
-        // A package two repos offer, such as one repo reached at two addresses, is listed from the first.
         val extensions = read.flatMap { (repo, index) -> index.getOrNull()?.let { offered(repo, it, onDevice) }.orEmpty() }.distinctBy(RepoExtension::packageName)
         RepoListing(extensions, read.mapNotNull { (repo, index) -> index.exceptionOrNull()?.let { repo.url to describe(it) } }.toMap())
     }
@@ -140,14 +119,12 @@ class ExtensionCatalog(
     }
 
     private suspend fun installFrom(url: String, packageName: String): String? {
-        // It names the file the APK is written to.
         if (!packageName.matches(PACKAGE_NAME)) return "Not a package name"
         val repo = repos().firstOrNull { it.url == url } ?: return "The repo was removed"
         val entry = index(repo, refresh = false).extensions.firstOrNull { it.packageName == packageName } ?: return "No longer in the repo"
         val before = packages().firstOrNull { it.origin != ExtensionOrigin.FILE && it.packageName == packageName }
         if (before != null && before.signer != repo.signingKey) return "The copy on this device is signed with another key"
         folder.mkdirs()
-        // Named so nothing lists it until it is checked and moved into place.
         val download = File(folder, "$packageName.apk.new")
         try {
             download(entry.apkUrl, download)
@@ -160,9 +137,7 @@ class ExtensionCatalog(
             }
             if (problem != null) return problem
             currentCoroutineContext().ensureActive()
-            // Once the file is in place, its trust and the registry follow even if the caller is gone.
             withContext(NonCancellable) {
-                // Replaced in one step: code already loaded from the old file runs on from its own locked copy.
                 Files.move(download.toPath(), File(folder, "$packageName.apk").toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
                 commit { if (before == null) it.copy(trusted = it.trusted + (packageName to repo.signingKey)) else it }
             }
@@ -172,20 +147,17 @@ class ExtensionCatalog(
         }
     }
 
-    /** Stores [change] to the user's choices for a change to [folder], then has the registry list it. */
     private suspend fun commit(change: (ExtensionChoices) -> ExtensionChoices) {
         choices.update(change)
         onChanged()
     }
 
-    /** [repo]'s index, read again when [refresh] or not yet read; refused when the repo names another key than it did. */
     private suspend fun index(repo: ExtensionRepo, refresh: Boolean): RepoIndex {
         val index = indexes[repo.url]?.takeUnless { refresh } ?: RepoReader.read(repo.url, ::get).also { indexes[repo.url] = it }
         if (index.signingKey != repo.signingKey) throw RepoProblem("Now signed with another key; remove it and add it again to trust that key")
         return index
     }
 
-    /** What [index] offers that this host runs, with how each stands against the packages [onDevice]. */
     private fun offered(repo: ExtensionRepo, index: RepoIndex, onDevice: Map<String, ExtensionPackage>) = index.extensions
         .filter { entry -> !entry.torrent && kinds.any { it.seriesKind == entry.kind && it.runs(entry.libVersion) } }
         .map { entry ->
@@ -199,13 +171,11 @@ class ExtensionCatalog(
             RepoExtension(repo.url, entry.packageName, entry.name, entry.languages, entry.versionName, entry.kind, status)
         }
 
-    /** [url]'s body, refused once it passes [MAX_INDEX_BYTES]. */
     private suspend fun get(url: String): ByteArray = client.newCall(request(url)).awaitSuccess().use { response ->
         if (response.body.contentLength() > MAX_INDEX_BYTES) throw RepoProblem(TOO_LARGE)
         response.body.byteStream().use { readAtMost(it, MAX_INDEX_BYTES) }
     }
 
-    /** Writes [url]'s body to [file], stopping once it passes [MAX_APK_BYTES]. */
     private suspend fun download(url: String, file: File) {
         client.newCall(request(url)).awaitSuccess().use { response ->
             if (response.body.contentLength() > MAX_APK_BYTES) throw RepoProblem(TOO_LARGE)
@@ -234,15 +204,12 @@ class ExtensionCatalog(
     }
 }
 
-/** A failure already worded for the Extensions page. */
 internal class RepoProblem(message: String) : Exception(message)
 
 internal const val TOO_LARGE = "Too large"
 
-/** The most a repo index or extension list may hold, both as fetched and once gunzipped; Keiyoushi's is well under 1 MiB. */
 internal const val MAX_INDEX_BYTES = 8L * 1024 * 1024
 
-/** Copies [input] to [output], refusing it once it passes [limit] bytes. */
 internal fun copyAtMost(input: InputStream, output: OutputStream, limit: Long) {
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
     var copied = 0L
@@ -255,5 +222,4 @@ internal fun copyAtMost(input: InputStream, output: OutputStream, limit: Long) {
     }
 }
 
-/** All of [input], refused once it passes [limit] bytes. */
 internal fun readAtMost(input: InputStream, limit: Long): ByteArray = ByteArrayOutputStream().also { copyAtMost(input, it, limit) }.toByteArray()

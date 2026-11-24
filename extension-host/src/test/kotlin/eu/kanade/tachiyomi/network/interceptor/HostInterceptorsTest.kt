@@ -24,7 +24,6 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class HostInterceptorsTest {
-    /** A test that listens to diagnostics leaves no listener behind for the tests after it. */
     @After
     fun stopListeningToDiagnostics() = Diagnostics.install { _, _, _ -> }
 
@@ -67,7 +66,6 @@ class HostInterceptorsTest {
         assertEquals(HostOutageKind.CHALLENGE, failure.kind)
         val outage = outages.outages.value.getValue("site.test")
         assertEquals(RefusedRequest("https://www.site.test/list", "agent/1"), outage.refused)
-        // The second challenge did not renew the record, so it still expires when the first one's does.
         assertEquals(HostOutageTracker.DEFAULT_OUTAGE_MS, outage.untilEpochMs)
     }
 

@@ -53,23 +53,18 @@ import com.theoriacodex.sources.credentials.UserApiKeyCredentialLookup
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 
-/** One site running Danbooru's software; every site shares the same API and post shape. */
 data class DanbooruSite(
     val source: SourceKey,
     val label: String,
     val baseUrl: String,
     val searchTermLimit: SearchTermLimit? = null,
-    /** Sent with every API request. Danbooru's Cloudflare challenges generic browser agents. */
     val headers: Map<String, String> = mapOf("User-Agent" to THEORIA_SOURCE_USER_AGENT),
-    /** Keys go out as `login` + `api_key` query parameters, to [baseUrl] only. */
     val credentials: ApiKeyUse = ApiKeyUse.OPTIONAL,
 ) {
     companion object {
-        /** API keys as Danbooru's query parameters; empty without keys. */
         fun authQuery(keys: UserApiKey?): Map<String, String> =
             keys?.let { mapOf("login" to it.userId, "api_key" to it.apiKey) }.orEmpty()
 
-        /** Guests may search two tags, and an `order:` metatag counts as one of them. */
         val DANBOORU = DanbooruSite(
             source = SourceKey.DANBOORU,
             label = "Danbooru",
@@ -80,15 +75,9 @@ data class DanbooruSite(
     }
 }
 
-/**
- * Adapter for any [DanbooruSite]. Newest-first searches page by post id (`b<id>`) because guests
- * cannot open numbered pages past 1000 and new uploads would otherwise shift later pages; score
- * sorts cannot use id paging, so they keep numbered pages.
- */
 class DanbooruSourceAdapter(
     private val site: DanbooruSite,
     private val httpClient: SourceHttpClient,
-    /** [UserApiKey.userId] is the Danbooru login name. */
     private val credentials: UserApiKeyCredentialLookup = { null },
     private val gson: Gson = Gson(),
 ) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, CommentsSourceAdapter,
@@ -102,8 +91,6 @@ class DanbooruSourceAdapter(
         supportsSortRandom = false,
         supportsExcludeTagsServerSide = true,
         searchTermLimit = site.searchTermLimit,
-        // `animated` covers video, ugoira and GIFs; `filetype:` costs no term, so it serves when the guest limit is full
-        // (static GIFs it lets through are left to the phone-side filter).
         animatedTerm = AnimatedSearchTerm(SearchTerm("animated"), overLimit = SearchTerm("filetype:gif,mp4,webm,zip")),
     )
 
@@ -120,7 +107,6 @@ class DanbooruSourceAdapter(
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> =
         if (creator.source == sourceKey) danbooruAccountFeeds(creator) else emptyList()
 
-    /** `/users/<id>.json` for the join date and upload count, and the `ordfav:` post count for favorites. */
     override suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = sourceCall {
         val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey } ?: return@sourceCall null
         val user = creator.profileId?.let { id -> parseJsonObject(request("/users/$id.json"), gson, site.label) }
@@ -128,7 +114,6 @@ class DanbooruSourceAdapter(
         parseDanbooruAccountDetails(user, parseDanbooruPostCount(parseJsonObject(favorites, gson, site.label)))
     }
 
-    /** Favorites page by number: `ordfav:` lists by favorite order, so an id cursor (`b<id>`) would skip posts. */
     override suspend fun accountPosts(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post> = sourceCall {
         val name = danbooruAccountName(creator)?.takeIf { creator.source == sourceKey }
             ?: return@sourceCall canonicalPostPage(emptyList(), null)
@@ -167,7 +152,6 @@ class DanbooruSourceAdapter(
         if (id.source != sourceKey) return@sourceCall null
         val record = parseJsonObject(request(path = "/posts/${id.sourcePostId}.json"), gson, site.label)
         if (record.has("id") && record.stringValue("file_url").isNullOrBlank()) {
-            // The post exists but its files are withheld, which "not found" would misreport.
             throw SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "${site.label} doesn't show this post to this account")
         }
         parsePost(record)
@@ -177,11 +161,6 @@ class DanbooruSourceAdapter(
         searchTags("md5:$md5", idCursor = false, pageToken = null).items.firstOrNull()
     }
 
-    /**
-     * Live comments newest first, 100 to a page, without deleted ones. A full page means another
-     * may follow, so the total is known only when everything fit on the first page. Danbooru comments
-     * are flat, so [parent] is ignored.
-     */
     override suspend fun comments(post: Post, pageToken: String?, parent: PostComment?): CommentPage = sourceCall {
         if (post.id.source != sourceKey) return@sourceCall CommentPage(emptyList(), total = 0, nextPageToken = null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
@@ -197,7 +176,6 @@ class DanbooruSourceAdapter(
             ),
         )
         val records = parseJsonArray(response, gson, site.label)
-        // Fullness counts every raw record, so a dropped deleted comment never ends paging early.
         val hasMore = records.size() >= DANBOORU_COMMENTS_PAGE_SIZE
         val comments = records.mapNotNull { parseDanbooruComment(it, sourceKey, site.baseUrl) }
         CommentPage(
@@ -209,7 +187,6 @@ class DanbooruSourceAdapter(
 
     override fun nativeCommentAnchor(commentId: String): String = "comment_$commentId"
 
-    /** [idCursor] pages by the last post id (`b<id>`); otherwise [pageToken] is a page number. */
     private suspend fun searchTags(tags: String, idCursor: Boolean, pageToken: String?): Page<Post> {
         val response = request(
             path = "/posts.json",
@@ -221,7 +198,6 @@ class DanbooruSourceAdapter(
         )
         val rawRecords = parseJsonArray(response, gson, site.label)
         val records = rawRecords.mapNotNull { element -> element.takeIf(JsonElement::isJsonObject)?.asJsonObject }
-        // Fullness counts every raw record, so a malformed entry never ends paging early.
         val nextPageToken = when {
             rawRecords.size() < PAGE_SIZE -> null
             idCursor -> records.mapNotNull { it.longValue("id") }.minOrNull()?.let { "b$it" }
@@ -238,21 +214,18 @@ class DanbooruSourceAdapter(
             query = query + DanbooruSite.authQuery(saved),
             headers = site.headers,
             providerMessage = { body ->
-                // Danbooru explains rejected searches (such as the tag limit) in a JSON `message`.
                 runCatching { parseJsonObject(body, gson, site.label) }.getOrNull()
                     ?.stringValue("message")?.trim()?.takeIf(String::isNotBlank)
             },
         )
     }
 
-    /** Posts without a file URL are restricted to signed-in users, so they are left out. */
     private fun parsePost(raw: JsonObject): Post? {
         val id = raw.longValue("id")?.toString() ?: return null
         val fileUrl = httpsMediaUrl(raw.stringValue("file_url")) ?: return null
         val sampleUrl = httpsMediaUrl(raw.stringValue("large_file_url"))
         val fileExt = raw.stringValue("file_ext")
         val mediaAsset = raw.optionalJsonObject("media_asset")
-        // Ugoira originals are zip archives; the site's sample is the playable webm rendition.
         val ugoiraSample = sampleUrl?.takeIf { fileExt == UGOIRA_FILE_EXT }
         val fullUrl = ugoiraSample ?: fileUrl
         val fullMime = mimeFromUrlOrExt(fullUrl, fileExt.takeIf { ugoiraSample == null })
@@ -296,15 +269,10 @@ class DanbooruSourceAdapter(
     private companion object {
         const val PAGE_SIZE = 40
         const val UGOIRA_FILE_EXT = "zip"
-        /** The largest bounded thumbnail; the 180px default blurs in two-column cards. */
         const val CARD_PREVIEW_VARIANT = "720x720"
     }
 }
 
-/**
- * Danbooru tags never contain spaces, so a typed space joins words rather than adding a tag. The
- * site defaults to newest first, so only ranked sorts spend a term on an `order:` metatag.
- */
 private fun compileTags(query: Query): String {
     val include = query.includeTags.mapNotNull(::danbooruTag)
     val exclude = query.excludeTags.mapNotNull(::danbooruTag).map { "-$it" }

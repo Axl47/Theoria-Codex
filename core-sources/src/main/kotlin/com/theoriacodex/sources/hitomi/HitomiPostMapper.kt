@@ -12,7 +12,6 @@ import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 
-/** Maps parsed gallery metadata to sparse or resolved posts and recovers provider media URLs. */
 internal class HitomiPostMapper(
     private val mediaUrlResolver: HitomiMediaUrlResolver,
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate>,
@@ -25,7 +24,6 @@ internal class HitomiPostMapper(
         val poster = posterFile?.let { file ->
             val candidates = resolvedCandidates[file].orEmpty()
             val fullSize = imageRef(file, candidates, metadata.animated, preview = true)
-            // An animated card plays the animated file itself, so only still galleries can show a thumbnail.
             if (metadata.animated) fullSize else fullSize.thumbnailFirst(thumbnailUrls(file, candidates, HitomiThumbnail.CARD))
         } ?: EMPTY_IMAGE_REF
         val media = mediaRefs(metadata, sparse, resolvedCandidates)
@@ -91,7 +89,6 @@ internal class HitomiPostMapper(
         return hitomiThumbnailUrls(file.hash, primaryShard, rendition)
     }
 
-    /** Leads with [thumbnails] and keeps every full-size location behind them as a fallback copy. */
     private fun ImageRef.thumbnailFirst(thumbnails: List<String>): ImageRef {
         val thumbnail = thumbnails.firstOrNull() ?: return this
         return copy(
@@ -163,7 +160,6 @@ internal class HitomiPostMapper(
             url?.takeIf(String::isNotBlank)?.let(::add)
             addAll(fallbackUrls.filter(String::isNotBlank))
         }.distinct()
-        // Thumbnail locations carry no gg.js version, so the first full-size location identifies the media.
         val parsedLocations = locations.mapNotNull { location ->
             HitomiMediaLocation.parse(location)
         }

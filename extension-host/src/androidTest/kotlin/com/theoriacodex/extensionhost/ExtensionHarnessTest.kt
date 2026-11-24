@@ -17,14 +17,6 @@ import org.junit.Assume.assumeNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Runs one real manga extension APK end to end on a device, in this module's own test package: load it, list series,
- * open one's first chapter, and fetch a page image through the extension's client. It reports counts, sizes and timings
- * as text only, and never shows or saves provider media.
- *
- * Skipped unless an APK is named: push it to this test package's external files directory, then run with
- * `-e extensionApk <file name>` (see this module's README).
- */
 @RunWith(AndroidJUnit4::class)
 class ExtensionHarnessTest {
     private val harness = Harness(TAG)
@@ -50,7 +42,6 @@ class ExtensionHarnessTest {
         report("cover", "through extension: $cover")
         report("cover", "plain request: ${runCatching { fetch(OkHttpClient(), checkNotNull(covered.coverUrl)) }.getOrElse { "failed: $it" }}")
         assertTrue("The cover did not arrive as an image: $cover", cover.startsWith("image "))
-        // A feed asks for every cover on screen at once, which some sites answer differently from one request.
         val together = timed("covers together") {
             coroutineScope {
                 listing.series.mapNotNull(images::address).map { url ->
@@ -70,17 +61,12 @@ class ExtensionHarnessTest {
         assertTrue("The page did not arrive as an image: $throughExtension", throughExtension.startsWith("image "))
     }
 
-    /**
-     * The pages of the first chapter of the first listed series that has one. Some series list no chapter in the
-     * source's language, so listed series are opened until one does.
-     */
     private suspend fun firstReadable(source: SeriesSource, listed: List<Series>): List<ImageRef> =
         listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
             val first = source.entries(source.details(series), stored = emptyList()).entries.lastOrNull()
             (first?.let { source.media(it) } as? EntryMedia.Pages)?.pages?.takeIf { it.isNotEmpty() }
         } ?: error("None of the first $MAX_SERIES_TRIED series had a readable chapter")
 
-    /** Describes a response by its leading bytes, so nothing depends on the server's content type. */
     private fun fetch(client: OkHttpClient, url: String): String = client.newCall(Request.Builder().url(url).build()).execute().use { response ->
         val bytes = response.body.bytes()
         val kind = IMAGE_SIGNATURES.entries.firstOrNull { (signature, _) -> bytes.startsWith(signature) }?.value

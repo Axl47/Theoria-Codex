@@ -69,7 +69,6 @@ class MihonFiltersTest {
     @Test
     fun `values that do not line up with the source's list leave its defaults`() = runTest {
         val defaults = series.filters()
-        // A list from before the source filled its filters in: the header's place now holds a select of other options.
         val stale = listOf(SeriesFilter.Select("Options", listOf("Old"), 0), SeriesFilter.Separator, SeriesFilter.Check("Author", true))
 
         series.search("one", 1, stale)

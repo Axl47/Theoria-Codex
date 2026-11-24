@@ -19,14 +19,6 @@ import org.junit.Assume.assumeNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Runs one real anime extension APK end to end on a device, in this module's own test package: load it, list series,
- * open one, list its episodes and resolve an episode's streams through [AniyomiSeriesSource], then ask the first stream
- * for its opening bytes. It reports counts, types and timings as text only, and never plays, shows or saves media.
- *
- * Skipped unless an APK is named: push it to this test package's external files directory, then run with
- * `-e animeApk <file name>` (see this module's README).
- */
 @RunWith(AndroidJUnit4::class)
 class AnimeHarnessTest {
     private val harness = Harness(TAG)
@@ -54,7 +46,6 @@ class AnimeHarnessTest {
         report("quickjs", "evaluated a script=${quickJsLoaded()}")
     }
 
-    /** The engine extensions evaluate scripts with loads in this package, whose ABIs match the app's. */
     @Test
     fun quickJsEvaluates() {
         val answer = QuickJs.create().use { it.evaluate("[6, 7].reduce((a, b) => a * b)") }
@@ -63,13 +54,8 @@ class AnimeHarnessTest {
         assertTrue("QuickJS ran without its native library mapped", quickJsLoaded())
     }
 
-    /** Whether QuickJS's native library is in this process, which happens only once something creates an engine. */
     private fun quickJsLoaded(): Boolean = File("/proc/self/maps").readText().contains("libquickjs")
 
-    /**
-     * The earliest episode of the first listed series that has one, with its details and episode list timed for the
-     * first series tried. Some series list no episode yet, so listed series are opened until one does.
-     */
     private suspend fun firstEpisode(source: SeriesSource, listed: List<Series>): SeriesEntry =
         listed.take(MAX_SERIES_TRIED).firstNotNullOfOrNull { series ->
             val details = harness.timed("details") { source.details(series) }
@@ -78,7 +64,6 @@ class AnimeHarnessTest {
             entries.lastOrNull()
         } ?: error("None of the first $MAX_SERIES_TRIED series had an episode")
 
-    /** What the stream's first bytes are, asked for with its headers; nothing depends on the server's content type. */
     private fun opening(stream: MediaStream): String {
         val request = Request.Builder().url(stream.url).header("Range", "bytes=0-2047").apply { stream.headers.forEach { (name, value) -> header(name, value) } }.build()
         return OkHttpClient().newCall(request).execute().use { response ->
