@@ -103,7 +103,9 @@ interface SeriesRepository {
      * dropped entry at a new address. That takes both to be the only release of their chapter number by their
      * translator group, among the dropped entries and among the listed ones; the new address then starts with the
      * dropped one's progress. A series with no stored entries gets none from its first list, because nothing was there
-     * to compare it with; one imported with its entries compares against those.
+     * to compare it with; one imported with its entries compares against those. A list in which no entry is stored or
+     * plainly moved gets none either: the source most likely changed its addresses, so the list becomes the new
+     * baseline.
      */
     suspend fun store(series: Series, entries: List<SeriesEntry>? = null): List<SeriesEntry>
 
