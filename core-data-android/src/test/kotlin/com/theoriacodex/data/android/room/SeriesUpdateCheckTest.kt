@@ -37,8 +37,7 @@ import org.robolectric.RobolectricTestRunner
 class SeriesUpdateCheckTest {
     private val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), TheoriaRoomDatabase::class.java)
         .allowMainThreadQueries().build()
-    private var now = 100L
-    private val repository = RoomSeriesRepository(database) { now }
+    private val repository = RoomSeriesRepository(database) { 100L }
     private val source = FakeSource("custom_mihon_1")
     private val series = Series(SeriesId(source.key, "/series/a"), "Series", coverUrl = "https://cdn.test/a.jpg")
     private val first = SeriesEntry("/c/1", "Chapter 1")
@@ -58,7 +57,6 @@ class SeriesUpdateCheckTest {
 
         assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)))
         assertEquals(2, repository.observeFollowed().first().single().unreadCount)
-        assertEquals(100L, repository.series(series.id)!!.lastCheckedAtEpochMs)
     }
 
     @Test
@@ -67,11 +65,8 @@ class SeriesUpdateCheckTest {
         source.chapters[series.id] = listOf(first)
         repository.checkFollowed(sourcesOn(source))
 
-        now = 200L
         source.chapters[series.id] = listOf(second, first.copy(name = "Chapter 1, renamed"))
         assertEquals(listOf(SeriesUpdate(series, listOf(second))), repository.checkFollowed(sourcesOn(source)))
-        assertEquals(200L, repository.series(series.id)!!.lastCheckedAtEpochMs)
-
         assertEquals(emptyList<SeriesUpdate>(), repository.checkFollowed(sourcesOn(source)))
     }
 

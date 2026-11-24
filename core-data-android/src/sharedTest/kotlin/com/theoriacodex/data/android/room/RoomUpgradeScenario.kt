@@ -72,7 +72,7 @@ object RoomUpgradeScenario {
                 RoomViewerTranslationCacheRepository(database, clock = { 100L }).putAll(mapOf(translationKey to "Blue sky"))
                 RoomForYouVerdictRepository(database).record(ForYouVerdict("a", shared.id, ForYouVerdictKind.SKIPPED, 100L, null))
                 RoomVisualSignatureRepository(database).put(shared.id, PICTURE_HASH)
-                assertEquals(20, database.openHelper.readableDatabase.version)
+                assertEquals(21, database.openHelper.readableDatabase.version)
                 database.openHelper.readableDatabase.query(
                     "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
                 ).use { assertFalse(it.moveToFirst()) }
