@@ -2,7 +2,10 @@ package com.theoriacodex.app.codex
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -55,9 +58,14 @@ fun LiveCodexFeedState.predates(marks: Collection<NewPostMarks>): Boolean {
 @Composable
 fun rememberNewPostsReload(owner: LiveCodexFeedOwner, feed: LiveCodexFeedState, marks: Collection<NewPostMarks>): Boolean {
     val opened = remember(owner) { marks }
-    val stale = feed.predates(opened)
-    LaunchedEffect(owner, stale) { if (stale) owner.refresh() }
-    return stale
+    var attempted by remember(owner) { mutableStateOf(false) }
+    val pending = !attempted && feed.predates(opened)
+    LaunchedEffect(owner, pending) {
+        if (!pending) return@LaunchedEffect
+        attempted = true
+        owner.refresh()
+    }
+    return pending
 }
 
 interface LiveCodexFeedOwner {
@@ -94,6 +102,8 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var generation = 0L
     private var coverPostId: PostId? = null
     private var loadedAt: Long? = null
+    private var keptBranches: Map<String, B>? = null
+    private var keptLoadedAt: Long? = null
     private var coverSort = CodexSortMode.NEWEST_SAVED
     private var coverUsage = emptyMap<String, CodexUsage>()
     private var coverDurations = emptyMap<PostId, Long>()
@@ -127,6 +137,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         related.clear("live codex reset")
         generation++
         coverPostId = null
+        keptBranches = null
         loadedAt = System.currentTimeMillis()
         branches.clear()
         initial.associateByTo(branches) { it.id }
@@ -135,14 +146,16 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     }
 
     fun reload(initial: List<B>) {
-        val previous = LinkedHashMap(branches)
+        if (keptBranches != null || initial.isEmpty()) return
+        keptBranches = LinkedHashMap(branches)
+        keptLoadedAt = loadedAt
         job?.cancel()
         related.clear("live codex reloaded")
         generation++
         loadedAt = System.currentTimeMillis()
         branches.clear()
         initial.associateByTo(branches) { it.id }
-        load(branches.keys.toList(), retry = false, kept = previous)
+        load(branches.keys.toList(), retry = false, reloading = true)
     }
 
     fun loadMore() {
@@ -153,7 +166,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         if (!state.value.loading) load(branches.values.filter { it.error != null }.map { it.id }, retry = true)
     }
 
-    private fun load(ids: List<String>, retry: Boolean, cacheInitialCover: Boolean = false, kept: Map<String, B>? = null) {
+    private fun load(ids: List<String>, retry: Boolean, cacheInitialCover: Boolean = false, reloading: Boolean = false) {
         if (ids.isEmpty()) return
         val admitted = ++generation
         mutableState.value = state.value.copy(loading = true, generation = generation)
@@ -164,18 +177,15 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
                     val result = fetch(branch, retry)
                     if (generation == admitted) {
                         branches[id] = result
-                        if (kept == null) {
+                        if (!reloading) {
                             publish(loading = true)
                             cacheFirstPost(admitted, cacheInitialCover)
                         }
                     }
                 }
-                if (kept != null && generation == admitted) {
-                    if (branches.values.all { it.posts.isEmpty() && it.error != null }) {
-                        branches.clear()
-                        branches.putAll(kept)
-                    }
-                    publish(loading = false)
+                if (reloading && generation == admitted) {
+                    keepFailedBranches()
+                    publish(loading = true)
                     cacheFirstPost(admitted, root = true)
                 }
             } finally {
@@ -184,6 +194,14 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
                 }
             }
         }
+    }
+
+    private fun keepFailedBranches() {
+        val kept = keptBranches ?: return
+        keptBranches = null
+        val failed = branches.filter { (id, branch) -> branch.posts.isEmpty() && branch.error != null && id in kept }.keys
+        failed.forEach { branches[it] = kept.getValue(it) }
+        if (failed.isNotEmpty()) loadedAt = keptLoadedAt
     }
 
     private suspend fun cacheFirstPost(admitted: Long, root: Boolean) {

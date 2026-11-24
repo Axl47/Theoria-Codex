@@ -216,13 +216,14 @@ class SavedSearchesCodexViewModelTest {
     @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page, keeping old pages if that fails`() = runTest {
         var uploads = listOf("old1", "old2", "old3", "old4")
         var offline = false
-        val source = adapter(SourceKey.PIXIV) { _, token ->
+        val source = adapter(SourceKey.PIXIV) { query, token ->
+            if (query.includeTags.single() == "dogs") return@adapter Page(listOf(testPost(SourceKey.PIXIV, "dog")), null)
             check(!offline) { "offline" }
             val page = token?.toInt() ?: 0
             Page(uploads.drop(page * 2).take(2).map { testPost(SourceKey.PIXIV, it) }, "${page + 1}".takeIf { (page + 1) * 2 < uploads.size })
         }
         withOwner(listOf(source)) { owner ->
-            val saved = listOf(entry("cats", "cats"))
+            val saved = listOf(entry("cats", "cats"), entry("dogs", "dogs"))
             owner.synchronize(saved, AppSettings(), setOf(SourceKey.PIXIV))
             advanceUntilIdle()
             val loadedAt = checkNotNull(owner.state.value.loadedAtEpochMs)
@@ -236,19 +237,21 @@ class SavedSearchesCodexViewModelTest {
             assertTrue(owner.state.value.predates(found))
             offline = true
             owner.refresh()
-            assertEquals(listOf("old1", "old2"), owner.state.value.posts.map { it.id.sourcePostId })
+            owner.refresh()
+            assertEquals(listOf("old1", "old2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
             advanceUntilIdle()
-            assertEquals(listOf("old1", "old2"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(listOf("old1", "old2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
             assertTrue(owner.state.value.errors.isEmpty())
+            assertTrue(owner.state.value.predates(found))
 
             offline = false
             owner.refresh()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(listOf("new1", "new2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
 
             owner.loadMore()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2", "new3", "old1"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(listOf("new1", "new2", "new3", "old1", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
         }
     }
 
