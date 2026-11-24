@@ -417,11 +417,13 @@ class CustomSitesViewModel(
         }
     }
 
+    /** Tests one site's row again, a built-in source's (by its [SourceKey.id]) or an added site's. */
     private fun retest(sourceId: String) {
         if (state.value.retests[sourceId] == RetestStatus.Running) return
-        if (state.value.sites.none { it.sourceId == sourceId }) return
+        val builtIn = state.value.builtInSites.firstOrNull { it.source.id == sourceId }
+        if (builtIn == null && state.value.sites.none { it.sourceId == sourceId }) return
         mutableState.update { it.copy(retests = it.retests + (sourceId to RetestStatus.Running)) }
-        scope.launch { runRetest(sourceId) }
+        scope.launch { if (builtIn != null) runBuiltInTest(builtIn) else runRetest(sourceId) }
     }
 
     private suspend fun runRetest(sourceId: String) {

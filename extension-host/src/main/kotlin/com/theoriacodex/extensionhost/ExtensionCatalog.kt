@@ -11,6 +11,7 @@ import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.storedRepoAddress
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.awaitSuccess
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -198,25 +199,17 @@ class ExtensionCatalog(
             RepoExtension(repo.url, entry.packageName, entry.name, entry.languages, entry.versionName, entry.kind, status)
         }
 
-    private suspend fun get(url: String): ByteArray = client.newCall(request(url)).awaitSuccess().use { it.body.bytes() }
+    /** [url]'s body, refused once it passes [MAX_INDEX_BYTES]. */
+    private suspend fun get(url: String): ByteArray = client.newCall(request(url)).awaitSuccess().use { response ->
+        if (response.body.contentLength() > MAX_INDEX_BYTES) throw RepoProblem(TOO_LARGE)
+        response.body.byteStream().use { readAtMost(it, MAX_INDEX_BYTES) }
+    }
 
     /** Writes [url]'s body to [file], stopping once it passes [MAX_APK_BYTES]. */
     private suspend fun download(url: String, file: File) {
         client.newCall(request(url)).awaitSuccess().use { response ->
-            if (response.body.contentLength() > MAX_APK_BYTES) throw RepoProblem("Too large")
-            response.body.byteStream().use { input -> file.outputStream().use { output -> copyAtMost(input, output) } }
-        }
-    }
-
-    private fun copyAtMost(input: InputStream, output: OutputStream) {
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var copied = 0L
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) return
-            copied += read
-            if (copied > MAX_APK_BYTES) throw RepoProblem("Too large")
-            output.write(buffer, 0, read)
+            if (response.body.contentLength() > MAX_APK_BYTES) throw RepoProblem(TOO_LARGE)
+            response.body.byteStream().use { input -> file.outputStream().use { output -> copyAtMost(input, output, MAX_APK_BYTES) } }
         }
     }
 
@@ -225,9 +218,6 @@ class ExtensionCatalog(
     } catch (_: IllegalArgumentException) {
         throw RepoProblem("Not a web address")
     }
-
-    /** A failure already worded for the Extensions page. */
-    private class RepoProblem(message: String) : Exception(message)
 
     private fun describe(error: Throwable): String = when (error) {
         is RepoProblem -> error.message.orEmpty()
@@ -243,3 +233,27 @@ class ExtensionCatalog(
         const val MAX_APK_BYTES = 64L * 1024 * 1024
     }
 }
+
+/** A failure already worded for the Extensions page. */
+internal class RepoProblem(message: String) : Exception(message)
+
+internal const val TOO_LARGE = "Too large"
+
+/** The most a repo index or extension list may hold, both as fetched and once gunzipped; Keiyoushi's is well under 1 MiB. */
+internal const val MAX_INDEX_BYTES = 8L * 1024 * 1024
+
+/** Copies [input] to [output], refusing it once it passes [limit] bytes. */
+internal fun copyAtMost(input: InputStream, output: OutputStream, limit: Long) {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var copied = 0L
+    while (true) {
+        val read = input.read(buffer)
+        if (read < 0) return
+        copied += read
+        if (copied > limit) throw RepoProblem(TOO_LARGE)
+        output.write(buffer, 0, read)
+    }
+}
+
+/** All of [input], refused once it passes [limit] bytes. */
+internal fun readAtMost(input: InputStream, limit: Long): ByteArray = ByteArrayOutputStream().also { copyAtMost(input, it, limit) }.toByteArray()

@@ -122,6 +122,7 @@ sealed interface CustomSitesAction {
     data object DismissReconnect : CustomSitesAction
     data object SaveEdit : CustomSitesAction
 
+    /** Tests one row again: an added site's [sourceId], or a built-in source's `SourceKey.id`. */
     data class Retest(val sourceId: String) : CustomSitesAction
     data object TestAll : CustomSitesAction
     /** Removes a site with Undo in its row; the removal commits after the Undo times out or Sites is left. */

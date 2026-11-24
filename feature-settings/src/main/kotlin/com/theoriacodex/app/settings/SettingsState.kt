@@ -54,8 +54,11 @@ class SettingsSitesEntry(val summary: String, val page: @Composable (onBack: () 
 /** Settings → Picture tags, supplied by the app shell, which owns the tagger: the home row's value and the page. */
 class SettingsPicturesEntry(val summary: String, val page: @Composable (onBack: () -> Unit) -> Unit)
 
-/** The Settings home row and page for backups; [summary] is null when this build has no daily backup. */
-class SettingsBackupEntry(val summary: AutoBackupSummary?, val controls: @Composable () -> Unit)
+/**
+ * The Settings home row and page for backups: [controls] for backing up and restoring, then [daily] in a group of its
+ * own. [summary] and [daily] are null when this build has no daily backup.
+ */
+class SettingsBackupEntry(val summary: AutoBackupSummary?, val daily: (@Composable () -> Unit)? = null, val controls: @Composable () -> Unit)
 
 data class SettingsAccountUiState(
     val pixivStatusLabel: String = "Not connected",

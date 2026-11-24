@@ -57,7 +57,7 @@ fun CustomSitesScreen(
     BackHandler(enabled = state.form == null && state.openBuiltIn != null) { onAction(CustomSitesAction.CloseBuiltIn) }
     val builtIn = state.builtInSites.firstOrNull { it.source == state.openBuiltIn }
     when (val form = state.form) {
-        null -> if (builtIn != null) BuiltInSitePage(builtIn, accounts, onAction) else SitesListPage(state, accounts, onAction, onBack)
+        null -> if (builtIn != null) BuiltInSitePage(builtIn, state.retests[builtIn.source.id], accounts, onAction) else SitesListPage(state, accounts, onAction, onBack)
         is SiteForm.Add -> AddSitePage(form, onAction)
         is SiteForm.Edit -> state.sites.firstOrNull { it.sourceId == form.sourceId }?.let { site ->
             EditSitePage(form, site, state.retests[site.sourceId], site.sourceId in state.workingSiteIds, onAction)
@@ -123,18 +123,7 @@ private fun SiteRow(site: CustomSiteSummary, retest: RetestStatus?, working: Boo
             title = site.label,
             summary = siteRowSummary(site),
             onClick = { onAction(CustomSitesAction.StartEdit(site.sourceId)) },
-            trailing = {
-                if (retest == RetestStatus.Running) {
-                    RowSpinner("Checking ${site.label}")
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (working) WorkingMark()
-                        IconButton(onClick = { onAction(CustomSitesAction.Retest(site.sourceId)) }) {
-                            Icon(Icons.Default.Refresh, "Re-test ${site.label}")
-                        }
-                    }
-                }
-            },
+            trailing = { RetestTrailing(site.label, retest, working) { onAction(CustomSitesAction.Retest(site.sourceId)) } },
         )
         RetestFailure(retest, site.host, onAction, KeyAction(site.sourceId, site.hasCredentials))
     }
@@ -160,6 +149,19 @@ internal fun RetestFailure(retest: RetestStatus?, host: String, onAction: (Custo
             TextButton(onClick = { onAction(CustomSitesAction.StartEdit(action.sourceId, expandKeys = true)) }) {
                 Text(if (action.hasKey) "Check API key" else ADD_API_KEY_LABEL)
             }
+        }
+    }
+}
+
+/** A site row's end: the spinner while [retest] runs, else the Working mark when [working], and Re-test. */
+@Composable
+internal fun RetestTrailing(label: String, retest: RetestStatus?, working: Boolean, onRetest: () -> Unit) {
+    if (retest == RetestStatus.Running) {
+        RowSpinner("Checking $label")
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (working) WorkingMark()
+            IconButton(onClick = onRetest) { Icon(Icons.Default.Refresh, "Re-test $label") }
         }
     }
 }

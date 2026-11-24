@@ -10,7 +10,7 @@ import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsPageColumn
 
-/** A built-in source in the Sites list, with its last test's result; opens its page. */
+/** A built-in source in the Sites list, with its last test's result and Re-test; opens its page. */
 @Composable
 internal fun BuiltInSiteRow(
     site: BuiltInSiteSummary,
@@ -23,21 +23,30 @@ internal fun BuiltInSiteRow(
             title = site.label,
             summary = builtInRowSummary(site, accounts.summary(site.source)),
             onClick = { onAction(CustomSitesAction.OpenBuiltIn(site.source)) },
-            trailing = when {
-                retest == RetestStatus.Running -> { { RowSpinner("Checking ${site.label}") } }
-                site.working -> { { WorkingMark() } }
-                else -> null
-            },
+            trailing = { RetestTrailing(site.label, retest, site.working) { onAction(CustomSitesAction.Retest(site.source.id)) } },
         )
         RetestFailure(retest, site.host, onAction)
     }
 }
 
-/** A built-in source's page: its browser check while it isn't Working, and its account when it has one. */
+/**
+ * A built-in source's page: its host with Working and Re-test, its browser check while it isn't Working, and its
+ * account when it has one. The host row keeps the page useful for a working site that has no account.
+ */
 @Composable
-internal fun BuiltInSitePage(site: BuiltInSiteSummary, accounts: BuiltInAccounts, onAction: (CustomSitesAction) -> Unit) {
+internal fun BuiltInSitePage(site: BuiltInSiteSummary, retest: RetestStatus?, accounts: BuiltInAccounts, onAction: (CustomSitesAction) -> Unit) {
     SettingsPageColumn {
         SettingsHeader(site.label, onBack = { onAction(CustomSitesAction.CloseBuiltIn) }, parents = SITES_PATH)
+        // A failed test's browser check is the group below, so the row shows only why it failed.
+        val failure = (retest as? RetestStatus.Done)?.takeUnless { it.ok }?.message
+        SettingsGroup(null) {
+            SettingsRow(
+                title = site.host,
+                summary = failure,
+                summaryIsError = failure != null,
+                trailing = { RetestTrailing(site.label, retest, site.working) { onAction(CustomSitesAction.Retest(site.source.id)) } },
+            )
+        }
         // A site that works needs no browser check; any later outage clears Working and brings the check back.
         if (!site.working) {
             SettingsGroup("Browser check") {

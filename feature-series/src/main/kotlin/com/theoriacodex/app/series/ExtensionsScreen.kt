@@ -62,7 +62,15 @@ private fun ExtensionsList(state: ExtensionsState, viewModel: ExtensionsViewMode
         UpdatesGroup(state, viewModel)
         when {
             extensions == null -> LoadingState()
-            extensions.isEmpty() -> EmptyState("No extensions installed")
+            // With no repo yet, the empty page offers the first step; once one exists, Get extensions is the row below.
+            extensions.isEmpty() -> if (state.repos?.isEmpty() == true) {
+                EmptyState("No extensions installed", actionLabel = ADD_REPO_LABEL) {
+                    viewModel.openSubpage(ExtensionsSubpage.REPOS)
+                    viewModel.askForRepo(true)
+                }
+            } else {
+                EmptyState("No extensions installed")
+            }
             else -> {
                 // With extensions of both kinds installed, each kind is a group headed by its name.
                 val kinds = extensions.groupBy(InstalledExtension::kind).toSortedMap()

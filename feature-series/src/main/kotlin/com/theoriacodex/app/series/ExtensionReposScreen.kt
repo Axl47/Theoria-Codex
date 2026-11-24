@@ -47,8 +47,9 @@ import com.theoriacodex.domain.series.languageName
 
 internal const val REPOS_TITLE = "Repos"
 internal const val BROWSE_TITLE = "Get extensions"
+internal const val ADD_REPO_LABEL = "Add repo"
 
-/** The user's repos, each with why it could not be read when that is so, and the way to add one. */
+/** The user's repos, each with why it could not be read when that is so, the way to add one, and once there is one, Get extensions. */
 @Composable
 internal fun ReposPage(state: ExtensionsState, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
     SettingsPageColumn {
@@ -70,7 +71,14 @@ internal fun ReposPage(state: ExtensionsState, viewModel: ExtensionsViewModel, o
                 }
             }
         }
-        SettingsGroup(null) { SettingsRow("Add repo", onClick = { viewModel.askForRepo(true) }) }
+        SettingsGroup(null) {
+            // Leads on from a repo just added to what it offers.
+            if (!repos.isNullOrEmpty()) {
+                SettingsRow(BROWSE_TITLE, onClick = { viewModel.openSubpage(ExtensionsSubpage.BROWSE) })
+                SettingsRowDivider()
+            }
+            SettingsRow(ADD_REPO_LABEL, onClick = { viewModel.askForRepo(true) })
+        }
     }
     state.addRepo?.let { ask -> AddRepoDialog(ask, onDismiss = { viewModel.askForRepo(false) }, onAdd = viewModel::addRepo) }
 }
@@ -83,7 +91,7 @@ private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -
     AlertDialog(
         // Stays open while the repo is read, so its answer lands in this dialog.
         onDismissRequest = { if (!ask.busy) onDismiss() },
-        title = { Text("Add repo") },
+        title = { Text(ADD_REPO_LABEL) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(

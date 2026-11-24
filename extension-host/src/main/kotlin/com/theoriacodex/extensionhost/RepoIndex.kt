@@ -86,8 +86,9 @@ internal object RepoReader {
         return Triple(store.name, store.signingKey, list.extensions)
     }
 
+    /** [body], decompressed when gzipped; a small body can expand enormously, so the result is held to [MAX_INDEX_BYTES]. */
     private fun gunzipped(body: ByteArray): ByteArray =
-        if (body.size >= 2 && body[0] == GZIP_FIRST && body[1] == GZIP_SECOND) GZIPInputStream(ByteArrayInputStream(body)).use { it.readBytes() } else body
+        if (body.size >= 2 && body[0] == GZIP_FIRST && body[1] == GZIP_SECOND) GZIPInputStream(ByteArrayInputStream(body)).use { readAtMost(it, MAX_INDEX_BYTES) } else body
 
     private const val GZIP_FIRST = 0x1f.toByte()
     private const val GZIP_SECOND = 0x8b.toByte()
