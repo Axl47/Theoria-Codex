@@ -16,6 +16,7 @@ import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.LocalPostTagSearchActions
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.Flow
@@ -169,6 +170,7 @@ fun FeedPostActionSheet(
     removeLabel: String = "Remove from Codex",
     onStartOver: (() -> Unit)? = null,
     onShowRelated: (() -> Unit)? = null,
+    shownCreator: CreatorProfile? = null,
 ) {
     val searchActions = LocalPostTagSearchActions.current
     PostActionSheet(
@@ -179,6 +181,7 @@ fun FeedPostActionSheet(
         onGoToSearch = onGoToSearch,
         onStartOver = onStartOver,
         onShowRelated = onShowRelated,
+        shownCreator = shownCreator,
     ) {
         PostTagActionSection(
             post,

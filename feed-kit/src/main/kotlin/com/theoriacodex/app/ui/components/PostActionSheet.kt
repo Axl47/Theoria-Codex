@@ -40,6 +40,8 @@ import com.theoriacodex.app.source.SourceIcon
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.motion.LikedHeartColor
 import com.theoriacodex.app.viewer.buildViewerImageRequest
+import com.theoriacodex.data.repository.followKey
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -58,6 +60,7 @@ fun PostActionSheet(
     onGoToSearch: (() -> Unit)? = null,
     onStartOver: (() -> Unit)? = null,
     onShowRelated: (() -> Unit)? = null,
+    shownCreator: CreatorProfile? = null,
     tagContent: @Composable () -> Unit,
 ) {
     PreloadCodexSaveRelevance(post, saveToCodexQuery)
@@ -74,6 +77,7 @@ fun PostActionSheet(
         action()
     }
     val creatorActions = creatorProfileActions(post, actions.creatorBrowsingSources.value)
+        .filterNot { action -> shownCreator != null && action.profile?.followKey() == shownCreator.followKey() }
 
     fun openCreator(action: CreatorProfileAction) = dismissThen {
         action.profile?.let(actions.openCreator) ?: actions.openPostCreator(post)
