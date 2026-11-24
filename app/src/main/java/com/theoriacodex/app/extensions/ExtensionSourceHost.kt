@@ -22,6 +22,7 @@ import com.theoriacodex.extensionhost.AniyomiKind
 import com.theoriacodex.extensionhost.ExtensionCatalog
 import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.extensionhost.ExtensionImages
+import com.theoriacodex.extensionhost.ExtensionLoader
 import com.theoriacodex.extensionhost.ExtensionPackages
 import com.theoriacodex.extensionhost.ExtensionRegistry
 import com.theoriacodex.extensionhost.ExtensionSite
@@ -84,8 +85,7 @@ internal class ExtensionSourceHost : ExtensionSites {
         installedFolder = lazy { File(application.noBackupFilesDir, INSTALLED_DIRECTORY) }
         packages = ExtensionPackages(application, KINDS, installedFolder::value) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
         val loader = lazy {
-            ExtensionHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browsers, outages())
-                .loader(application, packages)
+            ExtensionLoader.installingHost(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browsers, outages()) { packages.read(it) }
         }
         registry = ExtensionRegistry(
             packages = packages::list,

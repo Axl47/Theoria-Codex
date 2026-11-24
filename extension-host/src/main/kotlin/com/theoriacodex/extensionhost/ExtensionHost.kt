@@ -36,10 +36,6 @@ object ExtensionHost {
     @Volatile
     private var client: OkHttpClient? = null
 
-    class Installed internal constructor() {
-        fun loader(context: Context, packages: ExtensionPackages): ExtensionLoader = ExtensionLoader(context, packages)
-    }
-
     fun install(
         application: Application,
         versionName: String,
@@ -47,7 +43,7 @@ object ExtensionHost {
         cookies: BrowserCookieStore,
         browsers: ChallengeBrowsers,
         outages: HostOutageTracker,
-    ): Installed {
+    ) {
         AppInfo.hostVersionName = versionName
         AppInfo.hostVersionCode = versionCode
         val extensionApplication = ExtensionApplication(application)
@@ -56,7 +52,6 @@ object ExtensionHost {
         Injekt.bind(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
         val client = extensionClient(cookies, browsers, outages).also { ExtensionHost.client = it }
         Injekt.bind(NetworkHelper::class.java, NetworkHelper(client) { DEFAULT_USER_AGENT })
-        return Installed()
     }
 
     suspend fun clearsChallenge(url: String, userAgent: String): Boolean = withContext(Dispatchers.IO) {
