@@ -96,6 +96,24 @@ class ForYouVerdictLogTest {
         assertFalse(first.id in log)
     }
 
+    @Test fun `a read still running at reset does not bring its skips back`() = runTest {
+        skipped(PROFILE, first.id, 0)
+        val slow = CompletableDeferred<Unit>()
+        val held = object : ForYouVerdictRepository by verdicts {
+            override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> {
+                slow.await()
+                return verdicts.skippedBetween(profileId, sinceEpochMs, untilEpochMs, limit)
+            }
+        }
+        val log = log(held)
+        log.readSkips(PROFILE)
+        log.reset(readFor = PROFILE)
+        slow.complete(Unit)
+        runCurrent()
+
+        assertFalse(first.id in log)
+    }
+
     @Test fun `reset for a profile forgets its skips and does not read them back, even after a failed read`() = runTest {
         skipped(PROFILE, first.id, 0)
         var down = true
