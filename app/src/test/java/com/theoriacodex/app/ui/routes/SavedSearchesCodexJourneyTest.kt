@@ -38,6 +38,7 @@ import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.TheoriaAppContent
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.domain.model.ImageRef
@@ -89,30 +90,30 @@ class SavedSearchesCodexJourneyTest {
             openMergedSearches()
             val first = searchCardTestTag(posts[0].id)
             val second = searchCardTestTag(posts[1].id)
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isNotEmpty() &&
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(1, compose.onAllNodesWithTag(searchCardTestTag(posts[2].id)).fetchSemanticsNodes().size)
             compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
                 .performTouchInput { longClick() }
             compose.onNodeWithContentDescription("Include First search").performClick()
             compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() &&
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isEmpty() &&
                 compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             val verticalGrid = hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
             compose.onNode(verticalGrid, useUnmergedTree = true).performScrollToNode(hasTestTag(second))
             compose.onNodeWithTag(second).assertIsDisplayed().performClick()
             // Saved also has a Back button; only Viewer's action menu proves navigation completed.
-            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+            compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
             val roots = graph.registry.requests.count { it.pageToken == null }
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
-            compose.waitUntil(10_000) { compose.onNodeWithTag(second).isDisplayed() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithContentDescription("More actions").fetchSemanticsNodes().isEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onNodeWithTag(second).isDisplayed() }
             compose.onNodeWithTag(second).assertIsDisplayed()
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performScrollTo()
-            compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag(first).assertDoesNotExist()
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             verifySavedRouteReentry(graph, first, second, roots)
@@ -126,17 +127,17 @@ class SavedSearchesCodexJourneyTest {
         }
     }
     private fun openMergedSearches(): Unit {
-        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Library").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(librarySectionTag(LibrarySection.Saved)).performClick()
-        compose.waitUntil(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
+        compose.waitUntilSettled(10_000) { compose.onNodeWithText("Likes").isDisplayed() }
         compose.onNodeWithText("Likes").performTouchInput { longClick() }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Clear likes").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("Clear likes").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Auto-save").assertDoesNotExist()
         compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Followed").assertIsDisplayed()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Searches").performScrollTo().performTouchInput { longClick() }
         compose.onNodeWithContentDescription("Include First search").assertExists()
         compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
@@ -146,28 +147,28 @@ class SavedSearchesCodexJourneyTest {
 
     private fun verifySavedRouteReentry(graph: JourneyAppContainer, first: String, second: String, roots: Int): Unit {
         // Leaving Saved entirely must retain the same feed, too.
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Codices)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Codices)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(librarySectionTag(LibrarySection.Codices)).performClick()
         compose.onNodeWithTag(librarySectionTag(LibrarySection.Saved)).performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Searches").performScrollTo()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
         // The Home bottom bar covers the lowest shelf on this small screen, so a touch would miss it.
         compose.onNodeWithTag(second).performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitUntil(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+        compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("More actions").isDisplayed() }
         compose.onNodeWithContentDescription("Back").performClick()
         // Other Home pages can hold "More actions" too, so Library's own header proves the return.
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.Saved)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("Searches").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Searches").performScrollTo().performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Searches") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
             .performTouchInput { longClick() }
         compose.onNodeWithContentDescription("Include First search").assertIsOff()
         compose.onNodeWithText("Exclude all").performClick()
         compose.onNodeWithContentDescription("Close sheet").performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText("Include a search in this feed").assertIsDisplayed()
     }
 

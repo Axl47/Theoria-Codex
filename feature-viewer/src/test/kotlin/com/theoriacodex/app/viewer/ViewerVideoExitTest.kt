@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.session
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
@@ -65,7 +66,7 @@ class ViewerVideoExitTest {
 
         compose.runOnIdle { owner.clearSession(retainPresentation = true) }
         // A rebuilt player would fail on the missing file too.
-        runCatching { compose.waitUntil(1_000) { compose.waitForIdle(); playerErrors.size > 1 } }
+        runCatching { compose.waitUntilSettled(1_000) { playerErrors.size > 1 } }
         assertEquals("Closing replaced the player", 1, playerErrors.size)
     }
 
@@ -84,6 +85,6 @@ class ViewerVideoExitTest {
             val uiState by owner.state.collectAsState()
             MaterialTheme { if (shown.value) ViewerScreen(uiState = uiState, host = ViewerScreenHost(onAction = owner::onAction)) }
         }
-        compose.waitUntil(5_000) { compose.waitForIdle(); playerErrors.size == 1 }
+        compose.waitUntilSettled(5_000) { playerErrors.size == 1 }
     }
 }

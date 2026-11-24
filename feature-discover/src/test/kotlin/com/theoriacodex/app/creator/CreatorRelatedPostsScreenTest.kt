@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.components.FeedMarks
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
@@ -80,7 +81,7 @@ class CreatorRelatedPostsScreenTest {
         compose.onNodeWithText("Dismiss").performClick()
         // Releasing the seed changes the feed's filter inputs, which refilter off the main thread.
         val emptyMessage = "No uploads match the current filters."
-        compose.waitUntil(5_000) { compose.onAllNodesWithText(emptyMessage).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled(5_000) { compose.onAllNodesWithText(emptyMessage).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(emptyMessage).assertIsDisplayed()
     }
 }

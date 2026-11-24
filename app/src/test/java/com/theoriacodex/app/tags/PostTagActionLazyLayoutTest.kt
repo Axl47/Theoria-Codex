@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -84,7 +85,7 @@ class PostTagActionLazyLayoutTest {
         compose.tagList().performScrollToNode(hasText("Actions"))
         compose.tagList().performScrollToNode(hasText("Actions"))
         compose.tagChip("tag_0").performClick()
-        compose.waitUntil { lookups.get() == 300 }
+        compose.waitUntilSettled { lookups.get() == 300 }
         assertFalse(lookupOnMain.get())
         assertEquals(listOf("include:tag_0", "exclude:tag_0", "remove:tag_0"), selections)
     }

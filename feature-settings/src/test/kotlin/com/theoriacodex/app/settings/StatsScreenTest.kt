@@ -20,6 +20,7 @@ import com.theoriacodex.app.statistics.StatsShareCodex
 import com.theoriacodex.app.statistics.StatsShareFile
 import com.theoriacodex.app.statistics.StatsShareOverall
 import com.theoriacodex.app.statistics.StatsSharePost
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.data.repository.CodexPostStatistics
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -69,14 +70,14 @@ class StatsScreenTest {
         compose.onNodeWithText("Landscapes").performScrollTo().performClick()
 
         compose.onNodeWithText("First").performClick()
-        compose.waitUntil(5_000) { opened.isNotEmpty() }
+        compose.waitUntilSettled(5_000) { opened.isNotEmpty() }
         assertEquals(listOf(PostId(SourceKey.GELBOORU, "1")), opened)
 
         compose.onNodeWithContentDescription("Include First").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithContentDescription("Include Portraits").performScrollTo().performClick()
         compose.onNodeWithText("Share file").performScrollTo().performClick()
-        compose.waitUntil(5_000) { shared.isNotEmpty() }
+        compose.waitUntilSettled(5_000) { shared.isNotEmpty() }
 
         val codex = shared.single().codices.orEmpty().single()
         assertEquals("Landscapes", codex?.name)
@@ -96,20 +97,20 @@ class StatsScreenTest {
         compose.onNodeWithText("Alt").performClick()
         compose.onNodeWithContentDescription("Include profile Alt").performScrollTo().assertIsOff()
         compose.onNodeWithText("Download").performScrollTo().performClick()
-        compose.waitUntil(5_000) { downloaded.size == 1 }
+        compose.waitUntilSettled(5_000) { downloaded.size == 1 }
         assertEquals(setOf("Landscapes", "Saved"), downloaded.last().codices.orEmpty().map { it?.name }.toSet())
         assertEquals(StatsShareOverall(), downloaded.last().overall)
 
         compose.onNodeWithContentDescription("Include profile Alt").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Download").performScrollTo().performClick()
-        compose.waitUntil(5_000) { downloaded.size == 2 }
+        compose.waitUntilSettled(5_000) { downloaded.size == 2 }
         assertEquals(listOf("Landscapes", "Private", "Saved"), downloaded.last().codices.orEmpty().map { it?.name }.sortedBy { it })
 
         compose.onNodeWithContentDescription("Include overall stats").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Download").performScrollTo().performClick()
-        compose.waitUntil(5_000) { downloaded.size == 3 }
+        compose.waitUntilSettled(5_000) { downloaded.size == 3 }
         assertEquals(null, downloaded.last().overall)
     }
 
@@ -133,7 +134,7 @@ class StatsScreenTest {
         compose.onNodeWithText("Missing site post").performScrollTo().performClick()
         compose.onNodeWithText("This site isn't set up here").assertExists()
         compose.onNodeWithText("Ready post").performScrollTo().performClick()
-        compose.waitUntil(5_000) { opened.isNotEmpty() }
+        compose.waitUntilSettled(5_000) { opened.isNotEmpty() }
 
         assertEquals(listOf(PostId(SourceKey.GELBOORU, "7")), opened)
         assertEquals(listOf(PostId(SourceKey.GELBOORU, "7")), looked)

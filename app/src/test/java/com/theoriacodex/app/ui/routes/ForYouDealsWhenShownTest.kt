@@ -91,7 +91,7 @@ class ForYouDealsWhenShownTest {
                 SideEffect { owners = owner }
                 if (show.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
             }
-            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntilSettled(15_000) { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
             test(graph)
         } finally {
             compose.mainClock.autoAdvance = true

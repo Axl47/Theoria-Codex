@@ -11,6 +11,7 @@ import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveSuggestions
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -41,7 +42,7 @@ class ViewerSaveButtonTest {
                 if (docked.value) ViewerSaveButton(POST, ViewerSaveContext(), fan, onInteraction = {}, onOpenPicker = {})
             }
         }
-        compose.waitUntil { compose.onAllNodesWithContentDescription("Save to Cats").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled { compose.onAllNodesWithContentDescription("Save to Cats").fetchSemanticsNodes().isNotEmpty() }
         docked.value = false
         compose.waitForIdle()
         docked.value = true
