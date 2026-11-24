@@ -54,8 +54,6 @@ class StatisticsProjectionTest {
                 totalForegroundMs = 1_000L,
                 browsingMs = 500L,
                 codexEntryCounts = mapOf("first" to 3L),
-                translatedPhraseCount = 4L,
-                translatedSourceCharacterCount = 21L,
             ),
             liveUsage = UsageDurationDelta(totalMs = 2_000L, watchingMs = 2_000L),
             codices = listOf(first, second),
@@ -69,8 +67,6 @@ class StatisticsProjectionTest {
         assertEquals(500L, summary.browsingMs)
         assertEquals(2_000L, summary.watchingMs)
         assertEquals(2L, summary.savedPostCount)
-        assertEquals(4L, summary.translatedPhraseCount)
-        assertEquals(21L, summary.translatedSourceCharacterCount)
         assertEquals(listOf(1L, 1L), summary.savedSources.map { row -> row.count })
         assertEquals("First", summary.mostUsedCodex?.name)
         assertEquals(3L, summary.mostUsedCodex?.entryCount)

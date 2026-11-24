@@ -226,7 +226,7 @@ release, weekly, and on request with `gh workflow run device-validation.yml --re
 including isolated minified acceptance. That
 lane verifies package ID, debuggability and the actual debug signing certificate before install,
 then checks startup/callback and persisted JSON data across two separate process launches.
-Provider-live instrumentation remains opt-in. Viewer OCR and translation have been retired.
+Provider-live instrumentation remains opt-in.
 
 Physical performance validation has its own evidence-producing command:
 
