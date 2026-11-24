@@ -11,10 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * The permanent control for [OffMainWork]: proves on a device that app startup installed the real checker, that it
- * detects the main thread, and that its report reaches the diagnostics log.
- */
 @RunWith(AndroidJUnit4::class)
 class MainThreadWorkCheckerDeviceTest {
     @Test

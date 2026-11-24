@@ -2,7 +2,6 @@ package com.theoriacodex.app.developercopy
 
 import android.content.pm.PackageManager
 
-/** Pin the exact current signing certificate, rather than trusting a package name or shared debug key name. */
 internal fun PackageManager.requireCopySigner(packageName: String, expected: String) {
     require(expected.matches(Regex("[0-9a-f]{64}")))
     val certificates = getPackageInfo(

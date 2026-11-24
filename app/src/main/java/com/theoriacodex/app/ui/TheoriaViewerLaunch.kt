@@ -13,7 +13,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import kotlinx.coroutines.launch
 
-/** A feed result opened in the Viewer: its posts, where to start, and whether the Viewer keeps following the feed. */
 internal data class FeedViewerLaunch(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
@@ -21,13 +20,6 @@ internal data class FeedViewerLaunch(
     val visibilityFilters: SearchVisibilityFilters,
 )
 
-/**
- * Opens [session] in the Viewer; every Viewer launch ends here. The session is retained for the Viewer
- * destination to claim, then the Viewer is navigated to. Launches differ in two ways, which each caller states:
- * - [saveContext] saves the launch context, so a Viewer recreated after process death restores its place from it.
- *   Search saves its own when it opens a result; Creator and related launches leave the saved context as it was.
- * - [singleTop] lets a launch reuse a Viewer already on top instead of stacking another.
- */
 internal suspend fun TheoriaShell.launchViewer(session: ViewerSession, saveContext: Boolean, singleTop: Boolean) {
     features.offlineMedia.store.load()
     viewerSessions.retain(session)
@@ -35,7 +27,6 @@ internal suspend fun TheoriaShell.launchViewer(session: ViewerSession, saveConte
     navController.navigate(AppRoute.Viewer) { launchSingleTop = singleTop }
 }
 
-/** Opens a feed result, binding the Viewer's like action and related strip to the query the feed shows at this tap. */
 internal suspend fun TheoriaShell.openFeedViewer(
     source: ViewerStreamSource,
     launch: FeedViewerLaunch,
@@ -59,12 +50,10 @@ internal suspend fun TheoriaShell.openFeedViewer(
     launchViewer(session, saveContext, singleTop)
 }
 
-/** Opens the Viewer from a Codex; resumes at the saved position when this post has one. */
 internal fun TheoriaShell.openCodexViewer(codexId: String, visiblePosts: List<Post>, index: Int) {
     openStaticViewer(visiblePosts, ViewerLaunchContext("codex:$codexId", index, ViewerStreamSource.CODEX, 0), saveContext = true)
 }
 
-/** Opens a related shelf no feed owner pages, such as a live Codex's; like other related streams it is not restored. */
 internal fun TheoriaShell.openRelatedViewer(seed: Post, shelfPosts: List<Post>, index: Int) {
     openStaticViewer(shelfPosts, relatedViewerContext(seed, index), saveContext = false)
 }
@@ -78,7 +67,6 @@ private fun TheoriaShell.openStaticViewer(visiblePosts: List<Post>, context: Vie
     }
 }
 
-/** Opens one Recents section in the Viewer, resuming each post unless asked to start over. */
 internal fun TheoriaShell.openRecentSection(
     entries: List<RecentPostEntry>,
     index: Int,
@@ -103,7 +91,6 @@ internal fun TheoriaShell.openRecentSection(
     }
 }
 
-/** Replaces any open Viewer with a session holding one post, or reports that the post could not be loaded. */
 internal suspend fun TheoriaShell.openSinglePostViewer(queryHash: String, initialMediaIndex: Int = 0, load: suspend () -> Post?) {
     val post = runCatchingPreservingCancellation { load() }.getOrNull()
     if (post == null) {
@@ -113,16 +100,11 @@ internal suspend fun TheoriaShell.openSinglePostViewer(queryHash: String, initia
     openViewerSession(queryHash, listOf(post), initialMediaIndex)
 }
 
-/**
- * Replaces any open Viewer, with every level of its trail, with a fresh session over [posts], which also teach the file
- * mirror index.
- */
 internal suspend fun TheoriaShell.openViewerSession(queryHash: String, posts: List<Post>, initialMediaIndex: Int = 0) {
     data.fileMirrors.learn(posts)
     if (navigation.currentRoute == AppRoute.Viewer) {
         routes.viewer.current?.clearSession(retainPresentation = true)
         viewerSessions.clear()
-        // A trail stacks Viewer entries; popping to the route alone would leave the levels under the top one.
         do {
             val popped = navController.popBackStack()
         } while (popped && navController.currentDestination?.route == AppRoute.Viewer)

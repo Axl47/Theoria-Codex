@@ -24,13 +24,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * A fixed browsing session against the installed Debug app's real accounts and live feeds, reporting what it
- * downloaded. It first clears disposable media caches, as Settings does, so every run starts from the same state
- * (`theoriaKeepCaches=true` keeps them). Feeds change between runs, so compare medians of several runs per build.
- * Excluded from the default lane; `scripts/real_data_device.sh data-usage` passes `theoriaLiveDataUsage=true`.
- * It drives the app only through accessibility nodes and never captures the screen.
- */
 @RunWith(AndroidJUnit4::class)
 class LiveDataUsageSessionTest {
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -81,7 +74,6 @@ class LiveDataUsageSessionTest {
         }
     }
 
-    /** Opens the largest visible card (cards are long-clickable too); the Viewer hides the bottom navigation. */
     private fun openViewerAndSwipe(): Boolean {
         val card = device.findObjects(By.clickable(true).longClickable(true))
             ?.maxByOrNull { it.visibleBounds.width() * it.visibleBounds.height() }

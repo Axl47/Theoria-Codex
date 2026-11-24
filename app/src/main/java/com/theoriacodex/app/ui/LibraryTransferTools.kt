@@ -41,10 +41,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import com.theoriacodex.domain.series.SeriesId
 
-/**
- * Transfer work (the app's one download queue, Activity-owned removals, backup and offline owners) with shell-owned
- * Android document pickers and transient dialogs.
- */
 internal class LibraryTransferTools(
     val downloads: PostDownloads,
     val downloadRemovals: DownloadRemovals,
@@ -58,13 +54,10 @@ internal class LibraryTransferTools(
     sheetOpen: MutableState<Boolean>,
     sheetCodexId: MutableState<String?>,
 ) {
-    /** Whether the Library's offline and downloads sheet is open; saved, so a rotation keeps it open. */
     var showDownloads by sheetOpen
 
-    /** The Codex whose offline row the open sheet scrolls to and marks, if it was opened for one. */
     var markedCodexId by sheetCodexId
 
-    /** Opens the offline and downloads sheet, on [codexId]'s row when one is given. */
     fun openTransfers(codexId: String?) {
         markedCodexId = codexId
         showDownloads = true
@@ -117,7 +110,6 @@ internal fun rememberLibraryTransferTools(
             sheetCodexId = sheetCodexId,
         )
     }
-    // The open sheet shows the reason itself; closed, it would otherwise be lost.
     LaunchedEffect(tools) { offline.preparationFailures.collect { if (!tools.showDownloads) currentMessage(it) } }
     return tools
 }
@@ -135,7 +127,6 @@ private fun rememberAutoBackupFolderPicker(autoBackup: AutoBackupWorkflow?): Man
     }
 }
 
-/** A backup that keeps failing protects nothing, so say so where it will be seen, not only in Settings. */
 @Composable
 private fun AutoBackupFailureEffect(autoBackup: AutoBackupWorkflow?, onMessage: suspend (String) -> Unit) {
     val currentMessage by rememberUpdatedState(onMessage)

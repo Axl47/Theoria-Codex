@@ -77,7 +77,6 @@ internal data class ApkIdentity(
     val signatureDigests: Set<String>,
 )
 
-/** Pure release policy; Android package parsing remains a thin boundary above it. */
 internal fun validateApkIdentityPolicy(
     installed: ApkIdentity,
     archive: ApkIdentity,

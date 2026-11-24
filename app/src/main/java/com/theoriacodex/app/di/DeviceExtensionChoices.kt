@@ -17,13 +17,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/**
- * What this device decided and knows about extensions, in a file Android neither backs up nor transfers to a new
- * phone: turning an extension on is a decision made on a device, about the code installed on it. A profile backup
- * carries only the repos ([com.theoriacodex.domain.series.ExtensionRepos.restore] merges them in); the trusted
- * extensions and languages stay on the device. Nothing else is read: not the settings store, where builds before
- * the first release with extensions kept these choices (see [forgetLegacyExtensionData]).
- */
 internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceStore {
     private val lock = Mutex()
 
@@ -75,11 +68,6 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
     }
 }
 
-/**
- * Removes what debug builds kept where Android backs it up, before extensions reached a release: the choices in the
- * settings store and extension preferences in `shared_prefs`. Nothing is carried over, so an extension that was on in
- * such a build is turned on once more. Runs at every start; it writes nothing once both are gone.
- */
 internal suspend fun forgetLegacyExtensionData(context: Context, settings: SettingsRepository) {
     if (settings.observeSettings().first().extensions != ExtensionChoices()) settings.updateSettings { it.copy(extensions = ExtensionChoices()) }
     ExtensionHost.deleteLegacyPreferences(context)

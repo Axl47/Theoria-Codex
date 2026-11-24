@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.Credentials
 
-/** One stored site as the runtime sees it. [adapter] is null while the site is unusable. */
 data class CustomSiteState(val profile: SiteProfile, val hasCredentials: Boolean, val adapter: SourceAdapter?) {
     val source: SourceKey get() = SourceKey.of(profile)
 
@@ -37,9 +36,7 @@ data class CustomSiteState(val profile: SiteProfile, val hasCredentials: Boolean
         }
 }
 
-/** An immutable view of every user-added site; [revision] changes with each rebuild. */
 data class CustomSourceSnapshot(val revision: Long, val sites: List<CustomSiteState>) {
-    /** Usable sites only: a known family, and keys stored when the site requires them. */
     val adapters: Map<SourceKey, SourceAdapter> = sites.mapNotNull { site -> site.adapter?.let { site.source to it } }.toMap()
 
     companion object {
@@ -47,19 +44,12 @@ data class CustomSourceSnapshot(val revision: Long, val sites: List<CustomSiteSt
     }
 }
 
-/**
- * Turns stored profiles and keys into registered adapters and presentations (plan C4, C5). Rebuilt
- * whenever profiles or custom-site keys change, without an app restart. Adapters hold a key
- * snapshot, so a key edit takes effect through the rebuild.
- */
 internal class CustomSourceRuntime(
     profiles: SiteProfileRepository,
     private val credentials: SiteCredentialsStore,
     private val families: SiteFamilyRegistry,
-    /** A [com.theoriacodex.sources.custom.CustomSiteHttpClient]: HTTPS only, vetted redirects. */
     private val http: SourceHttpClient,
     scope: CoroutineScope,
-    /** Receives the saved sites whose API accepts their key in an `Authorization` header. */
     private val publishMediaKeys: (List<SiteMediaKey>) -> Unit = {},
     private val installPresentations: (List<SourcePresentation>) -> Unit = SourcePresentationCatalog::installCustom,
 ) {
@@ -69,7 +59,6 @@ internal class CustomSourceRuntime(
 
     val snapshot: StateFlow<CustomSourceSnapshot> = mutableSnapshot.asStateFlow()
 
-    /** Returns once the stored sites have been built into [snapshot] at least once, so their adapters exist. */
     suspend fun awaitFirstBuild() {
         snapshot.first { it.revision > 0 }
     }
@@ -81,10 +70,6 @@ internal class CustomSourceRuntime(
         }
     }
 
-    /**
-     * Any available source always has a presentation: new entries are installed before the snapshot
-     * (and so its adapters) is published, and removed entries are withdrawn only after.
-     */
     private fun publish(next: CustomSourceSnapshot) {
         val presentations = next.sites.mapIndexed { index, site -> site.presentation(CUSTOM_PRESENTATION_ORDER_START + index) }
         installPresentations((presentations + installed).distinctBy(SourcePresentation::source))
@@ -114,7 +99,6 @@ internal class CustomSourceRuntime(
     }
 }
 
-/** Label from the profile; Referer and User-Agent overrides apply to media requests (plan C5). */
 private fun CustomSiteState.presentation(order: Int): SourcePresentation = customSourcePresentation(
     source = source,
     label = profile.label,

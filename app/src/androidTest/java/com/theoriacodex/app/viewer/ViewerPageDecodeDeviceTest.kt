@@ -35,10 +35,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * A generated tall strip, served over loopback, decoded on the device's GPU as the vertical reader and its prefetch
- * request it. Logs each decoded size under [TAG].
- */
 @RunWith(AndroidJUnit4::class)
 class ViewerPageDecodeDeviceTest {
     @get:Rule val compose = createComposeRule()
@@ -50,7 +46,6 @@ class ViewerPageDecodeDeviceTest {
         var slotSized by mutableStateOf<Size?>(null)
         var pageSized by mutableStateOf<Size?>(null)
         compose.setContent {
-            // The slot a page lays out in before its shape is known.
             Column {
                 AsyncImage(
                     buildViewerImageRequest(context, "${server.baseUrl}/slot.jpg", SOURCE), null,
@@ -65,7 +60,6 @@ class ViewerPageDecodeDeviceTest {
         compose.waitUntil(DECODE_TIMEOUT_MS) { slotSized != null && pageSized != null }
         Log.i(TAG, "viewport=${viewport}px strip=${STRIP_WIDTH}x$STRIP_HEIGHT slotSized=${slotSized.px()} pageSized=${pageSized.px()}")
         val page = requireNotNull(pageSized)
-        // Full width, unless the strip is taller than this GPU draws at that width (4096px at the least).
         assertTrue("page decoded ${page.px()} for a ${viewport}px screen", page.width >= viewport || page.height >= MIN_TEXTURE_EDGE_PX)
         assertEquals(STRIP_HEIGHT.toFloat() / STRIP_WIDTH, page.height / page.width, 0.01f)
     }
@@ -93,7 +87,6 @@ class ViewerPageDecodeDeviceTest {
 
     private fun Size?.px() = this?.let { "${it.width.toInt()}x${it.height.toInt()}" }
 
-    /** Serves one generated strip under any name, on a fresh memory cache so every name decodes anew. */
     private fun stripServer(block: (BenchMediaServer) -> Unit) {
         check(context.packageName.startsWith("com.theoriacodex.") && context.packageName != "com.theoriacodex")
         val root = File(context.cacheDir, "page-decode-fixture").apply { deleteRecursively(); mkdirs() }
@@ -115,7 +108,6 @@ class ViewerPageDecodeDeviceTest {
 
     private companion object {
         const val TAG = "ViewerPageDecode"
-        /** A webtoon strip wider than a phone screen, short enough that its screen-width decode fits an 8192px texture. */
         const val STRIP_WIDTH = 1600
         const val STRIP_HEIGHT = 9_600
         const val BAND_PX = 400

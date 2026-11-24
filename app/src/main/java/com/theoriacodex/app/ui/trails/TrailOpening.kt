@@ -31,13 +31,8 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
-/** A fork ready to show: its crumb label, the trail it is ([com.theoriacodex.app.viewer.trailKey]) and its feed. */
 internal class TrailLevel(val label: String, val trailKey: String, val feed: TrailFeed)
 
-/**
- * Holds a fork between the opener, which loads its first page, and the Viewer entry that shows it. Activity-scoped, and
- * keyed by the fork's Viewer session so only the entry claiming that session takes it.
- */
 internal class TrailHandoffViewModel : ViewModel() {
     private var pending: Pair<String, TrailLevel>? = null
 
@@ -53,16 +48,10 @@ internal class TrailHandoffViewModel : ViewModel() {
     }
 }
 
-/** The activity's [TrailHandoffViewModel], the same instance from the shell and from any Viewer entry. */
 @Composable
 internal fun rememberTrailHandoff(): TrailHandoffViewModel =
     viewModel(viewModelStoreOwner = LocalContext.current.findActivity() as ComponentActivity)
 
-/**
- * The shell's [TrailOpener]: loads a fork's first page, then pushes it as another Viewer entry, but only over the screen it
- * was asked from. When the user has moved on meanwhile it opens nothing and ends in a [CancellationException], since
- * there is no failure to report.
- */
 @Composable
 internal fun rememberTrailOpener(shell: TheoriaShell): TrailOpener {
     val handoff = rememberTrailHandoff()
@@ -78,7 +67,6 @@ private suspend fun TheoriaShell.openTrail(
     marks: () -> BrowsingMetadata?,
 ): Boolean {
     val origin = navController.currentBackStackEntry
-    // A fork from a Viewer keeps that level's filters; one from a grid has only its query's.
     val parent = routes.viewer.current?.session?.value?.searchVisibilityFilters
         ?.takeIf { origin?.destination?.route == AppRoute.Viewer } ?: SearchVisibilityFilters()
     val spec = trailSpec(request, shellTrailSources(), parent) ?: return false
@@ -99,18 +87,15 @@ private suspend fun TheoriaShell.openTrail(
         if (session != null) {
             if (!stillOver(origin, request.from)) throw CancellationException("The screen or post this trail was opened from is gone")
             handoff.hand(session.sessionId, TrailLevel(spec.label, request.trailKey(), feed))
-            // A fork saves no launch context: the Viewer it covers keeps its own for restoration.
             launchViewer(session, saveContext = false, singleTop = false)
             opened = true
         }
     } finally {
-        // Also on cancellation: a fork that never opened has no entry to close its feed.
         if (!opened) feed.close()
     }
     return opened
 }
 
-/** The posts [filters] leave visible, as the Viewer filters the pages a live feed adds later. */
 private fun List<Post>.visibleUnder(filters: SearchVisibilityFilters, marks: BrowsingMetadata?): List<Post> = filterSearchResults(
     results = this,
     filters = filters,
@@ -119,17 +104,12 @@ private fun List<Post>.visibleUnder(filters: SearchVisibilityFilters, marks: Bro
     watchedPostIds = marks?.watchedPostIds.orEmpty(),
 )
 
-/**
- * Whether [origin] is still the screen on top and, when it is a Viewer, still shows [from]. Paging cancels a fork from an
- * effect that can run only after the fork finished, so the Viewer's own selection is read here, right before navigating.
- */
 private fun TheoriaShell.stillOver(origin: NavBackStackEntry?, from: Post): Boolean {
     if (navController.currentBackStackEntry !== origin) return false
     if (origin?.destination?.route != AppRoute.Viewer) return true
     return routes.viewer.current?.state?.value?.currentPage?.post?.id == from.id
 }
 
-/** Each trail kind bound to the shell's loaders, read with the current sources and settings. */
 internal suspend fun TheoriaShell.shellTrailSources(): TrailSources {
     val available = sources.availableSources.value
     val runtime = data.settingsRepository.observeSettings().first().runtime

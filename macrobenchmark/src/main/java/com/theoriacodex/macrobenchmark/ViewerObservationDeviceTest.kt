@@ -11,7 +11,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.regex.Pattern
 
-/** Device-only observation regression: real overlay, fitted pixels, identity and route departure. */
 @RunWith(AndroidJUnit4::class)
 class ViewerObservationDeviceTest {
     @Test

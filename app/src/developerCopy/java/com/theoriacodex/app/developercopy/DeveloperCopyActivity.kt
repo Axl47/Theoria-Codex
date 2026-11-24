@@ -30,7 +30,6 @@ import androidx.core.net.toUri
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** ADB launches this only after placing a one-shot request in Debug's private storage using run-as. */
 class DeveloperCopyActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -65,7 +64,6 @@ class DeveloperCopyActivity : Activity() {
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    // Publish only the non-secret outcome below.
                 } finally {
                     if (!completed) writeStatus(job, "failed")
                 }
@@ -98,7 +96,6 @@ class DeveloperCopyActivity : Activity() {
                     settings, RoomProfileBackupStore(database), FileBackedSavedSearchRepository(storage),
                     FileBackedReadingPositionRepository(storage), File(storage, "pending_profile_restore.json"),
                 )
-                // Recover any earlier admitted restore before starting a new snapshot's import.
                 backup.recoverPendingRestore()
                 backup.restore(payload.backup, applyPreferences = true, selectImportedProfile = true)
                 check(AndroidCredentialEnvelopeStore(this).writeVerified(payload.credentials) == CredentialStoreWriteResult.Success)
@@ -128,7 +125,6 @@ class DeveloperCopyActivity : Activity() {
     }
 }
 
-/** request.json, written by scripts/copy_production_to_debug.py and consumed once. */
 @Serializable
 private class DeveloperCopyRequest(
     @SerialName("job")
@@ -139,7 +135,6 @@ private class DeveloperCopyRequest(
     val productionCertificateSha256: String,
 )
 
-/** status.json, polled by scripts/copy_production_to_debug.py. */
 @Serializable
 private class DeveloperCopyStatus(
     @SerialName("job")

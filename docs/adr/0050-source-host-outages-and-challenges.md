@@ -16,6 +16,9 @@ Providers go down, serve maintenance pages, or sit behind Cloudflare browser che
 - The cookie jar serves only allowed hosts; a throwing store means no cookies, never an exception on a request thread. `BrowserCookieStore` is a port so rules are tested without `android.webkit`.
 - `SiteHealthCheck` is a light untracked home-page request: an oversized page still counts as answered. `countChallenges` is for custom sites, whose gates cover every page; a built-in may challenge its home page while its API works. `clearsChallenge` judges by status and headers alone and leaves the tracker alone until the check is completed.
 - `requestWithChallengeFallback` returns `CHALLENGED_RESPONSE` (a synthetic 403) for a challenge the client already turned into an outage, so the caller can route to a mirror while the outage stays recorded.
+- `TheoriaApplication` creates one `HostOutageTracker` and one `ChallengeBrowsers` set, and shares both with the extension host (`ExtensionSourceHost.attach`) and with the app's own HTTP clients, so every source, extensions included, keeps one record of down or challenged hosts and the app shows and clears it the same way. The tracker's online check reads a `NetworkMonitor` that starts watching on first use.
+- `AppHttpClients` shares one connection pool and one cookie bridge (`SiteCookieBridge`); the bridge is the only place browser cookies reach the app's own requests.
+- The app's `ChallengePass` only passes checks for hosts that keep the browser's cookies (`SiteCookieBridge.keepsCookies`), so a never-verified built-in site asks the user first, and it loads only the site's root (`Request::siteRoot`) in the hidden browser, since these requests can carry API keys.
 
 ## Consequences
 
@@ -34,3 +37,4 @@ One failing host cannot stall other features, and one hidden browser serves all 
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceAdapterCommon.kt`: failure message for `HostUnavailableException`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceRequests.kt`: `requestWithChallengeFallback`, `CHALLENGED_RESPONSE`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/custom/CustomSiteHttpClient.kt`: `sendTracked`
+- `app/src/main/java/com/theoriacodex/app/TheoriaApplication.kt`: `hostOutages`, `challengeBrowsers`, `httpClients`, `siteCookieBridge`

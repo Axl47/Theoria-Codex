@@ -29,13 +29,11 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         waitFor("original post is saved to the Trail collection") { io { container.content.observeCodexItems(codex.codexId).first() }.any { it.postId == original.id } }
         waitFor("Viewer save button shows Saved to Trail collection", timeoutMillis = 5_000) { save.description()?.startsWith("Saved to Trail collection") == true }
 
-        // Every fixture post carries "landscape", so it is universal and offers no chip; half carry "green", post 3 among them.
         activate(compose.onNodeWithTag("viewer-trail-chip-tag:green"))
         val forkCrumb = compose.onNodeWithTag("viewer-trail-crumb-1")
         waitFor("fork crumb is displayed", timeoutMillis = 15_000) { forkCrumb.isDisplayed() }
         val forkStart = selectedPost()
 
-        // The active media overlay owns the paging swipe; stay off the system back-gesture edges.
         compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true).performTouchInput {
             swipe(start = Offset(width * 0.85f, height * 0.5f), end = Offset(width * 0.15f, height * 0.5f), durationMillis = 400L)
         }
@@ -46,7 +44,6 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
     }
 
 
-    /** The post the Viewer's strip marks as open, by its fixture id. */
     private fun selectedPost(): String? = compose.onAllNodes(isSelected()).fetchSemanticsNodes()
         .firstNotNullOfOrNull { node ->
             node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()?.removePrefix("Open post ")

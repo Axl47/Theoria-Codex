@@ -38,8 +38,6 @@ class NetworkUsageTest {
     @After
     fun stop() = server.stop(0)
 
-    // Images, downloads and video share one base client, so a counter copied into all three would count every
-    // image three times.
     @Test
     fun `each client counts only its own traffic`() {
         val clients = AppHttpClients(CookieJar.NO_COOKIES)
@@ -65,7 +63,6 @@ class NetworkUsageTest {
 
         val image = NetworkUsage.snapshot().getJSONObject("stacks").getJSONObject("image")
         assertEquals(1, image.getInt("requests"))
-        // Reads arrive in OkHttp's buffer-sized segments, so the count covers the segments read, not the whole body.
         assertTrue(image.getInt("bytes") in PARTIAL_BYTES until BODY_BYTES / 2)
     }
 

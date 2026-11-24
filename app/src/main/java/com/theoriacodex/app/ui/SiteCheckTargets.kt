@@ -6,13 +6,6 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.isExtensionSource
 import com.theoriacodex.sources.http.HostOutageTracker
 
-/**
- * The browser check [source] needs, for the shared check page; null when it has nothing to check. A built-in or stored
- * site's opens its home page with the browser's own agent, which completing saves for the site; a built-in site's
- * requests carry the browser's cookies while it is open, which a stored site's always do. An extension source's
- * opens the request the site refused, with the agent it refused, since the extension keeps sending that one, and is
- * passed once the extensions' own client gets through.
- */
 internal fun siteCheckTarget(container: TheoriaAppContainer, source: SourceKey): SiteCheckTarget? {
     if (source.isExtensionSource()) return extensionCheckTarget(container, source)
     val sites = container.customSites
@@ -34,7 +27,6 @@ private fun extensionCheckTarget(container: TheoriaAppContainer, source: SourceK
     val site = extensions.sites()[source] ?: return null
     val outages = container.sources.outages
     val (host, refused) = outages.outages.value.entries.firstNotNullOfOrNull { (host, outage) ->
-        // Records outlive their challenge until the host is asked again, and one of those may no longer be reachable.
         outage.refused
             ?.takeIf { outages.isChallenged(it.url) && site.hosts.any { owned -> HostOutageTracker.hostBelongsToSite(host, owned) } }
             ?.let { host to it }

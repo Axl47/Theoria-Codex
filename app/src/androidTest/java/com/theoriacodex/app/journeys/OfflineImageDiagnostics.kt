@@ -24,7 +24,6 @@ import java.io.Closeable
 import java.io.File
 import kotlin.math.roundToInt
 
-/** Test-only request observation and pixels; never enabled in the shipped app. */
 internal class OfflineImageDiagnostics : Closeable, EventListener.Factory {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
@@ -56,7 +55,6 @@ internal class OfflineImageDiagnostics : Closeable, EventListener.Factory {
     fun activeMediaShowsFixturePixels(compose: ComposeTestRule, decor: View): Boolean {
         val surface = compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true)
             .fetchSemanticsNodes().singleOrNull() ?: return false
-        // UiAutomation captures the display, while Compose reports window-relative bounds.
         val center = surface.boundsInWindow.center + windowGeometry(decor).second
         val screenshot = instrumentation.uiAutomation.takeScreenshot() ?: return false
         return try {
@@ -131,7 +129,6 @@ internal class OfflineImageDiagnostics : Closeable, EventListener.Factory {
 
     override fun close() {
         Coil.setImageLoader(original)
-        // newBuilder shares the application's caches. Do not shut those caches down here.
     }
 
     companion object {

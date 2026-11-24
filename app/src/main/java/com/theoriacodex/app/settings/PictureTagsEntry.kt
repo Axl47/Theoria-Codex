@@ -34,7 +34,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
-/** Builds Settings' Picture tags row and page from the app's [pictures]; deleting runs in [scope], so leaving finishes it. */
 @Composable
 internal fun rememberPictureTagsEntry(pictures: AppPictures, scope: CoroutineScope): SettingsPicturesEntry {
     val state by pictures.model.states.collectAsStateWithLifecycle()
@@ -60,7 +59,6 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
         SettingsHeader(SettingDestinations.PictureTags.title, onBack, SETTINGS_PATH)
         SettingsGroup(null) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // What it does is worth saying before a 98 MB download, not after.
                 if (state != ModelState.Ready) Text("Tags pictures on this phone, for hidden tags, For You and save suggestions.")
                 when (val download = state) {
                     ModelState.Absent -> Button(onClick = model::download) { Text("Download ($size)") }
@@ -101,10 +99,6 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
     }
 }
 
-/**
- * "120 of 450 Library posts tagged", and when some are left, when the rest are tagged: while charging on Wi-Fi, and
- * a video's frames only while the phone also sits unused; null for an empty Library.
- */
 private fun libraryProgress(progress: VisionProgress): String? {
     if (progress.total == 0) return null
     val done = "${progress.analysed} of ${progress.total} Library posts tagged"

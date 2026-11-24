@@ -199,6 +199,31 @@ and link the record that replaces it.
 | [0179](0179-viewer-swipe-and-vertical-gallery.md) | Swipes commit by velocity and distance with a catchable settle, and vertical galleries select only on reader scrolls |
 | [0180](0180-viewer-trail-forks.md) | A Viewer level runs at most one trail fork and cancels it when the user pages away |
 | [0181](0181-viewer-video-surface-rules.md) | Viewer video pages pick their stream once, preload only cache-backed streams, and render subtitles outside the video frame |
+| [0182](0182-app-job-ids.md) | JobScheduler jobs have fixed, never reused IDs declared in one enum |
+| [0183](0183-application-image-loader-and-memory.md) | The image loader keeps a large immutable disk cache and big models are released when the process is at risk |
+| [0184](0184-developer-copy-pipeline.md) | Copying production data into Debug reads production read-only, pins both signers and never exposes secrets |
+| [0185](0185-device-and-live-test-rules.md) | Device, live and benchmark tests use isolated packages, text-only reports and fixture providers |
+| [0186](0186-app-container-startup-and-wiring.md) | Startup opens every durable store and registers restored work in a fixed order before any screen runs |
+| [0187](0187-app-lock.md) | The app lock gates the whole app behind a device-owner check and fails open only without a screen lock |
+| [0188](0188-custom-source-runtime.md) | User-added sites are rebuilt into adapters on every profile or key change and published presentation-first |
+| [0189](0189-extension-host-wiring.md) | The app attaches the extension host lazily, keeps extension choices on the device and watches package changes |
+| [0190](0190-home-pager-and-tab-navigation.md) | The home tabs are one pager whose swipes, taps and bar sizing follow fixed rules |
+| [0191](0191-series-background-work.md) | Series downloads and update checks run as JobScheduler jobs with lane-specific network rules |
+| [0192](0192-series-reader-session.md) | Series open in the Viewer as sessions whose progress is written in app scope, in order |
+| [0193](0193-settings-and-search-entry-points.md) | Settings can be opened from anywhere and every setting has exactly one binding in the search box |
+| [0194](0194-shell-activity-owned-state.md) | Cross-screen shell state lives in Activity-scoped owners, process-local unless it is a small saved handoff |
+| [0195](0195-shell-overlays-and-library-surfaces.md) | Shell overlays, Library sections and undo offers keep their state and scope past the screen that opened them |
+| [0196](0196-source-health-and-browser-checks.md) | Source health is derived from the outage tracker, and a browser check targets the request that was refused |
+| [0197](0197-viewer-launch-and-trail.md) | Every Viewer launch goes through launchViewer, and each caller states whether it saves context or reuses the top Viewer |
+| [0198](0198-library-picture-jobs.md) | Library picture work runs as two JobScheduler jobs that wait for charging, unmetered network and, for frames, an idle device |
+| [0199](0199-macrobenchmark-journeys.md) | Benchmark journeys use the real UI and judge playback from sampled pixels, skipping autoplay checks on emulator decoders |
+| [0200](0200-release-data-acceptance.md) | The minified acceptance APK writes and reads the stored formats across a process restart, and loads the Gson-written files it holds |
+| [0201](0201-retained-destination-state.md) | Destinations draw from activity-wide read models and retained flows so a returning screen needs no new query |
+| [0202](0202-route-screen-wiring-rules.md) | Route screens pass the shell only what each callback reads and publish owners before the lifecycle resume that uses them |
+| [0203](0203-triage-decks-seeded-from-the-grid.md) | A Triage deck opens on the posts its grid showed and follows that one query, with likes and hides written against the profile active at the swipe |
+| [0204](0204-update-feed-and-download-rules.md) | The updater tolerates malformed release entries and publishes a download only from a still-admitted caller |
+| [0205](0205-viewer-route-session-and-effects.md) | The Viewer route consumes its launch payload once, runs effects in order against current state, and extends live sessions off the main thread |
+| [0206](0206-vision-acceptance-phases.md) | The picture tagger is accepted on a device in phases that switch charging and idleness between them |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
 | [0209](0209-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |

@@ -42,7 +42,6 @@ class AndroidCredentialEnvelopeStoreDeviceTest {
 
         assertFalse(envelopeFile().exists())
         assertFalse(keyStore().containsAlias(TEST_KEY_ALIAS))
-        // Keep the local reference live so this also guards against eager delegated properties.
         assertEquals(AndroidCredentialEnvelopeStore::class, constructed::class)
     }
 

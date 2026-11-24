@@ -55,7 +55,6 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The custom-site graph end to end, without restarts: store → runtime → registry, and the controller. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CustomSitesControllerImplTest {
     private val profiles = InMemorySiteProfileRepository()
@@ -68,7 +67,6 @@ class CustomSitesControllerImplTest {
     private val outages = HostOutageTracker()
     private val cookieStore = FakeBrowserCookieStore()
 
-    /** Each install: the custom sources installed, and the sources whose adapters were visible at that moment. */
     private val installs = mutableListOf<Pair<Set<SourceKey>, Set<SourceKey>>>()
     private val labels = mutableMapOf<SourceKey, String>()
 
@@ -88,7 +86,6 @@ class CustomSitesControllerImplTest {
 
     private fun TestScope.graph(): Graph {
         val scope: CoroutineScope = backgroundScope + UnconfinedTestDispatcher(testScheduler)
-        // The unconfined collector publishes the first (empty) snapshot during construction.
         var built: CustomSourceRuntime? = null
         val runtime = CustomSourceRuntime(profiles, keys, families, NoNetwork, scope) { presentations ->
             installs += presentations.mapTo(mutableSetOf()) { it.source } to built?.snapshot?.value?.adapters?.keys.orEmpty()
@@ -141,7 +138,6 @@ class CustomSitesControllerImplTest {
 
         installs.clear()
         graph.controller.remove(SITE.id)
-        // Kept while the adapter is still visible; withdrawn once it is gone.
         assertEquals(listOf(setOf(SITE) to setOf(SITE), emptySet<SourceKey>() to emptySet()), installs)
     }
 
@@ -417,11 +413,9 @@ class CustomSitesControllerImplTest {
         addedAtEpochMs = 0,
     )
 
-    /** Probes answer [answer]; adapters are the real Gelbooru-family ones (no request is made). */
     private class ScriptedFamily : SiteFamily by GelbooruFamily {
         var answer: FamilyProbe = FamilyProbe.Match(suggestedLabel = null, searchTermLimit = null)
 
-        /** The headers of the latest probe, to show which agent a verification probed with. */
         var probedWith: SiteHeaders? = null
 
         override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe {

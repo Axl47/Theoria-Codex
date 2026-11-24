@@ -56,7 +56,6 @@ class OfflineViewerWorkflowTest {
             val offline = requireNotNull(graph.features.offlineMedia)
             val playback = sources.map { source ->
                 val selected = ImageRef("https://source.invalid/${source.id.sourcePostId}-small.webm", null, "video/webm")
-                // These bytes exercise metadata boundaries only; this test makes no decoder/playback claim.
                 offline.store.save(source, listOf(selected), "rendition-metadata") { _, output ->
                     output.writeText("controlled offline rendition metadata fixture")
                     null
@@ -72,7 +71,6 @@ class OfflineViewerWorkflowTest {
             assertCanonicalMedia(sources[1], requireNotNull(graph.content.getPost(sources[1].id)))
 
             val launch = ViewerSession(playback, ViewerLaunchContext("watched-source", 2, ViewerStreamSource.SEARCH, 0))
-            // Media progress can reach storage before the first visible-post write finishes.
             workflow(graph).recordVisibleMediaProgress(playback[2], 1, launch)
             assertCanonicalMedia(sources[2], graph.data.recentsRepository.observeWatchedPosts().first().single().post)
             workflow(graph).recordVisiblePost(playback[2], 1, launch)

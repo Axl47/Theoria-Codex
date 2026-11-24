@@ -10,10 +10,6 @@ import com.theoriacodex.app.backup.BackupControls
 import com.theoriacodex.app.backup.autoBackupSummary
 import com.theoriacodex.app.ui.LibraryTransferTools
 
-/**
- * Builds Settings' Backup row and page from the activity's transfer tools: backing up asks its choices in a sheet,
- * then opens the document picker; daily backup is a group of its own, and its failure shows as the row's value.
- */
 @Composable
 internal fun rememberSettingsBackupEntry(tools: LibraryTransferTools): SettingsBackupEntry {
     val summary = tools.autoBackup?.let { owner ->

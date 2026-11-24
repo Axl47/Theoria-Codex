@@ -23,17 +23,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Proves the trust step and the Extensions page in the real debug app, with a real extension installed as a package
- * the way Mihon installs one (`adb install`, see `extension-host/README.md`). Runs only with `-e extensionSourceLive true`.
- *
- * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
- * process anew: [anInstalledExtensionRunsOnlyOnceTurnedOn], then [aChangedSettingSurvivesARestart], then
- * [anUninstalledExtensionLeavesTheSeriesTab], which removes the package, then, after installing a copy signed by
- * another key, [aCopySignedWithAnotherKeyIsOff].
- *
- * The report is names, counts and labels only, never images.
- */
 @RunWith(AndroidJUnit4::class)
 class ExtensionsLiveTest {
     private val live = SeriesLiveDriver()
@@ -41,7 +30,6 @@ class ExtensionsLiveTest {
     private val extensions get() = live.series.extensions
     private val settings get() = live.container.data.settingsRepository
 
-    /** What one run leaves for the next, in the app's own data. */
     private val notes by lazy { live.context.getSharedPreferences("extensions_live_test", Context.MODE_PRIVATE) }
 
     @Before
@@ -49,7 +37,6 @@ class ExtensionsLiveTest {
 
     @Test
     fun anInstalledExtensionRunsOnlyOnceTurnedOn() {
-        // Start from nothing turned on, before the host is asked anything.
         runBlocking { extensions.installed().filter { it.on }.forEach { extensions.setOn(it.id, checkNotNull(it.signer), false) } }
         val off = installedPackage()
         live.report("installed", "${off.name} ${off.versionName}, signer ${off.signer}, on=${off.on}, languages known=${off.languages.size}")
@@ -74,7 +61,6 @@ class ExtensionsLiveTest {
         live.report("on", "${on.languages.size} languages, on: $languages; sources: ${sources.map { "${it.name} [${it.language}]" }}; loaded: ${loadedLines()}")
         assertEquals("Only the device's language is on", listOf("en"), languages)
         assertEquals("Only that language's source is offered", listOf("en"), sources.map { it.language })
-        // A second copy of the same extension, as a file in the debug folder, is another extension to turn on.
         val others = runBlocking { extensions.installed() }.filter { it.id != on.id }
         live.report("others", others.joinToString { "${it.name} on=${it.on}" }.ifEmpty { "none on the device" })
         assertTrue("Turning one extension on turns on no other", others.none { it.on })
@@ -106,7 +92,6 @@ class ExtensionsLiveTest {
 
         val stored = checkNotNull(setting(key)) { "The setting is no longer listed" }
         assertEquals("The changed setting kept its value", expected, stored.on)
-        // The value is in the source's own preferences file, which the host names apart from the app's files.
         val sourceId = settingsOf(on).single().sourceId.substringAfterLast('_')
         val file = ExtensionHost.preferencesFile(live.context, "source_$sourceId")
         assertTrue("The source's preferences file holds the value", file.readText().contains("\"$key\":{\"b\":$expected}"))
@@ -114,7 +99,6 @@ class ExtensionsLiveTest {
 
         live.openSeriesTab()
         live.tap("the Extensions button", By.desc("Extensions"))
-        // What TalkBack reads: the extension's switch is a checkable element that says it is on.
         val switch = live.waitFor("the extension's switch", switchOf(on)).let { "checkable=${it.isCheckable} checked=${it.isChecked}" }
         assertEquals("The extension's switch reports on", "checkable=true checked=true", switch)
         live.tap("the extension's page", By.text(on.name))
@@ -127,18 +111,14 @@ class ExtensionsLiveTest {
         live.context.deleteSharedPreferences("extensions_live_test")
     }
 
-    /** Removes the package while the app runs; the tab drops its source the next time it is shown, without a restart. */
     @Test
     fun anUninstalledExtensionLeavesTheSeriesTab() {
         val on = installedPackage()
         assertTrue("The extension is on", on.on)
         live.openSeriesTab()
         val before = runBlocking { live.series.sources() }.map { it.name }
-        // The Extensions page stays open across the uninstall and must drop the extension without being reopened.
         live.tap("the Extensions button", By.desc("Extensions"))
         live.waitFor("the extension's switch, on", switchOf(on).checked(true))
-        // The package's name is the last part of its install folder, up to the suffix Android adds after a hyphen;
-        // that suffix can hold hyphens of its own, a package name cannot.
         val packageName = on.id.substringBeforeLast('/').substringAfterLast('/').substringBefore('-')
         val answer = device.executeShellCommand("pm uninstall $packageName").trim()
         live.report("uninstall", "$packageName: $answer; sources before: $before")
@@ -170,14 +150,12 @@ class ExtensionsLiveTest {
         live.report("copy", "the Series tab shows \"No extensions on\", its switch is off, extensions loaded=0")
     }
 
-    /** The extension installed as a package, as the page lists it; `-e extensionName <name>` picks one when several are. */
     private fun installedPackage(): InstalledExtension {
         val name = InstrumentationRegistry.getArguments().getString("extensionName")
         return runBlocking { extensions.installed() }.firstOrNull { it.id.startsWith("/data/app/") && (name == null || it.name == name) }
             ?: error("No extension${name?.let { " named $it" }.orEmpty()} is installed as a package")
     }
 
-    /** An extension's switch in the list. Compose gives a named toggle its name as a child element. */
     private fun switchOf(extension: InstalledExtension) = By.checkable(true).hasDescendant(By.desc(extension.name))
 
     private fun setting(key: String): ExtensionSetting.Toggle? =
@@ -185,15 +163,12 @@ class ExtensionsLiveTest {
 
     private fun settingsOf(extension: InstalledExtension) = runBlocking { extensions.settings(extension.id) }
 
-    /** The row titled [title], scrolled into view when the page is longer than the screen. Settings arrive a moment after their page opens. */
     private fun showing(title: String) = device.wait(Until.findObject(By.text(title)), SeriesLiveDriver.SHORT_WAIT_MS)
         ?: device.findObject(By.scrollable(true))?.scrollUntil(Direction.DOWN, Until.findObject(By.text(title)))
         ?: error("\"$title\" is not on the page; on screen: ${live.screenText()}")
 
-    /** A switch row is one checkable element; its title can be that element or a child of it. */
     private fun androidx.test.uiautomator.UiObject2.parentOrSelfCheckable() = generateSequence(this) { it.parent }.first { it.isCheckable }
 
-    /** The host's "Loaded <extension>" log lines since this process started: one per extension whose code ran. */
     private fun loadedLines(): List<String> =
         ProcessBuilder("logcat", "-d", "--pid=${Process.myPid()}", "-s", "ExtensionHost:I").start().inputStream.bufferedReader().readLines()
             .filter { ": Loaded " in it }

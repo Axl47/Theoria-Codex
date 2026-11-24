@@ -22,7 +22,6 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ViewerVideoPrefetchDeviceTest {
-    /** The real transport against loopback: the bytes fetched must be the rendition the Viewer would play. */
     @Test
     fun prefetchRequestsTheRenditionPlaybackWillUse() = LoopbackVideo().use { server ->
         val context = InstrumentationRegistry.getInstrumentation().targetContext

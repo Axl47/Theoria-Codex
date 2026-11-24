@@ -39,16 +39,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Opt-in media buffering benchmark, driven by `scripts/media_bench_device.py`.
- *
- * Each scenario runs the app's real media stack (feed and Viewer player pools, the shared video cache, the scrub
- * frame source, the Viewer prefetch owner and Coil's loader) against [BenchMediaServer], a throttled loopback
- * server serving generated media the script pushed to `cache/media-bench`, so no provider media is involved.
- * Every run uses fresh URLs, so caches start cold, and the server reports bytes per path, including re-downloaded
- * ranges. Results are reported as one JSON instrumentation status (`mediaBench`). Without the `mediaBench`
- * argument every test is skipped.
- */
 @RunWith(AndroidJUnit4::class)
 class MediaBufferingBenchmarkTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -77,7 +67,6 @@ class MediaBufferingBenchmarkTest {
         if (::server.isInitialized) server.close()
     }
 
-    /** Four autoplaying feed cards, then the first opens in the Viewer and loops twice. */
     @Test
     fun feedToViewer() = runBlocking {
         val clips = (1..FEED_CARDS).map { url("clip_$it.mp4") }
@@ -97,7 +86,6 @@ class MediaBufferingBenchmarkTest {
         val feedFirstFrames = feed.map { (probe, _) -> probe.awaitFirstFrame() }
         delay(FEED_WATCH_MS)
 
-        // Opening the Viewer pauses the cards at once and returns their leases after the release grace.
         val atOpen = serverStats()
         val viewer = onMain {
             feed.forEach { (probe, _) -> probe.player.playWhenReady = false }
@@ -164,14 +152,6 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /**
-     * A long video opened directly: cold first frame, four seeks past the buffer, then three timeline drags through
-     * the page's scrub previews. The first drag rests on three targets past the buffer and releases on the last one,
-     * seeking as the timeline does; the second, after playback settles, rests on one target and is cancelled; the
-     * third rests between two keyframes in a stretch nothing has loaded and releases there. (The first release lands
-     * just past an earlier seek's cached stretch, so only the third needs bytes from before its target.) Stalls while
-     * playing, seeks excluded, are counted over the whole session.
-     */
     @Test
     fun viewerSeekAndScrub() = runBlocking {
         val video = url("long_1.mp4")
@@ -277,7 +257,6 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /** Instant-seek drags on a long video ([instantDrags]). */
     @Test
     fun viewerInstantDrag() = runBlocking {
         val video = url("long_1.mp4")
@@ -299,21 +278,14 @@ class MediaBufferingBenchmarkTest {
         report("viewerInstantDrag", metrics.put("server", end.json))
     }
 
-    /**
-     * Three 90 s videos in one post, opened on the middle one: it plays while the Viewer owner warms its two
-     * neighbours, then a swipe leases the right neighbour (the pager's swipe target), makes it current and plays it.
-     * The middle video plays for 20 s, or `mediaBenchSwipeWatchMs`.
-     */
     @Test
     fun viewerSwipe() = runBlocking {
         val videos = SWIPE_VIDEOS.map { name -> ImageRef(url(name), null, "video/mp4") }
         val post = Post(
-            // A Gelbooru post's media would be repaired to https; this loopback server is plain HTTP.
             id = PostId(SourceKey.NHENTAI, "media-bench-swipe-$nonce"), preview = videos[1], full = videos[1],
             media = videos, pageUrl = null, width = 1920, height = 1080, canonicalTags = emptyList(),
             rawTags = emptyList(), authorName = null, createdAtEpochMs = 1L, mediaCount = videos.size,
         )
-        // The Viewer's player and prefetcher both bind the post's source headers, so they share a cache entry.
         val swipeHeaders = post.id.source.requestHeaders()
         val infrastructure = context.videoPlaybackInfrastructure()
         warmUpVideo()
@@ -342,7 +314,6 @@ class MediaBufferingBenchmarkTest {
         onMain { viewer.markShown(1) }
         delay(arguments.getString("mediaBenchSwipeWatchMs")?.toLong() ?: SWIPE_WATCH_MS)
 
-        // The swipe's target page leases its player as the drag starts; it plays once the pager settles on it.
         val beforeSwipe = serverStats()
         val swipeStarted = SystemClock.elapsedRealtime()
         val target = onMain {
@@ -383,11 +354,6 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /**
-     * Four autoplaying feed cards; a scroll moves the first two off screen (paused, then returned warm, as a
-     * disposed card does) and brings two new cards on, which must autoplay with the rest. After the new cards
-     * play for a while, scrolling back returns the first two.
-     */
     @Test
     fun feedScroll() = runBlocking {
         val clips = (1..FEED_SCROLL_CLIPS).map { url("clip_$it.mp4") }
@@ -442,7 +408,6 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /** An nhentai-shaped 80-page gallery: open, read 40 pages, then skim 35 pages through the Viewer owner. */
     @Test
     fun galleryPaging() = runBlocking {
         val pages = (1..GALLERY_PAGES).map { index -> ImageRef(url("gallery/page_%03d.jpg".format(index)), null, "image/jpeg") }
@@ -451,7 +416,6 @@ class MediaBufferingBenchmarkTest {
             pageUrl = null, width = 1280, height = 1808, canonicalTags = emptyList(), rawTags = emptyList(),
             authorName = null, createdAtEpochMs = 1L, mediaCount = pages.size,
         )
-        // The loader, its OkHttp client and the disk cache journal are ready before any Viewer opens.
         context.imageLoader.execute(
             buildViewerImageRequest(context, "${server.baseUrl}/gallery/page_080.jpg?warmup=$nonce", SourceKey.NHENTAI),
         )
@@ -531,11 +495,6 @@ class MediaBufferingBenchmarkTest {
         )
     }
 
-    /**
-     * Closing the Viewer: the four cards lease again and must all play (every visible card autoplays). Then a
-     * Viewer opens and closes within the release grace, so the cards keep their stopped leases and resume, as
-     * the card's effect does. Returns how long until all four were playing in each case.
-     */
     private suspend fun returnToFeed(clips: List<String>, surfaces: List<BenchSurface>): Pair<Long, Long> {
         val infrastructure = context.videoPlaybackInfrastructure()
         val returnedAt = SystemClock.elapsedRealtime()
@@ -575,7 +534,6 @@ class MediaBufferingBenchmarkTest {
         return allPlaying to resumedAfter
     }
 
-    /** A Viewer page's player for [location], bound to [surface]; it plays at once only when [play] is set. */
     private fun viewerProbe(
         location: String,
         surface: BenchSurface,
@@ -589,7 +547,6 @@ class MediaBufferingBenchmarkTest {
         } to lease
     }
 
-    /** A visible feed card: it leases its player and autoplays. */
     private fun feedCard(location: String, surface: BenchSurface): Pair<PlayerProbe, VideoPlayerLease> {
         val lease = context.videoPlaybackInfrastructure().feedPreviewPlayerPool.acquire(location, headers)
         return PlayerProbe(lease.player, surface.surface).also { probe ->
@@ -598,7 +555,6 @@ class MediaBufferingBenchmarkTest {
         } to lease
     }
 
-    /** A card scrolled out of composition returns its player with its binding, as its disposal does. */
     private fun returnFeedCard(probe: PlayerProbe, lease: VideoPlayerLease) {
         probe.detach()
         context.videoPlaybackInfrastructure().feedPreviewPlayerPool.recycle(lease, retainBinding = true)
@@ -606,7 +562,6 @@ class MediaBufferingBenchmarkTest {
 
     private fun String.toPath(): String = substringAfter(server.baseUrl).substringBefore('?')
 
-    /** One Viewer player plays its first frame, so codec and player setup costs are paid before measuring. */
     private suspend fun warmUpVideo() {
         val infrastructure = context.videoPlaybackInfrastructure()
         val location = "${server.baseUrl}/clip_4.mp4?warmup=$nonce"
@@ -651,11 +606,6 @@ private val SEEK_FRACTIONS = listOf(0.50, 0.85, 0.25, 0.65)
 private val SCRUB_FRACTIONS = listOf(0.40, 0.72, 0.93)
 private const val SECOND_DRAG_FRACTION = 0.10
 
-/**
- * 41.4 s into the 90 s video, between the 40 s and 42 s keyframes and nearer the later one: nothing loads 37–45 s
- * (the first drag previews 36 s, the first seek starts at 45 s, and the opening seconds are cached again once the
- * looping video passes its end).
- */
 private const val COLD_RELEASE_FRACTION = 0.46
 private val SWIPE_VIDEOS = listOf("long_2.mp4", "long_1.mp4", "long_3.mp4")
 private const val SWIPE_WATCH_MS = 20_000L

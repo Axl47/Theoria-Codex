@@ -25,11 +25,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Corrupt credential files must read as "reconnect", not "temporarily unavailable", whatever the JSON library, and
- * files from a newer build as an unsupported version.
- * Robolectric has no Android Keystore, so a software one is installed for the duration of each test.
- */
 @RunWith(RobolectricTestRunner::class)
 class CredentialEnvelopeGoldenTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
@@ -47,7 +42,6 @@ class CredentialEnvelopeGoldenTest {
         envelopeFile().delete()
     }
 
-    // Control: the encrypt helper and fake keystore are sound, so the payload failures below come from the JSON.
     @Test fun `well formed envelope around a valid payload reads successfully`() = runTest {
         writeEnvelope(envelopeAround("""{"schemaVersion":1,"gelbooruUserId":"1","gelbooruApiKey":"k"}"""))
 
@@ -59,7 +53,6 @@ class CredentialEnvelopeGoldenTest {
         )
     }
 
-    // An envelope the Gson store wrote and encrypted with this test's key decodes to every credential it held.
     @Test fun `envelope written by the Gson store reads every credential`() = runTest {
         writeEnvelope(golden("envelope-gson-written.json"))
 
@@ -85,35 +78,30 @@ class CredentialEnvelopeGoldenTest {
         )
     }
 
-    // Pins: an envelope file that is not parseable JSON reads as ReconnectRequired.
     @Test fun `malformed envelope requires reconnect`() = runTest {
         writeEnvelope(golden("envelope-malformed.json"))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    // Pins: an envelope that is valid JSON of the wrong shape (an array) reads as ReconnectRequired.
     @Test fun `wrong shape envelope requires reconnect`() = runTest {
         writeEnvelope(golden("envelope-wrong-shape.json"))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    // Pins: a valid envelope whose decrypted payload is truncated JSON reads as ReconnectRequired.
     @Test fun `malformed payload requires reconnect`() = runTest {
         writeEnvelope(envelopeAround(golden("payload-malformed.json")))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    // Pins: a valid envelope whose decrypted payload is valid JSON of the wrong shape reads as ReconnectRequired.
     @Test fun `wrong shape payload requires reconnect`() = runTest {
         writeEnvelope(envelopeAround(golden("payload-wrong-shape.json")))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    // A newer build's envelope can have any shape; it must report its version, not ask to reconnect.
     @Test fun `envelope from a newer build reports its version`() = runTest {
         writeEnvelope("""{"formatVersion":2,"keyVersion":1,"iv":{"shape":"unknown"}}""")
 
@@ -134,7 +122,6 @@ class CredentialEnvelopeGoldenTest {
         envelopeFile().apply { parentFile?.mkdirs() }.writeText(json)
     }
 
-    /** Encrypts [payload] exactly as the store does (same key, AES-GCM, package-bound AAD) inside a v1 envelope. */
     private fun envelopeAround(payload: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.ENCRYPT_MODE, key)
@@ -158,7 +145,6 @@ private object FakeKeystoreProvider : Provider("AndroidKeyStore", 1.0, "In-memor
     }
 }
 
-/** Holds secret keys by alias for the fake Android Keystore; every `KeyStore.getInstance` shares [keys]. */
 class FakeKeyStoreSpi : KeyStoreSpi() {
     override fun engineGetKey(alias: String, password: CharArray?): Key? = keys[alias]
     override fun engineContainsAlias(alias: String): Boolean = keys.containsKey(alias)

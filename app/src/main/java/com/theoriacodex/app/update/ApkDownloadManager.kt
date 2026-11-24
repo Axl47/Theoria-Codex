@@ -61,7 +61,6 @@ class ApkDownloadManager(
                 finally { if (!requestContext.isActive) part.delete() }
             }
             requestContext.ensureActive()
-            // Only the still-admitted caller may publish; late blocking reads write their unique staging file.
             Files.move(part.toPath(), finalFile.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
             return finalFile
         } finally { part.delete() }

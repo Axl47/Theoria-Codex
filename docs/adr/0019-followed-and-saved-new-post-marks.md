@@ -17,6 +17,9 @@ Likes and creator follows are local actions with no remote bookmarks. New-post b
 - Checks are recorded in batches of `WRITE_BATCH_SIZE` (25) creators per settings write, so a large list neither rewrites settings per creator nor loses its progress when cancelled.
 - `cancelAutomaticRefresh` stops the automatic check when the app leaves the foreground; a refresh the user started carries on. A refresh the user asks for during the automatic check replaces it and covers every follow rather than only the stale ones; the checks the automatic run already recorded stay. An automatic check never replaces a running refresh.
 - `unfollowWithUndo` unfollows at once and its Undo restores the same record, so nothing the creator posted meanwhile counts as seen.
+- `NewPostsCheckEffect` checks followed creators and saved searches whenever the app comes to the foreground (`repeatOnLifecycle(STARTED)`), once the first frame is drawn and only when the last check is stale (`checkIfStale`, `refreshIfStale`). Leaving the app cancels checks in flight (`cancelAutomaticRefresh`). Saved searches run read-only (`retry = false`), on the sources and settings their collection uses.
+- `markingNewPostsSeen` marks the posts a live Followed or Searches collection shows (after the grid's display filters) as seen once its feed has drawn its first page, once per opening of the collection: loading a later page flips `rendered` again but must not mark its posts or late checks seen. A check that lands later, posts the filters hid, posts only in later pages, and posts the feed never showed (offline, a failed load) stay new. Any other collection has no new posts.
+- `markViewedNewPost` marks a post seen once the Viewer shows it from the Followed or Searches collection, whether opened from a Saved shelf or the full collection (`newPostsCollection`); posts the Viewer never reached stay new, and other sessions have no new posts.
 
 ## Consequences
 
@@ -28,3 +31,4 @@ Never add server-side follows or notifications.
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/NewPostMarks.kt`: `NewPostMarks`, `SavedSearchNewPosts`, `newPostsCheckDue`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt`: `observeSavedSearchNewPosts`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/creator/CreatorFollowsViewModel.kt`: `refreshIfStale`, `cancelAutomaticRefresh`, `startRefresh`, `WRITE_BATCH_SIZE`, `unfollowWithUndo`
+- `app/src/main/java/com/theoriacodex/app/ui/NewPostsEffects.kt`: `NewPostsCheckEffect`, `savedSearchChecker`, `markingNewPostsSeen`, `markNewPostsSeen`, `markViewedNewPost`, `newPostsCollection`

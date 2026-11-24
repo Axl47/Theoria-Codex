@@ -16,7 +16,6 @@ internal data class VirtualCodexUi(
     val emptyMessage: String,
 )
 
-/** Keeps virtual collection chrome out of the shell; ordinary collection mutation actions stay separate. */
 internal fun virtualCodexUi(
     state: CodexDetailDestinationState,
     restore: FeedFabRestoreState,

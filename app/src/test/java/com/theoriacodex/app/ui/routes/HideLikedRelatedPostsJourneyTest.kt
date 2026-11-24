@@ -59,7 +59,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Exercise actual Room Likes/Codex writes and route callbacks with both membership filters enabled. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class HideLikedRelatedPostsJourneyTest {
@@ -106,7 +105,6 @@ class HideLikedRelatedPostsJourneyTest {
             }
             compose.onNode(verticalGrid).performScrollToNode(hasText("Dismiss"))
             compose.onNodeWithText("Dismiss").performClick()
-            // Releasing the retained likes changes the feed's filter inputs, which refilter off the main thread.
             compose.waitUntilSettled(5_000) { compose.onAllNodesWithTag(searchCardTestTag(seed.id)).fetchSemanticsNodes().isEmpty() }
             compose.onNode(verticalGrid).performScrollToIndex(0)
             compose.onNodeWithTag(searchCardTestTag(seed.id)).assertDoesNotExist()
@@ -147,14 +145,12 @@ class HideLikedRelatedPostsJourneyTest {
             compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
                 .performClick()
         }
-        // A real like also adds this post to the system Likes Codex, activating Hide saved.
         compose.waitUntilSettled(10_000) {
             runBlocking(Dispatchers.IO) {
                 post.id in graph.content.observeSavedPostIds(setOf(likesCodexIdForProfile("profile-main"))).first()
             }
         }
         if (fullscreen) {
-            // Room persistence can complete before the separate liked-post flow reaches Viewer.
             compose.waitUntilSettled(10_000) { compose.onNodeWithContentDescription("Unlike post").isDisplayed() }
             compose.onNodeWithContentDescription("Unlike post").assertIsDisplayed()
             compose.onNodeWithContentDescription("Back").performClick()

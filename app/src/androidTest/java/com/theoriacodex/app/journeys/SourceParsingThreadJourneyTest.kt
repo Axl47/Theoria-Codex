@@ -17,11 +17,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/**
- * The gate for provider parsing on the main thread: Search pages through a source whose responses the real Danbooru
- * adapter parses, and the test fails if any parse ran on the main thread, or if too little parsing happened to tell.
- * It covers the Search path only.
- */
 class SourceParsingThreadJourneyTest : AppJourneyFixture() {
     override val providerShapedSources = setOf(SOURCE)
     override fun fixturePosts(media: ImageRef) = mapOf(SOURCE to providerShapedPosts(SOURCE, POST_COUNT, media))
@@ -58,7 +53,6 @@ class SourceParsingThreadJourneyTest : AppJourneyFixture() {
     private companion object {
         const val TAG = "SourceParsingJourney"
         val SOURCE = SourceKey.DANBOORU
-        /** Three pages of the adapter's 40 posts: the third holds posts 80 to 99 in display order. */
         const val POST_COUNT = 100
         const val THIRD_PAGE_CARD = 82
     }

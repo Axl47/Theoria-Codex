@@ -23,16 +23,6 @@ import kotlin.concurrent.thread
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * A throttled loopback HTTP/1.1 file server for [MediaBufferingBenchmarkTest].
- *
- * It runs in the app process so loopback socket buffers, not a USB bridge, bound how far a response can run
- * ahead of the app reading it, much as a phone's TCP receive window does. One token bucket models a shared
- * link: concurrent responses split [bytesPerSecond]. Each response waits [ttfbMs] before its headers. Files
- * carry `ETag` and `Last-Modified` but no `Cache-Control`, as an nginx origin does by default, and conditional
- * requests get 304. Every byte written is recorded per path as a [start, end) interval, so a snapshot reports
- * total, unique and duplicate (re-downloaded) bytes, including responses still in flight.
- */
 internal class BenchMediaServer(
     private val root: File,
     bytesPerSecond: Long,
@@ -57,10 +47,6 @@ internal class BenchMediaServer(
 
     fun reset() = responses.clear()
 
-    /**
-     * Every response for [path] opened at or after [sinceMs] (elapsed realtime): when its headers were sent, its
-     * first byte, bytes written so far, and when it finished or was abandoned (or -1 while still open).
-     */
     fun timeline(path: String, sinceMs: Long): JSONArray = JSONArray().apply {
         responses[path].orEmpty().filter { it.openedAtMs >= sinceMs }.forEach { response ->
             put(JSONObject().put("at", response.openedAtMs - sinceMs).put("offset", response.start)
@@ -68,7 +54,6 @@ internal class BenchMediaServer(
         }
     }
 
-    /** Per path: requests, bytes written, unique bytes and duplicate bytes. */
     fun snapshot(): JSONObject = JSONObject().apply {
         responses.forEach { (path, list) ->
             val sent = list.sumOf { it.sent.get() }
@@ -97,9 +82,7 @@ internal class BenchMediaServer(
                 respond(request, output)
             }
         } catch (_: IOException) {
-            // The client closed or abandoned the connection; the bytes written so far stay recorded.
         } catch (_: InterruptedException) {
-            // The server is closing while this response waits on the link.
         }
     }
 
@@ -164,7 +147,6 @@ internal class BenchMediaServer(
         @Volatile var endedAtMs = -1L
     }
 
-    /** One link shared by every response. */
     private class TokenBucket(private val bytesPerSecond: Long) {
         private val capacity = maxOf(CHUNK_BYTES * 4L, bytesPerSecond / BURST_DIVISOR)
         private var tokens = capacity.toDouble()
@@ -216,7 +198,6 @@ internal class BenchMediaServer(
             }
         }
 
-        /** `bytes=a-b`, `bytes=a-` or `bytes=-n`, clamped to the file; null when absent or unsatisfiable. */
         fun parseRange(header: String, size: Long): Pair<Long, Long>? {
             val spec = header.removePrefix("bytes=").takeIf { it != header } ?: return null
             val (first, last) = spec.split('-', limit = 2).let { it[0].trim() to it.getOrElse(1) { "" }.trim() }

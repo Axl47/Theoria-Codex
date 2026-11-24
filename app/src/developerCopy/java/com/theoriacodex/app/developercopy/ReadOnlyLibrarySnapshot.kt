@@ -7,11 +7,6 @@ import java.io.File
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
-/**
- * Stage rows from a version-stable read-only connection, including committed WAL rows. Never copy
- * live DB files, checkpoint production, or open production through Room's writable helper.
- * The disposable destination lets the existing Room backup mapper own the logical conversion.
- */
 internal suspend fun stageReadOnlyLibrary(sourceFile: File, destination: File) {
     require(sourceFile.isFile && !destination.exists())
     withUnchangedReadOnlyLibrary(sourceFile) { source ->
@@ -33,7 +28,6 @@ internal suspend fun stageReadOnlyLibrary(sourceFile: File, destination: File) {
     }
 }
 
-/** API 26+ needs no writable BEGIN: reject any external commit, including changes between cursor windows. */
 internal suspend fun <T> withUnchangedReadOnlyLibrary(file: File, read: suspend (SQLiteDatabase) -> T): T =
     SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { source ->
         require(source.isReadOnly)

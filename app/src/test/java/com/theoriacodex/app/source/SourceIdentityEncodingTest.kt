@@ -30,7 +30,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** App-side string forms of a source must carry custom ids, which are not enum names. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class SourceIdentityEncodingTest {
@@ -58,7 +57,6 @@ class SourceIdentityEncodingTest {
     fun `viewer and creator restoration encodings keep custom ids`() {
         val postId = PostId(custom, "123")
         assertEquals(postId, decodeViewerPostId(encodeViewerPostId(postId)))
-        // Stats rows are opened by decoding the key the statistics store recorded.
         assertEquals(postId, decodeViewerPostId(statisticsPostKey(postId)))
 
         val creator = CreatorProfile(custom, "uploader", "uploader", null, "user:uploader")

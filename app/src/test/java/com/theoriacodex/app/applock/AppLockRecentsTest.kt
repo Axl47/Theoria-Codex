@@ -17,7 +17,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Recents keeps hiding the app's screen until the stored choice is read as off. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class AppLockRecentsTest {
@@ -40,7 +39,6 @@ class AppLockRecentsTest {
     }
 }
 
-/** Records what the gate asks of Recents, which Robolectric does not expose. */
 class RecordingActivity : ComponentActivity() {
     val recentsScreenshots = mutableListOf<Boolean>()
 

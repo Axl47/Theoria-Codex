@@ -37,7 +37,6 @@ class SearchCachedFirstPageTest {
         store.save("key", listOf(SourceKey.GELBOORU, SourceKey.PIXIV, SourceKey.DANBOORU).map(::post))
         val available = mapOf(SourceKey.GELBOORU to emptyList<Post>(), SourceKey.PIXIV to emptyList())
         val coordinator = testSearchCoordinator(JourneySourceRegistry(available, 20), firstPageStore = store)
-        // Pixiv is turned off; Danbooru stays enabled but is no longer available.
         val runtime = AppSettings().runtime.copy(enabledSources = setOf(SourceKey.GELBOORU, SourceKey.DANBOORU))
         val sources = SearchSources.of(runtime, SearchSourceScope.GlobalUnified, coordinator.availableSources.toSet())
 

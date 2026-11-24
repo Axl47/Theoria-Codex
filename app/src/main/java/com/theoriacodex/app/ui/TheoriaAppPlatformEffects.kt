@@ -10,11 +10,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.viewer.ViewerOrientation
 import com.theoriacodex.app.viewer.ViewerRotationState
 
-/**
- * Owns only Android window policy; route and navigation state remain app-shell-owned. The Viewer follows
- * the phone's rotation unless [viewerRotation] holds an orientation, set by auto-rotate or the rotate button.
- * The hold lasts while any Viewer level is on top, so moving between trail levels never rotates.
- */
 @Composable
 internal fun TheoriaAppPlatformEffects(
     hostActivity: Activity?,

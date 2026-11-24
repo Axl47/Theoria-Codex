@@ -17,7 +17,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrailFeedTest {
-    /** Serves [pages] in order; a null page fails. */
     private class ScriptedPager(vararg pages: TrailPage?) : TrailPager {
         private val remaining = pages.toMutableList()
         var calls = 0

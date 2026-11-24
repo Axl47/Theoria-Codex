@@ -22,9 +22,6 @@ class TheoriaAppSmokeTest {
             composeRule.activityRule.scenario.state,
         )
 
-        // The app container and startup workflow are initialized asynchronously after the
-        // Activity reaches RESUMED. Wait for visible shell navigation instead of racing the
-        // startup surface on a cold CI emulator.
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onNodeWithContentDescription("Search").isDisplayed()
         }

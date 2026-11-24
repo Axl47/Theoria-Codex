@@ -9,10 +9,6 @@ import com.theoriacodex.app.settings.DefaultSettingsProfileMutations
 import com.theoriacodex.app.settings.SettingsOwnerDependencies
 import com.theoriacodex.app.settings.SettingsViewModel
 
-/**
- * Creates the Settings owner from the app container. It lives in `:app` because `:feature-settings` cannot name
- * the container; the dependencies are read only when the view model is first created.
- */
 internal fun settingsViewModelFactory(container: TheoriaAppContainer): ViewModelProvider.Factory = viewModelFactory {
     initializer {
         SettingsViewModel(

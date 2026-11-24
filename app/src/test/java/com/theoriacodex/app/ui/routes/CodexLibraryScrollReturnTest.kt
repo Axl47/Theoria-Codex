@@ -60,7 +60,6 @@ class CodexLibraryScrollReturnTest {
                     repeat(40) { graph.content.ensureCodex("collection-$it", "Collection $it") }
                 }
         }
-        // Hold each subscription until the test observes the destination without a grid.
         val pendingLoads = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
         val repository = object : CodexRepository by graph.content {
             override fun observeCodices(): Flow<List<Codex>> = flow {
@@ -83,7 +82,6 @@ class CodexLibraryScrollReturnTest {
                 pending = pendingLoads.tryReceive().getOrNull()
                 pending != null
             }
-            // An empty placeholder grid would clamp the saved anchor before real data arrives.
             compose.onNode(grid).assertDoesNotExist()
             compose.runOnIdle { requireNotNull(pending).complete(Unit) }
         }
@@ -104,7 +102,6 @@ class CodexLibraryScrollReturnTest {
                 if (iteration == 1) restoration.emulateSavedInstanceStateRestore()
                 compose.mainClock.autoAdvance = false
                 compose.onNodeWithText("Return to library").performClick()
-                // The tiles must be there at once, or the screen is blank and a morph has nothing to land on.
                 compose.mainClock.advanceTimeByFrame()
                 compose.mainClock.advanceTimeByFrame()
                 collection.assertExists()

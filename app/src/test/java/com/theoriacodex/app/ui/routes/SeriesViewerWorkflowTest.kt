@@ -32,7 +32,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** What the Viewer's route does with an anime series session: one source of two episodes, each lookup with fresh links. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class SeriesViewerWorkflowTest {
@@ -50,7 +49,6 @@ class SeriesViewerWorkflowTest {
     @Test
     fun `an episode on screen becomes Continue without a page or History, and its playback goes to its series`() = runTest {
         withWorkflow { graph, workflow, session, episode ->
-            // Showing is opening it: Continue moves to it at once, with no length, so where it was left stays.
             workflow.recordVisiblePost(episode, 1, session)
             workflow.recordVisibleMediaProgress(episode, 1, session)
             assertEquals(listOf("/e1 0/null", "/e1 0/null"), repository.progress)
@@ -74,7 +72,6 @@ class SeriesViewerWorkflowTest {
         }
     }
 
-    /** Opens episode 1 of [anime] in a series session and looks it up, as the Viewer does when it gets there. */
     private suspend fun TestScope.withWorkflow(block: suspend (JourneyAppContainer, ViewerRouteWorkflow, ViewerSession, Post) -> Unit) {
         val graph = JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(), emptyMap(), this)
         try {

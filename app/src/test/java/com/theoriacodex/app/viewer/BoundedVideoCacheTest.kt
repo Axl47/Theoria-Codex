@@ -48,7 +48,6 @@ class BoundedVideoCacheTest {
         player.open(spec(0L))
         player.read(ByteArray(10), 0, 10)
         try {
-            // A scrub preview past the playing position: before bounding, the player's lock reached the end of the file.
             factory.createDataSource().readAndClose(spec(5 * CHUNK), 500)
             assertEquals(500L, cache.getCachedBytes(KEY, 5 * CHUNK, 500L))
         } finally {
@@ -67,7 +66,6 @@ class BoundedVideoCacheTest {
             assertArrayEquals(content, read)
             assertEquals(size, ContentMetadata.getContentLength(cache.getContentMetadata(key)))
             assertTrue(origin.requests.all { (position, _) -> position < size })
-            // An offline save copies a fully watched video from the cache.
             val saved = temporaryFolder.newFile()
             assertTrue(runBlocking { copyFullyCachedVideo(cache, key, saved) })
             assertArrayEquals(content, saved.readBytes())
@@ -123,10 +121,6 @@ class BoundedVideoCacheTest {
 
 private const val UNSET = C.LENGTH_UNSET.toLong()
 
-/**
- * Serves [content] as `DefaultHttpDataSource` reads an HTTP origin: a ranged request gets the clamped range with a
- * `Content-Range`, or, when [honorsRanges] is false, the whole file, skipped to the position like a 200 response.
- */
 private class FakeOrigin(private val content: ByteArray, private val honorsRanges: Boolean = true) : DataSource.Factory {
     val requests = mutableListOf<Pair<Long, Long>>()
     var transferred = 0L

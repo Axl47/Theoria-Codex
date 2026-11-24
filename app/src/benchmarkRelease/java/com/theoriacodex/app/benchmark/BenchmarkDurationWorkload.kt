@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Explicit benchmark-only signal; the production app never registers this receiver. */
 class BenchmarkDurationStartReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
@@ -50,11 +49,6 @@ internal object BenchmarkDurationStartSignal {
     }
 }
 
-/**
- * Drives the production duration coordinator against the bundled MP4 while remaining offline.
- * The baseline commit exercised the legacy path; the final run keeps the same posts and gestures
- * but now observes separate coordinator metadata instead of rewriting the feed list.
- */
 internal class BenchmarkDurationWorkload(
     private val scope: CoroutineScope,
     resources: Resources,

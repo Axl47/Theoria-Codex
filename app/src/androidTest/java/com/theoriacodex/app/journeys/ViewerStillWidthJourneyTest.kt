@@ -15,14 +15,12 @@ import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Portrait paged viewing: still images fill the screen width, videos keep their place below the top gap. */
 class ViewerStillWidthJourneyTest : AppJourneyFixture() {
     override fun customizePost(index: Int, post: Post): Post = when (index) {
         GALLERY -> {
             val pages = List(3) { page -> solidImage("$index-$page", Color.HSVToColor(floatArrayOf(page * 120f, 0.7f, 0.9f))) }
             post.copy(preview = pages.first(), full = pages.first(), media = pages, mediaCount = pages.size)
         }
-        // An unroutable address keeps the video loading, so its page stays laid out as a video.
         VIDEO -> {
             val video = ImageRef("http://10.255.255.1/journey.mp4", null, "video/mp4")
             post.copy(full = video, media = listOf(video), mediaCount = 1)
@@ -49,7 +47,6 @@ class ViewerStillWidthJourneyTest : AppJourneyFixture() {
         assertEquals(pager.width, media.width)
     }
 
-    /** Bounds of the on-screen node described as [description], and of the media pager that pages it. */
     private fun shown(description: String): Pair<Rect, Rect> {
         val onScreen = { compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().filter { it.boundsInRoot.left == 0f } }
         waitFor("Viewer shows $description at the left edge") { onScreen().isNotEmpty() }

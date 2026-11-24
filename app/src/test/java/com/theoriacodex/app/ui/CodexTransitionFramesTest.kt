@@ -30,7 +30,6 @@ import org.robolectric.annotation.GraphicsMode
 class CodexTransitionFramesTest {
     @get:Rule val compose = createComposeRule()
 
-    /** A blue backdrop behind opaque screens: any blue in a frame means the screen dipped through it. */
     @Test fun `opening and closing a Codex never shows what is behind both screens`() {
         lateinit var navigation: NavHostController
         compose.setContent {

@@ -44,12 +44,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
-/**
- * Backups, pinned searches, and the restore journal under R8: what this build writes survives a process restart as
- * the same document a Gson build wrote, and the files a Gson build wrote still load. The write phase leaves a restore
- * pending, as a crash during the library import would; a fresh service in the read phase must decode the journal
- * and finish it. [post] is the acceptance video post.
- */
 internal suspend fun writeBackups(directory: File, post: Post) {
     check(directory.mkdirs()) { "could not create ${directory.path}" }
     directory.resolve("backup.json").writeBytes(ProfileBackupCodec().encode(acceptanceBackup(post)))
@@ -107,7 +101,6 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
         check(!journalRemains && imported.single() == expected.library) { "journal exists=$journalRemains imported=$imported" }
         val restoredPins = FileBackedSavedSearchRepository(restore.resolve("pins")).observeSavedSearches().first()
         check(restoredPins == pins) { "restored pins were $restoredPins" }
-        // Mihon-family backups decode through protobuf models, which R8 must keep with their field numbers.
         service.preview(mihon) to service.importSeries(mihon)
     }
     val counts = SeriesImportPreview(manga = 1, anime = 0, chaptersRead = 1, episodesWatched = 0)
@@ -116,7 +109,6 @@ internal suspend fun verifyBackups(directory: File, post: Post) {
     check(imported.last().series.single().entries.single().read) { "last imported series entries were ${imported.last().series}" }
 }
 
-/** A restore service over durable stores in [directory], as the app builds one, with [store] for the library. */
 private suspend fun <T> withRestoreService(
     directory: File,
     store: ProfileBackupStore,
@@ -136,7 +128,6 @@ private suspend fun <T> withRestoreService(
         )
     }
 
-/** Restores every repo it is given, keeping what it was given. */
 private class AddedRepos : ExtensionRepos {
     val given = mutableListOf<ExtensionRepo>()
     override suspend fun repos() = given.toList()
@@ -153,10 +144,6 @@ private fun acceptanceSearch() = RecentSearchEntry(
     "acceptance-search", 5L, RecentSearchKind.MULTI_SEARCH, listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
 )
 
-/**
- * [SHIPPED_BACKUP] as this build writes it: series time, which began counting later, is present as zero, and the
- * retired viewer OCR settings are absent.
- */
 private fun shippedBackupAsWrittenNow(): JsonObject {
     val shipped = Json.parseToJsonElement(SHIPPED_BACKUP).jsonObject
     val settings = shipped.getValue("settings").jsonObject - setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
@@ -164,7 +151,6 @@ private fun shippedBackupAsWrittenNow(): JsonObject {
     return JsonObject(shipped + ("settings" to JsonObject(settings)) + ("statistics" to JsonObject(statistics)))
 }
 
-/** The values behind [SHIPPED_BACKUP]; edit only together with a backup a Gson build wrote. */
 private fun acceptanceBackup(post: Post): ProfileBackup {
     val address = (SiteAddress.parse("safebooru.org") as SiteAddressParse.Valid).address
     return ProfileBackup(
@@ -188,7 +174,6 @@ private const val PIN_SAVED_AT = 5L
 private const val PINS_FILE = "pinned_searches.json"
 private const val RESTORE_JOURNAL = "pending_profile_restore.json"
 
-// What the Gson codec wrote for acceptanceBackup(videoPostFixture()).
 private const val SHIPPED_BACKUP =
     """{"format":"theoria-profile-backup","version":2,"createdAt":100,"settings":{"followedCreators":[],""" +
     """"sourceCatalogVersion":3,"enabledSources":["PIXIV","GELBOORU","AIBOORU","DANBOORU","NHENTAI","HITOMI",""" +
@@ -233,7 +218,6 @@ private const val SHIPPED_BACKUP =
     """"customSources":[{"sourceId":"custom_safebooru_org","baseUrl":"https://safebooru.org",""" +
     """"label":"Safe & 'sound'","family":"GELBOORU_02","credentialsRequired":false,"addedAt":1}]}"""
 
-// What the Gson pinned-search store wrote for the same pin.
 private const val SHIPPED_PINS =
     """{"schemaVersion":1,"searches":[{"id":"pin","name":"Pin & <x>","savedAtEpochMs":5,""" +
     """"queryHash":"acceptance-search","searchedAtEpochMs":5,"execution":{"recentSearchSchemaVersion":1,""" +
@@ -242,5 +226,4 @@ private const val SHIPPED_PINS =
     """"excludeTerms":[],"includeTermGroups":[[{"value":"a & b","facet":"ARTIST",""" +
     """"sourceNamespace":"artist"}]]},"kind":"MULTI_SEARCH","sources":["GELBOORU","PIXIV"],"sourceTags":{}}}]}"""
 
-/** A Mihon backup following one manga, `/s` on source 7 (named "Source"), with its one chapter read and one repo. */
 private const val MIHON_BACKUP = "H4sIAAAAAAAC/+MS4WAXYtIvlmIMbmLk4GLRL9Y3VGBcxcbFxRacX1qUnCrAfolNiksko6SkoNhKX78otSBfL7UiMbcgJ1WLKTEJAPmDCotAAAAA"

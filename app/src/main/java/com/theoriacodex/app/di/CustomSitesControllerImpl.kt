@@ -55,13 +55,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Settings → Sites over the profile store, the encrypted key store, the prober and the runtime
- * (plan C9). The Unified/For You opt-in is the site's membership in `enabledSources` (plan D4).
- * Removing a site deletes its profile, keys and opt-in, never library data. Completing a browser check
- * ties the saved agent, the site's outage and the browser's cookies together in one step; checking it
- * changes nothing.
- */
 internal class CustomSitesControllerImpl(
     private val profiles: SiteProfileRepository,
     private val credentials: SiteCredentialsStore,
@@ -73,9 +66,7 @@ internal class CustomSitesControllerImpl(
     private val outages: HostOutageTracker,
     private val cookieBridge: SiteCookieBridge,
     private val builtInAgents: BuiltInAgentStore,
-    /** Whether a URL answers a request with this User-Agent without a challenge or an outage. */
     private val clearsChallenge: suspend (url: String, userAgent: String) -> Boolean,
-    /** Runs one real search through a built-in source; false when it needs an account to search at all. */
     private val runBuiltInSearch: suspend (SourceKey) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : CustomSitesController {
@@ -105,7 +96,6 @@ internal class CustomSitesControllerImpl(
         )
     }
 
-    /** Each stored site's last verification probe, which its completion reads. */
     private val lastChecks = ConcurrentHashMap<String, SiteProbeResult>()
 
     private val pendingSetup = MutableStateFlow<SitesRequest?>(null)
@@ -151,7 +141,6 @@ internal class CustomSitesControllerImpl(
         )
         val source = SourceKey.of(profile)
         if (find(profile.sourceId) != null) return CustomSiteMutation.DuplicateHost(profile.sourceId)
-        // The same address derives the same id, so stored rows may belong to a removed site (plan D2).
         if (!draft.confirmReconnect && library.hasLibraryData(source)) {
             return CustomSiteMutation.ReconnectConfirmationNeeded(CustomSourceIds.hostLabel(profile.sourceId))
         }
@@ -167,10 +156,8 @@ internal class CustomSitesControllerImpl(
             }
         }
         if (draft.includeInUnifiedAndForYou) setIncluded(source, included = true)
-        // The check that led here just got an answer, so a mark from before a removal no longer applies.
         outages.clear(address.host)
         draft.linkAfterSetup?.let { link ->
-            // The link opens straight through the live source, which is rebuilt just after the keys are written.
             withTimeoutOrNull(LIVE_SOURCE_WAIT_MS) {
                 sites.first { live -> live.any { it.sourceId == profile.sourceId && it.hasCredentials == (draft.credentials != null) } }
             }
@@ -182,11 +169,9 @@ internal class CustomSitesControllerImpl(
     override suspend fun retest(sourceId: String): SiteProbeResult {
         val profile = requireNotNull(find(sourceId)) { "Re-test needs a stored site" }
         val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers, knownFamily = profile.family)
-        // A different family is reported to the user, never adopted (remove and re-add to switch).
         val working = result is SiteProbeResult.Supported && result.family == profile.family
         if (working) {
             outages.pass(profile.address.host)
-            // Re-testing also picks up an icon the site declared since, or one missed before.
             profiles.update(sourceId) { it.copy(verifiedAtEpochMs = clock(), iconUrl = result.iconUrl ?: it.iconUrl) }
         }
         outages.setWorking(profile.address.baseUrl, working)
@@ -197,7 +182,6 @@ internal class CustomSitesControllerImpl(
     override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult {
         outages.clearSource(source)
         val searched = runCatchingPreservingCancellation { withTimeoutOrNull(BUILT_IN_TEST_TIMEOUT_MS) { runBuiltInSearch(source) } }
-        // The tracker goes first: a source with a fallback mirror can return posts while its own host is challenged.
         val result = when (sourceIssues(outages.outages.value, listOf(source), clock())[source]) {
             HostOutageKind.CHALLENGE -> BuiltInTestResult.NEEDS_BROWSER_CHECK
             HostOutageKind.MAINTENANCE -> BuiltInTestResult.DOWN
@@ -219,7 +203,6 @@ internal class CustomSitesControllerImpl(
 
     override suspend fun checkVerification(source: SourceKey, userAgent: String): Boolean {
         if (!source.isCustom) {
-            // An API host is often what challenged, and it can stay challenged after the home page clears.
             val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
             return (listOf(source.presentation().referer) + outageHosts).all { clearsChallenge(it, userAgent) }
         }
@@ -238,7 +221,6 @@ internal class CustomSitesControllerImpl(
         if (source.isCustom) {
             val profile = requireNotNull(find(source.id)) { "Verification needs a stored site" }
             profiles.update(source.id) { it.copy(headers = it.headers.copy(userAgent = userAgent), verifiedAtEpochMs = clock()) }
-            // Working when the check also found the expected booru, rather than merely getting past the challenge.
             val checked = lastChecks.remove(source.id)
             outages.setWorking(profile.address.baseUrl, checked is SiteProbeResult.Supported && checked.family == profile.family)
         } else {
@@ -262,10 +244,8 @@ internal class CustomSitesControllerImpl(
             is CredentialEdit.Replace -> writeKeys { credentials.save(sourceId, keys.credentials) }
         }
         if (!keysWritten) return CustomSiteMutation.CredentialStoreUnavailable
-        // New keys may be what the site was waiting for, so requests should reach it again.
         if (edit.credentials != CredentialEdit.Keep) outages.clear(profile.address.host)
         if (label != null || edit.userAgent != HeaderEdit.Keep || edit.referer != HeaderEdit.Keep) {
-            // Each header applies to the profile as stored now, so a header saved meanwhile (a browser check's agent) stays.
             val updated = profiles.update(sourceId) { stored ->
                 val headers = SiteHeaders(edit.userAgent.applyTo(stored.headers.userAgent), edit.referer.applyTo(stored.headers.referer))
                 stored.copy(label = label ?: stored.label, headers = headers)
@@ -278,7 +258,6 @@ internal class CustomSitesControllerImpl(
 
     override suspend fun remove(sourceId: String): CustomSiteMutation {
         val profile = find(sourceId) ?: return CustomSiteMutation.NotFound
-        // Keys first: a profile is never left removed while its keys survive.
         if (!writeKeys { credentials.clear(sourceId) }) return CustomSiteMutation.CredentialStoreUnavailable
         if (!profiles.remove(sourceId)) return CustomSiteMutation.NotFound
         setIncluded(SourceKey.of(profile), included = false)
@@ -298,7 +277,6 @@ internal class CustomSitesControllerImpl(
         }
     }
 
-    /** False when the encrypted store cannot be written right now. */
     private suspend fun writeKeys(write: suspend () -> Unit): Boolean = try {
         write()
         true
@@ -311,7 +289,6 @@ internal class CustomSitesControllerImpl(
 
 private val BUILT_IN_SOURCES = SourceKey.builtIns.inPresentationOrder()
 
-/** Long enough for a slow first search, short enough that one stuck source doesn't stall Test all. */
 private const val BUILT_IN_TEST_TIMEOUT_MS = 20_000L
 private const val LIVE_SOURCE_WAIT_MS = 5_000L
 

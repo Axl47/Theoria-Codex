@@ -84,10 +84,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/**
- * Real app graph with test-owned storage and external providers. Never included in release. Sources named in
- * [providerShapedSources] serve their posts as provider JSON through a real adapter ([ProviderShapedSource]).
- */
 class JourneyAppContainer(
     context: Context,
     storageDirectory: File,
@@ -102,7 +98,6 @@ class JourneyAppContainer(
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     override val applicationScope: CoroutineScope get() = ownerScope
     private val fileMirrors = FileMirrorIndex()
-    // Journeys check what hashes do, not how fast a busy test device makes them, so a listing waits for its fixtures.
     private val listingPictures = ListingPictures(appContext, ownerScope, fileMirrors, budgetMs = 10_000)
     val registry = JourneySourceRegistry(
         postsBySource, pageSize,
@@ -127,7 +122,6 @@ class JourneyAppContainer(
         override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = Result.success(null)
         override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> = Result.success(emptyList())
     }
-    /** Completes at the end of [awaitReady]; downloads start after it, as in the app container. */
     private val ready = CompletableDeferred<Unit>()
     private val offline = OfflineMediaCoordinator(
         store = OfflineMediaStore(storageDirectory.resolve("offline-media")),
@@ -136,7 +130,6 @@ class JourneyAppContainer(
         selectMedia = { post -> post.downloadablePages },
         acquire = { _, media, output ->
             withContext(Dispatchers.IO) {
-                // Journey providers supply real fixture files. Remote transport is deliberately unavailable.
                 val source = File(checkNotNull(media.localPath) { "Fixture offline media must be local" })
                 check(source.isFile && source.length() > 0L) { "Fixture media is missing" }
                 source.copyTo(output, overwrite = true)
@@ -194,7 +187,6 @@ class JourneyAppContainer(
         profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
             data.readingPositions, storageDirectory.resolve("pending_profile_restore.json"), siteProfiles = siteProfiles),
     )
-    /** Real controller over in-memory stores; the fixture registry does not list custom sites. */
     override val customSites: CustomSitesController = CustomSitesControllerImpl(
         profiles = siteProfiles,
         credentials = siteKeys,
@@ -222,7 +214,6 @@ class JourneyAppContainer(
         settings.setResolveUnknownAnimatedDurations(false)
         ready.complete(Unit)
     }
-    /** Await DataStore ownership release before another graph opens the same fixture files. */
     suspend fun shutdown() = withContext(Dispatchers.IO) {
         try {
             features.mediaDurationCoordinator.close()

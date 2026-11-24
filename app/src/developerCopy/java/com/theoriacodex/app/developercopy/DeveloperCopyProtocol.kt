@@ -21,10 +21,9 @@ internal const val DEBUG_PACKAGE = "com.theoriacodex.debug"
 internal const val COPY_AUTHORITY = "$PRODUCTION_PACKAGE.developer-copy"
 internal const val COPY_DIRECTORY = "developer_copy"
 internal const val COPY_TIMEOUT_MS = 120_000L
-private const val COPY_MAGIC = 0x54434431 // TCD1
+private const val COPY_MAGIC = 0x54434431
 private const val MAX_CREDENTIAL_BYTES = 64 * 1024
 
-/** Secrets exist only in the authenticated pipe and each app's memory/Keystore storage. */
 internal class DeveloperCopyPayload(val backup: ByteArray, val credentials: SourceCredentialSnapshot) {
     override fun toString(): String = "DeveloperCopyPayload([REDACTED])"
 }
@@ -72,7 +71,6 @@ private fun encodeCredentials(snapshot: SourceCredentialSnapshot): ByteArray = D
     ),
 ).toByteArray(Charsets.UTF_8)
 
-/** Failures carry no message or cause from the parser, whose errors quote the input and so the secrets. */
 private fun decodeCredentials(bytes: ByteArray): SourceCredentialSnapshot {
     val raw = decodeDocumentUtf8(bytes)
     checkDocumentDepth(raw)
@@ -98,7 +96,6 @@ private fun decodeCredentials(bytes: ByteArray): SourceCredentialSnapshot {
     return snapshot
 }
 
-/** The credential section of the copy pipe. Older builds wrote absent values as JSON null; this one omits them. */
 @Serializable
 private class DeveloperCopyCredentials(
     @SerialName("pixivAccessToken")

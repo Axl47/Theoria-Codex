@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** One stable content slot preserves navigation owners and scroll state during window resizing. */
 @Composable
 internal fun TheoriaAdaptiveScaffold(
     navigationVisible: Boolean,
@@ -97,8 +96,6 @@ internal suspend fun navigateTopLevelDestination(
         }
         pager.scrollToPage(target)
     } else if (tabTap(destination, pager.targetPage, pager.settledPage, pager.isScrollInProgress) == TabTap.Move) {
-        // A scroll passing exactly over the target makes animateScrollToPage return without stopping that scroll,
-        // which then carries on past it; scrollToPage stops it there.
         if (pager.currentPage == target && pager.currentPageOffsetFraction == 0f) pager.scrollToPage(target)
         else pager.animateScrollToPage(target, animationSpec = tween(TheoriaMotion.SCREEN_MS))
     }

@@ -21,10 +21,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Live provider coverage is intentionally excluded from the default connected-device lane.
- * Run this class explicitly and pass the `theoriaLiveHitomi=true` instrumentation argument.
- */
 @RunWith(AndroidJUnit4::class)
 class HitomiLiveTransportDeviceTest {
     @Before

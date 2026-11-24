@@ -42,7 +42,6 @@ class VideoCacheContentionTest {
                     source.close()
                 }
             }
-            // Keep the range locked until playback completes: it must never wait for prefetch.
             assertArrayEquals(payload, result.get(2, TimeUnit.SECONDS))
         } finally {
             cache.releaseHoleSpan(locked)

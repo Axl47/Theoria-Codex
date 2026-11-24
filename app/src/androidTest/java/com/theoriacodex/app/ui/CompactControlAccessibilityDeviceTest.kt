@@ -84,7 +84,6 @@ class CompactControlAccessibilityDeviceTest {
         var expanded by mutableStateOf(false)
         composeRule.setContent {
             MaterialTheme {
-                // As For You's bar draws it: shorter than its touch target.
                 SourceSelector(
                     selectedSource = SourceKey.PIXIV,
                     availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),

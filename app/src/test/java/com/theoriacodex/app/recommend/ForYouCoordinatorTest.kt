@@ -42,7 +42,6 @@ class ForYouCoordinatorTest {
         val (first, second) = lanes
         val firstPage = service.loadPage(first.cursor, setOf(first.source))
         assertEquals(first.tags, adapter.lastSearchQuery?.includeTags)
-        // Paging one lane leaves the other at its first page.
         service.loadPage(first.cursor.accept(firstPage, setOf(first.source)), setOf(first.source))
         assertEquals("next", adapter.requestedPageTokens.last())
         service.loadPage(second.cursor, setOf(second.source))
@@ -170,7 +169,6 @@ class ForYouCoordinatorTest {
     private fun request(service: ForYouCoordinator, settings: AppSettings = AppSettings()) =
         ForYouFeedRequest(settings, service.availableSources(settings), null, SortMode.NEWEST)
 
-    /** One liked post per tag, so each tag is an interest of its own. */
     private suspend fun liked(source: SourceKey, vararg tags: String): InMemoryLikesRepository = InMemoryLikesRepository().also { addLikes(it, source, *tags) }
 
     private suspend fun addLikes(likes: InMemoryLikesRepository, source: SourceKey, vararg tags: String) {

@@ -57,7 +57,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 
-/** Only external provider input and storage location are fixtures; screens and owners are real. */
 abstract class AppJourneyFixture {
     @get:Rule val compose = createEmptyComposeRule()
     protected lateinit var container: JourneyAppContainer
@@ -75,10 +74,6 @@ abstract class AppJourneyFixture {
         openGraph()
     }
 
-    /**
-     * The provider posts every source serves, each in its display order. Sources in [providerShapedSources] go
-     * through a real parser and need posts it can carry (`providerShapedPosts`).
-     */
     protected open fun fixturePosts(media: ImageRef): Map<SourceKey, List<Post>> =
         listOf(SourceKey.PIXIV, SourceKey.GELBOORU).associateWith { source ->
             (0 until 60).map { index ->
@@ -94,13 +89,10 @@ abstract class AppJourneyFixture {
             }
         }
 
-    /** Sources served as provider JSON through a real adapter instead of as ready-made posts. */
     protected open val providerShapedSources: Set<SourceKey> = emptySet()
 
-    /** Lets a journey reshape a fixture post before the graph reads it. */
     protected open fun customizePost(index: Int, post: Post): Post = post
 
-    /** A one-color image on disk, standing in for provider media. */
     protected fun solidImage(name: String, color: Int): ImageRef {
         val image = directory.resolve("$name.png")
         val bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }
@@ -109,10 +101,6 @@ abstract class AppJourneyFixture {
         return ImageRef(null, image.absolutePath, "image/png")
     }
 
-    /**
-     * A patterned image on disk, addressed by a file URL as provider media is by its URL, so the app hashes its picture
-     * ([com.theoriacodex.app.di.ListingPictures]); solid images are too flat to hash.
-     */
     protected fun patternImage(name: String): ImageRef {
         val image = directory.resolve("$name.png")
         val size = 320
@@ -135,7 +123,6 @@ abstract class AppJourneyFixture {
         }
     }
 
-    /** New Activity, ViewModels, repositories and Room connection; only on-disk fixture data survives. */
     protected fun coldGraphRelaunch() {
         scenario.close()
         JourneyTestActivity.fixtureContainer = null
@@ -157,14 +144,12 @@ abstract class AppJourneyFixture {
         compose.waitForIdle()
     }
 
-    /** Shows Library at [section]. */
     protected fun library(section: LibrarySection) {
         tab("Library")
         activate(compose.onNodeWithTag(librarySectionTag(section)))
         compose.waitForIdle()
     }
 
-    /** Opens Settings from Library's gear. */
     protected fun openSettings() {
         tab("Library")
         activate(compose.onNodeWithTag(LIBRARY_SETTINGS_TAG))
@@ -177,10 +162,6 @@ abstract class AppJourneyFixture {
         compose.waitForIdle()
     }
 
-    /**
-     * Opens [source]'s fixture post at [index] in the Viewer, from a Recents search for [tags] recorded as
-     * [recentSearch]; the post must show near the top of that search's results.
-     */
     protected fun openSearchPost(
         index: Int,
         recentSearch: String,
@@ -202,20 +183,16 @@ abstract class AppJourneyFixture {
         activate(card)
     }
 
-    /** Exercise the visible control's action without racing its animated touch coordinates. */
     protected fun activate(node: SemanticsNodeInteraction) {
         waitForNode(node, "displayed and enabled") { node.isDisplayed() && isEnabled().matches(node.fetchSemanticsNode()) }
         node.performSemanticsAction(SemanticsActions.OnClick)
     }
 
-    /** Long-press a control once it has loaded, through its semantics action rather than injected touch. */
     protected fun longPress(node: SemanticsNodeInteraction) {
         waitForNode(node, "displayed for a long press") { node.isDisplayed() }
         node.performSemanticsAction(SemanticsActions.OnLongClick)
     }
 
-    /** Types [value] into the open Search composer and adds it as a tag. */
-    /** Runs the composer's query now and closes it, through the keyboard's Search action. */
     protected fun submitSearch() {
         val input = compose.onNodeWithTag("Search query input")
         waitFor("Search query input is displayed") { input.isDisplayed() }
@@ -252,20 +229,12 @@ abstract class AppJourneyFixture {
         }
     }
 
-    /**
-     * Drags Search results until [source]'s card at [index] is the grid's first visible item and has started to
-     * scroll off the top, so the grid saves a positive pixel offset for it. The tagged grid wrapper receives
-     * touches; its nested lazy grid owns scroll semantics.
-     */
     protected fun scrollToFirstVisibleCard(source: SourceKey, index: Int, maxDrags: Int = 24) {
         val grid = compose.onNodeWithTag("Search results", useUnmergedTree = true)
         repeat(maxDrags) {
             val viewport = grid.fetchSemanticsNode().boundsInRoot
-            // Unclipped, so it goes negative once the card's top has passed the viewport's.
             val targetTop = visibleCard(source, index, viewport)?.positionInRoot?.y?.minus(viewport.top)
             val previousVisible = index > 0 && visibleCard(source, index - 1, viewport) != null
-            // The preceding card leaving is not enough: the target can still sit in the 6dp row gap at or
-            // below the top, where it has no offset yet. Capped drags can stop anywhere, including there.
             if (targetTop != null && targetTop <= -1f && !previousVisible) {
                 compose.onNodeWithTag(searchCardTestTag(posts.getValue(source)[index].id)).assertIsDisplayed()
                 return
@@ -283,7 +252,6 @@ abstract class AppJourneyFixture {
         throw AssertionError("Search card $index did not become the first visible fixture row after $maxDrags drags")
     }
 
-    /** The card's node while any of it shows inside [viewport]; its `boundsInRoot` are clipped to the viewport. */
     private fun visibleCard(source: SourceKey, index: Int, viewport: Rect): SemanticsNode? {
         val tag = searchCardTestTag(posts.getValue(source)[index].id)
         return compose.onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()?.takeIf { node ->
@@ -292,10 +260,6 @@ abstract class AppJourneyFixture {
         }
     }
 
-    /**
-     * Saves the screen as `journey-shots/<name>.png` in the app's external files, where `adb pull` reaches it, for a
-     * look at a journey's key moment. Only for screens of fixture media.
-     */
     protected fun saveScreenshot(name: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()

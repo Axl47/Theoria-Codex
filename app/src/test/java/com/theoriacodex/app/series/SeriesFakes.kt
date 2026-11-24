@@ -40,7 +40,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 
-/** A source whose every entry opens as [answer] gives for the [asked]th ask; its kind comes from [key]. */
 internal class FakeSeriesSource(override val key: SourceKey, private val answer: (asked: Int) -> EntryMedia) : SeriesSource {
     var asked = 0
         private set
@@ -53,10 +52,6 @@ internal class FakeSeriesSource(override val key: SourceKey, private val answer:
     override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(emptyList())
 }
 
-/**
- * A repository over one stored series that records progress as the Room repository does: the entry opened last, and
- * the progress by [withProgress] once the length is known. [progress] lists each call as "address position/length".
- */
 internal class StoredOnly(stored: StoredSeries, private var entries: List<StoredSeriesEntry>) : SeriesRepository {
     private val stored = MutableStateFlow(stored)
     val progress = mutableListOf<String>()
@@ -83,7 +78,6 @@ internal class StoredOnly(stored: StoredSeries, private var entries: List<Stored
     }
 }
 
-/** The reader never asks about extensions. */
 internal object NoExtensions : SeriesExtensions {
     override val revision = MutableStateFlow(0)
 
@@ -114,10 +108,6 @@ internal object NoRepos : ExtensionRepos {
     override suspend fun uninstall(id: String) = Unit
 }
 
-/**
- * A series reader's dependencies over [repository], with downloads in [folder] that never fetch. A stored cover is
- * tagged `#loadable`, as an extension's own client would be asked for it.
- */
 internal fun TestScope.seriesDependencies(
     folder: File,
     repository: SeriesRepository,

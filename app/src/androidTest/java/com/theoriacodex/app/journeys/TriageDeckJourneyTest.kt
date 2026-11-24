@@ -21,7 +21,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class TriageDeckJourneyTest : AppJourneyFixture() {
-    /** Runs a Search from Recents over the fixture posts, then opens the deck from the filter sheet's Triage action. */
     private fun openTriageDeck() {
         io {
             container.data.recentsRepository.recordSearch(

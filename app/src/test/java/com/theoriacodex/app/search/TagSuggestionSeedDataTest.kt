@@ -10,7 +10,6 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class TagSuggestionSeedDataTest {
-    // The bundled seed asset is the only input; an empty result would silently remove every starter suggestion.
     @Test
     fun `the bundled seed asset loads its Pixiv suggestions`() {
         val seeds = loadSeedTagSuggestions(ApplicationProvider.getApplicationContext<Context>())

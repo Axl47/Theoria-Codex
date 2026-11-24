@@ -16,20 +16,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/**
- * A provider served from memory to the real Danbooru adapter, so a journey parses provider-shaped JSON instead of
- * receiving ready-made posts. It answers `/posts.json` newest first from [posts], honouring `limit` and both paging
- * forms (`page=N` and the `b<id>` cursor); `tags` is ignored. It answers `/posts/<id>.json` with that post, or 404.
- * Every other request goes to [fallback]. The JSON is generated from fixture posts, so no provider data is recorded
- * or stored.
- */
 class ProviderShapedSource(posts: List<Post>, private val fallback: SourceHttpClient) : SourceHttpClient {
     private val newestFirst = posts.sortedByDescending { it.id.sourcePostId.toLong() }
 
-    /** The `page` value of every `/posts.json` request, in order; each one was answered. */
     val pageRequests = CopyOnWriteArrayList<String>()
 
-    /** The id of every single-post request, in order; each one was answered. */
     val postRequests = CopyOnWriteArrayList<String>()
 
     fun adapter(source: SourceKey): SourceAdapter =
@@ -64,10 +55,6 @@ class ProviderShapedSource(posts: List<Post>, private val fallback: SourceHttpCl
     }
 }
 
-/**
- * [count] posts the Danbooru adapter can carry, newest first: numeric ids from [count] down to 1, so paging by
- * id cursor works, and [media] (a local file) for every image.
- */
 fun providerShapedPosts(source: SourceKey, count: Int, media: ImageRef): List<Post> = (count downTo 1).map { id ->
     Post(
         id = PostId(source, id.toString()), preview = media, full = media, pageUrl = null,

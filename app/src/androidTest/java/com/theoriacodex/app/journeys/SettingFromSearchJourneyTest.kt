@@ -25,8 +25,6 @@ class SettingFromSearchJourneyTest : AppJourneyFixture() {
         activate(compose.onNode(hasText(toggle.title) and isToggleable() and hasAnyAncestor(hasTestTag("Search composer"))))
         waitFor("setting ${toggle.title} is on in settings") { io { toggle.read(container.settings.observeSettings().first()) } }
 
-        // The composer is its own Dialog window, so system Back (not the Activity's dispatcher) closes it; the
-        // first press may only hide the keyboard.
         val composer = compose.onNodeWithTag("Search composer")
         repeat(2) { if (composer.isDisplayed()) pressSystemBack().also { compose.waitForIdle() } }
         waitFor("search composer is closed") { !composer.isDisplayed() }

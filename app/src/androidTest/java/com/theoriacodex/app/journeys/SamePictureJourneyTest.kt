@@ -21,7 +21,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** One picture listed by two sites: Search shows it once, and liking one copy hides the other, after a restart too. */
 class SamePictureJourneyTest : AppJourneyFixture() {
     private val picture by lazy { patternImage("same-picture") }
     private var launched = false
@@ -42,7 +41,6 @@ class SamePictureJourneyTest : AppJourneyFixture() {
 
         activate(compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(searchCardTestTag(liked))), useUnmergedTree = true))
         waitFor("liked copy is saved in likes") { io { liked in container.data.likesRepository.observeLikedPostIds("profile-main").first() } }
-        // Saved with the hash its listing gave it, which a restart keeps.
         assertTrue(io { liked in container.data.visualSignatures.observePictureHashes().first() })
 
         coldGraphRelaunch()
@@ -55,7 +53,6 @@ class SamePictureJourneyTest : AppJourneyFixture() {
         waitFor("${other.source} journey-1 copy is shown", timeoutMillis = 5_000) { shows(PostId(other.source, "journey-1")) }
     }
 
-    /** Runs a "multi" search recorded in Recents as [label], from History, as a user repeats a search. */
     private fun search(label: String, mode: QueryMode) {
         io { container.data.recentsRepository.recordSearch(Query(mode, listOf("multi"), emptyList(), SortMode.POPULAR, null, null), label) }
         if (!launched) launch().also { launched = true }

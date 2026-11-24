@@ -34,7 +34,6 @@ internal data class StartupUpdateWorkflowTransition(
     val effect: StartupUpdateWorkflowEffect? = null,
 )
 
-/** Pure transition boundary; Android launchers remain hosted by the app shell. */
 internal object StartupUpdateWorkflowReducer {
     fun reduce(
         current: StartupUpdateWorkflowState,

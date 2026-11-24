@@ -87,13 +87,11 @@ class TrailSpecsTest {
         assertEquals(listOf("comic"), fork.excludeTags)
         assertEquals(Triple(MediaFilter.ANIMATED, dates, SortMode.TOP), Triple(fork.media, fork.dateRange, fork.sort))
 
-        // A post from another source searches its own source, where the level's exclusions may not mean the same.
         assertEquals(emptyList<String>(), trailTagQuery("fox", SourceKey.GELBOORU, level).excludeTags)
     }
 
     @Test
     fun `a single-source tag trail drops exclusions its source has no room for`() {
-        // Danbooru's guest limit leaves one term under a ranked sort; the trail's own tag takes it.
         val level = Query(QueryMode.Source(SourceKey.DANBOORU), emptyList(), listOf("comic"), SortMode.TOP, null, null)
 
         val fork = trailTagQuery("dog", SourceKey.DANBOORU, level, termLimit = SearchTermLimit(maxTerms = 2, rankedSortUsesTerm = true))
@@ -153,7 +151,6 @@ class TrailSpecsTest {
         val four = trailTagQuery("blush", SourceKey.DANBOORU, level, termLimit = SearchTermLimit(maxTerms = 4))
         assertEquals(listOf("blush", "cat", "dog") to listOf("comic"), four.includeTags to four.excludeTags)
 
-        // A Unified trail keeps every tag; each source trims it to its own limit, and the tag still leads there.
         val unified = trailTagQuery("blush", SourceKey.DANBOORU, level.copy(mode = QueryMode.Unified), termLimit = SearchTermLimit(maxTerms = 1))
         assertEquals(listOf("blush", "cat", "dog"), unified.includeTags)
         assertEquals(listOf("blush"), unified.withinTermLimit(SearchTermLimit(maxTerms = 1)).includeTags)

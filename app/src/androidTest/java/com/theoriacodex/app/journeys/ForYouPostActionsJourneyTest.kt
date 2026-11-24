@@ -33,7 +33,6 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         val collection = io { container.content.ensureCodex(profileScopedCodexId("profile-main", "actions"), "FYP saved") }
         launch()
         tab("For You")
-        // The grid shows the Mix's posts; the first lane's first post is among its first cards.
         activate(compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG))
         val card = searchCardTestTag(first.id)
         waitFor("For You card for ${first.id} is displayed", timeoutMillis = 15_000) { compose.onAllNodesWithTag(card).fetchSemanticsNodes().isNotEmpty() }
@@ -41,7 +40,6 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         compose.onNode(hasContentDescription("Like post") and hasAnyAncestor(hasTestTag(card)), useUnmergedTree = true)
             .performClick()
         waitFor("More like this shelf appears after Like") { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
-        // Whichever lane answered first leads the grid, so the liked card's shelf may open below the fold.
         val grid = hasScrollToNodeAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange) and
             hasAnyDescendant(hasTestTag(card))
         compose.onNode(grid, useUnmergedTree = true).performScrollToNode(hasText("More like this"))
@@ -49,7 +47,6 @@ class ForYouPostActionsJourneyTest : AppJourneyFixture() {
         assertEquals(setOf(first.id), io { container.data.likesRepository.observeLikedPostIds("profile-main").first() })
         assertEquals(listOf(first.id), io { container.content.observeCodexItems(likesCodexIdForProfile("profile-main")).first().map { it.postId } })
         assertEquals(rootsBeforeLike, container.registry.requests.count { it.pageToken == null })
-        // For You leaves nothing in the search history.
         assertTrue(io { container.data.recentsRepository.observeSearches().first() }.isEmpty())
         compose.onNodeWithText("Dismiss").performClick()
         longPress(compose.onNodeWithTag(card))

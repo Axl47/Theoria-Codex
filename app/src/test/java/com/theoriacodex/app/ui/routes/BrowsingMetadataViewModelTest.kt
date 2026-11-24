@@ -64,7 +64,6 @@ class BrowsingMetadataViewModelTest {
         runCurrent()
         assertEquals(1, likedSubscriptions)
         assertEquals(0, fullLikeSubscriptions)
-        // One read of the watch history teaches the file mirror index; nothing stays subscribed for badges.
         assertEquals(1, watchedPayloadSubscriptions)
 
         backgroundScope.launch { owner.recents.collect() }
@@ -150,7 +149,6 @@ class BrowsingMetadataViewModelTest {
         val transactions = InMemoryCodexLikesTransactions()
         val profile = settings.observeSettings().first().activeRecommendationProfile()
         val sync = LikesCodexSyncService(transactions, transactions.codices, transactions.likes)
-        // More posts than are read one by one, so this takes the single Library read a real start takes.
         (1..25).forEach { n -> sync.toggle(profile, filePost(SourceKey.DANBOORU, "$n", "%032x".format(n)), emptyList()) }
         val mirrors = FileMirrorIndex()
         val owner = BrowsingMetadataViewModel(settings, transactions.likes, transactions.codices, InMemoryRecentsRepository(),

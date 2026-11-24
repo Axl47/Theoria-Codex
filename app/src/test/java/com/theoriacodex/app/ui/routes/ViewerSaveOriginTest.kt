@@ -133,7 +133,6 @@ class ViewerSaveOriginTest {
                 }
             }
             compose.runOnIdle { assertNull(retention.session.value) }
-            // With no Codex to suggest, the dock's Save opens the picker, as the info sheet's Save to Codex does.
             compose.onNodeWithTag("viewer-dock-save").performClick()
             compose.runOnIdle {
                 assertEquals(context, savedContext)

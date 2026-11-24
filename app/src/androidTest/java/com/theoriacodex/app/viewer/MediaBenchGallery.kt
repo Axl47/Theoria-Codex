@@ -10,13 +10,10 @@ import com.theoriacodex.app.media.viewerMediaDeliveryPlan
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.domain.model.Post
 
-// Gallery helpers for MediaBufferingBenchmarkTest.
-
 internal fun ViewerViewModel.queueAdjacentPrefetch() {
     onAction(viewerPrefetchAction(state.value.pages, state.value.currentMedia?.key, null))
 }
 
-/** What the page's renderer reports once its image is on screen. */
 internal fun ViewerViewModel.markShown(mediaIndex: Int) {
     val current = state.value.currentMedia?.takeIf { it.key.mediaIndex == mediaIndex } ?: return
     onAction(ViewerAction.MediaReady(requireNotNull(state.value.session), current.key, current.loadGeneration))
@@ -27,7 +24,6 @@ internal fun ViewerViewModel.selectAndPrefetch(mediaIndex: Int) {
     queueAdjacentPrefetch()
 }
 
-/** The Viewer page's own request: its location and the pager page's size, as AsyncImage resolves it. */
 internal suspend fun Context.displayViewerPage(post: Post, index: Int): Shown {
     val location = viewerMediaDeliveryPlan(post, post.media[index]).candidates.first().location
     val metrics = resources.displayMetrics
@@ -48,7 +44,6 @@ internal fun Context.pagesReadyAhead(post: Post, current: Int): Int =
         imageLoader.diskCache?.openSnapshot(location)?.use { true } == true
     }
 
-/** How long a gallery page took to decode, and where Coil read it from. */
 internal data class Shown(val elapsedMs: Long, val source: String)
 
 private const val READY_AHEAD_WINDOW = 10

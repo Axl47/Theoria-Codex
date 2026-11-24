@@ -64,23 +64,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Measures how long the real search and image paths take from a fresh process, against the installed Debug app's
- * accounts and live feeds. One instrumentation run measures one case, because connection pools live and die with the
- * process, so every case starts with no open connections. `scripts/live_latency_bench.py` passes
- * `theoriaLiveLatency=true` and the case; the default test lane skips this class.
- *
- * - `source:<ID>` searches one source, loads its first screen of card images, opens the first posts' Viewer images
- *   and, for multi-page posts, the page thumbnails the scrubber and gallery grid use.
- * - `first:<ID>` brings the real app up first, so launch-time work runs, and searches that source a few seconds later,
- *   as a person would. Run `source:<ID>` just before it so the source counts as recently used.
- * - `pages:<ID>` reads the first posts' pages one at a time, as turning pages does, and reports each page's load time.
- * - `unified:cold` opens the real Search tab with empty image caches and a filterless unified query.
- *   `unified:warm` does the same keeping every cache, as reopening the app does.
- *
- * It reports numbers only and drives the app through accessibility nodes, so no provider media is captured or logged.
- * Byte counts are the app's whole traffic over the step, read from the kernel, so they include TLS and headers.
- */
 @RunWith(AndroidJUnit4::class)
 class LiveLatencyBenchmarkTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -135,7 +118,6 @@ class LiveLatencyBenchmarkTest {
         report
     }
 
-    /** Searches [adapter], reporting the time and traffic, or the failure when this returns null. */
     private suspend fun timedSearch(
         registry: SourceAdapterRegistry,
         adapter: SourceAdapter,
@@ -220,7 +202,6 @@ class LiveLatencyBenchmarkTest {
         return buildFeedImageRequest(context, location, source, size)
     }
 
-    /** Resolves the first posts as opening them would, then loads their first Viewer images and any page thumbnails. */
     private suspend fun measureViewer(
         cards: List<Post>,
         source: SourceKey,
@@ -247,7 +228,6 @@ class LiveLatencyBenchmarkTest {
         loadAll("pages", pages, report)
     }
 
-    /** Runs [requests] at once on the app's real image loader and reports when they finished and what they cost. */
     private suspend fun loadAll(label: String, requests: List<ImageRequest>, report: JSONObject) = coroutineScope {
         if (requests.isEmpty()) return@coroutineScope
         val rxBefore = settledRxBytes()
@@ -279,7 +259,6 @@ class LiveLatencyBenchmarkTest {
             if (clearCaches) clearDisposableCaches(owner)
             val saved = keys.mapNotNull { key -> queries.observeAppliedQuery(key).first()?.let { key to it } }
             keys.forEach { key -> queries.upsertAppliedQuery(key, defaultQuery()) }
-            // The app reopens on its last tab; every run must start on Search for launch timing to compare.
             tabs.setLastTab(TopLevelDestination.Search.route)
             saved
         }
@@ -293,7 +272,6 @@ class LiveLatencyBenchmarkTest {
         }
     }
 
-    /** Timed from launch, because a reopened app paints Search before anything could tap it. */
     private fun driveSearchTab(events: CardImageEvents): JSONObject {
         Coil.setImageLoader(context.imageLoader.newBuilder().eventListener(events).build())
         val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
@@ -323,7 +301,6 @@ class LiveLatencyBenchmarkTest {
         return null
     }
 
-    /** Waits for [count] images and returns a timeline of `seconds:started/finished/failed/cards`, to explain slow screens. */
     private fun awaitImages(events: CardImageEvents, count: Int, start: Long): String {
         val deadline = clock() + RESULTS_TIMEOUT_MS
         val timeline = StringBuilder()
@@ -340,7 +317,6 @@ class LiveLatencyBenchmarkTest {
         return timeline.toString().trim()
     }
 
-    /** A card waiting less means its image was already on its way or on disk when it scrolled into view. */
     private fun measureScroll(events: CardImageEvents, report: JSONObject) {
         SystemClock.sleep(SCROLL_SETTLE_MS)
         events.reset()
@@ -361,13 +337,11 @@ class LiveLatencyBenchmarkTest {
 
     private fun clock(): Long = SystemClock.elapsedRealtime()
 
-    /** The kernel's per-app counters trail the socket slightly, so each read waits for them. */
     private fun settledRxBytes(): Long {
         SystemClock.sleep(RX_SETTLE_MS)
         return TrafficStats.getUidRxBytes(Process.myUid())
     }
 
-    /** Times every card image the screen itself requests. Preload requests are not cards waiting to be seen. */
     private class CardImageEvents : EventListener {
         private class Sample(val finishedAt: Long, val waitMs: Long, val source: DataSource)
 

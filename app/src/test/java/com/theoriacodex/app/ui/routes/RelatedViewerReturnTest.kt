@@ -115,7 +115,6 @@ class RelatedViewerReturnTest {
                 compose.waitUntilSettled(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
                 relatedCard.assertIsDisplayed()
                 val top = relatedCard.fetchSemanticsNode().boundsInRoot.top
-                // The first return centers the shelf; later returns must preserve that landing.
                 returnedShelfTop?.let { assertEquals(it, top, 1f) }
                 returnedShelfTop = top
                 assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
@@ -134,7 +133,6 @@ class RelatedViewerReturnTest {
         }
     }
 
-    /** Runs the recorded search for "seed" from History. */
     private fun openSeedSearch() {
         compose.onNodeWithContentDescription("Library").performClick()
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(librarySectionTag(LibrarySection.History)).fetchSemanticsNodes().isNotEmpty() }
@@ -146,7 +144,6 @@ class RelatedViewerReturnTest {
         compose.onNodeWithTag("Recent search:return-query").performClick()
     }
 
-    /** Shows For You as a grid, narrowed to the "seed" lane, so its grid holds the same posts as the search. */
     private fun openSeedLaneGrid() {
         compose.onNodeWithContentDescription("For You").performClick()
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(FOR_YOU_VIEW_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty() }
@@ -193,7 +190,6 @@ class RelatedViewerReturnTest {
 
 }
 
-/** Keep the real application-owned video runtime while the test supplies its isolated fixture graph. */
 @Implements(TheoriaApplication::class)
 class ViewerReturnApplicationShadow : org.robolectric.shadows.ShadowApplication() {
     @Implementation fun onCreate() = Unit

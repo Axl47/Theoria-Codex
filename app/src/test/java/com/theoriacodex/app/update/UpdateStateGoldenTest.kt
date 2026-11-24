@@ -4,9 +4,6 @@ import com.theoriacodex.data.storage.assertStoredFormat
 import org.junit.Test
 
 class UpdateStateGoldenTest {
-    // full.json is what the Gson store wrote, HTML-escaped strings included; sparse-legacy.json is an older, partial
-    // file with a quoted number, a section without bullets, and a retired key. kotlinx-full.json, captured from the
-    // kotlinx store, keeps a source version and release name on the installed changelog, which full.json lacks.
     @Test
     fun `update state files older builds wrote decode the same`() {
         val markdown = "## Fixed\n- a=b & c<d> 'quoted' \"double\" é☃"

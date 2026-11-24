@@ -171,7 +171,6 @@ class AppUsageTrackerTest {
         assertEquals(StatisticsUsageCategory.READING, statisticsUsageCategory("viewer", "series", codices, reading))
         val watching = session(ViewerStreamSource.SERIES, ViewerSeries.Watching())
         assertEquals(StatisticsUsageCategory.ANIME, statisticsUsageCategory("viewer", "series", codices, watching))
-        // The session only matters while the Viewer is the current screen.
         assertNull(statisticsUsageCategory("settings-screen", "search", codices, watching))
         assertEquals(StatisticsUsageCategory.BROWSING, statisticsUsageCategory("creator-profile", "library", codices))
         assertEquals(StatisticsUsageCategory.CODEX, statisticsUsageCategory("codex/detail/{codexId}", "search", codices))

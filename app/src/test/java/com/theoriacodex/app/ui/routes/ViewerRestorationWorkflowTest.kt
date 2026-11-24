@@ -161,8 +161,6 @@ class ViewerRestorationWorkflowTest {
         )
         try {
             graph.awaitReady()
-            // The store reads on the test scheduler, so restoration's lookup timeout runs on the same clock as the
-            // read; on the graph's real IO dispatcher the virtual 15 s timeout fires before the read returns.
             val offlineMedia = OfflineMediaCoordinator(
                 OfflineMediaStore(temporary.newFolder(), StandardTestDispatcher(testScheduler)), backgroundScope,
                 { it }, { emptyList() }, { _, _, _ -> error("Restoration never saves media offline") },

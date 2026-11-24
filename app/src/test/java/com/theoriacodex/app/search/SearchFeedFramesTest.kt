@@ -48,11 +48,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowTrace
 
-/**
- * Pins what the Search feed shows after every frame (plan `.docs/exec/shared-feed-presenter.html`, Phases 0 and 1). Frames advance by hand and background work runs only when [background] is drained, so each step shows
- * whether a result was computed in the frame itself (on the main thread) or waited for the background. Opening the
- * Viewer removes the feed from composition, as navigating to its destination does; [feedShown] stands in for that.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class SearchFeedFramesTest {
@@ -61,7 +56,6 @@ class SearchFeedFramesTest {
     private val background = SteppedDispatcher()
     private val transition = ViewerReturnTransition()
 
-    // Animated posts with no length in their metadata, so the length filter waits for [durations].
     private val posts = List(12) { testPost(SourceKey.RULE34VIDEO, "v$it") }
     private var state by mutableStateOf(searchState(posts.take(8)))
     private var fab by mutableStateOf(FeedFabRestoreState())
@@ -72,7 +66,6 @@ class SearchFeedFramesTest {
     private val actions = mutableListOf<SearchAction>()
     private lateinit var grid: LazyStaggeredGridState
 
-    /** What the grid draws in the last applied composition; an empty list is Search's "no results" state. */
     private var shown: List<String>? = null
 
     @Test fun `an appended page shows in the frame it arrives, filtering only the page in place`() {
@@ -98,10 +91,8 @@ class SearchFeedFramesTest {
         fab = fab.copy(hideLiked = true)
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
 
-        // The next page lands before the background pass: the whole new list is filtered in place, new filter included.
         state = searchState(posts)
         assertEquals(Frame(ids(0..11) - "v1", filterPasses = 1), frame())
-        // The background pass still runs over the old list; its answer is dropped.
         assertEquals(1, drain())
         assertEquals(Frame(ids(0..11) - "v1", filterPasses = 0), frame())
     }
@@ -111,9 +102,6 @@ class SearchFeedFramesTest {
         show()
         assertEquals(Frame(emptyList(), filterPasses = 0), frame())
 
-        // One length per step. The projection answers in the background with a longer presented list, and the
-        // visibility filter adds the result for the newly revealed post alone, in the frame itself (FilteredFeedTest
-        // checks that this equals a whole pass).
         for (index in 0..3) {
             durations = durations + known(posts[index], SHORT_MS)
             assertEquals(Frame(ids(0 until index), filterPasses = 0), frame())
@@ -121,7 +109,6 @@ class SearchFeedFramesTest {
             assertEquals(Frame(ids(0..index), filterPasses = 1), frame())
         }
 
-        // A burst inside one frame: one projection answers for all three, and one in-place pass shows them.
         durations = durations + known(posts[4], SHORT_MS)
         durations = durations + known(posts[5], LONG_MS)
         durations = durations + known(posts[6], SHORT_MS)
@@ -136,7 +123,6 @@ class SearchFeedFramesTest {
         show()
         assertEquals(Frame(ids(0..0), filterPasses = 0), frame())
 
-        // v5 lies behind the frontier, which waits at v1: the projection presents the very same list.
         durations = durations + known(posts[5], SHORT_MS)
         assertEquals(Frame(ids(0..0), filterPasses = 0), frame())
         assertEquals(0, drain())
@@ -161,7 +147,6 @@ class SearchFeedFramesTest {
         openViewer()
 
         feedShown = true
-        // The kept length frame and the kept filter result cover the same list, so nothing is redone.
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
@@ -200,7 +185,6 @@ class SearchFeedFramesTest {
         durations = durations + known(posts[7], SHORT_MS)
 
         feedShown = true
-        // The first frame is the one the Viewer covered; the new length lands as any arriving length does.
         assertEquals(Frame(ids(0..6), filterPasses = 0), frame())
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..7), filterPasses = 1), frame())
@@ -224,7 +208,6 @@ class SearchFeedFramesTest {
         state = searchState(posts)
 
         feedShown = true
-        // The kept length frame covers the start of the longer list, as for a page arriving with the feed on screen.
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..11), filterPasses = 1), frame())
@@ -235,14 +218,11 @@ class SearchFeedFramesTest {
         durations = posts.take(8).associate { known(it, SHORT_MS) }
         show()
         openViewer()
-        // The Viewer resolved v3 again: a new list, same ids, and a corrected length outside the range.
         state = searchState(posts.take(8).toMutableList().apply { this[3] = this[3].copy(durationMs = LONG_MS) })
 
         feedShown = true
-        // The kept length frame covers a list with the same ids, so the first frame is the one the Viewer covered.
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
-        // One background projection reads the new snapshot; the corrected length then hides v3 in place.
         assertEquals(0, drain())
         assertEquals(Frame(ids(0..7) - "v3", filterPasses = 1), frame())
         assertEquals(0, drain())
@@ -260,7 +240,6 @@ class SearchFeedFramesTest {
 
         feedShown = true
         transition.begin(posts[2].id)
-        // The marks changed, so the kept result does not apply and the first frame filters in place.
         assertEquals(Frame(ids(0..7), filterPasses = 1), frame())
         assertEquals(0, drain())
 
@@ -319,16 +298,11 @@ class SearchFeedFramesTest {
                 }
             }
         }
-        // Settle the first composition and its background work, so each test starts from a feed at rest.
         frame()
         background.drain()
         frame()
     }
 
-    /**
-     * One frame: what the grid draws (null while the Viewer covers the feed, empty for Search's "no results") and how
-     * many visibility filter passes ran inside the frame, that is on the main thread.
-     */
     private data class Frame(val shown: List<String>?, val filterPasses: Int)
 
     private fun frame(): Frame {
@@ -338,7 +312,6 @@ class SearchFeedFramesTest {
         return Frame(shown, filterPasses() - before)
     }
 
-    /** Runs the queued background work and returns how many visibility filter passes it held. */
     private fun drain(): Int {
         val before = filterPasses()
         background.drain()
@@ -362,7 +335,7 @@ class SearchFeedFramesTest {
     )
 
     private companion object {
-        const val SHORT_MS = 4_000L // inside the 0-10 s range the length filter tests use
+        const val SHORT_MS = 4_000L
         const val LONG_MS = 30_000L
     }
 }

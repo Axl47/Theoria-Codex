@@ -12,12 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/**
- * Restores a real library snapshot (a normal profile backup) into the freshly cleared benchmark app, so cold
- * starts measure a realistic library instead of an empty one. `scripts/verify_performance_device.sh` pushes the
- * snapshot to this app's media directory, launches this activity, and waits for [STATUS_FILE]. The restore goes
- * through the app's own backup path and selects the imported profile, like a user restoring a backup.
- */
 class BenchmarkLibrarySeedActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

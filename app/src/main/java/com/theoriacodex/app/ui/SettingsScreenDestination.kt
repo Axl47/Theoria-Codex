@@ -17,10 +17,6 @@ import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * The pushed [AppRoute.Settings] screen. It remembers the page it was opened at, so Back from that page
- * returns to the screen that opened it (Search's "Sites" jump, for example) instead of Settings' home.
- */
 @Composable
 internal fun SettingsScreenDestination(shell: TheoriaShell) {
     val owner = shell.owners.settings
@@ -43,16 +39,11 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
     )
 }
 
-/**
- * Opens Settings at [page], with [sheet] over its home, above the current screen; a jump during startup
- * waits for it to finish.
- */
 internal fun TheoriaShell.openSettings(page: SettingsPage = SettingsPage.HOME, sheet: SettingsSheet? = null) {
     owners.settings.onAction(SettingsAction.OpenPage(page, sheet))
     showSettingsRoute()
 }
 
-/** Pushes the Settings route once startup is done, so restoring the last tab cannot cover it. */
 internal fun TheoriaShell.showSettingsRoute() {
     scope.launch {
         snapshotFlow { navReady }.first { ready -> ready }

@@ -325,12 +325,6 @@ class TheoriaMacrobenchmark {
 
 }
 
-/**
- * Skips the Search autoplay scenarios on Android emulators, which cannot keep the fixture's twelve visible
- * videos playing at once: the goldfish H.264 decoder has four host slots, Media3 falls back to the software
- * decoder for the rest, and from about six software decoders on, at least one card stops playing. Phones
- * decode them all in hardware, so the simultaneous-autoplay assertion still runs there unchanged.
- */
 private fun assumeSearchAutoplayDecodersAvailable() {
     assumeFalse(
         "Search autoplay scenarios are phone-only: the emulator cannot decode 12 simultaneous videos",

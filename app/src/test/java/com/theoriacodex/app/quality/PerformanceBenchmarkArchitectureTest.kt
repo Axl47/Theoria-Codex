@@ -5,7 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Source/build isolation guard only. Packaged APK verification and device journeys prove runtime behavior. */
 class PerformanceBenchmarkArchitectureTest {
     private val repositoryRoot = generateSequence(File(requireNotNull(System.getProperty("user.dir"))).absoluteFile) {
         it.parentFile

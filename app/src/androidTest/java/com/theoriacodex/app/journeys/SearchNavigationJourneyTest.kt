@@ -97,11 +97,9 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
             hasAnyAncestor(hasTestTag("Search composer"))))
         activate(compose.onNodeWithText("Add an alternative"))
         addSearchTag("green")
-        // Touch mode is reported if the composer fails to collapse after the keyboard submits.
         var nativeTouchModeBeforeApply = false
         scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
         submitSearch()
-        // Search runs live, so each tag edit may reach the provider before the final grouped query does; that one is asked once.
         val expectedGroups = listOf(listOf("landscape"), listOf("blue", "green"))
         fun groupedRoots() = container.registry.requests.toList().filter { request ->
             request.source == SourceKey.PIXIV && request.pageToken == null &&

@@ -72,7 +72,6 @@ internal fun Intent.incomingPayloadUri(): Uri? {
 
 private val WEB_URL = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
 
-/** Apps often share a title with the link, and prose can put punctuation right after it. */
 internal fun firstWebUrl(text: String): String? =
     WEB_URL.find(text)?.value?.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '"', '\'')
 

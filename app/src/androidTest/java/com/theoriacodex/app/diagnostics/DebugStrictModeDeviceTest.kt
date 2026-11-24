@@ -12,7 +12,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Debug builds report main-thread disk access through StrictMode and keep Android's network-on-main protection. */
 @RunWith(AndroidJUnit4::class)
 class DebugStrictModeDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -20,13 +19,11 @@ class DebugStrictModeDeviceTest {
     @Test
     fun diskReadOnTheMainThreadIsCountedAtTheReadingCode() {
         val file = File(instrumentation.targetContext.cacheDir, "strictmode-probe").apply { writeText("probe") }
-        // Counts are uncapped and keyed by the reading class, so earlier tests cannot use up the reporting limit.
         val kind = DebugStrictModeDeviceTest::class.java.name
         val before = strictModeViolations.count(kind)
 
         instrumentation.runOnMainSync { file.readText() }
 
-        // StrictMode hands violations to the listener asynchronously.
         val deadline = SystemClock.uptimeMillis() + LISTENER_TIMEOUT_MS
         while (strictModeViolations.count(kind) == before && SystemClock.uptimeMillis() < deadline) {
             SystemClock.sleep(POLL_MS)
