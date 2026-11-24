@@ -21,6 +21,7 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.fixtures.AgedStatistics
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.fixtures.JourneyNoNetworkHttpClient
 import com.theoriacodex.app.media.MediaDurationState
@@ -70,11 +71,16 @@ internal class BenchmarkAppJourney private constructor(
     }
 
     companion object {
-        suspend fun create(context: Context, scope: CoroutineScope): BenchmarkAppJourney = withContext(Dispatchers.IO) {
+        suspend fun create(
+            context: Context,
+            scope: CoroutineScope,
+            agedStatistics: Boolean = false,
+        ): BenchmarkAppJourney = withContext(Dispatchers.IO) {
             val storage = File(context.cacheDir, "benchmark-journey-${System.nanoTime()}").apply { mkdirs() }
+            if (agedStatistics) AgedStatistics.write(storage)
             val mediaUri = "android.resource://${context.packageName}/${R.raw.benchmark_motion}"
             val transport = BenchmarkByteTransport(mediaUri, context.resources.openRawResource(R.raw.benchmark_motion).use { it.readBytes() })
-            val posts = journeyPosts(context)
+            val posts = journeyPosts(context, agedStatistics)
             val fixture = JourneyAppContainer(context, storage, mapOf(SourceKey.PIXIV to posts), scope,
                 pageSize = 12, httpClient = transport)
             fixture.awaitReady()
@@ -194,8 +200,9 @@ internal class BenchmarkByteTransport(
     }
 }
 
-private fun journeyPosts(context: Context): List<Post> = List(24) { index ->
-    val kind = listOf("video", "gif", "webp", "ugoira")[index % 4]
+private fun journeyPosts(context: Context, agedStatistics: Boolean): List<Post> = List(24) { index ->
+    val kind = if (agedStatistics) "video" else listOf("video", "gif", "webp", "ugoira")[index % 4]
+    val tags = if (agedStatistics) AgedStatistics.postTags(index) else listOf("benchmark")
     val resource = when (kind) {
         "video" -> R.raw.benchmark_motion
         "gif" -> R.raw.benchmark_two_frame_gif
@@ -213,7 +220,7 @@ private fun journeyPosts(context: Context): List<Post> = List(24) { index ->
         id = PostId(SourceKey.PIXIV, "benchmark_${kind}_$index"),
         preview = if (kind == "video" || kind == "ugoira") ImageRef(null, null, "image/jpeg") else media,
         full = media, media = listOf(media), pageUrl = null, width = 640, height = 360,
-        canonicalTags = listOf("benchmark"), rawTags = listOf("benchmark"), authorName = "Benchmark creator",
+        canonicalTags = tags, rawTags = tags, authorName = "Benchmark creator",
         createdAtEpochMs = index.toLong(), title = "Benchmark $kind ${index + 1}", mediaCount = 1,
         creatorProfile = CreatorProfile(SourceKey.PIXIV, "Benchmark creator", profileId = "benchmark-creator", uploadsQuery = "benchmark"),
     )

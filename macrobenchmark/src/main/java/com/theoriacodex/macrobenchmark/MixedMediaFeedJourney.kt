@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 private const val JOURNEY_TIMEOUT_MS = 15_000L
 private val MEDIA_PATTERN = Pattern.compile("search_media_pixiv_benchmark_(video|gif|webp|ugoira)_.*")
 private const val STATUS_TAG = "benchmark_journey_status"
+private const val FIRST_SEARCH_VIDEO = "search_media_pixiv_benchmark_video_0"
 private val ANIMATED_KINDS = setOf("video", "gif", "webp", "ugoira")
 
 internal fun UiDevice.completeFiveFeedJourney() {
@@ -73,6 +74,24 @@ internal fun UiDevice.completeFiveFeedJourney() {
         "Background resume recreated the fixture instead of retaining the route owners"
     }
     requireMovingFeedPreviews("Search after background resume")
+}
+
+internal fun UiDevice.completeViewerSwipes(pages: Int) {
+    val entry = wait(Until.findObject(By.res(FIRST_SEARCH_VIDEO)), JOURNEY_TIMEOUT_MS)
+        ?: error("Search fixture must present its first video for Viewer entry")
+    fun identity(page: Int) = "viewer_video_pixiv_benchmark_video_$page"
+    entry.click()
+    requireMovingViewer(identity(0), "Viewer opened from Search")
+    for (page in 1 until pages) {
+        swipeViewer(next = true)
+        requireMovingViewer(identity(page), "Viewer page $page")
+    }
+    for (page in pages - 2 downTo 0) {
+        swipeViewer(next = false)
+        requireMovingViewer(identity(page), "Viewer page $page")
+    }
+    pressBack()
+    requireMovingFeedPreviews("Search after Viewer swipes")
 }
 
 private fun UiDevice.exerciseCurrentFeed(label: String) {

@@ -77,6 +77,15 @@ Workload version 2 adds two complete app journeys:
   just as in the normal app. The JVM `DurationRouteAcquisitionTest` also proves that a real range
   operation is canceled by scrolling, stays paused, and resumes without copying the Post list.
 
+`agedStatisticsViewerSwipes` measures what a lifetime of viewing costs, which the fresh fixture profile
+never shows. Before the app graph starts, `AgedStatistics` writes an aged statistics file through the
+current store, from a fixed seed: four sources each at the full 4,000-tag watched table with Zipf-shaped
+counts and floors, 400 days of history, 600 searched tags per source and 24 codices of 150 posts (about
+1.4 MB). Search then shows 24 videos whose 35 tags come from the same distribution, roughly a third of them
+missing from the table, so the full table keeps evicting every few posts, as a long-used store does. The journey opens the Viewer from Search, swipes
+through eight posts and back with the same pixel check on each page, then returns to Search. Changing the
+generator changes the workload hash, so runs on different aged data never compare.
+
 The full app fixture uses `app/src/fixtures` with a fresh activity-owned storage directory inside
 its isolated app sandbox. Providers, media and credentials are controlled local fixtures; there
 are no live provider calls or downloads. The target manifest removes Internet,
