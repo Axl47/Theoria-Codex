@@ -243,15 +243,11 @@ internal class ViewerFrame(
 
     private val reading = uiState.series is ViewerSeries.Reading
 
-    // Media pages drop the portrait top gap in landscape and in PiP, where it would frame the media in black bars, and
-    // while reading a chapter, whose pages need every pixel.
-    val mediaEdgeToEdge = isLandscape || inPictureInPicture || reading
-
     /**
-     * Still images drop their inset in landscape and while reading a chapter. Galleries outside a series keep it: the
-     * inset and top gap are their screenshot-referenced layout, and only chapter reading was asked to fill the width.
+     * Whether animated and video pages drop their portrait top gap: in landscape and in PiP, where it would frame the
+     * media in black bars, and while reading a chapter. Still images always fill the page; see [ViewerMediaLayout].
      */
-    val stillsEdgeToEdge = isLandscape || reading
+    val mediaEdgeToEdge = isLandscape || inPictureInPicture || reading
 
     /** A running slideshow or an open chapter keeps the screen on. */
     val keepsScreenAwake = uiState.controls.slideshow || reading
