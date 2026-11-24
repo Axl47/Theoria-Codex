@@ -81,7 +81,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, pins.observeSavedSearches().first().size)
     }
 
-    @Test fun `a backup carries the extension repos, and one without them stays readable by the previous release`() {
+    @Test fun `a backup carries the extension repos, and one without them stays readable by the previous release (ADR 0024)`() {
         val repos = listOf(ExtensionRepo("https://a.example/repo", "A", "aa11"), ExtensionRepo("https://b.example/repo", "B", "bb22"))
         val written = backup().copy(extensionRepos = repos)
         assertEquals(repos, codec.decode(codec.encode(written)).extensionRepos)
@@ -93,7 +93,7 @@ class ProfileBackupServiceTest {
         assertEquals(emptyList<ExtensionRepo>(), codec.decode(codec.encode(backup())).extensionRepos)
     }
 
-    @Test fun `statistics with a watched-tag floor are written as version 5 and restore the floor`() {
+    @Test fun `statistics with a watched-tag floor are written as version 5 and restore the floor (ADR 0024)`() {
         val statistics = LifetimeStatistics(
             watchedByTag = mapOf(StatisticsTagKey(SourceKey.GELBOORU, "fern") to 9L),
             watchedTagFloors = mapOf(SourceKey.GELBOORU to 4L),
@@ -362,7 +362,7 @@ class ProfileBackupServiceTest {
         assertEquals(0, harness.store.merges)
     }
 
-    @Test fun `series round trip as version 3 and a backup without them is written and read as before`() {
+    @Test fun `series round trip as version 3 and a backup without them is written and read as before (ADR 0024)`() {
         val plain = backup()
         val written = codec.encode(plain).toString(Charsets.UTF_8)
         assertTrue(written.contains("\"version\":2") && !written.contains("\"series\""))

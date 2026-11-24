@@ -12,7 +12,7 @@ A backup is read by older and newer app builds, and by the restore journal. Olde
 - The frame is a JSON tree checked field by field; settings, statistics, posts and sites are their storage records through `DurableJson`, which writes the keys, omitted nulls and present defaults older builds read. A null `queryHash` is still written as an explicit null.
 - Readers match what the Gson tree accepted (`isBackupNumber`, `isBackupBoolean`, `backupObject`) so a malformed field fails with the same message; kotlinx's `IllegalArgumentException` text is shown verbatim, other failures keep the generic message.
 - Lists are bounded by sanity limits (256 repos, 256 sites, 10,000 series, 20,000 entries per series).
-- Credentials are never part of a backup. Trust for extensions is granted per device: a restored backup always carries empty `ExtensionChoices`.
+- Credentials are never part of a backup. Trust for extensions is granted per device and kept outside the settings record a backup carries.
 - Series pages, downloads and `chaptersShareFirstPage` are not backed up; pages need the extension installed, and the Viewer rediscovers the flag. The cover is the address the source gave, fetched by the series' own source client.
 - Export tolerates what extensions produce: series without an address and chapters without one are left out, a blank title is written as the address, and a series over the entry limit is cut in a fixed priority (Continue's entry, entries with progress, listed, dropped). Restore still refuses such input, since no export writes it. `validateBackupSeries` is the one check on both paths.
 - A memo is kept only if it is a JSON object within `MAX_MEMO_LENGTH`; null stays eligible for a later restore to fill. The series record keys `lastPage`/`pageCount` predate anime and hold position/length for both kinds.
@@ -37,3 +37,10 @@ Adding a backup field means bumping the version only when the field is present, 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesBackupRecords.kt`: `BackupSeriesRecord`, `storedMemo`, `validateBackupSeries`, `writable`, `withinEntryLimit`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/ProfileBackupService.kt`: `ProfileBackupService`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: backup encoding tests
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: `a backup carries the extension repos, and one without them stays readable by the previous release (ADR 0024)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: `statistics with a watched-tag floor are written as version 5 and restore the floor (ADR 0024)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/ProfileBackupServiceTest.kt`: `series round trip as version 3 and a backup without them is written and read as before (ADR 0024)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `backups holding retired settings and statistics keys still import (ADR 0024)`
