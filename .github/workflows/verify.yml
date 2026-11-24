@@ -79,6 +79,23 @@ jobs:
           echo "check=$RUN_CHECK" >> "$GITHUB_OUTPUT"
           echo "parts=[$(IFS=,; echo "${parts[*]}")]" >> "$GITHUB_OUTPUT"
 
+  # The parts check out the PR's head so their results can be reused for the same code, but a branch
+  # made before a policy check existed carries no copy of it and passes without it. This job runs the
+  # seconds-long policy checks on the merge result GitHub would create instead.
+  merge-policy:
+    name: Merge policy
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the merge result
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+
+      - name: Comment ratchet against main
+        run: source scripts/policy_checks.sh && comment_ratchet HEAD^1
+
   # A static name: GitHub shows each run as `Check part (tests)` and so on, and a skipped job as
   # `Check part`. A name built from the matrix would show unevaluated when the job is skipped.
   part:
@@ -214,7 +231,7 @@ jobs:
 
   verify:
     name: Verify
-    needs: [plan, part]
+    needs: [plan, part, merge-policy]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -269,8 +286,10 @@ jobs:
           PLAN: ${{ needs.plan.result }}
           PARTS: ${{ needs.plan.outputs.parts }}
           PART: ${{ needs.part.result }}
+          MERGE_POLICY: ${{ needs.merge-policy.result }}
         run: |
           [[ "$PLAN" == success ]] || { echo "::error::The lookup failed."; exit 1; }
+          [[ "$MERGE_POLICY" == success || "$MERGE_POLICY" == skipped ]] || { echo "::error::The merge result fails a policy check."; exit 1; }
           [[ "$PARTS" == '[]' || "$PART" == success ]] || { echo "::error::A part of the check failed."; exit 1; }
 
       # One `ci-timings` artifact per run, as the external dashboard expects. Phase names carry
