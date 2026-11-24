@@ -20,13 +20,13 @@ class ExtensionPackagesTest {
     private val packages = ExtensionPackages(context, listOf(MihonKind, AniyomiKind))
 
     @Test
-    fun `a package is listed under the kind whose feature it declares, and one declaring none is no extension`() {
-        install("app.manga", MihonKind.feature, "Tachiyomi: Manga", Bundle().apply {
-            putString(MihonKind.sourceClassesKey, ".MangaSource")
+    fun `a package is listed under the kind whose manifest names it declares, and one declaring none is no extension (ADR 0056)`() {
+        install("app.manga", "tachiyomi.extension", "Tachiyomi: Manga", Bundle().apply {
+            putString("tachiyomi.extension.class", ".MangaSource")
             putFloat("tachiyomix.extensionLib", 1.6f)
         })
-        install("app.anime", AniyomiKind.feature, "Aniyomi: Anime", Bundle().apply { putString(AniyomiKind.sourceClassesKey, ".AnimeSource") }, version = "14.25")
-        install("app.other", "android.hardware.camera", "Other", Bundle().apply { putString(MihonKind.sourceClassesKey, ".Source") })
+        install("app.anime", "tachiyomi.animeextension", "Aniyomi: Anime", Bundle().apply { putString("tachiyomi.animeextension.class", ".AnimeSource") }, version = "14.25")
+        install("app.other", "android.hardware.camera", "Other", Bundle().apply { putString("tachiyomi.extension.class", ".Source") })
 
         val listed = packages.list()
 
@@ -38,7 +38,7 @@ class ExtensionPackagesTest {
     }
 
     @Test
-    fun `a kind's reason for refusing an extension is the extension's`() {
+    fun `a kind's reason for refusing an extension is the extension's (ADR 0056)`() {
         install("app.old", MihonKind.feature, "Tachiyomi: Old", Bundle().apply {
             putString(MihonKind.sourceClassesKey, ".MangaSource")
             putFloat("tachiyomix.extensionLib", 1.5f)
@@ -48,7 +48,7 @@ class ExtensionPackagesTest {
     }
 
     @Test
-    fun `anime extensions of interface 14 and 16 are accepted, and any other version, an unreadable one or a torrent one is refused`() {
+    fun `anime extensions of interface 14 and 16 are accepted, and any other version, an unreadable one or a torrent one is refused (ADR 0055, 0056)`() {
         listOf("a" to "14.64", "b" to "16.8", "c" to "17.1", "d" to "13.9", "da" to "beta").forEach { (name, version) ->
             install("app.$name", AniyomiKind.feature, "Aniyomi: $name", Bundle().apply { putString(AniyomiKind.sourceClassesKey, ".Source") }, version)
         }
@@ -64,7 +64,7 @@ class ExtensionPackagesTest {
     }
 
     @Test
-    fun `a private copy stands in for a package of its name, unless the other app updated it past the copy`() {
+    fun `a private copy stands in for a package of its name, unless the other app updated it past the copy (ADR 0063)`() {
         fun extension(name: String, version: Long, signer: String, origin: ExtensionOrigin) =
             ExtensionPackage(name, name, "1.6.$version", version, signer, java.io.File("/$origin/$name.apk"), origin, MihonKind, listOf(".S"), size = 1, modified = 1)
         val owned = listOf("same", "newer", "foreign").map { extension(it, 5, "key", ExtensionOrigin.PRIVATE) } + extension("alone", 1, "key", ExtensionOrigin.PRIVATE)

@@ -2,9 +2,12 @@ package eu.kanade.tachiyomi.source.online
 
 import com.theoriacodex.extensionhost.answering
 import com.theoriacodex.extensionhost.cannedResponse
+import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
@@ -102,6 +105,40 @@ class HttpSourceTest {
     }
 
     @Test
+    fun `a source's id is the one Mihon and Aniyomi compute from its name, language and version (ADR 0056, 0065)`() {
+        val anime = object : AnimeHttpSource() {
+            override val name = "MangaDex"
+            override val lang = "en"
+            override val baseUrl = "https://anime.test"
+            override val supportsLatest = false
+        }
+
+        assertEquals(2_499_283_573_021_220_255L, TestSource(name = "MangaDex").id)
+        assertEquals(2_499_283_573_021_220_255L, anime.id)
+        assertEquals(490_041_738_643_955_318L, TestSource(name = "Alpha").id)
+        assertEquals(490_041_738_643_955_318L, TestSource(name = "ALPHA").id)
+    }
+
+    @Test
+    fun `withoutDomain keeps a URL's path, query and fragment, and returns what is no URI unchanged (ADR 0065)`() {
+        assertEquals("/series/1?lang=en#top", withoutDomain("https://example.test/series/1?lang=en#top"))
+        assertEquals("http://[bad", withoutDomain("http://[bad"))
+    }
+
+    @Test
+    fun `the extension API classes offer no RxJava method (ADR 0056)`() {
+        val api = listOf(Source::class.java, HttpSource::class.java, AnimeSource::class.java, AnimeHttpSource::class.java)
+
+        val rx = api.flatMap { type ->
+            type.methods.filter { method -> (method.parameterTypes + method.returnType).any { it.name.startsWith("rx.") || it.name.startsWith("io.reactivex.") } }
+                .map { "${type.simpleName}.${it.name}" }
+        }
+
+        assertTrue(api.all { it.methods.isNotEmpty() })
+        assertEquals(emptyList<String>(), rx)
+    }
+
+    @Test
     fun `setUrlWithoutDomain strips the host`() {
         val source = TestSource()
         val manga = manga("")
@@ -126,8 +163,7 @@ class HttpSourceTest {
         it.url = ""
     }
 
-    private class TestSource(override val lang: String = "en") : HttpSource() {
-        override val name = "Test"
+    private class TestSource(override val lang: String = "en", override val name: String = "Test") : HttpSource() {
         override val baseUrl = "https://example.test"
         override val supportsLatest = true
 

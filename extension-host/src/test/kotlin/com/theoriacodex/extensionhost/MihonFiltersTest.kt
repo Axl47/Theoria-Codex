@@ -42,7 +42,7 @@ class MihonFiltersTest {
     }
 
     @Test
-    fun `a search sets the values chosen onto a list the source makes afresh`() = runTest {
+    fun `a search sets the values chosen onto a list the source makes afresh (ADR 0064)`() = runTest {
         val chosen = series.filters().map { filter ->
             when (filter) {
                 is SeriesFilter.Text -> filter.copy(value = "Oda")
@@ -67,7 +67,7 @@ class MihonFiltersTest {
     }
 
     @Test
-    fun `values that do not line up with the source's list leave its defaults`() = runTest {
+    fun `values that do not line up with the source's list leave its defaults (ADR 0064)`() = runTest {
         val defaults = series.filters()
         val stale = listOf(SeriesFilter.Select("Options", listOf("Old"), 0), SeriesFilter.Separator, SeriesFilter.Check("Author", true))
 
@@ -77,7 +77,7 @@ class MihonFiltersTest {
     }
 
     @Test
-    fun `later pages of a search reuse the list its first page used, and a new search makes another`() = runTest {
+    fun `later pages of a search reuse the list its first page used, and a new search makes another (ADR 0064)`() = runTest {
         val chosen = series.filters().map { if (it is SeriesFilter.Check) it.copy(checked = true) else it }
 
         series.search("one", 1, chosen)

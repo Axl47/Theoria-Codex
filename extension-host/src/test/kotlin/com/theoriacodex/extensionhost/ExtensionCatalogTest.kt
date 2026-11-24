@@ -82,7 +82,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key (ADR 0007)`() = runTest {
+    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key (ADR 0007, 0063)`() = runTest {
         serve()
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/index.min.json"))))
         assertEquals(listOf(ExtensionRepo(repoUrl, "Anime", key)), catalog.repos())
@@ -141,7 +141,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `each extension the host runs is listed with how the device stands with it`() = runTest {
+    fun `each extension the host runs is listed with how the device stands with it (ADR 0063)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("current", 5, "14"), Triple("old", 7, "16"), Triple("foreign", 1, "16"), Triple("unsupported", 1, "15"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         system += listOf(extension("current", key, 5), extension("old", key, 6), extension("foreign", otherKey, 1))
@@ -167,7 +167,17 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `a repo whose index is too large, as fetched or once gunzipped, is refused without reading it all`() = runTest {
+    fun `torrent extensions and ones of an interface the host does not run are not offered (ADR 0063)`() = runTest {
+        serve(Triple("kept", 1, "16"), Triple("torrent", 1, "16"), Triple("unsupported", 1, "15"))
+        site["$repoUrl/index.min.json"] = site.getValue("$repoUrl/index.min.json").decodeToString()
+            .replace("\"pkg\":\"torrent\"", "\"pkg\":\"torrent\",\"torrent\":1").encodeToByteArray()
+        catalog.add(listOf(NewExtensionRepo(repoUrl)))
+
+        assertEquals(listOf("kept"), catalog.available().extensions.map { it.packageName })
+    }
+
+    @Test
+    fun `a repo whose index is too large, as fetched or once gunzipped, is refused without reading it all (ADR 0063)`() = runTest {
         site["https://huge.example/repo.json"] = ByteArray(MAX_INDEX_BYTES.toInt() + 1) { ' '.code.toByte() }
         assertEquals(mapOf("https://huge.example" to "Too large"), catalog.add(listOf(NewExtensionRepo("https://huge.example"))))
 
@@ -180,7 +190,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007)`() = runTest {
+    fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007, 0063)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("old", 7, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("new", key, 2)
@@ -214,7 +224,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `nothing is installed that is not the package the repo named, signed with its key, and no older than the copy on the device (ADR 0007)`() = runTest {
+    fun `nothing is installed that is not the package the repo named, signed with its key, and no older than the copy on the device (ADR 0007, 0063)`() = runTest {
         serve(Triple("swapped", 1, "16"), Triple("unsigned", 1, "16"), Triple("older", 3, "16"), Triple("foreign", 2, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("swapped", key, 1)

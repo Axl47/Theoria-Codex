@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -37,6 +38,26 @@ class ExtensionLoaderTest {
             assertEquals(error, assertFailsWith<ExtensionRejectedException> { create(factory) }.cause?.javaClass)
         }
     }
+
+    @Test
+    fun `an instance that is neither a source nor a factory, or whose constructor throws, rejects the extension (ADR 0056)`() {
+        val notASource = assertFailsWith<ExtensionRejectedException> { create(NotASource::class.java) }
+        val throwing = assertFailsWith<ExtensionRejectedException> { create(ThrowingConstructor::class.java) }
+
+        assertEquals("${NotASource::class.java.name} in app.ext is not a source of its kind", notASource.message)
+        assertTrue(throwing.message.orEmpty().startsWith("${ThrowingConstructor::class.java.name} in app.ext could not be created"))
+    }
+
+    @Test
+    fun `a private copy that no longer matches its listing is deleted and refused before any code loads (ADR 0063)`() {
+        val apk = File(context.filesDir, "app.ext.apk").apply { writeText("not the listed archive") }
+        val listed = extension.copy(apk = apk, origin = ExtensionOrigin.PRIVATE, sourceClasses = listOf(NotASource::class.java.name))
+
+        val refused = assertFailsWith<ExtensionRejectedException> { loader.load(listed, host) }
+
+        assertEquals("app.ext.apk changed after it was listed", refused.message)
+        assertTrue(File(context.codeCacheDir, "mihon-extensions").listFiles().orEmpty().isEmpty())
+    }
 }
 
 class OutOfMemoryFactory : SourceFactory {
@@ -62,5 +83,13 @@ class ThrowableFactory : SourceFactory {
 class OutOfMemoryConstructor {
     init {
         throw OutOfMemoryError("extension")
+    }
+}
+
+class NotASource
+
+class ThrowingConstructor {
+    init {
+        error("extension")
     }
 }

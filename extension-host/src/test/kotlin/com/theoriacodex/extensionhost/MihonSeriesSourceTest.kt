@@ -76,7 +76,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `details carry the description and Mihon's status, and details without them keep the earlier ones`() = runTest {
+    fun `details carry the description and Mihon's status, and details without them keep the earlier ones (ADR 0064)`() = runTest {
         source.listing = MangasPage(listOf(manga("/s", "Series")), hasNextPage = false)
         val listed = series.popular(1).series.single()
         assertNull(listed.description)
@@ -101,7 +101,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `details that name only what they add keep the listed title and cover`() = runTest {
+    fun `details that name only what they add keep the listed title and cover (ADR 0064)`() = runTest {
         source.listing = MangasPage(listOf(manga("/s", "Series", cover = "https://cdn.test/c.jpg")), hasNextPage = false)
         source.details = SManga.create().also { it.genre = "Webtoon" }
         val listed = series.popular(1).series.single()
@@ -115,7 +115,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `the source gets its own listed series back, and a stored one rebuilt from its address`() = runTest {
+    fun `the source gets its own listed series back, and a stored one rebuilt from its address (ADR 0064)`() = runTest {
         val listedManga = manga("/s", "Series")
         source.listing = MangasPage(listOf(listedManga), hasNextPage = false)
         val listed = series.popular(1).series.single()
@@ -129,7 +129,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt (ADR 0007)`() = runTest {
+    fun `memos the source keeps reach the app and come back when a stored series or chapter is rebuilt (ADR 0007, 0064)`() = runTest {
         val slug = buildJsonObject { put("slug", "s-1") }
         source.listing = MangasPage(listOf(manga("/s", "Series").also { it.memo = slug }), hasNextPage = false)
         val oversized = buildJsonObject { put("blob", "x".repeat(MAX_MEMO_LENGTH)) }
@@ -154,7 +154,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `a series listed without its memo takes the stored one, and details that give a memo replace it`() = runTest {
+    fun `a series listed without its memo takes the stored one, and details that give a memo replace it (ADR 0064)`() = runTest {
         source.listing = MangasPage(listOf(manga("/s", "Series")), hasNextPage = false)
         val listed = series.popular(1).series.single()
         assertNull(listed.memo)
@@ -171,7 +171,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `a listing is handed the stored chapters, memos included, and the series memo it leaves comes back (ADR 0007)`() = runTest {
+    fun `a listing is handed the stored chapters, memos included, and the series memo it leaves comes back (ADR 0007, 0064)`() = runTest {
         source.chapters = listOf(chapter("Chapter 2", "/c/2"), chapter("Chapter 1", "/c/1"))
         source.listingMemo = buildJsonObject { put("pages", 3) }
         val stored = Series(SeriesId(series.key, "/s"), "Series")
@@ -191,7 +191,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `a chapter listed twice is the first, for the app and for its pages`() = runTest {
+    fun `a chapter listed twice is the first, for the app and for its pages (ADR 0064)`() = runTest {
         source.chapters = listOf(
             chapter("Chapter 1", "/c/1").also { it.memo = buildJsonObject { put("id", 1) } },
             chapter("Chapter 1 again", "/c/1").also { it.memo = buildJsonObject { put("id", 2) } },
@@ -235,7 +235,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `failures map to the reasons built-in sources report`() = runTest {
+    fun `failures map to the reasons built-in sources report (ADR 0060)`() = runTest {
         assertEquals(SourceFailureReason.RATE_LIMITED, failureOf(HttpException(429)))
         assertEquals(SourceFailureReason.NETWORK, failureOf(HttpException(403)))
         assertEquals(SourceFailureReason.NETWORK, failureOf(HttpException(500)))
@@ -245,7 +245,7 @@ class MihonSeriesSourceTest {
     }
 
     @Test
-    fun `an extension's own cancellation is its failure, and the caller's passes through`() = runTest {
+    fun `an extension's own cancellation is its failure, and the caller's passes through (ADR 0060)`() = runTest {
         source.failure = CancellationException("Timed out inside the extension")
         assertEquals(SourceFailureReason.PARSE, assertFailsWith<SourceAdapterException> { series.popular(1) }.reason)
 

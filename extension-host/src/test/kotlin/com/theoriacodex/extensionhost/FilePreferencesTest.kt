@@ -19,7 +19,7 @@ class FilePreferencesTest {
     private val file = ExtensionHost.preferencesFile(context, "source_1")
 
     @Test
-    fun valuesOfEveryTypeAreKeptAcrossReopeningAndChangesAreAnnouncedOnTheMainThread() {
+    fun valuesOfEveryTypeAreKeptAcrossReopeningAndChangesAreAnnouncedOnTheMainThread_adr_0061() {
         val preferences = FilePreferences(file)
         val changed = mutableListOf<String?>()
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> changed += key }
@@ -53,7 +53,7 @@ class FilePreferencesTest {
     }
 
     @Test
-    fun anEditWhoseWriteFailsIsStillVisibleAndCommitSaysSo() {
+    fun anEditWhoseWriteFailsIsStillVisibleAndCommitSaysSo_adr_0061() {
         val preferences = FilePreferences(file)
         assertTrue(preferences.edit().putString("address", "old").commit())
         val directory = checkNotNull(file.parentFile)
@@ -70,7 +70,7 @@ class FilePreferencesTest {
     }
 
     @Test
-    fun aListenerThatFailsToLinkIsReportedAndTheOthersStillHear() {
+    fun aListenerThatFailsToLinkIsReportedAndTheOthersStillHear_adr_0061() {
         val reported = mutableListOf<Throwable>()
         val heard = mutableListOf<String?>()
         val preferences = FilePreferences(file) { reported += it }
@@ -87,7 +87,7 @@ class FilePreferencesTest {
     }
 
     @Test
-    fun oneUnreadableEntryIsDroppedAndAnUnreadableFileIsSetAside() {
+    fun oneUnreadableEntryIsDroppedAndAnUnreadableFileIsSetAside_adr_0061() {
         file.parentFile?.mkdirs()
         file.writeText("""{"good":{"s":"kept"},"bad":{"x":1},"worse":7}""")
         assertEquals(mapOf("good" to "kept"), FilePreferences(file).all)
@@ -101,7 +101,18 @@ class FilePreferencesTest {
     }
 
     @Test
-    fun preferencesLiveWhereAndroidDoesNotBackUpAndOldFilesAreDeletedNotImported() {
+    fun aFileWrittenByAnEarlierBuildIsReadAndValuesAreWrittenUnderTheSameOneLetterTypes_adr_0061() {
+        checkNotNull(file.parentFile).mkdirs()
+        file.writeText("""{"a":{"s":"x"},"b":{"b":true},"c":{"i":1},"d":{"l":5000000000},"e":{"f":1.5},"f":{"t":["en","es"]}}""")
+        val preferences = FilePreferences(file)
+
+        assertEquals(mapOf("a" to "x", "b" to true, "c" to 1, "d" to 5_000_000_000L, "e" to 1.5f, "f" to setOf("en", "es")), preferences.all)
+        preferences.edit().putInt("c", 2).commit()
+        assertEquals("""{"a":{"s":"x"},"b":{"b":true},"c":{"i":2},"d":{"l":5000000000},"e":{"f":1.5},"f":{"t":["en","es"]}}""", file.readText())
+    }
+
+    @Test
+    fun preferencesLiveWhereAndroidDoesNotBackUpAndOldFilesAreDeletedNotImported_adr_0061() {
         context.getSharedPreferences("mihon_source_9", Context.MODE_PRIVATE).edit().putString("password", "secret").commit()
         context.getSharedPreferences("theoria_other", Context.MODE_PRIVATE).edit().putString("kept", "yes").commit()
 
@@ -110,7 +121,7 @@ class FilePreferencesTest {
         assertFalse(File(context.dataDir, "shared_prefs").list().orEmpty().any { it.startsWith("mihon_") })
         assertEquals("yes", context.getSharedPreferences("theoria_other", Context.MODE_PRIVATE).getString("kept", null))
         val next = ExtensionHost.preferencesFile(context, "source_9")
-        assertTrue(next.path.startsWith(context.noBackupFilesDir.path))
+        assertEquals(File(context.noBackupFilesDir, "mihon_preferences"), next.parentFile)
         assertTrue(FilePreferences(next).all.isEmpty())
         assertEquals(next.parentFile, ExtensionHost.preferencesFile(context, "../../escape").parentFile)
     }

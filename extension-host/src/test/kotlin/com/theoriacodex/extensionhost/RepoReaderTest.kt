@@ -23,7 +23,7 @@ class RepoReaderTest {
     ]"""
 
     @Test
-    fun `a legacy repo is read from its folder, its index address or its repo address alike`() = runTest {
+    fun `a legacy repo is read from its folder, its index address or its repo address alike (ADR 0063)`() = runTest {
         val site = mapOf(
             "https://repo.example/anime/repo.json" to legacyRepo,
             "https://repo.example/anime/index.min.json" to legacyIndex,
@@ -45,7 +45,7 @@ class RepoReaderTest {
     }
 
     @Test
-    fun `a legacy repo naming a newer index is read from that index, as Keiyoushi's is`() = runTest {
+    fun `a legacy repo naming a newer index is read from that index, as Keiyoushi's is (ADR 0063)`() = runTest {
         val stub = """{"index_v2":"https://repo.example/store/index.pb","meta":{"name":"Old","website":"w","signingKeyFingerprint":"$signingKey"}}"""
         val site = mapOf(
             "https://repo.example/store/repo.json" to stub.encodeToByteArray(),
@@ -64,7 +64,7 @@ class RepoReaderTest {
     }
 
     @Test
-    fun `an anime store is read from its own address, with its torrent flag where a manga store has sources`() = runTest {
+    fun `an anime store is read from its own address, with its torrent flag where a manga store has sources (ADR 0063)`() = runTest {
         val index = RepoReader.read("https://repo.example/anime/index.pb") { url -> if (url.endsWith("index.pb")) animeStore else throw IOException("404 $url") }
         assertEquals("Anime fixture", index.name)
         assertEquals(
@@ -77,7 +77,7 @@ class RepoReaderTest {
     }
 
     @Test
-    fun `a manga store whose extensions list no sources is still read as manga`() = runTest {
+    fun `a manga store whose extensions list no sources is still read as manga (ADR 0063)`() = runTest {
         val index = RepoReader.read("https://repo.example/quiet/index.pb") { url -> if (url.endsWith("index.pb")) resource("quiet.pb.gz") else throw IOException("404 $url") }
         assertEquals(listOf(SeriesKind.MANGA to "1.6"), index.extensions.map { it.kind to it.libVersion })
     }

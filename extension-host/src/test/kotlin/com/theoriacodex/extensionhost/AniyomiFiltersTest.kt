@@ -15,7 +15,7 @@ class AniyomiFiltersTest {
     private val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
 
     @Test
-    fun `each of Aniyomi's filters becomes the app's, and a search sets the values chosen onto the source's own`() = runTest {
+    fun `each of Aniyomi's filters becomes the app's, and a search sets the values chosen onto the source's own (ADR 0064)`() = runTest {
         val defaults = listOf(
             SeriesFilter.Header("Options"),
             SeriesFilter.Separator,
