@@ -36,14 +36,15 @@ fun buildViewerImageRequest(
 )
 
 /**
- * A Viewer page decoded for the screen's full width whatever its shape, as tall as a hardware bitmap can be drawn
- * ([viewerPageDecodeBounds]). The vertical reader lays pages out before their shape is known, so sizing the decode
- * from that slot would shrink a tall strip to a sliver; the prefetcher uses the same request, so the bitmap it keeps
- * in memory is the one the page shows. Never upscales: a page narrower than the screen decodes at its own width.
+ * A Viewer page decoded for the full [pageWidthPx] the vertical reader lays it out at, whatever its shape, as tall as
+ * a hardware bitmap can be drawn ([viewerPageDecodeBounds]). The reader lays pages out before their shape is known,
+ * so sizing the decode from that slot would shrink a tall strip to a sliver; its prefetch uses the same request and
+ * width, so the bitmap it keeps in memory is the one the page shows. Never upscales: a narrower page decodes at its
+ * own width. A stopgap until tall strips decode as tiles; nothing outside the vertical reader should size this way.
  */
-fun buildViewerPageRequest(context: Context, url: String, sourceKey: SourceKey): ImageRequest =
+fun buildViewerPageRequest(context: Context, url: String, sourceKey: SourceKey, pageWidthPx: Int): ImageRequest =
     buildViewerImageRequest(context, url, sourceKey).newBuilder()
-        .size(ViewerPageSizeResolver(context.resources.displayMetrics.widthPixels))
+        .size(ViewerPageSizeResolver(pageWidthPx))
         .precision(Precision.INEXACT)
         .build()
 

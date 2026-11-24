@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
@@ -117,10 +118,12 @@ internal fun ViewerFrameEffects(
     val showInfoSheet = uiState.controls.panel == ViewerPanel.INFO && !frame.inPictureInPicture
     ViewerSelectionEffects(frame, screen, controls, swipe.settling, onAction)
     ViewerBackHandlers(frame, screen, controls, dismissDrag)
-    val verticalReading = config.readingModeOf(uiState.currentPage, uiState.series) == GalleryReadingMode.VERTICAL
+    // A vertical gallery fills the window's width, as its pages' own requests assume (ViewerImageRenderer).
+    val windowWidth = LocalWindowInfo.current.containerSize.width
+    val verticalPageWidthPx = windowWidth.takeIf { config.readingModeOf(uiState.currentPage, uiState.series) == GalleryReadingMode.VERTICAL }
     ViewerNavigationEffects(
         frame, swipe, postPagerState, controls, canLoadMoreFromSource, loadingMoreFromSource, loadMoreFromStrip, onAction, onVisiblePostChanged,
-        verticalReading,
+        verticalPageWidthPx,
     )
     ViewerChromeAutoHideEffect(
         chromeVisible = frame.chromeVisible,
@@ -232,7 +235,7 @@ private fun ViewerNavigationEffects(
     loadMoreFromStrip: () -> Unit,
     onAction: (ViewerAction) -> Unit,
     onVisiblePostChanged: ((Post, Int) -> Unit)?,
-    verticalReading: Boolean,
+    verticalPageWidthPx: Int?,
 ) {
     val uiState = frame.uiState
     val navigation = frame.navigation
@@ -244,11 +247,11 @@ private fun ViewerNavigationEffects(
     LaunchedEffect(swipeLoadPost?.id) {
         swipeLoadPost?.let { onAction(ViewerAction.RequestPageResolution(it.id)) }
     }
-    LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget, verticalReading) {
+    LaunchedEffect(posts, currentPostIndex, frame.selection.mediaIndex, swipeLoadTarget, verticalPageWidthPx) {
         val targetKey = swipeLoadTarget?.let { target ->
             pages.getOrNull(target.postIndex)?.media?.getOrNull(target.mediaIndex)?.key
         }
-        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey, verticalReading))
+        onAction(viewerPrefetchAction(pages, uiState.currentMedia?.key, targetKey, verticalPageWidthPx))
     }
     LaunchedEffect(navigation.originalPosts.size, navigation.stripAnchorIndex, canLoadMoreFromSource, loadingMoreFromSource) {
         if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect

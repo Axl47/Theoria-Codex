@@ -49,8 +49,9 @@ internal fun planAdjacentViewerPrefetch(
 }
 
 /**
- * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan, which looks further
- * ahead while [verticalReading]. Static images within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so
+ * What the Viewer asks its owner to prefetch: a swipe's target first, then the adjacent plan. While reading
+ * vertically, [verticalPageWidthPx] is the width pages lay out at: the plan looks further ahead, and images decode
+ * as full-width pages of that width. Static images within [VIEWER_MEMORY_PREFETCH_DISTANCE] are marked for decoding, so
  * a page first downloaded while it was far away is decoded into memory once it becomes a neighbour, and shows
  * without a decode when reached.
  */
@@ -58,11 +59,11 @@ fun viewerPrefetchAction(
     pages: List<ViewerPageState>,
     current: ViewerMediaKey?,
     swipeTarget: ViewerMediaKey?,
-    verticalReading: Boolean = false,
+    verticalPageWidthPx: Int? = null,
 ): ViewerAction.QueuePrefetch {
     val flattened = pages.flatMap(ViewerPageState::media)
     val currentIndex = current?.let { key -> flattened.indexOfFirst { media -> media.key == key } } ?: -1
-    val rightCount = if (verticalReading) VIEWER_VERTICAL_PREFETCH_RIGHT_COUNT else VIEWER_PREFETCH_RIGHT_COUNT
+    val rightCount = if (verticalPageWidthPx != null) VIEWER_VERTICAL_PREFETCH_RIGHT_COUNT else VIEWER_PREFETCH_RIGHT_COUNT
     val keys = (listOfNotNull(swipeTarget) + planAdjacentViewerPrefetch(pages, current, rightCount = rightCount)).distinct()
     return ViewerAction.QueuePrefetch(
         keys.map { key ->
@@ -70,7 +71,7 @@ fun viewerPrefetchAction(
             // Media-item distance in the flattened stream; unknown when either end is absent.
             val distance = if (currentIndex < 0 || index < 0) Int.MAX_VALUE else abs(index - currentIndex)
             val image = flattened.getOrNull(index)?.kind == ViewerMediaKind.IMAGE
-            ViewerPrefetchRequest(key, distance, decode = image && distance <= VIEWER_MEMORY_PREFETCH_DISTANCE)
+            ViewerPrefetchRequest(key, distance, decode = image && distance <= VIEWER_MEMORY_PREFETCH_DISTANCE, pageWidthPx = verticalPageWidthPx)
         },
     )
 }
