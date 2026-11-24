@@ -155,6 +155,36 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
+    fun `a source past the threshold keeps only its most watched tags, while its watched count and other sources stay exact`() {
+        val crowded = (0..WATCHED_TAGS_PRUNE_AT).associate { StatisticsTagKey(SourceKey.GELBOORU, "tag$it") to it + 1L }
+        val quiet = mapOf(StatisticsTagKey(SourceKey.PIXIV, "sky") to 1L)
+        val atThreshold = crowded.entries.take(WATCHED_TAGS_PRUNE_AT).associate { it.toPair() }
+        val statistics = LifetimeStatistics(watchedBySource = mapOf(SourceKey.GELBOORU to 9_000L), watchedByTag = crowded + quiet)
+
+        val capped = StatisticsPolicies.normalize(statistics)
+
+        val kept = capped.watchedByTag.filterKeys { it.source == SourceKey.GELBOORU }
+        assertEquals(WATCHED_TAGS_KEPT, kept.size)
+        assertEquals((WATCHED_TAGS_PRUNE_AT + 1 - WATCHED_TAGS_KEPT + 1L), kept.values.min())
+        assertEquals(1L, capped.watchedByTag[StatisticsTagKey(SourceKey.PIXIV, "sky")])
+        assertEquals(mapOf(SourceKey.GELBOORU to 9_000L), capped.watchedBySource)
+        assertEquals(atThreshold, StatisticsPolicies.normalize(LifetimeStatistics(watchedByTag = atThreshold)).watchedByTag)
+    }
+
+    @Test
+    fun `restoring the same backup twice gives the same watched tags once a source is past the cap`() {
+        val current = LifetimeStatistics(
+            watchedByTag = (1..WATCHED_TAGS_PRUNE_AT).associate { StatisticsTagKey(SourceKey.GELBOORU, "tag$it") to it + 10L },
+        )
+        val backup = LifetimeStatistics(watchedByTag = mapOf(StatisticsTagKey(SourceKey.GELBOORU, "rare") to 1L))
+
+        val once = StatisticsPolicies.normalize(StatisticsPolicies.mergeRestored(current, backup))
+
+        assertEquals(WATCHED_TAGS_KEPT, once.watchedByTag.size)
+        assertEquals(once, StatisticsPolicies.normalize(StatisticsPolicies.mergeRestored(once, backup)))
+    }
+
+    @Test
     fun `restoring a backup keeps the larger count of each typed term and both seed flags`() {
         val artist = SearchedTagKey(SourceKey.NHENTAI, SearchTerm("shindol", SearchFacet.ARTIST, "artist"))
         val current = LifetimeStatistics(searchesByTag = mapOf(artist to 2L, searched(SourceKey.NHENTAI, "sky") to 4L))

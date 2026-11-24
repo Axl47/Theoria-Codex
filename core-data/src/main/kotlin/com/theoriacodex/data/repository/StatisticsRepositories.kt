@@ -234,7 +234,7 @@ internal object StatisticsPolicies {
         animeMs = maxOf(current.animeMs, imported.animeMs),
         watchedPostCount = maxOf(current.watchedPostCount, imported.watchedPostCount),
         watchedBySource = current.watchedBySource.mergeWith(imported.watchedBySource, ::maxOf),
-        watchedByTag = current.watchedByTag.mergeWith(imported.watchedByTag, ::maxOf),
+        watchedByTag = current.watchedByTag.mergeWith(imported.watchedByTag, ::maxOf).keepTopTagsPerSource(pruneAt = WATCHED_TAGS_KEPT),
         searchCount = maxOf(current.searchCount, imported.searchCount),
         searchesBySource = current.searchesBySource.mergeWith(imported.searchesBySource, ::maxOf),
         searchesByTag = current.searchesByTag.mergeWith(imported.searchesByTag, ::maxOf),
@@ -266,7 +266,7 @@ internal object StatisticsPolicies {
             animeMs = statistics.animeMs.coerceAtLeast(0L),
             watchedPostCount = statistics.watchedPostCount.coerceAtLeast(0L),
             watchedBySource = statistics.watchedBySource.normalizeCounts(),
-            watchedByTag = statistics.watchedByTag.normalizeTagCounts(),
+            watchedByTag = statistics.watchedByTag.normalizeTagCounts().keepTopTagsPerSource(),
             searchCount = statistics.searchCount.coerceAtLeast(0L),
             searchesBySource = statistics.searchesBySource.normalizeCounts(),
             searchesByTag = statistics.searchesByTag.normalizeSearchedTagCounts(),
@@ -620,3 +620,16 @@ private fun Map<StatisticsTagKey, Long>.normalizeTagCounts(): Map<StatisticsTagK
         val normalizedCount = count.coerceAtLeast(0L).takeIf { it > 0L } ?: return@mapNotNull null
         StatisticsTagKey(key.source, tag) to normalizedCount
     }.toMap()
+
+private fun Map<StatisticsTagKey, Long>.keepTopTagsPerSource(pruneAt: Int = WATCHED_TAGS_PRUNE_AT): Map<StatisticsTagKey, Long> {
+    val crowded = keys.groupingBy(StatisticsTagKey::source).eachCount().filterValues { it > pruneAt }.keys
+    if (crowded.isEmpty()) return this
+    val dropped = entries.filter { it.key.source in crowded }.groupBy { it.key.source }.values.flatMapTo(HashSet()) { counts ->
+        counts.sortedWith(compareByDescending<Map.Entry<StatisticsTagKey, Long>> { it.value }.thenBy { it.key.tag })
+            .drop(WATCHED_TAGS_KEPT).map { it.key }
+    }
+    return filterKeys { it !in dropped }
+}
+
+internal const val WATCHED_TAGS_KEPT = 2_000
+internal const val WATCHED_TAGS_PRUNE_AT = 2_500
