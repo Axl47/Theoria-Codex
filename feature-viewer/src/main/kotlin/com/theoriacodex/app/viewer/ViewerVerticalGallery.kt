@@ -88,8 +88,16 @@ internal class ViewerVerticalGalleryState(val list: LazyListState) {
 
     val zoomed: Boolean get() = scale > 1.01f
 
-    /** The middle of the screen, where a zoom asked for without a tap (a TalkBack action) centres. */
-    val center: Offset get() = Offset(viewportWidth / 2f, list.layoutInfo.viewportSize.height / 2f)
+    /**
+     * Where a zoom asked for without a tap (a TalkBack action) centres: the middle of page [index]'s part on screen,
+     * so that page stays in view and keeps its actions. The screen's middle when it is not laid out.
+     */
+    fun zoomAnchor(index: Int): Offset {
+        val info = list.layoutInfo
+        val page = info.visibleItemsInfo.firstOrNull { it.index == index }
+        val y = page?.let { (maxOf(it.offset, info.viewportStartOffset) + minOf(it.offset + it.size, info.viewportEndOffset)) / 2f }
+        return Offset(viewportWidth / 2f, y ?: (info.viewportSize.height / 2f))
+    }
 
     /** Returns the pages to fit, as starting a slideshow does for horizontal media. */
     fun resetZoom() {
@@ -158,26 +166,13 @@ internal fun ViewerVerticalGallery(
     val shapes = remember(post.id) { mutableStateMapOf<Int, Float>() }
     var latestShape by remember(post.id) { mutableFloatStateOf(viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE) }
     VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
-    val scope = rememberCoroutineScope()
     val session = frame.uiState.session
     // The selected page reports readiness and failure to the Viewer, as a horizontal page does (slideshow holds wait on it).
     val selectedEvents = { key: ViewerMediaKey, generation: Long ->
         viewerRendererEvents(session, key, generation, host.onAction, onTimelineInteractionActiveChanged = {}, onDurationKnown = {})
     }
     val quickReturn = rememberQuickReturn { reveal -> if (isCurrentPost && reveal != frame.chromeVisible) controls.toggleChrome() }
-    // The column's gestures, which TalkBack reaches through the selected page's actions, as on a horizontal page.
-    val actions = ViewerMediaGestureActions(
-        seek = {},
-        zoom = { tap -> scope.launch { gallery.animateZoomToggle(tap ?: gallery.center) } },
-        toggleControls = { controls.toggleChrome() },
-        showInfo = { host.onAction(ViewerAction.ShowPanel(ViewerPanel.INFO)) },
-    )
-    // Read here so the zoom action's label follows, without recomposing on every step of a pinch.
-    val zoomed by remember(gallery) { derivedStateOf { gallery.zoomed } }
-    val assistive: SemanticsPropertyReceiver.() -> Unit = {
-        onClick(label = "Media information") { actions.showInfo(); true }
-        customActions = mediaAccessibilityActions(seekable = false, zoomed, frame.chromeVisible, frame.touchExplorationEnabled, actions)
-    }
+    val (actions, assistive) = verticalGalleryActions(gallery, frame, controls, host)
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize()
@@ -210,6 +205,33 @@ internal fun ViewerVerticalGallery(
             // Clear of the dock, which shows again as the list is scrolled back up.
             item(key = "next") { VerticalGalleryNextCard(frame.posts.getOrNull(postPage + 1), Modifier.padding(bottom = viewerDockInset()), onOpenNext) }
         }
+    }
+}
+
+/**
+ * The column's gestures, and the selected page's TalkBack actions that reach them, as on a horizontal page. Zoom
+ * without a tap centres on the selected page.
+ */
+@Composable
+private fun verticalGalleryActions(
+    gallery: ViewerVerticalGalleryState,
+    frame: ViewerFrame,
+    controls: ViewerControls,
+    host: ViewerScreenHost,
+): Pair<ViewerMediaGestureActions, SemanticsPropertyReceiver.() -> Unit> {
+    val scope = rememberCoroutineScope()
+    val selected = frame.selection.mediaIndex
+    val actions = ViewerMediaGestureActions(
+        seek = {},
+        zoom = { tap -> scope.launch { gallery.animateZoomToggle(tap ?: gallery.zoomAnchor(selected)) } },
+        toggleControls = { controls.toggleChrome() },
+        showInfo = { host.onAction(ViewerAction.ShowPanel(ViewerPanel.INFO)) },
+    )
+    // Read here so the zoom action's label follows, without recomposing on every step of a pinch.
+    val zoomed by remember(gallery) { derivedStateOf { gallery.zoomed } }
+    return actions to {
+        onClick(label = "Media information") { actions.showInfo(); true }
+        customActions = mediaAccessibilityActions(seekable = false, zoomed, frame.chromeVisible, frame.touchExplorationEnabled, actions)
     }
 }
 
