@@ -54,6 +54,9 @@ fun StoredSeries.withSettingsOf(from: StoredSeries): StoredSeries = copy(
     followed = followed || from.followed,
     readingMode = from.readingMode ?: readingMode,
     downloadNewChapters = downloadNewChapters || from.downloadNewChapters,
+    // Followed since the earlier of the two, and read last when either was.
+    followedAtEpochMs = listOfNotNull(followedAtEpochMs.takeIf { followed }, from.followedAtEpochMs.takeIf { from.followed }).minOrNull(),
+    lastReadAtEpochMs = listOfNotNull(lastReadAtEpochMs, from.lastReadAtEpochMs).maxOrNull(),
 )
 
 /**
