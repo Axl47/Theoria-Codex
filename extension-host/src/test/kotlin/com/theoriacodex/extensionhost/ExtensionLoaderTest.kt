@@ -1,10 +1,17 @@
 package com.theoriacodex.extensionhost
 
-import android.content.Context
+import android.app.Application
+import com.theoriacodex.sources.http.BrowserCookieStore
+import com.theoriacodex.sources.http.ChallengeBrowser
+import com.theoriacodex.sources.http.ChallengeBrowsers
+import com.theoriacodex.sources.http.HostOutageTracker
+import eu.kanade.tachiyomi.AppInfo
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import java.io.File
+import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,13 +20,19 @@ import org.robolectric.RuntimeEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 class ExtensionLoaderTest {
-    private val context: Context = RuntimeEnvironment.getApplication()
-    private val packages = ExtensionPackages(context, listOf(MihonKind))
-    private val loader = ExtensionLoader(context, packages)
+    private val app: Application = RuntimeEnvironment.getApplication()
+    private var read: (File) -> ExtensionPackage? = { null }
+    private val loader = loader("loader-test", 1)
     private val host = HostServices(ExtensionImages())
     private val extension = ExtensionPackage("app.ext", "Ext", "1.6.1", 1, "key", File("/app.ext.apk"), ExtensionOrigin.PACKAGE, MihonKind, emptyList())
 
-    private fun create(type: Class<*>) = loader.createSources(javaClass.classLoader!!, type.name, extension, host)
+    private fun loader(versionName: String, versionCode: Int) =
+        ExtensionLoader.installingHost(app, versionName, versionCode, NoCookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker()) { read(it) }
+
+    private fun create(type: Class<*>, kind: ExtensionKind = MihonKind) =
+        loader.sources(javaClass.classLoader!!, extension.copy(kind = kind, sourceClasses = listOfNotNull(LoadableSource::class.java.name.takeIf { kind == MihonKind }, type.name)), host)
+
+    private fun copies() = File(app.codeCacheDir, "mihon-extensions").listFiles().orEmpty().toList()
 
     @Test
     fun `a virtual machine error while an extension is created ends the load, and any other throwable rejects only that extension (ADR 0060)`() {
@@ -44,24 +57,71 @@ class ExtensionLoaderTest {
 
     @Test
     fun `an instance that is neither a source nor a factory, or whose constructor throws, rejects the extension (ADR 0056)`() {
-        val notASource = assertFailsWith<ExtensionRejectedException> { create(NotASource::class.java) }
+        listOf(MihonKind, AniyomiKind).forEach { kind ->
+            val notASource = assertFailsWith<ExtensionRejectedException> { create(NotASource::class.java, kind) }
+            assertEquals("${NotASource::class.java.name} in app.ext is not a source of its kind", notASource.message)
+        }
         val throwing = assertFailsWith<ExtensionRejectedException> { create(ThrowingConstructor::class.java) }
 
-        assertEquals("${NotASource::class.java.name} in app.ext is not a source of its kind", notASource.message)
         assertTrue(throwing.message.orEmpty().startsWith("${ThrowingConstructor::class.java.name} in app.ext could not be created"))
+        assertEquals(listOf("custom_mihon_3"), loader.sources(javaClass.classLoader!!, extension.copy(sourceClasses = listOf(LoadableSource::class.java.name)), host).map { it.key.id })
     }
 
     @Test
-    fun `a private copy that no longer matches its listing is deleted and refused before any code loads (ADR 0063)`() {
-        val apk = File(context.filesDir, "app.ext.apk").apply { writeText("not the listed archive") }
-        val listed = extension.copy(apk = apk, origin = ExtensionOrigin.PRIVATE, sourceClasses = listOf(NotASource::class.java.name))
+    fun `a private or debug copy loads only while its package, signer, version and size match the listing, locked, and any other copy is deleted before code loads (ADR 0063)`() {
+        val apk = File(app.filesDir, "app.ext.apk").apply { writeText("archive") }
+        listOf(ExtensionOrigin.PRIVATE, ExtensionOrigin.FILE).forEach { origin ->
+            val listed = extension.copy(apk = apk, origin = origin, size = 7)
+            val changes: List<(ExtensionPackage) -> ExtensionPackage?> = listOf(
+                { null },
+                { it.copy(packageName = "app.other") },
+                { it.copy(signer = "other") },
+                { it.copy(versionCode = 2) },
+                { it.copy(size = 8) },
+            )
+            changes.forEach { change ->
+                read = { copy -> change(listed.copy(apk = copy)) }
+                assertEquals("app.ext.apk changed after it was listed", assertFailsWith<ExtensionRejectedException> { loader.load(listed, host) }.message)
+                assertEquals(emptyList<File>(), copies())
+            }
+            read = { copy -> listed.copy(apk = copy, signer = null) }
+            assertFailsWith<ExtensionRejectedException> { loader.load(listed.copy(signer = null), host) }
+            assertEquals(emptyList<File>(), copies())
 
-        val refused = assertFailsWith<ExtensionRejectedException> { loader.load(listed, host) }
+            read = { copy -> listed.copy(apk = copy) }
+            assertEquals(emptyList<HostedSource>(), loader.load(listed, host))
+            val kept = copies().single()
+            assertFalse(kept.canWrite())
+            kept.setWritable(true)
+            kept.delete()
+        }
+    }
 
-        assertEquals("app.ext.apk changed after it was listed", refused.message)
-        assertTrue(File(context.codeCacheDir, "mihon-extensions").listFiles().orEmpty().isEmpty())
+    @Test
+    fun `the only way to get a loader installs the host first (ADR 0062)`() {
+        loader("loader-installs", 7)
+
+        assertEquals("loader-installs" to 7, AppInfo.getVersionName() to AppInfo.getVersionCode())
+    }
+
+    private object NoCookies : BrowserCookieStore {
+        override fun cookieHeader(url: String): String? = null
+
+        override fun setCookie(url: String, setCookie: String) = Unit
+
+        override fun flush() = Unit
+
+        override fun expire(url: String, name: String?) = Unit
+    }
+
+    private object NoBrowser : ChallengeBrowser {
+        override fun mayWait() = false
+
+        override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean) = false
     }
 }
+
+internal class LoadableSource : StubSource(3, "en")
 
 class OutOfMemoryFactory : SourceFactory {
     override fun createSources(): List<Source> = throw OutOfMemoryError("extension")
