@@ -161,6 +161,7 @@ internal fun <S : Any, T : Any> openDecodedJsonDataStore(
     decode: (S) -> T,
     encode: (T) -> S,
     oldestSchemaVersion: Int = schemaVersion,
+    canonical: (T) -> T = { value -> decode(encode(value)) },
 ): JsonDataStore<T> {
     val fileSerializer = JsonDataStoreSerializer(file.name, schemaVersion, defaultValue, serializer, validate, oldestSchemaVersion)
     val decodedDefault = decode(defaultValue)
@@ -182,7 +183,7 @@ internal fun <S : Any, T : Any> openDecodedJsonDataStore(
                 file
             },
         ),
-        canonical = { value -> decode(encode(value)) },
+        canonical = canonical,
     )
 }
 

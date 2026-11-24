@@ -389,24 +389,27 @@ class DataStoreStatisticsRepository private constructor(
         recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
         clock: Clock = Clock.systemDefaultZone(),
         writeBehind: WriteBehind? = null,
-    ) : this(
-        openDecodedJsonDataStore(
-            file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
-            logicalStore = "Statistics",
-            schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
-            oldestSchemaVersion = OLDEST_STATISTICS_DATASTORE_SCHEMA_VERSION,
-            defaultValue = StatisticsDataStoreFile(),
-            serializer = StatisticsDataStoreFile.serializer(),
-            scope = scope,
-            validate = StatisticsDataStoreFile::validate,
-            recoveries = recoveryRegistry,
-            decode = StatisticsDataStoreFile::toDomain,
-            encode = StatisticsDataStoreFile::fromDomain,
-        ),
-        clock,
-        writeBehind,
-    )
+    ) : this(openStatisticsDataStore(baseDirectory, scope, recoveryRegistry), clock, writeBehind)
 }
+
+internal fun openStatisticsDataStore(
+    baseDirectory: File,
+    scope: CoroutineScope,
+    recoveries: FileStoreRecoveryRegistry,
+): JsonDataStore<LifetimeStatistics> = openDecodedJsonDataStore(
+    file = baseDirectory.resolve(DATASTORE_STATISTICS_FILE_NAME),
+    logicalStore = "Statistics",
+    schemaVersion = STATISTICS_DATASTORE_SCHEMA_VERSION,
+    oldestSchemaVersion = OLDEST_STATISTICS_DATASTORE_SCHEMA_VERSION,
+    defaultValue = StatisticsDataStoreFile(),
+    serializer = StatisticsDataStoreFile.serializer(),
+    scope = scope,
+    validate = StatisticsDataStoreFile::validate,
+    recoveries = recoveries,
+    decode = StatisticsDataStoreFile::toDomain,
+    encode = StatisticsDataStoreFile::fromDomain,
+    canonical = { statistics -> statistics },
+)
 
 internal class CellStatisticsRepository(
     private val cell: StateCell<LifetimeStatistics>,
