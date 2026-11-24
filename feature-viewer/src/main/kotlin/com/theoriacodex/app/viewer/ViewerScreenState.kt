@@ -38,6 +38,7 @@ internal class ViewerScreenState {
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var touchSerial by mutableIntStateOf(0)
+    val playingVideos = mutableIntStateOf(0)
     var timelineInteractionActive by mutableStateOf(false)
     /** Set while a hold-scrub has shown chrome that was hidden, so the scrub's end can hide it again. */
     var chromeShownForScrub = false
@@ -244,7 +245,6 @@ internal class ViewerFrame(
     /** Active episode lock: hides chrome, blocks media gestures and intercepts Back; hidden in PiP. */
     val locked = uiState.controls.locked && watching && !inPictureInPicture
 
-    /** Whether the current session is reading a chapter. */
     val reading = uiState.series is ViewerSeries.Reading
 
     /**

@@ -7,6 +7,8 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -146,24 +148,34 @@ internal fun ViewerFrameEffects(
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
     ViewerUnlockPeekEffect(frame, screen)
-    ViewerKeepScreenOnEffect(
-        slideshow = uiState.controls.slideshow,
-        reading = frame.reading,
-        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
-    )
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
 }
 
-/**
- * Keeps the screen on during a running [slideshow], or while [reading] a chapter until [VIEWER_READING_IDLE_MS] pass
- * without a change of [activity] (a touch, a control used, or a page change), so a reader who falls asleep lets it
- * sleep too. [activity] is read in a snapshot flow, so a touch does not recompose the caller. Released once the
- * Viewer pauses or leaves.
- */
 @Composable
-internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, activity: () -> Any) {
-    val view = LocalView.current
-    val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
+internal fun viewerKeepsScreenOn(frame: ViewerFrame, screen: ViewerScreenState): Boolean =
+    viewerKeepsScreenOn(
+        slideshow = frame.uiState.controls.slideshow,
+        reading = frame.reading,
+        videoPlaying = screen.playingVideos.intValue > 0,
+        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
+    )
+
+internal val LocalViewerPlayingVideos = staticCompositionLocalOf<MutableIntState?> { null }
+
+@Composable
+internal fun CountViewerPlayingVideo(playing: Boolean) {
+    val playingVideos = LocalViewerPlayingVideos.current
+    DisposableEffect(playingVideos, playing) {
+        if (playing) playingVideos?.let { it.intValue += 1 }
+        onDispose { if (playing) playingVideos?.let { it.intValue -= 1 } }
+    }
+}
+
+@Composable
+internal fun viewerKeepsScreenOn(slideshow: Boolean, reading: Boolean, videoPlaying: Boolean, activity: () -> Any): Boolean {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
+    val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    val visible = lifecycle.isAtLeast(Lifecycle.State.STARTED)
     var readingIdle by remember { mutableStateOf(false) }
     val currentActivity by rememberUpdatedState(activity)
     LaunchedEffect(reading, resumed) {
@@ -175,11 +187,7 @@ internal fun ViewerKeepScreenOnEffect(slideshow: Boolean, reading: Boolean, acti
             readingIdle = true
         }
     }
-    val on = resumed && (slideshow || reading && !readingIdle)
-    DisposableEffect(view, on) {
-        view.keepScreenOn = on
-        onDispose { view.keepScreenOn = false }
-    }
+    return visible && videoPlaying || resumed && (slideshow || reading && !readingIdle)
 }
 
 /** Auto-hides the revealed Unlock button after the accessibility-adjusted timeout; clears immediately when unlocked. */
