@@ -15,7 +15,10 @@ import androidx.compose.ui.test.performSemanticsAction
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.data.repository.seriesOfflineOwner
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.SeriesId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -79,6 +82,13 @@ class LibraryTransfersSheetTest {
         assertEquals(listOf("cancel:codex:a", "remove:codex:a"), offlineCalls)
     }
 
+    @Test fun `a downloaded series opens its page from its row`() {
+        val series = SeriesId(SourceKey.GELBOORU, "/series/1")
+        show(owners = listOf(OfflineStorageOwner(seriesOfflineOwner(series), "Series", 2)))
+        compose.onNodeWithText("Series").performClick()
+        assertEquals(listOf("series:/series/1"), offlineCalls)
+    }
+
     @Test fun `opened for a Codex it scrolls to that row once the owners have loaded`() {
         val owners = mutableStateOf(emptyList<OfflineStorageOwner>())
         show(owners = owners, markedCodexId = "z")
@@ -119,6 +129,7 @@ class LibraryTransfersSheetTest {
                     retry = { offlineCalls += "retry:$it" }, cancel = { offlineCalls += "cancel:$it" },
                     remove = { offlineCalls += "remove:$it" }, removeAll = { offlineCalls += "removeAll" },
                     actOnRemoval = { offlineCalls += "act:$it" },
+                    openSeries = { offlineCalls += "series:${it.address}" },
                 ),
                 batches = if (downloads.isEmpty()) emptyList() else listOf(PostDownloadBatch(1, "Batch", downloads)),
                 downloadRemovals = DownloadRemovalRows(emptyMap()) {},
