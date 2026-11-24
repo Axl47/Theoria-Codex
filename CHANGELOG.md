@@ -61,6 +61,7 @@
 - New episodes of an anime you follow are checked and notified like new chapters.
 - Switch source works for anime too, between anime sources, and keeps the episodes you've watched.
 - Extensions that stream by torrent are listed but can't be turned on, and an anime its source splits into seasons says seasons aren't supported yet. Episodes can't be downloaded yet.
+- Following has Sort & filter: show All, Unread, Not started, In progress or Completed series, and sort by Most unread, Last updated, Recently read, Recently added or Title. Your choice is kept, a dot on the button shows while a filter hides series, and No matches offers Show all.
 - Statistics count time spent reading series and watching anime as their own categories, Reading and Anime, also in shared stats and comparisons.
 
 ### Changed
@@ -101,8 +102,10 @@
 - The app says "posts" where it sometimes said "items", and "Codices" where backups said "collections". Empty lists show a short label instead of a sentence.
 - Every site that wants a browser check, built-in, added in Sites or from an extension, now asks the same way: Verify in browser opens the site over the screen you're on instead of sending you to Settings, and closes by itself once Theoria gets through, so the screen you were on loads again. If the site lets the browser in but still refuses Theoria, the page says so. A built-in site you've verified once renews its check out of sight when it expires, as added sites and extensions do.
 - Series cards now show their title inside the bottom of the cover over a scrim, mark already-followed series with a Following badge in browse and search, and the Series search bar matches the Search tab's collapsing pill bar.
-- In global Series search, each source header shows its language underneath and opens that source's dedicated search when tapped; the Following shelf now bubbles series with unread chapters to the front.
-- In Series browse and dedicated source search, Popular, Latest and Filter now float in a pill at the bottom that hides as you scroll down and returns as you scroll back up, alongside the dedicated search header.
+- In global Series search, each source header opens that source's dedicated search when tapped, and shows its language underneath when your sources' languages differ.
+- The Series tab has two views, Following and Browse, switched at the top. It opens on Following once you follow something, and on Browse until then.
+- Browse shows one source at a time: tap its name to pick another source, grouped into Manga and Anime, then choose Popular or Latest and Filter beside it. A source without Latest shows only Filter. The same controls sit above a source's own search.
+- The search bar narrows Following by title as you type; on Browse it searches every source.
 - Series pages now open with a blurred cover backdrop, a Follow button beside Open in browser and Share, tap-to-zoom cover preview, long-press title copy, an expandable About section with genre tags that open that source's genre filter, a full-width Continue reading button, pull-to-refresh, card-styled chapters showing scanlator groups, and a floating top bar that hides as you scroll down and returns as you scroll up.
 - On a series page, the top bar now searches chapters inline, holding a chapter offers per-chapter read/unread, Mark previous as read, and download actions, bulk read/unread changes offer Undo, and the chapter list's filter button remembers sort and filter choices per series with quick-clear pills under the header.
 
@@ -113,6 +116,7 @@
 
 ### Fixed
 
+- Tapping the Series tab again while on it no longer collapses its search bar.
 - Opening a chapter of a series from sites like Asura no longer shows an HTTP 403 error while its pages load: the series cover shown meanwhile is fetched the way the site requires. The cover now also shows for the first chapter you open after starting the app, and for downloaded chapters.
 - Opening an extension series chapter no longer fails some of its pages with "Network request failed unexpectedly" while the app checks for extension updates.
 - In vertical reading, a long page that is still loading no longer looks like a blank black screen until you scroll to its middle: its spinner, or its Retry if it failed, stays in the part of the page you can see.
