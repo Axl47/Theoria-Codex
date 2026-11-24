@@ -94,7 +94,8 @@ private fun ViewerMediaGestureActions.doubleTap(offset: Offset, size: IntSize, s
     }
 }
 
-private fun mediaAccessibilityActions(
+/** TalkBack's equivalents of the media gestures, for the selected media of a horizontal page or vertical gallery. */
+internal fun mediaAccessibilityActions(
     seekable: Boolean,
     zoomed: Boolean,
     chromeVisible: Boolean,
