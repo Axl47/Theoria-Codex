@@ -59,6 +59,24 @@ class TrainingTagsTest {
     }
 
     @Test
+    fun `a post with raw tags and no typed taxonomy teaches its raw tags`() {
+        val post = Post(
+            id = PostId(SourceKey.GELBOORU, "8"),
+            preview = ImageRef(url = "https://example.com/8.jpg", localPath = null, mime = "image/jpeg"),
+            full = null,
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = emptyList(),
+            rawTags = listOf("moth", "lamp"),
+            authorName = null,
+            createdAtEpochMs = null,
+        )
+
+        assertEquals(listOf("moth", "lamp"), trainingTagsFor(post))
+    }
+
+    @Test
     fun `pixiv recommendation training keeps native raw tags instead of translated aliases`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "42"),

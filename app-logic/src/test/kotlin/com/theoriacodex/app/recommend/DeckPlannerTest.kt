@@ -12,14 +12,14 @@ class DeckPlannerTest {
     private val b = DeckOrigin.Lane("b", "b")
 
     @Test fun `lanes take turns and each card names its lane`() {
-        val batch = nextBatch(listOf(lane(a, "a1", "a2", "a3"), lane(b, "b1", "b2")), DeckSteering(), emptySet(), size = 4)
+        val batch = nextBatch(listOf(lane(a, "a1", "a2", "a3"), lane(b, "b1", "b2")), DeckSteering(), { false }, size = 4)
 
         assertEquals(listOf("a1" to a, "b1" to b, "a2" to a, "b2" to b), batch.cards.map { it.post.id.sourcePostId to it.origin })
         assertEquals(mapOf("a" to 2, "b" to 2), batch.taken)
     }
 
     @Test fun `a post two lanes hold is dealt once and a seen post never`() {
-        val batch = nextBatch(listOf(lane(a, "x", "a2"), lane(b, "x", "b2")), DeckSteering(), setOf(id("a2")), size = 4)
+        val batch = nextBatch(listOf(lane(a, "x", "a2"), lane(b, "x", "b2")), DeckSteering(), setOf(id("a2"))::contains, size = 4)
 
         assertEquals(listOf("x", "b2"), batch.cards.map { it.post.id.sourcePostId })
         assertEquals("the caller drops the seen and duplicate posts too", mapOf("a" to 2, "b" to 2), batch.taken)
@@ -30,7 +30,7 @@ class DeckPlannerTest {
         assertEquals(0.5, skipped.weight("a"), 0.0)
 
         val lanes = listOf(lane(a, "a1", "a2", "a3", "a4"), lane(b, "b1", "b2", "b3", "b4"))
-        assertEquals(listOf("b", "a", "b", "b", "a", "b"), nextBatch(lanes, skipped, emptySet(), 6).cards.map { (it.origin as DeckOrigin.Lane).laneId })
+        assertEquals(listOf("b", "a", "b", "b", "a", "b"), nextBatch(lanes, skipped, { false }, 6).cards.map { (it.origin as DeckOrigin.Lane).laneId })
 
         assertEquals(1.0, skipped.after(DeckSignal.Liked, a).weight("a"), 0.0)
     }
@@ -48,24 +48,24 @@ class DeckPlannerTest {
         val liked = id("a1")
         val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(liked, saved = false)), DeckCard(post("s2"), DeckOrigin.Similar(id("other"), saved = false))))
 
-        assertEquals(listOf("s1", "s2", "a2"), nextBatch(listOf(lane(a, "a2")), injected, emptySet(), 3).cards.map { it.post.id.sourcePostId })
+        assertEquals(listOf("s1", "s2", "a2"), nextBatch(listOf(lane(a, "a2")), injected, { false }, 3).cards.map { it.post.id.sourcePostId })
         assertEquals(listOf("s2"), injected.undone(before = DeckSteering(), post = liked).pending.map { it.post.id.sourcePostId })
     }
 
     @Test fun `a chip deals one lane and batches continue the rotation`() {
         val lanes = listOf(lane(a, "a1", "a2"), lane(b, "b1", "b2"))
-        assertEquals(listOf("b1", "b2"), nextBatch(lanes, DeckSteering(), emptySet(), 4, only = "b").cards.map { it.post.id.sourcePostId })
+        assertEquals(listOf("b1", "b2"), nextBatch(lanes, DeckSteering(), { false }, 4, only = "b").cards.map { it.post.id.sourcePostId })
 
-        val first = nextBatch(lanes, DeckSteering(), emptySet(), 1)
+        val first = nextBatch(lanes, DeckSteering(), { false }, 1)
         val rest = listOf(lane(a, "a2"), lane(b, "b1", "b2"))
-        assertEquals(listOf("a1", "b1"), first.cards.map { it.post.id.sourcePostId } + nextBatch(rest, first.steering, setOf(id("a1")), 1).cards.map { it.post.id.sourcePostId })
+        assertEquals(listOf("a1", "b1"), first.cards.map { it.post.id.sourcePostId } + nextBatch(rest, first.steering, setOf(id("a1"))::contains, 1).cards.map { it.post.id.sourcePostId })
     }
 
     @Test fun `one picture is dealt once, and not at all when a copy was seen`() {
         // a1 and b1 are one picture on two sites; b2 is a copy of the kept k.
         val copies = mapOf("a1" to setOf("a1", "b1"), "b1" to setOf("a1", "b1"), "b2" to setOf("b2", "k"))
         val batch = nextBatch(
-            listOf(lane(a, "a1", "a2"), lane(b, "b1", "b2", "b3")), DeckSteering(), setOf(id("k")), size = 4,
+            listOf(lane(a, "a1", "a2"), lane(b, "b1", "b2", "b3")), DeckSteering(), setOf(id("k"))::contains, size = 4,
         ) { post -> copies[post.id.sourcePostId].orEmpty().mapTo(mutableSetOf(), ::id) + post.id }
 
         assertEquals(listOf("a1", "b3", "a2"), batch.cards.map { it.post.id.sourcePostId })
