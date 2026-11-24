@@ -63,6 +63,9 @@ import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.ui.components.LocalFeedViewport
+import com.theoriacodex.app.viewer.ViewerReturnShelfId
+import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.app.ui.components.FeedViewport
 import com.theoriacodex.app.ui.components.rememberLifecycleStarted
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.LocalViewerReturnShelf
@@ -120,32 +123,10 @@ fun SearchResultCard(
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
     val cardDensity = LocalDensity.current
-    val returnTarget by remember(viewerReturn, viewerReturnGrid, post.id, viewerReturnShelf) {
-        derivedStateOf { viewerReturn?.takeIf { it.request == ViewerReturnRequest(viewerReturnGrid, post.id, viewerReturnShelf) } }
-    }
-    val pendingReturn = returnTarget
     val mediaTracking = Modifier
         .onPlaced { coordinates -> mediaGeometry.coordinates = coordinates }
-        .then(
-            if (viewport == null) {
-                Modifier
-            } else {
-                Modifier.onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport.bounds) { visible -> visibility.inFeed = visible }
-            },
-        )
-        .onVisibilityChanged(minFractionVisible = 0f) { visible -> visibility.inWindow = visible }
-        .then(
-            if (pendingReturn == null) {
-                Modifier
-            } else {
-                Modifier.onGloballyPositioned { coordinates ->
-                    pendingReturn.recordBounds(
-                        viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf,
-                        mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
-                    )
-                }
-            },
-        )
+        .then(mediaVisibilityTracking(viewport, visibility))
+        .then(rememberViewerReturnTracking(viewerReturn, viewerReturnGrid, viewerReturnShelf, post.id, mediaGeometry))
     val liftModifier = rememberCardLiftModifier(
         post, mediaGeometry::boundsInWindow, liked, onToggleLike, onLongPress,
     )
@@ -169,6 +150,37 @@ fun SearchResultCard(
             viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, onToggleLike, resolvePostById,
             recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
             mediaGeometry, mediaTracking,
+        )
+    }
+}
+
+private fun mediaVisibilityTracking(viewport: FeedViewport?, visibility: SearchCardVisibility): Modifier {
+    val inWindow = Modifier.onVisibilityChanged(minFractionVisible = 0f) { visible -> visibility.inWindow = visible }
+    if (viewport == null) return inWindow
+    return Modifier
+        .onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport.bounds) { visible -> visibility.inFeed = visible }
+        .then(inWindow)
+}
+
+@Composable
+private fun rememberViewerReturnTracking(
+    viewerReturn: ViewerReturnTransition?,
+    grid: String?,
+    shelf: ViewerReturnShelfId?,
+    postId: PostId,
+    mediaGeometry: SearchCardMediaGeometry,
+): Modifier {
+    val cardShape = CardDefaults.elevatedShape
+    val layoutDirection = LocalLayoutDirection.current
+    val density = LocalDensity.current
+    val target by remember(viewerReturn, grid, postId, shelf) {
+        derivedStateOf { viewerReturn?.takeIf { it.request == ViewerReturnRequest(grid, postId, shelf) } }
+    }
+    val pending = target ?: return Modifier
+    return Modifier.onGloballyPositioned { coordinates ->
+        pending.recordBounds(
+            grid, postId, coordinates.boundsInWindow(clipBounds = false), shelf,
+            mediaGeometry.corners(cardShape, layoutDirection, density),
         )
     }
 }
