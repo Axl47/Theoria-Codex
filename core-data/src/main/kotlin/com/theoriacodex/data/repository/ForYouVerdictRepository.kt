@@ -6,7 +6,8 @@ import com.theoriacodex.domain.model.PostId
 enum class ForYouVerdictKind { LIKED, SAVED, SKIPPED, HID }
 
 /**
- * A profile's latest swipe on a For You card, kept as a label for a future taste model. [previewUrl] is the still
+ * A profile's latest swipe on a For You card. Recent skips keep their posts out of the Mix, and every verdict is kept as
+ * a label for a future taste model. [previewUrl] is the still
  * preview the card showed, so the picture can be fetched again while it stays up; the post id resolves it otherwise.
  */
 data class ForYouVerdict(
@@ -30,6 +31,9 @@ interface ForYouVerdictRepository {
 
     /** The profile's verdicts, newest first. */
     suspend fun verdicts(profileId: String): List<ForYouVerdict>
+
+    /** The posts the profile skipped at or after [sinceEpochMs], at most the newest [limit]. */
+    suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId>
 }
 
 /**

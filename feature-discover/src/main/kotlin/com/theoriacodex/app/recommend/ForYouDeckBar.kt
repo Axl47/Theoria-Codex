@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Badge
@@ -39,13 +40,17 @@ import com.theoriacodex.app.ui.components.SourceSelector
 import com.theoriacodex.app.ui.navigation.LocalHiddenTagsOpener
 import com.theoriacodex.domain.model.SortMode
 
-/** For You's bar: the profile, the source, Undo for the deck's last swipe, the deck and grid toggle, and filters. */
+/**
+ * For You's bar: the profile, the source, Refresh for a fresh Mix (on the Mix only), Undo for the deck's last swipe, the
+ * deck and grid toggle, and filters.
+ */
 @Composable
 internal fun ForYouBar(
     state: ForYouDeckUiState,
     level: ForYouLevel,
     config: ForYouScreenConfig,
     callbacks: ForYouDeckCallbacks,
+    onRefresh: () -> Unit,
     onShowFilters: () -> Unit,
 ) {
     val grid = config.grid
@@ -75,6 +80,11 @@ internal fun ForYouBar(
             )
         }
         Row {
+            if (level.fork == null) {
+                IconButton(onRefresh, Modifier.testTag(FOR_YOU_REFRESH_TAG)) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                }
+            }
             if (!grid) {
                 IconButton(level.deck::undo, Modifier.testTag(FOR_YOU_UNDO_TAG), enabled = deck.last != null) {
                     Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
@@ -129,6 +139,7 @@ internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeck
     }
 }
 
+const val FOR_YOU_REFRESH_TAG = "for-you-refresh"
 const val FOR_YOU_UNDO_TAG = "for-you-undo"
 const val FOR_YOU_VIEW_TOGGLE_TAG = "for-you-view-toggle"
 const val FOR_YOU_FILTERS_TAG = "for-you-filters"

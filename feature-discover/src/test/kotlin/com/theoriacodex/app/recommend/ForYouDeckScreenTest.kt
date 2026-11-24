@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -57,6 +58,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -149,6 +151,20 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag(FOR_YOU_UNDO_TAG).assertIsEnabled().performClick()
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("fog")
         compose.runOnIdle { assertEquals(0, owner.levels.value.single().deck.state.value.index) }
+    }
+
+    @Test fun `Refresh builds a fresh Mix, and shows on the Mix only`() {
+        trails.creator = listOf(testPost(DECK_SOURCE, "t-1"))
+        val owner = render()
+        val mix = compose.runOnIdle { owner.levels.value.single().id }
+        compose.onNodeWithTag(FOR_YOU_REFRESH_TAG).assertContentDescriptionEquals("Refresh").performClick()
+        compose.runOnIdle {
+            assertEquals(2, engine.builds)
+            assertNotEquals(mix, owner.levels.value.single().id)
+        }
+
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").performClick()
+        compose.onNodeWithTag(FOR_YOU_REFRESH_TAG).assertDoesNotExist()
     }
 
     @Test fun `a fork opens a trail whose crumbs replace the chips, and a crumb returns to the Mix`() {

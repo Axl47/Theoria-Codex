@@ -7,6 +7,7 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.InMemoryForYouVerdictRepository
 import com.theoriacodex.domain.model.Post
@@ -433,14 +434,45 @@ class ForYouDeckViewModelTest {
         assertEquals(1, owner.levels.value.size)
     }
 
-    @Test fun `a recreated owner deals a fresh Mix`() {
+    @Test fun `a recreated owner deals a fresh Mix without the profile's recent skips`() {
         val first = owner()
         first.skip(3)
         val second = owner()
         assertNotEquals(first.top.id, second.top.id)
-        assertEquals(listOf("a-0-0", "b-0-0", "c-0-0", "a-0-1"), second.posts.map { it.id.sourcePostId })
+        assertEquals(listOf("a-0-1", "b-0-1", "c-0-1", "a-0-2"), second.posts.map { it.id.sourcePostId })
         assertEquals(0, second.top.deck.state.value.index)
         assertEquals(2, engine.builds)
+    }
+
+    @Test fun `a skip older than 30 days is dealt again, and another profile's skips are not read`() = runTest {
+        val now = 40L * DAY_MS
+        verdicts.record(ForYouVerdict("other", lanePost("a", 0, 1).id, ForYouVerdictKind.SKIPPED, now, null))
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("a", 0, 0).id, ForYouVerdictKind.SKIPPED, now - 31 * DAY_MS, null))
+        verdicts.record(ForYouVerdict(AppSettings().activeProfileId, lanePost("b", 0, 0).id, ForYouVerdictKind.SKIPPED, now - 29 * DAY_MS, null))
+        val owner = ForYouDeckViewModel(engine, deckWiring(writeScope, trails, actions, quickSave, verdicts, clock = { now }))
+        owner.synchronize(deckEnvironment())
+        assertEquals(listOf("a-0-0", "b-0-1", "c-0-0", "a-0-1"), owner.posts.map { it.id.sourcePostId })
+    }
+
+    @Test fun `Start over deals a small source's skipped posts again, while Refresh keeps them out`() {
+        val small = FakeForYouEngine(listOf("a"), pages = 1, pageSize = 4)
+        fun smallOwner() = ForYouDeckViewModel(small, deckWiring(writeScope, trails, actions, quickSave, verdicts)).also { it.synchronize(deckEnvironment()) }
+        smallOwner().skip(4)
+
+        val next = smallOwner()
+        assertTrue(next.posts.isEmpty())
+        assertFalse(next.top.feed.value.canLoadMore)
+        next.rebuild()
+        assertTrue(next.posts.isEmpty())
+        next.startOver()
+        assertEquals(listOf("a-0-0", "a-0-1", "a-0-2", "a-0-3"), next.posts.map { it.id.sourcePostId })
+    }
+
+    @Test fun `a session's skips stay out of a refreshed Mix`() {
+        val owner = owner()
+        val skipped = List(2) { owner.decide(TriageChoice.Skip) }
+        owner.rebuild()
+        assertTrue(owner.posts.none { it in skipped })
     }
 
     @Test fun `posts the profile already liked or saved are not dealt`() {
@@ -484,3 +516,5 @@ class ForYouDeckViewModelTest {
         assertEquals(4, owner.posts.size)
     }
 }
+
+private const val DAY_MS = 24L * 60 * 60 * 1000
