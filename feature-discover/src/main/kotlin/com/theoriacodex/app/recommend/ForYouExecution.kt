@@ -29,4 +29,11 @@ interface ForYouRouteEngine {
 
     suspend fun loadPage(continuation: FeedCursor, sources: Set<SourceKey>): UnifiedSearchResult
     suspend fun resolvePost(postId: PostId): Post?
+
+    suspend fun lastDeck(request: ForYouFeedRequest): List<Post> = emptyList()
+
+    suspend fun rememberDeck(request: ForYouFeedRequest, posts: List<Post>) = Unit
 }
+
+internal fun ForYouFeedRequest.deckKey(): String =
+    listOf(settings.activeProfileId, selectedSource?.id.orEmpty(), sortMode.name, animatedOnly.toString()).joinToString("|")

@@ -8,6 +8,7 @@ import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.PostResolutionFlights
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.FirstPageStore
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -27,6 +28,8 @@ class ForYouCoordinator(
     computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val postResolutions: PostResolutionFlights = PostResolutionFlights(),
     private val fileMirrors: FileMirrorIndex = FileMirrorIndex(),
+    private val deckStore: FirstPageStore? = null,
+    private val deckWritable: (profileId: String) -> Boolean = { true },
     random: () -> Random? = { Random.Default },
 ) : ForYouRouteEngine {
     private val lanes = ForYouLanesLoader(registry, tagSuggestionStore, tagAffinity, computationDispatcher, random)
@@ -47,5 +50,11 @@ class ForYouCoordinator(
     override suspend fun resolvePost(postId: PostId): Post? {
         val adapter = registry.adapterFor(postId.source) ?: return null
         return postResolutions.resolve(postId) { adapter.resolvePost(postId) }
+    }
+
+    override suspend fun lastDeck(request: ForYouFeedRequest): List<Post> = deckStore?.load(request.deckKey()).orEmpty().also(fileMirrors::learn)
+
+    override suspend fun rememberDeck(request: ForYouFeedRequest, posts: List<Post>) {
+        deckStore?.save(request.deckKey(), posts) { deckWritable(request.settings.activeProfileId) }
     }
 }

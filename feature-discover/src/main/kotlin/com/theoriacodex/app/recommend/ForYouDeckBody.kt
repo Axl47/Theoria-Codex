@@ -58,7 +58,7 @@ internal fun ForYouBody(
         feed.posts.isEmpty() && feed.pageFailed && !feed.loadingMore -> Column(Modifier.padding(16.dp)) {
             FeedFailureTile(state.failure?.takeIf { level.fork == null } ?: LOAD_FAILED, onRetry = level::retryPage)
         }
-        config.grid -> ForYouGrid(level, feed, config, related, callbacks, onLongPress, end)
+        config.grid -> ForYouGrid(level, feed, config, related, callbacks, onLongPress, end, mixFailed = state.mix == ForYouMixState.Failed)
         else -> ForYouDeck(owner, level, feed, config, callbacks, end)
     }
 }
@@ -103,6 +103,7 @@ private fun ForYouGrid(
     callbacks: ForYouDeckCallbacks,
     onLongPress: (Post) -> Unit,
     end: @Composable () -> Unit,
+    mixFailed: Boolean,
 ) {
     val retainKey = level.id
     val gridState = rememberRetainedFeedGridState(retainKey)
@@ -127,7 +128,7 @@ private fun ForYouGrid(
     )
     when {
         view.related.projection.entries.isNotEmpty() -> Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-            if (feed.pageFailed && level.fork != null) {
+            if (feed.pageFailed && (level.fork != null || mixFailed)) {
                 Box(Modifier.padding(bottom = 8.dp)) { FeedFailureTile(LOAD_FAILED, onRetry = level::retryPage) }
             }
             FeedContinueLoading(demand)

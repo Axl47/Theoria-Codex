@@ -27,6 +27,7 @@ class ProfileDeletionService(
     private val writeGuard: ProfileLibraryWriteGuard,
     private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val removeProfileCaches: suspend (profileId: String) -> Unit = {},
 ) {
     private val mutex = Mutex()
 
@@ -70,6 +71,7 @@ class ProfileDeletionService(
                 settings.setActiveProfile(replacement.profileId)
             }
             library.removeProfileLibrary(profileId)
+            removeProfileCaches(profileId)
             settings.removeRecommendationProfile(profileId)
             check(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profileId }) {
                 "The removed profile was not committed"

@@ -100,10 +100,12 @@ class ProfileDeletionServiceTest {
             }
             val journal = directory.resolve("intent.json")
             journal.writeText(golden("gson-written.json"))
-            val owner = ProfileDeletionService(settings, library, journal, ProfileLibraryWriteGuard())
+            val cachesRemoved = mutableListOf<String>()
+            val owner = ProfileDeletionService(settings, library, journal, ProfileLibraryWriteGuard(), removeProfileCaches = { cachesRemoved += it })
 
             assertTrue(owner.recoverPendingDeletion())
             org.junit.Assert.assertEquals(listOf(profileId), removed)
+            org.junit.Assert.assertEquals(listOf(profileId), cachesRemoved)
             assertTrue(settings.observeSettings().first().recommendationProfiles.none { it.profileId == profileId })
             assertFalse(journal.exists())
         } finally { directory.deleteRecursively() }

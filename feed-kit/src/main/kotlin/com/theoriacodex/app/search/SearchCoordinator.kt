@@ -13,7 +13,7 @@ import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
-import com.theoriacodex.data.repository.SearchFirstPageStore
+import com.theoriacodex.data.repository.FirstPageStore
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
@@ -76,7 +76,7 @@ class SearchCoordinator(
     private val recentsRepository: RecentsRepository,
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
-    private val firstPageStore: SearchFirstPageStore? = null,
+    private val firstPageStore: FirstPageStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
     seenTagScope: CoroutineScope = CoroutineScope(SupervisorJob() + computationDispatcher),

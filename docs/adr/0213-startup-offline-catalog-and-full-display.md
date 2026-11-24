@@ -20,7 +20,7 @@ The startup benchmark also measured only time to initial display, the spinner's 
 - `recoverPendingJobs` stays on the readiness gate. It reads only the small queue file, and it must register every recovered owner before a screen can start a job whose checkpoint would overwrite that file. Its jobs wait for sources, and their store calls wait for the scan.
 - The launch reports full display through `ReportsLaunchContent` in `HomePager`. It holds one `ReportDrawnWhen` lock until the pager rests on the tab restored at startup and that tab has called `ReportLaunchContent`. A single lock at the pager survives the pages composed before the restored tab is shown, which per-page locks would release too early. Each tab reports what it renders, never a hidden state:
   - Search: results, even while slower sources load; the start screen when no search was left; or a settled error or empty result. A search kept from re-running by an edited draft counts as settled.
-  - For You: cards, the failure tile, or the end of the deck.
+  - For You: cards, the failure tile, or the end of the deck. Cards kept from the last session count (ADR 0214), as Search's cached first page counts as results.
   - Library: Codices, History, or the first Saved shelf that draws. A live shelf counts only once it shows posts or errors, because it reads as not loading before its first fetch. Likes always settles.
   - Series: the shown view's first listing. The decision comes from one `SeriesTabContent` emission.
 - The startup benchmarks wait for the system's "Fully drawn" line, allowing `FULLY_DRAWN_TIMEOUT_MS` so a restored search can reach its error state within its request timeout. The benchmark contract tracks `timeToFullDisplayMs` from version v3 on.

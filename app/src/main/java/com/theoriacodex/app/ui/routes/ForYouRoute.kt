@@ -81,7 +81,7 @@ internal class ForYouRouteCallbacks(
 
 /**
  * The navigation-scoped For You owner and its screen. The feed's restore state keeps the source, sort, media filter and
- * the deck or grid choice; the owner itself keeps nothing, so a recreated one deals a fresh Mix from them.
+ * the deck or grid choice; a recreated owner opens on the cards its last Mix left undecided and deals a fresh Mix behind them.
  */
 @Composable
 internal fun ForYouRoute(

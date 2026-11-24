@@ -94,14 +94,18 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
     }
 }
 
-internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -> Set<PostId> = { setOf(it.id) }) {
+internal class ForYouMix(
+    lanes: List<ForYouLane>,
+    private val copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
+    leading: List<Post> = emptyList(),
+) {
     private var all = lanes.map { lane -> MixLane(lane, lane.labelAmong(lanes)) }
 
     var lanes: List<MixLane> = all
         private set
     var steering = DeckSteering()
     var only: String? = null
-    var released: List<Post> = emptyList()
+    var released: List<Post> = leading
         private set
 
     val origins = mutableMapOf<PostId, DeckOrigin>()
@@ -111,7 +115,10 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
     val wanted: Boolean get() = short != 0
 
     fun owed(whole: Int): Int = short ?: whole
-    private val dealt = mutableSetOf<PostId>()
+    private val dealt = leading.mapTo(mutableSetOf(), Post::id)
+    private var leadCount = leading.size
+
+    fun freshFirst(): List<Post> = released.drop(leadCount) + released.take(leadCount)
 
     val ready: Boolean get() = lanes.any { it.opened }
 
@@ -142,6 +149,7 @@ internal class ForYouMix(lanes: List<ForYouLane>, private val copiesOf: (Post) -
         val asked = back[null].orEmpty().mapNotNull { post -> origins[post.id]?.let { DeckCard(post, it) } }
         steering = steering.copy(pending = asked + steering.pending)
         released = emptyList()
+        leadCount = 0
         dealt.clear()
         short = null
     }

@@ -16,7 +16,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class SearchFirstPageStoreTest {
+class FirstPageStoreTest {
     @get:Rule val temporary = TemporaryFolder()
 
     private fun post(id: String) = Post(
@@ -32,11 +32,11 @@ class SearchFirstPageStoreTest {
         createdAtEpochMs = null,
     )
 
-    private fun file() = File(temporary.root, SearchFirstPageStore.FILE_NAME)
+    private fun file() = File(temporary.root, FirstPageStore.SEARCH_FILE_NAME)
 
     @Test
     fun `a saved page comes back for its own search only`() = runTest {
-        val store = SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
 
         store.save("key-a", listOf(post("1"), post("2")))
 
@@ -46,7 +46,7 @@ class SearchFirstPageStoreTest {
 
     @Test
     fun `comment hints survive a restore, including a listing that gave none`() = runTest {
-        val store = SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
         val hints = listOf(CommentHint(3), CommentHint.Some, CommentHint.None, null)
 
         store.save("key", hints.mapIndexed { index, hint -> post("$index").copy(commentHint = hint) })
@@ -56,7 +56,7 @@ class SearchFirstPageStoreTest {
 
     @Test
     fun `file and picture hashes survive a restore`() = runTest {
-        val store = SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
         val hashes = listOf("0123456789abcdef0123456789abcdef", null)
         val pictures = listOf(null, -0x7FF0_0000_0000_0001L)
 
@@ -67,9 +67,33 @@ class SearchFirstPageStoreTest {
     }
 
     @Test
+    fun `clearing removes the page, and a refused write leaves nothing behind`() = runTest {
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler))
+        store.save("key", listOf(post("1")))
+
+        store.clear()
+        store.save("key", listOf(post("2"))) { false }
+
+        assertTrue(store.load("key").isEmpty())
+        assertTrue(!file().exists())
+    }
+
+    @Test
+    fun `a page older than the store's age limit is not shown`() = runTest {
+        var now = 0L
+        val store = FirstPageStore(file(), StandardTestDispatcher(testScheduler), maxAgeMs = 1_000, now = { now })
+        store.save("key", listOf(post("1")))
+        now = file().lastModified() + 1_000
+
+        assertEquals(listOf("1"), store.load("key").map { it.id.sourcePostId })
+        now += 1
+        assertTrue(store.load("key").isEmpty())
+    }
+
+    @Test
     fun `an unreadable file only costs the instant paint`() = runTest {
         file().writeText("{not json")
 
-        assertTrue(SearchFirstPageStore(file(), StandardTestDispatcher(testScheduler)).load("key-a").isEmpty())
+        assertTrue(FirstPageStore(file(), StandardTestDispatcher(testScheduler)).load("key-a").isEmpty())
     }
 }

@@ -34,6 +34,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import com.theoriacodex.domain.vision.PictureTags
 import com.theoriacodex.domain.vision.PredictedTag
@@ -188,8 +189,9 @@ internal fun deckWiring(
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
     pictures: PictureTags = PictureTags.None,
     clock: () -> Long = AtomicLong()::incrementAndGet,
+    reconnections: Flow<Unit> = emptyFlow(),
 ) = ForYouDeckWiring(
-    actions, quickSave, trails::open, NoRelatedPosts, scope, fetchContext = EmptyCoroutineContext, verdicts = verdicts,
+    actions, quickSave, trails::open, NoRelatedPosts, scope, reconnections, fetchContext = EmptyCoroutineContext, verdicts = verdicts,
     copiesOf = copiesOf, clock = clock, pictures = pictures,
 )
 
