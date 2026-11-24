@@ -26,3 +26,4 @@ New host tests are correct by default when they use the helper, and the check na
 ## Guarded by
 
 - `scripts/tests/test_check_architecture.py`: `test_flags_every_spelling_of_a_bare_wait_adr_0210`
+- `scripts/check_architecture.py`: `@rule def host_tests_wait_settled() -> list[str]`

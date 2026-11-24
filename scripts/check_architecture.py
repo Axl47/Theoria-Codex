@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,6 +51,14 @@ SCOPED_POLICY_DECLARATIONS = [
 ]
 
 
+RULES: list[Callable[[], list[str]]] = []
+
+
+def rule(check: Callable[[], list[str]]) -> Callable[[], list[str]]:
+    RULES.append(check)
+    return check
+
+
 def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
@@ -58,6 +67,7 @@ def files_under(directory: Path):
     return (path for path in directory.rglob("*") if path.is_file())
 
 
+@rule
 def app_logic_stays_platform_free() -> list[str]:
     build = read("app-logic/build.gradle.kts")
     failures = [
@@ -83,6 +93,7 @@ def app_logic_stays_platform_free() -> list[str]:
     return failures
 
 
+@rule
 def moved_owners_stay_in_app_logic() -> list[str]:
     app_roots = [
         module / "src/main"
@@ -113,6 +124,7 @@ def moved_owners_stay_in_app_logic() -> list[str]:
     return failures
 
 
+@rule
 def quality_gates_cover_app_logic() -> list[str]:
     check = read("scripts/check.sh")
     boundaries = read("config/quality/coverage-boundaries.json")
@@ -128,6 +140,7 @@ def quality_gates_cover_app_logic() -> list[str]:
     return [message for passed, message in expectations if not passed]
 
 
+@rule
 def delivery_plans_ignore_source_names() -> list[str]:
     post_media = read("media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt")
     plans = post_media.split("fun previewMediaDeliveryPlan", 1)[-1].split("private fun ImageRef.hasLighterRenditions", 1)[0]
@@ -154,6 +167,7 @@ def is_bare_compose_wait(line: str) -> bool:
     return bool(BARE_COMPOSE_WAIT.search(line)) and not WAIT_DECLARATION.search(line)
 
 
+@rule
 def host_tests_wait_settled() -> list[str]:
     failures = []
     for source in sorted(ROOT.glob("*/src/test/**/*.kt")):
@@ -167,15 +181,6 @@ def host_tests_wait_settled() -> list[str]:
                     "docs/adr/0210-host-test-compose-waits.md and NON_IDLING_WAIT_FILES may use"
                 )
     return failures
-
-
-RULES = (
-    app_logic_stays_platform_free,
-    moved_owners_stay_in_app_logic,
-    quality_gates_cover_app_logic,
-    delivery_plans_ignore_source_names,
-    host_tests_wait_settled,
-)
 
 
 def main() -> int:

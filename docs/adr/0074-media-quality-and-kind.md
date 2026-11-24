@@ -27,4 +27,5 @@ New sources get delivery optimizations automatically if their media offers varia
 
 ## Guarded by
 
-- `scripts/check_architecture.py`: `delivery_plans_ignore_source_names`
+- `scripts/tests/test_check_architecture.py`: `test_reports_a_delivery_plan_that_decides_from_a_source_adr_0074`
+- `scripts/check_architecture.py`: `@rule def delivery_plans_ignore_source_names() -> list[str]`

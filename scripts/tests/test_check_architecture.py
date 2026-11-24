@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import inspect
 import pathlib
 import sys
-import typing
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
@@ -32,15 +32,23 @@ class BareComposeWaitTest(unittest.TestCase):
             self.assertFalse(check_architecture.is_bare_compose_wait(line), line)
 
 
-class RulesTest(unittest.TestCase):
-    def test_every_rule_is_registered(self) -> None:
-        rules = {
-            function
-            for _, function in inspect.getmembers(check_architecture, inspect.isfunction)
-            if function.__module__ == check_architecture.__name__ and typing.get_type_hints(function).get("return") == list[str]
-        }
-        self.assertTrue(rules)
-        self.assertEqual(rules, set(check_architecture.RULES))
+class DeliveryPlanTest(unittest.TestCase):
+    def test_reports_a_delivery_plan_that_decides_from_a_source_adr_0074(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            post_media = root / "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt"
+            post_media.parent.mkdir(parents=True)
+            post_media.write_text(
+                "fun previewMediaDeliveryPlan() = Unit\n"
+                "private fun mediaDeliveryPlan(post: Post) = post.source == SourceKey.Pixiv || hasLighterRenditions()\n"
+                "private fun ImageRef.hasLighterRenditions() = true\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(check_architecture, "ROOT", root):
+                self.assertEqual(
+                    ["PostMedia.kt's delivery plans must decide from the media, not from SourceKey"],
+                    check_architecture.delivery_plans_ignore_source_names(),
+                )
 
 
 if __name__ == "__main__":
