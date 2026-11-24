@@ -14,8 +14,6 @@ import java.util.Base64
 
 internal object SearchSavedStateKeys {
     const val DRAFT_QUERY = "search_draft_query_v2"
-    const val RESTORATION_STARTED = "search_restoration_started"
-    const val RESTORATION_COMPLETED = "search_restoration_completed"
     const val SCROLL_INDEX = "search_scroll_index"
     const val SCROLL_OFFSET = "search_scroll_offset"
 }

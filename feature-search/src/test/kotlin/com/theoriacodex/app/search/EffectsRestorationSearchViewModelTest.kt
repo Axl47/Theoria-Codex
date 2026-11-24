@@ -171,7 +171,6 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
             runCurrent()
 
             assertNotNull(savedState.get<String>(SearchSavedStateKeys.DRAFT_QUERY))
-            assertEquals(true, savedState.get<Boolean>(SearchSavedStateKeys.RESTORATION_COMPLETED))
 
             val recreated = viewModel(ViewModelSearchAdapter(), savedState = savedState)
             recreated.onAction(SearchAction.Restore)
