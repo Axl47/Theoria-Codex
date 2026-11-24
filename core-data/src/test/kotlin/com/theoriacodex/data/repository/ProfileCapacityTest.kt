@@ -1,13 +1,10 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.closeDataStores
+import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,7 +18,7 @@ class ProfileCapacityTest {
 
     @Test fun `profile favorite and blacklist overflow preserve the complete durable state`() = runTest {
         val directory = temporary.newFolder()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val scope = newDataStoreScope()
         val expected = fullSettings(64).copy(
             favoriteTagsByProfile = mapOf("p0" to List(500) { FavoriteTagEntry(SourceKey.PIXIV, "tag-$it") }),
             forYouBlacklistByProfile = mapOf("p0" to List(250) { ForYouBlacklistEntry(SourceKey.PIXIV, listOf("seed-$it")) }),
@@ -33,16 +30,16 @@ class ProfileCapacityTest {
             assertTrue(runCatching { settings.addFavoriteTag("p0", SourceKey.PIXIV, listOf("overflow")) }.isFailure)
             assertTrue(runCatching { settings.addForYouBlacklistEntry("p0", SourceKey.PIXIV, listOf("overflow")) }.isFailure)
             assertEquals(expected, settings.observeSettings().first())
-        } finally { scope.cancel(); scope.coroutineContext.job.join() }
-        val reopenedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        } finally { scope.closeDataStores() }
+        val reopenedScope = newDataStoreScope()
         try {
             assertEquals(expected, DataStoreSettingsRepository(directory, reopenedScope).observeSettings().first())
-        } finally { reopenedScope.cancel(); reopenedScope.coroutineContext.job.join() }
+        } finally { reopenedScope.closeDataStores() }
     }
 
     @Test fun `restore checks combined capacity before mutation and last available slot survives reopen`() = runTest {
         val directory = temporary.newFolder()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val scope = newDataStoreScope()
         val library = RecordingLibrary()
         val journal = directory.resolve("restore.json")
         val importedSettings = AppSettings(
@@ -66,15 +63,15 @@ class ProfileCapacityTest {
             assertEquals(1, service.restore(ProfileBackupCodec().encode(backup)).profilesAdded)
             assertFalse(journal.exists())
             assertEquals(64, settings.observeSettings().first().recommendationProfiles.size)
-        } finally { scope.cancel(); scope.coroutineContext.job.join() }
-        val reopenedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        } finally { scope.closeDataStores() }
+        val reopenedScope = newDataStoreScope()
         try {
             val settings = DataStoreSettingsRepository(directory, reopenedScope)
             assertTrue(settings.observeSettings().first().recommendationProfiles.any { it.profileId == "incoming" })
             val service = ProfileBackupService(settings, library, InMemorySavedSearchRepository(),
                 InMemoryReadingPositionRepository(), journal)
             assertEquals(1, ProfileBackupCodec().decode(service.export()).library.codices.size)
-        } finally { reopenedScope.cancel(); reopenedScope.coroutineContext.job.join() }
+        } finally { reopenedScope.closeDataStores() }
     }
 
     private fun fullSettings(count: Int) = RepositoryPolicies.normalizeSettings(AppSettings(

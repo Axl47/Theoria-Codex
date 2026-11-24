@@ -86,3 +86,4 @@ and link the record that replaces it.
 | [0065](0065-extension-source-ids.md) | Source ids are the first eight bytes of MD5 of name/lang/versionId, as Mihon and Aniyomi derive them |
 | [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
 | [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
+| [0209](0209-datastore-scope-lifetime.md) | A DataStore's scope is closed by cancelling it and waiting for its release, within a bound |

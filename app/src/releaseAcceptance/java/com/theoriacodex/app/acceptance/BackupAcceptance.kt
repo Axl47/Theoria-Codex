@@ -1,5 +1,6 @@
 package com.theoriacodex.app.acceptance
 
+import com.theoriacodex.data.storage.withDataStoreScope
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.BackupLibrary
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
@@ -122,7 +123,7 @@ private suspend fun <T> withRestoreService(
     extensionRepos: ExtensionRepos? = null,
     block: suspend (ProfileBackupService) -> T,
 ): T =
-    withStoreScope { scope ->
+    withDataStoreScope { scope ->
         block(
             ProfileBackupService(
                 settings = DataStoreSettingsRepository(directory.resolve("settings"), scope).apply { awaitReady() },

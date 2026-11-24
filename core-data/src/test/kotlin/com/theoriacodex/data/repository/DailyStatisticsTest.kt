@@ -1,14 +1,11 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.newDataStoreScope
+import com.theoriacodex.data.storage.closeDataStores
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -39,7 +36,7 @@ class DailyStatisticsTest {
     @Test fun `history is bounded by calendar age and count without changing lifetime totals`() = runTest {
         val directory = temporary.newFolder()
         val today = LocalDate.of(2026, 11, 2)
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val scope = newDataStoreScope()
         try {
             val repository = DataStoreStatisticsRepository(directory, scope,
                 clock = Clock.fixed(today.atStartOfDay(ZoneId.of("UTC")).toInstant(), ZoneId.of("UTC")))
@@ -53,8 +50,7 @@ class DailyStatisticsTest {
             val stored = Json.parseToJsonElement(directory.resolve(DATASTORE_STATISTICS_FILE_NAME).readText())
             assertEquals(400, stored.jsonObject.getValue("statistics").jsonObject.getValue("history").jsonObject.size)
         } finally {
-            scope.cancel()
-            scope.coroutineContext.job.join()
+            scope.closeDataStores()
         }
     }
 }

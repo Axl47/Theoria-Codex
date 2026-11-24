@@ -1,5 +1,7 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.newDataStoreScope
+import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -8,15 +10,11 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.job
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -168,7 +166,7 @@ class StatisticsRepositoriesTest {
     @Test
     fun `statistics round trip through typed DataStore and retain source aware tags`() = runTest {
         val directory = tempFolder.newFolder("statistics-round-trip")
-        val firstScope = newScope()
+        val firstScope = newDataStoreScope()
         val first = DataStoreStatisticsRepository(directory, firstScope)
         first.recordWatchedPost(SourceKey.PIXIV, setOf("landscape"), CodexPostOpen("first", "PIXIV:1", "A post"))
         first.recordWatchedPost(SourceKey.GELBOORU, setOf("landscape"))
@@ -180,9 +178,9 @@ class StatisticsRepositoriesTest {
         first.addCodexUsage(CodexUsageTarget("first", "PIXIV:1", video = true), 250L)
         first.addCodexUsage(CodexUsageTarget("first", "PIXIV:1"), 50L)
         first.addCodexUsage(CodexUsageTarget("second", "PIXIV:1"), 80L)
-        closeScope(firstScope)
+        firstScope.closeDataStores()
 
-        val secondScope = newScope()
+        val secondScope = newDataStoreScope()
         val second = DataStoreStatisticsRepository(directory, secondScope)
         val restored = second.observeStatistics().first()
 
@@ -203,13 +201,13 @@ class StatisticsRepositoriesTest {
         assertEquals(3L, restored.translatedPhraseCount)
         assertEquals(18L, restored.translatedSourceCharacterCount)
         assertTrue(directory.resolve(DATASTORE_STATISTICS_FILE_NAME).isFile)
-        closeScope(secondScope)
+        secondScope.closeDataStores()
     }
 
     @Test
     fun `concurrent statistics mutations serialize without lost counts`() = runTest {
         val directory = tempFolder.newFolder("statistics-concurrency")
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreStatisticsRepository(directory, scope)
 
         coroutineScope {
@@ -221,7 +219,7 @@ class StatisticsRepositoriesTest {
         }
 
         assertEquals(40L, repository.observeStatistics().first().postUrlCopyCount)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
@@ -253,13 +251,13 @@ class StatisticsRepositoriesTest {
         directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText(
             """{"schemaVersion":2,"statistics":{"appOpenCount":4}}"""
         )
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val statistics = DataStoreStatisticsRepository(directory, scope).observeStatistics().first()
 
         assertEquals(4L, statistics.appOpenCount)
         assertEquals(0L, statistics.translatedPhraseCount)
         assertEquals(0L, statistics.translatedSourceCharacterCount)
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
@@ -268,14 +266,14 @@ class StatisticsRepositoriesTest {
         directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText(
             """{"schemaVersion":2,"statistics":{"appOpenCount":4,"history":{"not-a-day":{"appOpenCount":1}}}}"""
         )
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val recoveries = FileStoreRecoveryRegistry()
         val repository = DataStoreStatisticsRepository(directory, scope, recoveryRegistry = recoveries)
         val statistics = repository.observeStatistics().first()
 
         assertEquals(0L, statistics.appOpenCount)
         assertRecorded(recoveries, "Statistics", directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).single())
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     @Test
@@ -284,7 +282,7 @@ class StatisticsRepositoriesTest {
         val destination = directory.resolve(DATASTORE_STATISTICS_FILE_NAME)
         val future = """{"schemaVersion":99,"statistics":{}}"""
         destination.writeText(future)
-        val scope = newScope()
+        val scope = newDataStoreScope()
         val repository = DataStoreStatisticsRepository(directory, scope)
 
         assertThrows(Exception::class.java) {
@@ -293,7 +291,7 @@ class StatisticsRepositoriesTest {
 
         assertEquals(future, destination.readText())
         assertFalse(directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).isNotEmpty())
-        closeScope(scope)
+        scope.closeDataStores()
     }
 
     private fun searched(source: SourceKey, value: String, facet: SearchFacet = SearchFacet.TAG, namespace: String? = null) =
@@ -301,11 +299,4 @@ class StatisticsRepositoriesTest {
 
     private fun query(mode: QueryMode, vararg include: SearchTerm) =
         Query(mode, include.toList(), emptyList(), SortMode.NEWEST, dateRange = null, minScore = null)
-
-    private fun newScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private suspend fun closeScope(scope: CoroutineScope) {
-        scope.cancel()
-        scope.coroutineContext.job.join()
-    }
 }
