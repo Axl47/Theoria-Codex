@@ -98,10 +98,10 @@ class ViewerVideoPositionsTest {
     }
 
     @Test
-    fun `an episode left at its end starts over, any other video resumes anywhere`() {
+    fun `an episode left in its tail starts over, any other video resumes anywhere`() {
         val watching = ViewerVideoPositions(ViewerSeries.Watching())
-        assertTrue(watching.startsOver(1_436_000L, 1_440_000L))
-        assertFalse(watching.startsOver(1_400_000L, 1_440_000L))
+        assertTrue(watching.startsOver(1_400_000L, 1_440_000L))
+        assertFalse(watching.startsOver(1_300_000L, 1_440_000L))
         assertFalse(ViewerVideoPositions().startsOver(5_900L, 6_000L))
     }
 }

@@ -67,7 +67,7 @@ class RoomSeriesRepository(
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> =
         withContext(Dispatchers.IO) { dao.entries(id.source.id, id.address) }.map(SeriesEntryEntity::toStored)
 
-    override suspend fun entry(id: SeriesId, address: String): StoredSeriesEntry? =
+    override suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? =
         withContext(Dispatchers.IO) { dao.listedEntry(id.source.id, id.address, address) }?.toStored()
 
     override suspend fun store(series: Series, entries: List<SeriesEntry>?): List<SeriesEntry> =

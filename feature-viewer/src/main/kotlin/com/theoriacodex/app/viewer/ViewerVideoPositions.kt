@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
+import com.theoriacodex.data.repository.episodeStartsOver
 import com.theoriacodex.domain.model.PostId
 
 /**
@@ -34,15 +35,11 @@ internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
     }
 
     /**
-     * Whether a start at [positionMs] of a video [durationMs] long begins again instead: in a watched session, within
-     * [VIEWER_EPISODE_END_MARGIN_MS] of the end, the episode was watched to its end. Any other video resumes anywhere.
+     * Whether a start at [positionMs] of a video [durationMs] long begins again instead: in a watched session, by
+     * [episodeStartsOver], the rule stored progress resumes by. Any other video resumes anywhere.
      */
-    fun startsOver(positionMs: Long, durationMs: Long): Boolean =
-        episodes != null && positionMs >= durationMs - VIEWER_EPISODE_END_MARGIN_MS
+    fun startsOver(positionMs: Long, durationMs: Long): Boolean = episodes != null && episodeStartsOver(positionMs, durationMs)
 }
-
-/** How close to an episode's end a saved position counts as watched to the end. */
-internal const val VIEWER_EPISODE_END_MARGIN_MS = 5_000L
 
 /**
  * Holds the current session's [ViewerVideoPositions] in the screen's ViewModel store (the Viewer's navigation entry), so

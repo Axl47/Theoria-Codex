@@ -96,7 +96,7 @@ interface SeriesRepository {
     suspend fun entries(id: SeriesId): List<StoredSeriesEntry>
 
     /** The entry of [id] at [address], as [entries] has it: null when the source does not list it, or it is not stored. */
-    suspend fun entry(id: SeriesId, address: String): StoredSeriesEntry? = entries(id).firstOrNull { it.entry.address == address }
+    suspend fun listedEntry(id: SeriesId, address: String): StoredSeriesEntry? = entries(id).firstOrNull { it.entry.address == address }
 
     /**
      * Stores what the source says about [series], keeping what the user did with it, and the stored description,
@@ -210,15 +210,21 @@ fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): Store
 fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).coerceAtLeast(0).toInt()
 
 /**
- * The playback position, in milliseconds, an episode starts at: where the user left it, watched or not, unless that is
- * in its tail, the last [RESUME_TAIL_MS] or last 10% of it, whichever is shorter: the ending and next-episode preview of
- * a 24-minute episode, where it was as good as played out, so it starts over. Watching [ANIME_FINISHED_PERCENT] still
- * marks it watched and moves Continue on, but one left at 20:30 of 24:00 reopens there.
+ * The playback position, in milliseconds, an episode starts at: where the user left it, watched or not, unless
+ * [episodeStartsOver] there. Watching [ANIME_FINISHED_PERCENT] still marks it watched and moves Continue on, but one
+ * left at 20:30 of 24:00 reopens there.
  */
 fun StoredSeriesEntry.resumePositionMs(): Long {
     val length = length ?: return if (read) 0 else position
-    return if (position < length - minOf(RESUME_TAIL_MS, length / 10)) position else 0
+    return if (episodeStartsOver(position, length)) 0 else position
 }
 
-/** The longest tail of an episode in which a saved position counts as having played it out; see [resumePositionMs]. */
+/**
+ * Whether an episode [lengthMs] long, left at [positionMs], starts over rather than resuming: the position is in its
+ * tail, the last [RESUME_TAIL_MS] or last 10% of it, whichever is shorter. For a 24-minute episode that is its ending
+ * and next-episode preview, where it was as good as played out. The Viewer applies the same rule within a session.
+ */
+fun episodeStartsOver(positionMs: Long, lengthMs: Long): Boolean = positionMs >= lengthMs - minOf(RESUME_TAIL_MS, lengthMs / 10)
+
+/** The longest tail of an episode in which a saved position counts as having played it out; see [episodeStartsOver]. */
 const val RESUME_TAIL_MS = 120_000L
