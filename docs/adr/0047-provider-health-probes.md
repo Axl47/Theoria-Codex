@@ -23,3 +23,11 @@ A challenged provider shows as unknown rather than failing the run. New health o
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProbeSteps.kt`: `observingChallenges`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt`: `CANNOT_CHECK`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCli.kt`: `publicSafeSummaryLines`
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ChallengeObservingHttpClientTest.kt`: `maintenance pages and plain refusals are not browser challenges (ADR 0047)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/health/HitomiProviderHealthProbeTest.kt`: `disabling media ranges skips both byte probes and keeps configuration and gallery steps (ADR 0047)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCliTest.kt`: `public safe summary lists only source status and reason enum (ADR 0047)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt`: `a problem during a browser challenge cannot be checked while a real failure stays failed (ADR 0047)`
+- Left to prose: public runs passing `probeMediaRanges = false` and printing only the safe summary are wiring inside the CLI's `main`, which runs live providers, so a test would need a seam the CLI does not have.

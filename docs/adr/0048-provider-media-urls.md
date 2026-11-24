@@ -25,3 +25,13 @@ Cards load fast and safely; a provider that only serves HTTP media would need an
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapter.kt`: `CARD_PREVIEW_VARIANT`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/iwara/IwaraSourceAdapter.kt`: `iwaraAssetUrl`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiGalleryParser.kt`: thumbnail URL selection
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/common/OriginUrlTest.kt`: `Pixiv image addresses and a known Pixiv ID become the artwork page (ADR 0048)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapterTest.kt`: `a card uses the 720 px variant rather than the 180 px default (ADR 0048)`, `provider media addresses are upgraded to HTTPS, plain or protocol-relative (ADR 0048)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt`: `search canonicalizes numbered video cdn urls with invalid host certificates (ADR 0048)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/iwara/IwaraSourceAdapterTest.kt`: `a custom thumbnail card loads the small rendition, not the uploaded original (ADR 0048)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiResolutionSourceAdapterTest.kt`: `resolve post maps v2 gallery details with page paths (ADR 0048)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_cleartext_beyond_loopback_adr_0048`
+- Left to prose: the size and sharpness reasons behind the 720 px variant and Iwara's rendition, and how often nhentai names thumbnails irregularly, are measurements of live providers; nhentai passes an absolute `http://` path through unchanged, and the network security rule is what keeps it from loading.

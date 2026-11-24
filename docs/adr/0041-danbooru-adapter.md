@@ -24,3 +24,11 @@ Guest limits are encoded in the site description; a site with different limits n
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapter.kt`: `DanbooruSite`, `DanbooruSourceAdapter`, `accountPosts`, `parsePost`, `compileTags`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/DanbooruAccounts.kt`: `danbooruAccountName`, `parseDanbooruAccountDetails`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/custom/Families.kt`: `DanbooruFamily` (term limit)
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/custom/FamilyAdapterTest.kt`: `a custom Danbooru site sends its keys, headers and term limit (ADR 0041)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/custom/SiteProberTest.kt`: `a Danbooru site that does not report its tag limit falls back to two (ADR 0041)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruAccountsTest.kt`: `only user creators are accounts, told apart by the profile alone (ADR 0008, 0041)`, `private favorites count as zero (ADR 0041)`, `an artist tag has no account details and asks for nothing (ADR 0041)`, `favorites page by number because ordfav is not id ordered (ADR 0041)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapterTest.kt`: `score search spends a term on its order metatag and keeps numbered pages (ADR 0041, 0054)`, `newest search sends only the typed tags and pages before the lowest post id (ADR 0041)`, `a post whose files are withheld is an account failure, not a missing post (ADR 0041)`, `ugoira plays its webm sample and posts without a file are left out (ADR 0041)`, `rejected search reports the provider's own explanation (ADR 0041)`, `guests keep two terms, a ranked sort spends one, and animated falls back to the free filetype term (ADR 0041)`
+- Left to prose: the guest page limit and Cloudflare's dislike of generic agents are provider facts checked live; static GIFs the animated term admits are filtered on the phone (app-logic).
