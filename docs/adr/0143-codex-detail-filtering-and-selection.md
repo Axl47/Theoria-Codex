@@ -14,6 +14,7 @@ Codex detail serves real Codices, Likes and virtual collections (Followed, saved
 - "Draw" picks a random saved post's tags (`drawCodexTerms`) so at least that post matches when they are all required; tags drawn independently across a collection may never appear together.
 - Drag-select reads grid positions as post indices, so it is enabled only while no related shelf is shifting them. While selecting, the grid's drag-select owns long press. The selection's back handler is registered after the destination's own Back handler so it wins while enabled. The selection marker only draws, because a Surface there would swallow taps meant for the card, which toggles selection.
 - The related shelf in a Codex takes only the collection's media filters, and only the collection's own cards resolve posts by id; the shelf shares the card environment without it.
+- Resetting the filters keeps the sort, because Sort is a chip of its own.
 - The unavailable placeholder waits for an answer (`loading`): not answered yet is not the same as gone, and saying so would flash on every first open.
 
 ## Consequences
@@ -27,4 +28,4 @@ Tag filtering never leaks into saved state. Adding a collection type means decid
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexTagFilterSheet.kt`: `CodexTagSheets`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexTagSearchSheet.kt`: `CodexTagSearchSheet`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexSearchSourceOptions.kt`: `drawCodexTerms`
-- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailScreen.kt`: `CodexUnavailable`, `rememberCodexEditSelection`, `CodexSelectionMarker`, `rememberCodexDetailFeed`
+- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailScreen.kt`: `CodexUnavailable`, `resetFilters`, `rememberCodexEditSelection`, `CodexSelectionMarker`, `rememberCodexDetailFeed`

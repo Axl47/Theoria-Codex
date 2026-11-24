@@ -90,14 +90,12 @@ class SeriesTabViewModelTest {
         before.search("one punch")
         advanceUntilIdle()
 
-        // The system keeps only the handle's contents; the sources load again in the new process.
         val after = SeriesTabViewModel(NothingStored, { offered }, saved = SavedStateHandle(saved.keys().associateWith { saved.get<String>(it) })) { NOTHING_CHECKED }
         assertEquals(emptyList<SeriesSourceListing>(), after.state.value.search)
         advanceUntilIdle()
 
         val found = after.state.value.search.orEmpty().map { (it.listing as SeriesListing.Loaded).series.single().title }
         assertEquals(listOf("one punch", "one punch"), found)
-        // The browsed source loads once the search no longer hides it.
         after.clearSearch()
         advanceUntilIdle()
         assertEquals(offered[1].key, after.state.value.browse?.key)
@@ -184,7 +182,6 @@ class SeriesTabViewModelTest {
         assertEquals(listOf("one punch", "one punch"), browsed(viewModel))
         assertEquals(listOf(chosen, chosen), source.searchedWith)
 
-        // Opened again, the sheet starts at what the listing on screen chose.
         viewModel.openFilters()
         advanceUntilIdle()
         assertEquals(FilterSheetState("one punch", defaults, chosen), viewModel.state.value.filterSheet)
@@ -408,7 +405,6 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
         assertEquals(SeriesView.BROWSE, viewModel.content.value.view)
 
-        // Following a series from Browse leaves the tab on Browse.
         followed.value = listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0))
         advanceUntilIdle()
         assertEquals(SeriesView.BROWSE, viewModel.content.value.view)
@@ -417,7 +413,6 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
         assertEquals(SeriesView.FOLLOWING, reopened.state.value.view)
 
-        // After process death the view comes back with the rest of the tab, as a Browse search does.
         val restored = SeriesTabViewModel(Following(followed), { listOf(manga) }, saved = SavedStateHandle(mapOf("view" to "BROWSE", "search" to "moon"))) { NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(SeriesView.BROWSE to "moon", restored.state.value.view to restored.state.value.searchQuery)
@@ -453,7 +448,6 @@ class SeriesTabViewModelTest {
         val collecting = launch { viewModel.content.collect {} }
         advanceUntilIdle()
         assertEquals(null, viewModel.content.value.following)
-        // Choosing Following before the read does not show the grid early either.
         viewModel.chooseView(SeriesView.FOLLOWING)
         advanceUntilIdle()
         assertEquals(null, viewModel.content.value.following)
@@ -508,7 +502,6 @@ class SeriesTabViewModelTest {
         assertEquals("Fake", dedicated.source.sourceName)
         assertEquals("en", dedicated.source.language)
         assertEquals(BrowseKind.Filtered("reincarnation", emptyList(), changed = 0), dedicated.kind)
-        // Reused page 1 from global search without issuing a duplicate search call.
         assertEquals(1, first.searchedWith.size)
         assertEquals(listOf("/found"), (dedicated.source.listing as SeriesListing.Loaded).series.map { it.id.address })
 
@@ -545,7 +538,6 @@ class SeriesTabViewModelTest {
         assertEquals(BrowseKind.Filtered("solo", chosen, changed = 1), viewModel.state.value.dedicated?.kind)
         assertEquals(BrowseKind.Popular, viewModel.state.value.browseKind)
 
-        // Updating text in dedicated search preserves the active source filters.
         viewModel.searchDedicated("tower")
         advanceUntilIdle()
         assertEquals(BrowseKind.Filtered("tower", chosen, changed = 1), viewModel.state.value.dedicated?.kind)
@@ -555,7 +547,6 @@ class SeriesTabViewModelTest {
         assertEquals(BrowseKind.Latest, viewModel.state.value.dedicated?.kind)
         assertEquals(listOf("latest"), (viewModel.state.value.dedicated?.source?.listing as SeriesListing.Loaded).series.map { it.title })
 
-        // Clearing text with no filters active returns to Popular.
         viewModel.searchDedicated("")
         advanceUntilIdle()
         assertEquals(BrowseKind.Popular, viewModel.state.value.dedicated?.kind)
@@ -608,7 +599,6 @@ class SeriesTabViewModelTest {
         val group = filtered.filters.single() as SeriesFilter.Group
         assertEquals(Inclusion.INCLUDE, (group.filters.first() as SeriesFilter.TriState).state)
 
-        // Unknown genre falls back to text search inside that source.
         viewModel.openGenreSearch(source.key, "Mecha")
         advanceUntilIdle()
         val fallback = viewModel.state.value.dedicated?.kind as BrowseKind.Filtered

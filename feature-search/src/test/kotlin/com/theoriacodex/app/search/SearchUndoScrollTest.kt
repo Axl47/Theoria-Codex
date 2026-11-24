@@ -45,7 +45,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
 
-/** Search's real screen and owner together, driven through the composer like the phone. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class SearchUndoScrollTest {
@@ -58,7 +57,6 @@ class SearchUndoScrollTest {
         scrollPersistenceDelayMs = 0L,
     )
 
-    // The place lies more pages below the first than page demand drains on its own between scrolls.
     @Test fun `Undo loads every page up to a deep saved place and returns to it`() {
         compose.setContent {
             val state by owner.state.collectAsState()
@@ -107,10 +105,8 @@ class SearchUndoScrollTest {
         settle { it.query.applied.includeTags == listOf(tag) }
     }
 
-    /** Waits until no search runs, no scroll request is open, and [done] holds. */
     private fun settle(done: (SearchUiState) -> Boolean) {
         compose.waitUntilSettled(5_000) {
-            // Main-thread delays (the request timeout among them) run only as Robolectric's clock moves.
             ShadowLooper.idleMainLooper(10, TimeUnit.MILLISECONDS)
             val state = owner.state.value
             val restored = state.restoration as? SearchRestorationUiState.Restored
@@ -119,7 +115,6 @@ class SearchUndoScrollTest {
         compose.waitForIdle()
     }
 
-    /** Ten pages of twenty posts per tag, of varied heights. */
     private class PagedAdapter : SourceAdapter {
         override val sourceKey = SourceKey.PIXIV
         override val capabilities = SourceCapabilities(
@@ -144,7 +139,6 @@ class SearchUndoScrollTest {
     private companion object {
         const val PAGE_SIZE = 20
         const val PAGES = 10
-        // Past the first page plus the three that page demand loads unasked.
         const val DEEP_ANCHOR = 85
     }
 }

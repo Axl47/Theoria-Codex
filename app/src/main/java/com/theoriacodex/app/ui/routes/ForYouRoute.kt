@@ -36,53 +36,37 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 
-/** App-level inputs the For You deck is built from or drawn with. */
 internal data class ForYouRouteConfig(
     val settings: AppSettings,
     val availableSources: Set<SourceKey>,
     val creatorBrowsingSources: Set<SourceKey>,
-    /** The active profile's marks: the Mix does not deal a post it already liked or saved. */
     val marks: FeedMarks,
     val resolveUnknownAnimatedDurations: Boolean,
-    /** Whether a tag trail's search is already a saved search. */
     val isSearchSaved: (Query) -> Boolean,
-    /**
-     * Whether For You is on screen or the tabs are heading to it. The owner is told what to deal from only then, so a
-     * tab change that merely passes over For You asks the sources for nothing.
-     */
     val shown: Boolean,
 )
 
-/** What the owner and its cards are built with. */
 internal class ForYouRouteServices(
     val coordinator: ForYouCoordinator,
-    /** Read once, when the owner is created. */
     val wiring: () -> ForYouDeckWiring,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val pixivUgoiraClient: PixivUgoiraClient?,
     val recoverPostMedia: suspend (Post, ImageRef) -> Post?,
 )
 
-/** Platform and navigation effects that remain owned by the application shell. */
 internal class ForYouRouteCallbacks(
-    /** Opens the Viewer on a post of a level's feed. */
     val onOpenPost: (level: ForYouLevel, post: PostId, scrollOffsetHint: Int) -> Unit,
     val onOpenRelated: (seed: Post, posts: List<Post>, index: Int) -> Unit,
     val onPickCodex: (post: Post, onPick: (ChosenCodex) -> Unit) -> Unit,
     val onSaveSearch: (Query) -> Unit,
     val onOpenSourceAccounts: () -> Unit,
     val onShowMessage: (String) -> Unit,
-    /** Makes a profile the active one in settings, which the deck follows. */
     val onSelectProfile: (profileId: String) -> Unit,
     val onToggleLike: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onGoToSearch: () -> Unit,
 )
 
-/**
- * The navigation-scoped For You owner and its screen. The feed's restore state keeps the source, sort, media filter and
- * the deck or grid choice; a recreated owner opens on the cards its last Mix left undecided and deals a fresh Mix behind them.
- */
 @Composable
 internal fun ForYouRoute(
     services: ForYouRouteServices,
@@ -142,7 +126,6 @@ internal fun ForYouRoute(
     )
 }
 
-/** Hands the owner what it deals from, again whenever any of it changes, while For You is [ForYouRouteConfig.shown]. */
 @Composable
 private fun FollowForYouEnvironment(owner: ForYouDeckViewModel, config: ForYouRouteConfig, restore: FeedFabRestoreState, sortMode: SortMode) {
     val selectedSource = remember(restore.source, config.availableSources) { config.availableSources.firstOrNull { it.id == restore.source } }
@@ -155,7 +138,6 @@ private fun FollowForYouEnvironment(owner: ForYouDeckViewModel, config: ForYouRo
     }
 }
 
-/** The screen's callbacks: the shell's, plus the choices the feed's restore state keeps. */
 private fun deckCallbacks(
     callbacks: ForYouRouteCallbacks,
     restore: FeedFabRestoreState,
@@ -165,7 +147,6 @@ private fun deckCallbacks(
     onSelectSource = { source -> onRestoreChange(restore.copy(source = source?.id)) },
     onSelectSort = { sort -> onRestoreChange(restore.copy(sortMode = sort.name)) },
     onAnimatedOnlyChange = { animatedOnly -> onRestoreChange(restore.copy(animatedOnly = animatedOnly)) },
-    // One change: two would each start from the state before the other.
     onResetFilters = { onRestoreChange(restore.copy(sortMode = null, animatedOnly = false)) },
     onGridChange = { grid -> onRestoreChange(restore.copy(grid = grid)) },
     onOpenPost = callbacks.onOpenPost,

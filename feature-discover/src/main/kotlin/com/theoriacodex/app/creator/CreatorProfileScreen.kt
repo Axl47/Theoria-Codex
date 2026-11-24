@@ -93,7 +93,6 @@ fun CreatorProfileScreen(
     state: CreatorUiState,
     followed: Boolean = false,
     onToggleFollow: () -> Unit = {},
-    /** What the follow had seen when the page opened; null when the creator is not followed. */
     seenAtOpen: Set<String>? = null,
     marks: FeedMarks,
     pixivUgoiraClient: PixivUgoiraClient? = null,
@@ -108,7 +107,6 @@ fun CreatorProfileScreen(
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    // Each feed keeps its own scroll position and duration reveal order.
     val gridState = rememberRetainedFeedGridState(state.selectedFeed.retainKey)
     val feed = rememberCreatorFeed(state, related.state, marks, fabRestoreState, durations)
     LaunchedEffect(feed.durationFilterActive) { durations.onFilterChanged(feed.durationFilterActive) }
@@ -150,7 +148,6 @@ fun CreatorProfileScreen(
     if (showFilterSheet) {
         CreatorFilterSheet(
             fabRestoreState, feed.filters.animatedDurationRange, onFabRestoreStateChange,
-            // The sheet reset has no undo affordance, so the undo callback is intentionally discarded.
             onReset = @Suppress("IgnoredReturnValue") { clearFilters() },
             onTriage = rememberTriageAction(ViewerStreamSource.CREATOR_PROFILE, state.queryHash, feed.triageSeed()),
             onDismiss = { showFilterSheet = false },
@@ -189,7 +186,6 @@ private fun rememberCreatorPageDemand(
     onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
 )
 
-/** The creator's grid: its feed after the sheet's filters, known lengths, and the related shelf. */
 @Composable
 private fun rememberCreatorFeed(
     state: CreatorUiState,
@@ -228,7 +224,6 @@ private fun creatorFilterLabels(fabRestoreState: FeedFabRestoreState, feed: Feed
     "Hide saved".takeIf { fabRestoreState.hideSaved },
 )
 
-/** Clears the feed's filters and returns how to put them back. */
 private fun clearCreatorFilters(
     previous: FeedFabRestoreState,
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
@@ -245,10 +240,6 @@ private fun clearCreatorFilters(
     return { onFabRestoreStateChange(previous) }
 }
 
-/**
- * The bar and, for accounts, their facts and feed tabs (landscape accounts fold all of it into one bar), then the
- * common tags of the uploads.
- */
 @Composable
 private fun CreatorHeader(
     state: CreatorUiState,
@@ -270,7 +261,6 @@ private fun CreatorHeader(
     if (state.selectedFeed == AccountFeed.UPLOADS) CreatorTagChips(creator, state.results)
 }
 
-/** An account's facts and its feed tabs, below the app bar. */
 @Composable
 private fun AccountSection(
     state: CreatorUiState,
@@ -284,7 +274,6 @@ private fun AccountSection(
     AccountFeedTabs(state.tabs, state.selectedFeed) { onAction(CreatorAction.SelectFeed(it)) }
 }
 
-/** Account pages move Follow and the source name into the header below the bar. */
 @Composable
 private fun CreatorAppBar(
     creator: CreatorProfile,
@@ -305,7 +294,6 @@ private fun CreatorAppBar(
     }
 }
 
-/** Landscape account pages fold the header and feed tabs into one bar, with the bio behind a toggle. */
 @Composable
 private fun CompactAccountBar(
     state: CreatorUiState,
@@ -337,7 +325,6 @@ private fun CompactAccountBar(
     if (bioShown && bio != null) AccountBio(bio)
 }
 
-/** Open in browser and Share, when the creator has a profile link. */
 @Composable
 private fun CreatorLinkActions(creator: CreatorProfile, onOpenUrl: (String) -> Unit) {
     creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
@@ -415,7 +402,6 @@ private fun CreatorFeedBody(
             FeedEmptyTile(message = creatorEmptyMessage(state, feed))
         }
 
-        // Pull to refresh is how paging resumes after a dismissed page failure.
         else -> PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { onAction(CreatorAction.Refresh) }) {
             CreatorGrid(state, related, feed, cards, gridState, newSince, onAction, onLongPress)
         }
@@ -475,7 +461,6 @@ private fun creatorEmptyMessage(state: CreatorUiState, feed: FeedView): String =
     else -> "No ${state.selectedFeed.noun} match the current filters."
 }
 
-/** Keeps the uploads feed's keys as they were before accounts had other feeds. */
 private val AccountFeed.retainKey: String
     get() = if (this == AccountFeed.UPLOADS) "creator" else "creator-${name.lowercase()}"
 

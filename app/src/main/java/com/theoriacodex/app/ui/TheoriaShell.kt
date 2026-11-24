@@ -113,27 +113,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * The navigation-owned ViewModels the shell may reach, and actions waiting for Search to exist.
- *
- * The slots outlive individual destination compositions: Viewer can keep paging through a still-live
- * back-stack owner, and only that owner's clear empties its slot. Hold one instance for the shell's
- * whole lifetime and close it only when the shell leaves composition.
- */
 @Stable
 internal class RouteOwners {
     val search = RouteOwnerSlot<SearchViewModel>()
     val forYou = RouteOwnerSlot<ForYouDeckViewModel>()
     val creator = RouteOwnerSlot<CreatorProfileViewModel>()
-    /** The Viewer while its destination is composed. */
     val viewer = RouteOwnerSlot<ViewerViewModel>()
     private val pendingSearchActions = PendingRouteActions<SearchAction>()
 
-    /** The live feeds a Viewer session can follow. */
     val feeds: List<ViewerFeedOwner>
         get() = listOfNotNull(search.current, forYou.current, creator.current)
 
-    /** The live feed that launches Viewer streams from [source], if any. */
     fun feed(source: ViewerStreamSource): ViewerFeedOwner? = feeds.firstOrNull { feed -> feed.streamSource == source }
 
     fun close() {
@@ -165,7 +155,6 @@ internal class RouteOwners {
     )
 }
 
-/** Which home tab is showing, and the routes that lead back to it. */
 @Stable
 internal class HomeNavigation(
     val navController: NavHostController,
@@ -178,16 +167,11 @@ internal class HomeNavigation(
     val currentRoute: String?
         get() = navController.currentBackStackEntry?.destination?.route
 
-    /**
-     * Selects a tab without a page animation, which is how every cross-tab jump arrives. With another
-     * screen on top, the pager moves there when Home returns ([HomeTabEffects] scrolls to [homeTabRoute]).
-     */
     fun showTab(destination: TopLevelDestination) {
         homeTabRoute = destination.route
         if (currentRoute == AppRoute.Home) scope.launch { pagerState.scrollToRoute(destination.route) }
     }
 
-    /** Returns to Home from any screen and selects [destination]'s tab. */
     fun goToTab(destination: TopLevelDestination) {
         if (currentRoute != AppRoute.Home && !navController.popBackStack(AppRoute.Home, inclusive = false)) {
             navController.navigate(AppRoute.Home) {
@@ -199,10 +183,8 @@ internal class HomeNavigation(
     }
 }
 
-/** Posts on their way into a Codex, and what the save sheet should offer for them. */
 @Stable
 internal class PendingCodexSave {
-    /** Save targets per search this session, so the picker suggests where this search's posts went. */
     val searchSaves = SearchSaveMemory()
 
     var visible by mutableStateOf(false)
@@ -216,10 +198,6 @@ internal class PendingCodexSave {
     var excludedCodexIds by mutableStateOf<Set<String>>(emptySet())
         private set
 
-    /**
-     * Set by a requester that saves the picked Codex itself, as the lift and the triage deck do so their Undo covers
-     * the save; the sheet then hands over the Codex picked, or the new one named, instead of saving.
-     */
     var onPick by mutableStateOf<CodexChosen?>(null)
         private set
 
@@ -250,7 +228,6 @@ internal class PendingCodexSave {
     }
 }
 
-/** Sheets and dialogs the shell shows over whichever destination is current. */
 @Stable
 internal class ShellOverlays {
     var showFollowedCreators by mutableStateOf(false)
@@ -258,7 +235,6 @@ internal class ShellOverlays {
     var codexActionTargetId by mutableStateOf<String?>(null)
     var releaseHistoryEntries by mutableStateOf<List<ReleaseChangelogEntry>?>(null)
 
-    /** Saved's collections are virtual except Likes, so each opens the menu that manages it. */
     fun openCollectionActions(id: String) {
         when (id) {
             FOLLOWED_CODEX_ID -> showFollowedCreators = true
@@ -268,7 +244,6 @@ internal class ShellOverlays {
     }
 }
 
-/** Activity-scoped ViewModels the shell coordinates; created above the NavHost so entries share them. */
 internal class ShellOwners(
     val savedSearches: SavedSearchViewModel,
     val codexCommands: CodexCommandViewModel,
@@ -277,7 +252,6 @@ internal class ShellOwners(
     val settings: SettingsViewModel,
     val follows: CreatorFollowsViewModel,
     val codexImports: CodexImportViewModel,
-    /** The one browser check page, shown over every screen. */
     val siteChecks: SiteChecks,
 )
 
@@ -328,10 +302,6 @@ private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Cont
     }
 }
 
-/**
- * What the app shell's parts share: dependencies, its state holders, and the commands that cross
- * destinations. Commands read state when they run, so they always act on the current destination.
- */
 @Stable
 internal class TheoriaShell(
     val container: TheoriaAppContainer,
@@ -366,7 +336,6 @@ internal class TheoriaShell(
     private val fileCopies = FileCopyLookup(sources.registry, data.fileMirrors::copiesOf)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
-    /** Reads series chapters in the Viewer; null in a build without extensions. */
     val seriesReader = container.series?.let(::SeriesReader)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
         data = data,
@@ -376,7 +345,6 @@ internal class TheoriaShell(
         offlineMedia = features.offlineMedia,
         series = seriesReader,
     )
-    /** Saves one tag, or an "or" group with an optional name, for the active profile. */
     val addFavoriteTags: (SourceKey, List<String>, String?) -> Unit = { source, tags, name ->
         owners.postMutations.favorite(owners.settings.state.value.activeProfile.profileId, source, tags, true, name)
     }
@@ -414,11 +382,6 @@ internal class TheoriaShell(
         transfers.showDownloads = true
     }
 
-    /**
-     * Opens [creator] above the current screen, so Back returns to it. A Viewer stays open underneath, except one
-     * browsing a creator page's feed: that feed lives in the single creator owner the new page takes over, so it closes.
-     * A creator page already showing [creator] stays as it is.
-     */
     suspend fun openCreatorProfile(creator: CreatorProfile) {
         val shownCreator = routes.creator.current?.state?.value?.creator
         if (navigation.currentRoute == AppRoute.CreatorProfile && shownCreator?.followKey() == creator.followKey()) return
@@ -433,7 +396,6 @@ internal class TheoriaShell(
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
         }
         navController.navigate(AppRoute.CreatorProfile) {
-            // A creator opened from a creator page replaces it; its entry remembers the creator it started with.
             if (navigation.currentRoute == AppRoute.CreatorProfile) popUpTo(AppRoute.CreatorProfile) { inclusive = true }
         }
     }
@@ -464,7 +426,6 @@ internal class TheoriaShell(
         scope.launch { openCreatorProfile(post) }
     }
 
-    /** Commits only while the profile that liked the post is still the active one. */
     fun toggleLikeAndSyncCodex(post: Post, onCommitted: (LikeToggleOutcome) -> Unit = {}) {
         val profile = owners.settings.state.value.activeProfile
         owners.postMutations.like(profile, post) { outcome ->
@@ -472,10 +433,6 @@ internal class TheoriaShell(
         }
     }
 
-    /**
-     * A like action bound to the feed behind [source] and the query it shows now: a committed like opens or clears
-     * that feed's related shelf, unless the feed has since moved to another query or owner.
-     */
     fun feedLikeAction(source: ViewerStreamSource): (Post) -> Unit {
         val owner = routes.feed(source)
         val queryHash = owner?.viewerFeed?.queryHash
@@ -488,7 +445,6 @@ internal class TheoriaShell(
         }
     }
 
-    /** Replaces the current search with [query], built in a Codex for [source]. */
     fun searchFromCodex(source: SourceKey, query: Query) {
         if (source !in sources.registry.availableSources()) {
             toast("${source.displayName()} source is unavailable")
@@ -533,7 +489,6 @@ internal class TheoriaShell(
 
     private fun statsDocument(file: StatsShareFile) = ExportDocument("Theoria stats", "theoria-stats.json", encodeStatsShare(file))
 
-    /** Reads a stats file someone sent, or explains why it can't be compared. */
     suspend fun readStatsFile(document: String): StatsShareFile? {
         val file = runCatchingPreservingCancellation {
             readBoundedTextDocument(STATS_SHARE_MAX_BYTES) { appContext.contentResolver.openInputStream(document.toUri()) }
@@ -577,7 +532,6 @@ internal class TheoriaShell(
         }.onFailure { Diagnostics.report("share", "Could not open the share sheet", it) }.isSuccess
     }
 
-    /** Absent when the host application keeps no diagnostics, as in fixture graphs without [TheoriaApplication]. */
     val diagnosticsEntry: SettingsDiagnosticsEntry? = (appContext as? TheoriaApplication)?.diagnosticReporter?.let { reporter ->
         SettingsDiagnosticsEntry(
             reporter::build, ::shareDiagnosticsReport,
@@ -596,10 +550,6 @@ internal class TheoriaShell(
         navReady = true
     }
 
-    /**
-     * Opens the page a booru post came from. A post on an active source replaces the open Viewer; anything else, or
-     * a post that cannot be loaded, opens in the browser.
-     */
     fun openOriginalPost(url: String) {
         val link = parseExternalPostDeepLink(url) ?: parseCustomSitePostDeepLink(url, container.customSites.sites.value)
         val adapter = link?.takeIf { it.source in sources.availableSources.value }
@@ -620,7 +570,6 @@ internal class TheoriaShell(
         }
     }
 
-    /** "Find on other sites" for [post], or null when no copy is known and no other site can look its file up. */
     fun findOnOtherSites(post: Post): (() -> Unit)? = if (!fileCopies.canFind(post)) null else ({
         scope.launch {
             val copies = fileCopies.find(post) { toast("Searching other sites…") }
@@ -629,7 +578,6 @@ internal class TheoriaShell(
         }
     })
 
-    /** Opens a shared link as a creator profile or a one-post Viewer session, or says why it cannot. */
     suspend fun openExternalContent(uri: Uri) {
         val customSites = container.customSites.sites.value
         val deepLink = parseExternalPostDeepLink(uri) ?: parseCustomSitePostDeepLink(uri.toString(), customSites)
@@ -639,7 +587,6 @@ internal class TheoriaShell(
         }
         val creatorDeepLink = parseExternalCreatorDeepLink(uri)
         if (creatorDeepLink == null) {
-            // A post on a booru that isn't added yet: offer the Sites setup with its address filled in.
             val unaddedHost = unaddedBooruPostHost(uri.toString(), customSites)
             if (unaddedHost != null) {
                 container.customSites.requestSetup(unaddedHost, linkAfterSetup = uri.toString())
@@ -672,7 +619,6 @@ internal class TheoriaShell(
                     container.customSites.requestKeyEntry(deepLink.source.id)
                     owners.settings.onAction(SettingsAction.OpenCustomSites)
                 }
-                // A passed check opens the post after all.
                 SharedPostFix.VERIFY -> owners.siteChecks.open(deepLink.source) { scope.launch { openExternalPost(deepLink) } }
                 null -> Unit
             }
@@ -696,7 +642,6 @@ internal class TheoriaShell(
             initialMediaIndices = mapOf(resolved.id to deepLink.initialMediaIndex),
             focusComment = deepLink.comment,
         )
-        // Unlike other one-post launches, a shared link leaves an open Viewer underneath and reuses one on top.
         launchViewer(session, saveContext = true, singleTop = true)
     }
 
@@ -711,27 +656,23 @@ internal class TheoriaShell(
         navigation.goToTab(TopLevelDestination.Search)
     }
 
-    /** Opens a finished download in a fresh Viewer session at the page that was saved. */
     suspend fun openDownloadedPost(item: PostDownloadItem) {
         openSinglePostViewer("downloads:${item.id}", item.request.selectedMedia?.pageIndex ?: 0) {
             viewerRouteWorkflow.resolvePost(item.request.post.id, ViewerStreamSource.RECENTS)
         }
     }
 
-    /** Opens a ranked Stats post. A saved copy works offline; the source is only asked for posts no longer saved. */
     suspend fun openStatisticsPost(postId: PostId) {
         openSinglePostViewer("stats:${statisticsPostKey(postId)}") {
             data.codexRepository.getPost(postId) ?: viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.RECENTS)
         }
     }
 
-    /** Never saves a looked-up post, so a friend's stats leave nothing behind in this library. */
     suspend fun previewStatisticsPost(postId: PostId): Post? = runCatchingPreservingCancellation {
         data.codexRepository.getPost(postId) ?: viewerRouteWorkflow.resolvePostWithoutSaving(postId)
     }.getOrNull()
 }
 
-/** Creates the shell once per container; ViewModels resolve against the Activity's store here. */
 @Composable
 internal fun rememberTheoriaShell(
     container: TheoriaAppContainer,

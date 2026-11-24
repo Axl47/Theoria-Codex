@@ -73,10 +73,6 @@ import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.domain.model.PostId
 
-/**
- * Likes, Followed and saved Searches as shelves under a fixed [header]: Library's own in its Saved
- * section, [SavedBackHeader] on the standalone route.
- */
 @Composable
 internal fun SavedCodexRoute(
     data: DataDependencies,
@@ -118,7 +114,6 @@ internal fun SavedCodexRoute(
     }
 }
 
-/** The standalone Saved route's title row. */
 @Composable
 internal fun SavedBackHeader(onBack: () -> Unit) {
     Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -127,7 +122,6 @@ internal fun SavedBackHeader(onBack: () -> Unit) {
     }
 }
 
-/** What a Saved shelf can do: open its collection or its actions, open a post, or go to Search from its menu. */
 private class SavedShelfActions(
     val open: () -> Unit,
     val openActions: () -> Unit,
@@ -150,7 +144,6 @@ private fun SavedCodexShelf(
 ) {
     val restore = restoreRegistry.state(codexFeedFabContext(child.codexId)) ?: return
     val sort = CodexSortMode.entries.firstOrNull { it.name == restore.sortMode } ?: CodexSortMode.NEWEST_SAVED
-    // Owned above the boundary so its known lengths reach the length sorts.
     val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:${child.codexId}",
         factory = MediaDurationRouteViewModel.factory(features.mediaDurationCoordinator, "saved:${child.codexId}"))
     val durationStates by owner.states.collectAsStateWithLifecycle()
@@ -178,7 +171,6 @@ private fun SavedCodexSection(
     SideEffect { owner.synchronize(id, state.posts, state.resolveUnknownAnimatedDurations) }
     val filters = remember(restore) { restore.savedCollectionFilters() }
     val metadata = rememberDurationFilterMetadata(state.posts, durationStates, !filters.animatedDurationRange.isFullRange)
-    // New posts lead the strip.
     val posts = remember(state.posts, filters, metadata.knownDurationMsByPostId, news) {
         filterCodexCollectionPosts(state.posts, filters, metadata.knownDurationMsByPostId)
             .sortedByDescending { it.id.markKey() in news }
@@ -193,8 +185,6 @@ private fun SavedCodexSection(
     ReportLaunchContent(TopLevelDestination.Library, drawn = posts.isNotEmpty() ||
         if (liveOwner == null) !state.loading else feed?.errors?.isNotEmpty() == true)
     val postIds = remember(posts) { posts.map { it.id } }
-    // Followed and saved-search sections are live feeds, so only their card hearts like; the hold menu, like Codex
-    // detail's, can also unlike from Likes.
     val durations = remember(owner, durationStates) { owner.feedDurations(durationStates, state.resolveUnknownAnimatedDurations) }
     val cards = rememberFeedCardEnvironment(
         sources.pixivUgoiraClient, state.likedPostIds, emptyMap(), durations,

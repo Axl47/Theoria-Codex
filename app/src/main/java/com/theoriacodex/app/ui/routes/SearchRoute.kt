@@ -45,7 +45,6 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.SearchSourceMix
 
-/** App-level inputs rendered by Search or used to reconcile its long-lived engine. */
 internal data class SearchRouteConfig(
     val settings: AppSettings,
     val availableSources: Set<SourceKey>,
@@ -53,24 +52,17 @@ internal data class SearchRouteConfig(
     val marks: FeedMarks,
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
-    /**
-     * What the composer's typed text reaches besides tags (see `rememberSearchOmniboxEntries`), composed only while the
-     * composer is open so its stores are not observed behind the results.
-     */
     val omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
 )
 
-/** Platform and navigation effects that remain owned by the application shell. */
 internal data class SearchRouteCallbacks(
     val onOpenViewer: suspend (SearchEffect.OpenViewer) -> Unit,
     val onShowMessage: (String) -> Unit,
     val onToggleLike: ((Post) -> Unit)?,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onOpenSourceAccounts: () -> Unit = {},
-    /** Writes the Unified source mix the source picker edits; see [SearchSourceMix]. */
     val onSetSourceWeights: (Set<SourceKey>, Map<SourceKey, Double>) -> Unit = { _, _ -> },
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
-    /** The applied search finished without error and shows these results. */
     val onResultsShown: suspend (Query, List<Post>) -> Unit = { _, _ -> },
     val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     val onManageSavedSearches: () -> Unit = {},
@@ -79,7 +71,6 @@ internal data class SearchRouteCallbacks(
     val onRenameFavoriteTag: (SourceKey, List<String>, String) -> Unit,
 )
 
-/** Delivers one Search resume action for each lifecycle resume period. */
 internal class SearchRouteResumeObserver(
     private val onResume: () -> Unit,
 ) : LifecycleEventObserver {
@@ -116,7 +107,6 @@ internal class SearchRouteResumeObserver(
     }
 }
 
-/** Tells [onResultsShown] each applied search that finished without error and shows posts. */
 @Composable
 private fun ReportShownResults(state: SearchUiState, onResultsShown: suspend (Query, List<Post>) -> Unit) {
     val current by rememberUpdatedState(onResultsShown)
@@ -126,7 +116,6 @@ private fun ReportShownResults(state: SearchUiState, onResultsShown: suspend (Qu
     }
 }
 
-/** Navigation-scoped Search owner plus its immutable rendering boundary. */
 @Composable
 internal fun SearchRoute(
     coordinator: SearchCoordinator,
@@ -155,7 +144,6 @@ internal fun SearchRoute(
         posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
-    // Held here so a typed gallery ID can close the composer before the Viewer opens over it.
     val composerOpen = rememberSaveable { mutableStateOf(false) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -176,8 +164,6 @@ internal fun SearchRoute(
             owner.onAction(SearchAction.Resume)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        // Effects run before SideEffect: publish first, so actions queued before Search had an owner, such as
-        // Viewer tag edits staged from Library, reach it before the resume that runs them.
         currentOnOwnerAvailable(owner)
         observer.synchronize(lifecycleOwner.lifecycle.currentState)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -220,7 +206,6 @@ private fun SearchRouteContent(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: SearchRouteCallbacks,
 ) {
-    // Capture only what each callback reads, so keystrokes and paging leave result cards untouched.
     val appliedQueryHash = state.query.appliedQueryHash
     val resolvePostById: suspend (PostId) -> Post? = remember(coordinator, appliedQueryHash) {
         { id -> coordinator.resolvePostForSearch(id, appliedQueryHash) }
