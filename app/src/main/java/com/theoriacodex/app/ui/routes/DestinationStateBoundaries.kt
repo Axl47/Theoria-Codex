@@ -538,6 +538,7 @@ private fun FollowedCodexDestinationStateBoundary(
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, FOLLOWED_CODEX_ID, sort).orEmpty()
     val feed = owner.state.collectAsStateWithLifecycle().value
+    val reloading = com.theoriacodex.app.codex.rememberNewPostsReload(owner, feed, selected.map { it.marks })
     val durations = rememberCodexPostDurations(feed.posts, sort, durationStates, FOLLOWED_CODEX_ID)
     androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage, durations) {
         owner.synchronize(selected, available, sort, usage, durations)
@@ -555,6 +556,6 @@ private fun FollowedCodexDestinationStateBoundary(
             sources.registry.creatorBrowsingSources().intersect(available)
         },
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-        followedOwner = owner, follows = settings.followedCreators, loading = feed.loading,
+        followedOwner = owner, follows = settings.followedCreators, loading = feed.loading || reloading,
     ))
 }

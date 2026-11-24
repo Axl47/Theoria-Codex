@@ -45,10 +45,10 @@ class SavedSearchesCodexViewModel(
         entries = selected
         available = sources
         runtime = settings.runtime
-        if (changed) refresh()
+        if (changed) feed.reset(entries.map(::SavedSearchBranch))
     }
 
-    override fun refresh() = feed.reset(entries.map(::SavedSearchBranch))
+    override fun refresh() = feed.reload(entries.map(::SavedSearchBranch))
     override fun loadMore() = feed.loadMore()
     override fun retry() = feed.retry()
 
