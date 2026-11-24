@@ -13,6 +13,7 @@ import com.theoriacodex.app.MainActivity
 import com.theoriacodex.app.R
 import com.theoriacodex.data.repository.ChapterName
 import com.theoriacodex.data.repository.DrainProgress
+import com.theoriacodex.data.repository.QueuedChapter
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -109,13 +110,21 @@ internal fun notifyDownloadsFailed(context: Context, failed: List<ChapterName>) 
  * they share one, or takes the notice away once none wait: they stay queued and download once it is back.
  */
 internal fun showDownloadsWaiting(context: Context, automatic: Boolean, waiting: Int, series: Series?) {
-    val tag = if (automatic) "automatic" else "user"
+    val tag = laneTag(automatic)
     if (waiting == 0) {
         context.getSystemService(NotificationManager::class.java).cancel(tag, DOWNLOADS_WAITING_NOTIFICATION_ID)
     } else {
         postChaptersNotice(context, tag, DOWNLOADS_WAITING_NOTIFICATION_ID, waitingNotice(waiting, series))
     }
 }
+
+/** Takes away the waiting notice of each lane, by [automatic][QueuedChapter.automatic], with nothing left queued. */
+internal fun clearIdleWaitingNotices(context: Context, queuedLanes: Set<Boolean>) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    listOf(false, true).filter { it !in queuedLanes }.forEach { manager.cancel(laneTag(it), DOWNLOADS_WAITING_NOTIFICATION_ID) }
+}
+
+private fun laneTag(automatic: Boolean) = if (automatic) "automatic" else "user"
 
 /** A download notification about some chapters: titled by their series and opening its page when they share one. */
 internal data class ChaptersNotice(val title: String, val text: String?, val series: SeriesId?)

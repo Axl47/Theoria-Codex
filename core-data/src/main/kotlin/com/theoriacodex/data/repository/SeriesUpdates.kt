@@ -62,15 +62,15 @@ internal suspend fun SeriesRepository.fetchEntries(source: SeriesSource, series:
  * stored, with the series memo a source records while listing: details cost a request of their own, and the ones the
  * check started with may be older than what a series' page stored meanwhile.
  *
- * [onUpdate] gets each series as soon as its new entries are stored, so a check stopped midway has already reported
- * everything it stored. Sources report side by side.
+ * [onUpdate] gets each series as soon as its new entries are stored, in the same step that cannot be stopped midway,
+ * so a check stopped midway has already reported everything it stored. Sources report side by side.
  */
 suspend fun SeriesRepository.checkFollowed(
     source: suspend (SourceKey) -> SeriesSource?,
     onUpdate: suspend (SeriesUpdate) -> Unit = {},
 ): FollowedCheck = coroutineScope {
     val checks = observeFollowed().first().map(FollowedSeries::series).groupBy { it.id.source }.values.map { followed ->
-        async { followed.map { series -> check(source, series).also { if (it is Checked.Updated) onUpdate(it.update) } } }
+        async { followed.map { series -> check(source, series, onUpdate) } }
     }.awaitAll().flatten()
     FollowedCheck(
         updates = checks.filterIsInstance<Checked.Updated>().map(Checked.Updated::update),
@@ -91,13 +91,20 @@ private sealed interface Checked {
     data object Failed : Checked
 }
 
-/** Checks [series] for new entries on the [source] its key names. */
-private suspend fun SeriesRepository.check(source: suspend (SourceKey) -> SeriesSource?, series: Series): Checked = try {
+/** Checks [series] for new entries on the [source] its key names, handing an update to [onUpdate] as it is stored. */
+private suspend fun SeriesRepository.check(
+    source: suspend (SourceKey) -> SeriesSource?,
+    series: Series,
+    onUpdate: suspend (SeriesUpdate) -> Unit,
+): Checked = try {
     refreshLocks.getOrPut(series.id.source, ::Mutex).withLock {
         val found = source(series.id.source) ?: return@withLock Checked.Skipped
         val listed = fetchEntries(found, series)
-        val added = storeEntries(series.id, listed.entries, listed.seriesMemo)
-        if (added.isEmpty()) Checked.Unchanged else Checked.Updated(SeriesUpdate(series, added))
+        // As in refresh: once stored the entries are no longer new, so whoever acts on them must still hear of them.
+        withContext(NonCancellable) {
+            val added = storeEntries(series.id, listed.entries, listed.seriesMemo)
+            if (added.isEmpty()) Checked.Unchanged else SeriesUpdate(series, added).also { onUpdate(it) }.let(Checked::Updated)
+        }
     }
 } catch (error: CancellationException) {
     throw error

@@ -154,7 +154,7 @@ class SeriesDownloadsTest {
 
         val result = harness.downloads.drain(automatic = false)
 
-        assertEquals(DrainResult(downloaded = 1, retry = true, waiting = listOf(QueuedChapter(id, "/c1"))), result)
+        assertEquals(DrainResult(downloaded = 1, waiting = listOf(QueuedChapter(id, "/c1"))), result)
         assertEquals(mapOf("/c1" to ChapterDownload.Queued(null)), harness.downloads.states(id).first())
         assertEquals(mapOf("/c2" to ChapterDownload.OnDevice), harness.downloads.states(elsewhere).first())
     }

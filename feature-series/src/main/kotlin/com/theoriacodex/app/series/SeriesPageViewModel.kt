@@ -228,7 +228,7 @@ class SeriesPageViewModel(
         refresh.update { it.copy(source = source, sourceName = source.label(sources), sourceMissing = false) }
         val failure = try {
             repository.series(id)?.let { stored ->
-                repository.refresh(source, stored.series) { added -> queueNew(SeriesUpdate(stored.series, added)) }
+                repository.refresh(source, stored.series) { added -> downloads?.downloadNew(SeriesUpdate(stored.series, added)) }
             }
             null
         } catch (error: CancellationException) {
@@ -320,15 +320,6 @@ class SeriesPageViewModel(
     fun download(choice: DownloadChoice) = changeDownloads { download(id, choice) }
 
     fun deleteDownloads() = changeDownloads { deleteSeries(id) }
-
-    /** Queues [update]'s chapters where its series asks for that; a disk that refuses is reported. */
-    private suspend fun queueNew(update: SeriesUpdate) {
-        try {
-            downloads?.downloadNew(update)
-        } catch (error: IOException) {
-            Diagnostics.report("series", "New chapters could not be queued for download", error)
-        }
-    }
 
     /** Runs [change]; one the disk refuses, when it is full say, is reported and changes nothing on screen. */
     private fun changeDownloads(change: suspend SeriesDownloads.() -> Unit) {

@@ -7,8 +7,6 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.data.repository.switchSource
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.Series
@@ -50,8 +48,7 @@ class SeriesDependencies(
      */
     suspend fun checkFollowed(onUpdate: suspend (SeriesUpdate) -> Unit = {}): FollowedCheck = checking.withLock {
         repository.checkFollowed(source) { update ->
-            runCatchingPreservingCancellation { downloads.downloadNew(update) }
-                .onFailure { Diagnostics.report("series", "New chapters could not be queued for download", it) }
+            downloads.downloadNew(update)
             onUpdate(update)
         }
     }

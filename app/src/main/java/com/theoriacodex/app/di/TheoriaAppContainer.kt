@@ -143,6 +143,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.theoriacodex.app.series.keepSeriesUpdatesScheduled
 import com.theoriacodex.app.series.SeriesDownloadScheduler
+import com.theoriacodex.app.series.clearIdleWaitingNotices
 import com.theoriacodex.app.series.downloadChapterPage
 import com.theoriacodex.data.repository.SeriesDownloads
 
@@ -679,6 +680,10 @@ internal class DefaultTheoriaAppContainer(
                     val network = settingsRepository.observeSettings().map { it.cache.downloadsOverMetered to it.cache.downloadsOverRoaming }
                     runCatchingPreservingCancellation { series.downloads.rescheduleOnChanges(series.extensions.revision, network) }
                         .onFailure { Diagnostics.report("series", "Chapter downloads stopped following source and network changes", it) }
+                }
+                durableStoreScope.launch {
+                    runCatchingPreservingCancellation { series.downloads.queuedLanes().collect { clearIdleWaitingNotices(appContext, it) } }
+                        .onFailure { Diagnostics.report("series", "Waiting download notices stopped following the queue", it) }
                 }
                 durableStoreScope.launch {
                     keepSeriesUpdatesScheduled(appContext, series.repository.observeFollowed(), settingsRepository.observeSettings())

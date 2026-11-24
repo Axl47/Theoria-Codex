@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
@@ -61,9 +62,9 @@ data class ChapterName(val seriesId: SeriesId, val series: String, val chapter: 
 
 /**
  * How a drain ended: how many chapters it [downloaded], the ones it gave up on ([failed]), and whether it should run
- * again later ([retry]) because a chapter failed in a way that may pass, such as no connection, a busy or refusing
- * server, or a source that is off. Such a chapter stays queued. [waiting] are the chapters it left queued because their
- * source is off, which only the user can change.
+ * again later ([retry]) because a chapter failed in a way that may pass, such as no connection or a busy or refusing
+ * server. Such a chapter stays queued. [waiting] are the chapters it left queued because their source is off, which
+ * only the user can change; turning a source on reschedules the lane ([rescheduleOnChanges]).
  */
 data class DrainResult(
     val downloaded: Int,
@@ -321,13 +322,26 @@ class SeriesDownloads(
 
     /**
      * Queues [update]'s new chapters, oldest first, when its series is followed and set to download them. Episodes never
-     * download, whatever an anime series' stored setting says.
+     * download, whatever an anime series' stored setting says. Every place that stores new chapters calls this; a
+     * failure, such as a full disk, is reported and never thrown, so storing them still counts as done.
      */
     suspend fun downloadNew(update: SeriesUpdate) {
         if (update.series.id.source.seriesKind != SeriesKind.MANGA) return
-        val series = repository.series(update.series.id) ?: return
-        if (!series.followed || !series.downloadNewChapters) return
-        download(update.series.id, update.newEntries.asReversed().map { it.address }, automatic = true)
+        try {
+            val series = repository.series(update.series.id) ?: return
+            if (!series.followed || !series.downloadNewChapters) return
+            download(update.series.id, update.newEntries.asReversed().map { it.address }, automatic = true)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Diagnostics.report("series", "New chapters could not be queued for download", error)
+        }
+    }
+
+    /** Which lanes, by [QueuedChapter.automatic], have chapters queued; again whenever that changes. */
+    fun queuedLanes(): Flow<Set<Boolean>> = flow {
+        lock.withLock { load() }
+        emitAll(queue.map { chapters -> chapters.mapTo(HashSet()) { it.automatic } }.distinctUntilChanged())
     }
 
     /**
@@ -384,7 +398,8 @@ class SeriesDownloads(
                 }
             }
             val waiting = lock.withLock { queue.value.filter { it.automatic == automatic && it.series.source in held.off } }
-            return DrainResult(downloaded, failed, retry = held.sources.isNotEmpty(), waiting = waiting)
+            // Only the user can turn a source on, which reschedules the lane, so waiting for one asks for no retry.
+            return DrainResult(downloaded, failed, retry = (held.sources - held.off).isNotEmpty(), waiting = waiting)
         } finally {
             withContext(NonCancellable) { lock.withLock { draining.remove(automatic, token) } }
         }
