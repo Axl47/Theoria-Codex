@@ -97,6 +97,13 @@ fi
                          if "connected" in line and "--dry-run" not in line]
             self.assertEqual([], connected)
 
+    def test_ci_preparation_is_not_repeated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            completed = self.run_wrapper(repo, "app", FAKE_QEMU="1", FAKE_DIALOG="stuck", EMULATOR_DIALOGS_PREPARED="1")
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertNotIn("settings put", (repo / "adb.log").read_text())
+
     def test_physical_device_settings_are_left_untouched(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = pathlib.Path(temporary)

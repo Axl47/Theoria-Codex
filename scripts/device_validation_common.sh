@@ -51,7 +51,7 @@ prepare_emulator_dialogs() {
   local target="$1" log="$2"
   local adb_command=("${ADB:-adb}" -s "$target")
   [[ "$("${adb_command[@]}" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]] || return 0
-  "${adb_command[@]}" shell settings put global hide_error_dialogs 1
+  "${adb_command[@]}" shell settings put global hide_error_dialogs 1 || return 1
   error_dialogs_closed "$log" "${adb_command[@]}" || {
     echo "An error dialog stayed open on $target after closing it; restart the emulator." >&2
     return 2

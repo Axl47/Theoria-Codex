@@ -105,6 +105,7 @@ if (( sdk_level >= 37 )); then
 fi
 
 test_status=0
+export EMULATOR_DIALOGS_PREPARED=1
 if [[ "$owner" == debug ]]; then
   scripts/verify_debug_device.sh all || test_status=$?
 else
