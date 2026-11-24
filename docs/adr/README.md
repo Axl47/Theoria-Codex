@@ -36,8 +36,9 @@ Detekt rule. Each record lists its guards under `Guarded by`, after `Applies to`
 - a test: its file and exact name. The name ends with the record's tag so the failing test names the record at
   the moment someone is tempted to edit it: a backticked Kotlin name ends `` `... (ADR 0022)` ``, and a plain
   identifier (Java, camelCase Kotlin, Python) ends `_adr_0022` (several: `(ADR 0008, 0022)`, `_adr_0008_adr_0022`).
-- a signature: its file and the declaration as source text from the start of its line, such as
-  `` `suspend fun post(id: String): Post?` ``.
+- a signature: its file and the declaration as source text from the start of its line, written on one line
+  (line breaks in the code are ignored), such as `` `suspend fun post(id: String): Post?` ``. A pin covers what it
+  spells out: to pin an annotation or an initializer, include it.
 - a policy rule: two lines, the rule's tagged unit test in `scripts/tests/test_check_architecture.py`, which feeds
   it a violation, and its registered declaration as source text, `` `@rule def rule_name() -> list[str]` ``.
 - `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour. Any
@@ -49,7 +50,8 @@ through its concrete subclasses. When a guard fails and the promise still holds,
 changed, edit the record and the guard together.
 
 Every live record has a `Guarded by` section, except those listed in `unguarded.txt`, which only shrinks: a new
-record needs the section, and a record that gains one leaves the list. Delete the file when it is empty.
+record needs the section, a record that gains one leaves the list, and on push a name added to it fails. Delete
+the file when it is empty.
 
 ## Integrity check
 
@@ -64,9 +66,11 @@ CI). Superseded records are skipped. It fails when:
   `@Ignore` on it or its class, or a Python `test_` method of a class with no skip decorator), or lacks the
   record's tag; a test carries a tag its record does not list, or a malformed one;
 - a signature guard's text is gone or changed (line breaks and a trailing comma before `)` are ignored; an added
-  modifier, nullability, type argument or return type is a change), a rule or type guard's name is gone, a
+  nullability, type argument, return type or supertype is a change, and so is a modifier or annotation added on
+  the pin's own line), a rule or type guard's name is gone, a
   `Guarded by` line names no guard, or the section lists nothing;
-- a live record has no `Guarded by` section and is not in `unguarded.txt`.
+- a live record has no `Guarded by` section and is not in `unguarded.txt`, or, on push, the change adds a name
+  to that list.
 
 Test files are Kotlin and Java files under source sets named `test`, `androidTest` or `sharedTest`, with any
 suffix (`testDebug`, `testFixtures`), and `scripts/tests/test_*.py`. The check proves a guard exists, is tagged
@@ -74,5 +78,5 @@ and runs, not that its body still bites; the break-it-first proof and the guard-
 
 When a change moves or deletes a file, the check names every record that still points at the old path; update
 those records in the same change. On push it also prints notes that never fail: the records whose `Applies to`
-symbols the change's edited lines touch, to reread, and any guard test edited beside code its record governs
-while the record did not, which usually means the test was bent to pass.
+symbols the change's edited lines name or fall inside, to reread, and any guard test edited while its record
+was not, saying when code the record governs changed too, which usually means the test was bent to pass.

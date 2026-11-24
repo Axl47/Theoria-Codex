@@ -13,23 +13,24 @@ directory resolves against the directories of the bullet's previous path.
 "Guarded by" names the guards that keep the record's promises, so deleting, renaming, disabling or untagging one
 fails here and names the record. Its paths are files, and each line with a path names at least one symbol. In a
 test file (TEST_FILE) each symbol is a test's exact name: declared once in the bullet's files, run (`runs`) and
-tagged with the record's number (`tags`). Any other file is a source guard: a symbol without whitespace follows
+tagged with the record's number (`tags`); Python files are read with `ast`. Any other file is a source guard: a symbol without whitespace follows
 the "Applies to" rule, and one with whitespace is source text (`pinned`). A line that names no path must start
 "Left to prose:" and give a reason, so a forgotten backtick cannot turn a guard into prose. A section with no
-bullet fails. Every live record has the section unless docs/adr/unguarded.txt lists it, a list that only shrinks
-(`unguarded_problems`). In reverse, every tagged test in the tracked test files must be listed by the live record
+bullet fails. Every live record has the section unless docs/adr/unguarded.txt lists it (`unguarded_problems`), a
+list that only shrinks: with --base, a name the base's copy does not hold fails (`unguarded_growth`). In reverse, every tagged test in the tracked test files must be listed by the live record
 its tag names, and a name that looks tagged but is not fails. Superseded records are skipped.
 
 With --base, a missing path that git sees as renamed or deleted since that revision gets an indented line naming
 its new path, so the PR that moved the file names the records to update. --base also prints notes that never
-change the exit status: the records whose "Applies to" lines the change's edited lines touch (`touches`), and
-guard tests edited alongside the code their record governs while the record did not (`guard_edit_notes`). Notes
-are indented, like every line the Main policy workflow must not count as a violation.
+change the exit status: the records whose "Applies to" symbols the change's edited lines name or fall inside
+(`touches`), and guard tests edited while their record was not (`guard_edits`), saying when governed code changed
+too. Notes are indented, like every line the Main policy workflow must not count as a violation.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import collections
 import collections.abc
 import pathlib
@@ -43,19 +44,20 @@ ADR_NAME = re.compile(r"\d{4}-[a-z0-9-]+\.md")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 TEST_FILE = re.compile(r".*/src/(?:test|androidTest|sharedTest)\w*/.*\.(?:kt|java)|scripts/tests/test_[^/]*\.py")
 DECLARATION = re.compile(
-    r"\s*(?:@[\w.]+(?:\([^)]*\))?\s+)*(?:(?:public|protected|private|internal|override|open|final|static|suspend|async)\s+)*"
-    r"(?:fun|def|void)\s+(?:`([^`\n]+)`|([A-Za-z_]\w*))\s*\("
+    r"\s*(?:@[\w.]+(?:\([^)]*\))?\s+)*(?:(?:public|protected|private|internal|override|open|final|static|suspend)\s+)*"
+    r"(?:fun|void)\s+(?:`([^`\n]+)`|([A-Za-z_]\w*))\s*\("
 )
 KOTLIN_TAG = re.compile(r"\(ADR (\d{4}(?:, \d{4})*)\)$")
 PYTHON_TAG = re.compile(r"(?:_adr_\d{4})+$")
 MALFORMED_TAG = re.compile(r"\(ADR|_adr_", re.IGNORECASE)
 TEST_ANNOTATION = re.compile(r"@(?:[\w.]+\.)?Test\b(\s*\([^)]*\))?")
 IGNORE_ANNOTATION = re.compile(r"@(?:[\w.]+\.)?Ignore\b")
-PYTHON_SKIP = re.compile(r"@(?:unittest\.)?(?:skip|skipIf|skipUnless|expectedFailure)\b")
-DECLARED = re.compile(r"\b(?:fun|void|def|class|object|interface)\s")
+PYTHON_SKIPS = {"skip", "skipIf", "skipUnless", "expectedFailure"}
+PYTHON_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+DECLARED = re.compile(r"\b(?:fun|void|class|object|interface)\s")
 TYPE_DECLARATION = re.compile(r"\s*(?:@[\w.]+(?:\([^)]*\))?\s+)*(?:[a-z]+\s+)*(?:class|object|interface)\s")
 TOKEN = re.compile(r"\w+|\n|[^\w\s]")
-PIN_END = {"\n", "{", "=", "(", ")", ","}
+PIN_END = {"{", "=", "(", ")"}
 PROSE = "Left to prose:"
 UNGUARDED = ADR_DIR / "unguarded.txt"
 SIGNATURE_CHANGED = "the signature this record pins has changed: restore it, or edit the record if the decision changed."
@@ -177,12 +179,23 @@ def tags(name: str) -> list[str]:
     return []
 
 
-def declarations(text: str) -> list[tuple[str, int]]:
-    """Each function declared at the start of a line in a Kotlin, Java or Python file: its name and line index.
+def python_tree(text: str) -> ast.Module | None:
+    try:
+        return ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
 
-    Anchoring to the line start keeps out a declaration quoted mid-line in a string literal, but one that starts a
-    line inside a multi-line string, such as a test fixture, is still read.
+
+def declarations(text: str, python: bool = False) -> list[tuple[str, int]]:
+    """Each function declared in a Kotlin, Java or Python file: its name and line index.
+
+    Python is parsed, and a file that does not parse declares nothing. Kotlin and Java declarations must start a
+    line, which keeps out one quoted mid-line in a string literal, but one that starts a line inside a multi-line
+    string, such as a test fixture, is still read.
     """
+    if python:
+        tree = python_tree(text)
+        return sorted((node.name, node.lineno - 1) for node in ast.walk(tree) if isinstance(node, PYTHON_FUNCTIONS)) if tree else []
     return [
         (match.group(1) or match.group(2), index)
         for index, line in enumerate(text.splitlines())
@@ -218,21 +231,32 @@ def annotations(lines: list[str], index: int) -> str:
     return " ".join(found)
 
 
-def runs(path: pathlib.Path, lines: list[str], index: int, name: str) -> bool:
+def skipped(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether a decorator's final name, as in `@skip`, `@unittest.skipIf(...)` or `@ut.expectedFailure`, skips [node]."""
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        name = target.attr if isinstance(target, ast.Attribute) else target.id if isinstance(target, ast.Name) else ""
+        if name in PYTHON_SKIPS:
+            return True
+    return False
+
+
+def runs(path: pathlib.Path, lines: list[str], index: int) -> bool:
     """Whether the test declared at [index] runs.
 
     Kotlin or Java: `@Test` without an `expected` argument and no `@Ignore` on it or on any enclosing type. Python:
-    a `test_` method of a class, with no skip or expected-failure decorator on either.
+    a `test_` function directly in a class with a base, with no skip or expected-failure decorator on either.
     """
-    marks = annotations(lines, index)
     if path.suffix == ".py":
-        owner = next((above for above in range(index - 1, -1, -1) if lines[above].strip() and indent(lines[above]) < indent(lines[index])), None)
-        return (
-            name.startswith("test_")
-            and owner is not None
-            and lines[owner].lstrip().startswith("class ")
-            and PYTHON_SKIP.search(marks + annotations(lines, owner)) is None
+        tree = python_tree("\n".join(lines))
+        return tree is not None and any(
+            node.lineno - 1 == index and node.name.startswith("test_") and not skipped(owner) and not skipped(node)
+            for owner in ast.walk(tree)
+            if isinstance(owner, ast.ClassDef) and owner.bases
+            for node in owner.body
+            if isinstance(node, PYTHON_FUNCTIONS)
         )
+    marks = annotations(lines, index)
     test = TEST_ANNOTATION.search(marks)
     if test is None or re.search(r"\bexpected\s*=", test.group(1) or "") or IGNORE_ANNOTATION.search(marks):
         return False
@@ -247,15 +271,15 @@ def runs(path: pathlib.Path, lines: list[str], index: int, name: str) -> bool:
 
 def test_guard_problems(record: Record, files: list[pathlib.Path], root: pathlib.Path, symbol: str) -> list[str]:
     texts = {file: file.read_text(encoding="utf-8", errors="replace") for file in files}
-    found = [(file, index) for file, text in texts.items() for name, index in declarations(text) if name == symbol]
+    found = [(file, index) for file, text in texts.items() for name, index in declarations(text, file.suffix == ".py") if name == symbol]
     where = ", ".join(f"`{file.relative_to(root)}`" for file in files)
     if not found:
-        return [f"{record.name}: guard `{symbol}` is not a test in {where}. Restore the test, or point the record at its new name."]
+        return [f"{record.name}: guard `{symbol}` is not a test named exactly that in {where}: restore the test with its name and tag, or point the record at its new name."]
     if len(found) > 1:
         return [f"{record.name}: guard `{symbol}` is declared more than once in {where}; give each test its own name."]
     file, index = found[0]
     problems: list[str] = []
-    if not runs(file, texts[file].splitlines(), index, symbol):
+    if not runs(file, texts[file].splitlines(), index):
         problems.append(
             f"{record.name}: guard `{symbol}` in `{file.relative_to(root)}` does not run; a guard needs @Test without `expected` and no @Ignore "
             "on it or its class, or a Python test_ method of a class without a skip decorator."
@@ -298,9 +322,10 @@ def tokens(text: str) -> list[str]:
 def pinned(pin: str, text: str, python: bool) -> bool:
     """Whether source text [pin] appears in [text] token for token, whatever its line breaks.
 
-    The match must start a line, so an added modifier or annotation fails, and end the file, its line, or before
-    `{ = ( ) ,` (and `:` in Python), so an added nullability, type argument, qualifier, return type or supertype
-    fails.
+    The match must start a line, so a modifier or annotation added on that line fails, and end before `{ = ( )`
+    (and `:` in Python), before a `,` that ends its line (a parameter on its own line), or at the end of its line or
+    the file when the next line does not start with `:`. So an added nullability, type argument, qualifier, return
+    type or supertype fails.
     """
     want = [token for token in tokens(pin) if token != "\n"]
     found = tokens(text)
@@ -311,9 +336,19 @@ def pinned(pin: str, text: str, python: bool) -> bool:
         if found[first] != want[0] or (first > 0 and found[first - 1] != "\n"):
             continue
         run = words[start:start + len(want)]
-        if [found[index] for index in run] == want and (run[-1] + 1 == len(found) or found[run[-1] + 1] in ends):
+        if [found[index] for index in run] == want and pin_ends(found, run[-1] + 1, ends):
             return True
     return False
+
+
+def pin_ends(found: list[str], after: int, ends: set[str]) -> bool:
+    """Whether a pinned run may end before token [after] of [found]."""
+    following = found[after] if after < len(found) else "\n"
+    if following == "\n":
+        return next((token for token in found[after:] if token != "\n"), "") != ":"
+    if following == ",":
+        return after + 1 == len(found) or found[after + 1] == "\n"
+    return following in ends
 
 
 def guarded_by(record: Record, root: pathlib.Path, moved: dict[str, str], deleted: set[str]) -> tuple[list[str], list[tuple[str, str]]]:
@@ -360,7 +395,7 @@ def untracked_tags(records: list[Record], listed: set[tuple[str, str, str]], tes
         by_number[record.number].append(record)
     problems: list[str] = []
     for path in test_files:
-        for name, _ in declarations((root / path).read_text(encoding="utf-8", errors="replace")):
+        for name, _ in declarations((root / path).read_text(encoding="utf-8", errors="replace"), path.endswith(".py")):
             if not tags(name) and MALFORMED_TAG.search(name):
                 problems.append(
                     f"{path}: test `{name}` has a malformed ADR tag; end a backticked Kotlin name with (ADR NNNN) "
@@ -389,10 +424,14 @@ def has_guards(record: Record) -> bool:
     return re.search(r"^## Guarded by\s*$", record.text, re.MULTILINE) is not None
 
 
+def unguarded_names(root: pathlib.Path) -> list[str]:
+    path = root / UNGUARDED
+    return path.read_text(encoding="utf-8").split() if path.is_file() else []
+
+
 def unguarded_problems(live: list[Record], root: pathlib.Path) -> list[str]:
     """Problems with docs/adr/unguarded.txt, the sorted names of live records that do not list guards yet."""
-    path = root / UNGUARDED
-    names = path.read_text(encoding="utf-8").split() if path.is_file() else []
+    names = unguarded_names(root)
     by_name = {pathlib.PurePath(record.name).name: record for record in live}
     problems = [f"{UNGUARDED}: names are not sorted; sort them."] if names != sorted(names) else []
     for name in names:
@@ -435,18 +474,29 @@ def test_span(lines: list[str], start: int) -> list[str]:
     return span
 
 
-def guard_body(text: str, name: str) -> list[str] | None:
+def unguarded_growth(old: list[str], new: list[str]) -> list[str]:
+    """A problem for each name [new] adds to docs/adr/unguarded.txt, whose [old] copy is the base's."""
+    return [f"{UNGUARDED}: the list only shrinks: give {name} a \"Guarded by\" section instead." for name in new if name not in old]
+
+
+def unguarded_growth_problems(root: pathlib.Path, revision: str) -> list[str]:
+    """`unguarded_growth` against [revision]'s list; nothing when [revision] has none, as in the change adding it."""
+    old = git(root, "show", f"{revision}:{UNGUARDED.as_posix()}")
+    return unguarded_growth(old.stdout.split(), unguarded_names(root)) if old.returncode == 0 else []
+
+
+def guard_body(text: str, name: str, python: bool) -> list[str] | None:
     """The stripped, non-blank lines of test [name] in [text], or None when it is not declared exactly once."""
     lines = text.splitlines()
-    found = [index for declared, index in declarations(text) if declared == name]
+    found = [index for declared, index in declarations(text, python) if declared == name]
     if len(found) != 1:
         return None
     return [line.strip() for line in test_span(lines, found[0]) if line.strip()]
 
 
-def guard_edited(old: str, new: str, name: str) -> bool:
+def guard_edited(old: str, new: str, name: str, python: bool = False) -> bool:
     """Whether test [name] exists in both texts and its body differs beyond indentation and blank lines."""
-    before, after = guard_body(old, name), guard_body(new, name)
+    before, after = guard_body(old, name, python), guard_body(new, name, python)
     return before is not None and after is not None and before != after
 
 
@@ -470,11 +520,19 @@ def governed(record: Record, root: pathlib.Path, changed: set[str]) -> list[str]
     return sorted({path for bullet in bullets(record.text, "Applies to") for path in covered(bullet, record, root, changed)})
 
 
-def changed_words(root: pathlib.Path, revision: str) -> dict[str, set[str] | None]:
-    """Each path changed since [revision]: the identifiers on its added and removed lines, or None when the whole
-    file was added or deleted."""
+@dataclass(frozen=True)
+class Change:
+    """A changed file's added and removed identifiers, and the work-tree line indexes its hunks cover (a pure
+    deletion counts as the line before it)."""
+
+    words: set[str]
+    lines: set[int]
+
+
+def changed_lines(root: pathlib.Path, revision: str) -> dict[str, Change | None]:
+    """Each path changed since [revision], or None when the whole file was added or deleted."""
     diff = git(root, "-c", "core.quotePath=false", "diff", "-U0", "--no-renames", "--no-color", revision, "--").stdout
-    words: dict[str, set[str] | None] = {}
+    changed: dict[str, Change | None] = {}
     path, whole, header = "", False, True
     for line in diff.splitlines():
         if line.startswith("diff --git "):
@@ -484,29 +542,49 @@ def changed_words(root: pathlib.Path, revision: str) -> dict[str, set[str] | Non
             whole = whole or name == "/dev/null"
             path = path if name == "/dev/null" else name[2:]
             if path:
-                words[path] = None if whole else words.get(path, set())
-        elif line.startswith("@@"):
+                changed[path] = None if whole else changed.get(path) or Change(set(), set())
+        elif (hunk := re.match(r"@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)) is not None:
             header = False
-        elif not header and line[:1] in "+-" and (found := words.get(path)) is not None:
-            found.update(IDENTIFIER.findall(line[1:]))
-    return words
+            start, count = int(hunk.group(1)), int(hunk.group(2) or 1)
+            if (change := changed.get(path)) is not None:
+                change.lines.update(range(start - 1, start - 1 + count) if count else [start - 1])
+        elif not header and line[:1] in "+-" and (change := changed.get(path)) is not None:
+            change.words.update(IDENTIFIER.findall(line[1:]))
+    return changed
 
 
-def touches(record: Record, root: pathlib.Path, changed: dict[str, set[str] | None]) -> bool:
+def inside_declarations(text: str, names: set[str], lines: set[int]) -> bool:
+    """Whether one of [lines] falls inside the span (`test_span`) of a line in [text] declaring one of [names]."""
+    declaring = re.compile(rf"\b(?:fun|val|var|class|object|interface|def)\s.*\b(?:{'|'.join(map(re.escape, names))})\b")
+    source = text.splitlines()
+    return any(
+        lines.intersection(range(index, index + len(test_span(source, index))))
+        for index, line in enumerate(source)
+        if declaring.search(line)
+    )
+
+
+def touches(record: Record, root: pathlib.Path, changed: dict[str, Change | None]) -> bool:
     """Whether a changed file falls under one of the record's "Applies to" bullets, and the bullet names no symbol, the
-    file was added or deleted whole, or a changed line holds the last identifier of one of its symbols."""
+    file was added or deleted whole, or the last identifier of one of its symbols is on a changed line or declares a
+    span a changed line falls in."""
     for bullet in bullets(record.text, "Applies to"):
         names = {found[-1] for symbol in bullet.symbols if (found := IDENTIFIER.findall(symbol))}
         for path in covered(bullet, record, root, changed):
-            words = changed[path]
-            if words is None or not names or names & words:
+            change = changed[path]
+            if (
+                change is None
+                or not names
+                or names & change.words
+                or inside_declarations((root / path).read_text(encoding="utf-8", errors="replace"), names, change.lines)
+            ):
                 return True
     return False
 
 
 def governing_notes(root: pathlib.Path, revision: str) -> list[str]:
     """One note naming the live records whose code the change's edited lines touch, unless the change edits them."""
-    changed = changed_words(root, revision)
+    changed = changed_lines(root, revision)
     names = [record.name for record in records(root) if not record.superseded and record.name not in changed and touches(record, root, changed)]
     if not names:
         return []
@@ -514,24 +592,39 @@ def governing_notes(root: pathlib.Path, revision: str) -> list[str]:
     return [f"  note: this change edits code governed by {', '.join(names[:8])}{more}; reread them."]
 
 
-def guard_edit_notes(root: pathlib.Path, revision: str) -> list[str]:
-    """A note per guard test edited since [revision] beside code its unchanged record governs."""
+@dataclass(frozen=True)
+class GuardEdit:
+    """A guard test edited while its record was not, and the first file of the record's governed code the change also
+    edits, if any."""
+
+    record: str
+    name: str
+    code: str | None
+
+    @property
+    def note(self) -> str:
+        beside = f" and code the record governs ({self.code})" if self.code else ""
+        return (
+            f"  note: {self.record}: this change edits guard `{self.name}`{beside}. "
+            "If the promise still holds, restore the guard; if the decision changed, edit the record."
+        )
+
+
+def guard_edits(root: pathlib.Path, revision: str) -> list[GuardEdit]:
+    """Each guard test edited since [revision] whose live record was not."""
     changed = changed_files(root, revision)
-    notes: list[str] = []
+    edits: list[GuardEdit] = []
     for record in records(root):
         if record.superseded or record.name in changed:
             continue
         for path, name in guarded_by(record, root, {}, set())[1]:
-            code = [file for file in governed(record, root, changed) if file != path]
-            if path not in changed or not code:
+            if path not in changed:
                 continue
             old = git(root, "show", f"{revision}:{path}")
-            if old.returncode == 0 and guard_edited(old.stdout, (root / path).read_text(encoding="utf-8"), name):
-                notes.append(
-                    f"  note: {record.name}: this change edits guard `{name}` and code the record governs ({code[0]}). "
-                    "If the promise still holds, restore the guard; if the decision changed, edit the record."
-                )
-    return notes
+            if old.returncode == 0 and guard_edited(old.stdout, (root / path).read_text(encoding="utf-8"), name, path.endswith(".py")):
+                code = [file for file in governed(record, root, changed) if file != path]
+                edits.append(GuardEdit(record.name, name, code[0] if code else None))
+    return edits
 
 
 def changes(revision: str) -> tuple[dict[str, str], set[str]]:
@@ -574,7 +667,10 @@ def main() -> int:
     root = pathlib.Path.cwd()
     moved, deleted = changes(args.base) if args.base else ({}, set())
     problems = check(root, moved, deleted, tracked_tests(root))
-    notes = governing_notes(root, args.base) + guard_edit_notes(root, args.base) if args.base else []
+    notes: list[str] = []
+    if args.base:
+        problems += unguarded_growth_problems(root, args.base)
+        notes = governing_notes(root, args.base) + [edit.note for edit in guard_edits(root, args.base)]
     for line in problems + notes:
         print(line, file=sys.stderr)
     return 1 if problems else 0

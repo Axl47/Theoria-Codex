@@ -13,14 +13,25 @@ import check_architecture  # noqa: E402
 
 class BareComposeWaitTest(unittest.TestCase):
     def test_flags_every_spelling_of_a_bare_wait_adr_0210(self) -> None:
-        for line in [
+        spellings = [
             "compose.waitUntil(10_000) { ready }",
             "        waitUntil { ready }",
             "with(compose) { waitUntil { ready } }",
             "val done = waitUntil(timeoutMillis = 1_000) { ready }",
             "runComposeUiTest { waitUntil { ready } }",
-        ]:
-            self.assertTrue(check_architecture.is_bare_compose_wait(line), line)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            tests = root / "feature/src/test/kotlin"
+            tests.mkdir(parents=True)
+            (tests / "BareTest.kt").write_text("\n".join(spellings) + "\n", encoding="utf-8")
+            (tests / "SettledTest.kt").write_text("compose.waitUntilSettled { ready }\n", encoding="utf-8")
+            with mock.patch.object(check_architecture, "ROOT", root):
+                self.assertEqual(
+                    [f"feature/src/test/kotlin/BareTest.kt:{number} uses a bare waitUntil; use waitUntilSettled (docs/adr/0210-host-test-compose-waits.md)"
+                     for number in range(1, len(spellings) + 1)],
+                    check_architecture.host_tests_wait_settled(),
+                )
 
     def test_allows_the_settled_helpers_and_declarations(self) -> None:
         for line in [
