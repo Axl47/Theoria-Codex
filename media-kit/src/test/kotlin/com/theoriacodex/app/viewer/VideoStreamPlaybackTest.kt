@@ -223,6 +223,17 @@ class VideoStreamPlaybackTest {
         assertEquals(ViewerPrefetchOutcome.WARMED, infrastructure.prefetch(uncached.copy(cache = true)).outcome)
     }
 
+    @Test fun `a prefetched post plays from the bytes prefetch cached, without asking the server again`() {
+        val post = VideoPlaybackRequest("${server.base}/main.wav", STREAM_FIXTURE_HEADERS)
+        assertEquals(ViewerPrefetchOutcome.WARMED, runBlocking { infrastructure.prefetch(post) }.outcome)
+        val prefetchRequests = server.paths()
+
+        val lease = pool.acquire(post)
+        until { lease.player.playbackState == Player.STATE_READY }
+        assertEquals(prefetchRequests, server.paths())
+        pool.recycle(lease)
+    }
+
     private fun request(
         location: String,
         mime: String? = null,

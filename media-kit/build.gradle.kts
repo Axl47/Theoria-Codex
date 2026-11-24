@@ -84,11 +84,3 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
 }
-
-// PixivUgoiraArchiveTest reads this :feed-kit source file, which :media-kit does not depend on, so it has
-// to be a declared input for an edit to it to rerun the test.
-tasks.withType<Test>().configureEach {
-    inputs.file(rootProject.file("feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchResultCard.kt"))
-        .withPropertyName("searchResultCardSource")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
-}
