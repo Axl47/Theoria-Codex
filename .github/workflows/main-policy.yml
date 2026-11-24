@@ -1,8 +1,8 @@
 name: Main policy
 
-# PR checks may have run against an older main, and Main's own run is cancelled by a newer push, so a
-# merge can break a policy check without any run pinning it on that merge. This seconds-long run checks
-# every push to main and names the violations the push introduced.
+# The ruleset on main requires PRs to pass Verify on a branch that is up to date with main, but release
+# commits and admin bypasses push to main without it. This seconds-long run checks every push to main and
+# names the violations the push introduced.
 on:
   push:
     branches:
