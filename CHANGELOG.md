@@ -72,6 +72,7 @@
 
 ### Changed
 
+- Pulling down on the Series tab notifies you of the new chapters and episodes it finds, the same way the background check does.
 - Downloading chapters, checking followed series for new chapters, a series' images and a chapter reopened from where you left off start only the extension that series comes from, not every extension that is on, so they no longer wait for the others to load.
 - In the reader's chapter strip, downloaded chapters and chapters the reader has loaded show their first page instead of the series cover, so chapters are easier to tell apart.
 - When a series' chapters open on the same page, such as a scanlation group's credits, the reader's chapter strip shows each chapter's second page instead, and remembers that for the series.

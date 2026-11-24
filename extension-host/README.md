@@ -255,7 +255,8 @@ Followed series are checked for new chapters, in the sources of extensions that 
 tab and by a periodic background job
 (`SeriesUpdateJobService`, every 12 hours unless Settings > Check for new chapters says otherwise), scheduled only
 while a series is followed. A chapter is new when its address was not stored before; each series that gained some
-gets one local notification that opens its page. The same test class proves it, with the job run by hand in between:
+gets one local notification that opens its page, whichever check found them. The same test class proves it, with the
+job run by hand in between (or `run ExtensionSourceLiveTest#pullingDownOnFollowingNotifiesTheNewChapter` in its place):
 
 ```sh
 run ExtensionSourceLiveTest#followingASeriesAsksToNotifyAndSchedulesTheCheck

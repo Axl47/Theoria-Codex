@@ -1,5 +1,7 @@
 package com.theoriacodex.app.live
 
+import android.app.Notification
+import android.app.NotificationManager
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.database.sqlite.SQLiteDatabase
@@ -9,6 +11,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import com.theoriacodex.app.series.SERIES_NOTIFICATION_ID
 import com.theoriacodex.app.series.SERIES_UPDATE_JOB_ID
 import com.theoriacodex.app.series.notifySeriesUpdate
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
@@ -37,8 +40,9 @@ import org.junit.runner.RunWith
  *
  * The tests are one story across app restarts, so run each as its own `am instrument` call, which starts the app's
  * process anew: [aSeriesIsBrowsedReadResumedAndFollowed], [aFollowedSeriesIsOnTheShelfAfterARestart], then the
- * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], the background check run by hand from a shell
- * (`cmd jobscheduler run`, see `extension-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
+ * new-chapter story: [followingASeriesAsksToNotifyAndSchedulesTheCheck], [aFollowedSeriesForgetsItsNewestChapter], then either
+ * [pullingDownOnFollowingNotifiesTheNewChapter] or the background check run by hand from a shell (`cmd jobscheduler run`,
+ * see `extension-host/README.md`), [aNewChapterNotificationOpensItsSeries], [aNotificationOpensItsSeriesOverAnotherSeriesPage] and
  * [unfollowingTheLastSeriesCancelsTheCheck].
  *
  * The report is counts and labels only, never images: provider media stays off screenshots and logs.
@@ -279,6 +283,29 @@ class ExtensionSourceLiveTest {
         val left = runBlocking { series.repository.entries(followed.id) }
         assertTrue("The newest chapter is no longer stored", left.none { it.entry.address == entries.first().entry.address })
         live.report("forgotten", "\"${followed.title}\" no longer stores \"${entries.first().entry.name}\"; chapters ${entries.size} -> ${left.size}")
+    }
+
+    /**
+     * Run after [aFollowedSeriesForgetsItsNewestChapter]: pulling down on Following stores the forgotten chapter again
+     * and posts the series' notification, as the background check does.
+     */
+    @Test
+    fun pullingDownOnFollowingNotifiesTheNewChapter() {
+        val followed = runBlocking { series.repository.observeFollowed().first() }.first().series
+        val before = runBlocking { series.repository.entries(followed.id) }.size
+        val notifications = context.getSystemService(NotificationManager::class.java)
+        // One left from an earlier run would pass the check below without this pull posting anything.
+        notifications.cancel(followed.id.toString(), SERIES_NOTIFICATION_ID)
+        live.openSeriesTab(By.text(followed.title), view = SeriesLiveDriver.FOLLOWING)
+        val shelved = live.waitFor("the followed series", By.text(followed.title))
+        val x = device.displayWidth / 2
+        device.swipe(x, shelved.visibleBounds.top, x, device.displayHeight * 3 / 4, SWIPE_STEPS)
+        val after = live.await("the forgotten chapter stored again", { series.repository.entries(followed.id).size }) { it > before }
+        val posted = live.await("the series' notification", { notifications.activeNotifications.filter { it.tag == followed.id.toString() } }) {
+            it.isNotEmpty()
+        }
+        val text = posted.single().notification.extras.getCharSequence(Notification.EXTRA_TEXT)
+        live.report("pulled", "chapters $before -> $after; \"${followed.title}\" notified \"$text\"")
     }
 
     /** Run after the background check posted a notification: tapping it opens that series' page. */
