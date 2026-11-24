@@ -165,9 +165,11 @@ internal class ViewerControls(
         if (isActive) markInteraction()
     }
 
-    /** The top bar's Back: like system Back, it leaves an open page overview before it closes the Viewer. */
+    /** Back from the top bar or the system: it leaves an open page overview before it closes the Viewer. */
     fun back() {
-        if (overviewVisible) setOverviewVisible(false) else requestDismiss()
+        if (!overviewVisible) return requestDismiss()
+        setOverviewVisible(false)
+        markInteraction()
     }
 
     fun requestDismiss() {
@@ -245,8 +247,14 @@ internal class ViewerFrame(
     // while reading a chapter, whose pages need every pixel.
     val mediaEdgeToEdge = isLandscape || inPictureInPicture || reading
 
-    /** Still images drop their inset in landscape and while reading a chapter. */
+    /**
+     * Still images drop their inset in landscape and while reading a chapter. Galleries outside a series keep it: the
+     * inset and top gap are their screenshot-referenced layout, and only chapter reading was asked to fill the width.
+     */
     val stillsEdgeToEdge = isLandscape || reading
+
+    /** A running slideshow or an open chapter keeps the screen on. */
+    val keepsScreenAwake = uiState.controls.slideshow || reading
 
     /**
      * Whether the selected video may take the system's media controls and picture-in-picture: not while the Viewer
