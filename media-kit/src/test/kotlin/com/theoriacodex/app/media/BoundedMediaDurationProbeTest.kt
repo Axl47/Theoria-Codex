@@ -116,6 +116,14 @@ class BoundedMediaDurationProbeTest {
             MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
             probe(notFound).probe(post("gone", SourceKey.HITOMI)),
         )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
+            probe(StatusHttpClient(403)).probe(post("refused", SourceKey.GELBOORU)),
+        )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
+            probe(StatusHttpClient(410)).probe(post("removed", SourceKey.GELBOORU)),
+        )
     }
 
     @Test

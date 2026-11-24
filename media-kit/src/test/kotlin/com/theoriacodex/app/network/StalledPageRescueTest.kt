@@ -7,6 +7,7 @@ import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import okhttp3.CookieJar
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -22,6 +23,8 @@ import org.junit.Test
 class StalledPageRescueTest {
     private val page = ByteArray(4_096) { (it % 251).toByte() }
     private val requests = CopyOnWriteArrayList<String?>()
+    private val connections = CopyOnWriteArrayList<Int>()
+    private val long = ByteArray(1024 * 1024) { (it % 253).toByte() }
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         executor = Executors.newCachedThreadPool()
         createContext("/page") { exchange ->
@@ -35,6 +38,21 @@ class StalledPageRescueTest {
             } else {
                 exchange.sendResponseHeaders(206, (page.size - STALLS_AFTER).toLong())
                 exchange.responseBody.write(page, STALLS_AFTER, page.size - STALLS_AFTER)
+            }
+            runCatching { exchange.close() }
+        }
+        createContext("/long") { exchange ->
+            val range = exchange.requestHeaders.getFirst("Range")
+            requests += range
+            connections += exchange.remoteAddress.port
+            if (range == null) {
+                exchange.sendResponseHeaders(200, long.size.toLong())
+                exchange.responseBody.write(long, 0, STALLS_AFTER)
+                exchange.responseBody.flush()
+                Thread.sleep(LONG_STALL_MS)
+            } else {
+                exchange.sendResponseHeaders(206, (long.size - STALLS_AFTER).toLong())
+                runCatching { exchange.responseBody.write(long, STALLS_AFTER, long.size - STALLS_AFTER) }
             }
             runCatching { exchange.close() }
         }
@@ -94,15 +112,34 @@ class StalledPageRescueTest {
         }
 
         fetch("img.example.org")
-        assertEquals(listOf<String?>(null), requests.toList())
+        fetch("static.nhentai.net")
+        assertEquals(listOf<String?>(null, null), requests.toList())
 
         requests.clear()
         assertEquals(page.toList(), fetch("i3.nhentai.net").getOrThrow().toList())
         assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
     }
 
+    @Test
+    fun `the image client resumes a stalled page on another connection and stops reading once the call is cancelled (ADR 0102)`() {
+        val clients = AppHttpClients(
+            CookieJar.NO_COOKIES,
+            memory = ConnectionMemory(NoRecentHosts, activeNetwork = { null }, resolver = Dns { listOf(InetAddress.getByName("127.0.0.1")) }),
+        )
+        val call = clients.images.newCall(Request.Builder().url("http://i3.nhentai.net:${server.address.port}/long").build())
+        val source = call.execute().body.source()
+
+        assertEquals(long.copyOfRange(0, 64 * 1024).toList(), source.readByteArray(64 * 1024L).toList())
+        assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
+        assertEquals(2, connections.toSet().size)
+
+        call.cancel()
+        assertThrows(IOException::class.java) { source.readByteArray(long.size.toLong()) }
+    }
+
     private companion object {
         const val STALLS_AFTER = 1_024
         const val STALL_LENGTH_MS = 1_500L
+        const val LONG_STALL_MS = 3_500L
     }
 }

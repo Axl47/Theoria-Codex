@@ -256,18 +256,32 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
+READ_LOGS_REQUEST = re.compile(r"<uses-permission(?:-sdk-23)?\b[^>]*>")
+
+
 @rule
 def no_manifest_reads_other_apps_logs() -> list[str]:
     return [
         f"{path.relative_to(ROOT).as_posix()} requests READ_LOGS; the diagnostic report reads only the app's own log "
         "(docs/adr/0103-diagnostics-log-and-usage.md)"
         for path in sorted(ROOT.glob("*/src/*/AndroidManifest.xml"))
-        if "android.permission.READ_LOGS" in path.read_text(encoding="utf-8")
+        if any(
+            "android.permission.READ_LOGS" in tag and 'tools:node="remove"' not in tag
+            for tag in READ_LOGS_REQUEST.findall(path.read_text(encoding="utf-8"))
+        )
     ]
 
 
 DOWNLOAD_MANAGER = re.compile(r"\bDownloadManager\b|\bDOWNLOAD_SERVICE\b")
 DOWNLOAD_MANAGER_OWNERS = re.compile(r"media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownload\w*\.kt")
+TEST_SOURCE_SETS = ("test", "androidTest", "sharedTest")
+
+
+def shipping_sources() -> Iterable[Path]:
+    return sorted(
+        path for pattern in ("*/src/*/**/*.kt", "*/src/*/**/*.java") for path in ROOT.glob(pattern)
+        if not path.relative_to(ROOT).parts[2].startswith(TEST_SOURCE_SETS)
+    )
 
 
 @rule
@@ -275,7 +289,7 @@ def only_post_downloads_use_download_manager() -> list[str]:
     return [
         f"{relative} uses Android's DownloadManager; only post downloads queue there, and animation export uses the "
         "app's own transport (docs/adr/0110-offline-media-jobs.md)"
-        for path in sorted(ROOT.glob("*/src/main/**/*.kt"))
+        for path in shipping_sources()
         if not DOWNLOAD_MANAGER_OWNERS.fullmatch(relative := path.relative_to(ROOT).as_posix())
         and DOWNLOAD_MANAGER.search(path.read_text(encoding="utf-8"))
     ]

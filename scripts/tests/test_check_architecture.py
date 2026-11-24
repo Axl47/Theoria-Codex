@@ -81,18 +81,23 @@ class DiagnosticsRulesTest(unittest.TestCase):
     def test_reports_a_manifest_that_asks_to_read_other_apps_logs_adr_0103(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            for module, permission in [("app", "READ_LOGS"), ("media-kit", "INTERNET")]:
-                manifest = root / module / "src/debug/AndroidManifest.xml"
+            manifests = {
+                "app/src/debug": '<uses-permission\n    android:name="android.permission.READ_LOGS" />',
+                "app/src/release": '<uses-permission-sdk-23 android:name="android.permission.READ_LOGS"/>',
+                "media-kit/src/main": '<uses-permission android:name="android.permission.READ_LOGS" tools:node="remove" />',
+                "feature-viewer/src/main": '<uses-permission android:name="android.permission.INTERNET" />',
+            }
+            for source_set, text in manifests.items():
+                manifest = root / source_set / "AndroidManifest.xml"
                 manifest.parent.mkdir(parents=True)
-                manifest.write_text(f'<uses-permission android:name="android.permission.{permission}" />\n', encoding="utf-8")
+                manifest.write_text(text + "\n", encoding="utf-8")
             self.assertIn(check_architecture.no_manifest_reads_other_apps_logs, check_architecture.RULES)
             with mock.patch.object(check_architecture, "ROOT", root):
                 self.assertEqual(
-                    ["app/src/debug/AndroidManifest.xml requests READ_LOGS; the diagnostic report reads only the app's own log "
-                     "(docs/adr/0103-diagnostics-log-and-usage.md)"],
+                    [f"app/src/{source_set}/AndroidManifest.xml requests READ_LOGS; the diagnostic report reads only the app's own log "
+                     "(docs/adr/0103-diagnostics-log-and-usage.md)" for source_set in ("debug", "release")],
                     check_architecture.no_manifest_reads_other_apps_logs(),
                 )
-
 
 class DownloadManagerRuleTest(unittest.TestCase):
     def test_reports_animation_export_through_download_manager_adr_0110(self) -> None:
@@ -101,9 +106,14 @@ class DownloadManagerRuleTest(unittest.TestCase):
                 "val queue = context.getSystemService(DownloadManager::class.java)\n",
             "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Export.kt":
                 "val queue = context.getSystemService(Context.DOWNLOAD_SERVICE)\n",
+            "app/src/personalRelease/java/com/theoriacodex/app/Export.java":
+                "DownloadManager queue = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);\n",
             "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadService.kt":
                 "import android.app.DownloadManager\n",
             "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadManagerHints.kt": "val hint = 1\n",
+            "app/src/main/java/com/theoriacodex/app/update/Updater.kt": "val apk = ApkDownloadManager(context)\n",
+            "app/src/androidTest/java/com/theoriacodex/app/DownloadsDeviceTest.kt": "val queue: DownloadManager? = null\n",
+            "media-kit/src/test/kotlin/com/theoriacodex/app/media/QueueTest.kt": "val queue: DownloadManager? = null\n",
         }
         with main_sources(files):
             self.assertIn(check_architecture.only_post_downloads_use_download_manager, check_architecture.RULES)
@@ -111,6 +121,7 @@ class DownloadManagerRuleTest(unittest.TestCase):
                 [f"{path} uses Android's DownloadManager; only post downloads queue there, and animation export uses the "
                  "app's own transport (docs/adr/0110-offline-media-jobs.md)"
                  for path in [
+                     "app/src/personalRelease/java/com/theoriacodex/app/Export.java",
                      "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Export.kt",
                      "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/UgoiraMp4Export.kt",
                  ]],

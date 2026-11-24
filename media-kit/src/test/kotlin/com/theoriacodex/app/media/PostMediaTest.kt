@@ -199,10 +199,9 @@ class PostMediaTest {
                 viewer.candidates.take(2).map { it.location },
             )
             assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, viewer.candidates[1].activation)
-            assertEquals(
-                MediaDeliveryActivation.QUALITY_UPGRADE,
-                previewMediaDeliveryPlan(post).candidates.first { it.location.endsWith("sample.jpg") }.activation,
-            )
+            val card = previewMediaDeliveryPlan(post).candidates
+            assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, card.first { it.location.endsWith("sample.jpg") }.activation)
+            assertEquals(MediaDeliveryActivation.FAILURE_FALLBACK, card.first { it.location.endsWith("full.jpg") }.activation)
         }
     }
 

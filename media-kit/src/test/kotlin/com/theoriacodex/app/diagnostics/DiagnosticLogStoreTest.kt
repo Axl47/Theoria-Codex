@@ -57,6 +57,7 @@ class DiagnosticLogStoreTest {
         var time = 0L
         val store = DiagnosticLogStore(folder.root.resolve("diagnostics"), now = { ++time })
         repeat(7) { store.writeCrash(Thread.currentThread(), IllegalStateException("crash $it")) }
+        store.record("area", "an event", null)
 
         val crashes = store.readCrashes()
         assertEquals(5, crashes.size)
@@ -64,6 +65,18 @@ class DiagnosticLogStoreTest {
 
         store.clear()
         assertTrue(store.readCrashes().isEmpty())
+        assertEquals("", store.readEvents())
+        assertTrue(folder.root.resolve("diagnostics").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun `a crash reaches disk redacted (ADR 0103)`() {
+        val store = store()
+        store.writeCrash(Thread.currentThread(), IllegalStateException("GET https://site.example/post?api_key=abc123"))
+
+        val crash = store.readCrashes().single()
+        assertTrue(crash, "site.example" in crash)
+        assertFalse(crash, "abc123" in crash)
     }
 
     @Test
@@ -89,8 +102,9 @@ class DiagnosticLogStoreTest {
         val release = CountDownLatch(1)
         store.record("area", "held", heldOnTheWriter(release) {})
         store.record("area", "after", null)
+        val reader = Thread.currentThread()
         Thread {
-            Thread.sleep(100)
+            while (reader.state != Thread.State.WAITING && reader.state != Thread.State.TIMED_WAITING) Thread.onSpinWait()
             release.countDown()
         }.start()
 

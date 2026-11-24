@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -99,6 +100,23 @@ class PreviewPictureHasherTest {
         assertEquals(listOf(9L), second.await().map { it.pictureHash })
 
         assertEquals(mapOf("seen.jpg" to 1, "flat.jpg" to 1, "gone.jpg" to 2, "shared.jpg" to 1), loads.groupingBy { it }.eachCount())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `answers are keyed by preview address, not post, and a load that finishes at once is still remembered (ADR 0111)`() = runTest {
+        val loads = mutableListOf<String>()
+        val hasher = PreviewPictureHasher(CoroutineScope(UnconfinedTestDispatcher(testScheduler)), { candidate ->
+            loads += candidate.url
+            PictureHashResult.Hashed(4)
+        })
+        val original = post("shared")
+        val repost = original.copy(id = PostId(SourceKey.GELBOORU, "repost"))
+        val renamed = original.copy(preview = ImageRef("https://cdn.example/other.jpg", null, "image/jpeg"))
+
+        assertEquals(listOf(4L), hasher.annotate(listOf(original)).map { it.pictureHash })
+        assertEquals(listOf(4L, 4L), hasher.annotate(listOf(repost, renamed)).map { it.pictureHash })
+
+        assertEquals(listOf("https://cdn.example/shared.jpg", "https://cdn.example/other.jpg"), loads)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

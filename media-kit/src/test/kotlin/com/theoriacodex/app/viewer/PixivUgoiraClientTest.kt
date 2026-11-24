@@ -2,7 +2,9 @@ package com.theoriacodex.app.viewer
 
 import android.app.Application
 import android.graphics.Bitmap
+import com.sun.net.httpserver.HttpServer
 import java.io.File
+import java.net.InetSocketAddress
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.io.ByteArrayOutputStream
@@ -148,17 +150,17 @@ class PixivUgoiraClientTest {
     }
 
     @Test
-    fun `last departing consumer interrupts archive acquisition and a returning card retries`() = runTest {
+    fun `last departing consumer interrupts archive acquisition and a returning card retries (ADR 0112)`() = runTest {
         val started = CompletableDeferred<Unit>()
-        val interrupted = CompletableDeferred<Unit>()
+        val interrupted = CountDownLatch(1)
         val calls = AtomicInteger()
-        val client = fixtureClient(download = { _, _, destination ->
+        val client = fixtureClient(timeoutMs = 600_000L, download = { _, _, destination ->
             if (calls.incrementAndGet() == 1) {
                 started.complete(Unit)
                 try {
                     CountDownLatch(1).await()
                 } catch (error: InterruptedException) {
-                    interrupted.complete(Unit)
+                    interrupted.countDown()
                     throw error
                 }
             }
@@ -168,7 +170,7 @@ class PixivUgoiraClientTest {
         val first = async { client.load("returning", UgoiraSizeBucket.CARD) }
         started.await()
         first.cancelAndJoin()
-        interrupted.await()
+        assertTrue(interrupted.await(5, TimeUnit.SECONDS))
         assertTrue(client.load("returning", UgoiraSizeBucket.CARD).isSuccess)
         assertEquals(2, calls.get())
     }
@@ -391,6 +393,23 @@ class PixivUgoiraClientTest {
     }
 
     @Test
+    fun `a cached archive that no longer validates is downloaded again (ADR 0112)`() = runTest {
+        val directory = temporaryFolder.newFolder()
+        val downloads = AtomicInteger()
+        val download: (String, String, File) -> BinaryResponse = { _, _, file ->
+            downloads.incrementAndGet()
+            writeFrameZip(file)
+            BinaryResponse(200)
+        }
+        assertTrue(fixtureClient(directory, decode = { _, _, _, _ -> throw IOException("damaged frame") }, download = download)
+            .load("damaged", UgoiraSizeBucket.CARD).isFailure)
+        File(directory, "damaged.zip").writeBytes(ByteArray(64) { 7 })
+
+        assertTrue(fixtureClient(directory, download = download).load("damaged", UgoiraSizeBucket.CARD).isSuccess)
+        assertEquals(2, downloads.get())
+    }
+
+    @Test
     fun `an offline archive that fails to decode keeps its timing (ADR 0112)`() = runTest {
         val offline = File(temporaryFolder.newFolder("offline"), "animation.zip")
         fixtureClient().copyArchiveForOffline("pinned", offline)
@@ -420,6 +439,168 @@ class PixivUgoiraClientTest {
         assertEquals(1, downloads.get())
         assertEquals(FrameSample.Unreadable, client.sampleFrames("huge", count = 2, sizePx = 2, NetworkBudget(maxBytes = 1L shl 20)))
         assertEquals(2, downloads.get())
+    }
+
+    @Test
+    fun `metadata and archive requests retry an I-O failure, 429 and 5xx with growing waits, then stop after three tries (ADR 0112)`() = runTest {
+        val metadataAt = mutableListOf<Long>()
+        val zipAt = mutableListOf<Long>()
+        val metadataAnswers = ArrayDeque(listOf<() -> TextResponse>({ throw IOException("reset") }, { TextResponse(503, "") }))
+        val zipAnswers = ArrayDeque(listOf<() -> BinaryResponse>({ BinaryResponse(429) }, { throw IOException("reset") }))
+        val client = PixivUgoiraClient(
+            credentialsProvider = FixedCredentialsProvider,
+            httpClient = UnusedHttpClient,
+            archiveDirectory = temporaryFolder.newFolder(),
+            metadataFetcher = { _, _ ->
+                metadataAt += System.nanoTime()
+                metadataAnswers.removeFirstOrNull()?.invoke()
+                    ?: TextResponse(200, """{"ugoira_metadata":{"zip_urls":{"medium":"https://example.test/a.zip"},"frames":[{"file":"0001.png","delay":50}]}}""")
+            },
+            zipDownloader = { _, _, file ->
+                zipAt += System.nanoTime()
+                zipAnswers.removeFirstOrNull()?.invoke() ?: run {
+                    writeFrameZip(file)
+                    BinaryResponse(200)
+                }
+            },
+        )
+
+        assertTrue(client.load("retried", UgoiraSizeBucket.CARD).isSuccess)
+        listOf(metadataAt, zipAt).forEach { times ->
+            assertEquals(3, times.size)
+            val waits = times.zipWithNext { earlier, later -> (later - earlier) / 1_000_000 }
+            assertTrue(waits.toString(), waits[0] >= 300 && waits[1] > waits[0])
+        }
+
+        val zipCalls = AtomicInteger()
+        val failing = fixtureClient(download = { _, _, _ -> zipCalls.incrementAndGet(); BinaryResponse(500) })
+        assertTrue(failing.load("down", UgoiraSizeBucket.CARD).isFailure)
+        assertEquals(3, zipCalls.get())
+    }
+
+    @Test
+    fun `the first 401 or 403 refreshes the token and retries with it, and a second one fails (ADR 0112)`() = runTest {
+        for (status in listOf(401, 403)) {
+            val tokens = mutableListOf<String>()
+            val recovering = fixtureClient(credentials = SavingCredentialsProvider(), httpClient = RefreshingHttpClient, download = { _, token, file ->
+                tokens += token
+                if (tokens.size == 1) BinaryResponse(status) else {
+                    writeFrameZip(file)
+                    BinaryResponse(200)
+                }
+            })
+            assertTrue(recovering.load("auth-$status", UgoiraSizeBucket.CARD).isSuccess)
+            assertEquals(listOf("access", "fresh"), tokens)
+
+            val refused = AtomicInteger()
+            val signedOut = fixtureClient(credentials = SavingCredentialsProvider(), httpClient = RefreshingHttpClient, download = { _, _, _ ->
+                refused.incrementAndGet()
+                BinaryResponse(status)
+            })
+            assertTrue(signedOut.load("refused-$status", UgoiraSizeBucket.CARD).isFailure)
+            assertEquals(2, refused.get())
+        }
+    }
+
+    @Test
+    fun `clearing the disposable cache while playback decodes keeps the archive and reports false (ADR 0112)`() = runTest {
+        val directory = temporaryFolder.newFolder()
+        val decoding = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val client = fixtureClient(directory, decode = { file, frames, size, publish ->
+            decoding.complete(Unit)
+            release.await()
+            decodeUgoiraFrames(file, frames, size, publish)
+        })
+        val playing = async { client.load("playing", UgoiraSizeBucket.CARD) }
+        decoding.await()
+
+        assertFalse(client.clearDisposableCache())
+        assertTrue(File(directory, "playing.zip").isFile)
+
+        release.complete(Unit)
+        assertTrue(playing.await().isSuccess)
+    }
+
+    @Test
+    fun `pruning the archive store leaves an archive still being fetched (ADR 0112)`() = runTest {
+        val directory = temporaryFolder.newFolder()
+        repeat(130) { index -> File(directory, "stale-$index.zip").apply { writeBytes(byteArrayOf(1)); setLastModified(2_000L + index) } }
+        val fetching = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val client = fixtureClient(directory, download = { _, _, file ->
+            writeFrameZip(file)
+            if (file.name == "busy.zip") {
+                file.setLastModified(1_000L)
+                fetching.countDown()
+                release.await(5, TimeUnit.SECONDS)
+            }
+            BinaryResponse(200)
+        })
+        val busy = async { client.warmArchive("busy") }
+        runCurrent()
+        assertTrue(fetching.await(5, TimeUnit.SECONDS))
+
+        assertTrue(client.warmArchive("fresh"))
+        assertTrue(File(directory, "busy.zip").isFile)
+        assertFalse(File(directory, "stale-0.zip").exists())
+
+        release.countDown()
+        assertTrue(busy.await())
+    }
+
+    @Test
+    fun `no more than three archives download at once (ADR 0112)`() = runTest {
+        val downloading = AtomicInteger()
+        val most = AtomicInteger()
+        val release = CountDownLatch(1)
+        val client = fixtureClient(download = { _, _, file ->
+            most.accumulateAndGet(downloading.incrementAndGet(), ::maxOf)
+            release.await(5, TimeUnit.SECONDS)
+            writeFrameZip(file)
+            downloading.decrementAndGet()
+            BinaryResponse(200)
+        })
+        val warming = List(4) { index -> async { client.warmArchive("slot-$index") } }
+        runCurrent()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (downloading.get() < 3 && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        Thread.sleep(300)
+
+        assertEquals(3, downloading.get())
+        release.countDown()
+        assertTrue(warming.awaitAll().all { it })
+        assertEquals(3, most.get())
+    }
+
+    @Test
+    fun `every try at one post's archive spends the same sampling budget (ADR 0107)`() = runTest {
+        val requests = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/a.zip") { exchange ->
+                requests.incrementAndGet()
+                exchange.sendResponseHeaders(200, 100)
+                exchange.responseBody.write(ByteArray(40))
+                exchange.responseBody.flush()
+                exchange.close()
+            }
+            start()
+        }
+        try {
+            val client = PixivUgoiraClient(
+                credentialsProvider = FixedCredentialsProvider,
+                httpClient = UnusedHttpClient,
+                archiveDirectory = temporaryFolder.newFolder(),
+                metadataFetcher = { _, _ ->
+                    TextResponse(200, """{"ugoira_metadata":{"zip_urls":{"medium":"http://127.0.0.1:${server.address.port}/a.zip"},"frames":[{"file":"0001.png","delay":50}]}}""")
+                },
+            )
+
+            assertEquals(FrameSample.Unreadable, client.sampleFrames("budgeted", count = 2, sizePx = 2, NetworkBudget(maxBytes = 60)))
+            assertEquals(2, requests.get())
+        } finally {
+            server.stop(0)
+        }
     }
 
     private fun fixtureClient(

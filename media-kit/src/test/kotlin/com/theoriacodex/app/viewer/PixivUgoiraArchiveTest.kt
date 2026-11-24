@@ -58,7 +58,6 @@ class PixivUgoiraArchiveTest {
         RandomAccessFile(oversized, "rw").use { file ->
             file.setLength(UGOIRA_MAX_COMPRESSED_BYTES + 1L)
         }
-        val ordinary = zip("ordinary.zip", mapOf("frame.jpg" to byteArrayOf(1)))
         val expanded = temporaryFolder.newFile("expanded.zip")
         ZipOutputStream(FileOutputStream(expanded)).use { zip ->
             zip.putNextEntry(ZipEntry("frame.jpg"))
@@ -74,7 +73,7 @@ class PixivUgoiraArchiveTest {
         }
         assertThrows(IOException::class.java) {
             validateUgoiraArchive(
-                ordinary,
+                zip("many.zip", List(UGOIRA_MAX_FRAME_COUNT + 1) { index -> "$index.jpg" to byteArrayOf(1) }.toMap()),
                 List(UGOIRA_MAX_FRAME_COUNT + 1) { index -> UgoiraFrameSpec("$index.jpg", 50) },
             )
         }

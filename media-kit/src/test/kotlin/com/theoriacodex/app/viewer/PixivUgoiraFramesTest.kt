@@ -7,6 +7,9 @@ import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -99,11 +102,29 @@ class PixivUgoiraFramesTest {
         val specs = listOf(UgoiraFrameSpec("frame.jpg", 50))
         writeUgoiraFrameMetadata(archive, specs)
         assertEquals(specs, readUgoiraFrameMetadata(archive))
-        archive.appendBytes(byteArrayOf(4))
+        val modified = archive.lastModified()
+        archive.writeBytes(byteArrayOf(1, 2, 3, 4))
+        archive.setLastModified(modified)
         assertNull(readUgoiraFrameMetadata(archive))
+
+        archive.writeBytes(byteArrayOf(1, 2, 3))
+        writeUgoiraFrameMetadata(archive, specs)
+        archive.setLastModified(archive.lastModified() + 2_000L)
+        assertNull(readUgoiraFrameMetadata(archive))
+
         writeUgoiraFrameMetadata(archive, specs)
         ugoiraMetadataFile(archive).writeText("broken")
         assertNull(readUgoiraFrameMetadata(archive))
+    }
+
+    @Test
+    fun `the timing sidecar stores only frame timing and the archive's size and time (ADR 0112)`() {
+        val archive = temporaryFolder.newFile("stored.zip").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        writeUgoiraFrameMetadata(archive, listOf(UgoiraFrameSpec("frame.jpg", 50)))
+
+        val stored = Json.parseToJsonElement(ugoiraMetadataFile(archive).readText()).jsonObject
+        assertEquals(setOf("version", "archiveBytes", "archiveModifiedMs", "frames"), stored.keys)
+        assertEquals(listOf(setOf("file", "delay")), stored.getValue("frames").jsonArray.map { it.jsonObject.keys })
     }
 
     @Test

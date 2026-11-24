@@ -9,8 +9,10 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.sun.net.httpserver.HttpServer
 import com.theoriacodex.app.network.AppHttpClients
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.InetSocketAddress
+import java.util.zip.GZIPOutputStream
 import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -44,14 +46,40 @@ class NetworkUsageTest {
 
         read(clients.images, times = 2)
         read(clients.video)
-        read(clients.downloads)
-        read(clients.sources)
+        read(clients.downloads, times = 3)
+        read(clients.sources, times = 4)
 
         val stacks = NetworkUsage.snapshot().getJSONObject("stacks")
-        mapOf("image" to 2, "video" to 1, "download" to 1, "source" to 1).forEach { (stack, requests) ->
+        mapOf("image" to 2, "video" to 1, "download" to 3, "source" to 4).forEach { (stack, requests) ->
             assertEquals(stack, requests, stacks.getJSONObject(stack).getInt("requests"))
             assertEquals(stack, requests * BODY_BYTES, stacks.getJSONObject(stack).getInt("bytes"))
         }
+    }
+
+    @Test
+    fun `a redirect counts as its own request and a body counts as it arrived, before gzip decoding (ADR 0103)`() {
+        val packed = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(ByteArray(BODY_BYTES)) } }.toByteArray()
+        server.createContext("/moved") { exchange ->
+            exchange.responseHeaders.add("Location", "/landed")
+            exchange.sendResponseHeaders(302, -1)
+            exchange.close()
+        }
+        server.createContext("/packed") { exchange ->
+            exchange.responseHeaders.add("Content-Encoding", "gzip")
+            exchange.sendResponseHeaders(200, packed.size.toLong())
+            exchange.responseBody.use { it.write(packed) }
+        }
+        val clients = AppHttpClients(CookieJar.NO_COOKIES)
+        fun fetch(client: OkHttpClient, path: String) =
+            client.newCall(Request.Builder().url("http://127.0.0.1:${server.address.port}$path").build()).execute().use { it.body.bytes().size }
+
+        assertEquals(BODY_BYTES, fetch(clients.images, "/moved"))
+        assertEquals(BODY_BYTES, fetch(clients.downloads, "/packed"))
+
+        val stacks = NetworkUsage.snapshot().getJSONObject("stacks")
+        assertEquals(2, stacks.getJSONObject("image").getInt("requests"))
+        assertEquals(BODY_BYTES, stacks.getJSONObject("image").getInt("bytes"))
+        assertEquals(packed.size, stacks.getJSONObject("download").getInt("bytes"))
     }
 
     @Test

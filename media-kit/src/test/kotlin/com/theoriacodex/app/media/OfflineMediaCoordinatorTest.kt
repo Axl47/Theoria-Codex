@@ -289,6 +289,28 @@ class OfflineMediaCoordinatorTest {
         assertEquals(0, store.snapshot.value!!.postCount)
     }
 
+    @Test
+    fun `a save made while clear or a removal runs publishes no job, and a removal leaves other owners alone (ADR 0110)`() = runTest {
+        val (clearingCoordinator, _) = gatedCoordinator()
+        val clearProceeds = loadedPreparation(clearingCoordinator)
+        val clearing = launch { clearingCoordinator.clear() }
+        runCurrent()
+        clearingCoordinator.makeAvailableOffline("codex:b", listOf(post("b")))
+        assertTrue(clearingCoordinator.jobs.value.isEmpty())
+        clearProceeds.complete(Unit)
+        clearing.join()
+
+        val (removingCoordinator, _) = gatedCoordinator()
+        val removalProceeds = loadedPreparation(removingCoordinator)
+        val removing = launch { removingCoordinator.remove("codex:a") }
+        runCurrent()
+        removingCoordinator.makeAvailableOffline("codex:a", listOf(post("again")))
+        removingCoordinator.makeAvailableOffline("codex:other", listOf(post("c")))
+        assertEquals(setOf("codex:other"), removingCoordinator.jobs.value.keys)
+        removalProceeds.complete(Unit)
+        removing.join()
+    }
+
     private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         return OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { _, _, file -> file.writeText("bytes") }) to store

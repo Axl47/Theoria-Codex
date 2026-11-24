@@ -73,6 +73,15 @@ class VideoFrameSamplingTest {
         val signedOut = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "Pixiv credentials not configured")
         assertEquals(FrameSample.Unreachable, frameSample(emptyList(), signedOut))
         assertEquals(FrameSample.Unreadable, frameSample(emptyList(), SourceAdapterException(SourceFailureReason.PARSE, "unreadable listing")))
+        assertEquals(FrameSample.Unreadable, frameSample(emptyList(), SourceAdapterException(SourceFailureReason.UNKNOWN, "unexpected answer")))
+        assertEquals(FrameSample.Unreachable, frameSample(emptyList(), status(408)))
+        listOf(SourceFailureReason.AUTH_EXPIRED, SourceFailureReason.RATE_LIMITED, SourceFailureReason.NETWORK).forEach { reason ->
+            assertEquals(reason.name, FrameSample.Unreachable, frameSample(frames, SourceAdapterException(reason, "try later")))
+        }
+        assertTrue(frameSample(frames, SourceAdapterException(SourceFailureReason.PARSE, "unreadable listing")) is FrameSample.Frames)
+        assertTrue(frameSample(frames, UnreadableMedia("damaged")) is FrameSample.Frames)
+        assertEquals(FrameSample.Unreachable, frameSample(frames, status(503)))
+        assertEquals(FrameSample.Refused, frameSample(frames, status(404)))
     }
 
     @Test
@@ -115,7 +124,7 @@ class VideoFrameSamplingTest {
     }
 
     @Test
-    fun `the reader's first failure fails every later fetch (ADR 0107)`() {
+    fun `after the reader's first failure a read outside its kept windows fails while a kept window is still served (ADR 0107)`() {
         val window = 256L * 1024
         val source = RecordingSource(ByteArray(2 * 1024 * 1024) { it.toByte() }, failsAt = window)
         val reader = DataSourceMediaReader(source, uri, key = null, Job())
@@ -123,6 +132,8 @@ class VideoFrameSamplingTest {
 
         assertEquals(-1, reader.readAt(window, buffer, 0, 16))
         assertEquals(-1, reader.readAt(2 * window, buffer, 0, 16))
+        assertEquals(16, reader.readAt(10, buffer, 0, 16))
+        assertEquals(10.toByte(), buffer[0])
 
         assertTrue(reader.failure is IOException)
         assertEquals(listOf(0L to C.LENGTH_UNSET.toLong(), window to window), source.opened)
