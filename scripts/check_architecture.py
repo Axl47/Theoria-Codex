@@ -256,7 +256,7 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
-READ_LOGS_REQUEST = re.compile(r"<uses-permission(?:-sdk-23)?\b[^>]*>")
+READ_LOGS_REQUEST = re.compile(r"<uses-permission\b[^>]*>")
 
 
 @rule

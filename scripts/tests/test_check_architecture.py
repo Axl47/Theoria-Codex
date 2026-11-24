@@ -114,6 +114,7 @@ class DownloadManagerRuleTest(unittest.TestCase):
             "app/src/main/java/com/theoriacodex/app/update/Updater.kt": "val apk = ApkDownloadManager(context)\n",
             "app/src/androidTest/java/com/theoriacodex/app/DownloadsDeviceTest.kt": "val queue: DownloadManager? = null\n",
             "media-kit/src/test/kotlin/com/theoriacodex/app/media/QueueTest.kt": "val queue: DownloadManager? = null\n",
+            "media-kit/src/sharedTest/kotlin/com/theoriacodex/app/viewer/Fixture.kt": "val queue: DownloadManager? = null\n",
         }
         with main_sources(files):
             self.assertIn(check_architecture.only_post_downloads_use_download_manager, check_architecture.RULES)
