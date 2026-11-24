@@ -11,6 +11,7 @@ The deck's record of decided posts lived only in memory, so after a restart For 
 Before a profile's first deal, the Mix reads that profile's SKIPPED verdicts from the last 30 days and treats those posts as already decided. Trails still show them: the user opens a trail on purpose, and a trail's end has no Start over. The read:
 
 - runs alongside lane planning, after verdict writes already queued, but does not hold the write lock while it queries;
+- reads only skips decided before it started, so a skip made and undone while it runs cannot be kept out by it;
 - returns at most the newest 5,000 skips, about 30 days at 150 skips a day;
 - is waited on for at most 1.5 s. Only the wait is timed, because a blocking Room query cannot be cancelled. A read that runs late still applies when it lands, so only cards already dealt can show; a read that fails is tried again by the next Mix.
 
@@ -23,5 +24,5 @@ Skips survive restarts without becoming permanent, and a small source refills as
 ## Applies to
 
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckViewModel.kt`: `readRecentSkips`, `startOver`, `isKnown`, `push`, `SKIP_MEMORY_MS`, `SKIP_READ_LIMIT`, `SKIP_READ_TIMEOUT_MS`
-- `core-data-android/src/main/java/com/theoriacodex/data/android/room/ForYouVerdictDao.java`: `since`
-- `core-data/src/main/kotlin/com/theoriacodex/data/repository/ForYouVerdictRepository.kt`: `skippedSince`
+- `core-data-android/src/main/java/com/theoriacodex/data/android/room/ForYouVerdictDao.java`: `between`
+- `core-data/src/main/kotlin/com/theoriacodex/data/repository/ForYouVerdictRepository.kt`: `skippedBetween`

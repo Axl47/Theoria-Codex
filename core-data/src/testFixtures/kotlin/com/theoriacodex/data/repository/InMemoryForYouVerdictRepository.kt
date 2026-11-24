@@ -18,7 +18,7 @@ class InMemoryForYouVerdictRepository : ForYouVerdictRepository {
         stored.values.filter { it.profileId == profileId }.sortedByDescending { it.decidedAtEpochMs }
     }
 
-    override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId> =
-        verdicts(profileId).filter { it.kind == ForYouVerdictKind.SKIPPED && it.decidedAtEpochMs >= sinceEpochMs }
+    override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> =
+        verdicts(profileId).filter { it.kind == ForYouVerdictKind.SKIPPED && it.decidedAtEpochMs in sinceEpochMs..untilEpochMs }
             .take(limit).mapTo(LinkedHashSet()) { it.postId }
 }

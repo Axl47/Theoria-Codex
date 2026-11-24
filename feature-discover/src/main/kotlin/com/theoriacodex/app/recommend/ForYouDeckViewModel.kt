@@ -287,10 +287,11 @@ class ForYouDeckViewModel(
     }
 
     private suspend fun readRecentSkips(profileId: String) {
-        val since = wiring.clock() - SKIP_MEMORY_MS
+        val until = wiring.clock()
+        val since = until - SKIP_MEMORY_MS
         val read = workScope.launch {
             verdictWrites.withLock {}
-            recentSkips = runCatchingPreservingCancellation { wiring.verdicts.skippedSince(profileId, since, SKIP_READ_LIMIT) }
+            recentSkips = runCatchingPreservingCancellation { wiring.verdicts.skippedBetween(profileId, since, until, SKIP_READ_LIMIT) }
                 .onFailure { Diagnostics.report("for-you", "For You could not read its recent skips", it) }
                 .getOrNull() ?: return@launch
             skipsReadFor = profileId

@@ -47,8 +47,9 @@ class RoomForYouVerdictRepository(
         }
     }
 
-    override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId> = withContext(Dispatchers.IO) {
-        dao.since(profileId, ForYouVerdictKind.SKIPPED.name, sinceEpochMs, limit).mapNotNullTo(LinkedHashSet()) { it.postId() }
+    override suspend fun skippedBetween(profileId: String, sinceEpochMs: Long, untilEpochMs: Long, limit: Int): Set<PostId> =
+        withContext(Dispatchers.IO) {
+            dao.between(profileId, ForYouVerdictKind.SKIPPED.name, sinceEpochMs, untilEpochMs, limit).mapNotNullTo(LinkedHashSet()) { it.postId() }
     }
 }
 
