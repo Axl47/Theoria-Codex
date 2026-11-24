@@ -227,7 +227,6 @@ class ProfileBackupCodec {
         // Trust is given on a device, for the extensions on it: a backup file must not be able to turn one on.
         extensions = ExtensionChoices(),
         scenarioPreset = ScenarioPreset.NORMAL,
-        viewer = settings.viewer.copy(automaticTextTranslationEnabled = false, enabledOcrLanguages = emptySet()),
     )
 }
 

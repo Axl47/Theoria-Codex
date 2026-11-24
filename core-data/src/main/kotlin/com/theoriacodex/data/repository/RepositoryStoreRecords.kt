@@ -50,10 +50,6 @@ internal data class SettingsStoreRecord(
     @SerialName("instantSeek") val instantSeek: Boolean = false,
     @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
     @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
-    @SerialName("viewerAutomaticTextTranslationEnabled")
-    val viewerAutomaticTextTranslationEnabled: Boolean = false,
-    @SerialName("viewerEnabledOcrLanguages")
-    val viewerEnabledOcrLanguages: List<String> = emptyList(),
     @SerialName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     @SerialName("recommendationProfiles")
@@ -155,10 +151,6 @@ internal data class SettingsStoreRecord(
             autoRotateVideos = viewerAutoRotateVideos ?: true,
             commentOrder = com.theoriacodex.domain.model.CommentOrder.entries.firstOrNull { it.name == viewerCommentOrder }
                 ?: com.theoriacodex.domain.model.CommentOrder.OLDEST,
-            automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
-            enabledOcrLanguages = viewerEnabledOcrLanguages.mapNotNullTo(linkedSetOf()) { name ->
-                runCatching { ViewerOcrLanguage.valueOf(name) }.getOrNull()
-            },
         )
     }
 
@@ -189,10 +181,6 @@ internal data class SettingsStoreRecord(
                 instantSeek = settings.viewer.instantSeek,
                 viewerAutoRotateVideos = settings.viewer.autoRotateVideos,
                 viewerCommentOrder = settings.viewer.commentOrder.name,
-                viewerAutomaticTextTranslationEnabled = settings.viewer.automaticTextTranslationEnabled,
-                viewerEnabledOcrLanguages = settings.viewer.enabledOcrLanguages
-                    .sortedBy(ViewerOcrLanguage::ordinal)
-                    .map(ViewerOcrLanguage::name),
                 scenarioPreset = settings.scenarioPreset.name,
                 recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,

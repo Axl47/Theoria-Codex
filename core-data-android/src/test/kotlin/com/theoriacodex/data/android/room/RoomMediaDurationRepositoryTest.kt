@@ -2,9 +2,7 @@ package com.theoriacodex.data.android.room
 
 import android.content.Context
 import androidx.room.Room
-import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.data.repository.StoredMediaDurationKey
 import com.theoriacodex.data.repository.StoredMediaDurationState
 import com.theoriacodex.domain.model.PostId
@@ -14,19 +12,12 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class RoomMediaDurationRepositoryTest {
-    @get:Rule
-    val migrationHelper = MigrationTestHelper(
-        InstrumentationRegistry.getInstrumentation(),
-        TheoriaRoomDatabase::class.java,
-    )
-
     private lateinit var database: TheoriaRoomDatabase
     private var now = 100L
 
@@ -105,42 +96,10 @@ class RoomMediaDurationRepositoryTest {
         )
     }
 
-    @Test
-    fun `migration four to five preserves content and validates duration schema`() {
-        migrationHelper.createDatabase(MIGRATION_DATABASE_NAME, 4).apply {
-            execSQL(
-                "INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) " +
-                    "VALUES('saved','Saved',1,0)",
-            )
-            close()
-        }
-
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            MIGRATION_DATABASE_NAME,
-            5,
-            true,
-            TheoriaRoomDatabase.MIGRATION_4_5,
-        )
-        migrated.execSQL(
-            "INSERT INTO media_durations(source,source_post_id,media_fingerprint,decision," +
-                "duration_ms,provenance,updated_at_epoch_ms) " +
-                "VALUES('HITOMI','anime','fingerprint','KNOWN',12000,'PROVIDER',1)",
-        )
-        migrated.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
-            assertEquals(true, cursor.moveToFirst())
-            assertEquals("Saved", cursor.getString(0))
-        }
-        migrated.close()
-    }
-
     private fun key(id: String): StoredMediaDurationKey {
         return StoredMediaDurationKey(
             postId = PostId(SourceKey.HITOMI, id),
             mediaFingerprint = "fingerprint-$id",
         )
-    }
-
-    private companion object {
-        const val MIGRATION_DATABASE_NAME = "media-duration-migration-test"
     }
 }

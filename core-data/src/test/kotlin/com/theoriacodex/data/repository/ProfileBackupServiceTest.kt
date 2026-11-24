@@ -160,7 +160,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, restored.preview().savedSearchCount)
     }
 
-    @Test fun `export strips device paths signed URLs and retired or transient settings`() {
+    @Test fun `export strips device paths signed URLs and transient settings`() {
         val backup = backup()
         val localPost = backup.library.posts.single().copy(
             preview = ImageRef("https://example.test/p?token=secret", "/private/photo", "image/jpeg"),
@@ -169,7 +169,7 @@ class ProfileBackupServiceTest {
             pageUrl = "https://example.test/page?auth=secret",
         )
         val source = backup.copy(settings = backup.settings.copy(
-            viewer = ViewerSettings(automaticTextTranslationEnabled = true), scenarioPreset = ScenarioPreset.SLOW_NETWORK,
+            scenarioPreset = ScenarioPreset.SLOW_NETWORK,
         ), library = backup.library.copy(posts = listOf(localPost)))
         val bytes = codec.encode(source)
         val json = bytes.toString(Charsets.UTF_8)
@@ -179,7 +179,6 @@ class ProfileBackupServiceTest {
         assertNull(restored.library.posts.single().preview.url)
         assertNull(restored.library.posts.single().full)
         assertNull(restored.library.posts.single().media.single().localPath)
-        assertFalse(restored.settings.viewer.automaticTextTranslationEnabled)
         assertEquals(ScenarioPreset.NORMAL, restored.settings.scenarioPreset)
     }
 
