@@ -34,8 +34,7 @@ data class CodexOfflineState(val fraction: Float, val running: Boolean = false, 
     val complete: Boolean get() = fraction >= 1f && !running && !failed
 }
 
-/** Offline state by Codex id, for Codices kept offline only. Empty until the Library provides it, so no ring shows. */
-val LocalCodexOfflineStates = compositionLocalOf<Map<String, CodexOfflineState>> { emptyMap() }
+val LocalCodexOfflineStates = compositionLocalOf<Map<String, CodexOfflineState>?> { null }
 
 /**
  * What can be done to a Codex's offline copy from outside the Library's offline sheet. The app provides it over

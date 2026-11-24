@@ -205,8 +205,7 @@ class SeriesDownloads(
     /** Each chapter of [id] that is queued or on the device, by address. */
     fun states(id: SeriesId): Flow<Map<String, ChapterDownload>> = flow {
         lock.withLock { load() }
-        store.load()
-        val downloaded = store.snapshot.map { it.chapters(id) }.distinctUntilChanged()
+        val downloaded = store.scannedSnapshots.map { it.chapters(id) }.distinctUntilChanged()
         emitAll(
             combine(downloaded, queue, fetching) { downloaded, queued, current ->
                 downloaded.associateWith<String, ChapterDownload> { ChapterDownload.OnDevice } +
@@ -224,16 +223,11 @@ class SeriesDownloads(
      * The first two pages, as files, of each of [id]'s chapters on the device, by address, read from memory; then again
      * whenever a chapter is downloaded or deleted.
      */
-    fun leadPages(id: SeriesId): Flow<Map<String, List<ImageRef>>> = flow {
-        store.load()
-        emitAll(store.snapshot.map { it.leadPages(id) }.distinctUntilChanged())
-    }
+    fun leadPages(id: SeriesId): Flow<Map<String, List<ImageRef>>> =
+        store.scannedSnapshots.map { it.leadPages(id) }.distinctUntilChanged()
 
     /** The addresses of [id]'s chapters on the device. */
-    suspend fun downloaded(id: SeriesId): Set<String> {
-        store.load()
-        return store.snapshot.value.chapters(id)
-    }
+    suspend fun downloaded(id: SeriesId): Set<String> = store.load().chapters(id)
 
     /**
      * Loads the saved queue, deletes what [deleteRead] would, since the process may have ended with chapters read, and
@@ -283,8 +277,7 @@ class SeriesDownloads(
      */
     suspend fun deleteRead(noReaderOpen: () -> Boolean = { true }) {
         if (!deleteAfterReading()) return
-        store.load()
-        store.snapshot.value.postsByOwner.forEach { (owner, posts) ->
+        store.load().postsByOwner.forEach { (owner, posts) ->
             val id = seriesIdOfOfflineOwner(owner) ?: return@forEach
             val chapters = posts.mapTo(HashSet()) { it.sourcePostId }
             val series = repository.series(id) ?: return@forEach
