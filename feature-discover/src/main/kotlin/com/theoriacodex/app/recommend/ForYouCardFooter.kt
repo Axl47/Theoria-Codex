@@ -24,31 +24,12 @@ import com.theoriacodex.app.creator.creatorProfileActions
 import com.theoriacodex.app.related.LocalRelatedPostsSupport
 import com.theoriacodex.app.ui.components.TrailChip
 import com.theoriacodex.app.ui.components.TrailChipGap
-import com.theoriacodex.app.ui.components.TrailChipIcons
+import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.ui.navigation.TrailRequest
-import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.app.ui.navigation.request
+import com.theoriacodex.app.ui.navigation.trailForks
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.tags.normalizeMatchToken
-
-internal class ForYouFork(val key: String, val label: String, val request: TrailRequest)
-
-internal fun forYouForks(
-    post: Post,
-    tags: List<String>,
-    covered: Set<String>,
-    creator: CreatorProfile?,
-    similarSupported: Boolean,
-    levelQuery: Query?,
-    maxTags: Int = MAX_TAG_FORKS,
-): List<ForYouFork> {
-    val fresh = tags.asSequence().filter { normalizeMatchToken(it) !in covered }.distinctBy(::normalizeMatchToken).take(maxTags)
-    return listOfNotNull(
-        creator?.let { ForYouFork("creator", it.displayName, TrailRequest.Creator(it, post)) },
-        ForYouFork(SIMILAR_FORK, "Similar", TrailRequest.Similar(post)).takeIf { similarSupported },
-    ) + fresh.map { ForYouFork("tag:$it", it.replace('_', ' '), TrailRequest.Tag(it, post.id.source, levelQuery, post)) }
-}
 
 internal fun DeckOrigin.label(): String = when (this) {
     is DeckOrigin.Lane -> label
@@ -70,9 +51,8 @@ internal fun ForYouCardFooter(
     val forks = remember(post, affinity, feedShare, similarSupported, creatorBrowsingSources, level, origin) {
         val creator = creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile }
             ?.takeUnless { (level.fork as? TrailRequest.Creator)?.creator == it || origin is DeckOrigin.Creator }
-        val covered = (level.query?.includeTags.orEmpty() + owner.laneTags(post.id)).mapTo(mutableSetOf(), ::normalizeMatchToken)
-        val tags = tagAffinities(post, affinity, feedShare).filter { it.informative }.map { it.tag }
-        forYouForks(post, tags, covered, creator, similarSupported, level.query)
+        val covered = level.query?.includeTags.orEmpty() + owner.laneTags(post.id)
+        trailForks(creator, similarSupported, tagAffinities(post, affinity, feedShare), covered)
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
         if (origin != null) {
@@ -85,12 +65,12 @@ internal fun ForYouCardFooter(
                 modifier = Modifier.padding(start = 16.dp, end = 12.dp, bottom = 4.dp).testTag(FOR_YOU_ORIGIN_TAG),
             )
         }
-        ForYouForkRow(forks, owner::fork)
+        ForYouForkRow(forks) { owner.fork(it.request(post, level.query)) }
     }
 }
 
 @Composable
-internal fun ForYouForkRow(forks: List<ForYouFork>, onFork: (TrailRequest) -> Unit) {
+internal fun ForYouForkRow(forks: List<TrailFork>, onFork: (TrailFork) -> Unit) {
     val state = rememberLazyListState()
     LazyRow(
         Modifier.fillMaxWidth().testTag(FOR_YOU_FORK_ROW_TAG),
@@ -103,24 +83,16 @@ internal fun ForYouForkRow(forks: List<ForYouFork>, onFork: (TrailRequest) -> Un
         items(forks, key = { it.key }) { fork ->
             TrailChip(
                 fork.label,
-                when (fork.request) {
-                    is TrailRequest.Creator -> TrailChipIcons.Creator
-                    is TrailRequest.Similar -> TrailChipIcons.Similar
-                    is TrailRequest.Tag -> null
-                },
+                fork.icon,
                 container = MaterialTheme.colorScheme.surfaceContainerHigh,
                 content = MaterialTheme.colorScheme.onSurface,
                 onClickLabel = "Open ${fork.label}",
-                onClick = { onFork(fork.request) },
+                onClick = { onFork(fork) },
                 modifier = Modifier.testTag("$FOR_YOU_FORK_TAG_PREFIX${fork.key}"),
             )
         }
     }
 }
-
-private const val SIMILAR_FORK = "similar"
-
-private const val MAX_TAG_FORKS = 5
 
 const val FOR_YOU_ORIGIN_TAG = "for-you-origin"
 const val FOR_YOU_FORK_ROW_TAG = "for-you-forks"

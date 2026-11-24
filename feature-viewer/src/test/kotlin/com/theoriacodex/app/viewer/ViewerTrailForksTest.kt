@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
@@ -14,7 +15,7 @@ import org.junit.Test
 class ViewerTrailForksTest {
     private val art = post("art").id
     private val other = post("other").id
-    private val dog = ViewerTrailChip.Tag("dog")
+    private val dog = TrailFork.Tag("dog")
 
     @Test
     fun `one fork loads at a time, and every entry point sees it`() = runTest {
@@ -23,7 +24,7 @@ class ViewerTrailForksTest {
 
         assertTrue(forks.open(dog, art) { first.await() })
         runCurrent()
-        assertFalse(forks.open(ViewerTrailChip.Similar, art) { true })
+        assertFalse(forks.open(TrailFork.Similar, art) { true })
         assertEquals(dog, forks.busy)
 
         first.complete(true)
@@ -61,12 +62,12 @@ class ViewerTrailForksTest {
         assertEquals(dog, forks.busy)
         forks.follow(other)
         assertNull(forks.busy)
-        assertTrue(forks.open(ViewerTrailChip.Similar, other) { CompletableDeferred<Boolean>().await() })
+        assertTrue(forks.open(TrailFork.Similar, other) { CompletableDeferred<Boolean>().await() })
         advanceTimeBy(1)
         runCurrent()
 
         assertTrue(cancelled)
-        assertEquals(ViewerTrailChip.Similar, forks.busy)
+        assertEquals(TrailFork.Similar, forks.busy)
     }
 
     @Test

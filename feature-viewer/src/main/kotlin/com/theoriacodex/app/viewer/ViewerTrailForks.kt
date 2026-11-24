@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -19,16 +20,16 @@ import kotlinx.coroutines.launch
 internal class ViewerTrailForks(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) {
-    var busy by mutableStateOf<ViewerTrailChip?>(null)
+    var busy by mutableStateOf<TrailFork?>(null)
         private set
 
-    var failed by mutableStateOf<ViewerTrailChip?>(null)
+    var failed by mutableStateOf<TrailFork?>(null)
         private set
 
     private var from: PostId? = null
     private var job: Job? = null
 
-    fun open(chip: ViewerTrailChip, post: PostId, start: suspend () -> Boolean): Boolean {
+    fun open(chip: TrailFork, post: PostId, start: suspend () -> Boolean): Boolean {
         if (busy != null) return false
         from = post
         busy = chip
