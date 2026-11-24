@@ -261,6 +261,7 @@ private fun SeriesTabViewBody(
         content.view == SeriesView.FOLLOWING -> FollowingBody(
             content = content,
             refreshing = state.refreshing,
+            failedCheck = state.failedCheck,
             grid = grids.following,
             onRefresh = viewModel::refresh,
             onChooseKind = viewModel::chooseKind,

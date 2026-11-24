@@ -31,18 +31,21 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesKind
 
 /**
  * The Following view: the followed series as [content] orders and narrows them, under the kind filter and Sort &
- * filter. Pulling down checks them for new entries. With nothing followed it leads to Browse; with nothing shown, a
- * title search goes on to every source, otherwise Show all clears the filters.
+ * filter. Pulling down checks them for new entries; when sources fail, [failedCheck] says so above the grid with Retry.
+ * With nothing followed it leads to Browse; with nothing shown, a title search goes on to every source, otherwise Show
+ * all clears the filters.
  */
 @Composable
 internal fun FollowingBody(
     content: SeriesTabContent,
     refreshing: Boolean,
+    failedCheck: FollowedCheck?,
     grid: LazyGridState,
     onRefresh: () -> Unit,
     onChooseKind: (SeriesKind?) -> Unit,
@@ -67,6 +70,9 @@ internal fun FollowingBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (failedCheck != null && content.followsAny) {
+                    fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message(content.words)) }
+                }
                 when {
                     following == null -> Unit
                     following.isEmpty() && content.followingQuery.isNotBlank() ->
@@ -84,6 +90,10 @@ internal fun FollowingBody(
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
     }
 }
+
+/** "Couldn't check 2 series", or when none could be checked, "Couldn't check for new chapters". */
+internal fun FollowedCheck.message(words: EntryWords): String =
+    if (failed == checked) "Couldn't check for new ${words.many}" else "Couldn't check $failed series"
 
 /** The kind filter, when both kinds are followed or on, and Sort & filter, marked while a filter hides series. */
 @Composable
