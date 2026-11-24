@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
@@ -21,11 +22,13 @@ import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.SeriesCovers
 import com.theoriacodex.domain.series.UnsupportedEntriesException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -290,11 +293,29 @@ class SeriesPageViewModelTest {
         collecting.cancel()
     }
 
-    /** Downloads over this test's folder that never run: the page only asks whether it offers them. */
-    private fun downloads() = SeriesDownloads(
-        store = OfflineMediaStore(folder.newFolder()),
+    @Test
+    fun aRefreshQueuesTheNewChaptersOfASeriesSetToDownloadThem() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val repository = Restored(StoredSeries(Series(id, "Title"), followed = true, downloadNewChapters = true), emptyList())
+        repository.added = listOf(SeriesEntry("/c/2", "Chapter 2"))
+        val downloads = downloads(repository, StandardTestDispatcher(testScheduler))
+        val source = WebSeriesSource(id.source, "https://site.example")
+        SeriesPageViewModel(id, repository, { listOf(source) }, downloads = downloads, ioDispatcher = StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        assertEquals(mapOf("/c/2" to ChapterDownload.Queued(null)), downloads.states(id).first())
+    }
+
+    /** Downloads over this test's folder that never run: the page asks whether it offers them, and queues chapters. */
+    private fun downloads(
+        repository: SeriesRepository = Restored(StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/"), "")), emptyList()),
+        io: CoroutineDispatcher = Dispatchers.IO,
+    ) = SeriesDownloads(
+        store = OfflineMediaStore(folder.newFolder(), io),
         queueFile = folder.root.resolve("queue.json"),
-        repository = Restored(StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/"), "")), emptyList()),
+        repository = repository,
+        files = AtomicJsonFileStore(io),
         source = { null },
         covers = SeriesCovers.Stored,
         fetch = { _, _ -> error("Nothing downloads") },
@@ -334,12 +355,15 @@ private class Restored(stored: StoredSeries, entries: List<StoredSeriesEntry>) :
     private val storedFlow = MutableStateFlow<StoredSeries?>(stored)
     private val entryFlow = MutableStateFlow(entries)
 
+    /** What [store] says is new. */
+    var added = emptyList<SeriesEntry>()
+
     override fun observeFollowed(): Flow<List<FollowedSeries>> = emptyFlow()
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = storedFlow
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = entryFlow
     override suspend fun series(id: SeriesId): StoredSeries? = storedFlow.value
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = entryFlow.value
-    override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
+    override suspend fun store(series: Series, entries: List<SeriesEntry>?) = added
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
     override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit

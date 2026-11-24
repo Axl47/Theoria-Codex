@@ -35,6 +35,7 @@ import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.SeriesStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -250,7 +251,7 @@ private fun pageHarness(chapterCount: Int, readIndices: Set<Int> = emptySet()): 
     }
     val repository = PageMemoryRepository(StoredSeries(series, followed = true), entries)
     val sources = listOf(primary, alternate)
-    val page = SeriesPageViewModel(id, repository, loadSources = { sources })
+    val page = SeriesPageViewModel(id, repository, loadSources = { sources }, ioDispatcher = Dispatchers.Unconfined)
     val switchSource = SwitchSourceViewModel(id, loadSources = { sources }, store = {}, switch = { _, _ -> false })
     return PageHarness(page, switchSource, repository)
 }
