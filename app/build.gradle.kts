@@ -531,6 +531,7 @@ tasks.withType<Test>().configureEach {
 
 // Reference screenshots are CI's Linux renders: other hosts draw text differently, so their captures stay in build/
 // and can never overwrite a reference. Failed comparisons always land in build/. See scripts/screenshots.sh.
+@OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
 roborazzi {
     if (System.getProperty("os.name") == "Linux") outputDir.set(layout.projectDirectory.dir("src/test/screenshots"))
     compare { outputDir.set(layout.buildDirectory.dir("outputs/roborazzi-compare")) }
