@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -44,6 +45,22 @@ class TachiyomiBackupTest {
         assertEquals(7L, first.firstSeenAtEpochMs)
         assertEquals(100L, first.entry.uploadedAtEpochMs)
         assertEquals(1, first.sourceOrder)
+    }
+
+    @Test
+    fun `TachiyomiJ2K's pages left marks a chapter opened on its first page and gives its page count`() {
+        val entries = decodeTachiyomiBackup(backup {
+            message(1) {
+                long(1, 1); string(2, "/j"); string(3, "J")
+                message(16) { string(1, "/j/3"); long(800, 20); long(10, 0) }
+                message(16) { string(1, "/j/2"); long(6, 4); long(800, 6); long(10, 1) }
+                message(16) { string(1, "/j/1"); bool(4, true); long(6, 9); long(800, 1); float(9, Float.POSITIVE_INFINITY); long(10, 2) }
+            }
+        }, now = 0).single().entries
+
+        assertEquals(listOf(1L, 5L, 10L), entries.map { it.position })
+        assertEquals(listOf(20L, 10L, 10L), entries.map { it.length })
+        assertNull("A number no chapter has is none", entries.last().entry.number)
     }
 
     @Test

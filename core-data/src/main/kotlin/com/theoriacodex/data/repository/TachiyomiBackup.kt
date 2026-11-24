@@ -58,8 +58,8 @@ private fun gunzip(bytes: ByteArray): ByteArray = GZIPInputStream(bytes.inputStr
     while (true) {
         val read = input.read(buffer)
         if (read < 0) break
+        require(output.size() + read <= MAX_TACHIYOMI_BACKUP_BYTES) { "This backup is too large to import." }
         output.write(buffer, 0, read)
-        require(output.size() <= MAX_TACHIYOMI_BACKUP_BYTES) { "This backup is too large to import." }
     }
     output.toByteArray()
 }
@@ -92,13 +92,13 @@ private fun TachiyomiSeries.toBackup(kind: SeriesKind, now: Long): BackupSeries?
 }
 
 private fun TachiyomiEntry.toStored(kind: SeriesKind, now: Long): StoredSeriesEntry {
-    val length = if (kind == SeriesKind.ANIME) totalSeconds.takeIf { it > 0 } else null
-    val position = when (kind) {
-        SeriesKind.MANGA -> if (lastPosition > 0) lastPosition + 1 else 0
-        SeriesKind.ANIME -> lastPosition.coerceIn(0, length ?: Long.MAX_VALUE)
+    val (position, length) = when (kind) {
+        // Page index 0 is also an untouched chapter's, unless TachiyomiJ2K's pages left says it was opened.
+        SeriesKind.MANGA -> (if (lastPosition > 0 || pagesLeft > 0) lastPosition + 1 else 0L) to (lastPosition + pagesLeft).takeIf { pagesLeft > 0 }
+        SeriesKind.ANIME -> totalSeconds.takeIf { it > 0 }.let { duration -> lastPosition.coerceIn(0, duration ?: Long.MAX_VALUE) to duration }
     }
     return StoredSeriesEntry(
-        entry = SeriesEntry(url, name, number.takeIf { it >= 0f }, scanlator?.takeIf(String::isNotBlank), dateUpload.takeIf { it > 0 }),
+        entry = SeriesEntry(url, name, number.takeIf { it.isFinite() && it >= 0f }, scanlator?.takeIf(String::isNotBlank), dateUpload.takeIf { it > 0 }),
         sourceOrder = sourceOrder.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
         firstSeenAtEpochMs = dateFetch.takeIf { it > 0 } ?: now,
         read = read,
@@ -147,6 +147,8 @@ private class TachiyomiEntry(
     @ProtoNumber(9) val number: Float = 0f,
     @ProtoNumber(10) val sourceOrder: Long = 0,
     @ProtoNumber(16) val totalSeconds: Long = 0,
+    /** TachiyomiJ2K's pages from the last one read to the end, that one included: 1 for a finished chapter. */
+    @ProtoNumber(800) val pagesLeft: Long = 0,
 )
 
 @Serializable
@@ -155,5 +157,8 @@ private class TachiyomiHistory(
     @ProtoNumber(2) val lastRead: Long = 0,
 )
 
-/** Far above a real library's: the TachiyomiJ2K backup of 253 series and 40,000 chapters inflates to 4 MB. */
-private const val MAX_TACHIYOMI_BACKUP_BYTES = 128 * 1024 * 1024
+/**
+ * Far above a real library's (the TachiyomiJ2K backup of 253 series and 40,000 chapters inflates to 4 MB), yet small
+ * enough that the inflated bytes, their copy and the decoded series fit an app's heap.
+ */
+private const val MAX_TACHIYOMI_BACKUP_BYTES = 64 * 1024 * 1024
