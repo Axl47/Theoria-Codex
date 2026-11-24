@@ -118,10 +118,11 @@ class ExtensionsViewModelTest {
     }
 
     @Test
-    fun `browsing shows the device's languages and every-language extensions until a search looks through all`() {
+    fun `browsing shows the device's languages and every-language extensions, also while searching`() {
         val extensions = listOf(offered("pt", languages = listOf("pt-BR")), offered("all", languages = listOf("all")), offered("ja", languages = listOf("ja")), offered("En2", languages = listOf("en")))
         assertEquals(listOf("all", "En2", "pt"), browseRows(extensions, "", listOf("en-US", "pt-PT")).map { it.name })
-        assertEquals(listOf("ja"), browseRows(extensions, " J", listOf("en-US")).map { it.name })
+        assertEquals(emptyList<String>(), browseRows(extensions, " J", listOf("en-US")).map { it.name })
+        assertEquals(listOf("ja"), browseRows(extensions, " J", listOf("en-US"), LanguageFilter.Every).map { it.name })
     }
 
     @Test

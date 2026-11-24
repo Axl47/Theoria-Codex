@@ -120,9 +120,8 @@ private fun AddRepoDialog(ask: AddRepo, onDismiss: () -> Unit, onAdd: (String) -
 }
 
 /**
- * Every extension the repos offer that this app can run, narrowed by kind when both are offered and by language. By
- * default it shows those for the device's languages and those covering every language, and a search looks through
- * all languages; a language chosen holds during a search too.
+ * Every extension the repos offer that this app can run, narrowed by kind when both are offered and by language (by
+ * default the device's languages), then by name with a search.
  */
 @Composable
 internal fun BrowsePage(state: ExtensionsState, viewModel: ExtensionsViewModel, onBack: () -> Unit) {
@@ -192,7 +191,6 @@ internal sealed interface LanguageFilter {
 
 /**
  * What the browse page lists: those of [kind] (any when null) in the [language] chosen, then name matches for [query].
- * With [LanguageFilter.Yours], a search looks through every language; without one it keeps to the device's languages.
  * Extensions covering every language ("all") show under any language.
  */
 internal fun browseRows(
@@ -206,7 +204,7 @@ internal fun browseRows(
     val device = deviceLanguages.mapTo(HashSet()) { it.substringBefore('-').lowercase() } + "all"
     fun RepoExtension.inLanguage(): Boolean = when (language) {
         LanguageFilter.Every -> true
-        LanguageFilter.Yours -> search.isNotEmpty() || languages.any { it.substringBefore('-').lowercase() in device }
+        LanguageFilter.Yours -> languages.any { it.substringBefore('-').lowercase() in device }
         is LanguageFilter.Only -> language.code in languages || "all" in languages
     }
     return extensions
