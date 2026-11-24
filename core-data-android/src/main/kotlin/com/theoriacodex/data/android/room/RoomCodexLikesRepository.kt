@@ -372,7 +372,7 @@ class RoomCodexLikesRepository(
                     dao.automaticTagsForCodices(candidateIds)
                         .groupBy(CodexAutomaticTagEntity::getCodexId)
                         .filterValues { values ->
-                            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+                            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                                 post = post,
                                 automaticTags = values.mapNotNull(CodexAutomaticTagEntity::toDomainOrNull),
                             )

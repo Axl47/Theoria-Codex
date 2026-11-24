@@ -100,9 +100,6 @@ object CodexLikesPolicy {
         }
     }
 
-    fun postMatchesAnyAutomaticTag(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean =
-        postMatchesAutomaticTagGroups(post, automaticTags)
-
     private fun normalizeAutomaticTagOrNull(tag: CodexAutomaticTag): CodexAutomaticTag? {
         val normalized = tag.copy(
             tag = tag.tag.trim(),
