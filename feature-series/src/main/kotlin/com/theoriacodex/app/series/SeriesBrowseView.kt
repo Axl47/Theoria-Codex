@@ -27,9 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
+import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.domain.model.SourceKey
@@ -129,7 +127,7 @@ private fun BrowseHeader(
             Text(browse.name, Modifier.weight(1f, fill = false).padding(start = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
         }
-        ListingControls(kind, latest, (kind as? BrowseKind.Filtered)?.active ?: 0, onChoose, onFilter, Modifier.weight(1f, fill = false))
+        ListingControls(kind, latest, (kind as? BrowseKind.Filtered)?.active ?: 0, onChoose, onFilter)
     }
 }
 
@@ -147,18 +145,8 @@ internal fun ListingControls(
     modifier: Modifier = Modifier,
 ) {
     val listings = if (latest) listOf(BrowseKind.Popular to "Popular", BrowseKind.Latest to "Latest") else listOf(BrowseKind.Popular to "Popular")
-    Row(modifier.testTag(LISTING_CONTROLS_TAG), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        SingleChoiceSegmentedButtonRow {
-            listings.forEachIndexed { index, (listing, label) ->
-                SegmentedButton(
-                    selected = kind == listing,
-                    onClick = { onChoose(listing) },
-                    shape = SegmentedButtonDefaults.itemShape(index, listings.size),
-                    // No checkmark, so segments keep their width when the selection changes.
-                    icon = {},
-                ) { Text(label, maxLines = 1) }
-            }
-        }
+    Row(modifier.testTag(LISTING_CONTROLS_TAG), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        listings.forEach { (listing, label) -> FilterChoiceChip(label, selected = kind == listing) { onChoose(listing) } }
         IconButton(onClick = onFilter) {
             BadgedBox(badge = { if (filterCount > 0) Badge { Text("$filterCount") } }) {
                 Icon(Icons.Default.FilterList, contentDescription = FILTER)
