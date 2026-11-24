@@ -8,4 +8,3 @@ internal fun JsonObject.objects(name: String): List<JsonObject> = optionalJsonAr
 
 internal fun JsonArray?.objects(): List<JsonObject> =
     elementsOrEmpty().mapNotNull { element -> element.takeIf(JsonElement::isJsonObject)?.asJsonObject }
-
