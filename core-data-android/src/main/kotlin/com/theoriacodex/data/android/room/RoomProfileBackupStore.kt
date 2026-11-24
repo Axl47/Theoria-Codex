@@ -110,12 +110,12 @@ class RoomProfileBackupStore(
         if (series.insertSeries(stored.toEntity()) == -1L) {
             series.mergeRestoredSeries(
                 id.source.id, id.address, stored.followed, stored.readingMode?.name, stored.lastOpenedEntry, stored.downloadNewChapters,
-                stored.followedAtEpochMs, stored.lastReadAtEpochMs,
+                stored.followedAtEpochMs,
             )
         }
         val onDevice = series.allEntries(id.source.id, id.address).mapTo(HashSet()) { it.address }
         val (known, missing) = backup.entries.partition { it.entry.address in onDevice }
-        known.forEach { series.mergeRestoredEntry(id.source.id, id.address, it.entry.address, it.read, it.position, it.length) }
+        known.forEach { series.mergeRestoredEntry(id.source.id, id.address, it.entry.address, it.read, it.position, it.length, it.lastReadAtEpochMs) }
         series.insertEntries(missing.map { (if (onDevice.isEmpty()) it else it.copy(sourceOrder = NOT_LISTED)).toEntity(id) })
     }
 

@@ -36,8 +36,8 @@ import com.theoriacodex.domain.series.SeriesKind
 
 /**
  * The Following view: the followed series as [content] orders and narrows them, under the kind filter and Sort &
- * filter. Pulling down checks them for new entries. With nothing followed it leads to Browse; with nothing shown
- * under its filters, Show all clears them.
+ * filter. Pulling down checks them for new entries. With nothing followed it leads to Browse; with nothing shown, a
+ * title search goes on to every source, otherwise Show all clears the filters.
  */
 @Composable
 internal fun FollowingBody(
@@ -48,6 +48,7 @@ internal fun FollowingBody(
     onChooseKind: (SeriesKind?) -> Unit,
     onChooseLibrary: (LibraryOptions) -> Unit,
     onShowAll: () -> Unit,
+    onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
 ) {
@@ -69,7 +70,7 @@ internal fun FollowingBody(
                 when {
                     following == null -> Unit
                     !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
-                    following.isEmpty() -> fullWidth("following-no-match") { EmptyState("No matches", actionLabel = "Show all", onAction = onShowAll) }
+                    following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
                     else -> items(following, key = { it.series.id.toString() }) { item ->
                         SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
                     }
@@ -96,6 +97,16 @@ private fun FollowingControls(content: SeriesTabContent, onChooseKind: (SeriesKi
     }
 }
 
+/** Nothing followed matches: a title search goes on to every source, otherwise Show all clears the filters. */
+@Composable
+private fun NoMatches(query: String, onShowAll: () -> Unit, onSearchAll: () -> Unit) {
+    if (query.isBlank()) {
+        EmptyState("No matches", actionLabel = "Show all", onAction = onShowAll)
+    } else {
+        EmptyState("No matches", actionLabel = SEARCH_ALL_SOURCES, onAction = onSearchAll)
+    }
+}
+
 @Composable
 private fun LibraryOptionsSheet(options: LibraryOptions, words: EntryWords, onChoose: (LibraryOptions) -> Unit, onDismiss: () -> Unit) {
     SortFilterSheet(
@@ -113,3 +124,4 @@ private fun LibraryOptionsSheet(options: LibraryOptions, words: EntryWords, onCh
 }
 
 internal const val SORT_AND_FILTER = "Sort and filter"
+internal const val SEARCH_ALL_SOURCES = "Search all sources"
