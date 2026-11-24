@@ -44,6 +44,7 @@ class RepoReaderTest {
             assertEquals(listOf("en"), index.extensions[1].languages)
         }
         assertEquals("https://repo.example/anime", RepoReader.storedAddress(" https://repo.example/anime/index.min.json "))
+        assertEquals("A repo at a site's root", "https://someone.github.io/repo.json", RepoReader.fetchAddress(RepoReader.storedAddress("https://someone.github.io/index.min.json")))
     }
 
     @Test

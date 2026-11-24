@@ -52,15 +52,16 @@ data class RepoListing(val extensions: List<RepoExtension>, val problems: Map<St
  * The user's extension repos, and installing, updating and removing extensions from them. Extensions are installed
  * into this app's own storage, not as Android packages, so no other app can remove or replace them and Android asks
  * nothing. Adding a repo installs and turns on nothing; installing an extension that is not on the device turns that
- * one extension on, and an update keeps its choice. Every call can take seconds and may use the network, so call off
- * the main thread.
+ * one extension on, and an update keeps its choice. Calls can take seconds and use the network; each moves off the
+ * main thread itself.
  */
 interface ExtensionRepos {
     suspend fun repos(): List<ExtensionRepo>
 
     /**
-     * Adds each repo after reading what it publishes now; a repo already added, or one with the same signing key as one
-     * already added, counts as added. Returns, keyed by the [NewExtensionRepo.url] given, why each other one was not.
+     * Adds each repo after reading what it publishes now. A repo already added counts as added, under any of its
+     * addresses: one with the same name and signing key as one already added. Returns, keyed by the
+     * [NewExtensionRepo.url] given, why each other one was not.
      */
     suspend fun add(repos: List<NewExtensionRepo>): Map<String, String>
 
