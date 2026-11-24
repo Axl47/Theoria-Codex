@@ -57,7 +57,7 @@ class ViewerPageDecodeDeviceTest {
                     Modifier.fillMaxWidth().aspectRatio(0.7f), onSuccess = { slotSized = it.painter.intrinsicSize },
                 )
                 AsyncImage(
-                    buildViewerPageRequest(context, "${server.baseUrl}/page.jpg", SOURCE), null,
+                    buildViewerPageRequest(context, "${server.baseUrl}/page.jpg", SOURCE, viewport), null,
                     Modifier.fillMaxWidth().aspectRatio(0.7f), onSuccess = { pageSized = it.painter.intrinsicSize },
                 )
             }
@@ -72,6 +72,7 @@ class ViewerPageDecodeDeviceTest {
 
     @Test
     fun aPrefetchedPageIsTheBitmapThePageShows() = stripServer { server ->
+        val viewport = context.resources.displayMetrics.widthPixels
         val url = "${server.baseUrl}/prefetched.jpg"
         val ref = ImageRef(url = url, localPath = null, mime = "image/jpeg")
         val post = Post(
@@ -79,9 +80,11 @@ class ViewerPageDecodeDeviceTest {
             canonicalTags = emptyList(), rawTags = emptyList(), authorName = null, createdAtEpochMs = 1L, media = listOf(ref),
         )
         runBlocking {
-            val prefetched = prefetchViewerMedia(context, ref.toViewerMediaState(post, 0), VideoQuality.AUTO, keepDecodedInMemory = true)
+            val prefetched = prefetchViewerMedia(
+                context, ref.toViewerMediaState(post, 0), VideoQuality.AUTO, keepDecodedInMemory = true, pageWidthPx = viewport,
+            )
             assertEquals(ViewerPrefetchOutcome.WARMED, prefetched.outcome)
-            val shown = context.imageLoader.execute(buildViewerPageRequest(context, url, SOURCE)) as SuccessResult
+            val shown = context.imageLoader.execute(buildViewerPageRequest(context, url, SOURCE, viewport)) as SuccessResult
             val bitmap = shown.drawable.let { it.intrinsicWidth to it.intrinsicHeight }
             Log.i(TAG, "prefetched page shows from ${shown.dataSource} at ${bitmap.first}x${bitmap.second}")
             assertEquals(DataSource.MEMORY_CACHE, shown.dataSource)

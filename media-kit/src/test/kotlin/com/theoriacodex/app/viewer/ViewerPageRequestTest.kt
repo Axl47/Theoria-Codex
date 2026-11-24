@@ -40,7 +40,7 @@ class ViewerPageRequestTest {
         val loader = ImageLoader(context)
         try {
             // Hardware bitmaps need a GPU; the decode size is the same either way.
-            val request = buildViewerPageRequest(context, strip.path, SourceKey.PIXIV).newBuilder().allowHardware(false).build()
+            val request = buildViewerPageRequest(context, strip.path, SourceKey.PIXIV, viewport).newBuilder().allowHardware(false).build()
             // Coil finishes on the main thread, which is this one, so its looper runs while the decode completes.
             val result = MainScope().async { loader.execute(request) }
             val deadline = System.currentTimeMillis() + DECODE_TIMEOUT_MS

@@ -56,9 +56,9 @@ fun interface ViewerPostResolver {
 }
 
 /** Performs bounded media prefetch outside immutable state and platform playback ownership. */
-/** Warms one media item; [distance] is how many media items it sits from the one on screen. */
+/** Warms one media item as [request] asks: how far it sits from the one on screen, and how a page decodes. */
 fun interface ViewerMediaPrefetcher {
-    suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState, distance: Int): ViewerPrefetchResult
+    suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState, request: ViewerPrefetchRequest): ViewerPrefetchResult
 }
 
 /**
@@ -485,7 +485,7 @@ class ViewerViewModel(
             if (request.key !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
         }
         val result = try {
-            mediaPrefetcher.prefetch(session, media, request.distance).also { currentCoroutineContext().ensureActive() }
+            mediaPrefetcher.prefetch(session, media, request).also { currentCoroutineContext().ensureActive() }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {

@@ -102,16 +102,18 @@ class ViewerPrefetchPlannerTest {
     }
 
     @Test
-    fun `vertical reading looks further ahead but keeps videos to the next one`() {
+    fun `vertical reading looks further ahead, decodes full-width pages, and keeps videos to the next one`() {
         val pages = pages(mediaCounts = listOf(9, 1, 1), videoPosts = setOf(2))
         val flattened = pages.flatMap { page -> page.media.map { media -> media.key } }
 
-        val vertical = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null, verticalReading = true)
+        val vertical = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null, verticalPageWidthPx = 1080)
         val paged = viewerPrefetchAction(pages, current = flattened[2], swipeTarget = null)
 
         assertEquals((3..8).map(flattened::get) + listOf(flattened[1], flattened[0]), vertical.requests.map { it.key })
         assertEquals((3..5).map(flattened::get) + listOf(flattened[1], flattened[0]), paged.requests.map { it.key })
-        val atEnd = viewerPrefetchAction(pages, current = flattened[8], swipeTarget = null, verticalReading = true).requests.map { it.key }
+        assertEquals(setOf(1080), vertical.requests.map { it.pageWidthPx }.toSet())
+        assertEquals(setOf(null), paged.requests.map { it.pageWidthPx }.toSet())
+        val atEnd = viewerPrefetchAction(pages, current = flattened[8], swipeTarget = null, verticalPageWidthPx = 1080).requests.map { it.key }
         assertEquals(listOf(flattened[9]), atEnd.take(1))
         assertFalse(flattened[10] in atEnd)
     }
