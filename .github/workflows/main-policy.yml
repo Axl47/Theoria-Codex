@@ -1,0 +1,54 @@
+name: Main policy
+
+# PR checks may have run against an older main, and Main's own run is cancelled by a newer push, so a
+# merge can break a policy check without any run pinning it on that merge. This seconds-long run checks
+# every push to main and names the violations the push introduced.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: Main policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Checks the new tip against the commit main pointed at before this push, so a multi-commit push
+      # cannot hide a raised baseline, then names the violations that the old tip did not already have.
+      - name: Policy checks against main before this push
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          source scripts/policy_checks.sh
+          [[ "$BEFORE" =~ ^0+$ ]] || git cat-file -e "$BEFORE^{commit}" 2>/dev/null || git fetch -q --depth=1 origin "$BEFORE" 2>/dev/null || true
+          if [[ "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            now="$(policy_violations HEAD^1 || true)"
+            [[ -z "$now" ]] && exit 0
+            echo "::error::main fails these policy checks; the commit main pointed at before this push is unknown."
+            printf '%s\n' "$now"
+            exit 1
+          fi
+          now="$(policy_violations "$BEFORE" || true)"
+          [[ -z "$now" ]] && exit 0
+          previous="$(mktemp -d)/previous"
+          git worktree add -q --detach "$previous" "$BEFORE"
+          before="$(cd "$previous" && policy_violations HEAD^1 || true)"
+          # Indented lines list where each comment sits, which moves with unrelated edits; compare the summaries.
+          introduced="$(grep -v '^  ' <<< "$now" | grep -vxF -f <(grep -v '^  ' <<< "$before"; echo) || true)"
+          if [[ -n "$introduced" ]]; then
+            echo "::error::Pushing $(git log -1 --format='%h %s') broke a policy check on main. Fix it in a follow-up PR."
+            printf '%s\n' "$introduced"
+          else
+            echo "::error::main already failed these policy checks before $(git log -1 --format=%h); an earlier push broke them."
+            printf '%s\n' "$now"
+          fi
+          exit 1

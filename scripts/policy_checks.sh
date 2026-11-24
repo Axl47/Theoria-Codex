@@ -75,6 +75,16 @@ module_registration() {
   return "$failed"
 }
 
+# Every seconds-long policy check above, against <base>. Prints each failing check's output and fails
+# if any did; the Verify merge-result job and Main policy workflow run it. Usage: policy_violations <base>
+policy_violations() {
+  local check out failed=0
+  for check in "line_budgets $1" "comment_ratchet $1" module_layering architecture_rules module_registration; do
+    out="$($check 2>&1)" || { printf '%s\n' "$out"; failed=1; }
+  done
+  return "$failed"
+}
+
 python_tests() {
   python3 -m unittest discover -s scripts/tests -p 'test_*.py'
   python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
