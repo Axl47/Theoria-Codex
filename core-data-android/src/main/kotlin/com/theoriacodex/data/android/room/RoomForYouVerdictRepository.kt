@@ -40,11 +40,17 @@ class RoomForYouVerdictRepository(
 
     override suspend fun verdicts(profileId: String): List<ForYouVerdict> = withContext(Dispatchers.IO) {
         dao.forProfile(profileId).mapNotNull { row ->
-            val source = SourceKey.parse(row.source) ?: return@mapNotNull null
             ForYouVerdict(
-                row.profileId, PostId(source, row.sourcePostId), ForYouVerdictKind.valueOf(row.decision),
+                row.profileId, row.postId() ?: return@mapNotNull null, ForYouVerdictKind.valueOf(row.decision),
                 row.decidedAtEpochMs, row.previewUrl,
             )
         }
     }
+
+    override suspend fun skippedSince(profileId: String, sinceEpochMs: Long, limit: Int): Set<PostId> = withContext(Dispatchers.IO) {
+        dao.since(profileId, ForYouVerdictKind.SKIPPED.name, sinceEpochMs, limit).mapNotNullTo(LinkedHashSet()) { it.postId() }
+    }
 }
+
+/** The row's post, or null for a source this build no longer knows. */
+private fun ForYouVerdictEntity.postId(): PostId? = SourceKey.parse(source)?.let { PostId(it, sourcePostId) }

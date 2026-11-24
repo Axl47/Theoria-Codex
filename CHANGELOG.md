@@ -4,6 +4,7 @@
 
 ### Added
 
+- For You has a Refresh button in its top bar that deals a fresh Mix.
 - When no sources are enabled, For You offers Manage sources, which opens Settings › Sites.
 - Restore backup also takes backups from Mihon, TachiyomiJ2K and Anikku. Their followed manga and anime appear in Series, with the chapters you read, the episodes you watched, where you stopped in each, and each manga's reading mode. Nothing you already have is removed, and importing the same backup twice adds nothing more. The extension repos the backup lists are added too, without contacting them. The preview names the extensions still missing, so you only need to install them, and a series opens once its extension is on here. The next background check for new chapters notifies you of chapters and episodes the backup didn't have yet, unless you already refreshed that series.
 - Backups Theoria makes include your extension repos. Restoring one adds the repos you don't have yet, so a new device finds the repos your series came from; which extensions are on stays on each device.
@@ -75,6 +76,7 @@
 
 ### Changed
 
+- For You no longer deals cards you skipped in the last 30 days, even after the app restarts. Start over at the end of the Mix brings them back.
 - Opening a post in the Viewer loads its first page before looking up the posts next to it, so the first page appears sooner on a slow connection.
 - For You learns from every tag of the posts you like, not only the first 20 in the site's order. On Gelbooru and Danbooru, whose tags come alphabetically, interests further down the alphabet now shape your Mix too, including for posts you liked before this update. A post you both liked and saved counts once.
 - For You plans a Mix faster when you have liked many posts.
