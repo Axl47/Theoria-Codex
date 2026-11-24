@@ -163,7 +163,7 @@
   "app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt": 35,
   "app/src/main/java/com/theoriacodex/app/extensions/ExtensionSourceHost.kt": 31,
   "app/src/main/java/com/theoriacodex/app/series/ChapterPictures.kt": 6,
-  "app/src/main/java/com/theoriacodex/app/series/SeriesDownloadJobService.kt": 14,
+  "app/src/main/java/com/theoriacodex/app/series/SeriesDownloadJobService.kt": 13,
   "app/src/main/java/com/theoriacodex/app/series/SeriesReader.kt": 28,
   "app/src/main/java/com/theoriacodex/app/series/SeriesUpdateJobService.kt": 3,
   "app/src/main/java/com/theoriacodex/app/series/SeriesUpdateSchedule.kt": 3,

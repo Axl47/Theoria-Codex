@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import android.app.Application
+import android.app.NotificationManager
 import android.app.job.JobParameters
 import android.app.job.JobService
 import android.net.ConnectivityManager
@@ -68,6 +69,19 @@ class SeriesDownloadJobServiceTest {
         application.container = { seriesContainer(unreadableQueue()) }
 
         assertEquals(Finished(reschedule = true), run(AppJob.USER_DOWNLOAD))
+    }
+
+    @Test
+    fun `a failed drain takes down its lane's waiting notice and leaves the other lane's`() {
+        activeNetwork(ConnectivityManager.TYPE_WIFI)
+        application.container = { seriesContainer(unreadableQueue()) }
+        showDownloadsWaiting(application, automatic = false, waiting = 2, series = null)
+        showDownloadsWaiting(application, automatic = true, waiting = 1, series = null)
+
+        run(AppJob.USER_DOWNLOAD)
+
+        val posted = application.getSystemService(NotificationManager::class.java).activeNotifications.map { it.tag }
+        assertEquals(listOf("automatic"), posted)
     }
 
     @Test
