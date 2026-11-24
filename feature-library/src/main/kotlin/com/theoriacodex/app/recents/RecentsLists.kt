@@ -124,6 +124,7 @@ private fun RecentPostsGrid(
         onOpenWatchedPost = onOpen,
         onLongPress = { onLongPress(it, section) },
         onRemove = onRemove,
+        gridKey = "recents:${section.name}",
         showMediaProgress = showMediaProgress,
         emptyMessage = emptyMessage,
     )
@@ -138,6 +139,7 @@ private fun WatchedGrid(
     onOpenWatchedPost: (Int) -> Unit,
     onLongPress: (Post) -> Unit,
     onRemove: ((RecentPostEntry) -> Unit)?,
+    gridKey: String,
     emptyMessage: String,
     showMediaProgress: Boolean,
 ) {
@@ -145,7 +147,7 @@ private fun WatchedGrid(
         EmptyRecentState(emptyMessage)
         return
     }
-    val gridState = rememberRetainedFeedGridState("recents")
+    val gridState = rememberRetainedFeedGridState(gridKey)
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
     DurationRouteEnvironmentEffect(gridState, cards.onEnvironmentChanged)
     val rows = remember(watchedPosts, now, related?.request) {
