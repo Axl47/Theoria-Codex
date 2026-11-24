@@ -592,7 +592,7 @@ internal class DefaultTheoriaAppContainer(
             deleteAfterReading = { settingsRepository.observeSettings().first().seriesDeleteAfterReading },
         )
         SeriesDependencies(
-            repository, host::sources, host::source, host.extensions, downloads, scope = durableStoreScope, covers = host.covers,
+            repository, host::sources, host::source, host.extensions, host.repos(httpClients.shared), downloads, scope = durableStoreScope, covers = host.covers,
             pictures = ChapterPictures(repository) { source, page -> (page.localPath ?: page.url)?.let { pictureHashAt(appContext, it, source, cachedOnly = true) } },
         ) { Log.i("SeriesReader", it) }
     }

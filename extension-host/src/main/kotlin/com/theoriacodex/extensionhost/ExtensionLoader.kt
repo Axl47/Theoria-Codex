@@ -31,14 +31,14 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
     fun load(extension: ExtensionPackage, host: HostServices): List<HostedSource> {
         extension.unsupported?.let { throw ExtensionRejectedException("${extension.packageName}: $it") }
         // An installed package's APK is Android's own read-only copy, so its code loads from where it is.
-        val code = if (extension.installed) extension.apk else privateReadOnlyCopy(extension)
+        val code = if (extension.origin == ExtensionOrigin.PACKAGE) extension.apk else privateReadOnlyCopy(extension)
         val classLoader = DelegateLastClassLoader(code.path, context.classLoader)
         return extension.sourceClasses.flatMap { className -> createSources(classLoader, className, extension, host) }
     }
 
     /**
-     * Android refuses to load code from a file the app could still write, so a file from the folder is copied and
-     * locked first. Every load gets a copy of its own, never written again, so code already loaded from an earlier
+     * Android refuses to load code from a file the app could still write, so a private copy or a debug file is copied
+     * and locked first. Every load gets a copy of its own, never written again, so code already loaded from an earlier
      * copy is not changed under it. The copy is what runs, so it is the copy that must be what the user turned on:
      * the same package, signer, version and length as the file that was listed.
      */
