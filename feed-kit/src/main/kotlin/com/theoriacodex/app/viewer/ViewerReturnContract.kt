@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.geometry.Rect
+import com.theoriacodex.app.ui.components.ProvideFeedViewport
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -240,7 +241,7 @@ fun ViewerReturnColumn(
         state.revealViewerReturnItem(index)
         transition.positioned(gridId, request.postId)
     }
-    CompositionLocalProvider(LocalViewerReturnGrid provides gridId, content = content)
+    CompositionLocalProvider(LocalViewerReturnGrid provides gridId) { ProvideFeedViewport(content) }
 }
 
 @Composable

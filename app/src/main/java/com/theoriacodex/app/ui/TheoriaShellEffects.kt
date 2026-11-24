@@ -24,6 +24,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.BuildConfig
@@ -56,15 +57,17 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
     LaunchedEffect(owners.codexSaves) {
         owners.codexSaves.effects.collect { message -> snackbarHostState.showSnackbar(message) }
     }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { shell.flushPendingWrites() }
     val appUsageTracker = shell.features.appUsageTracker
     val autoBackup = shell.workflows.autoBackup
-    DisposableEffect(appUsageTracker, autoBackup) {
+    DisposableEffect(shell, appUsageTracker, autoBackup) {
         val processLifecycle = ProcessLifecycleOwner.get().lifecycle
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> appUsageTracker.onForeground()
                 Lifecycle.Event.ON_STOP -> {
                     appUsageTracker.onBackground()
+                    shell.flushPendingWrites()
                     autoBackup?.onAppBackgrounded()
                 }
                 else -> Unit

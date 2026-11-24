@@ -20,5 +20,5 @@ Adding state to these routes means deciding whether it belongs in the restore st
 ## Applies to
 
 - `app/src/main/java/com/theoriacodex/app/ui/routes/SearchRoute.kt`: `SearchRoute`, `SearchRouteConfig`, `SearchRouteResumeObserver`
-- `app/src/main/java/com/theoriacodex/app/ui/routes/ForYouRoute.kt`: `ForYouRoute`, `ForYouRouteConfig`, `FollowForYouEnvironment`, `deckCallbacks`
+- `app/src/main/java/com/theoriacodex/app/ui/routes/ForYouRoute.kt`: `ForYouRoute`, `ForYouRouteConfig`, `FollowForYouEnvironment`, `rememberDeckCallbacks`
 - `app/src/main/java/com/theoriacodex/app/ui/routes/SavedCodexRoute.kt`: `SavedCodexRoute`

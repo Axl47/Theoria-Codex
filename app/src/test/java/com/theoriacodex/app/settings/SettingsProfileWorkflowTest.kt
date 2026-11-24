@@ -29,6 +29,34 @@ class SettingsProfileWorkflowTest {
             ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)))
 
     @Test
+    fun `creating, switching and removing a profile flush pending writes first (ADR 0215)`() = runTest {
+        val settings = InMemorySettingsRepository()
+        var flushes = 0
+        val mutations = object : SettingsProfileMutations {
+            override suspend fun removeProfile(profileId: String) = Unit
+            override suspend fun flushPendingWrites() {
+                flushes++
+            }
+        }
+        val owner = settingsOwner(settingsRepository = settings, profileMutations = mutations)
+        runCurrent()
+        val other = owner.state.value.settings.recommendationProfiles.first { it.profileId != owner.state.value.activeProfile.profileId }
+
+        owner.onAction(SettingsAction.SetActiveProfile(other.profileId))
+        runCurrent()
+        assertEquals(1, flushes)
+
+        owner.onAction(SettingsAction.RequestRemoveProfile(other.profileId))
+        owner.onAction(SettingsAction.ConfirmRemoveProfile)
+        runCurrent()
+        assertEquals(2, flushes)
+
+        owner.onAction(SettingsAction.AddProfile("Sketching"))
+        runCurrent()
+        assertEquals(3, flushes)
+    }
+
+    @Test
     fun `create switch and delete removes only the confirmed profile data`() = runTest {
         val settings = InMemorySettingsRepository().apply {
             updateSettings { it.copy(recommendationProfiles = it.recommendationProfiles.take(1)) }

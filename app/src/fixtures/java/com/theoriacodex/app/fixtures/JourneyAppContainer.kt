@@ -75,6 +75,7 @@ import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
+import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -142,7 +143,7 @@ class JourneyAppContainer(
         RoomRecentsRepository(database), settings, statistics,
         OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offline),
         restore, durations, MutableStateFlow(emptyList()),
-        readingPositions = FileBackedReadingPositionRepository(storageDirectory),
+        readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = ownerScope, writeDelay = FLUSH_ONLY_WRITE_DELAY),
         galleryReadingModes = FileBackedGalleryReadingModeRepository(storageDirectory),
         savedSearches = FileBackedSavedSearchRepository(storageDirectory),
         forYouVerdicts = RoomForYouVerdictRepository(database, profileWriteGuard),
@@ -216,6 +217,7 @@ class JourneyAppContainer(
     }
     suspend fun shutdown() = withContext(Dispatchers.IO) {
         try {
+            data.flushPendingWrites()
             features.mediaDurationCoordinator.close()
             tags.close()
             ownerJob.cancelAndJoin()
@@ -229,3 +231,5 @@ class JourneyAppContainer(
         runBlocking { shutdown() }
     }
 }
+
+private val FLUSH_ONLY_WRITE_DELAY = 1.hours

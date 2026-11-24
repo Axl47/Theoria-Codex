@@ -49,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.components.LoadingState
 import androidx.compose.ui.Alignment
@@ -244,10 +245,12 @@ private fun CodexDetailBody(
         val cards = rememberFeedCardEnvironment(
             pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike,
         )
+        val currentSelection by rememberUpdatedState(editSelection)
+        val currentVisiblePosts by rememberUpdatedState(feed.visiblePosts)
         CodexDetailGrid(
             feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
-            { index -> onOpenViewer(feed.visiblePosts, index) },
-            { postId -> onEditSelectionChange(editSelection.toggle(postId)) },
+            { index -> onOpenViewer(currentVisiblePosts, index) },
+            { postId -> onEditSelectionChange(currentSelection.toggle(postId)) },
             onEditSelectionChange, onOpenPostActions, emptyMessage, related,
         )
     }
@@ -362,7 +365,8 @@ private fun CodexDetailGrid(
             post = post,
             cards = cards,
             index = index,
-            editSelection = editSelection,
+            editing = editSelection.active,
+            selected = post.id in editSelection.selectedPostIds,
             resolvePostById = resolvePostById,
             onOpenViewer = onOpenViewer,
             onToggleSelection = onToggleSelection,
@@ -393,7 +397,8 @@ private fun CodexSelectablePostCard(
     post: Post,
     cards: FeedCardEnvironment,
     index: Int,
-    editSelection: CodexEditSelection,
+    editing: Boolean,
+    selected: Boolean,
     resolvePostById: suspend (PostId) -> Post?,
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
@@ -404,17 +409,15 @@ private fun CodexSelectablePostCard(
             post = post,
             environment = cards,
             onClick = {
-                if (editSelection.active) onToggleSelection(post.id) else onOpenViewer(index)
+                if (editing) onToggleSelection(post.id) else onOpenViewer(index)
             },
-            onLongPress = { if (!editSelection.active) onOpenPostActions(post) },
+            onLongPress = { if (!editing) onOpenPostActions(post) },
             showSourceBadge = true,
-            likeEnabled = !editSelection.active,
+            likeEnabled = !editing,
             refreshOnPreviewError = true,
             resolvePostById = resolvePostById,
         )
-        if (editSelection.active) {
-            CodexSelectionMarker(selected = post.id in editSelection.selectedPostIds)
-        }
+        if (editing) CodexSelectionMarker(selected)
     }
 }
 

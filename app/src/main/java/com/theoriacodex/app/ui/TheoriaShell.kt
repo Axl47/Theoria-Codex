@@ -328,6 +328,10 @@ internal class TheoriaShell(
     val updates = container.updates
     val workflows = container.workflows
     val navController get() = navigation.navController
+
+    fun flushPendingWrites() {
+        container.applicationScope.launch { runCatchingPreservingCancellation { data.flushPendingWrites() } }
+    }
     val savedSearches by savedSearches
     val pendingLikePostIds by pendingLikePostIds
     var pendingCreatorProfile by pendingCreatorProfile

@@ -166,7 +166,11 @@ data class DataDependencies(
     val librarySections: LibrarySectionStore = LibrarySectionStore(uiRestoreRepository),
     val forYouVerdicts: ForYouVerdictRepository,
     val visualSignatures: VisualSignatureRepository,
-)
+) {
+    suspend fun flushPendingWrites() {
+        readingPositions.flush()
+    }
+}
 
 data class SourceDependencies(
     val httpClient: SourceHttpClient,
@@ -399,7 +403,7 @@ internal class DefaultTheoriaAppContainer(
         awaitSources = sourceReadiness::await,
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
-    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
+    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeScope = durableStoreScope)
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)

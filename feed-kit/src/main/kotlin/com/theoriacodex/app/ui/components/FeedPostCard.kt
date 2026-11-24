@@ -2,9 +2,11 @@ package com.theoriacodex.app.ui.components
 
 import com.theoriacodex.app.tags.PostTagActionSection
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -41,20 +43,31 @@ fun rememberFeedCardEnvironment(
     onToggleLike: ((Post) -> Unit)?,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
 ): FeedCardEnvironment {
-    val liked = rememberUpdatedState(likedPostIds)
-    val known = rememberUpdatedState(acquiredDurations)
+    val liked = rememberStateSetAfterComposition(likedPostIds)
+    val known = rememberStateSetAfterComposition(acquiredDurations)
     val latestResolve = rememberUpdatedState(resolvePostById)
     val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
         remember<suspend (PostId) -> Post?> { { postId -> latestResolve.value?.invoke(postId) } }
     }
+    val latestToggleLike = rememberUpdatedState(onToggleLike)
+    val toggleLike: ((Post) -> Unit)? = if (onToggleLike == null) null else {
+        remember { { post -> latestToggleLike.value?.invoke(post) } }
+    }
     val durationStateForPost = durations.stateForPost
     val onViewportChanged = durations.onPostVisibilityChanged
     val onDurationKnown = durations.onAuthoritativeDurationKnown
-    return remember(pixivUgoiraClient, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver) {
+    return remember(pixivUgoiraClient, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver) {
         FeedCardEnvironment(
-            pixivUgoiraClient, liked, known, durationStateForPost, onToggleLike, onViewportChanged, onDurationKnown, resolver,
+            pixivUgoiraClient, liked, known, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver,
         )
     }
+}
+
+@Composable
+private fun <T> rememberStateSetAfterComposition(value: T): State<T> {
+    val state = remember { mutableStateOf(value) }
+    SideEffect { state.value = value }
+    return state
 }
 
 @Composable
@@ -118,7 +131,7 @@ fun FeedRelatedPostsShelf(
     onNextPage: () -> Unit,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
 ) {
-    val shelfDurations = rememberUpdatedState(presentation.knownDurationMsByPostId)
+    val shelfDurations = rememberStateSetAfterComposition(presentation.knownDurationMsByPostId)
     val shelfEnvironment = remember(environment) { environment.copy(acquiredDurations = shelfDurations) }
     RelatedPostsShelf(
         state = state,

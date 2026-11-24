@@ -119,11 +119,15 @@ class DefaultSettingsAccountGateway(
 interface SettingsProfileMutations {
     suspend fun removeProfile(profileId: String)
     fun isRemoving(profileId: String): Boolean = false
+    suspend fun flushPendingWrites() = Unit
 }
 
-class DefaultSettingsProfileMutations(private val service: com.theoriacodex.data.repository.ProfileDeletionService) :
-    SettingsProfileMutations {
+class DefaultSettingsProfileMutations(
+    private val service: com.theoriacodex.data.repository.ProfileDeletionService,
+    private val flush: suspend () -> Unit = {},
+) : SettingsProfileMutations {
     override suspend fun removeProfile(profileId: String) = service.removeProfile(profileId)
+    override suspend fun flushPendingWrites() = flush()
     override fun isRemoving(profileId: String): Boolean = service.isRemoving(profileId)
 }
 
@@ -232,6 +236,7 @@ class SettingsViewModel(
             }
             is SettingsAction.SetActiveProfile -> launchMutation {
                 check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
+                savePendingWrites()
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
             }
             is SettingsAction.AddProfile -> addProfile(action.name)
@@ -346,7 +351,14 @@ class SettingsViewModel(
     private fun addProfile(requestedName: String) {
         val name = requestedName.trim()
         if (name.isBlank()) return
-        launchMutation { dependencies.settingsRepository.addRecommendationProfile(name) }
+        launchMutation {
+            savePendingWrites()
+            dependencies.settingsRepository.addRecommendationProfile(name)
+        }
+    }
+
+    private suspend fun savePendingWrites() {
+        runCatchingPreservingCancellation { dependencies.profileMutations.flushPendingWrites() }
     }
 
     private fun removeRequestedProfile() {
@@ -356,6 +368,7 @@ class SettingsViewModel(
             val canRemove = state.value.settings.recommendationProfiles.size > 1 &&
                 state.value.settings.recommendationProfiles.any { it.profileId == profileId }
             if (!canRemove) return@launchMutation
+            savePendingWrites()
             val removed = runCatchingPreservingCancellation {
                 dependencies.profileMutations.removeProfile(profileId)
             }

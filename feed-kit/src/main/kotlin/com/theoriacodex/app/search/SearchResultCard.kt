@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onVisibilityChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -43,9 +46,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.currentStateAsState
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.imageLoader
 import coil.memory.MemoryCache
 import coil.request.ErrorResult
@@ -62,6 +62,11 @@ import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.post.displayTitleOrNull
+import com.theoriacodex.app.ui.components.LocalFeedViewport
+import com.theoriacodex.app.viewer.ViewerReturnShelfId
+import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.app.ui.components.FeedViewport
+import com.theoriacodex.app.ui.components.rememberLifecycleStarted
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.LocalViewerReturnShelf
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
@@ -71,6 +76,7 @@ import com.theoriacodex.app.viewer.UgoiraSizeBucket
 import com.theoriacodex.app.viewer.ViewerRendererControls
 import com.theoriacodex.app.viewer.ViewerRendererEvents
 import com.theoriacodex.app.viewer.ViewerReturnCorners
+import com.theoriacodex.app.viewer.ViewerReturnRequest
 import com.theoriacodex.app.viewer.viewerReturnCorners
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
@@ -108,20 +114,19 @@ fun SearchResultCard(
     val viewerReturn = LocalViewerReturnTransition.current
     val viewerReturnGrid = LocalViewerReturnGrid.current
     val viewerReturnShelf = LocalViewerReturnShelf.current
-    val mediaGeometry = remember(post.id) { SearchCardMediaGeometry() }
-    var isInViewport by remember(post.id) { mutableStateOf(false) }
-    val lifecycleState = LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val lifecycleStarted by remember(lifecycleState) { derivedStateOf { lifecycleState.value.isAtLeast(Lifecycle.State.STARTED) } }
-    val playbackActive = isInViewport && lifecycleStarted
+    val mediaGeometry = remember { SearchCardMediaGeometry() }
+    val viewport = LocalFeedViewport.current
+    val visibility = rememberMediaVisibility(post.id, hasFeedViewport = viewport != null, onViewportChanged)
+    val lifecycleStarted by viewport?.lifecycleStarted ?: rememberLifecycleStarted()
+    val playbackActive = visibility.visible && lifecycleStarted
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
-    DisposableEffect(post.id) {
-        onDispose {
-            if (isInViewport) onViewportChanged(false)
-        }
-    }
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
     val cardDensity = LocalDensity.current
+    val mediaTracking = Modifier
+        .onPlaced { coordinates -> mediaGeometry.coordinates = coordinates }
+        .then(mediaVisibilityTracking(viewport, visibility))
+        .then(rememberViewerReturnTracking(viewerReturn, viewerReturnGrid, viewerReturnShelf, post.id, mediaGeometry))
     val liftModifier = rememberCardLiftModifier(
         post, mediaGeometry::boundsInWindow, liked, onToggleLike, onLongPress,
     )
@@ -144,23 +149,60 @@ fun SearchResultCard(
             post, resolution, pixivUgoiraClient, playbackActive, acquiredDurationMs, showSourceBadge, metadataLabel,
             viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, onToggleLike, resolvePostById,
             recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
-            onMediaPositioned = { coordinates, titleBelowMedia ->
-                mediaGeometry.coordinates = coordinates
-                mediaGeometry.titleBelowMedia = titleBelowMedia
-                if (viewerReturn?.request != null) {
-                    viewerReturn.recordBounds(
-                        viewerReturnGrid, post.id, coordinates.boundsInWindow(clipBounds = false), viewerReturnShelf,
-                        mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
-                    )
-                }
-                val visible = coordinates.isAttached && !coordinates.boundsInWindow(clipBounds = true).isEmpty
-                if (isInViewport != visible) {
-                    isInViewport = visible
-                    onViewportChanged(visible)
-                }
-            },
+            mediaGeometry, mediaTracking,
         )
     }
+}
+
+private fun mediaVisibilityTracking(viewport: FeedViewport?, visibility: SearchCardVisibility): Modifier {
+    val inWindow = Modifier.onVisibilityChanged(minFractionVisible = 0f) { visible -> visibility.inWindow = visible }
+    if (viewport == null) return inWindow
+    return inWindow.onVisibilityChanged(minFractionVisible = 0f, viewportBounds = viewport.bounds) { visible -> visibility.inFeed = visible }
+}
+
+@Composable
+private fun rememberViewerReturnTracking(
+    viewerReturn: ViewerReturnTransition?,
+    grid: String?,
+    shelf: ViewerReturnShelfId?,
+    postId: PostId,
+    mediaGeometry: SearchCardMediaGeometry,
+): Modifier {
+    val cardShape = CardDefaults.elevatedShape
+    val layoutDirection = LocalLayoutDirection.current
+    val density = LocalDensity.current
+    val target by remember(viewerReturn, grid, postId, shelf) {
+        derivedStateOf { viewerReturn?.takeIf { it.request == ViewerReturnRequest(grid, postId, shelf) } }
+    }
+    val pending = target ?: return Modifier
+    return Modifier.onGloballyPositioned { coordinates ->
+        pending.recordBounds(
+            grid, postId, coordinates.boundsInWindow(clipBounds = false), shelf,
+            mediaGeometry.corners(cardShape, layoutDirection, density),
+        )
+    }
+}
+
+@Stable
+private class SearchCardVisibility {
+    var hasFeedViewport = false
+    var inFeed by mutableStateOf(false)
+    var inWindow by mutableStateOf(false)
+    val visible: Boolean get() = (inFeed || !hasFeedViewport) && inWindow
+}
+
+@Composable
+private fun rememberMediaVisibility(postId: PostId, hasFeedViewport: Boolean, onViewportChanged: (Boolean) -> Unit): SearchCardVisibility {
+    val visibility = remember { SearchCardVisibility() }
+    visibility.hasFeedViewport = hasFeedViewport
+    val visible = visibility.visible
+    DisposableEffect(postId, visible) {
+        if (!visible) return@DisposableEffect onDispose {}
+        val report = onViewportChanged
+        report(true)
+        onDispose { report(false) }
+    }
+    return visibility
 }
 
 private class SearchCardMediaGeometry {
@@ -283,11 +325,13 @@ private fun SearchCardContent(
     refreshOnPreviewError: Boolean,
     playbackDiagnosticsEnabled: Boolean,
     onAuthoritativeDurationKnown: (Long) -> Unit,
-    onMediaPositioned: (LayoutCoordinates, Boolean) -> Unit,
+    mediaGeometry: SearchCardMediaGeometry,
+    mediaTracking: Modifier,
 ) {
-    val effectivePost = resolution.resolvedPost?.let { resolved ->
-        mergeResolvedPostForPresentation(original = post, resolved = resolved)
-    } ?: post
+    val resolvedPost = resolution.resolvedPost
+    val effectivePost = remember(post, resolvedPost) {
+        resolvedPost?.let { resolved -> mergeResolvedPostForPresentation(original = post, resolved = resolved) } ?: post
+    }
     val watch = rememberSearchCardWatch(post, effectivePost, showWatchHistory, metadataLabel, viewedMediaNumber)
     val title = effectivePost.displayTitleOrNull()
     val supportingContent = searchCardSupportingContent(
@@ -322,12 +366,13 @@ private fun SearchCardContent(
         }
     }
     val titleBelowMedia = showTitle && supportingContent.showTitleFooter
+    SideEffect { mediaGeometry.titleBelowMedia = titleBelowMedia }
     Box(
         modifier = Modifier
             .testTag(searchMediaTestTag(post.id))
             .fillMaxWidth()
             .aspectRatio(ratio)
-            .onGloballyPositioned { coordinates -> onMediaPositioned(coordinates, titleBelowMedia) },
+            .then(mediaTracking),
     ) {
         SearchCardMedia(
             effectivePost, watch.watchedPost, pixivUgoiraClient, title ?: effectivePost.id.sourcePostId, playbackActive,

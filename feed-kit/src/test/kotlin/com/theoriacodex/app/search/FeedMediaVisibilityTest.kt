@@ -15,6 +15,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.ui.components.ProvideFeedViewport
 import com.theoriacodex.domain.model.ImageRef
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
@@ -43,14 +44,16 @@ class FeedMediaVisibilityTest {
         var mediaVisible = false
         compose.setContent {
             MaterialTheme {
-                Box(Modifier.size(width = 200.dp, height = 32.dp).clipToBounds()) {
-                    Column(Modifier.verticalScroll(scroll)) {
-                        SearchResultCard(
-                            post = post,
-                            pixivUgoiraClient = null,
-                            onClick = {},
-                            onViewportChanged = { mediaVisible = it },
-                        )
+                ProvideFeedViewport {
+                    Box(Modifier.size(width = 200.dp, height = 32.dp).clipToBounds()) {
+                        Column(Modifier.verticalScroll(scroll)) {
+                            SearchResultCard(
+                                post = post,
+                                pixivUgoiraClient = null,
+                                onClick = {},
+                                onViewportChanged = { mediaVisible = it },
+                            )
+                        }
                     }
                 }
             }

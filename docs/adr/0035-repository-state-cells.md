@@ -11,6 +11,7 @@ Repositories need an in-memory default for tests and backups and a durable store
 - A repository holds its policy over a `StateCell`; the backings are `JsonDataStore`, `MemoryStateCell` and `FileStateCell`. `updateReturning` applies one transform at a time, and a value equal to the current one writes nothing.
 - List rules, such as those for site profiles, are pure functions in a policy object (`SiteProfileListPolicy`) applied by `CellSiteProfileRepository` for both backings.
 - `FileStateCell` writes each change before observers see it, so a failed write leaves the value as it was.
+- `writeBehind` wraps a durable cell for stores written on every view (ADR 0215): observers see a change at once and the durable write follows, so a failed write keeps the new value in memory and retries.
 - Codex and Recents behavior is pinned by `LibraryRepositoryContract`: the in-memory fakes run it in core-data and Room runs it in core-data-android, so the fakes cannot drift from the durable store.
 
 ## Consequences

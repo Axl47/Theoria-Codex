@@ -110,6 +110,7 @@ fun SearchScreen(
     val gridState = rememberRetainedFeedGridState("search")
     SearchTabReselectEffect(state.restoration, gridState, onAction)
     val feed = rememberSearchFeed(state, related.state, fabRestoreState, marks, durations)
+    val results by rememberUpdatedState(state.content.results)
     val serverFilters = state.query.serverFilters()
     val filterScroll = rememberFeedScrollSignal()
     LaunchedEffect(feed.animatedDurationFilterActive) { durations.onFilterChanged(feed.animatedDurationFilterActive) }
@@ -134,7 +135,7 @@ fun SearchScreen(
             pixivUgoiraClient, marks.liked, durations, onToggleLike, resolvePostById, recoverPostMedia, onAction,
         ) { post ->
             inputFocus.clear()
-            actionPost.open(post, state.content.results, scope, resolvePostById)
+            actionPost.open(post, results, scope, resolvePostById)
         }
     }
     actionPost.post?.let { post ->

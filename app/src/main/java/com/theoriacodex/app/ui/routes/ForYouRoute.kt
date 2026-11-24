@@ -104,25 +104,26 @@ internal fun ForYouRoute(
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
     val durations = duration.owner.feedDurations(duration.states, config.resolveUnknownAnimatedDurations)
-    val liked = remember(config.marks) { config.marks.liked + config.marks.pendingLikes }
-    val support = TriageCardSupport(
-        environment = rememberFeedCardEnvironment(
-            services.pixivUgoiraClient, liked, emptyMap(), durations, callbacks.onToggleLike, owner::resolvePost,
-        ),
-        resolvePostById = owner::resolvePost,
-        recoverPostMedia = services.recoverPostMedia,
+    val liked = remember(config.marks.liked, config.marks.pendingLikes) { config.marks.liked + config.marks.pendingLikes }
+    val environment = rememberFeedCardEnvironment(
+        services.pixivUgoiraClient, liked, emptyMap(), durations, callbacks.onToggleLike, owner::resolvePost,
     )
+    val support = remember(environment, owner, services.recoverPostMedia) {
+        TriageCardSupport(environment, resolvePostById = owner::resolvePost, recoverPostMedia = services.recoverPostMedia)
+    }
     val related = rememberFeedRelatedShelf(viewerFeed.relatedPosts, owner.related) { posts, index ->
         viewerFeed.relatedPosts.requestOrNull?.let { request -> callbacks.onOpenRelated(request.seed, posts, index) }
     }
+    val animatedOnly = fabRestoreState.animatedOnly
+    val grid = fabRestoreState.grid
+    val screenConfig = remember(sortMode, animatedOnly, grid, config.creatorBrowsingSources, durations, support, config.isSearchSaved) {
+        ForYouScreenConfig(sortMode, animatedOnly, grid, config.creatorBrowsingSources, durations, support, config.isSearchSaved)
+    }
     ForYouDeckScreen(
         owner = owner,
-        config = ForYouScreenConfig(
-            sortMode, fabRestoreState.animatedOnly, fabRestoreState.grid, liked, config.creatorBrowsingSources, durations, support,
-            config.isSearchSaved,
-        ),
+        config = screenConfig,
         related = related,
-        callbacks = deckCallbacks(callbacks, fabRestoreState, onFabRestoreStateChange),
+        callbacks = rememberDeckCallbacks(callbacks, fabRestoreState, onFabRestoreStateChange),
     )
 }
 
@@ -138,25 +139,34 @@ private fun FollowForYouEnvironment(owner: ForYouDeckViewModel, config: ForYouRo
     }
 }
 
-private fun deckCallbacks(
+@Composable
+private fun rememberDeckCallbacks(
     callbacks: ForYouRouteCallbacks,
     restore: FeedFabRestoreState,
     onRestoreChange: (FeedFabRestoreState) -> Unit,
-) = ForYouDeckCallbacks(
-    onSelectProfile = callbacks.onSelectProfile,
-    onSelectSource = { source -> onRestoreChange(restore.copy(source = source?.id)) },
-    onSelectSort = { sort -> onRestoreChange(restore.copy(sortMode = sort.name)) },
-    onAnimatedOnlyChange = { animatedOnly -> onRestoreChange(restore.copy(animatedOnly = animatedOnly)) },
-    onResetFilters = { onRestoreChange(restore.copy(sortMode = null, animatedOnly = false)) },
-    onGridChange = { grid -> onRestoreChange(restore.copy(grid = grid)) },
-    onOpenPost = callbacks.onOpenPost,
-    onPickCodex = callbacks.onPickCodex,
-    onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
-    onSaveSearch = callbacks.onSaveSearch,
-    onToggleLike = callbacks.onToggleLike,
-    onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
-    onGoToSearch = callbacks.onGoToSearch,
-)
+): ForYouDeckCallbacks {
+    val current by rememberUpdatedState(callbacks)
+    val currentRestore by rememberUpdatedState(restore)
+    val currentOnRestoreChange by rememberUpdatedState(onRestoreChange)
+    return remember {
+        val change = { update: FeedFabRestoreState.() -> FeedFabRestoreState -> currentOnRestoreChange(currentRestore.update()) }
+        ForYouDeckCallbacks(
+            onSelectProfile = { current.onSelectProfile(it) },
+            onSelectSource = { source -> change { copy(source = source?.id) } },
+            onSelectSort = { sort -> change { copy(sortMode = sort.name) } },
+            onAnimatedOnlyChange = { animatedOnly -> change { copy(animatedOnly = animatedOnly) } },
+            onResetFilters = { change { copy(sortMode = null, animatedOnly = false) } },
+            onGridChange = { grid -> change { copy(grid = grid) } },
+            onOpenPost = { level, post, scrollOffsetHint -> current.onOpenPost(level, post, scrollOffsetHint) },
+            onPickCodex = { post, onPick -> current.onPickCodex(post, onPick) },
+            onRequestSaveToCodex = { current.onRequestSaveToCodex(it) },
+            onSaveSearch = { current.onSaveSearch(it) },
+            onToggleLike = { current.onToggleLike(it) },
+            onOpenSourceAccounts = { current.onOpenSourceAccounts() },
+            onGoToSearch = { current.onGoToSearch() },
+        )
+    }
+}
 
 private const val FOR_YOU_DURATION_OWNER_KEY = "for-you-duration-owner"
 private const val FOR_YOU_ROUTE_OWNER_KEY = "for-you-route-owner"

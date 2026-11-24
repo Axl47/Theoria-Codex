@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -419,6 +420,7 @@ private fun CreatorGrid(
     onAction: (CreatorAction) -> Unit,
     onLongPress: (Post) -> Unit,
 ) {
+    val currentFeed by rememberUpdatedState(feed)
     FeedGrid(
         view = feed,
         state = gridState,
@@ -439,8 +441,8 @@ private fun CreatorGrid(
                         CreatorAction.OpenResult(
                             index = index,
                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                            visibleResults = feed.visiblePosts,
-                            visibilityFilters = feed.filters,
+                            visibleResults = currentFeed.visiblePosts,
+                            visibilityFilters = currentFeed.filters,
                         )
                     )
                 },

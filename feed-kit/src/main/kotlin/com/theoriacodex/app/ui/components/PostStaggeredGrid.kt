@@ -20,6 +20,7 @@ import com.theoriacodex.app.viewer.ViewerReturnGridEffect
 import java.util.UUID
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layoutBounds
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -139,12 +140,13 @@ fun AdaptivePostGrid(
     val gridId = rememberSaveable { UUID.randomUUID().toString() }
     ViewerReturnGridEffect(gridId, postIds, state, shelfIds)
     FeedLaneJumpLogger(gridId, state)
-    CompositionLocalProvider(LocalViewerReturnGrid provides gridId) {
+    val viewport = rememberFeedViewport()
+    CompositionLocalProvider(LocalViewerReturnGrid provides gridId, LocalFeedViewport provides viewport) {
         BoxWithConstraints(modifier = modifier) {
             LazyVerticalStaggeredGrid(
                 columns = StaggeredGridCells.Fixed(adaptiveFeedColumns(maxWidth.value)),
                 state = state,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().layoutBounds(viewport.bounds),
                 verticalItemSpacing = 6.dp,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 content = content,
