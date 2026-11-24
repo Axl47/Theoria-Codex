@@ -27,7 +27,7 @@ class PixivUgoiraFramesTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun `the tagger's sample spreads frames through the animation and decodes them no smaller than asked`() = runTest {
+    fun `the tagger's sample spreads frames through the animation and decodes them no smaller than asked (ADR 0107)`() = runTest {
         val archive = temporaryFolder.newFile("sample.zip")
         val specs = List(12) { UgoiraFrameSpec("$it.png", 50) }
         ZipOutputStream(FileOutputStream(archive)).use { zip ->
@@ -44,12 +44,18 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `a frame held longer is sampled once per stretch of time it fills`() {
+    fun `a frame held longer is sampled once per stretch of time it fills (ADR 0107)`() {
         val held = listOf(UgoiraFrameSpec("0.png", 3_000)) + List(3) { UgoiraFrameSpec("${it + 1}.png", 1_000) }
         assertEquals(listOf(0, 0, 0, 1, 2, 3), ugoiraSampleIndices(held, count = 6))
 
         val pause = listOf(UgoiraFrameSpec("0.png", 60_000)) + List(11) { UgoiraFrameSpec("${it + 1}.png", 16) }
         assertEquals(List(6) { 0 }, ugoiraSampleIndices(pause, count = 6))
+    }
+
+    @Test
+    fun `a frame without delay still counts one millisecond of playing time (ADR 0107)`() {
+        val instant = List(3) { UgoiraFrameSpec("$it.png", 0) } + UgoiraFrameSpec("3.png", 1)
+        assertEquals(listOf(0, 1, 2, 3), ugoiraSampleIndices(instant, count = 4))
     }
 
     @Test

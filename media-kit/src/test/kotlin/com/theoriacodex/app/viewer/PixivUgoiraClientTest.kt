@@ -202,7 +202,7 @@ class PixivUgoiraClientTest {
     }
 
     @Test
-    fun `sampling frames leaves the playback store alone, a refused post samples nothing, and a refused sign-in waits`() = runTest {
+    fun `sampling frames leaves the playback store alone, a refused post samples nothing, and a refused sign-in waits (ADR 0107)`() = runTest {
         val budget = NetworkBudget(maxBytes = 1L shl 20)
         val client = fixtureClient()
 
@@ -220,6 +220,40 @@ class PixivUgoiraClientTest {
         assertEquals(FrameSample.Unreachable, forbidden.sampleFrames("locked", count = 6, sizePx = 2, budget))
 
         assertEquals(FrameSample.Unreadable, fixtureClient().sampleFrames("large", count = 6, sizePx = 2, NetworkBudget(maxBytes = 16)))
+    }
+
+    @Test
+    fun `sampling downloads the 600 px archive into a file it deletes and reads a held archive without marking it used (ADR 0107)`() = runTest {
+        val directory = temporaryFolder.newFolder()
+        val downloads = mutableListOf<Pair<String, File>>()
+        fun client() = PixivUgoiraClient(
+            credentialsProvider = FixedCredentialsProvider,
+            httpClient = UnusedHttpClient,
+            archiveDirectory = directory,
+            metadataFetcher = { _, _ ->
+                TextResponse(200, """{"ugoira_metadata":{"zip_urls":{"original":"https://example.test/big.zip","medium":"https://example.test/600.zip"},"frames":[{"file":"0001.png","delay":50}]}}""")
+            },
+            zipDownloader = { url, _, file ->
+                downloads += url to file
+                writeFrameZip(file)
+                BinaryResponse(200)
+            },
+        )
+        val budget = NetworkBudget(maxBytes = 1L shl 20)
+
+        assertTrue(client().sampleFrames("fresh", count = 2, sizePx = 2, budget) is FrameSample.Frames)
+        assertEquals(listOf("https://example.test/600.zip"), downloads.map { it.first })
+        assertFalse(downloads.single().second.exists())
+
+        assertTrue(client().warmArchive("held"))
+        val held = directory.listFiles().orEmpty().single { it.extension == "zip" }
+        val lastUsed = held.lastModified()
+        Thread.sleep(20)
+        downloads.clear()
+
+        assertTrue(client().sampleFrames("held", count = 2, sizePx = 2, budget) is FrameSample.Frames)
+        assertEquals(emptyList<Pair<String, File>>(), downloads)
+        assertEquals(lastUsed, held.lastModified())
     }
 
     @Test

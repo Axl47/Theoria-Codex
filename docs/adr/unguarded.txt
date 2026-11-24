@@ -86,7 +86,6 @@
 0099-ui-test-fixtures.md
 0100-undo-offers-and-deferred-removals.md
 0101-visual-model-files.md
-0107-frame-sampling-for-tagger.md
 0108-media-disk-caches.md
 0109-media-kit-device-and-fixture-tests.md
 0110-offline-media-jobs.md
