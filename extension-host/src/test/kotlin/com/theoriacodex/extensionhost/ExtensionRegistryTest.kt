@@ -142,7 +142,7 @@ class ExtensionRegistryTest {
     @Test
     fun `a lookup cancelled while it keeps the owners still offers what it loaded (ADR 0062)`() = runBlocking {
         twoExtensionsOn()
-        store.choices = store.choices.copy(owners = mapOf("custom_mihon_1" to "a", "custom_mihon_2" to "b"))
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_1" to "a"))
         assertNotNull(registry.source(MihonKind.sourceKey(1)))
         val updating = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -154,7 +154,17 @@ class ExtensionRegistryTest {
         release.complete(Unit)
         lookup.join()
 
+        assertEquals("b", store.choices.owners["custom_mihon_2"])
         assertEquals("custom_mihon_2", registry.source(MihonKind.sourceKey(2))?.key?.id)
+    }
+
+    @Test
+    fun `a source whose recorded extension has its language off is not found, and the others do not load for it (ADR 0062)`() = runBlocking {
+        twoExtensionsOn()
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_2" to "b"), languages = mapOf("b" to setOf("fr")))
+
+        assertNull(registry.source(MihonKind.sourceKey(2)))
+        assertEquals(listOf("/b.apk"), loads)
     }
 
     @Test
@@ -185,9 +195,15 @@ class ExtensionRegistryTest {
     @Test
     fun `an anime source's lookup also loads only the extension that last offered it (ADR 0062)`() = runBlocking {
         twoExtensionsOn()
-        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1").copy(kind = AniyomiKind))
-        sourcesOf = { if (it.packageName == "a") listOf(StubSource(2, "en")) else listOf(StubAnimeSource(2, "en")) }
-        store.choices = store.choices.copy(owners = mapOf("custom_aniyomi_2" to "b"))
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1").copy(kind = AniyomiKind), extension("c", signer = "key-1").copy(kind = AniyomiKind))
+        sourcesOf = {
+            when (it.packageName) {
+                "a" -> listOf(StubSource(2, "en"))
+                "b" -> listOf(StubAnimeSource(2, "en"))
+                else -> listOf(StubAnimeSource(3, "en"))
+            }
+        }
+        store.choices = store.choices.copy(trusted = store.choices.trusted + ("c" to "key-1"), owners = mapOf("custom_aniyomi_2" to "b"))
 
         assertEquals("custom_aniyomi_2", registry.source(AniyomiKind.sourceKey(2))?.key?.id)
         assertEquals(listOf("/b.apk"), loads)
@@ -312,6 +328,26 @@ class ExtensionRegistryTest {
         assertEquals(2, listings)
         assertEquals(1, registry.sources().size)
         assertEquals(2, listings)
+
+        val cold = registry { error("No source here has settings") }
+        store.interruption = IllegalStateException("the choices could not be read")
+        assertFailsWith<IllegalStateException> { cold.source(MihonKind.sourceKey(1)) }
+        cold.recheck()
+        assertEquals(3, listings)
+    }
+
+    @Test
+    fun `a recheck after single lookups lists the device again (ADR 0062)`() = runBlocking {
+        twoExtensionsOn()
+        onDevice = onDevice.take(1)
+        store.choices = store.choices.copy(owners = mapOf("custom_mihon_1" to "a"))
+        assertNotNull(registry.source(MihonKind.sourceKey(1)))
+        val revision = registry.revision.value
+
+        onDevice = listOf(extension("a", signer = "key-1"), extension("b", signer = "key-1"))
+        registry.recheck()
+
+        assertEquals(revision + 1, registry.revision.value)
     }
 
     @Test
@@ -383,13 +419,16 @@ class ExtensionRegistryTest {
     @Test
     fun `a file replaced in place loads anew and its old code is no longer offered (ADR 0062)`() = runBlocking {
         registry.setOn("/a.apk", "key-1", true)
-        val before = registry.sources().single()
+        val replacements = listOf<(ExtensionPackage) -> ExtensionPackage>({ it.copy(modified = 2) }, { it.copy(versionCode = 2) }, { it.copy(size = 2) })
 
-        onDevice = listOf(extension("a", signer = "key-1").copy(modified = 2))
-        registry.installed()
+        replacements.forEach { replace ->
+            val before = registry.sources().single()
+            onDevice = listOf(replace(extension("a", signer = "key-1")))
+            registry.installed()
+            assertTrue(registry.sources().single() !== before)
+        }
 
-        assertEquals(listOf("/a.apk", "/a.apk"), loads)
-        assertTrue(registry.sources().single() !== before)
+        assertEquals(List(4) { "/a.apk" }, loads)
     }
 
     @Test
@@ -544,10 +583,11 @@ class ExtensionRegistryTest {
     @Test
     fun `the same extension on the device twice offers its sources once (ADR 0062)`() = runBlocking {
         onDevice = listOf(extension("a", signer = "key-1"), extension("a", signer = "key-1", apk = "/files/a.apk"))
+        sourcesOf = { listOf(object : StubSource(1, "en") { override val name = if (it.apk.path == "/a.apk") "First" else "Second" }) }
 
         registry.setOn("/a.apk", "key-1", true)
 
-        assertEquals(listOf("custom_mihon_1"), registry.sources().map { it.key.id })
+        assertEquals(listOf("custom_mihon_1" to "First"), registry.sources().map { it.key.id to it.name })
         assertNull(registry.installed().last().problem)
     }
 
