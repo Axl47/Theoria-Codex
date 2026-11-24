@@ -2,8 +2,7 @@ name: Main policy
 
 # PR checks may have run against an older main, and Main's own run is cancelled by a newer push, so a
 # merge can break a policy check without any run pinning it on that merge. This seconds-long run checks
-# every push to main against its first parent and, when the parent still passed, names the commit
-# that broke a check.
+# every push to main and names the violations the push introduced.
 on:
   push:
     branches:
@@ -21,18 +20,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
-          fetch-depth: 3
+          fetch-depth: 0
 
-      - name: Policy checks against the previous main
+      # Checks the new tip against the commit main pointed at before this push, so a multi-commit push
+      # cannot hide a raised baseline, then names the violations that the old tip did not already have.
+      - name: Policy checks against main before this push
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
           source scripts/policy_checks.sh
-          checks() { line_budgets "$1" && comment_ratchet "$1" && module_layering && architecture_rules && module_registration; }
-          checks HEAD^1 && exit 0
+          violations() {
+            local check out
+            for check in "line_budgets $1" "comment_ratchet $1" module_layering architecture_rules module_registration; do
+              out="$($check 2>&1)" || printf '%s\n' "$out"
+            done
+          }
+          git cat-file -e "$BEFORE^{commit}" 2>/dev/null || BEFORE="$(git rev-parse HEAD^1)"
+          now="$(violations "$BEFORE")"
+          [[ -z "$now" ]] && exit 0
           previous="$(mktemp -d)/previous"
-          git worktree add -q --detach "$previous" HEAD^1
-          if (cd "$previous" && checks HEAD^1 > /dev/null 2>&1); then
-            echo "::error::$(git log -1 --format='%h %s') broke a policy check on main. Fix it in a follow-up PR."
+          git worktree add -q --detach "$previous" "$BEFORE"
+          before="$(cd "$previous" && violations HEAD^1)"
+          introduced="$(grep -vxF -f <(printf '%s\n' "$before") <<< "$now" || true)"
+          if [[ -n "$introduced" ]]; then
+            echo "::error::Pushing $(git log -1 --format='%h %s') broke a policy check on main. Fix it in a follow-up PR."
+            printf '%s\n' "$introduced"
           else
-            echo "::error::main already failed a policy check before $(git log -1 --format=%h); an earlier push broke it."
+            echo "::error::main already failed these policy checks before $(git log -1 --format=%h); an earlier push broke them."
+            printf '%s\n' "$now"
           fi
           exit 1
