@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer
 
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
@@ -9,6 +10,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -202,8 +204,7 @@ private fun ViewerBackHandlers(
     dismissDrag: ViewerDismissDrag,
 ) {
     val scope = rememberCoroutineScope()
-    // Nothing may pop the route underneath a return that is already moving.
-    BackHandler(enabled = screen.pendingDismiss || frame.returning) {}
+    ViewerHeldBackHandler(holding = screen.pendingDismiss || frame.returning)
     BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.locked) {
         screen.revealUnlock()
     }
@@ -217,6 +218,33 @@ private fun ViewerBackHandlers(
         } finally {
             // Cancelling the back swipe cancels this collector, so it recoils in the screen's scope.
             if (committed) controls.requestDismiss() else scope.launch { dismissDrag.recoil() }
+        }
+    }
+}
+
+/**
+ * Nothing may pop the route underneath a return that is already moving, so a Back pressed while [holding] waits and runs
+ * once the hold ends: when [holding] turns false, or when the Viewer leaves composition at the end of its return. Two
+ * quick Backs therefore still mean two steps back. At most one held Back runs.
+ */
+@Composable
+internal fun ViewerHeldBackHandler(holding: Boolean) {
+    val owner = LocalOnBackPressedDispatcherOwner.current ?: return
+    val view = LocalView.current
+    val held = remember { mutableStateOf(false) }
+    BackHandler(enabled = holding) { held.value = true }
+    LaunchedEffect(holding) {
+        if (!holding && held.value) {
+            held.value = false
+            owner.onBackPressedDispatcher.onBackPressed()
+        }
+    }
+    DisposableEffect(owner, view) {
+        onDispose {
+            if (!held.value) return@onDispose
+            held.value = false
+            // Posted so every handler leaving with the Viewer is gone first; a Viewer leaving with its activity drops it.
+            view.post { if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) owner.onBackPressedDispatcher.onBackPressed() }
         }
     }
 }
