@@ -247,8 +247,8 @@ class PostDownloadQueue(
         } catch (error: DownloadPreparationException) {
             markFailed(item.id, error.message)
         } catch (error: Exception) {
-            diagnostics.record("downloads", "Saving a post to the device failed", error)
             markFailed(item.id, "Could not save this post. Try again.")
+            diagnostics.record("downloads", "Saving a post to the device failed", error)
         } finally {
             if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
                 withContext(NonCancellable) { (downloadId ?: currentItem(item.id)?.downloadId)?.let { backend.cancel(it) } }
