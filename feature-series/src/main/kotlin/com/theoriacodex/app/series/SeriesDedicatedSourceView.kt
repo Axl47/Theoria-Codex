@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,30 +18,27 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.CollapsingSearchChrome
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
-import com.theoriacodex.app.ui.components.rememberQuickReturn
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 
 /**
- * One source's dedicated search, opened by tapping a source header in global search. Both the source header and the
- * floating browse controls hide on downward scroll and return on upward scroll, alongside the collapsing search bar.
+ * One source's dedicated search, opened by tapping a source header in global search. The source header hides on
+ * downward scroll and returns at the top, alongside the collapsing search bar; the listing's controls stay above it.
  */
 @Composable
 internal fun DedicatedSourceSearchView(
@@ -99,9 +95,7 @@ internal fun DedicatedSourceSearchView(
                 )
             },
         ) {
-            DedicatedSourceGridBody(
-                dedicated, followedIds, grid, supportsLatest, chromeVisible, { chromeVisible = it }, onChoose, onFilter, onRetry, onMore, onOpenSeries,
-            )
+            DedicatedSourceGridBody(dedicated, followedIds, grid, supportsLatest, onChoose, onFilter, onRetry, onMore, onOpenSeries)
         }
     }
 }
@@ -128,35 +122,29 @@ private fun DedicatedSourceGridBody(
     followedIds: Set<SeriesId>,
     grid: LazyGridState,
     supportsLatest: Boolean,
-    controlsVisible: Boolean,
-    onRevealControls: (Boolean) -> Unit,
     onChoose: (BrowseKind) -> Unit,
     onFilter: () -> Unit,
     onRetry: () -> Unit,
     onMore: () -> Unit,
     onOpenSeries: (Series) -> Unit,
 ) {
-    val quickReturn = rememberQuickReturn(onRevealControls)
-    Box(Modifier.fillMaxSize().nestedScroll(quickReturn)) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(CARD_WIDTH),
-            state = grid,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = BROWSE_GRID_BOTTOM_PADDING),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            browseListing(dedicated.source, dedicated.run, followedIds, onRetry, onMore, onOpenSeries)
-        }
-        BrowseControlsBar(
-            kind = dedicated.kind,
-            latest = supportsLatest,
-            visible = controlsVisible,
-            onChoose = onChoose,
-            onFilter = onFilter,
-            filterCount = (dedicated.kind as? BrowseKind.Filtered)?.changed ?: 0,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp),
-        )
+    ListingControls(
+        kind = dedicated.kind,
+        latest = supportsLatest,
+        filterCount = (dedicated.kind as? BrowseKind.Filtered)?.changed ?: 0,
+        onChoose = onChoose,
+        onFilter = onFilter,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(CARD_WIDTH),
+        state = grid,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        browseListing(dedicated.source, dedicated.run, followedIds, onRetry, onMore, onOpenSeries)
     }
 }
 
