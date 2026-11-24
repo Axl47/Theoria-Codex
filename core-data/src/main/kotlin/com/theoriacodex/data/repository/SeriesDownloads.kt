@@ -355,7 +355,7 @@ class SeriesDownloads(
      * Downloads one lane of the queue, chapters the user queued or [automatic] ones, in order until nothing is left it
      * can try. A chapter that fails in a way that may pass stays queued, and the rest of its source's chapters wait with
      * it for the next drain, which [DrainResult.retry] asks for, while other sources' chapters go on; once the sources
-     * that are on change, held sources are tried again. Cancelling it stops
+     * that are on change, held sources that were off are tried again. Cancelling it stops
      * the chapter being fetched, which stays queued for the next drain. A drain that starts while a cancelled one of the
      * same lane is still stopping takes the lane over, so the old one's end does not mark the lane idle.
      */
@@ -403,7 +403,7 @@ class SeriesDownloads(
     ): Pair<ChapterName, Outcome>? {
         // The lane stops draining in the same step that finds nothing to try, so a chapter queued after is scheduled.
         val (next, remaining) = lock.withLock {
-            if (held.changes != sourceChanges) held.forget(sourceChanges)
+            if (held.changes != sourceChanges) held.releaseOff(sourceChanges)
             val lane = queue.value.filter { it.automatic == automatic && it.series.source !in held.sources }
             if (lane.isEmpty()) draining.remove(automatic, token)
             lane.firstOrNull() to lane.size
@@ -551,15 +551,15 @@ private enum class Outcome { DOWNLOADED, UNAVAILABLE, SOURCE_OFF, LATER, REMOVED
 
 /**
  * One drain's [sources] sitting out the rest of it after a failure that may pass, and of those, the ones that are
- * [off]; forgotten once the sources that are on have changed since the count of [changes].
+ * [off]. Those that are off get another go once the sources that are on have changed since the count of [changes].
  */
 private class Held(var changes: Int) {
     val sources = HashSet<SourceKey>()
     val off = HashSet<SourceKey>()
 
-    fun forget(changes: Int) {
+    fun releaseOff(changes: Int) {
         this.changes = changes
-        sources.clear()
+        sources -= off
         off.clear()
     }
 }

@@ -275,9 +275,10 @@ class SeriesTabViewModel(
     /** Takes the Following title query to Browse and searches every source, of both kinds, for it. */
     fun searchAllSources() {
         val query = state.value.followingQuery
-        chooseView(SeriesView.BROWSE)
         mutableState.update { it.copy(followingQuery = "", kind = null) }
+        // Searched first, so Browse never loads the listing the results hide.
         search(query)
+        chooseView(SeriesView.BROWSE)
     }
 
     /** Checks the followed series for new entries, unless a check is already running. */

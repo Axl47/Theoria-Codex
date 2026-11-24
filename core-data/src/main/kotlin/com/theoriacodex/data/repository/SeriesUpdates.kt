@@ -8,12 +8,14 @@ import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesSource
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** A followed series that gained [newEntries], in its source's order (newest first). */
 data class SeriesUpdate(val series: Series, val newEntries: List<SeriesEntry>)
@@ -32,14 +34,20 @@ internal val refreshLocks = ConcurrentHashMap<SourceKey, Mutex>()
 
 /**
  * Stores what [source] says about [series] now: its details and its whole entry list. Returns the new entries, as
- * [SeriesRepository.store] does. Throws what the source throws.
+ * [SeriesRepository.store] does, and hands them to [onNew] when there are any. Once stored they are no longer new, so
+ * storing and [onNew] finish even when the caller is cancelled meanwhile. Throws what the source throws.
  */
-suspend fun SeriesRepository.refresh(source: SeriesSource, series: Series): List<SeriesEntry> =
-    refreshLocks.getOrPut(source.key, ::Mutex).withLock {
-        val details = source.details(series)
-        val listed = fetchEntries(source, details)
-        store(listed.memoOn(details), listed.entries)
+suspend fun SeriesRepository.refresh(
+    source: SeriesSource,
+    series: Series,
+    onNew: suspend (List<SeriesEntry>) -> Unit = {},
+): List<SeriesEntry> = refreshLocks.getOrPut(source.key, ::Mutex).withLock {
+    val details = source.details(series)
+    val listed = fetchEntries(source, details)
+    withContext(NonCancellable) {
+        store(listed.memoOn(details), listed.entries).also { if (it.isNotEmpty()) onNew(it) }
     }
+}
 
 /** [series]' entries from [source], which is handed the list stored for it. */
 internal suspend fun SeriesRepository.fetchEntries(source: SeriesSource, series: Series): SeriesEntries =

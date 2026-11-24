@@ -26,7 +26,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
@@ -229,9 +228,7 @@ class SeriesPageViewModel(
         refresh.update { it.copy(source = source, sourceName = source.label(sources), sourceMissing = false) }
         val failure = try {
             repository.series(id)?.let { stored ->
-                val added = repository.refresh(source, stored.series)
-                // Once stored they are no longer new, so leaving the page must not stop them from being queued.
-                if (added.isNotEmpty()) withContext(NonCancellable) { queueNew(SeriesUpdate(stored.series, added)) }
+                repository.refresh(source, stored.series) { added -> queueNew(SeriesUpdate(stored.series, added)) }
             }
             null
         } catch (error: CancellationException) {
