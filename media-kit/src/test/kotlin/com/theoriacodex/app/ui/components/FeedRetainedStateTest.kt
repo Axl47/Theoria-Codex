@@ -6,7 +6,7 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class FeedRetainedStateTest {
-    @Test fun `forgetting keeps the kept feeds and their parts, and leaves keys outside the prefix alone`() {
+    @Test fun `forgetting keeps the kept feeds and their parts, and leaves keys outside the prefix alone (ADR 0106)`() {
         val retained = FeedRetainedState()
         val keys = listOf("for_you:mix:1", "for_you:mix:1:related", "for_you:mix:10", "for_you:trail:2", "search")
         val before = keys.associateWith { key -> retained.gridState(key) { LazyStaggeredGridState() } }
@@ -18,7 +18,7 @@ class FeedRetainedStateTest {
         listOf("for_you:mix:10", "for_you:trail:2").forEach { assertNotSame(before[it], after[it]) }
     }
 
-    @Test fun `a retained frame cache is shared only by the frames that created it`() {
+    @Test fun `a retained frame cache is shared only by the frames that created it (ADR 0106)`() {
         val retained = FeedRetainedState()
         val counts = RetainedFrames<String, Int>()
         val labels = RetainedFrames<String, String>()
