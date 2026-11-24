@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -241,7 +241,7 @@ class SeriesTabViewModel(
         // Nothing shows until the view is chosen, so the saved sort and filter arrive with it.
         viewModelScope.launch {
             val options = library.read()
-            val following = repository.observeFollowed().firstOrNull().orEmpty().isNotEmpty()
+            val following = repository.observeHasFollowed().first()
             val opening = state.value.view ?: if (following) SeriesView.FOLLOWING else SeriesView.BROWSE
             saved[SAVED_VIEW] = opening.name
             mutableState.update { it.copy(view = it.view ?: opening, library = options, libraryLoaded = true) }

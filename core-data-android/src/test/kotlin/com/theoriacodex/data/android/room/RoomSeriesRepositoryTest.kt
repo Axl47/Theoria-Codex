@@ -63,6 +63,7 @@ class RoomSeriesRepositoryTest {
         assertNull(repository.listedEntry(id, "/c/9"))
         repository.storeEntries(id, listOf(SeriesEntry("/c/2", "Chapter 2")))
         assertNull("Dropped by its source", repository.listedEntry(id, "/c/1"))
+        assertEquals("Still stored", "Chapter 1", repository.storedEntry(id, "/c/1")?.entry?.name)
     }
 
     @Test
@@ -242,6 +243,22 @@ class RoomSeriesRepositoryTest {
         assertEquals(listOf(second), repository.storeEntries(id, listOf(second, SeriesEntry("/c/1", "Chapter 1"))))
         assertEquals(series.copy(title = "Renamed", description = "A synopsis."), repository.series(id)!!.series)
         assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(id.copy(address = "/series/unknown"), listOf(second)))
+    }
+
+    @Test
+    fun `a series listed empty before gets its first chapters as new, and one never listed takes them as a baseline`() = runTest {
+        val first = listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1"))
+        repository.store(series)
+        assertEquals(emptyList<SeriesEntry>(), repository.storeEntries(id, first))
+
+        val announced = Series(SeriesId(id.source, "/series/b"), "Announced", language = "en")
+        repository.store(announced, emptyList())
+        assertEquals(first, repository.storeEntries(announced.id, first))
+
+        val checked = Series(SeriesId(id.source, "/series/c"), "Checked", language = "en")
+        repository.store(checked)
+        repository.storeEntries(checked.id, emptyList())
+        assertEquals(first, repository.storeEntries(checked.id, first))
     }
 
     @Test
