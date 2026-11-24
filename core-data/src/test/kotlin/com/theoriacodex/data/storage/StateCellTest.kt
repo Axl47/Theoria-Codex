@@ -10,7 +10,6 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StateCellTest {
@@ -41,24 +40,27 @@ class StateCellTest {
     @Test
     fun `flushAll writes every cell it wrapped on its queue even when one fails (ADR 0215)`() = runTest {
         val executor = Executors.newSingleThreadExecutor { task -> Thread(task, QUEUE_THREAD) }
+        val job = Job()
         try {
             val queue = executor.asCoroutineDispatcher()
-            val writeBehind = WriteBehind(CoroutineScope(Job()), timed = false, newQueue = { queue })
+            val writeBehind = WriteBehind(CoroutineScope(job), timed = false, newQueue = { queue })
             val writes = mutableListOf<String>()
             val threads = mutableSetOf<String>()
-            val positions = FileStateCell("old position") { writes += it }.writeBehind(writeBehind)
+            val record: suspend (String) -> Unit = { value -> threads += Thread.currentThread().name.substringBefore(" @"); writes += value }
+            val positions = FileStateCell("old position", record).writeBehind(writeBehind)
             val failing = FileStateCell("old") { throw IOException("disk full") }.writeBehind(writeBehind, 10.seconds)
-            val statistics = FileStateCell("old statistics") { writes += it }.writeBehind(writeBehind, 10.seconds)
-            positions.update { threads += Thread.currentThread().name; "new position" }
+            val statistics = FileStateCell("old statistics", record).writeBehind(writeBehind, 10.seconds)
+            positions.update { "new position" }
             failing.update { "new" }
             statistics.update { "new statistics" }
 
             val failure = runCatching { writeBehind.flushAll() }.exceptionOrNull()
 
             assertEquals("disk full", failure?.message)
-            assertEquals(listOf("new position", "new statistics"), writes)
-            assertTrue(threads.single().startsWith(QUEUE_THREAD))
+            assertEquals(setOf("new position", "new statistics"), writes.toSet())
+            assertEquals(setOf(QUEUE_THREAD), threads)
         } finally {
+            job.cancel()
             executor.shutdown()
         }
     }

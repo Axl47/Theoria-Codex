@@ -71,7 +71,7 @@ class StatisticsWriteBehindTest {
         repository.recordWatchedPost(SourceKey.GELBOORU, setOf("second"))
 
         writeScope.cancel()
-        writeClock.advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds + 1)
+        writeClock.advanceTimeBy(STATISTICS_WRITE_DELAY.inWholeMilliseconds + 1)
         storeScope.closeDataStores()
 
         val stored = reopened(directory)
