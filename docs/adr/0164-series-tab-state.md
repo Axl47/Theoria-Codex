@@ -15,6 +15,7 @@ Source calls are slow, sources and extensions can change while answers are in fl
 - `searchRun` and `dedicatedRun` count submitted searches and listings; an answer asked for under an earlier run is dropped, even when its text is the same. `followShown` is followed in the view model, not in the tab's composition, because the pager drops the composition before it reports another tab settled; once the tab is left the filter sheet closes and a filtered browse returns to popular.
 - The filter sheet's filters load afresh each time it opens, since some sources fill theirs in from what they fetched meanwhile; a source whose filters fail to load offers none, and the sheet still searches it. Searching before the filters load keeps the filters of the listing on screen and changes only the text.
 - `openDedicatedSearch` reuses the listing the global search already loaded for that source, with its paging flags reset, so the switch is immediate and sends no duplicate request. When that listing is still loading or failed, it fetches page one for the query; with a blank query it fetches the source's popular series.
+- Nulls in `SeriesTabState` and `SeriesTabContent` mean "not yet" or "none", never an error: `sources` is null until the extensions that are on have loaded; `search` is null while no search shows, and an empty list for a search sent before the sources loaded, which then runs; `view` is null until the followed series are first read; `kind` (`filter` in `SeriesTabContent`) is null for both kinds; `following` is null until the followed series have been read.
 - The tab's query is hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
 - `arranged` keeps the stored order (unread first, most first) for ties and for series a time sort has no time for, which go last.
 
@@ -24,6 +25,6 @@ Anything new that must survive process death goes through the saved-state handle
 
 ## Applies to
 
-- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `content`, `browse`, `showSources`, `searchIn`, `search`, `followShown`, `openFilters`, `openDedicatedSearch`, `searchSource`, `searchAllSources`
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `SeriesTabState`, `SeriesTabContent`, `content`, `browse`, `showSources`, `searchIn`, `search`, `followShown`, `openFilters`, `openDedicatedSearch`, `searchSource`, `searchAllSources`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabScreen.kt`: `SeriesTabScreen` query state
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesLibrary.kt`: `SharedPreferencesSeriesLibraryPreferences`, `arranged`
