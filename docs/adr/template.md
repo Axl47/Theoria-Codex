@@ -17,3 +17,10 @@ What this makes easier and harder, and what would have to change to revisit it.
 ## Applies to
 
 - `module/src/main/kotlin/.../File.kt`: `Symbol`, `Owner.member`
+
+## Guarded by
+
+- `module/src/test/kotlin/.../FileTest.kt`: `the promise in plain words (ADR NNNN)`
+- `module/src/main/kotlin/.../File.kt`: `internal class Symbol private constructor`
+- `scripts/check_architecture.py`: `rule_function_name`
+- Left to prose: the promise no machine can check, and why.

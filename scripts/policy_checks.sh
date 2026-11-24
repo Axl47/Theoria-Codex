@@ -18,7 +18,8 @@ comment_ban() {
   python3 scripts/check_comments.py
 }
 
-# Every ADR's Applies-to paths exist and its symbols appear in them; see docs/adr/README.md. Usage: adr_integrity [<base>]
+# Every ADR's Applies-to and Guarded-by links hold; with <base>, also prints notes that never fail. See
+# docs/adr/README.md. Usage: adr_integrity [<base>]
 adr_integrity() {
   python3 scripts/check_adrs.py ${1:+--base "$1"}
 }
