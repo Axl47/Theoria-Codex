@@ -7,227 +7,28 @@ in `config/quality/comment-baseline.json`, which may only shrink.
 
 ## Format
 
-One file per decision, named `NNNN-kebab-case-title.md` and numbered in order. Copy
-[`template.md`](template.md): context, decision, consequences, and the code the decision governs, named by
-file and symbol so a reader can find it. Group related code under one decision rather than writing one
-record per call site. Name constants rather than copying their values, and avoid claims that expire, such
-as "the latest release". When a decision changes, edit its record; when it is reversed, mark it superseded
-and link the record that replaces it.
+One file per decision, named `NNNN-kebab-case-title.md`. Copy [`template.md`](template.md): context, decision,
+consequences, and the code the decision governs, named by file and symbol so a reader can find it. Group
+related code under one decision rather than writing one record per call site. Name constants rather than
+copying their values, and avoid claims that expire, such as "the latest release". When a decision changes,
+edit its record. When it is reversed, or the code it governs is gone, set its status to
+`Superseded by [NNNN](NNNN-title.md)` (or `Superseded` when nothing replaces it) and leave the record in place.
 
-## Index
+Number a new record as the highest number on the latest `main` plus one, and rebase right before pushing. If
+another record took the number first, renumber yours.
 
-| ADR | Decision |
-| --- | --- |
-| [0001](0001-comment-links.md) | Comment links use the site's anchor when it has one, else a fragment browsers ignore |
-| [0002](0002-coroutine-and-diagnostics-rules.md) | Shared requests, cancellation, diagnostics and off-main checks follow fixed rules |
-| [0003](0003-cross-source-tags.md) | For You trains across sources by translating tags, with foreign likes capped |
-| [0004](0004-custom-site-profiles.md) | Custom booru sites get ids compatible with existing encodings, validated HTTPS roots and secret-safe credentials |
-| [0005](0005-picture-tagger-thresholds.md) | Predicted picture tags are a separate tag source with per-use score thresholds |
-| [0006](0006-post-identity-and-dedup.md) | One file or picture shown once: posts are deduplicated by ID, MD5 and a banded perceptual hash |
-| [0007](0007-series-sources-and-extensions.md) | Series come from Mihon and Aniyomi extensions installed into app storage, trusted by pinned signing key |
-| [0008](0008-source-adapter-contracts.md) | Source capabilities are optional adapter interfaces with throw-on-failure and null-for-absent results |
-| [0009](0009-stored-data-compatibility.md) | Persisted identifiers, hashes and legacy fields keep their original form |
-| [0010](0010-tag-and-text-normalization.md) | Tag spelling is normalized per source dialect and provider quirks are undone at the edge |
-| [0011](0011-unified-search-orchestration.md) | Unified search publishes early, merges stably and shapes requests per source |
-| [0012](0012-room-explicit-migrations.md) | The Room database upgrades only through explicit, tested migrations |
-| [0013](0013-room-read-paths-and-projections.md) | Room reads avoid transactions and reuse decoded posts |
-| [0014](0014-series-backup-merge.md) | Restoring a series backup only adds to what the device holds |
-| [0015](0015-series-entry-storage.md) | Series entries are kept, never deleted, when a source stops listing them |
-| [0016](0016-shared-post-storage.md) | Posts are stored once, sparsely and compared by decoded value |
-| [0017](0017-visual-similarity-storage.md) | Visual signatures and For You verdicts are stored with their own lifecycle |
-| [0018](0018-codex-library-transactions.md) | Cross-Codex and Likes operations commit atomically and Undo authority is process-only |
-| [0019](0019-followed-and-saved-new-post-marks.md) | Follows and new-post marks are local, identity-keyed and rate-limited across restarts |
-| [0020](0020-for-you-retired-searches.md) | Saved For You searches are converted to ordinary source searches without displacing existing ones |
-| [0021](0021-local-state-files.md) | Small local state files reject newer schemas, skip unreadable entries and keep lists as raw JSON |
-| [0022](0022-offline-media-store.md) | Offline copies commit through a manifest and survive undecodable data without losing owners |
-| [0023](0023-post-snapshots.md) | Post snapshots drop device-bound data and merging never erases known data |
-| [0024](0024-profile-backup-format.md) | Profile backups are a versioned, strictly validated document written at the lowest version that fits |
-| [0025](0025-profile-backup-restore.md) | Restore merges through a durable intent and only adds to what the device has |
-| [0026](0026-profile-deletion-journal.md) | Profile deletion runs from a fail-closed durable intent and blocks writes to retired profiles |
-| [0027](0027-series-download-queue.md) | Chapter downloads run from a two-lane queue with one worker |
-| [0028](0028-series-storage-and-switching.md) | Series entry lists, progress and source switches are stored conservatively |
-| [0029](0029-source-weights-normalization.md) | Source weights are normalized without drift and new sources get an even share |
-| [0030](0030-statistics-recording.md) | Usage statistics split by local calendar day, merge by maximum and seed tag counts once |
-| [0031](0031-custom-site-profile-storage.md) | User-added site profiles are stored without credentials, skip invalid records, and merge on restore without the site limit |
-| [0032](0032-datastore-open-and-recovery.md) | Stores open through a startup gate, refuse newer schemas, set unreadable files aside before resetting, and close by waiting for their release |
-| [0033](0033-durable-json-configuration.md) | All saved data uses one kotlinx Json configuration that keeps Gson-era behaviour |
-| [0034](0034-golden-files-pin-stored-formats.md) | Golden files are bytes real builds wrote and are never regenerated to pass a change |
-| [0035](0035-repository-state-cells.md) | Repository rules run over a StateCell so in-memory and durable backings share one code path |
-| [0036](0036-settings-persistence-rules.md) | Settings are admitted before persistence and change with their derived source weights in one transaction |
-| [0037](0037-statistics-thumbnail-store.md) | Statistics thumbnails are private files owned by the top lists and fetched only for promoted or opened posts |
-| [0038](0038-stored-record-compatibility.md) | Durable records are separate from domain models and keep decoding every shape this app ever stored |
-| [0039](0039-tachiyomi-backup-import.md) | Mihon-family backups are decoded from their protobuf wire format and import their followed or started series |
-| [0040](0040-custom-site-probing.md) | Adding a custom site runs a bounded read-only probe over protocol families |
-| [0041](0041-danbooru-adapter.md) | The Danbooru adapter works within guest limits and id paging |
-| [0042](0042-gelbooru-adapter.md) | The Gelbooru adapter tolerates per-fork API differences and latches detected quirks |
-| [0043](0043-hitomi-provider.md) | Hitomi is read from Nozomi indexes with single-flight, version-bound caches and in-memory tokens |
-| [0044](0044-nhentai-adapter.md) | nhentai falls back to mirrors for metadata but never for comments |
-| [0045](0045-paging-by-raw-records.md) | A page is full when the raw record count says so, before filtering |
-| [0046](0046-pixiv-provider.md) | Pixiv credential refreshes are serialized and fenced by a session revision |
-| [0047](0047-provider-health-probes.md) | Provider health probes report CANNOT_CHECK behind a challenge and keep public output free of provider data |
-| [0048](0048-provider-media-urls.md) | Provider media loads over HTTPS and prefers small renditions for cards |
-| [0049](0049-source-calls-off-main-thread.md) | Source entry points run on a background dispatcher through sourceCall |
-| [0050](0050-source-host-outages-and-challenges.md) | Host outages are tracked per host and Cloudflare checks are passed by a shared hidden browser |
-| [0051](0051-source-http-transport.md) | Source HTTP stays HTTPS-only, byte-exact, unqueued and cancellable |
-| [0052](0052-kvs-site-scraping.md) | KVS sites list latest posts through the listing when RSS thumbnails fail, and read lazy thumbnails from data-rd-src |
-| [0053](0053-paheal-source-limits.md) | Paheal is excluded from hash lookup and infers file type from data attributes |
-| [0054](0054-source-parsing-compat.md) | Source parsers keep provider and stored-data compatibility |
-| [0055](0055-aniyomi-stream-resolution.md) | Anime streams resolve from all servers concurrently, with per-server and list time limits |
-| [0056](0056-extension-binary-compatibility.md) | The host reproduces the Mihon and Aniyomi extension API under the names extension binaries expect |
-| [0057](0057-extension-challenge-handling.md) | Extensions get a Mihon-like HTTP client that shares browser cookies and never lets a challenge page through |
-| [0058](0058-extension-device-harness.md) | The real-extension device harness reports text only and measures extensions without the app's browser |
-| [0059](0059-extension-image-tags.md) | Extension images are fetched through the source's own client, selected by an HMAC-signed address tag |
-| [0060](0060-extension-isolation-and-failures.md) | Extension code runs off the caller's thread, and its failures become source failures without leaking detail |
-| [0061](0061-extension-preferences-storage.md) | Extension preferences live in no-backup JSON files, written before apply returns |
-| [0062](0062-extension-registry-loading.md) | The registry loads extensions lazily, per source lookup, and publishes one consistent offer |
-| [0063](0063-extension-repos-and-install.md) | Extensions install only from a repo's named key, into a private folder, and load only from verified read-only copies |
-| [0064](0064-extension-source-state.md) | Adapters hand sources back their own objects, memos and filters, and merge details additively |
-| [0065](0065-extension-source-ids.md) | Source ids are the first eight bytes of MD5 of name/lang/versionId, as Mihon and Aniyomi derive them |
-| [0066](0066-creator-feeds.md) | Account creator feeds park their lists, and Follow records the uploads list whichever tab is shown |
-| [0067](0067-custom-sites-controller.md) | Custom site verification and setup never touch library data and bind cookies to the in-app browser |
-| [0068](0068-duration-filter.md) | Duration filters reveal posts in stable order and schedule only the demand that matters |
-| [0069](0069-feed-paging.md) | Feeds drain pages within a bound, except to reach a saved place, and merge without reordering |
-| [0070](0070-for-you-deck-steering.md) | The For You deck deals deterministically from weighted lanes and steers from this session's swipes only |
-| [0071](0071-for-you-interest-picking.md) | For You interests are weighed once per source and picked from proven, co-occurring tags |
-| [0072](0072-image-text-and-file-tags.md) | Tags about text on the image or about the file are never counted as interests |
-| [0073](0073-main-thread-work-checker.md) | Main-thread work is reported once per call site and counted without limit |
-| [0074](0074-media-quality-and-kind.md) | Media policy decides from what the media offers, not from source names |
-| [0075](0075-perceptual-hash.md) | Picture hashes match Python's imagehash on grey input and skip flat pictures |
-| [0076](0076-post-comments-controller.md) | Viewer comments prefetch only the first page, keep loaded lists, and focus a linked comment with a page cap |
-| [0077](0077-related-shelf.md) | Related shelves anchor to their seed, keep their seeds visible, and are never restored |
-| [0078](0078-save-target-ranking.md) | Save targets are ranked once, with this session's saves and recent saves lifted above tag relevance |
-| [0079](0079-search-draft-rules.md) | Draft edits keep source-valid terms and tell the user what a change removes |
-| [0080](0080-search-execution-and-cache.md) | A search is identified by query and source scope, and cached first pages are filtered to enabled sources |
-| [0081](0081-search-history-and-scroll-restoration.md) | Search history keeps settled searches only, and scroll restoration yields to the user |
-| [0082](0082-search-request-lifecycle.md) | Search requests end through one reducer that keeps results on screen and ignores foreign answers |
-| [0083](0083-search-suggestions-and-omnibox.md) | Suggestions interleave providers by relevance band and the omnibox places matches among tag rows |
-| [0084](0084-search-visibility-filters.md) | Date and length filters run on the device with one animated-media rule for every source |
-| [0085](0085-shared-tag-affinity-inputs.md) | Affinity inputs are built once per profile from its library and rebuilt only when the library changes |
-| [0086](0086-statistics-attribution.md) | Statistics keep every recorded post, avoid reading posts on timer ticks, and attribute only direct Codex launches |
-| [0087](0087-tag-affinity-scoring.md) | Tag affinity compares kept posts with watched posts and discounts universal tags |
-| [0088](0088-training-tags.md) | Training tags keep each source's vocabulary and use typed taxonomy to find general tags |
-| [0089](0089-triage-hide-rules.md) | Hidden tags match within their own vocabulary and the picture tagger judges only sparsely tagged posts |
-| [0090](0090-viewer-and-feed-playback.md) | Feed players start after a short delay and Viewer rotation is offered only where it gains space |
-| [0091](0091-feed-chrome-stability.md) | Feed chrome avoids layout jumps, per-frame recomposition and noisy announcements |
-| [0092](0092-frame-mixing.md) | Several pictures of a post fold into one analysis by weighted top-third scores |
-| [0093](0093-in-app-browser-webview.md) | The in-app browser is a locked-down WebView that lives as long as its address and agent |
-| [0094](0094-library-vision-backfill.md) | Library picture indexing is paced, thermally gated and bounded in retries |
-| [0095](0095-lift-and-triage-contracts.md) | Card lift and triage hand-offs keep the long-click as the fallback and carry the grid's view |
-| [0096](0096-picture-model-runtime.md) | The picture model runs on the CPU, loaded only while pictures arrive, with int8 embeddings |
-| [0097](0097-picture-tagger-session-and-commits.md) | The picture tagger remembers results per session and never leaves answers behind a deleted model |
-| [0098](0098-route-state-owners.md) | Route owners publish immutable state and keep large or Android objects out of saved state |
-| [0099](0099-ui-test-fixtures.md) | Compose tests drain the main looper and step background work by hand |
-| [0100](0100-undo-offers-and-deferred-removals.md) | Removals are hidden first and deleted when their lifetime ends, with one app-wide Undo offer |
-| [0101](0101-visual-model-files.md) | Model files are pinned by SHA-256, renamed into place only when verified, and removed on any failure |
-| [0102](0102-app-http-clients.md) | Every app HTTP client derives from one shared client, and the app learns hosts and IPv6 health to cut first-request waits |
-| [0103](0103-diagnostics-log-and-usage.md) | The diagnostics log is redacted, bounded and written off the failing thread; data-usage counting exists only in debug builds |
-| [0104](0104-duration-lookups.md) | Video lengths are looked up by one application-scoped coordinator, paced per source, and cached without changing outcomes |
-| [0105](0105-feed-media-delivery.md) | Feed cards load the preview first, step up only to a downscaled rendition, and lazy media links are refreshed for booru families |
-| [0106](0106-feed-state-retained-across-viewer.md) | Feed state outlives the Viewer, and feed work runs off the main thread without flashing or reshuffling |
-| [0107](0107-frame-sampling-for-tagger.md) | Frame sampling for the picture tagger has a per-post byte budget and classifies each failure by whether a retry could change it |
-| [0108](0108-media-disk-caches.md) | Disposable media caches are cleared by their owners, cached bodies that cannot decode are evicted, and downloads stage before publishing |
-| [0109](0109-media-kit-device-and-fixture-tests.md) | Stream tests run against a captured loopback fixture, and device and coroutine test helpers work around known platform limits |
-| [0110](0110-offline-media-jobs.md) | Offline copies are made by application-owned jobs admitted through one gate and validated before they count as available |
-| [0111](0111-picture-hashing.md) | Posts get a picture hash from their cached still preview, within a listing budget, so reposts on other sites show once |
-| [0112](0112-pixiv-ugoira-playback.md) | Pixiv animations play from a validated disk archive that downloads once, retries auth once and never touches offline copies |
-| [0113](0113-post-download-queue.md) | Post downloads run from a durable queue that waits for sources, never duplicates a transfer and never deletes a finished file by itself |
-| [0114](0114-site-browser-checks.md) | Browser checks run in one visible page, never leak credentials to the page, and media requests retry once with the user's key |
-| [0115](0115-source-presentation-catalog.md) | One catalog holds source labels, headers, grouping and logos; custom sites install into it as a whole |
-| [0116](0116-stream-playback-requests.md) | A playback request fixes the stream type, headers, tracks and subtitle loading from what the media offers |
-| [0117](0117-video-cache-bounded-locks.md) | Background video readers lock the shared cache a chunk at a time, and only plain progressive web files use it |
-| [0118](0118-video-http-transport.md) | Video HTTP is HTTP/1.1 only and abandons half-read responses instead of draining them |
-| [0119](0119-video-player-tuning.md) | Players are pooled with deferred release, buffer lightly for feed previews, and seek by keyframe while dragging |
-| [0120](0120-viewer-image-decoding.md) | Viewer images decode to hardware bitmaps, and tall pages are bounded by what the GPU can draw |
-| [0121](0121-codex-save-relevance.md) | Codex relevance for save surfaces is shared, warm for a few seconds and never shows placeholders |
-| [0122](0122-drag-gestures-act-on-release.md) | Drag-to-collect gestures act on the highlighted target at release and stay accessible |
-| [0123](0123-failure-presentation.md) | Failure messages separate account problems, browser challenges and offline from plain retries |
-| [0124](0124-feed-pipeline-and-grid.md) | Feed filtering and grids carry results forward and read hot state without recomposing everything |
-| [0125](0125-file-mirror-index.md) | Copies of a post on other sites are grouped in memory from hashes learned this session |
-| [0126](0126-post-tag-sheet-editing.md) | Tag sheets edit the Search draft without silently dropping terms and keep chips layout-stable |
-| [0127](0127-quick-save-and-undo.md) | One-tap saves create Codices only when they run and Undo reverses exactly what the save added |
-| [0128](0128-search-service-rules.md) | Search services own provider access only and keep bookkeeping ordered, capped and off the request path |
-| [0129](0129-triage-deck-ordered-writes.md) | Triage decisions move the card at once and their writes run in order after the deck closes |
-| [0130](0130-viewer-animated-playback.md) | Animated media share one clock, one timeline and a hold-to-scrub gesture without recomposing per frame |
-| [0131](0131-viewer-return-scrolling.md) | Returning from the Viewer moves the feed as little as possible and keeps the originating post in place |
-| [0132](0132-creator-page-seen-marks-and-account-header.md) | The creator page marks new posts from a seen-ids snapshot taken before the visit, and never waits on account details |
-| [0133](0133-for-you-lanes-and-deals.md) | A Mix is a few lanes taken in turn across sources, topped up before they run dry and dealt in short, owed batches |
-| [0134](0134-for-you-mix-owner-and-levels.md) | The For You owner keeps a stack of levels on one thread, rebuilds the Mix for deck inputs and only prunes it for hidden-tag changes |
-| [0135](0135-for-you-picture-vetting.md) | For You vets pictures before dealing only while hidden tags could catch them, and never passes an unchecked post |
-| [0136](0136-search-and-discover-test-timing.md) | Search and Discover tests step virtual time by hand so timeouts, undo offers and idling do not fire early |
-| [0137](0137-search-composer-sheet-and-bar-gestures.md) | The composer is an undimmed bottom sheet that leaves results in view, and the collapsed bar steps through history by swipe |
-| [0138](0138-search-composer-tag-editing.md) | The composer adds tags to the target it shows, keeps groups to one tag type and offers Undo only while it is safe |
-| [0139](0139-search-live-run-and-settlement.md) | Search runs live after a pause, and a search is remembered only once the user settles it |
-| [0140](0140-search-results-notices-and-recovery.md) | Search results report failures once, retry what a returning network or a passed browser check fixes, and apply filters on screen |
-| [0141](0141-tag-suggestion-store.md) | The tag suggestion store seeds from a bundled asset, bounds its size, and survives damaged files and failed writes |
-| [0142](0142-codex-collection-source-reads.md) | Codex collection reads decode covers and payloads once and keep full tag projections off the browsing path |
-| [0143](0143-codex-detail-filtering-and-selection.md) | Codex detail's tag filter is transient, its triage action depends on the collection, and drag-select only runs without a related shelf |
-| [0144](0144-codex-library-commands.md) | Codex library commands run serially in a retained owner, with Undo offered in the app's undo slot |
-| [0145](0145-codex-library-sorting-and-reorder.md) | Codex Library and detail sorts are stable, wait for their inputs, and reorder by long-press drag on the grid |
-| [0146](0146-codex-save-targets.md) | Save-to-Codex surfaces share one save path, exclude Likes, and rank like the one-tap suggestions |
-| [0147](0147-codex-share-and-transfer.md) | Codex share files are bounded on import, never carry device paths, and are exported into per-share folders |
-| [0148](0148-custom-sites-settings-flow.md) | Settings → Sites writes edits live, defers removals for Undo, and ties browser checks to the form that opened them |
-| [0149](0149-library-offline-and-download-removals.md) | Offline copies and downloads are removed as deferred destruction, and a Codex's offline ring counts only current posts |
-| [0150](0150-library-section-persistence.md) | The Library's selected section is app-wide, persisted by name |
-| [0151](0151-likes-codex-sync-writes.md) | Like writes are serialized and treat every site's copy of a file as one like |
-| [0152](0152-live-saved-collections.md) | Followed and saved-search collections are live, read-only feeds whose new-post marks move only when the results are actually shown |
-| [0153](0153-pixiv-pkce-login.md) | Pixiv login persists its one-shot PKCE session before the browser opens and commits the callback uncancellably |
-| [0154](0154-recents-history-behavior.md) | History removals keep their place for Undo, its related shelf never joins History, and swipes are left-only |
-| [0155](0155-settings-backup.md) | Daily backup runs when the app leaves the foreground and never deletes files it did not name |
-| [0156](0156-settings-owner-and-pages.md) | Settings state lives in an activity-retained owner, with statistics collected only while shown |
-| [0157](0157-site-cookie-bridge.md) | Browser cookies and site keys reach requests only for the hosts the user set up or verified |
-| [0158](0158-source-credential-storage.md) | Source credentials are encrypted in one envelope, never leak into errors or logs, and are cleared only on the user's request |
-| [0159](0159-stats-sharing.md) | Shared Stats files hold only what was left in, are validated on import, and are compared without being stored |
-| [0160](0160-extensions-page-flow.md) | The Extensions page asks before turning an extension on, hides text-setting values, and lists only what it has just compared |
-| [0161](0161-series-page-refresh.md) | A series page refreshes from its source without losing stored data and stops refreshing while the series moves |
-| [0162](0162-series-source-listing-and-filters.md) | Series listings and filters tell sources apart by language only when needed, keep loaded pages on failure, and virtualise filter groups |
-| [0163](0163-series-switch-source-sheet.md) | The Switch source sheet searches other sources with bounded concurrency and locks while a switch runs |
-| [0164](0164-series-tab-state.md) | The Series tab keeps some state across process death, holds the grid until saved options arrive, and drops stale answers |
-| [0165](0165-viewer-back-hold-and-return-transition.md) | Back during a return is held and replayed, and the Viewer keeps both destinations alive while media returns to its card |
-| [0166](0166-viewer-chrome-layout-and-selection.md) | Viewer chrome composes in stages, floating controls follow the footer, and the selected media drives layout |
-| [0167](0167-viewer-episode-playback.md) | Episode playback keeps the user's track choice across players, reports progress often, and recovers media at most once per ask |
-| [0168](0168-viewer-gesture-recognizer.md) | One Viewer recognizer owns every one-finger gesture, with a fixed order of direction-lock rules |
-| [0169](0169-viewer-gif-frame-rendering.md) | GIFs render off the main thread through android.graphics.Movie into two alternating bitmaps |
-| [0170](0170-viewer-image-loading-and-prefetch.md) | Viewer prefetch warms the page's own cache entries, keeps only near neighbours decoded, and gates heavy originals |
-| [0171](0171-viewer-level-controls.md) | Viewer brightness persists across Viewers in a session and volume is restored only for video |
-| [0172](0172-viewer-page-strip-and-scrubber.md) | The post strip and page scrubber animate as one eased motion, hold the touched page, and load previews only once the finger rests |
-| [0173](0173-viewer-reading-modes-and-navigation.md) | Reading mode, entry page and recommendation branches follow fixed rules, and the info sheet opens where it was asked to |
-| [0174](0174-viewer-rotation-pip-and-system-controls.md) | The Viewer rotates once on opening, shares one rotation across trail levels, and sizes picture-in-picture from the displayed frame |
-| [0175](0175-viewer-save-button.md) | The Viewer's Save button saves to the top suggestion, never to a stale post's target, and cleans up its fan with the dock |
-| [0176](0176-viewer-scrub-preview-player.md) | Scrub previews come from a paused, video-only player that seeks to keyframes and stops between drags |
-| [0177](0177-viewer-episode-resume-positions.md) | Episode positions are kept for the whole session and only reported once a player has reached its start |
-| [0178](0178-viewer-session-state-rules.md) | Viewer session state survives live updates of the same session, and series entries follow their own rules |
-| [0179](0179-viewer-swipe-and-vertical-gallery.md) | Swipes commit by velocity and distance with a catchable settle, and vertical galleries select only on reader scrolls |
-| [0180](0180-viewer-trail-forks.md) | A Viewer level runs at most one trail fork and cancels it when the user pages away |
-| [0181](0181-viewer-video-surface-rules.md) | Viewer video pages pick their stream once, preload only cache-backed streams, and render subtitles outside the video frame |
-| [0182](0182-app-job-ids.md) | JobScheduler jobs have fixed, never reused IDs declared in one enum |
-| [0183](0183-application-image-loader-and-memory.md) | The image loader keeps a large immutable disk cache and big models are released when the process is at risk |
-| [0184](0184-developer-copy-pipeline.md) | Copying production data into Debug reads production read-only, pins both signers and never exposes secrets |
-| [0185](0185-device-and-live-test-rules.md) | Device, live and benchmark tests use isolated packages, text-only reports and fixture providers |
-| [0186](0186-app-container-startup-and-wiring.md) | Startup opens every durable store and registers restored work in a fixed order before any screen runs |
-| [0187](0187-app-lock.md) | The app lock gates the whole app behind a device-owner check and fails open only without a screen lock |
-| [0188](0188-custom-source-runtime.md) | User-added sites are rebuilt into adapters on every profile or key change and published presentation-first |
-| [0189](0189-extension-host-wiring.md) | The app attaches the extension host lazily, keeps extension choices on the device and watches package changes |
-| [0190](0190-home-pager-and-tab-navigation.md) | The home tabs are one pager whose swipes, taps and bar sizing follow fixed rules |
-| [0191](0191-series-background-work.md) | Series downloads and update checks run as JobScheduler jobs with lane-specific network rules |
-| [0192](0192-series-reader-session.md) | Series open in the Viewer as sessions whose progress is written in app scope, in order |
-| [0193](0193-settings-and-search-entry-points.md) | Settings can be opened from anywhere and every setting has exactly one binding in the search box |
-| [0194](0194-shell-activity-owned-state.md) | Cross-screen shell state lives in Activity-scoped owners, process-local unless it is a small saved handoff |
-| [0195](0195-shell-overlays-and-library-surfaces.md) | Shell overlays, Library sections and undo offers keep their state and scope past the screen that opened them |
-| [0196](0196-source-health-and-browser-checks.md) | Source health is derived from the outage tracker, and a browser check targets the request that was refused |
-| [0197](0197-viewer-launch-and-trail.md) | Every Viewer launch goes through launchViewer, and each caller states whether it saves context or reuses the top Viewer |
-| [0198](0198-library-picture-jobs.md) | Library picture work runs as two JobScheduler jobs that wait for charging, unmetered network and, for frames, an idle device |
-| [0199](0199-macrobenchmark-journeys.md) | Benchmark journeys use the real UI and judge playback from sampled pixels, skipping autoplay checks on emulator decoders |
-| [0200](0200-release-data-acceptance.md) | The minified acceptance APK writes and reads the stored formats across a process restart, and loads the Gson-written files it holds |
-| [0201](0201-retained-destination-state.md) | Destinations draw from activity-wide read models and retained flows so a returning screen needs no new query |
-| [0202](0202-route-screen-wiring-rules.md) | Route screens pass the shell only what each callback reads and publish owners before the lifecycle resume that uses them |
-| [0203](0203-triage-decks-seeded-from-the-grid.md) | A Triage deck opens on the posts its grid showed and follows that one query, with likes and hides written against the profile active at the swipe |
-| [0204](0204-update-feed-and-download-rules.md) | The updater tolerates malformed release entries and publishes a download only from a still-admitted caller |
-| [0205](0205-viewer-route-session-and-effects.md) | The Viewer route consumes its launch payload once, runs effects in order against current state, and extends live sessions off the main thread |
-| [0206](0206-vision-acceptance-phases.md) | The picture tagger is accepted on a device in phases that switch charging and idleness between them |
-| [0207](0207-series-notifications.md) | Series notifications: one frozen channel, per-series tags, and a private trampoline |
-| [0208](0208-viewer-holds-back-while-closing.md) | The Viewer holds a Back pressed while it closes, and its dismissal never suspends |
-| [0209](0209-for-you-recent-skips.md) | For You leaves out posts skipped in the last 30 days |
-| [0210](0210-host-test-compose-waits.md) | Host-test Compose waits drain the main looper |
-| [0211](0211-viewer-owns-keep-screen-on.md) | The Viewer owns keep-screen-on |
-| [0212](0212-settings-and-tag-term-behaviour.md) | Settings navigation, the Series sheet, and how post tag chips are built |
-| [0213](0213-startup-offline-catalog-and-full-display.md) | Startup does not wait for the offline catalog, and the launch reports full display from the restored tab |
+## Finding records
+
+The folder is the index: there is no table to update, so adding a record touches only its own file. Each
+record's first line is its number and title, and `grep -h '^# ' docs/adr/0*.md` lists them all. To find the
+decisions behind a file, search for its name: `grep -l 'SearchViewModel.kt' docs/adr/*.md`.
+
+## Integrity check
+
+`scripts/check_adrs.py` runs with the other policy checks (`scripts/policy_checks.sh`, the pre-push hook and
+CI). It fails when a record's `Applies to` names a path that does not exist, a backticked symbol that does
+not appear in the files on its line, or a number another record already uses. Superseded records are skipped.
+Each `Applies to` line reads `` `path`[, `path`]: `symbol`, `symbol` ``; a path without its module directory
+resolves against the previous path on the line, and prose around the backticked names is ignored. When a
+change moves or deletes a file, the check names every record that still points at the old path; update those
+records in the same change.

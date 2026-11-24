@@ -25,5 +25,5 @@ A new setting definition fails the binding test until it is bound. A new entry p
 - `app/src/main/java/com/theoriacodex/app/ui/SettingsScreenDestination.kt`: `SettingsScreenDestination`, `openSettings`, `showSettingsRoute`
 - `app/src/main/java/com/theoriacodex/app/ui/SettingsViewModelFactory.kt`: `settingsViewModelFactory`
 - `app/src/main/java/com/theoriacodex/app/ui/SearchSettingBindings.kt`: `SettingBinding`, `SETTING_BINDINGS`, `searchSettingEntries`
-- `app/src/main/java/com/theoriacodex/app/settings/SettingsScreen.kt`: `SettingsScreen`, `SeriesUpdatesRow`, `notificationSettingsOpener`
+- `feature-settings/src/main/kotlin/com/theoriacodex/app/settings/SettingsScreen.kt`: `SettingsScreen`, `SeriesUpdatesRow`, `notificationSettingsOpener`
 - `app/src/main/java/com/theoriacodex/app/settings/PictureTagsEntry.kt`: `rememberPictureTagsEntry`
