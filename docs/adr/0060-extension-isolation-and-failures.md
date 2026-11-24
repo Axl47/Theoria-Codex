@@ -30,3 +30,13 @@ Loaded code cannot be sandboxed or unloaded; this contains failure, not malice. 
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionRegistry.kt`: `limited`, `threads`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionLoader.kt`: `createSources`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/AniyomiKind.kt`, `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/MihonKind.kt`: `hosted`
+
+## Guarded by
+
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCallsTest.kt`: `an extension call runs off the caller's thread (ADR 0060)`, `a failure keeps the extension's own message, never its class name, and an adapter's exception passes unchanged (ADR 0060)`, `only a virtual machine error escapes an extension, and every other throwable is its failure (ADR 0060)`, `only errors reach the diagnostics log, and a missing host class says so (ADR 0060)`, `time-limited extension work gets 32 threads of its own beside the IO pool (ADR 0060)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionLoaderTest.kt`: `a virtual machine error while an extension is created ends the load, and any other throwable rejects only that extension (ADR 0060)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/MihonSeriesSourceTest.kt`: `an extension's own cancellation is its failure, and the caller's passes through (ADR 0060)`, `failures map to the reasons built-in sources report (ADR 0060)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/AniyomiSeriesSourceTest.kt`: `a server that ignores cancellation delays neither the answer nor a caller that stops waiting (ADR 0055, 0060)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionRegistryTest.kt`: `an extension that hangs or fails is named and the others still load (ADR 0060)`
+- `extension-host/src/test/kotlin/eu/kanade/tachiyomi/network/interceptor/HostInterceptorsTest.kt`: `a non-IO exception later in the chain is wrapped in IOException (ADR 0060)`, `an IOException passes through as it is (ADR 0060)`
+- Left to prose: `ExtensionRegistry.limited` turns any throwable from a load, a `VirtualMachineError` included, into a load problem, so the registry contains what `ExtensionLoader` now rethrows (reported to the owner); the loading thread being a daemon, 32 covering the largest measured fan-out, and a `LinkageError` meaning missing host API are rationale; the Suppress annotations on broad catches are tied to these rules by review.

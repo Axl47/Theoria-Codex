@@ -46,3 +46,14 @@ Adding API surface means copying only what binaries call. A missing class or mem
 - `extension-host/src/main/kotlin/eu/kanade/tachiyomi/source/model/`: `SManga`, `SChapter`, `Filter`
 - `extension-host/src/main/kotlin/eu/kanade/tachiyomi/network/Requests.kt`, `OkHttpExtensions.kt`
 - `extension-host/src/main/kotlin/eu/kanade/tachiyomi/util/JsoupExtensions.kt`
+
+## Guarded by
+
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/AniyomiSeriesSourceTest.kt`: `an anime source and a manga source with the same number are different sources (ADR 0056)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionImagesTest.kt`: `covers of two kinds' sources with the same numeric id are fetched by their own source (ADR 0056, 0059)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionLoaderTest.kt`: `an instance that is neither a source nor a factory, or whose constructor throws, rejects the extension (ADR 0056)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionPackagesTest.kt`: `a package is listed under the kind whose manifest names it declares, and one declaring none is no extension (ADR 0056)`, `a kind's reason for refusing an extension is the extension's (ADR 0056)`, `anime extensions of interface 14 and 16 are accepted, and any other version, an unreadable one or a torrent one is refused (ADR 0055, 0056)`
+- `extension-host/src/test/kotlin/eu/kanade/tachiyomi/network/interceptor/HostInterceptorsTest.kt`: `the client extensions rebuild carries the interceptor names they require, in Mihon's order (ADR 0056, 0057)`
+- `extension-host/src/test/kotlin/eu/kanade/tachiyomi/source/online/HttpSourceTest.kt`: `a source's id is the one Mihon and Aniyomi compute from its name, language and version (ADR 0056, 0065)`, `the extension API classes offer no RxJava method (ADR 0056)`
+- `scripts/tests/test_check_architecture.py`: `test_reports_derived_code_without_its_attribution_or_licence_adr_0056`
+- Left to prose: the package, class and member names binaries call (including `Video`'s two constructors) are checked by `extension_symbols_kept` in check.sh, which runs only in the release part after R8 and covers only what the sampled extensions referenced, so this batch could not mutation-prove it; the attribution rule reads only files under eu/kanade, so a derived file elsewhere (`ChapterRecognition`) keeps its notice by review; which members surveys found in use, holder classes that draw nothing, `OnBindEditTextListener` never being called, `Page.uri` staying in the constructor, the trimmed `ChapterRecognition` and the file-level Suppress annotations are judgments about what binaries call; the adapt step's time limit is guarded under 0060; `Injekt` being bound only by the host is guarded under 0062.

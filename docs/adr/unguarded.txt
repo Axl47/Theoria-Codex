@@ -25,17 +25,6 @@
 0037-statistics-thumbnail-store.md
 0038-stored-record-compatibility.md
 0039-tachiyomi-backup-import.md
-0055-aniyomi-stream-resolution.md
-0056-extension-binary-compatibility.md
-0057-extension-challenge-handling.md
-0058-extension-device-harness.md
-0059-extension-image-tags.md
-0060-extension-isolation-and-failures.md
-0061-extension-preferences-storage.md
-0062-extension-registry-loading.md
-0063-extension-repos-and-install.md
-0064-extension-source-state.md
-0065-extension-source-ids.md
 0066-creator-feeds.md
 0067-custom-sites-controller.md
 0068-duration-filter.md
