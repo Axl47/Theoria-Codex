@@ -414,10 +414,11 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val kept = object : SeriesLibraryPreferences {
             var options = LibraryOptions(sort = LibrarySort.TITLE)
-            override fun read() = options
+            override suspend fun read() = options
             override fun write(options: LibraryOptions) { this.options = options }
         }
         val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }, library = kept) {}
+        advanceUntilIdle()
         assertEquals(LibrarySort.TITLE, viewModel.state.value.library.sort)
 
         viewModel.chooseLibrary(LibraryOptions(LibrarySort.TITLE, LibraryShow.NOT_STARTED))
