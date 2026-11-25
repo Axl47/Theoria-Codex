@@ -36,7 +36,7 @@ object ExtensionHost {
     @Volatile
     private var client: OkHttpClient? = null
 
-    fun install(
+    internal fun install(
         application: Application,
         versionName: String,
         versionCode: Int,
