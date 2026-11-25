@@ -6,6 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.media.DurationFilterProjection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
@@ -23,7 +25,13 @@ class FeedRetainedStateTest {
     @Test fun `a feed's grid state is the same object when the feed comes back into composition (ADR 0106)`() {
         var shown by mutableStateOf(true)
         val states = mutableListOf<LazyStaggeredGridState>()
-        compose.setContent { if (shown) states += rememberRetainedFeedGridState("feed") }
+        val projections = mutableListOf<DurationFilterProjection>()
+        compose.setContent {
+            if (shown) {
+                states += rememberRetainedFeedGridState("feed")
+                projections += rememberRetainedDurationProjection("feed")
+            }
+        }
         compose.waitForIdle()
         shown = false
         compose.waitForIdle()
@@ -32,6 +40,25 @@ class FeedRetainedStateTest {
 
         assertEquals(1, states.toSet().size)
         assertSame(states.first(), states.last())
+        assertSame(projections.first(), projections.last())
+    }
+
+    @Test fun `a feed dropped from the kept set is forgotten while the effect stays in composition (ADR 0106)`() {
+        var keep by mutableStateOf(setOf("feed:a", "feed:b"))
+        lateinit var retained: FeedRetainedState
+        compose.setContent {
+            retained = viewModel()
+            ForgetRetainedFeedsEffect("feed:", keep)
+        }
+        compose.waitForIdle()
+        val dropped = retained.durationProjection("feed:b")
+        val kept = retained.durationProjection("feed:a")
+
+        keep = setOf("feed:a")
+        compose.waitForIdle()
+
+        assertNotSame(dropped, retained.durationProjection("feed:b"))
+        assertSame(kept, retained.durationProjection("feed:a"))
     }
 
     @Test fun `forgetting keeps the kept feeds and their parts in every retained map, and leaves keys outside the prefix alone (ADR 0106)`() {

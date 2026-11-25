@@ -67,5 +67,9 @@ class DurationFilterProjectionTest {
         val changed = projection.project(posts, known(0 to 2_000, 1 to 1_000, 5 to 1_000), true)
         assertSame(revealing.presentedPosts, changed.presentedPosts)
         assertNotSame(revealing.presentedDurationsKey, changed.presentedDurationsKey)
+
+        val edited = posts.toMutableList().apply { this[0] = posts[0].copy(title = "edited") }
+        val replaced = projection.project(edited, known(0 to 2_000, 1 to 1_000, 5 to 1_000), true)
+        assertSame("A replaced post is shown, even with the same id", edited[0], replaced.presentedPosts?.get(0))
     }
 }

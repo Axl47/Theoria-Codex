@@ -81,12 +81,12 @@ class OffMainComputationTest {
     @Test
     fun `a replaced list is computed in the same composition (ADR 0106)`() {
         show()
-        compose.runOnIdle { list = listOf("q1", "q2", "q3") }
+        compose.runOnIdle { list = listOf("q1", "q2") }
         compose.waitForIdle()
 
-        val replaced = frames.filter { it.list == listOf("q1", "q2", "q3") }
+        val replaced = frames.filter { it.list == listOf("q1", "q2") }
         assertTrue(replaced.isNotEmpty())
-        assertTrue(replaced.all { it.value == listOf("q1a", "q2a", "q3a") })
+        assertTrue(replaced.all { it.value == listOf("q1a", "q2a") })
         assertTrue(computes.none { !it.onMain })
     }
 
