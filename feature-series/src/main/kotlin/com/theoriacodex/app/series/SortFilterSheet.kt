@@ -39,7 +39,7 @@ internal fun <F, S> SortFilterSheet(
 ) {
     ExpandedBottomSheet(onDismiss = onDismiss) {
         SheetHeader("Sort & filter", closeDescription = "Close", onDismiss = onDismiss) {
-            if (onReset != null) TextButton(onClick = onReset) { Text("Reset") }
+            TextButton(onClick = { onReset?.invoke() }, enabled = onReset != null) { Text("Reset") }
         }
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
