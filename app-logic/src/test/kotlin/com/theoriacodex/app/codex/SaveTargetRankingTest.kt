@@ -5,7 +5,6 @@ import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.SearchTerm
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,9 +32,14 @@ class SaveTargetRankingTest {
         assertEquals(listOf("a", "c"), ranked.ordered.ids())
     }
 
-    @Test fun `in any Codex ignores Likes but counts an excluded Codex`() {
-        assertFalse(rankSaveTargets(listOf(likes, a), profile, setOf(likes.codexId)).inAnyCodex)
-        assertTrue(rankSaveTargets(listOf(a, b), profile, setOf("a"), excludedCodexIds = setOf("a")).inAnyCodex)
+    @Test fun `saved in ignores Likes but counts an excluded Codex`() {
+        assertEquals(null, rankSaveTargets(listOf(likes, a), profile, setOf(likes.codexId)).savedIn)
+        assertEquals("a", rankSaveTargets(listOf(a, b), profile, setOf("a"), excludedCodexIds = setOf("a")).savedIn?.codexId)
+    }
+
+    @Test fun `saved in names the best-matching Codex that holds the post`() {
+        assertEquals("b", rankSaveTargets(listOf(a, b, c), profile, setOf("a", "b"), relevance = mapOf("b" to 0.6, "c" to 0.9)).savedIn?.codexId)
+        assertEquals(null, rankSaveTargets(listOf(a, b), profile, emptySet()).savedIn)
     }
 
     @Test fun `this session's saves from the same search outrank tag relevance`() {

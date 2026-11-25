@@ -6,7 +6,7 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Query
 import kotlin.math.exp
 
-data class SaveTargets(val ordered: List<Codex>, val suggestions: List<Codex>, val inAnyCodex: Boolean)
+data class SaveTargets(val ordered: List<Codex>, val suggestions: List<Codex>, val savedIn: Codex?)
 
 fun rankSaveTargets(
     codices: List<Codex>,
@@ -36,7 +36,7 @@ fun rankSaveTargets(
         suggestions = open.sortedWith(
             compareByDescending(score).thenByDescending { lastSavedAt[it.codexId] ?: Long.MIN_VALUE },
         ),
-        inAnyCodex = profileCodices.any { it.codexId in containingCodexIds },
+        savedIn = profileCodices.filter { it.codexId in containingCodexIds }.sortedByDescending(score).firstOrNull(),
     )
 }
 

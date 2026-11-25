@@ -17,9 +17,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Collections
@@ -63,6 +62,7 @@ import com.theoriacodex.app.codex.LocalNewCodexOpener
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.SAVE_MENU_CODICES
+import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveTarget
 import com.theoriacodex.app.codex.save
 import com.theoriacodex.app.codex.QuickSaveRecord
@@ -144,12 +144,37 @@ internal fun ViewerSaveButton(
             }
             .height(40.dp)
             .animateContentSize()
-            .padding(start = 6.dp, end = 14.dp),
+            .padding(start = 6.dp, end = if (state.next() != null) 6.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ViewerSaveLeading(state)
-        Text(state.label(), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 128.dp))
+        val savedIn = state.savedIn()
+        if (savedIn != null) ViewerSavedInLabel(savedIn, state.next()) else {
+            ViewerSaveLeading(state)
+            ViewerSaveLabel(state.label())
+        }
+    }
+}
+
+@Composable
+private fun ViewerSaveLabel(text: String, color: Color = Color.Unspecified) {
+    Text(text, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 128.dp))
+}
+
+@Composable
+private fun ViewerSavedInLabel(savedIn: SaveSuggestion, next: SaveSuggestion?) {
+    val accent = LocalViewerAccent.current
+    Icon(Icons.Default.Check, contentDescription = null, tint = accent, modifier = Modifier.size(28.dp).padding(2.dp))
+    ViewerSaveLabel(savedIn.name, accent)
+    if (next == null) return
+    Box {
+        CodexCoverImage(next.cover, null, Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))) {
+            Icon(Icons.Outlined.Collections, contentDescription = null, modifier = Modifier.padding(4.dp))
+        }
+        Icon(
+            Icons.Default.Add, contentDescription = null, tint = Color.White,
+            modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).background(Color.Black, CircleShape),
+        )
     }
 }
 
@@ -242,21 +267,11 @@ private fun Modifier.viewerSaveGestures(hold: ViewerSaveHold, postId: PostId): M
 @Composable
 private fun ViewerSaveLeading(state: ViewerSaveButtonState) {
     when (state) {
-        is ViewerSaveButtonState.Suggest -> Box {
-            CodexCoverImage(state.target.cover, null, Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))) {
-                Icon(Icons.Outlined.Collections, contentDescription = null, modifier = Modifier.padding(4.dp))
-            }
-            if (state.inAnyCodex) {
-                Icon(
-                    Icons.Default.CheckCircle, contentDescription = null, tint = LocalViewerAccent.current,
-                    modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).background(Color.Black, CircleShape),
-                )
-            }
+        is ViewerSaveButtonState.Suggest -> CodexCoverImage(state.target.cover, null, Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))) {
+            Icon(Icons.Outlined.Collections, contentDescription = null, modifier = Modifier.padding(4.dp))
         }
         is ViewerSaveButtonState.Saved -> Icon(Icons.Default.Check, contentDescription = null, tint = LocalViewerAccent.current, modifier = Modifier.size(28.dp).padding(2.dp))
-        is ViewerSaveButtonState.NoTarget -> Icon(
-            if (state.inAnyCodex) Icons.Default.Bookmark else Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(28.dp).padding(2.dp),
-        )
+        is ViewerSaveButtonState.NoTarget -> Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(28.dp).padding(2.dp))
         ViewerSaveButtonState.Loading -> Icon(Icons.Outlined.BookmarkBorder, contentDescription = null, modifier = Modifier.size(28.dp).padding(2.dp))
     }
 }
@@ -264,14 +279,14 @@ private fun ViewerSaveLeading(state: ViewerSaveButtonState) {
 private fun ViewerSaveButtonState.label(): String = when (this) {
     is ViewerSaveButtonState.Suggest -> target.name
     is ViewerSaveButtonState.Saved -> if (record.undoable) "Saved · Undo" else "Saved"
-    is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) "Saved" else "Save"
+    is ViewerSaveButtonState.NoTarget -> "Save"
     ViewerSaveButtonState.Loading -> "Save"
 }
 
 private fun ViewerSaveButtonState.description(): String = when (this) {
-    is ViewerSaveButtonState.Suggest -> "Save to ${target.name}" + if (inAnyCodex) ", already in a Codex" else ""
+    is ViewerSaveButtonState.Suggest -> savedIn?.let { "Saved in ${it.name}. " }.orEmpty() + "Save to ${target.name}"
     is ViewerSaveButtonState.Saved -> "Saved to ${record.codexName}" + if (record.undoable) ", undo" else ""
-    is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) "Saved in every Codex. Choose Codex" else "Save to Codex"
+    is ViewerSaveButtonState.NoTarget -> savedIn?.let { "Saved in ${it.name}. Choose Codex" } ?: "Save to Codex"
     ViewerSaveButtonState.Loading -> "Save to Codex"
 }
 
