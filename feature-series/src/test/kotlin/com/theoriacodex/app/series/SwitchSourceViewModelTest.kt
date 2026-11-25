@@ -95,6 +95,26 @@ class SwitchSourceViewModelTest {
     }
 
     @Test
+    fun twoOpenSheetsKeepEachOthersChoices() = runTest {
+        val a = Finding("custom_mihon_2")
+        val b = Finding("custom_mihon_3")
+        val skips = MemorySwitchSourceSkips()
+        val first = viewModel(a, b, skips = skips)
+        val second = viewModel(a, b, skips = skips)
+        advanceUntilIdle()
+        first.open("Hero")
+        second.open("Hero")
+        advanceUntilIdle()
+
+        first.toggle(listOf(a.key))
+        advanceUntilIdle()
+        second.toggle(listOf(b.key))
+        advanceUntilIdle()
+
+        assertEquals(setOf(a.key, b.key), skips.skipped)
+    }
+
+    @Test
     fun uncheckingASourceCancelsItsSearchAndNothingCheckedSearchesNothing() = runTest {
         val slow = Finding("custom_mihon_2", listOf("Hero")).apply { wait = CompletableDeferred() }
         val viewModel = viewModel(slow)
