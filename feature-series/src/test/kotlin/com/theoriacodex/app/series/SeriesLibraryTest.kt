@@ -48,6 +48,8 @@ class SeriesLibraryTest {
         assertEquals(listOf("Mid", "alpha", "Zeta"), library.arranged(reversed, "").map { it.series.title })
         assertEquals(SortChoice(LibrarySort.TITLE, SortDirection.ASCENDING), reversed.picking(LibrarySort.TITLE).sort)
         assertEquals(LibraryOptions(), reversed.reversed())
+        val oldestReadFirst = LibraryOptions(sort = SortChoice(LibrarySort.RECENTLY_READ, SortDirection.ASCENDING))
+        assertEquals(listOf("Mid", "Zeta", "alpha"), library.arranged(oldestReadFirst, "").map { it.series.title })
     }
 
     @Test

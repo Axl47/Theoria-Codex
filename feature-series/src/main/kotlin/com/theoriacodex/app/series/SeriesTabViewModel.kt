@@ -192,9 +192,10 @@ class SeriesTabViewModel(
     val content: StateFlow<SeriesTabContent> = combine(
         mutableState,
         repository.observeFollowed().map<List<FollowedSeries>, List<FollowedSeries>?> { it }.onStart { emit(null) },
-        downloads.onStart { emit(emptyMap()) },
+        downloads.map<Map<SeriesId, Int>, Map<SeriesId, Int>?> { it }.onStart { emit(null) },
     ) { state, followed, downloaded ->
-        state.content(followed.takeIf { state.libraryLoaded }, downloaded)
+        val ready = state.libraryLoaded && (downloaded != null || state.library.show != LibraryShow.DOWNLOADED)
+        state.content(followed.takeIf { ready }, downloaded.orEmpty())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(null))
 
     init {

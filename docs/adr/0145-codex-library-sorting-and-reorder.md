@@ -10,7 +10,8 @@ Sorting by usage or animation length depends on data that arrives late or change
 
 - Library: `sortCodicesForLibrary` receives Codices in manual order. Automatic sorts pin Likes first because it presents as the full-width Saved tile; usage sorts break ties on the other usage figure, and remaining ties keep manual order. `CodexListUiState.awaitingSortInputs` holds the sort until counts or usage are known, because a first frame in manual order would move the restored scroll anchor.
 - `observeCodexLibraryUsage` emits only when a figure changes (other statistics are written often); a statistics failure degrades to no usage, which leaves manual order, and never affects the Library. `codexPostUsage` likewise degrades to no usage and the date order.
-- Detail: the store orders only by save time or source (`CodexSortMode.storeOrder`); the app refines the rest in `codexPostRefinement`. Sorting is stable, so ties keep the date order. Length sorts are offered only when the collection has animated posts, unless one is already chosen (`codexSortModes`).
+- Detail: the store orders only by save time or source (`CodexSortMode.storeOrder`); the app refines the rest in `codexPostRefinement`. Sorting is stable, so ties keep the date order. Length sorts are offered only when the collection has animated posts, unless one is already chosen (`codexSortOptions`).
+- Each `CodexSortMode` and `CodexLibrarySort` value is a key plus a direction (`DirectedSort`), and the menus offer one item per key: tapping the selected key picks the value with the opposite direction (`next`), and another key starts at its first-declared value. The values keep their stored names, and every directed key has both directions, so saved sorts, restore state and backups need no migration.
 - A length sort compares each post many times and telling an animated post apart reads its media, so `lengthGroups` works out each post's group once per comparator.
 - Known durations are recomputed off the main thread as they resolve, so posts settle while resolution runs. The sorted order and known lengths are kept per Codex while the Viewer is open, so an unchanged Codex does not recompute on return. Usage is read once per Codex visit (`CodexUsageSnapshots`) so posts keep their places while the Viewer adds watch time and opens.
 - The detail feed reveals in order only for non-length sorts (`revealInOrder = !sortMode.usesDuration`): the filter's reveal keeps shown cards in place, which a length sort must not do as lengths arrive.
@@ -28,7 +29,8 @@ Order never flickers or moves under the user while data arrives, at the cost of 
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexLibrarySorting.kt`: `sortCodicesForLibrary`, `observeCodexLibraryUsage`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexListUiState.kt`: `awaitingSortInputs`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexPostSorting.kt`: `storeOrder`, `codexPostRefinement`, `lengthGroups`, `rememberCodexPostDurations`, `rememberSortedCodexPosts`, `codexPostUsage`, `CodexUsageSnapshots`
-- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailChips.kt`: `codexSortModes`
+- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailChips.kt`: `codexSortOptions`
+- `core-domain/src/main/kotlin/com/theoriacodex/domain/model/Sorting.kt`: `DirectedSort`, `next`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailScreen.kt`: `rememberCodexDetailFeed`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexGridReorder.kt`: `CodexGridReorderState`, `codexReorderGestures`, `followFinger`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexCoverTile.kt`: `CodexCoverTile`

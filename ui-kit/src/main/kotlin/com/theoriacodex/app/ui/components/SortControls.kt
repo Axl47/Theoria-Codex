@@ -96,27 +96,31 @@ fun <K> SortMenu(
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         options.forEach { option ->
-            val active = option.key == choice.key
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        option.label,
-                        color = if (active) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                        fontWeight = if (active) FontWeight.Medium else null,
-                    )
-                },
-                leadingIcon = { Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) { if (active) SortDirectionMark(choice.direction) } },
-                modifier = Modifier.semantics {
-                    selected = active
-                    if (active) choice.direction?.let { stateDescription = it.label }
-                },
-                onClick = {
-                    onDismiss()
-                    onPick(option.key)
-                },
-            )
+            SortMenuItem(option.label, choice.direction.takeIf { option.key == choice.key }, active = option.key == choice.key) {
+                onDismiss()
+                onPick(option.key)
+            }
         }
     }
+}
+
+@Composable
+private fun SortMenuItem(label: String, direction: SortDirection?, active: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                label,
+                color = if (active) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                fontWeight = if (active) FontWeight.Medium else null,
+            )
+        },
+        leadingIcon = { Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) { if (active) SortDirectionMark(direction) } },
+        modifier = Modifier.semantics {
+            selected = active
+            direction?.let { stateDescription = it.label }
+        },
+        onClick = onClick,
+    )
 }
 
 const val REVERSE_ORDER = "Reverse order"

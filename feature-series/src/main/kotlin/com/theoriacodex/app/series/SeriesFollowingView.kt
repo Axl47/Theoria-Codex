@@ -3,6 +3,8 @@ package com.theoriacodex.app.series
 import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +65,14 @@ internal fun FollowingBody(
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
+    val sort = content.library.sort
+    var arrangedSort by remember { mutableStateOf(sort) }
+    LaunchedEffect(sort) {
+        if (sort != arrangedSort) {
+            arrangedSort = sort
+            grid.scrollToItem(0)
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
             FollowingControls(
@@ -128,6 +139,7 @@ internal fun missingExtensionsLine(count: Int): String =
 internal val FollowedCheck.message: String
     get() = if (failed == checked) "Couldn't check for updates" else "Couldn't check $failed series"
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FollowingControls(
     content: SeriesTabContent,
@@ -138,12 +150,14 @@ private fun FollowingControls(
 ) {
     val filtered = content.library.show != LibraryShow.ALL
     val sort = content.library.sort
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (content.offersFilter) KindFilter(content.filter, onChooseKind, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
-        SortLabel(sort.key.label(content.words), sort.direction, onReverse)
-        IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
-            BadgedBox(badge = { if (filtered) Badge() }) {
-                Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
+    FlowRow(modifier.fillMaxWidth(), itemVerticalAlignment = Alignment.CenterVertically) {
+        if (content.offersFilter) KindFilter(content.filter, onChooseKind)
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            SortLabel(sort.key.label(content.words), sort.direction, onReverse)
+            IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
+                BadgedBox(badge = { if (filtered) Badge() }) {
+                    Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
+                }
             }
         }
     }

@@ -83,15 +83,16 @@ internal fun List<FollowedSeries>.arranged(options: LibraryOptions, query: Strin
     val shown = filter { item ->
         options.show.admits(item, downloads[item.series.id] ?: 0) && (needle.isEmpty() || item.series.title.contains(needle, ignoreCase = true))
     }
-    val sort = options.sort.key
-    val natural = when (sort) {
-        LibrarySort.UNREAD -> shown
-        LibrarySort.LAST_UPDATED -> shown.sortedByDescending { it.lastUpdatedAtEpochMs ?: Long.MIN_VALUE }
-        LibrarySort.RECENTLY_READ -> shown.sortedByDescending { it.lastReadAtEpochMs ?: Long.MIN_VALUE }
-        LibrarySort.RECENTLY_ADDED -> shown.sortedByDescending { it.followedAtEpochMs ?: Long.MIN_VALUE }
-        LibrarySort.TITLE -> shown.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.series.title })
+    val descending = options.sort.direction == SortDirection.DESCENDING
+    fun <T : Comparable<T>> by(order: Comparator<T>, value: (FollowedSeries) -> T?) =
+        shown.sortedWith(compareBy(nullsLast(if (descending) order.reversed() else order), value))
+    return when (options.sort.key) {
+        LibrarySort.UNREAD -> if (descending) shown else shown.sortedBy { it.unreadCount }
+        LibrarySort.LAST_UPDATED -> by(naturalOrder()) { it.lastUpdatedAtEpochMs }
+        LibrarySort.RECENTLY_READ -> by(naturalOrder()) { it.lastReadAtEpochMs }
+        LibrarySort.RECENTLY_ADDED -> by(naturalOrder()) { it.followedAtEpochMs }
+        LibrarySort.TITLE -> by(String.CASE_INSENSITIVE_ORDER) { it.series.title }
     }
-    return if (options.sort.direction == sort.natural) natural else natural.asReversed()
 }
 
 interface SeriesLibraryPreferences {

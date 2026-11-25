@@ -29,7 +29,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,19 +92,26 @@ internal fun SeriesCard(
 ) {
     val kind = series.id.source.seriesKind
     val anime = marked && kind == SeriesKind.ANIME
+    val description = counts.description(kind)
     Box(modifier.aspectRatio(COVER_ASPECT)) {
-        CardFace(series, onClick, followed, anime)
-        CountBadge(counts, kind, Modifier.align(Alignment.TopStart).offset(-COUNT_OVERHANG, -COUNT_OVERHANG))
+        CardFace(series, onClick, followed, anime, description)
+        CountBadge(counts, Modifier.align(Alignment.TopStart).offset(-COUNT_OVERHANG, -COUNT_OVERHANG))
     }
 }
 
+private fun CardCounts.description(kind: SeriesKind): String? = listOfNotNull(
+    unread.takeIf { it > 0 }?.let(kind.words::unfinished),
+    downloaded.takeIf { it > 0 }?.let { "$it downloaded" },
+).joinToString(", ").ifEmpty { null }
+
 @Composable
-private fun CardFace(series: Series, onClick: () -> Unit, followed: Boolean, anime: Boolean) {
+private fun CardFace(series: Series, onClick: () -> Unit, followed: Boolean, anime: Boolean, counts: String?) {
     Box(
         Modifier
             .fillMaxSize()
             .clip(COVER_SHAPE)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics { counts?.let { stateDescription = it } },
     ) {
         SeriesCover(series, Modifier.fillMaxSize())
         if (followed) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
@@ -127,18 +135,14 @@ private fun CardFace(series: Series, onClick: () -> Unit, followed: Boolean, ani
 }
 
 @Composable
-private fun CountBadge(counts: CardCounts, kind: SeriesKind, modifier: Modifier) {
+private fun CountBadge(counts: CardCounts, modifier: Modifier) {
     if (counts.unread <= 0 && counts.downloaded <= 0) return
-    val description = listOfNotNull(
-        counts.unread.takeIf { it > 0 }?.let(kind.words::unfinished),
-        counts.downloaded.takeIf { it > 0 }?.let { "$it downloaded" },
-    ).joinToString(", ")
     Row(
         modifier
             .background(MaterialTheme.colorScheme.background, COUNT_RING_SHAPE)
             .padding(COUNT_RING)
             .clip(COUNT_SHAPE)
-            .clearAndSetSemantics { contentDescription = description },
+            .clearAndSetSemantics {},
     ) {
         if (counts.downloaded > 0) CountSegment(counts.downloaded, MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onTertiary)
         if (counts.unread > 0) CountSegment(counts.unread, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary)
