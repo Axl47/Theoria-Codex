@@ -60,7 +60,7 @@ class RelatedPostsRouteControllerTest {
     }
 
     @Test
-    fun `a dependency's cancellation fails the shelf instead of leaving it loading`() = runTest {
+    fun `a dependency's cancellation fails the shelf instead of leaving it loading (ADR 0002)`() = runTest {
         val seed = testPost(sourcePostId = "seed")
         var state: RelatedPostsUiState = RelatedPostsUiState.Idle
         val controller = controller(

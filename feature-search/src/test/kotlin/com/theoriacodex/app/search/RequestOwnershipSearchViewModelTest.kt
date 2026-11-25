@@ -144,7 +144,7 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
         }
 
     @Test
-    fun `a dependency's cancellation fails the search instead of leaving it loading`() =
+    fun `a dependency's cancellation fails the search instead of leaving it loading (ADR 0002)`() =
         runTest(mainDispatcherRule.dispatcher) {
             val viewModel = viewModel(
                 adapter = ViewModelSearchAdapter(),
