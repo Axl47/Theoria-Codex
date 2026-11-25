@@ -104,16 +104,16 @@ class ForYouInterestsTest {
         assertEquals(listOf(listOf("x"), listOf("z")), picker.pick(unavailable = setOf("y")).map { it.tags })
     }
 
-    @Test fun `tags pair only when they share most of the more common one's Likes and at least two (ADR 0071)`() {
+    @Test fun `tags pair only when they share most of the more common one's Likes and more than a single Like (ADR 0071)`() {
         fun picked(documents: List<List<String>>) =
             ForYouInterests.prepare(SourceKey.GELBOORU, documents, likedOnly(documents)).pick().map { it.tags }
 
-        assertEquals(listOf(listOf("x", "y")), picked(List(6) { listOf("x", "y") } + List(4) { listOf("x") } + List(4) { listOf("y") }))
-        assertEquals(listOf(listOf("x"), listOf("y")), picked(List(5) { listOf("x", "y") } + List(5) { listOf("x") } + List(5) { listOf("y") }))
+        assertEquals(listOf(listOf("x", "y"), listOf("z")), picked(List(9) { listOf("x", "y") } + listOf(listOf("x"), listOf("y")) + List(4) { listOf("z") }))
+        assertEquals(listOf(listOf("x"), listOf("y")), picked(List(2) { listOf("x", "y") } + List(8) { listOf("x") } + List(8) { listOf("y") }))
         assertEquals(listOf(listOf("x"), listOf("y")), picked(listOf(listOf("x", "y"))))
         assertEquals(
             listOf(listOf("x"), listOf("y"), listOf("z")),
-            picked(List(5) { listOf("x", "y") } + List(5) { listOf("x") } + List(1) { listOf("y") } + List(3) { listOf("z") }),
+            picked(List(4) { listOf("x", "y") } + List(6) { listOf("x") } + List(2) { listOf("y") } + List(3) { listOf("z") }),
         )
     }
 
@@ -156,11 +156,13 @@ class ForYouPictureInterestsTest {
         assertEquals(listOf(listOf("cat_ears")), interests.map { it.tags })
     }
 
-    @Test fun `before the source has watched enough, a predicted tag must beat its Danbooru share four times (ADR 0087)`() {
-        val evidence = PictureEvidence(mapOf("cat ears" to 7.0), mapOf("cat ears" to 7), kept = 39, baseRates = mapOf("cat ears" to 0.048))
+    @Test fun `before the source has watched enough, a predicted tag must beat its Danbooru share by a wide margin (ADR 0087)`() {
+        val evidence = PictureEvidence(mapOf("cat ears" to 7.0), mapOf("cat ears" to 7), kept = 39, baseRates = mapOf("cat ears" to 0.15))
         val cold = TagAffinityInputs(pictures = evidence)
-        assertFalse(cold.pictureAffinity(source, "cat ears", "cat_ears").proven)
-        assertTrue(cold.copy(pictures = evidence.copy(baseRates = mapOf("cat ears" to 0.046))).pictureAffinity(source, "cat ears", "cat_ears").proven)
+        fun proven(baseRate: Double) = cold.copy(pictures = evidence.copy(baseRates = mapOf("cat ears" to baseRate))).pictureAffinity(source, "cat ears", "cat_ears").proven
+        assertFalse(proven(0.1875))
+        assertFalse(proven(0.15))
+        assertTrue(proven(0.02))
     }
 
     @Test fun `a predicted tag common on Danbooru is not proven by a low watched count (ADR 0087)`() {

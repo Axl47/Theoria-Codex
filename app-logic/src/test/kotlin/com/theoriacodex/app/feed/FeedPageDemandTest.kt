@@ -100,6 +100,9 @@ class FeedPageDemandTest {
         assertFalse(
             demand.update(hiddenPage.copy(durationsBlockPaging = true, canonicalCount = 20, requiredCanonicalIndex = 110)).loadNextPage,
         )
+        val restoring = hiddenPage.copy(canonicalCount = 20, requiredCanonicalIndex = 110)
+        assertFalse(demand.update(restoring.copy(refreshing = true)).loadNextPage)
+        assertFalse(demand.update(restoring.copy(paging = true)).loadNextPage)
         assertTrue(demand.update(hiddenPage).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(completedGeneration = 2L, durationsBlockPaging = true)).showContinue)
         assertTrue(demand.update(hiddenPage.copy(completedGeneration = 2L)).showContinue)

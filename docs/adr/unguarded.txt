@@ -30,6 +30,7 @@
 0063-extension-repos-and-install.md
 0064-extension-source-state.md
 0065-extension-source-ids.md
+0067-custom-sites-controller.md
 0090-viewer-and-feed-playback.md
 0091-feed-chrome-stability.md
 0092-frame-mixing.md

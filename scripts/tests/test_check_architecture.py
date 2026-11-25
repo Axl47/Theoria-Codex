@@ -60,9 +60,41 @@ class DeliveryPlanTest(unittest.TestCase):
             self.assertIn(check_architecture.delivery_plans_ignore_source_names, check_architecture.RULES)
             with mock.patch.object(check_architecture, "ROOT", root):
                 self.assertEqual(
-                    ["PostMedia.kt's delivery plans must decide from the media, not from SourceKey"],
+                    [
+                        "PostMedia.kt's delivery plans must decide from the media, not from SourceKey",
+                        "PostMedia.kt's delivery plans must not decide from a source id or isCustom",
+                    ],
                     check_architecture.delivery_plans_ignore_source_names(),
                 )
+
+
+    def test_reports_a_preview_candidate_that_decides_from_a_source_id_adr_0074(self) -> None:
+        with main_sources({"media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt": (
+            "fun postPreviewImageCandidate(post: Post): Candidate? {\n"
+            "    if (post.id.source.id == \"danbooru\") return null\n"
+            "}\n"
+            "fun postPlaybackMediaCandidate() = Unit\n"
+            "fun previewMediaDeliveryPlan() = Unit\n"
+            "private fun mediaDeliveryPlan() = hasLighterRenditions()\n"
+            "private fun ImageRef.hasLighterRenditions() = true\n"
+        )}):
+            self.assertEqual(
+                ["PostMedia.kt's delivery plans must not decide from a source id or isCustom"],
+                check_architecture.delivery_plans_ignore_source_names(),
+            )
+
+    def test_allows_only_the_named_pixiv_medium_first_exception_adr_0074(self) -> None:
+        with main_sources({"media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt": (
+            "fun postPreviewImageCandidate(post: Post): Candidate? {\n"
+            "    if (post.id.source == SourceKey.PIXIV && full != null) {\n"
+            "    }\n"
+            "}\n"
+            "fun postPlaybackMediaCandidate() = Unit\n"
+            "fun previewMediaDeliveryPlan() = Unit\n"
+            "private fun mediaDeliveryPlan() = hasLighterRenditions()\n"
+            "private fun ImageRef.hasLighterRenditions() = true\n"
+        )}):
+            self.assertEqual([], check_architecture.delivery_plans_ignore_source_names())
 
 
 @contextlib.contextmanager

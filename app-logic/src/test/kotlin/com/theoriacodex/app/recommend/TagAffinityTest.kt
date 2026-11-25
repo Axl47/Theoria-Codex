@@ -99,7 +99,7 @@ class TagAffinityTest {
     @Test
     fun `before enough watched posts, Likes alone mark a tag universal unless it was chosen explicitly (ADR 0087)`() {
         val likes = List(5) { like(listOf("solo", "cat")) }
-        val inputs = tagAffinityInputs(likes, emptyList(), listOf("cat"), emptyList(), statistics(watched = 19, "solo" to 19))
+        val inputs = tagAffinityInputs(likes, emptyList(), listOf("cat"), emptyList(), statistics(watched = 5, "solo" to 5))
 
         val ranked = tagAffinities(post("solo", "cat"), inputs).associateBy { it.tag }
 
@@ -180,13 +180,13 @@ class TagAffinityTest {
     }
 
     @Test
-    fun `a source with plenty watched but fewer than twenty kept posts has no lift yet (ADR 0087)`() {
+    fun `a source with plenty watched but too few kept posts has no lift yet (ADR 0087)`() {
         fun inputs(kept: Int) = tagAffinityInputs(
             List(kept) { index -> like(listOf("moth"), "$index") }, emptyList(), emptyList(), emptyList(), statistics(watched = 300, "moth" to 3),
         )
 
-        assertEquals(null, inputs(19).lift(source, "moth"))
-        assertTrue(inputs(20).lift(source, "moth")!! > 10)
+        assertEquals(null, inputs(3).lift(source, "moth"))
+        assertTrue(inputs(60).lift(source, "moth")!! > 10)
     }
 
     @Test

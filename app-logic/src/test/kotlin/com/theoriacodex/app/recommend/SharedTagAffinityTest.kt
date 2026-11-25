@@ -3,11 +3,14 @@ package com.theoriacodex.app.recommend
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.data.repository.InMemoryLikesRepository
+import com.theoriacodex.data.repository.LikedPost
+import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.InMemorySavedSearchRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.ProfileLibraryIds
 import com.theoriacodex.data.repository.repositoryTestPost
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.io.IOException
 import kotlinx.coroutines.async
@@ -17,11 +20,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -54,14 +59,18 @@ class SharedTagAffinityTest {
         codex.addItems(ProfileLibraryIds.codex(other, "b"), listOf(tagged("l", "lamp")))
         settings.addFavoriteTag(main, SourceKey.GELBOORU, listOf("fox"))
         settings.addFavoriteTag(other, SourceKey.GELBOORU, listOf("owl"))
-        val affinity = share(settings, codex)
+        val likes = likesOf(
+            main to listOf(tagged("lm", "newt")),
+            other to listOf(tagged("lo", "crow")),
+        )
+        val affinity = share(settings, codex, likes)
 
         val mainInterest = affinity.forProfile(main).interest.keys
         settings.setActiveProfile(other)
         val otherInterest = affinity.forProfile(other).interest.keys
 
-        assertTrue(mainInterest.toString(), "moth" in mainInterest && "fox" in mainInterest && "lamp" !in mainInterest && "owl" !in mainInterest)
-        assertTrue(otherInterest.toString(), "lamp" in otherInterest && "owl" in otherInterest && "moth" !in otherInterest && "fox" !in otherInterest)
+        assertTrue(mainInterest.toString(), "moth" in mainInterest && "fox" in mainInterest && "newt" in mainInterest && "lamp" !in mainInterest && "owl" !in mainInterest && "crow" !in mainInterest)
+        assertTrue(otherInterest.toString(), "lamp" in otherInterest && "owl" in otherInterest && "crow" in otherInterest && "moth" !in otherInterest && "fox" !in otherInterest && "newt" !in otherInterest)
     }
 
     @Test
@@ -87,7 +96,7 @@ class SharedTagAffinityTest {
 
         settings.setActiveProfile(other)
         runCurrent()
-        assertTrue("lamp" in affinity.forProfile(other).interest)
+        assertTrue("lamp" in withTimeout(1_000) { affinity.forProfile(other) }.interest)
         advanceTimeBy(6_000)
 
         val latest = affinity.latest.value.interest.keys
@@ -95,7 +104,7 @@ class SharedTagAffinityTest {
     }
 
     @Test
-    fun `a failing library read gives empty inputs at once and retries after one, then two seconds (ADR 0085)`() = runTest {
+    fun `a failing library read gives empty inputs at once and retries after a growing pause (ADR 0085)`() = runTest {
         val failures = 2
         val settings = InMemorySettingsRepository()
         val main = settings.observeSettings().first().activeProfileId
@@ -123,7 +132,7 @@ class SharedTagAffinityTest {
     }
 
     @Test
-    fun `retries keep doubling to sixty-four seconds and then stay there (ADR 0085)`() = runTest {
+    fun `retries keep doubling up to their cap (ADR 0085)`() = runTest {
         val failures = 8
         val settings = InMemorySettingsRepository()
         val main = settings.observeSettings().first().activeProfileId
@@ -152,8 +161,18 @@ class SharedTagAffinityTest {
     private fun tagged(id: String, tag: String) =
         repositoryTestPost(id).copy(rawTags = listOf(tag), canonicalTags = listOf(tag), taxonomy = emptyList())
 
-    private fun TestScope.share(settings: InMemorySettingsRepository, codex: CodexRepository) = shareTagAffinityInputs(
-        backgroundScope, settings, InMemoryLikesRepository(), codex, InMemorySavedSearchRepository(), InMemoryStatisticsRepository(),
+    private fun likesOf(vararg byProfile: Pair<String, List<Post>>) = object : LikesRepository {
+        private val liked = byProfile.associate { (profile, posts) -> profile to posts.map { LikedPost(profile, it.id, 0L, it.rawTags) } }
+        override fun observeLikes(profileId: String) = flowOf(liked[profileId].orEmpty())
+        override fun observeLikedPostIds(profileId: String) = flowOf(liked[profileId].orEmpty().mapTo(mutableSetOf(), LikedPost::postId))
+    }
+
+    private fun TestScope.share(
+        settings: InMemorySettingsRepository,
+        codex: CodexRepository,
+        likes: LikesRepository = InMemoryLikesRepository(),
+    ) = shareTagAffinityInputs(
+        backgroundScope, settings, likes, codex, InMemorySavedSearchRepository(), InMemoryStatisticsRepository(),
         computationDispatcher = StandardTestDispatcher(testScheduler),
     )
 }

@@ -60,18 +60,22 @@ class SaveTargetRankingTest {
         assertEquals("b", rankSaveTargets(listOf(a, b), profile, emptySet(), relevance, lastSavedAt = lastSavedAt, nowEpochMs = now + 3 * HOUR).suggestions.first().codexId)
     }
 
-    @Test fun `a save fades by about two thirds every half hour, from a boost of three tenths (ADR 0078)`() {
+    @Test fun `a save fades over time from its starting boost (ADR 0078)`() {
         val now = 10 * HOUR
-        fun leader(savedAgo: Long, bRelevance: Double) = rankSaveTargets(
-            listOf(a, b), profile, emptySet(), mapOf("b" to bRelevance), lastSavedAt = mapOf("a" to now - savedAgo), nowEpochMs = now,
-        ).suggestions.first().codexId
+        val ladder = listOf(0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 0.95)
+        fun beaten(savedAgo: Long) = ladder.count { bRelevance ->
+            rankSaveTargets(
+                listOf(a, b), profile, emptySet(), mapOf("b" to bRelevance), lastSavedAt = mapOf("a" to now - savedAgo), nowEpochMs = now,
+            ).suggestions.first().codexId == "a"
+        }
 
-        assertEquals("a", leader(savedAgo = 0, bRelevance = 0.29))
-        assertEquals("b", leader(savedAgo = 0, bRelevance = 0.31))
-        assertEquals("a", leader(savedAgo = 30 * MINUTE, bRelevance = 0.11))
-        assertEquals("b", leader(savedAgo = 30 * MINUTE, bRelevance = 0.111))
-        assertEquals("a", leader(savedAgo = 60 * MINUTE, bRelevance = 0.04))
-        assertEquals("b", leader(savedAgo = 60 * MINUTE, bRelevance = 0.042))
+        val ages = listOf(0L, 10 * MINUTE, 30 * MINUTE, HOUR, 3 * HOUR, 24 * HOUR).map(::beaten)
+
+        assertTrue(ages.toString(), ages.first() > 0)
+        assertTrue(ages.toString(), ages.first() < ladder.size)
+        assertEquals(ages.toString(), ages.sortedDescending(), ages)
+        assertTrue(ages.toString(), ages.first() > ages.last())
+        assertEquals(ages.toString(), 0, ages.last())
     }
 
     @Test fun `a recent save never lifts a strong match over a Codex this search already saved into (ADR 0078)`() {

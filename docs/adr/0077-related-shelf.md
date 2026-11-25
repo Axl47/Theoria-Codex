@@ -32,4 +32,4 @@ Feed filters must keep retained seeds reachable.
 - `app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchVisibilityFiltersTest.kt`: `watched liked seed stays visible until recommendations are dismissed (ADR 0077)`, `pending like retains its automatic save without retaining unrelated saved posts (ADR 0077)`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsRouteControllerTest.kt`: `liking a shelf post promotes it and opens a retained next page (ADR 0077)`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsDiagnosticsTest.kt`: `a lifecycle line names no post, tag, address or account (ADR 0077)`
-- Left to prose: that related streams are never restored is decided by the Viewer route in `:app`, and each feed owner's `retryPage` lives in its feature module; neither is guarded.
+- Left to prose: that related streams are never restored, and each feed owner's `retryPage`, are not yet guarded; the first is decided by the Viewer route in `:app` and testable beside `ViewerRoutePolicyTest`, the second in each owner's feature module, beside tests such as `SearchPageRecoveryTest` and `ForYouDeckViewModelTest`.

@@ -29,4 +29,4 @@ Source switching never loses terms silently.
 - `app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchStateContractTest.kt`: `restoring keeps the notice that stored source terms were removed (ADR 0079)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchRequestReducerTest.kt`: `each mode remembers its last search and Multi-Search does not (ADR 0079)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchTermLimitNoticeTest.kt`: `unified warns about a capped source while a single-source search is refused (ADR 0079)`, `queries within the budget and terms Unified never sends produce no notice (ADR 0079, 0080)`, `a ranked sort lowers the budget and says so (ADR 0079)`
-- Left to prose: that only the filter reset clears "Animated only" depends on the Search screen's toggle in `feature-search`, which is not guarded.
+- Left to prose: that only the filter reset clears "Animated only" is not yet guarded; it depends on the Search screen's toggle in `feature-search` and is testable there, beside `SearchFilterApplyTest`.

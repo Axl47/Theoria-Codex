@@ -17,6 +17,7 @@ A stale answer for another search can never land on screen.
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchExecutionContract.kt`: `searchExecutionKey`, `cachedFirstPage`, `completedSuccessfully`, `admits`, `showsPartialResults`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchCoordinator.kt`: `cachedFirstPage`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchTermLimitNotice.kt`: `searchTermLimitNotices`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchVisibilityFilters.kt`: `hidesStillsOnPhone`
 

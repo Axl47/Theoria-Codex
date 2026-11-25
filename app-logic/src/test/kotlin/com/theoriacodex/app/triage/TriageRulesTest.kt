@@ -120,7 +120,8 @@ class TriageRulesTest {
 
     @Test fun `a sparse Hitomi post's predicted tag meets the hidden tags of every booru source (ADR 0089)`() {
         val sparse = post().copy(id = PostId(SourceKey.HITOMI, "h"))
-        val booruSources = listOf(SourceKey.DANBOORU, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.RULE34XXX, SourceKey.PIXIV)
+        val custom = requireNotNull(SourceKey.parse("custom_booru_example"))
+        val booruSources = listOf(SourceKey.DANBOORU, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.RULE34XXX, SourceKey.PIXIV, custom)
 
         booruSources.forEach { booru ->
             assertTrue(booru.id, sparse.hiddenBy(mapOf(booru to setOf("furry")), seen("furry", 0.4f)))

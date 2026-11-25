@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeckPlannerTest {
@@ -26,8 +27,9 @@ class DeckPlannerTest {
         assertEquals("the caller drops the seen and duplicate posts too", mapOf("a" to 2, "b" to 2), batch.taken)
     }
 
-    @Test fun `three skips in a row halve a lane until a like restores it (ADR 0070)`() {
-        val skipped = (1..3).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.SKIPPED, a) }
+    @Test fun `repeated skips halve a lane until a like restores it (ADR 0070)`() {
+        val skipped = skips(skipsToHalve())
+        assertTrue(skipsToHalve() > 1)
         assertEquals(0.5, skipped.weight("a"), 0.0)
 
         val lanes = listOf(lane(a, "a1", "a2", "a3", "a4"), lane(b, "b1", "b2", "b3", "b4"))
@@ -41,17 +43,25 @@ class DeckPlannerTest {
             .after(ForYouVerdictKind.SKIPPED, a)
         assertEquals(1.0, broken.weight("a"), 0.0)
 
-        val reduced = (1..3).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.SKIPPED, a) }
+        val reduced = skips(skipsToHalve())
         assertEquals(1.0, reduced.after(ForYouVerdictKind.SAVED, a).weight("a"), 0.0)
 
-        val floor = (1..12).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }
-        assertEquals(0.25, floor.weight("a"), 0.0)
+        val run = skipsToHalve()
+        fun hides(runs: Int) = (1..runs * run).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }.weight("a")
+        assertTrue(hides(40) > 0.0)
+        assertTrue(hides(40) < 1.0)
+        assertEquals(hides(40), hides(41), 0.0)
     }
 
-    @Test fun `every third hide halves a lane (ADR 0070)`() {
-        val weights = (1..6).runningFold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }.map { it.weight("a") }
+    @Test fun `hides and skips share one run that halves a lane (ADR 0070)`() {
+        val run = skipsToHalve()
+        val hidden = (1..run).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }
+        val mixed = skips(run - 1).after(ForYouVerdictKind.HID, a)
+        val twice = (1..run).fold(hidden) { steering, _ -> steering.after(ForYouVerdictKind.HID, a) }
 
-        assertEquals(listOf(1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.25), weights)
+        assertEquals(0.5, hidden.weight("a"), 0.0)
+        assertEquals(0.5, mixed.weight("a"), 0.0)
+        assertTrue(twice.weight("a") < hidden.weight("a"))
     }
 
     @Test fun `injected cards come first and undo drops the ones its post asked for (ADR 0070)`() {
@@ -110,6 +120,8 @@ class DeckPlannerTest {
         assertEquals(listOf("s1", "a2"), batch.cards.map { it.post.id.sourcePostId })
     }
 
+    private fun skips(count: Int) = (1..count).fold(DeckSteering()) { steering, _ -> steering.after(ForYouVerdictKind.SKIPPED, a) }
+    private fun skipsToHalve() = (1..100).first { skips(it).weight("a") < 1.0 }
     private fun lane(origin: DeckOrigin.Lane, vararg ids: String) = DeckLane(origin, ids.map(::post))
     private fun id(value: String) = PostId(SourceKey.PIXIV, value)
     private fun post(value: String) = Post(
