@@ -1,5 +1,7 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.lifecycle.compose.LifecycleStartEffect
+import com.theoriacodex.app.ui.LocalTabShown
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.ScrollableState
@@ -27,6 +29,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
@@ -114,31 +117,41 @@ fun ScrollChromeBox(
     state: ScrollChromeState = rememberScrollChromeState(),
     content: @Composable () -> Unit,
 ) {
-    val active = enabled && !rememberTouchExplorationEnabled()
+    ScrollChromeResets(state, active = enabled && !rememberTouchExplorationEnabled())
+    val scope = rememberCoroutineScope()
+    val connection = remember(state, scope) { state.connection(scope) }
+    val measure = remember(state) { scrollChromeMeasure(state) }
+    CompositionLocalProvider(LocalScrollChrome provides state) {
+        Layout(
+            content = { Box(Modifier.onPlaced { state.root = it }) { content() } },
+            modifier = modifier.clipToBounds().nestedScroll(connection),
+            measurePolicy = measure,
+        )
+    }
+}
+
+@Composable
+private fun ScrollChromeResets(state: ScrollChromeState, active: Boolean) {
     SideEffect {
         if (state.active != active) {
             state.active = active
             state.show()
         }
     }
-    val scope = rememberCoroutineScope()
-    val connection = remember(state, scope) { state.connection(scope) }
-    CompositionLocalProvider(LocalScrollChrome provides state) {
-        Layout(
-            content = { Box(Modifier.onPlaced { state.root = it }) { content() } },
-            modifier = modifier.clipToBounds().nestedScroll(connection),
-        ) { measurables, constraints ->
-            val extra = if (constraints.hasBoundedHeight) state.hideablePx else 0
-            val height = constraints.maxHeight + extra
-            val placeable = measurables.single().measure(
-                if (constraints.hasBoundedHeight) constraints.copy(minHeight = height, maxHeight = height) else constraints,
-            )
-            val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
-            val visibleHeight = if (constraints.hasBoundedHeight) constraints.maxHeight else placeable.height
-            layout(width, visibleHeight) {
-                placeable.placeWithLayer(0, 0) { translationY = -state.offsetPx.coerceAtMost(state.hideablePx.toFloat()) }
-            }
-        }
+    val tabShown = LocalTabShown.current
+    LaunchedEffect(state, tabShown) { snapshotFlow(tabShown).collect { shown -> if (!shown) state.show() } }
+    LifecycleStartEffect(state) { onStopOrDispose { state.show() } }
+}
+
+private fun scrollChromeMeasure(state: ScrollChromeState) = MeasurePolicy { measurables, constraints ->
+    if (!constraints.hasBoundedHeight) {
+        val placeable = measurables.single().measure(constraints)
+        return@MeasurePolicy layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+    val height = constraints.maxHeight + state.hideablePx
+    val placeable = measurables.single().measure(constraints.copy(minHeight = height, maxHeight = height))
+    layout(placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth), constraints.maxHeight) {
+        placeable.placeWithLayer(0, 0) { translationY = -state.offsetPx.coerceAtMost(state.hideablePx.toFloat()) }
     }
 }
 

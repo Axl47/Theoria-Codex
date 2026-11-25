@@ -24,7 +24,7 @@ scope.
   1:1. Any scroll-up starts revealing it before the list moves. On release it settles toward the last direction,
   but never stays hidden while the list is at its top (`ScrollChromeTopEffect`, which also catches programmatic
   scrolls such as tab reselect).
-- The state is remembered, not saved, so returning to a tab or back from the Viewer shows the header. A focused
+- The header returns when its tab is left (`LocalTabShown`, provided per page by `HomePager`, because the pager can keep a page's state across a switch) and when the screen stops, such as under the Viewer (`LifecycleStartEffect`). A focused
   hideable shows it, and with touch exploration on (`rememberTouchExplorationEnabled`) nothing hides, so TalkBack
   and keyboard focus never rest on an off-screen control.
 - Wired screens: Series (view switch, Following controls, Browse header), For You in grid mode (bar, chips or
@@ -48,6 +48,8 @@ which is why it was left out.
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckScreen.kt`: `ForYouDeckScreen`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/library/LibraryHeader.kt`: `LibraryHeader`
 - `app/src/main/java/com/theoriacodex/app/ui/LibraryDestination.kt`: `LibraryDestination`
+- `app/src/main/java/com/theoriacodex/app/ui/TheoriaHomeDestinations.kt`: `HomePager`
+- `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/SharedNavigation.kt`: `LocalTabShown`
 
 ## Guarded by
 
@@ -55,5 +57,7 @@ which is why it was left out.
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `any scroll up reveals before the list moves (ADR 0218)`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `release settles toward the last direction but never hides at the top (ADR 0218)`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `the lowest hideable sets the range and an inactive chrome never hides (ADR 0218)`
+- `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `show returns the header at once (ADR 0218)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218`
+- `app/src/androidTest/java/com/theoriacodex/app/journeys/HeaderHidesOnScrollJourneyTest.kt`: `theLibraryHeaderLeavesOnScrollDownAndReturnsOnScrollUpAndAfterATabSwitchWhileTabsStay_adr_0218`
 - Left to prose: that hiding never resizes the grid's viewport is a layout property; a host test would need to measure the grid across frames, and the device frame-timing check covers it instead.

@@ -46,6 +46,8 @@ val LocalNetworkOnline = staticCompositionLocalOf<StateFlow<Boolean>> { MutableS
 
 val LocalTabReselects = staticCompositionLocalOf<SharedFlow<TopLevelDestination>> { MutableSharedFlow() }
 
+val LocalTabShown = staticCompositionLocalOf<() -> Boolean> { { true } }
+
 @Composable
 fun ScrollToTopOnTabReselect(destination: TopLevelDestination, scrollToTop: suspend () -> Unit) {
     val reselects = LocalTabReselects.current

@@ -15,7 +15,7 @@ import org.junit.Test
 
 class HeaderHidesOnScrollJourneyTest : AppJourneyFixture() {
     @Test
-    fun theLibraryHeaderLeavesOnScrollDownAndReturnsOnScrollUpWhileTabsStay_adr_0218() {
+    fun theLibraryHeaderLeavesOnScrollDownAndReturnsOnScrollUpAndAfterATabSwitchWhileTabsStay_adr_0218() {
         io {
             val post = posts.getValue(SourceKey.PIXIV).first()
             repeat(CODICES) { index ->
@@ -34,6 +34,12 @@ class HeaderHidesOnScrollJourneyTest : AppJourneyFixture() {
 
         compose.onRoot().performTouchInput { swipeDown(startY = centerY, endY = centerY + height / 10f) }
         waitFor("Library header returned on scroll-up") { settings.isDisplayed() }
+
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + height / 4f, endY = centerY - height / 4f) }
+        waitFor("Library header hid again") { !settings.isDisplayed() }
+        tab("Search")
+        tab("Library")
+        waitFor("Library header returned after a tab switch") { settings.isDisplayed() }
     }
 
     private companion object {
