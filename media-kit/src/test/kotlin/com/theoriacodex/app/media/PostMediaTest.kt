@@ -26,6 +26,10 @@ class PostMediaTest {
         val motion = postMotion(videoPost) as PostMotion.Video
         assertEquals("https://example.test/480.mp4", motion.location)
         assertEquals("https://gelbooru.com/", motion.headers["Referer"])
+        assertEquals("Mozilla/5.0", motion.headers["User-Agent"])
+        val customSite = requireNotNull(SourceKey.parse("custom_booru_example"))
+        val customMotion = postMotion(post(customSite, ref("full.jpg", "image/jpeg")).copy(media = listOf(video))) as PostMotion.Video
+        assertEquals("https://example.test/480.mp4", customMotion.location)
         val saved = videoPost.copy(media = listOf(video.copy(localPath = "/data/offline/file.mp4")))
         assertEquals("/data/offline/file.mp4", (postMotion(saved) as PostMotion.Video).location)
     }
@@ -202,6 +206,19 @@ class PostMediaTest {
             val card = previewMediaDeliveryPlan(post).candidates
             assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, card.first { it.location.endsWith("sample.jpg") }.activation)
             assertEquals(MediaDeliveryActivation.FAILURE_FALLBACK, card.first { it.location.endsWith("full.jpg") }.activation)
+
+            val page = ref("page.jpg", "image/jpeg").copy(progressiveUrls = listOf("https://example.test/page-sample.jpg"))
+            val paged = post(source, ref("full.jpg", "image/jpeg")).copy(media = listOf(page))
+            assertEquals(
+                MediaDeliveryActivation.FAILURE_FALLBACK,
+                previewMediaDeliveryPlan(paged).candidates.first { it.location.endsWith("page.jpg") }.activation,
+            )
+
+            val small = post(source, ref("full.jpg", "image/jpeg")).copy(width = 800, height = 1_280)
+            assertEquals(
+                listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.QUALITY_UPGRADE),
+                previewMediaDeliveryPlan(small).candidates.map { it.activation },
+            )
         }
     }
 
@@ -244,20 +261,23 @@ class PostMediaTest {
 
     @Test
     fun `remote gif paints its poster first and never upgrades to a static sample (ADR 0105)`() {
-        val gif = ref("file.gif", "image/gif").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
+        listOf("sample.jpg", "sample.jpeg", "sample.png").forEach { sample ->
+            val gif = ref("file.gif", "image/gif").copy(progressiveUrls = listOf("https://example.test/$sample"))
 
-        val plan = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, gif))
+            val plan = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, gif))
 
-        assertEquals(
-            listOf("https://example.test/preview.jpg", "https://example.test/file.gif"),
-            plan.candidates.map { it.location },
-        )
-        assertEquals(
-            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.ANIMATION_UPGRADE),
-            plan.candidates.map { it.activation },
-        )
-        assertEquals(listOf(1), plan.upgradeIndicesAfter(0))
-        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+            assertEquals(
+                sample,
+                listOf("https://example.test/preview.jpg", "https://example.test/file.gif"),
+                plan.candidates.map { it.location },
+            )
+            assertEquals(
+                listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.ANIMATION_UPGRADE),
+                plan.candidates.map { it.activation },
+            )
+            assertEquals(listOf(1), plan.upgradeIndicesAfter(0))
+            assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+        }
     }
 
     @Test
@@ -298,6 +318,14 @@ class PostMediaTest {
 
         assertEquals(setOf(THEORIA_SOURCE_USER_AGENT), danbooru.candidates.mapTo(mutableSetOf()) { it.requestHeaders["User-Agent"] })
         assertEquals(setOf("Mozilla/5.0"), gelbooru.candidates.mapTo(mutableSetOf()) { it.requestHeaders["User-Agent"] })
+        assertEquals(
+            "Mozilla/5.0",
+            postPreviewImageCandidate(post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")))?.requestHeaders?.get("User-Agent"),
+        )
+        assertEquals(
+            THEORIA_SOURCE_USER_AGENT,
+            postDownloadMediaCandidate(post(SourceKey.DANBOORU, ref("full.jpg", "image/jpeg")))?.requestHeaders?.get("User-Agent"),
+        )
     }
 
     @Test
