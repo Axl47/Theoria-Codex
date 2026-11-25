@@ -35,8 +35,12 @@ data class ExtensionsState(
     val updates: List<RepoExtension> get() = listing?.extensions.orEmpty().filter { it.status == RepoExtension.Status.UPDATE }
 }
 
-class ExtensionsViewModel(private val extensions: SeriesExtensions, private val repos: ExtensionRepos) : ViewModel() {
-    private val mutableState = MutableStateFlow(ExtensionsState())
+class ExtensionsViewModel(
+    private val extensions: SeriesExtensions,
+    private val repos: ExtensionRepos,
+    subpage: ExtensionsSubpage? = null,
+) : ViewModel() {
+    private val mutableState = MutableStateFlow(ExtensionsState(subpage = subpage))
     val state: StateFlow<ExtensionsState> = mutableState
 
     init {

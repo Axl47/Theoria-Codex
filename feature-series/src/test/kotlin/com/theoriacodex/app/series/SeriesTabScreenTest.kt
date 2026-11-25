@@ -6,6 +6,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -37,6 +39,13 @@ import com.theoriacodex.domain.series.languageName
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onLast
+import com.theoriacodex.domain.series.RepoExtension
+import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.extensionSourceKey
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -59,7 +68,7 @@ class SeriesTabScreenTest {
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
         compose.setContent {
             MaterialTheme {
-                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {})
+                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions)
             }
         }
         compose.waitForIdle()
@@ -86,7 +95,7 @@ class SeriesTabScreenTest {
     fun aSourcesListingFiltersStayClearOfTheCollapsedSearch() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 40))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
         compose.waitForIdle()
         compose.runOnIdle { viewModel.openDedicatedSearch(sources.single().key) }
         compose.waitForIdle()
@@ -100,18 +109,45 @@ class SeriesTabScreenTest {
     }
 
     @Test
-    fun followingCountsTheSeriesWhoseExtensionIsNotOnAndLeadsToExtensions() {
-        val followed = listOf("custom_mihon_1", "custom_mihon_2", "custom_mihon_3").map { id ->
-            FollowedSeries(Series(SeriesId(SourceKey.parseOrThrow(id), "/a"), "Series $id"), unreadCount = 0)
+    fun missingExtensionsGroupTheSeriesByTheExtensionThatProvidesThemAndLeaveAsTheyResolve() {
+        fun followed(id: Long, title: String) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title), unreadCount = 0)
+        val repository = StubSeriesRepository(listOf(followed(1, "Loaded"), followed(2, "Kaiju"), followed(3, "Dandadan"), followed(9, "Blue Period")))
+        val repos = FakeExtensionRepos().apply {
+            offered = listOf(
+                RepoExtension("https://repo.example", "pkg.dex", "Ink Dex", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.AVAILABLE, sources = listOf(2L, 3L).map(SeriesKind.MANGA::extensionSourceKey)),
+            )
         }
-        var opened = false
-        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = { opened = true }) } }
+        val device = FakeSeriesExtensions(emptyList())
+        var loaded = listOf("custom_mihon_1")
+        val viewModel = SeriesTabViewModel(repository, { loaded.map { FakeSeriesSource(it, "Ink Harbor", "en", count = 1) } }, device.revision) { NOTHING_CHECKED }
+        val actions = MissingExtensionsActions({ ExtensionsViewModel(device, repos) }, { error("unused") }, onOpenRepos = {})
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = actions) } }
         compose.waitForIdle()
 
-        compose.onNodeWithText("2 series need their extension").assertIsDisplayed()
-        compose.onNodeWithText(EXTENSIONS_TITLE).performClick()
-        assertTrue(opened)
+        compose.onNodeWithText("3 series need their extension").assertIsDisplayed()
+        compose.onNodeWithText(SHOW_MISSING).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("2 series").assertIsDisplayed()
+        compose.onNodeWithText(NOT_IN_YOUR_REPOS).assertIsDisplayed()
+        compose.onAllNodesWithText("Blue Period").assertCountEquals(2)
+        compose.onAllNodesWithText("Kaiju").assertCountEquals(1)
+        compose.onNodeWithText("Ink Dex").performClick()
+        compose.onAllNodesWithText("Kaiju").assertCountEquals(2)
+
+        compose.onAllNodesWithContentDescription("More options").onLast().performClick()
+        compose.onNodeWithText(UNFOLLOW).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(NOT_IN_YOUR_REPOS).assertDoesNotExist()
+        compose.onAllNodesWithText("Blue Period").assertCountEquals(0)
+
+        compose.onNodeWithText("Install").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("pkg.dex"), repos.installed)
+        loaded = listOf("custom_mihon_1", "custom_mihon_2", "custom_mihon_3")
+        device.revision.value++
+        compose.waitForIdle()
+        compose.onNodeWithText(MISSING_EXTENSIONS_TITLE).assertDoesNotExist()
+        compose.onNodeWithText(SHOW_MISSING).assertDoesNotExist()
         assertEquals("1 series needs its extension", missingExtensionsLine(1))
     }
 
@@ -123,7 +159,7 @@ class SeriesTabScreenTest {
             FollowedSeries(Series(SeriesId(source, "/beta"), "Beta Tale"), unreadCount = 5),
         )
         val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
         compose.waitForIdle()
 
         compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING)).assertIsSelected()
@@ -146,7 +182,7 @@ class SeriesTabScreenTest {
     fun browsePicksItsSourceAndListingFromOneHeader() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3), FakeSeriesSource("custom_aniyomi_2", "Moon Reel", "en", count = 3))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
         compose.waitForIdle()
 
         compose.onNodeWithTag(seriesViewTag(SeriesView.BROWSE)).assertIsSelected()
@@ -207,15 +243,20 @@ private class FakeSeriesSource(
 
 private val EmptySeriesRepository = StubSeriesRepository()
 
-private class StubSeriesRepository(private val followed: List<FollowedSeries> = emptyList()) : SeriesRepository {
-    override fun observeFollowed(): Flow<List<FollowedSeries>> = flowOf(followed)
+private val NoMissingActions = MissingExtensionsActions({ error("unused") }, { error("unused") }, onOpenRepos = {})
+
+private class StubSeriesRepository(followed: List<FollowedSeries> = emptyList()) : SeriesRepository {
+    private val followed = MutableStateFlow(followed)
+    override fun observeFollowed(): Flow<List<FollowedSeries>> = followed
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
     override suspend fun series(id: SeriesId): StoredSeries? = null
     override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = emptyList()
     override suspend fun store(series: Series, entries: List<SeriesEntry>?) = emptyList<SeriesEntry>()
     override suspend fun storeEntries(id: SeriesId, entries: List<SeriesEntry>, seriesMemo: String?) = emptyList<SeriesEntry>()
-    override suspend fun setFollowed(id: SeriesId, followed: Boolean) = Unit
+    override suspend fun setFollowed(id: SeriesId, followed: Boolean) {
+        if (!followed) this.followed.update { all -> all.filterNot { it.series.id == id } }
+    }
     override suspend fun setReadingMode(id: SeriesId, mode: GalleryReadingMode) = Unit
     override suspend fun setDownloadNewChapters(id: SeriesId, on: Boolean) = Unit
     override suspend fun setChaptersShareFirstPage(id: SeriesId) = Unit

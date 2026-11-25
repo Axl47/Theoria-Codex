@@ -20,6 +20,7 @@ import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
+import com.theoriacodex.app.series.ExtensionsSubpage
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerSession
@@ -33,7 +34,9 @@ internal object AppRoute {
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
 
-    const val Extensions = "extensions"
+    const val Extensions = "extensions?page={page}"
+
+    fun extensions(page: ExtensionsSubpage? = null): String = "extensions" + page?.let { "?page=${it.name}" }.orEmpty()
 
     const val Series = "series?source={source}&address={address}&entry={entry}"
 

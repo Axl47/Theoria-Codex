@@ -33,8 +33,8 @@ class ExtensionsViewModelTest {
     @Test
     fun theOpenPageFollowsAnExtensionRemovedAndInstalled() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val device = OnDevice(listOf(InstalledExtension(id = "/a.apk", name = "A", versionName = "1.0", signer = "key", on = false)))
-        val viewModel = ExtensionsViewModel(device, Repos())
+        val device = FakeSeriesExtensions(listOf(InstalledExtension(id = "/a.apk", name = "A", versionName = "1.0", signer = "key", on = false)))
+        val viewModel = ExtensionsViewModel(device, FakeExtensionRepos())
         advanceUntilIdle()
         assertEquals(listOf("A"), viewModel.state.value.extensions?.map { it.name })
 
@@ -52,10 +52,10 @@ class ExtensionsViewModelTest {
     @Test
     fun `an update installs, a failure shows on its row, and updates follow the repos`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repos = Repos()
+        val repos = FakeExtensionRepos()
         repos.offered = listOf(offered("a", RepoExtension.Status.UPDATE), offered("b", RepoExtension.Status.UPDATE), offered("c", RepoExtension.Status.AVAILABLE))
         repos.refusing = mapOf("b" to "Not signed with the repo's key")
-        val viewModel = ExtensionsViewModel(OnDevice(emptyList()), repos)
+        val viewModel = ExtensionsViewModel(FakeSeriesExtensions(emptyList()), repos)
         advanceUntilIdle()
         assertEquals(listOf("a", "b"), viewModel.state.value.updates.map { it.packageName })
 
@@ -71,8 +71,8 @@ class ExtensionsViewModelTest {
     @Test
     fun `a refused repo keeps the question open with why, and an added one closes it`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repos = Repos()
-        val viewModel = ExtensionsViewModel(OnDevice(emptyList()), repos)
+        val repos = FakeExtensionRepos()
+        val viewModel = ExtensionsViewModel(FakeSeriesExtensions(emptyList()), repos)
         viewModel.askForRepo(true)
 
         viewModel.addRepo("https://bad.example")
@@ -88,10 +88,10 @@ class ExtensionsViewModelTest {
     @Test
     fun `a slow first check of the repos does not bring back a repo removed meanwhile`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repos = Repos()
+        val repos = FakeExtensionRepos()
         repos.offered = listOf(offered("a", RepoExtension.Status.UPDATE))
         repos.refreshDelay = 1_000
-        val viewModel = ExtensionsViewModel(OnDevice(emptyList()), repos)
+        val viewModel = ExtensionsViewModel(FakeSeriesExtensions(emptyList()), repos)
         runCurrent()
 
         viewModel.removeRepo("https://repo.example")
@@ -103,12 +103,12 @@ class ExtensionsViewModelTest {
     @Test
     fun `a listing that replaces a slow first check still checks the repos`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repos = Repos()
+        val repos = FakeExtensionRepos()
         val update = offered("b", RepoExtension.Status.UPDATE).copy(repo = "https://other.example")
         repos.offered = listOf(offered("a"), update)
         repos.cached = listOf(offered("a"), update.copy(status = RepoExtension.Status.INSTALLED))
         repos.refreshDelay = 1_000
-        val viewModel = ExtensionsViewModel(OnDevice(emptyList()), repos)
+        val viewModel = ExtensionsViewModel(FakeSeriesExtensions(emptyList()), repos)
         runCurrent()
 
         viewModel.removeRepo("https://repo.example")
@@ -141,58 +141,58 @@ class ExtensionsViewModelTest {
 
     private fun offered(name: String, status: RepoExtension.Status = RepoExtension.Status.AVAILABLE, languages: List<String> = listOf("en")) =
         RepoExtension("https://repo.example", name, name, languages, "1.0", SeriesKind.ANIME, status)
+}
 
-    private class Repos : ExtensionRepos {
-        var offered = emptyList<RepoExtension>()
-        var refusing = emptyMap<String, String>()
-        var refreshDelay = 0L
-        var cached: List<RepoExtension>? = null
-        val installed = mutableListOf<String>()
-        private val added = mutableListOf<ExtensionRepo>()
+internal class FakeExtensionRepos : ExtensionRepos {
+    var offered = emptyList<RepoExtension>()
+    var refusing = emptyMap<String, String>()
+    var refreshDelay = 0L
+    var cached: List<RepoExtension>? = null
+    val installed = mutableListOf<String>()
+    private val added = mutableListOf<ExtensionRepo>()
 
-        override suspend fun repos() = added.toList()
+    override suspend fun repos() = added.toList()
 
-        override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> {
-            val (good, bad) = repos.partition { it.url == "https://repo.example" }
-            good.forEach { added += ExtensionRepo(it.url, "Repo", "key") }
-            return bad.associate { it.url to "Not an extension repo" }
-        }
-
-        override suspend fun restore(repos: List<ExtensionRepo>): Map<String, String> = error("unused")
-
-        override suspend fun remove(url: String) {
-            added.removeAll { it.url == url }
-            offered = offered.filterNot { it.repo == url }
-            cached = cached?.filterNot { it.repo == url }
-        }
-
-        override suspend fun available(refresh: Boolean): RepoListing {
-            val now = cached?.takeUnless { refresh } ?: offered
-            if (refresh) delay(refreshDelay)
-            return RepoListing(now)
-        }
-
-        override suspend fun install(repo: String, packageName: String): String? {
-            installed += packageName
-            refusing[packageName]?.let { return it }
-            offered = offered.map { if (it.packageName == packageName) it.copy(status = RepoExtension.Status.INSTALLED) else it }
-            return null
-        }
-
-        override suspend fun uninstall(id: String) = Unit
+    override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> {
+        val (good, bad) = repos.partition { it.url == "https://repo.example" }
+        good.forEach { added += ExtensionRepo(it.url, "Repo", "key") }
+        return bad.associate { it.url to "Not an extension repo" }
     }
 
-    private class OnDevice(var listed: List<InstalledExtension>) : SeriesExtensions {
-        override val revision = MutableStateFlow(0)
+    override suspend fun restore(repos: List<ExtensionRepo>): Map<String, String> = error("unused")
 
-        override suspend fun installed() = listed
-
-        override suspend fun setOn(id: String, signer: String, on: Boolean) = listed
-
-        override suspend fun setLanguage(id: String, language: String, on: Boolean) = listed
-
-        override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()
-
-        override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = emptyList<ExtensionSourceSettings>()
+    override suspend fun remove(url: String) {
+        added.removeAll { it.url == url }
+        offered = offered.filterNot { it.repo == url }
+        cached = cached?.filterNot { it.repo == url }
     }
+
+    override suspend fun available(refresh: Boolean): RepoListing {
+        val now = cached?.takeUnless { refresh } ?: offered
+        if (refresh) delay(refreshDelay)
+        return RepoListing(now)
+    }
+
+    override suspend fun install(repo: String, packageName: String): String? {
+        installed += packageName
+        refusing[packageName]?.let { return it }
+        offered = offered.map { if (it.packageName == packageName) it.copy(status = RepoExtension.Status.INSTALLED) else it }
+        return null
+    }
+
+    override suspend fun uninstall(id: String) = Unit
+}
+
+internal class FakeSeriesExtensions(var listed: List<InstalledExtension>) : SeriesExtensions {
+    override val revision = MutableStateFlow(0)
+
+    override suspend fun installed() = listed
+
+    override suspend fun setOn(id: String, signer: String, on: Boolean) = listed
+
+    override suspend fun setLanguage(id: String, language: String, on: Boolean) = listed
+
+    override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()
+
+    override suspend fun change(id: String, sourceId: String, setting: ExtensionSetting) = emptyList<ExtensionSourceSettings>()
 }

@@ -10,7 +10,7 @@ import org.junit.Test
 
 class MissingExtensionsTest {
     @Test
-    fun `each missing series goes to the extension that provides its source, or to the unlisted group`() {
+    fun `each missing series goes to the extension that provides its source, or to the unlisted group (ADR 0063)`() {
         val mangaOne = series(SeriesKind.MANGA, 1, "Kaiju")
         val mangaTwo = series(SeriesKind.MANGA, 2, "Dandadan")
         val animeOne = series(SeriesKind.ANIME, 1, "Frieren")
