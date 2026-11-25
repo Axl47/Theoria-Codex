@@ -12,7 +12,8 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -110,7 +111,7 @@ internal fun NavGraphBuilder.theoriaDestinations(
         val top by shell.navController.currentBackStackEntryAsState()
         ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
         ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
-            Box(Modifier.windowInsetsPadding(screenBottomInsets), propagateMinConstraints = true) { ViewerDestination(shell, entry) }
+            Box(Modifier.padding(screenBottomInsets.asPaddingValues()), propagateMinConstraints = true) { ViewerDestination(shell, entry) }
         }
     }
     opaqueScreen(AppRoute.Settings) { SettingsScreenDestination(shell) }
@@ -132,7 +133,7 @@ private fun CodexDetailEntry(
     val codexMorph = remember { CodexMorphScope(sharedScope, entryScope) }
     Box(
         Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(screenBottomInsets),
+            .padding(screenBottomInsets.asPaddingValues()),
     ) {
         if (codexId == SAVED_CODEX_ID) {
             SavedCodexRoute(

@@ -22,7 +22,8 @@ instead would still draw it over the leaving screen, which is not part of Home.
   transition, the back gesture's preview included, and a screen pushed over Home covers it like any other part of
   Home.
 - The NavHost reaches the bottom edge so the bar's surface can extend under the system navigation bar. Every other
-  screen takes the bottom system-bar inset itself (`screenBottomInsets`): `opaqueScreen` does it inside its
+  screen takes the bottom system-bar inset itself (`screenBottomInsets`), as plain padding that leaves the insets
+  unconsumed, as the scaffold's padding did, because screens such as the Viewer's dock read them again: `opaqueScreen` does it inside its
   background unless declared with `reachesBottomEdge`, which only Home is, and the Codex detail and the Viewer
   destination do it around their content. Home in rail mode insets its content the same way, and the rail extends
   to the bottom edge.
@@ -43,5 +44,5 @@ wide windows the rail now starts below the status bar instead of under it.
 ## Guarded by
 
 - `app/src/test/java/com/theoriacodex/app/ui/AdaptiveNavigationTest.kt`: `a screen leaving for Home keeps its size while Home already shows its bar (ADR 0222)`
-- `app/src/test/java/com/theoriacodex/app/ui/AdaptiveNavigationTest.kt`: `the rail belongs to Home, so other screens keep the full width (ADR 0222)`
+- `app/src/test/java/com/theoriacodex/app/ui/AdaptiveNavigationTest.kt`: `a screen leaving for Home keeps its size while Home already shows its rail (ADR 0222)`
 - Left to prose: that every bare `composable` destination applies `screenBottomInsets`; host tests run without system-bar insets, and a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.

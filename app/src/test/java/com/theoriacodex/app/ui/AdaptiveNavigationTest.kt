@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -78,14 +79,23 @@ class AdaptiveNavigationTest {
     }
 
     @Test fun `a screen leaving for Home keeps its size while Home already shows its bar (ADR 0222)`() {
-        val navigation = openSettingsOverHome(width = 400f)
+        assertPopToHomeKeepsBounds(400f) { compose.onNodeWithContentDescription(TopLevelDestination.Search.label, useUnmergedTree = true) }
+    }
+
+    @Test fun `a screen leaving for Home keeps its size while Home already shows its rail (ADR 0222)`() {
+        assertPopToHomeKeepsBounds(1000f) { compose.onNodeWithTag("navigation-rail") }
+    }
+
+    private fun assertPopToHomeKeepsBounds(width: Float, chrome: () -> SemanticsNodeInteraction) {
+        val navigation = openSettingsOverHome(width)
+        chrome().assertDoesNotExist()
         val dispatcher = compose.activity.onBackPressedDispatcher
         val leaving = compose.onNodeWithTag("settings").fetchSemanticsNode().size
+        assertEquals(compose.onNodeWithTag("shell").fetchSemanticsNode().size, leaving)
         compose.runOnIdle { dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 400f, 0f, BackEventCompat.EDGE_LEFT)) }
         compose.runOnIdle { dispatcher.dispatchOnBackProgressed(BackEventCompat(200f, 400f, 0.5f, BackEventCompat.EDGE_LEFT)) }
         repeat(3) { compose.mainClock.advanceTimeByFrame() }
-        compose.onNodeWithTag("home").assertExists()
-        compose.onNodeWithContentDescription(TopLevelDestination.Search.label, useUnmergedTree = true).assertExists()
+        chrome().assertExists()
         assertEquals(leaving, compose.onNodeWithTag("settings").fetchSemanticsNode().size)
         compose.runOnIdle { dispatcher.dispatchOnBackCancelled() }
         compose.mainClock.advanceTimeBy(1_000)
@@ -97,16 +107,8 @@ class AdaptiveNavigationTest {
         }
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithTag("settings").assertDoesNotExist()
+        chrome().assertExists()
         assertEquals(compose.onNodeWithTag("home-screen").fetchSemanticsNode().size, leaving)
-    }
-
-    @Test fun `the rail belongs to Home, so other screens keep the full width (ADR 0222)`() {
-        openSettingsOverHome(width = 1000f)
-        compose.onNodeWithTag("navigation-rail").assertDoesNotExist()
-        assertEquals(
-            compose.onNodeWithTag("shell").fetchSemanticsNode().size,
-            compose.onNodeWithTag("settings").fetchSemanticsNode().size,
-        )
     }
 
     private fun openSettingsOverHome(width: Float): NavHostController {

@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -101,7 +101,7 @@ internal fun TheoriaNavigationChrome(
         }
         Column(modifier = Modifier.weight(1f).fillMaxSize()) {
             Box(modifier = Modifier.weight(1f).fillMaxSize()) {
-                content(Modifier.fillMaxSize().then(if (rail) Modifier.windowInsetsPadding(screenBottomInsets) else Modifier))
+                content(Modifier.fillMaxSize().then(if (rail) Modifier.padding(screenBottomInsets.asPaddingValues()) else Modifier))
             }
             if (!rail) TheoriaBottomNavigation(
                 selectedIndex, bottomBarHeight, bottomBarIconSize, bottomBarWindowInsets, destinations, onDestinationSelected, marked,
