@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -281,6 +282,29 @@ class SavedSearchesCodexViewModelTest {
             advanceUntilIdle()
 
             assertEquals(firstScreens, sorts.map { sort -> shown(sort).take(3) })
+        }
+    }
+
+    @Test fun `every feed published during a load more keeps the posts already shown as its prefix (ADR 0152)`() = runTest {
+        val source = adapter(SourceKey.PIXIV) { query, token ->
+            val tag = query.includeTags.single()
+            if (tag == "slow" && token != null) delay(1_000)
+            val dated = if (token == null) 10L else if (tag == "slow") 90L else 20L
+            Page(listOf(testPost(SourceKey.PIXIV, "$tag-${token ?: "first"}", createdAtEpochMs = dated)), "next".takeIf { token == null })
+        }
+        withOwner(listOf(source)) { owner ->
+            owner.synchronize(listOf(entry("fast", "fast"), entry("slow", "slow")), AppSettings(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val published = mutableListOf<List<String>>()
+            backgroundScope.launch { owner.state.collect { state -> published += state.posts.map { it.id.sourcePostId } } }
+            runCurrent()
+
+            owner.loadMore()
+            advanceUntilIdle()
+            runCurrent()
+
+            assertEquals(4, published.last().size)
+            assertTrue(published.toString(), published.zipWithNext().all { (before, after) -> after.take(before.size) == before })
         }
     }
 
