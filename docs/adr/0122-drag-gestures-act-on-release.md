@@ -15,7 +15,7 @@ Lifting a card or swiping a triage card shows save, like and hide targets under 
 - Drops outlive the overlay's phases: a save or trail keeps running after the copy has landed, and Undo for a drop that created a Codex removes it.
 - The lifted copy clears its semantics so TalkBack and tests find only the original card; the card's long-press modifier sits after its clickable so a release never also clicks, consumes the drag, and keeps an accessibility long-click that opens the menu.
 - A feed update that disposes the card mid-lift cancels the lift.
-- The triage deck offers TalkBack custom actions equal to the drop targets, and composes the next card only while the top card is away from rest so it holds no player.
+- The triage deck offers TalkBack custom actions equal to the drop targets, and composes the next card only while the top card is away from rest so it holds no player; it fades and grows in with the drag (read while drawing), so a drag never starts with it fully shown.
 
 ## Consequences
 

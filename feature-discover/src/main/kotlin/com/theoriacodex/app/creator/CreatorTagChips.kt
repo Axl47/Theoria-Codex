@@ -19,6 +19,7 @@ import com.theoriacodex.app.tags.TagCount
 import com.theoriacodex.app.tags.topTags
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.TrailOutcome
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -59,8 +60,8 @@ internal fun CreatorTagChips(creator: CreatorProfile, posts: List<Post>) {
                     busy = tag.tag
                     scope.launch {
                         try {
-                            val opened = opener.openTrail(TrailRequest.Tag(tag.tag, creator.source, context = null, from = tag.from))
-                            if (!opened) empty += tag.tag
+                            val outcome = opener.openTrail(TrailRequest.Tag(tag.tag, creator.source, context = null, from = tag.from))
+                            if (outcome == TrailOutcome.Empty) empty += tag.tag
                         } finally { busy = null }
                     }
                 },

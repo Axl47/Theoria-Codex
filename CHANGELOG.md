@@ -164,9 +164,11 @@
 
 ### Fixed
 
-- Unlocking the Viewer's rotation keeps the orientation you chose with rotate before locking, instead of snapping back to portrait when system auto-rotate is off.
+- A trail step that would hold only the post you're on, which happens quickly on Hitomi where each post is a whole gallery, now says "No other posts" instead of opening a step with nothing new.
+- A trail step whose site couldn't be reached now says "Couldn't load" instead of claiming there were no posts, and a creator page's tag chip stays usable after a failed load.
 - A gallery that is the only post in the Viewer's thumbnail strip spreads its pages across the whole strip instead of leaving empty space beside them.
 - Missing extensions no longer says "Language off" for every installed extension that is on. It names the language that is off and turns it on, says when the extension couldn't load, or says the installed version doesn't offer that series' source.
+- Unlocking the Viewer's rotation keeps the orientation you chose with rotate before locking, instead of snapping back to portrait when system auto-rotate is off.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.

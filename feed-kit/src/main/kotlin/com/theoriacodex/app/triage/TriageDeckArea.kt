@@ -171,6 +171,7 @@ internal fun TriageCards(
             val scale = PEEK_SCALE + (1f - PEEK_SCALE) * reveal
             scaleX = scale
             scaleY = scale
+            alpha = reveal
         }
         TriageCard(next, support, ratioFloor, footer, onClick = {}, likeEnabled = false, modifier = peek)
     }
