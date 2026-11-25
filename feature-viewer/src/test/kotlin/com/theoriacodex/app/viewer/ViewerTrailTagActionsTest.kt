@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.app.tags.PostTagContextProvider
 import com.theoriacodex.app.tags.PostTagSavedTags
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
 import com.theoriacodex.app.ui.navigation.TrailRequest
@@ -88,9 +89,9 @@ class ViewerTrailTagActionsTest {
         showRow()
         compose.onNodeWithContentDescription("Add tag").performClick()
         compose.onNodeWithTag("trail-tag-field").performTextInput("star")
-        compose.waitUntil { compose.onAllNodesWithTagCount("trail-tag-suggestion-starry_sky") > 0 }
+        compose.waitUntilSettled(5_000) { compose.onAllNodesWithTagCount("trail-tag-suggestion-starry_sky") > 0 }
         compose.onNodeWithTag("trail-tag-suggestion-starry_sky").performClick()
-        compose.waitUntil { opened.isNotEmpty() }
+        compose.waitUntilSettled(5_000) { opened.isNotEmpty() }
 
         assertEquals(listOf(TrailRequest.Tag("starry_sky", SourceKey.DANBOORU, levelQuery, shown)), opened)
     }
