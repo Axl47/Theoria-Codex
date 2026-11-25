@@ -166,8 +166,6 @@ private fun ViewerLoadedScreen(
         loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
-    SideEffect { screen.dwellStartedAtMs = uiState.controls.dwell.startedAtMs }
-    val dwellApplies by rememberUpdatedState(uiState.dwellApplies)
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     val timelineInset = viewerTimelineInset(chromeVisible, frame.watching)
     val bottomRowHeight = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
@@ -180,11 +178,7 @@ private fun ViewerLoadedScreen(
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
         LocalViewerPlayingVideos provides screen.playingVideos,
     ) {
-        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { down ->
-            screen.touching = down
-            screen.touchSerial += 1
-            if (dwellApplies) host.onAction(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = down))
-        }) {
+        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = rememberViewerTouch(screen, uiState, host.onAction)) {
             ViewerContentSurface(
                 frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
                 readReturnProgress, flingVelocity, quality, qualityHeight, videoPositions, host, config, scope,
@@ -262,6 +256,20 @@ private fun rememberViewerLoadMore(
         if (!loadingMoreFromSource && canLoadMoreFromSource && requestedAtSize.intValue != postCount) {
             requestedAtSize.intValue = postCount
             onAction(ViewerAction.LoadMore)
+        }
+    }
+}
+
+@Composable
+private fun rememberViewerTouch(screen: ViewerScreenState, uiState: ViewerUiState, onAction: (ViewerAction) -> Unit): (Boolean) -> Unit {
+    val dwellApplies by rememberUpdatedState(uiState.dwellApplies)
+    val dispatch by rememberUpdatedState(onAction)
+    SideEffect { screen.dwellStartedAtMs = uiState.controls.dwell.startedAtMs }
+    return remember(screen) {
+        { down ->
+            screen.touching = down
+            screen.touchSerial += 1
+            if (dwellApplies) dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = down))
         }
     }
 }

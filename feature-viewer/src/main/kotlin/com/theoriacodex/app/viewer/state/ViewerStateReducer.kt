@@ -109,11 +109,8 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.ReplaceSession -> error("Handled above")
         is ViewerAction.AppendPosts -> state.ifCurrentSession(action.session) { appendPosts(action) }
         is ViewerAction.IncludeRelatedPosts -> state.ifCurrentSession(action.session) { includeRelatedPosts(action) }
-        is ViewerAction.SelectPage -> state.movedByUser(state.selectPage(action.pageIndex))
-        is ViewerAction.SelectMedia -> state.movedByUser(state.selectMedia(action.mediaIndex))
-        is ViewerAction.Navigate -> state.movedByUser(state.navigate(action.pageIndex, action.mediaIndex))
-        is ViewerAction.RestartDwell ->
-            state.withControls(state.controls.copy(dwell = state.controls.dwell.copy(startedAtMs = action.atMs, interacting = action.interacting)))
+        is ViewerAction.SelectPage, is ViewerAction.SelectMedia, is ViewerAction.Navigate -> state.movedByUser(state.moveTo(action))
+        is ViewerAction.RestartDwell -> state.withControls(state.controls.copy(dwell = ViewerDwell(action.atMs, state.controls.dwell.held, action.interacting)))
         ViewerAction.ToggleChrome -> ViewerReduction(state.toggleChrome())
         is ViewerAction.SetChromeVisible ->
             ViewerReduction(if (action.visible == state.controls.chromeVisible) state else state.toggleChrome())
@@ -426,6 +423,13 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
         playback = controls.playback.copy(playing = false, completed = true),
         slideshow = false,
     )))
+}
+
+private fun ViewerUiState.moveTo(action: ViewerAction): ViewerReduction = when (action) {
+    is ViewerAction.SelectPage -> selectPage(action.pageIndex)
+    is ViewerAction.SelectMedia -> selectMedia(action.mediaIndex)
+    is ViewerAction.Navigate -> navigate(action.pageIndex, action.mediaIndex)
+    else -> ViewerReduction(this)
 }
 
 private fun ViewerUiState.movedByUser(moved: ViewerReduction): ViewerReduction {
