@@ -112,7 +112,6 @@ private fun ForYouGrid(
     val environment = config.support.environment
     val currentCallbacks by rememberUpdatedState(callbacks)
     val gridState = rememberRetainedFeedGridState(retainKey)
-    ScrollToTopOnTabReselect(TopLevelDestination.ForYou, gridState)
     DurationRouteEnvironmentEffect(gridState, config.durations.onEnvironmentChanged)
     val view = rememberFeedView(retainKey, feed.posts, NO_FILTERS, config.durations, related.state)
     val demand = rememberFeedPageDemand(
@@ -133,6 +132,7 @@ private fun ForYouGrid(
     )
     when {
         view.related.projection.entries.isNotEmpty() -> Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            ScrollToTopOnTabReselect(TopLevelDestination.ForYou, gridState)
             if (feed.pageFailed && (level.fork != null || mixFailed)) {
                 Box(Modifier.padding(bottom = 8.dp)) { FeedFailureTile(LOAD_FAILED, onRetry = level::retryPage) }
             }

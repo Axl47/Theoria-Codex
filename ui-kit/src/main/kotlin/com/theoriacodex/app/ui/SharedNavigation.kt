@@ -58,13 +58,13 @@ val LocalTabShown = staticCompositionLocalOf<() -> Boolean> { { true } }
 fun ScrollToTopOnTabReselect(destination: TopLevelDestination, scrollable: ScrollableState, onReselect: () -> Unit = {}) {
     val chrome = LocalScrollChrome.current
     ScrollToTopOnTabReselect(destination) {
-        onReselect()
         chrome?.show()
         when (scrollable) {
             is LazyListState -> scrollable.animateScrollToItem(0)
             is LazyGridState -> scrollable.animateScrollToItem(0)
             is LazyStaggeredGridState -> scrollable.animateScrollToItem(0)
         }
+        onReselect()
     }
     if (chrome != null) ScrollChromeTopEffect(chrome, scrollable)
 }

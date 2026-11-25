@@ -16,10 +16,10 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
@@ -32,13 +32,12 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.unit.Velocity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import com.theoriacodex.app.ui.LocalTabShown
 import com.theoriacodex.app.ui.motion.TheoriaMotion
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -117,13 +116,8 @@ internal class ScrollChromeState {
         focused.remove(key)
     }
 
-    fun connection(scope: CoroutineScope) = object : NestedScrollConnection {
+    val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource) = Offset(0f, preScroll(available.y))
-
-        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-            scope.launch { settle() }
-            return Velocity.Zero
-        }
     }
 }
 
@@ -146,13 +140,11 @@ fun ScrollChromeBox(
             state.show()
         }
     }
-    val scope = rememberCoroutineScope()
-    val connection = remember(state, scope) { state.connection(scope) }
     val measure = remember(state) { scrollChromeMeasure(state) }
     CompositionLocalProvider(LocalScrollChrome provides state) {
         Layout(
             content = { Box(Modifier.onPlaced { state.root = it }) { content() } },
-            modifier = modifier.clipToBounds().nestedScroll(connection),
+            modifier = modifier.clipToBounds().nestedScroll(state.connection),
             measurePolicy = measure,
         )
     }
@@ -191,6 +183,11 @@ internal fun ScrollChromeTopEffect(chrome: ScrollChromeState, scrollable: Scroll
     }
     LaunchedEffect(chrome, scrollable) {
         launch { snapshotFlow { !scrollable.canScrollBackward }.collect { top -> if (top) chrome.animateTo(0f) } }
-        snapshotFlow { scrollable.isScrollInProgress }.drop(1).collect { scrolling -> if (!scrolling) chrome.settle() }
+        snapshotFlow { scrollable.isScrollInProgress }.drop(1).collectLatest { scrolling ->
+            if (!scrolling) {
+                withFrameNanos {}
+                chrome.settle()
+            }
+        }
     }
 }
