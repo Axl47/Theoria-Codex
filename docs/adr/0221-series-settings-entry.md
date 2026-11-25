@@ -24,7 +24,8 @@ Following.
   fetches each repo's index at most once per process. The counts are taken again whenever the installed extensions
   change and whenever the listing does (`ExtensionRepos.changes`: a repo added, restored or removed, or the indexes
   read again). Reads of one repo's index run one at a time, so a slow first read can't overwrite a refresh that
-  started after it, and Series, Settings and the Extensions page agree. No separate update check exists.
+  started after it, and Series, Settings and the Extensions page agree. A failed read of the sources or the listing
+  keeps that count's last value instead of ending the shared flow. No separate update check exists.
 
 ## Consequences
 
@@ -44,7 +45,7 @@ something else (failed checks, broken sources) belongs in `ExtensionAlerts`, not
 
 ## Guarded by
 
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/MissingExtensionsTest.kt`: `extension alerts add series missing their extension to extensions with an update, and recount when extensions change (ADR 0221)`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/MissingExtensionsTest.kt`: `extension alerts add series missing their extension to extensions with an update, recount when extensions change, and keep the last count when a read fails (ADR 0221)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `the Series settings button opens Settings and badges extension alerts (ADR 0221)`
 - `feature-settings/src/test/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroupTest.kt`: `extensions sit above everything else and list each alert on its own line (ADR 0221)`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCatalogTest.kt`: `adding, restoring or removing a repo and re-reading the indexes each signal that the listing changed (ADR 0221)`

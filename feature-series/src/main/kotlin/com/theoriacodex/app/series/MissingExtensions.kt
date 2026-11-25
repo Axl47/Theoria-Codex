@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionAlerts
 import com.theoriacodex.domain.series.ExtensionRepos
@@ -58,8 +59,12 @@ fun observeExtensionAlerts(
     changed: Flow<*>,
 ): Flow<ExtensionAlerts> = combine(
     repository.observeFollowed(),
-    channelFlow { changed.collectLatest { send(loadSources()) } },
-    channelFlow { changed.collectLatest { send(repos.available().extensions.count { it.status == RepoExtension.Status.UPDATE }) } }.onStart { emit(0) },
+    channelFlow { changed.collectLatest { runCatchingPreservingCancellation { loadSources() }.onSuccess { send(it) } } },
+    channelFlow {
+        changed.collectLatest {
+            runCatchingPreservingCancellation { repos.available().extensions.count { it.status == RepoExtension.Status.UPDATE } }.onSuccess { send(it) }
+        }
+    }.onStart { emit(0) },
 ) { followed, sources, updates -> ExtensionAlerts(missingSeries(followed, sources).size, updates) }
 
 internal fun missingSeries(followed: List<FollowedSeries>, sources: List<SeriesSource>): List<FollowedSeries> {

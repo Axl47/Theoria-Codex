@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -38,7 +39,7 @@ class MissingExtensionsTest {
     }
 
     @Test
-    fun `extension alerts add series missing their extension to extensions with an update, and recount when extensions change (ADR 0221)`() = runTest {
+    fun `extension alerts add series missing their extension to extensions with an update, recount when extensions change, and keep the last count when a read fails (ADR 0221)`() = runTest {
         fun followed(id: Long) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), "Series $id"), unreadCount = 0)
         var loaded = listOf("custom_mihon_1")
         val repos = FakeExtensionRepos().apply {
@@ -67,6 +68,16 @@ class MissingExtensionsTest {
         changed.value++
         val updateOnly = alerts.first { it.missing == 0 && it.updates == 1 }
         assertEquals(listOf("1 update"), updateOnly.lines)
+
+        repos.failing = true
+        changed.value++
+        testScheduler.runCurrent()
+        assertEquals(updateOnly, alerts.value)
+
+        repos.failing = false
+        repos.offered = repos.offered.map { it.copy(status = RepoExtension.Status.INSTALLED) }
+        changed.value++
+        assertEquals(ExtensionAlerts(), withTimeout(RECOUNT_MS) { alerts.first { it.updates == 0 } })
     }
 
     @Test
@@ -116,3 +127,5 @@ class MissingExtensionsTest {
     private fun extension(name: String, status: RepoExtension.Status, kind: SeriesKind, vararg ids: Long, repo: String = "https://repo.example") =
         RepoExtension(repo, "pkg.$name", name, listOf("en"), "1.0", kind, status, sources = ids.map(kind::extensionSourceKey))
 }
+
+private const val RECOUNT_MS = 1_000L
