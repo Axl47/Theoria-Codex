@@ -33,10 +33,12 @@ private fun reportMainThreadWork(report: MainThreadWorkReport) = when (report) {
     is MainThreadWorkReport.LimitReached -> reportLimit(MAIN_THREAD_AREA, report.siteLimit)
 }
 
+val debugDiagnosticsEnabled: Boolean = BuildConfig.DEBUG
+
 val strictModeViolations = ViolationLedger()
 
 fun installDebugStrictMode() {
-    if (!BuildConfig.DEBUG) return
+    if (!debugDiagnosticsEnabled) return
     val listenerThread = Executors.newSingleThreadExecutor { task ->
         Thread(task, "theoria-strictmode").apply { isDaemon = true }
     }

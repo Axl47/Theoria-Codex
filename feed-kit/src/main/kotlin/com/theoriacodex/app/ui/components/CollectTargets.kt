@@ -84,6 +84,15 @@ class CollectTargetsState<T> {
     }
 }
 
+@Immutable
+data class ArmedColors(val container: Color, val content: Color)
+
+@Composable
+fun armedColors(armed: Boolean): ArmedColors {
+    val colors = MaterialTheme.colorScheme
+    return if (armed) ArmedColors(colors.primaryContainer, colors.onPrimaryContainer) else ArmedColors(colors.surfaceContainerHigh, colors.onSurface)
+}
+
 @Composable
 fun <T> rememberCollectTargetsState(): CollectTargetsState<T> = remember { CollectTargetsState() }
 
@@ -143,20 +152,21 @@ private fun <T> CollectTargetBubble(
     labelWidth: Dp = LABEL_WIDTH,
 ) {
     val scale by animateFloatAsState(if (hovered) HOVERED_SCALE else 1f, label = "collect-target-scale")
-    val colors = MaterialTheme.colorScheme
+    val fill = armedColors(hovered)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             shape = CircleShape,
-            color = colors.surfaceContainerHigh,
+            color = fill.container,
+            contentColor = fill.content,
             shadowElevation = 6.dp,
             modifier = Modifier
                 .size(TARGET_SIZE)
                 .testTag("Collect target ${target.key}")
                 .onGloballyPositioned { state.place(target.key, it.boundsInWindow()) }
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .then(if (hovered) Modifier.border(3.dp, colors.primary, CircleShape) else Modifier),
+                .then(if (hovered) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.padding(if (hovered) ARMED_INSET else 0.dp), contentAlignment = Alignment.Center) {
                 when (val visual = target.visual) {
                     CollectTargetVisual.Busy -> CircularProgressIndicator(Modifier.size(TARGET_SIZE / 2), strokeWidth = 3.dp)
                     is CollectTargetVisual.Icon -> Icon(visual.icon, contentDescription = null)
@@ -182,5 +192,6 @@ private val TARGET_SIZE = 56.dp
 private val LABEL_WIDTH = TARGET_SIZE + 16.dp
 private val ROW_GAP = 12.dp
 private val HIT_SLOP = 12.dp
+private val ARMED_INSET = 6.dp
 private val RISING_GAP = 12.dp
 private const val HOVERED_SCALE = 1.2f

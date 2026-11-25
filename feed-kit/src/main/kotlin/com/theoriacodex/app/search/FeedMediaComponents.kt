@@ -62,6 +62,7 @@ internal fun SearchVideoPreview(
     playbackDiagnosticsEnabled: Boolean,
     isActive: Boolean,
     modifier: Modifier = Modifier,
+    autoplayProbe: FeedAutoplayProbe? = null,
     previewModel: Any? = null,
     onPlaybackError: () -> Unit = {},
     onDurationKnown: (Long) -> Unit = {},
@@ -74,6 +75,7 @@ internal fun SearchVideoPreview(
     }
 
     var shouldLeasePlayer by remember(location, sourceKey) { mutableStateOf(false) }
+    FeedAutoplayLeaseWantedEffect(autoplayProbe, shouldLeasePlayer)
     val viewerClosing = LocalViewerReturnTransition.current?.mediaSettling == true
     LaunchedEffect(location, sourceKey, isActive, viewerClosing) {
         if (!isActive) {
@@ -99,6 +101,7 @@ internal fun SearchVideoPreview(
         location = location,
         sourceKey = sourceKey,
         isActive = isActive,
+        autoplayProbe = autoplayProbe,
         onPlaybackError = onPlaybackError,
         onDurationKnown = onDurationKnown,
     )
@@ -136,6 +139,7 @@ private fun rememberFeedPreviewPlayerState(
     location: String,
     sourceKey: SourceKey,
     isActive: Boolean,
+    autoplayProbe: FeedAutoplayProbe?,
     onPlaybackError: () -> Unit,
     onDurationKnown: (Long) -> Unit,
 ): FeedPreviewPlayerState {
@@ -172,7 +176,9 @@ private fun rememberFeedPreviewPlayerState(
             state.player = player
             publishReadyFeedDuration(state, player) { durationMs -> latestOnDurationKnown(durationMs) }
         }
+        autoplayProbe?.leased = true
         onDispose {
+            autoplayProbe?.leased = false
             state.presentation.end()
             handoff.close()
             recycleFeedPreviewPlayer(state, lease, listener, pool)
