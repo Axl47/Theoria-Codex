@@ -39,6 +39,14 @@ class ScrollChromeStateTest {
         assertEquals(0, chrome.hideablePx)
     }
 
+    @Test fun `at the top the list and pull to refresh take a downward scroll before the header hides (ADR 0218)`() {
+        val chrome = state().apply { atTop = { true } }
+        assertEquals(0f, chrome.preScroll(-30f))
+        assertEquals(-30f, chrome.postScroll(-30f))
+        assertEquals(30f, chrome.offsetPx)
+        assertEquals(0f, chrome.postScroll(30f))
+    }
+
     @Test fun `show returns the header at once (ADR 0218)`() {
         val chrome = state()
         chrome.consume(-70f)

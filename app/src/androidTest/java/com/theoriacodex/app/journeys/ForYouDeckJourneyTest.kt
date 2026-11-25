@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -152,6 +153,8 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         waitFor("grid view is displayed") { compose.onNodeWithTag(FOR_YOU_GRID_TAG).isDisplayed() }
         val first = topGridCard()
         repeat(3) { compose.onNodeWithTag(FOR_YOU_GRID_TAG).performTouchInput { swipeUp() }; compose.waitForIdle() }
+        compose.onNodeWithTag(FOR_YOU_GRID_TAG).performTouchInput { swipeDown(startY = centerY, endY = centerY + 80f, durationMillis = 600) }
+        compose.waitForIdle()
         val scrolled = topGridCard()
         assertNotEquals(first, scrolled)
 

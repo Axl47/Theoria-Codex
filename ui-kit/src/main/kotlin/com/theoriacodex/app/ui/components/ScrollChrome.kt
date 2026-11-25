@@ -1,7 +1,5 @@
 package com.theoriacodex.app.ui.components
 
-import androidx.lifecycle.compose.LifecycleStartEffect
-import com.theoriacodex.app.ui.LocalTabShown
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.ScrollableState
@@ -34,6 +32,8 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.unit.Velocity
+import androidx.lifecycle.compose.LifecycleStartEffect
+import com.theoriacodex.app.ui.LocalTabShown
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -47,6 +47,7 @@ class ScrollChromeState {
         internal set
     private val hideableBottoms = mutableStateMapOf<Any, Int>()
     val hideablePx: Int get() = if (active) hideableBottoms.values.maxOrNull() ?: 0 else 0
+    internal val shiftPx: Int get() = offsetPx.roundToInt().coerceIn(0, hideablePx)
     internal var atTop: () -> Boolean = { false }
     internal var root: LayoutCoordinates? = null
     private var hiding = false
@@ -61,6 +62,10 @@ class ScrollChromeState {
         offsetPx = (before - deltaY).coerceIn(0f, range)
         return before - offsetPx
     }
+
+    fun preScroll(deltaY: Float): Float = if (deltaY < 0f && atTop()) 0f else consume(deltaY)
+
+    fun postScroll(deltaY: Float): Float = if (deltaY < 0f) consume(deltaY) else 0f
 
     fun settleTarget(): Float {
         val range = hideablePx.toFloat()
@@ -96,7 +101,9 @@ class ScrollChromeState {
     }
 
     internal fun connection(scope: CoroutineScope) = object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource) = Offset(0f, consume(available.y))
+        override fun onPreScroll(available: Offset, source: NestedScrollSource) = Offset(0f, preScroll(available.y))
+
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, postScroll(available.y))
 
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
             scope.launch { animateTo(settleTarget()) }
@@ -148,10 +155,11 @@ private fun scrollChromeMeasure(state: ScrollChromeState) = MeasurePolicy { meas
         val placeable = measurables.single().measure(constraints)
         return@MeasurePolicy layout(placeable.width, placeable.height) { placeable.place(0, 0) }
     }
-    val height = constraints.maxHeight + state.hideablePx
+    val shift = state.shiftPx
+    val height = constraints.maxHeight + shift
     val placeable = measurables.single().measure(constraints.copy(minHeight = height, maxHeight = height))
     layout(placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth), constraints.maxHeight) {
-        placeable.placeWithLayer(0, 0) { translationY = -state.offsetPx.coerceAtMost(state.hideablePx.toFloat()) }
+        placeable.place(0, -shift)
     }
 }
 
@@ -167,7 +175,10 @@ fun Modifier.hidesOnScroll(): Modifier {
 @Composable
 fun ScrollChromeTopEffect(scrollable: ScrollableState) {
     val chrome = LocalScrollChrome.current ?: return
-    SideEffect { chrome.atTop = { !scrollable.canScrollBackward } }
+    DisposableEffect(chrome, scrollable) {
+        chrome.atTop = { !scrollable.canScrollBackward }
+        onDispose { chrome.atTop = { false } }
+    }
     LaunchedEffect(chrome, scrollable) {
         snapshotFlow { !scrollable.canScrollBackward }.collect { top -> if (top) chrome.animateTo(0f) }
     }
