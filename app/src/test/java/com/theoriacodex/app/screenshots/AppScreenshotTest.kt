@@ -6,12 +6,11 @@ import com.theoriacodex.app.library.librarySectionTag
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -20,7 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import coil.Coil
 import coil.ImageLoader
@@ -28,14 +27,12 @@ import coil.decode.DataSource
 import coil.fetch.DrawableResult
 import coil.fetch.Fetcher
 import com.github.takahirom.roborazzi.captureRoboImage
-import com.theoriacodex.app.appshell.AppShellViewModel
-import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.fixtures.JourneyTestActivity
 import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.testing.waitUntilSettled
-import com.theoriacodex.app.ui.TheoriaAppContent
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.ImageRef
@@ -62,11 +59,11 @@ import org.robolectric.annotation.GraphicsMode
 @Config(application = Application::class, qualifiers = "w411dp-h914dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AppScreenshotTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createEmptyComposeRule()
     @get:Rule val temporary = TemporaryFolder()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val showApp = mutableStateOf(true)
+    private lateinit var scenario: ActivityScenario<JourneyTestActivity>
     private val posts = (1..8).map { index ->
         val image = ImageRef("https://example.test/screenshot-$index.jpg", null, "image/jpeg")
         testPost(SourceKey.PIXIV, "screenshot-$index").copy(
@@ -91,15 +88,14 @@ class AppScreenshotTest {
                 )
             }
         }
-        compose.setContent {
-            if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
-        }
+        JourneyTestActivity.fixtureContainer = graph
+        scenario = ActivityScenario.launch(JourneyTestActivity::class.java)
         waitFor { compose.onAllNodes(libraryTab).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @After fun close() {
-        compose.runOnIdle { showApp.value = false }
-        compose.waitForIdle()
+        scenario.close()
+        JourneyTestActivity.fixtureContainer = null
         runBlocking(Dispatchers.IO) { graph.shutdown() }
         scope.cancel()
         Coil.reset()
