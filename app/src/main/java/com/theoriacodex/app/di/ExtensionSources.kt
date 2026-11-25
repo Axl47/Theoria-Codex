@@ -41,8 +41,10 @@ class SeriesDependencies(
 ) {
     private val checking = Mutex()
 
-    val extensionAlerts: StateFlow<ExtensionAlerts> = observeExtensionAlerts(repository, sources, repos, merge(extensions.revision, repos.changes))
-        .stateIn(scope, SharingStarted.WhileSubscribed(ALERTS_KEPT_MS), ExtensionAlerts())
+    val extensionAlerts: StateFlow<ExtensionAlerts> by lazy {
+        observeExtensionAlerts(repository, sources, repos, merge(extensions.revision, repos.changes))
+            .stateIn(scope, SharingStarted.WhileSubscribed(ALERTS_KEPT_MS), ExtensionAlerts())
+    }
 
     suspend fun checkFollowed(
         runEvery: Duration? = null,
