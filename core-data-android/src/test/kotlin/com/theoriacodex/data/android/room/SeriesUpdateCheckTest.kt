@@ -3,6 +3,7 @@ package com.theoriacodex.data.android.room
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
@@ -105,6 +106,21 @@ class SeriesUpdateCheckTest {
             FollowedCheck(listOf(SeriesUpdate(series, listOf(second))), checked = 2, failed = 1),
             repository.checkFollowed(sourcesOn(failing, source)),
         )
+    }
+
+    @Test
+    fun `progress counts each due series as it finishes, failures included and missing extensions left out (ADR 0219)`() = runTest {
+        val failing = FakeSource("custom_mihon_2", fails = true)
+        val onFailing = Series(SeriesId(failing.key, "/series/b"), "Broken")
+        val uninstalled = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_3"), "/series/c"), "Gone")
+        listOf(series, onFailing, uninstalled).forEach { follow(it) }
+        val progress = mutableListOf<CheckProgress>()
+
+        repository.checkFollowed(sourcesOn(failing, source), onProgress = { progress += it })
+
+        assertEquals(CheckProgress(0, 3), progress.first())
+        assertEquals(CheckProgress(2, 2), progress.last())
+        assertEquals(listOf(0, 1, 2), progress.map(CheckProgress::done).distinct())
     }
 
     @Test

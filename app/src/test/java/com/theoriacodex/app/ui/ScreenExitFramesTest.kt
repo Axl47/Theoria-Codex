@@ -36,14 +36,14 @@ import kotlin.math.abs
 class ScreenExitFramesTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun `leaving a screen with the back arrow never blends it with the screen underneath (ADR 0218)`() {
+    @Test fun `leaving a screen with the back arrow never blends it with the screen underneath (ADR 0220)`() {
         val navigation = openScreen()
         compose.runOnIdle { navigation.popBackStack() }
         assertFramesNeverBlend("Back arrow", 30)
         assertHomeShown()
     }
 
-    @Test fun `leaving a screen with the back gesture never blends it with the screen underneath (ADR 0218)`() {
+    @Test fun `leaving a screen with the back gesture never blends it with the screen underneath (ADR 0220)`() {
         openScreen()
         val dispatcher = compose.activity.onBackPressedDispatcher
         compose.runOnIdle { dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 400f, 0f, BackEventCompat.EDGE_LEFT)) }
@@ -57,7 +57,7 @@ class ScreenExitFramesTest {
         assertHomeShown()
     }
 
-    @Test fun `a back gesture out of the Viewer leaves it in place instead of sliding it like a screen (ADR 0218)`() {
+    @Test fun `a back gesture out of the Viewer leaves it in place instead of sliding it like a screen (ADR 0220)`() {
         lateinit var navigation: NavHostController
         compose.setContent {
             navigation = rememberNavController()

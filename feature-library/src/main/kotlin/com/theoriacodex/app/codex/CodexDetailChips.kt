@@ -115,7 +115,7 @@ internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Mo
             item(key = "triage") {
                 AssistChip(
                     onClick = triage,
-                    label = { Text("Triage") },
+                    label = { Text("Swipe") },
                     leadingIcon = { Icon(Icons.Default.Style, contentDescription = null, Modifier.size(18.dp)) },
                 )
             }

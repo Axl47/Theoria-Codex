@@ -21,7 +21,7 @@ The Viewer is opened from feeds, Codices, the deck, shared links, downloads and 
 
 ## Consequences
 
-A new launcher must pick `saveContext` and `singleTop` deliberately. Because For You and related Viewers are not restored, after process death they close back to their origin. A second source of Viewer sessions that bypasses `launchViewer` would skip the retention claim and the card-origin check ([0218](0218-screens-leave-as-one-opaque-unit.md)).
+A new launcher must pick `saveContext` and `singleTop` deliberately. Because For You and related Viewers are not restored, after process death they close back to their origin. A second source of Viewer sessions that bypasses `launchViewer` would skip the retention claim and the card-origin check ([0220](0220-screens-leave-as-one-opaque-unit.md)).
 
 ## Applies to
 

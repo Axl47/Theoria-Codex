@@ -1,12 +1,14 @@
 package com.theoriacodex.app.series
 
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.activity.BackEventCompat
+import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -17,9 +19,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.data.repository.EntryProgressRestore
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.performTouchInput
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.SeriesUpdate
+import kotlinx.coroutines.channels.Channel
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -53,7 +59,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class MissingExtensionsBackDeviceTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun theSeriesTabExtensionsButtonTellsAccessibilityHowManySeriesNeedTheirExtension() {
@@ -72,6 +78,39 @@ class MissingExtensionsBackDeviceTest {
         assertEquals(listOf("1 series needs its extension"), heard())
         val shown = nodes(automation.rootInActiveWindow)
         assertEquals(0, shown.count { it.text?.contains("needs its extension") == true })
+    }
+
+    @Test
+    fun pullingTheFollowingGridNamesTheCheckThenCountsSeriesAsTheyFinish() {
+        val step = Channel<Unit>(Channel.UNLIMITED)
+        val found = SeriesUpdate(Followed.first, listOf(SeriesEntry("/c/1", "1"), SeriesEntry("/c/2", "2"), SeriesEntry("/c/3", "3")))
+        val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { onProgress ->
+            (0..2).forEach { done ->
+                onProgress(CheckProgress(done, 2))
+                step.receive()
+            }
+            FollowedCheck(listOf(found), checked = 2, failed = 0)
+        }
+        compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(TITLE).fetchSemanticsNodes().isNotEmpty() }
+
+        val card = compose.onNodeWithText(TITLE)
+        card.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, height * 0.15f))
+            moveBy(Offset(0f, height * 0.15f))
+        }
+        compose.onNodeWithText("Check for new chapters").assertExists()
+        card.performTouchInput {
+            repeat(PULL_STEPS) { moveBy(Offset(0f, height * 0.3f)) }
+            up()
+        }
+
+        listOf("0 of 2 series checked", "1 of 2 series checked", "2 of 2 series checked", "3 new chapters").forEach { shown ->
+            compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(shown).fetchSemanticsNodes().isNotEmpty() }
+            step.trySend(Unit)
+        }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText("3 new chapters").fetchSemanticsNodes().isEmpty() }
     }
 
     private fun nodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> =
@@ -111,9 +150,12 @@ class MissingExtensionsBackDeviceTest {
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(SERIES_PAGE).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
 
-        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        val middle = device.displayHeight / 2
-        device.swipe(1, middle, device.displayWidth / 2, middle, GESTURE_STEPS)
+        val back = compose.activity.onBackPressedDispatcher
+        compose.runOnUiThread { back.dispatchOnBackStarted(BackEventCompat(0f, 0f, 0f, BackEventCompat.EDGE_LEFT)) }
+        compose.waitForIdle()
+        compose.runOnUiThread { back.dispatchOnBackProgressed(BackEventCompat(0f, 0f, GESTURE_PROGRESS, BackEventCompat.EDGE_LEFT)) }
+        compose.waitForIdle()
+        compose.runOnUiThread { back.onBackPressed() }
         compose.waitUntil(TIMEOUT_MS) { nav.currentDestination?.route == EXTENSIONS }
         compose.waitForIdle()
 
@@ -130,7 +172,8 @@ private const val MISSING = "Missing extensions"
 private const val TITLE = "Kaiju"
 private const val SOURCE_NAME = "Ink Harbor"
 private const val TIMEOUT_MS = 10_000L
-private const val GESTURE_STEPS = 30
+private const val PULL_STEPS = 4
+private const val GESTURE_PROGRESS = 0.5f
 
 private object Loaded : SeriesSource {
     override val key: SourceKey = SeriesKind.MANGA.extensionSourceKey(1)
@@ -146,7 +189,8 @@ private object Loaded : SeriesSource {
 }
 
 private object Followed : SeriesRepository {
-    private val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(2), "/kaiju"), TITLE), unreadCount = 0)))
+    val first = Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(2), "/kaiju"), TITLE)
+    private val followed = MutableStateFlow(listOf(FollowedSeries(first, unreadCount = 0)))
     override fun observeFollowed(): Flow<List<FollowedSeries>> = followed
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()

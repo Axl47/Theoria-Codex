@@ -1,4 +1,4 @@
-# 0218. Screens leave as one opaque unit, and a Viewer with no card to return to leaves at once
+# 0220. Screens leave as one opaque unit, and a Viewer with no card to return to leaves at once
 
 Status: Accepted
 
@@ -62,12 +62,12 @@ closes in one frame rather than into its card.
 
 ## Guarded by
 
-- `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `leaving a screen with the back arrow never blends it with the screen underneath (ADR 0218)`
-- `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `leaving a screen with the back gesture never blends it with the screen underneath (ADR 0218)`
-- `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `a back gesture out of the Viewer leaves it in place instead of sliding it like a screen (ADR 0218)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer opened without a card leaves in one frame when it closes (ADR 0218)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a card origin belongs only to the launch of the card that was tapped (ADR 0218)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card is gone once the backdrop is (ADR 0218)`
+- `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `leaving a screen with the back arrow never blends it with the screen underneath (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `leaving a screen with the back gesture never blends it with the screen underneath (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `a back gesture out of the Viewer leaves it in place instead of sliding it like a screen (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer opened without a card leaves in one frame when it closes (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a card origin belongs only to the launch of the card that was tapped (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card is gone once the backdrop is (ADR 0220)`
 - Left to prose: that every new full-screen destination uses `opaqueScreen`; a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.
 - Left to prose: that every Viewer launch passes through `launchViewer`; a new `navigate(AppRoute.Viewer)` elsewhere would skip `launching`.
 - Left to prose: that a Codex in edit mode records no origin; no host test composes the Codex detail grid, and the launch binding above still clears such an origin for any launch of another post.

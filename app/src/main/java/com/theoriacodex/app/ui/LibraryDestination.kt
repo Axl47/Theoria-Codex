@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.ui.components.ScrollChromeBox
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,11 +62,13 @@ internal fun LibraryDestination(shell: TheoriaShell) {
     }
     val sectionStates = rememberSaveableStateHolder()
     Box(Modifier.fillMaxSize()) {
-        sectionStates.SaveableStateProvider(section.name) {
-            when (section) {
-                LibrarySection.Codices -> CodexLibraryDestination(shell, actionCodexId = null, header = header)
-                LibrarySection.Saved -> SavedLibraryDestination(shell, header)
-                LibrarySection.History -> RecentsDestination(shell, header)
+        ScrollChromeBox(Modifier.fillMaxSize()) {
+            sectionStates.SaveableStateProvider(section.name) {
+                when (section) {
+                    LibrarySection.Codices -> CodexLibraryDestination(shell, actionCodexId = null, header = header)
+                    LibrarySection.Saved -> SavedLibraryDestination(shell, header)
+                    LibrarySection.History -> RecentsDestination(shell, header)
+                }
             }
         }
         val undoAnchor = when (section) {

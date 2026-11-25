@@ -330,7 +330,7 @@ class ViewerReturnTransitionTest {
         compose.onNodeWithTag("returning media").assertDoesNotExist()
     }
 
-    @Test fun `a card origin belongs only to the launch of the card that was tapped (ADR 0218)`() {
+    @Test fun `a card origin belongs only to the launch of the card that was tapped (ADR 0220)`() {
         val other = PostId(SourceKey.GELBOORU, "other")
         val abandoned = ViewerReturnTransition()
         abandoned.openedFrom("grid", Rect(0f, 0f, 40f, 50f), post = postId)
@@ -351,7 +351,7 @@ class ViewerReturnTransitionTest {
         assertNull(launched.request)
     }
 
-    @Test fun `a Viewer opened without a card leaves in one frame when it closes (ADR 0218)`() {
+    @Test fun `a Viewer opened without a card leaves in one frame when it closes (ADR 0220)`() {
         val returning = ViewerReturnTransition()
         lateinit var navigation: NavHostController
         compose.setContent {

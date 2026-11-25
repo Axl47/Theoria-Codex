@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import com.theoriacodex.app.ui.navigation.TrailFork
+import com.theoriacodex.app.ui.navigation.TrailOutcome
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
@@ -20,26 +21,33 @@ class ViewerTrailForksTest {
     @Test
     fun `one fork loads at a time, and every entry point sees it`() = runTest {
         val forks = ViewerTrailForks(backgroundScope)
-        val first = CompletableDeferred<Boolean>()
+        val first = CompletableDeferred<TrailOutcome>()
 
         assertTrue(forks.open(dog, art) { first.await() })
         runCurrent()
-        assertFalse(forks.open(TrailFork.Similar, art) { true })
+        assertFalse(forks.open(TrailFork.Similar, art) { TrailOutcome.Opened })
         assertEquals(dog, forks.busy)
 
-        first.complete(true)
+        first.complete(TrailOutcome.Opened)
         runCurrent()
         assertNull(forks.busy)
         assertNull(forks.failed)
     }
 
     @Test
-    fun `a fork that opens nothing says so on its chip for a moment`() = runTest {
+    fun `a fork that opens nothing says so on its chip for a moment, telling empty from failed`() = runTest {
         val forks = ViewerTrailForks(backgroundScope)
 
-        forks.open(dog, art) { false }
+        forks.open(dog, art) { TrailOutcome.Empty }
         runCurrent()
         assertEquals(dog, forks.failed)
+        assertTrue(forks.failedEmpty)
+        advanceTimeBy(3_000)
+
+        forks.open(dog, art) { TrailOutcome.Failed }
+        runCurrent()
+        assertEquals(dog, forks.failed)
+        assertFalse(forks.failedEmpty)
 
         advanceTimeBy(3_000)
         assertNull(forks.failed)
@@ -51,7 +59,7 @@ class ViewerTrailForksTest {
         var cancelled = false
         forks.open(dog, art) {
             try {
-                CompletableDeferred<Boolean>().await()
+                CompletableDeferred<TrailOutcome>().await()
             } finally {
                 cancelled = true
             }
@@ -62,7 +70,7 @@ class ViewerTrailForksTest {
         assertEquals(dog, forks.busy)
         forks.follow(other)
         assertNull(forks.busy)
-        assertTrue(forks.open(TrailFork.Similar, other) { CompletableDeferred<Boolean>().await() })
+        assertTrue(forks.open(TrailFork.Similar, other) { CompletableDeferred<TrailOutcome>().await() })
         advanceTimeBy(1)
         runCurrent()
 
@@ -74,16 +82,16 @@ class ViewerTrailForksTest {
     fun `a swipe heading to another post cancels the fork before the page lands`() = runTest {
         val forks = ViewerTrailForks(backgroundScope)
         var opened = false
-        val search = CompletableDeferred<Boolean>()
+        val search = CompletableDeferred<TrailOutcome>()
         forks.open(dog, art) { search.await().also { opened = true } }
         runCurrent()
 
         forks.leave()
-        search.complete(true)
+        search.complete(TrailOutcome.Opened)
         runCurrent()
 
         assertFalse(opened)
         assertNull(forks.busy)
-        assertTrue(forks.open(dog, art) { true })
+        assertTrue(forks.open(dog, art) { TrailOutcome.Opened })
     }
 }

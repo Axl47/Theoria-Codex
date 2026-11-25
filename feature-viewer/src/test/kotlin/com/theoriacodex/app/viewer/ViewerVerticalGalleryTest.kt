@@ -93,7 +93,7 @@ class ViewerVerticalGalleryTest {
     }
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun `a vertical gallery closing into its card is gone once the backdrop is (ADR 0218)`() {
+    fun `a vertical gallery closing into its card is gone once the backdrop is (ADR 0220)`() {
         val returning = ViewerReturnTransition()
         returning.openedFrom("grid", post = gallery.id)
         returning.begin(gallery.id)

@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,19 +33,30 @@ class TrailFeedTest {
 
     @Test
     fun `opens only once the first page holds posts`() = runTest {
-        assertTrue(feed(ScriptedPager(page("a", more = true))).start().isNotEmpty())
-        assertTrue(feed(ScriptedPager(page(more = false))).start().isEmpty())
-        assertTrue(feed(ScriptedPager(null)).start().isEmpty())
+        assertEquals(listOf("a"), feed(ScriptedPager(page("a", more = true))).start()?.map { it.id.sourcePostId })
+        assertEquals(emptyList<Post>(), feed(ScriptedPager(page(more = false))).start())
+        assertNull(feed(ScriptedPager(null)).start())
+    }
+
+    @Test
+    fun `a step opens only with a post besides the one it was opened from or its mirrors (ADR 0180)`() = runTest {
+        val origin = setOf(post("here").id, post("mirror").id)
+        val isOrigin: (Post) -> Boolean = { it.id in origin }
+        assertEquals(emptyList<Post>(), feed(ScriptedPager(page("here", "mirror", more = false))).start(isOrigin))
+
+        val later = ScriptedPager(page("here", more = true), page("here", "other", more = false))
+        assertEquals(listOf("here", "other"), feed(later).start(isOrigin)?.map { it.id.sourcePostId })
+        assertEquals(2, later.calls)
     }
 
     @Test
     fun `a filtered fork pages until something shows, up to three pages`() = runTest {
         val onlyB: (List<Post>) -> List<Post> = { posts -> posts.filter { it.id.sourcePostId.startsWith("b") } }
         val found = ScriptedPager(page("a1", more = true), page("a1", "b1", more = true))
-        assertEquals(listOf("b1"), feed(found).start(onlyB).map { it.id.sourcePostId })
+        assertEquals(listOf("b1"), feed(found).start(visible = onlyB)?.map { it.id.sourcePostId })
 
         val never = ScriptedPager(page("a1", more = true), page("a2", more = true), page("a3", more = true), page("b", more = true))
-        assertTrue(feed(never).start(onlyB).isEmpty())
+        assertEquals(emptyList<Post>(), feed(never).start(visible = onlyB))
         assertEquals(3, never.calls)
     }
 
