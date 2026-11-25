@@ -20,6 +20,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,11 +93,12 @@ internal fun FollowingBody(
             }
         }
     }
+    LaunchedEffect(failed == null) { if (failed == null) failuresOpen = false }
     if (failuresOpen && failed != null) {
         val dates = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
         CheckFailuresSheet(
             sources = failed.bySource { key -> content.sources?.firstOrNull { it.key == key }?.name },
-            titles = TitleActions({ false }, {}, onUnfollow, onOpen = onOpenSeries) { series -> content.followed[series.id]?.let { readingSummary(it, dates) } },
+            titles = TitleActions({ false }, {}, onUnfollow, onOpen = { onOpenSeries(content.followed[it.id]?.series ?: it) }) { series -> content.followed[series.id]?.let { readingSummary(it, dates) } },
             onRetry = { ids ->
                 failuresOpen = false
                 onRetryFailed(ids)

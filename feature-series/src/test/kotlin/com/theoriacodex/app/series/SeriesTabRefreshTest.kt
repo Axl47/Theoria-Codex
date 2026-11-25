@@ -10,6 +10,7 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -113,6 +114,27 @@ class SeriesTabRefreshTest {
 
         assertEquals(listOf(null, setOf(limited.series.id)), asked)
         assertEquals(listOf(reachable), viewModel.state.value.failedCheck?.failures)
+    }
+
+    @Test
+    fun dismissingDuringAGroupRetryKeepsOnlyWhatTheRetryFound_adr_0219() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val reachable = failure("/a")
+        val limited = failure("/b", reason = SourceFailureReason.RATE_LIMITED)
+        val retrying = CompletableDeferred<FollowedCheck>()
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { only, _ ->
+            if (only == null) FollowedCheck(emptyList(), checked = 3, failures = listOf(reachable, limited)) else retrying.await()
+        }
+        viewModel.refresh()
+        advanceUntilIdle()
+        viewModel.retry(setOf(limited.series.id))
+        runCurrent()
+
+        viewModel.dismissFailures()
+        retrying.complete(FollowedCheck(emptyList(), checked = 1))
+        advanceUntilIdle()
+
+        assertNull(viewModel.state.value.failedCheck)
     }
 
     @Test

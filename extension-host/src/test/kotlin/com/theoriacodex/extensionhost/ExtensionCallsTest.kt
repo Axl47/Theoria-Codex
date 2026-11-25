@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.network.HttpException
 import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -65,6 +66,7 @@ class ExtensionCallsTest {
             HostUnavailableException("site.test", HostOutageKind.CHALLENGE) to SourceFailureReason.BLOCKED,
             HttpException(500) to SourceFailureReason.NETWORK,
             SocketTimeoutException("slow") to SourceFailureReason.TIMED_OUT,
+            InterruptedIOException("timeout") to SourceFailureReason.TIMED_OUT,
             IOException("offline") to SourceFailureReason.NETWORK,
             IllegalStateException("bad html") to SourceFailureReason.PARSE,
         )

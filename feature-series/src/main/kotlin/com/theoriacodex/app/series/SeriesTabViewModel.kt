@@ -255,15 +255,16 @@ class SeriesTabViewModel(
     private fun check(only: Set<SeriesId>?) {
         if (state.value.checking != null) return
         foundShown?.cancel()
-        val before = state.value.failedCheck.takeIf { only != null }
-        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = before) }
+        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = it.failedCheck.takeIf { only != null }) }
         foundShown = viewModelScope.launch {
             var check: FollowedCheck? = null
             try {
                 check = checkFollowed(only) { progress -> mutableState.update { it.copy(checking = progress) } }
             } finally {
-                val failed = check?.let { done -> before?.retried(only.orEmpty(), done) ?: done } ?: before
-                mutableState.update { it.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 }) }
+                mutableState.update { state ->
+                    val failed = check?.let { done -> state.failedCheck?.retried(only.orEmpty(), done) ?: done } ?: state.failedCheck
+                    state.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 })
+                }
             }
             if (check?.updates.orEmpty().isNotEmpty()) {
                 delay(FOUND_SHOWN)

@@ -12,6 +12,7 @@ import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.network.HttpException
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,7 +43,7 @@ internal class ExtensionCalls(private val name: String, private val onChallenged
             }
             error.isBrowserCheck() -> SourceFailureReason.BLOCKED
             error is HostUnavailableException && error.kind == HostOutageKind.RATE_LIMITED -> SourceFailureReason.RATE_LIMITED
-            error is SocketTimeoutException -> SourceFailureReason.TIMED_OUT
+            error is SocketTimeoutException || error is InterruptedIOException && error.message == OKHTTP_CALL_TIMEOUT -> SourceFailureReason.TIMED_OUT
             error is IOException -> SourceFailureReason.NETWORK
             error is LinkageError -> {
                 Diagnostics.report(LOG_AREA, "$name needs host API this module lacks", error)
@@ -60,6 +61,7 @@ internal class ExtensionCalls(private val name: String, private val onChallenged
     private companion object {
         const val HTTP_TOO_MANY_REQUESTS = 429
         const val HTTP_FORBIDDEN = 403
+        const val OKHTTP_CALL_TIMEOUT = "timeout"
         const val LOG_AREA = "extensions"
     }
 }
