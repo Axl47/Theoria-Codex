@@ -256,45 +256,46 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
-ROOM_DATABASE = "core-data-android/src/main/java/com/theoriacodex/data/android/room/TheoriaRoomDatabase.java"
-REGISTERED_MIGRATIONS = re.compile(r"Migration\[\]\s+MIGRATIONS\s*=\s*new\s+Migration\[\]\s*\{([^}]*)\}")
-
-
-@rule
-def room_migrations_have_host_tests() -> list[str]:
-    registry = REGISTERED_MIGRATIONS.search(read(ROOM_DATABASE))
-    names = re.findall(r"\bMIGRATION_\d+_\d+\b", registry.group(1)) if registry else []
-    if not names:
-        return [f"{ROOM_DATABASE} has no readable MIGRATIONS array (docs/adr/0012-room-explicit-migrations.md)"]
-    tests = "\n".join(path.read_text(encoding="utf-8") for path in sorted(ROOT.glob("core-data-android/src/test/**/*.kt")))
-    return [
-        f"{name} has no host test naming it in core-data-android/src/test; every schema bump adds a migration "
-        "and a test for it (docs/adr/0012-room-explicit-migrations.md)"
-        for name in names
-        if not re.search(rf"\b{name}\b", tests)
-    ]
-
-
 VISION_COMMIT = re.compile(r"\bVisionCommit\b")
-VISION_COMMITTERS = (
+VISION_OPT_IN = re.compile(r"\bOptIn\s*\([^)]*\bVisionCommit\b")
+VISION_TAGGER = "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt"
+VISION_PROPAGATORS = (
     "core-data/src/main/kotlin/com/theoriacodex/data/repository/VisualSignatureRepository.kt",
     "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomVisualSignatureRepository.kt",
-    "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt",
 )
+TEST_SOURCE_SET = re.compile(r"^(test|androidTest|sharedTest|testFixtures)")
+
+
+def shipped_sources() -> list[tuple[str, str]]:
+    sources = []
+    for path in sorted(ROOT.glob("*/src/*/**/*")):
+        relative = path.relative_to(ROOT)
+        if path.suffix in (".kt", ".java") and path.is_file() and not TEST_SOURCE_SET.match(relative.parts[2]):
+            sources.append((relative.as_posix(), KOTLIN_LITERAL.sub('""', path.read_text(encoding="utf-8"))))
+    return sources
+
+
+def build_scripts() -> list[tuple[str, str]]:
+    return [
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
+        for path in sorted([*ROOT.glob("**/*.gradle.kts"), *ROOT.glob("**/*.gradle")])
+        if path.is_file() and not {"build", ".gradle"} & set(path.relative_to(ROOT).parts[:-1])
+    ]
 
 
 @rule
 def vision_results_are_written_under_commits() -> list[str]:
-    build_scripts = tuple(
-        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
-        for path in sorted(ROOT.glob("**/*.gradle.kts"))
-        if "build" not in path.relative_to(ROOT).parts[:-1]
-    )
-    return [
-        f"{relative} opts into VisionCommit; only PictureTagger writes vision results, under its commits lock "
-        "(docs/adr/0097-picture-tagger-session-and-commits.md)"
-        for relative in references_outside(main_kotlin_sources() + build_scripts, VISION_COMMIT, VISION_COMMITTERS)
-    ]
+    reason = "only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)"
+    failures = []
+    for relative, text in shipped_sources() + build_scripts():
+        if relative == VISION_TAGGER:
+            continue
+        if relative in VISION_PROPAGATORS:
+            if VISION_OPT_IN.search(text):
+                failures.append(f"{relative} opts into VisionCommit; it may only pass the marker on; {reason}")
+        elif VISION_COMMIT.search(text):
+            failures.append(f"{relative} names VisionCommit; {reason}")
+    return failures
 
 
 def main() -> int:

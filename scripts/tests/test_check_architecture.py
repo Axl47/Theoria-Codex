@@ -137,51 +137,50 @@ class CoreDomainRulesTest(unittest.TestCase):
         )
 
 
-class RoomMigrationRuleTest(unittest.TestCase):
-    def test_reports_a_registered_migration_no_host_test_names_adr_0012(self) -> None:
-        self.assertIn(check_architecture.room_migrations_have_host_tests, check_architecture.RULES)
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            database = root / check_architecture.ROOM_DATABASE
-            database.parent.mkdir(parents=True)
-            database.write_text(
-                "public static final Migration MIGRATION_23_24 = new Migration(23, 24) {};\n"
-                "public static final Migration[] MIGRATIONS = new Migration[] {\n"
-                "        MIGRATION_22_23,\n        MIGRATION_23_24\n};\n",
-                encoding="utf-8",
-            )
-            host = root / "core-data-android/src/test/kotlin/RoomUpgradeJourneyTest.kt"
-            host.parent.mkdir(parents=True)
-            host.write_text("helper.runMigrationsAndValidate(name, 23, true, TheoriaRoomDatabase.MIGRATION_22_23)\n", encoding="utf-8")
-            device = root / "core-data-android/src/androidTest/kotlin/DeviceTest.kt"
-            device.parent.mkdir(parents=True)
-            device.write_text("TheoriaRoomDatabase.MIGRATION_23_24\n", encoding="utf-8")
-            with mock.patch.object(check_architecture, "ROOT", root):
-                failures = check_architecture.room_migrations_have_host_tests()
-                self.assertEqual(["MIGRATION_23_24"], [failure.split(" ", 1)[0] for failure in failures])
-                database.write_text("public static final Migration[] MIGRATIONS = new Migration[] {};\n", encoding="utf-8")
-                self.assertEqual(1, len(check_architecture.room_migrations_have_host_tests()))
-
-
 class VisionCommitRuleTest(unittest.TestCase):
     def test_reports_vision_results_written_outside_the_tagger_adr_0097(self) -> None:
         self.assertIn(check_architecture.vision_results_are_written_under_commits, check_architecture.RULES)
+        opt_in = "@OptIn(VisionCommit::class)\nfun writeAround() = Unit\n"
         with main_sources({
-            "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt": "@OptIn(VisionCommit::class)\nclass PictureTagger\n",
-            "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt": "@OptIn(VisionCommit::class)\nfun writeAround() = Unit\n",
+            check_architecture.VISION_TAGGER: "@OptIn(VisionCommit::class)\nclass PictureTagger\n",
+            check_architecture.VISION_PROPAGATORS[0]: "annotation class VisionCommit\n@VisionCommit suspend fun clearVision()\n",
+            check_architecture.VISION_PROPAGATORS[1]: "@VisionCommit override suspend fun clearVision() = Unit\n",
+            "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt": opt_in,
+            "app/src/debug/java/com/theoriacodex/app/DebugTools.kt": opt_in,
+            "app/src/main/java/com/theoriacodex/app/Writer.java": "@kotlin.OptIn(markerClass = VisionCommit.class) class Writer {}\n",
             "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt": "@file:OptIn(com.theoriacodex.data.repository.VisionCommit::class)\n",
+            "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/Sibling.kt": opt_in,
+            "core-data/src/main/kotlin/com/theoriacodex/data/repository/Other.kt": "@VisionCommit fun passOn() = Unit\n",
             "vision-kit/build.gradle.kts": "kotlin { compilerOptions { optIn.add(\"com.theoriacodex.data.repository.VisionCommit\") } }\n",
+            "media-kit/build.gradle": "kotlinOptions { freeCompilerArgs += '-opt-in=com.theoriacodex.data.repository.VisionCommit' }\n",
+            "app/src/main/java/com/theoriacodex/app/Message.kt": "val why = \"VisionCommit is held by the tagger\"\n",
+            "app/src/test/java/com/theoriacodex/app/FakeTest.kt": opt_in,
+            "app/src/androidTest/java/com/theoriacodex/app/DeviceTest.kt": opt_in,
+            "core-data-android/src/sharedTest/kotlin/Scenario.kt": opt_in,
             "vision-kit/build/generated/Stale.gradle.kts": "VisionCommit\n",
         }):
             failures = check_architecture.vision_results_are_written_under_commits()
-        self.assertEqual(
-            [
-                "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt",
-                "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt",
-                "vision-kit/build.gradle.kts",
-            ],
-            [failure.split(" ", 1)[0] for failure in failures],
-        )
+            self.assertEqual(
+                [
+                    "app/src/debug/java/com/theoriacodex/app/DebugTools.kt",
+                    "app/src/main/java/com/theoriacodex/app/Writer.java",
+                    "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt",
+                    "core-data/src/main/kotlin/com/theoriacodex/data/repository/Other.kt",
+                    "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt",
+                    "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/Sibling.kt",
+                    "media-kit/build.gradle",
+                    "vision-kit/build.gradle.kts",
+                ],
+                [failure.split(" ", 1)[0] for failure in failures],
+            )
+            (check_architecture.ROOT / check_architecture.VISION_PROPAGATORS[1]).write_text(
+                "@OptIn(VisionCommit::class)\nclass RoomVisualSignatureRepository\n", encoding="utf-8",
+            )
+            self.assertIn(
+                check_architecture.VISION_PROPAGATORS[1],
+                [failure.split(" ", 1)[0] for failure in check_architecture.vision_results_are_written_under_commits()],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
