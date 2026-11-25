@@ -38,6 +38,7 @@ class RoomSeriesRepository(
                 FollowedSeries(
                     series = row.series.toStored().series,
                     unreadCount = row.unreadCount,
+                    entryCount = row.entryCount,
                     followedAtEpochMs = row.series.followedAtEpochMs,
                     lastReadAtEpochMs = row.lastReadAtEpochMs,
                     lastUpdatedAtEpochMs = row.lastUpdatedAtEpochMs,

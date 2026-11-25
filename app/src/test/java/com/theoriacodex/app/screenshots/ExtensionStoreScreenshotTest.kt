@@ -30,7 +30,9 @@ import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ApkIcon
+import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
@@ -43,6 +45,8 @@ import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.SourceAvailability
+import com.theoriacodex.domain.series.SourceOff
 import com.theoriacodex.domain.series.extensionSourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,9 +96,17 @@ class ExtensionStoreScreenshotTest {
 
     @Test fun `missing extensions`() {
         installSolidColorIcons()
-        val followed = listOf(1L to "Paper Lantern", 2L to "Quiet Harbor", 3L to "Salt Road", 4L to "Moss Lane", 9L to "Tin Orchard").map { (id, title) ->
-            FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title), unreadCount = 0)
-        }
+        fun followed(id: Long, title: String, cover: String? = null, total: Int = 0, unread: Int = 0, read: Long? = null) =
+            FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title, coverUrl = cover), unreadCount = unread, lastReadAtEpochMs = read, started = read != null, entryCount = total)
+        val followed = listOf(
+            followed(1, "Paper Lantern", total = 40, unread = 28, read = 1_772_539_200_000L),
+            followed(2, "Quiet Harbor", total = 12, unread = 12),
+            followed(3, "Salt Road"),
+            followed(4, "Moss Lane"),
+            followed(5, "Dune Step", total = 8, unread = 2, read = 1_772_539_200_000L),
+            followed(9, "Tin Orchard", cover = "https://cdn.asurascans.com/covers/9.webp"),
+            followed(10, "Kelp Row", cover = "https://img.flamecomics.xyz/10.jpg"),
+        )
         val repository = object : SeriesRepository by StoredOnly(StoredSeries(followed.first().series), emptyList()) {
             override fun observeFollowed() = flowOf(followed)
 
@@ -106,11 +118,13 @@ class ExtensionStoreScreenshotTest {
                     RepoExtension(REPO, "fixture.aurora", "Aurora", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.AVAILABLE, "$REPO/icon/aurora.png", listOf(1L, 2L).map(SeriesKind.MANGA::extensionSourceKey)),
                     RepoExtension(REPO, "fixture.birch", "Birch", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.OTHER_KEY, "$REPO/icon/birch.png", listOf(SeriesKind.MANGA.extensionSourceKey(3))),
                     RepoExtension(REPO, "fixture.cedar", "Cedar", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.INSTALLED, "$REPO/icon/cedar.png", listOf(SeriesKind.MANGA.extensionSourceKey(4))),
+                    RepoExtension(REPO, "fixture.dune", "Dune", listOf("en", "es"), "1.0", SeriesKind.MANGA, RepoExtension.Status.INSTALLED, "$REPO/icon/dune.png", listOf(SeriesKind.MANGA.extensionSourceKey(5))),
                 ),
             )
         }
         val cedar = InstalledExtension("/apk/cedar", "Cedar", "1.0", signer = "fixture-key", on = false, icon = ApkIcon("fixture.cedar", 1, "/apk/cedar"))
-        val extensions = ExtensionsViewModel(Device(listOf(cedar)), repos)
+        val dune = InstalledExtension("/apk/dune", "Dune", "1.0", signer = "fixture-key", on = true, languages = listOf(ExtensionLanguage("en", true), ExtensionLanguage("es", false)), icon = ApkIcon("fixture.dune", 1, "/apk/dune"))
+        val extensions = ExtensionsViewModel(Device(listOf(cedar, dune), off = mapOf(SeriesKind.MANGA.extensionSourceKey(5) to SourceOff("Dune", "es", "/apk/dune"))), repos)
         val missing = MissingSeriesViewModel(repository, { emptyList() }, flowOf(Unit))
         val actions = MissingExtensionsActions({ missing }, { error("unused") }, onOpenSeries = {})
         compose.setContent {
@@ -170,7 +184,8 @@ class ExtensionStoreScreenshotTest {
         )
     }
 
-    private class Device(private val installed: List<InstalledExtension> = emptyList()) : SeriesExtensions {
+    private class Device(private val installed: List<InstalledExtension> = emptyList(), private val off: Map<SourceKey, SourceOff> = emptyMap()) : SeriesExtensions {
+        override suspend fun availability() = SourceAvailability(off = off)
         override val revision = MutableStateFlow(0)
         override suspend fun installed() = installed
         override suspend fun setOn(id: String, signer: String, on: Boolean) = emptyList<InstalledExtension>()
