@@ -18,6 +18,7 @@ data class ViewerRendererControls(
     val showSpeedChip: Boolean = true,
     val dimBackdrop: Boolean = false,
     val fillScreen: Boolean = false,
+    val repeatsAtEnd: Boolean = loopPlayback,
 ) {
     companion object {
         fun feedCard(isActive: Boolean) = ViewerRendererControls(

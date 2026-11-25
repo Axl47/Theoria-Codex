@@ -4,6 +4,7 @@ package com.theoriacodex.app.viewer
 
 import android.app.Application
 import android.os.Looper
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
@@ -248,6 +249,27 @@ class VideoStreamPlaybackTest {
         val lease = pool.acquire(post)
         until { lease.player.playbackState == Player.STATE_READY }
         assertEquals(prefetchRequests, server.paths())
+        pool.recycle(lease)
+    }
+
+    @Test fun `a repeating post starts over on its own, without buffering or asking the server again`() {
+        val lease = pool.acquire(VideoPlaybackRequest("${server.base}/main.wav", STREAM_FIXTURE_HEADERS), loop = true)
+        val player = lease.player
+        until { player.playbackState == Player.STATE_READY }
+        val requests = server.paths()
+        val states = mutableListOf<Int>()
+        var repeats = 0
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) { states += playbackState }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) repeats += 1
+            }
+        })
+        player.play()
+        until { repeats >= 2 }
+
+        assertEquals(emptyList<Int>(), states)
+        assertEquals(requests, server.paths())
         pool.recycle(lease)
     }
 

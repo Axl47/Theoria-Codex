@@ -313,6 +313,7 @@ private fun viewerRendererControls(
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
         showPassiveProgress = active && !frame.inPictureInPicture && !frame.chromeVisible,
         loopPlayback = frame.uiState.loopsPlayback,
+        repeatsAtEnd = frame.videoRepeats,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,

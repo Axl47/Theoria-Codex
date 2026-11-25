@@ -417,7 +417,7 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
         loopsPlayback) return ViewerReduction(this)
     if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) {
-        if (dwellApplies && (controls.dwell.held || !controls.dwell.elapsed(action.atMs))) return ViewerReduction(restartPlayback())
+        if (restartsAtEnd(controls.dwell.elapsed(action.atMs))) return ViewerReduction(restartPlayback())
         advanceInQueue()?.let { return it }
     }
     return ViewerReduction(copy(controls = controls.copy(
