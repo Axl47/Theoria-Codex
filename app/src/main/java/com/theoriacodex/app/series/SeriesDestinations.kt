@@ -71,7 +71,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             series.extensions.revision,
             createSavedStateHandle(),
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
-        ) { series.checkFollowed { notifySeriesUpdate(shell.appContext, it) } }
+        ) { onProgress -> series.checkFollowed(onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
     }
     val tabShown = LocalTabShown.current
     LaunchedEffect(viewModel, tabShown) { viewModel.followShown(snapshotFlow(tabShown)) }
