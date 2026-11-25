@@ -54,6 +54,25 @@ class TagForkChipTest {
     }
 
     @Test
+    fun `holding a forking chip lists its trail moves first (ADR 0217)`() {
+        val moved = mutableListOf<String>()
+        val extras = PostTagSheetExtras(
+            tagsInitiallyCollapsed = false,
+            onFork = {},
+            trailActions = { term -> listOf(TagChipAction("Add to trail") { moved += term.value }) },
+        )
+        compose.setContent {
+            MaterialTheme {
+                PostTagActionSection(post = post(), draftQuery = emptySearchQuery(), onFavoriteTagLongPress = null, sheetExtras = extras)
+            }
+        }
+
+        compose.onNodeWithText("cat").performTouchInput { longClick() }
+        compose.onNodeWithText("Add to trail").performClick()
+        assertEquals(listOf("cat"), moved)
+    }
+
+    @Test
     fun `a forking chip for a tag the level searches shows as required, and the others as not in search`() {
         val level = Query(QueryMode.Unified, listOf("cat"), listOf("dog"), SortMode.NEWEST, null, null)
         compose.setContent {

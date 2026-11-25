@@ -140,6 +140,7 @@ internal fun ViewerInfoSheet(
     saveToCodexQuery: Query?,
     contextActions: ViewerContextActions,
     comments: ViewerComments,
+    trail: ViewerTrail = ViewerTrail.None,
 ) {
     val post = selection.post
     if (series != null) {
@@ -154,7 +155,7 @@ internal fun ViewerInfoSheet(
             }
         }
     } else {
-        PostInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments)
+        PostInfoSheet(selection, controls, host, config, saveToCodexQuery, contextActions, comments, trail)
     }
 }
 
@@ -167,6 +168,7 @@ private fun PostInfoSheet(
     saveToCodexQuery: Query?,
     contextActions: ViewerContextActions,
     comments: ViewerComments,
+    trail: ViewerTrail,
 ) {
     val post = selection.post
     val onAction = host.onAction
@@ -180,6 +182,10 @@ private fun PostInfoSheet(
     val nowEpochMs = remember { System.currentTimeMillis() }
     var commentsCollapsed by remember(post.id) { mutableStateOf(false) }
     val highlightedComment = rememberHighlightedComment(post, comments)
+    val onFork = rememberViewerTagFork(controls.trailForks, post, saveToCodexQuery) {
+        controls.setInfoSheetVisible(false)
+        controls.markInteraction()
+    }
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
@@ -208,10 +214,8 @@ private fun PostInfoSheet(
                 scrollToAfterTags = openedAtComments,
                 scrollToKey = highlightedComment,
                 filterBehindIcon = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE,
-                onFork = rememberViewerTagFork(controls.trailForks, post, saveToCodexQuery) {
-                    controls.setInfoSheetVisible(false)
-                    controls.markInteraction()
-                },
+                onFork = onFork,
+                trailActions = rememberViewerTagTrailActions(trail, post, onFork),
                 levelQuery = saveToCodexQuery,
                 afterTags = {
                     commentsState?.let { state ->

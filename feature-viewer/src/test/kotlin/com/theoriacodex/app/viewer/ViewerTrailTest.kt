@@ -27,6 +27,31 @@ class ViewerTrailTest {
     private fun tag(value: String) = ViewerCrumb(value, "tag:DANBOORU:$value", crumbTag(value))
 
     @Test
+    fun `a tag's trail moves are Start without a trail, then Add or Remove with Start a new trail (ADR 0217)`() {
+        val forked = mutableListOf<String>()
+        val removed = mutableListOf<Int>()
+        val restarted = mutableListOf<CrumbTag>()
+        fun trail(vararg crumbs: ViewerCrumb) = ViewerTrail(crumbs.toList(), null, {}, { removed += it }, onRestart = { restarted += it })
+        fun ViewerTrail.moves(value: String) = tagActions(crumbTag(value)) { forked += value }
+        fun List<com.theoriacodex.app.tags.TagChipAction>.run(label: String) = first { it.label == label }.run()
+
+        val root = trail(ViewerCrumb("landscape"))
+        assertEquals(listOf("Start a trail"), root.moves("snow").map { it.label })
+        root.moves("snow").run("Start a trail")
+
+        val path = trail(ViewerCrumb("landscape"), tag("night_sky"), tag("aurora"))
+        assertEquals(listOf("Add to trail", "Start a new trail"), path.moves("snow").map { it.label })
+        assertEquals(listOf("Remove from trail", "Start a new trail"), path.moves("night_sky").map { it.label })
+        path.moves("snow").run("Add to trail")
+        path.moves("night_sky").run("Remove from trail")
+        path.moves("snow").run("Start a new trail")
+
+        assertEquals(listOf("snow", "snow"), forked)
+        assertEquals(listOf(1), removed)
+        assertEquals(listOf(crumbTag("snow")), restarted)
+    }
+
+    @Test
     fun `removing a middle step goes back before it and re-runs the later steps in order (ADR 0217)`() {
         val path = listOf(ViewerCrumb("landscape"), tag("night_sky"), tag("aurora"), tag("snow"))
 
