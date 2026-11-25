@@ -18,8 +18,13 @@ A series whose extension is missing is skipped, never a failure (the Missing ext
 The failure row on the Series tab sits on its own card and opens a sheet that groups the failed series by
 source, then by `CheckProblem`. Each group has its own Retry, which checks only those series (`only`) and
 replaces just their failures in whatever failure is showing when it ends, so a failure dismissed meanwhile stays dismissed; groups over `COLLAPSE_OVER` titles start collapsed. Title rows are the Missing
-extensions sheet's `FollowedTitleRow`. Dismiss clears the failure from the ViewModel only, so the next check
+extensions sheet's `FollowedTitleRow`, and Switch source on one runs the same `SwitchingSource` flow that sheet uses. Dismiss clears the failure from the ViewModel only, so the next check
 that fails shows it again, and nothing about it is persisted.
+
+The card is the grid's first item, so a check that ends while the grid is scrolled down would add it out of view.
+Each finished check bumps `SeriesTabState.checkRun`, since two failed checks can be equal. If the grid was at the
+top, it stays there so the card shows, because a lazy grid otherwise keeps its old first item in place and puts the
+card just above. Otherwise a snackbar names the count with Show, which scrolls to the card.
 
 ## Consequences
 
@@ -30,7 +35,7 @@ placed in `CheckProblem` because the mapping is an exhaustive `when`.
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesUpdates.kt`: `CheckFailure`, `FollowedCheck.failures`, `checkFollowed`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionCalls.kt`: `ExtensionCalls.failure`
-- `feature-series/src/main/kotlin/com/theoriacodex/app/series/CheckFailures.kt`: `CheckProblem`, `bySource`, `CheckFailedCard`, `CheckFailuresSheet`
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/CheckFailures.kt`: `CheckProblem`, `bySource`, `CheckFailedCard`, `CheckFailuresSheet`, `OffScreenFailuresNotice`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `SeriesTabViewModel.retry`, `SeriesTabViewModel.dismissFailures`
 
 ## Guarded by
@@ -42,3 +47,5 @@ placed in `CheckProblem` because the mapping is an exhaustive `when`.
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `dismissingDuringAGroupRetryKeepsOnlyWhatTheRetryFound_adr_0220`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `failuresGroupBySourceThenReasonAndDropSeriesNoLongerFollowed_adr_0220`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `theFailureCardOpensTheListRetriesAGroupAndDismisses_adr_0220`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `aFailedSeriesWithAnotherSourceOfItsKindOffersSwitchSource_adr_0220`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `aCheckThatFinishesWithTheCardOffScreenOffersToScrollToIt_adr_0220`
