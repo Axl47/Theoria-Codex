@@ -153,7 +153,7 @@ class RoomRecentsRepositoryTest {
         assertEquals(1, database.codexLikesDao().posts().size)
     }
 
-    @Test fun `watched media progress keeps the highest page per membership`() = runTest {
+    @Test fun `watched media progress keeps the highest page per membership (ADR 0013)`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         val post = recentPost("progress")
 
@@ -196,7 +196,7 @@ class RoomRecentsRepositoryTest {
         assertEquals(0, database.recentsDao().raiseWatchedMediaProgress("PIXIV", "progress", "WATCHED", 50))
     }
 
-    @Test fun `progress on one watched post reuses every other decoded post`() = runTest {
+    @Test fun `progress on one watched post reuses every other decoded post (ADR 0013)`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         repository.recordWatchedPost(recentPost("kept"), ViewerStreamSource.SEARCH, null)
         repository.recordWatchedPost(recentPost("progress"), ViewerStreamSource.SEARCH, null)
