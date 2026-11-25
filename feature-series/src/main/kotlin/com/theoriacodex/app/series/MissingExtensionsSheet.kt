@@ -61,7 +61,7 @@ internal fun MissingExtensionsOverlay(
     val resolved = content.sources != null && content.following != null && missing.isEmpty()
     LaunchedEffect(resolved) { if (resolved) onDismiss() }
     val extensions = viewModel(key = MISSING_EXTENSIONS_KEY) { actions.extensions() }
-    var resumed by remember { mutableStateOf(false) }
+    var resumed by rememberSaveable { mutableStateOf(false) }
     LifecycleResumeEffect(extensions) {
         if (resumed || extensions.state.value.listing != null) extensions.reloadListing()
         resumed = true
