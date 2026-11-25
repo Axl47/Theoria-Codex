@@ -118,6 +118,7 @@ fun CodexDetailScreen(
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
+    newPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     related: RelatedShelfBinding? = null,
     onSearchSites: ((SourceKey, Query) -> Unit)? = null,
@@ -161,7 +162,7 @@ fun CodexDetailScreen(
     ) { padding ->
         CodexDetailBody(
             padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
-            editSelection, { editSelection = it }, likedPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
+            editSelection, { editSelection = it }, likedPostIds, newPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
         )
     }
@@ -215,6 +216,7 @@ private fun CodexDetailBody(
     editSelection: CodexEditSelection,
     onEditSelectionChange: (CodexEditSelection) -> Unit,
     likedPostIds: Set<PostId>,
+    newPostIds: Set<PostId>,
     onToggleLike: ((Post) -> Unit)?,
     loading: Boolean,
     gridState: LazyStaggeredGridState,
@@ -244,6 +246,7 @@ private fun CodexDetailBody(
         if (posts.isNotEmpty() && !editSelection.active) CodexDetailChipRow(chips)
         val cards = rememberFeedCardEnvironment(
             pixivUgoiraClient, likedPostIds, feed.durations.knownDurationMsByPostId, durations, onToggleLike,
+            newPostIds = newPostIds,
         )
         val currentSelection by rememberUpdatedState(editSelection)
         val currentVisiblePosts by rememberUpdatedState(feed.visiblePosts)

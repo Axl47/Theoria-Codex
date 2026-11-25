@@ -32,6 +32,7 @@ data class FeedCardEnvironment(
     val onViewportChanged: (Post, Boolean) -> Unit,
     val onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     val resolvePostById: (suspend (PostId) -> Post?)? = null,
+    val newPostIds: State<Set<PostId>> = mutableStateOf(emptySet()),
 )
 
 @Composable
@@ -42,8 +43,10 @@ fun rememberFeedCardEnvironment(
     durations: FeedDurations,
     onToggleLike: ((Post) -> Unit)?,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
+    newPostIds: Set<PostId> = emptySet(),
 ): FeedCardEnvironment {
     val liked = rememberStateSetAfterComposition(likedPostIds)
+    val news = rememberStateSetAfterComposition(newPostIds)
     val known = rememberStateSetAfterComposition(acquiredDurations)
     val latestResolve = rememberUpdatedState(resolvePostById)
     val resolver: (suspend (PostId) -> Post?)? = if (resolvePostById == null) null else {
@@ -58,7 +61,7 @@ fun rememberFeedCardEnvironment(
     val onDurationKnown = durations.onAuthoritativeDurationKnown
     return remember(pixivUgoiraClient, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver) {
         FeedCardEnvironment(
-            pixivUgoiraClient, liked, known, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver,
+            pixivUgoiraClient, liked, known, durationStateForPost, toggleLike, onViewportChanged, onDurationKnown, resolver, news,
         )
     }
 }
@@ -95,6 +98,9 @@ fun FeedPostCard(
     val liked by remember(post.id, environment.likedPostIds) {
         derivedStateOf { post.id in environment.likedPostIds.value }
     }
+    val isNew by remember(post.id, environment.newPostIds) {
+        derivedStateOf { post.id in environment.newPostIds.value }
+    }
     SearchResultCard(
         post = post,
         showWatchHistory = showWatchHistory,
@@ -106,6 +112,7 @@ fun FeedPostCard(
         mediaAspectRatio = mediaAspectRatio,
         showTitle = showTitle,
         liked = liked,
+        isNew = isNew,
         onToggleLike = environment.onToggleLike?.takeIf { likeEnabled }?.let { toggle -> { toggle(post) } },
         resolvePostById = resolvePostById ?: environment.resolvePostById,
         recoverPostMedia = recoverPostMedia,
