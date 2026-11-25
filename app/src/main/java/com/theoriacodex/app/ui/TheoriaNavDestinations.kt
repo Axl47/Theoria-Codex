@@ -8,8 +8,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import com.theoriacodex.app.ui.components.feedDurations
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -71,8 +69,6 @@ import com.theoriacodex.app.ui.routes.virtualCodexUi
 import com.theoriacodex.app.ui.trails.forLevel
 import com.theoriacodex.app.ui.trails.isTrailLevel
 import com.theoriacodex.app.ui.trails.rememberViewerLevel
-import com.theoriacodex.app.ui.trails.viewerForkFadeIn
-import com.theoriacodex.app.ui.trails.viewerForkFadeOut
 import com.theoriacodex.app.viewer.ViewerCoveredLifecycle
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
@@ -102,15 +98,7 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
         CodexDetailEntry(shell, entry, sharedScope, this)
     }
     opaqueScreen(AppRoute.CreatorProfile) { CreatorDestination(shell) }
-    composable(
-        AppRoute.Viewer,
-        enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
-        exitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else null },
-        popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
-        popExitTransition = {
-            if (targetState.destination.route == AppRoute.Viewer || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
-        },
-    ) { entry ->
+    composable(AppRoute.Viewer) { entry ->
         val top by shell.navController.currentBackStackEntryAsState()
         ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
         ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {

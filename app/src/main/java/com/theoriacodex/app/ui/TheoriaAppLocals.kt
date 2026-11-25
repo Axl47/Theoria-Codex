@@ -3,6 +3,8 @@ package com.theoriacodex.app.ui
 import com.theoriacodex.app.codex.LocalNewCodexOpener
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.navigation.NavController
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,6 +43,13 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
     val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
     val watchPresentation = rememberPostWatchPresentation(shell.data.readingPositions, shell.data.recentsRepository)
     val viewerReturnTransition = remember { ViewerReturnTransition() }
+    DisposableEffect(shell.navController, viewerReturnTransition) {
+        val dropUnclaimed = NavController.OnDestinationChangedListener { _, destination, _ ->
+            if (destination.route != AppRoute.Viewer) viewerReturnTransition.dropUnclaimedOrigin()
+        }
+        shell.navController.addOnDestinationChangedListener(dropUnclaimed)
+        onDispose { shell.navController.removeOnDestinationChangedListener(dropUnclaimed) }
+    }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     CompositionLocalProvider(
         LocalTrailOpener provides rememberTrailOpener(shell),

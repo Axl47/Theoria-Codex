@@ -32,6 +32,9 @@ import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
+import com.theoriacodex.app.ui.trails.isTrailLevel
+import com.theoriacodex.app.ui.trails.viewerForkFadeIn
+import com.theoriacodex.app.ui.trails.viewerForkFadeOut
 import com.theoriacodex.app.series.ExtensionsSubpage
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.viewer.ViewerSeries
@@ -106,23 +109,36 @@ internal fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
 
 private typealias ScreenTransitionScope = AnimatedContentTransitionScope<NavBackStackEntry>
 
-private fun ScreenTransitionScope.screenEnter(): EnterTransition =
-    if (targetState.destination.route == AppRoute.CodexDetail) codexEnterTransition() else pushEnterTransition()
+private val ScreenTransitionScope.betweenViewers: Boolean
+    get() = initialState.destination.route == AppRoute.Viewer && targetState.destination.route == AppRoute.Viewer
 
-private fun ScreenTransitionScope.screenExit(): ExitTransition = when (targetState.destination.route) {
-    AppRoute.Viewer -> ExitTransition.None
-    AppRoute.CodexDetail -> codexUnderneathExit()
+private fun ScreenTransitionScope.screenEnter(): EnterTransition = when {
+    betweenViewers -> viewerForkFadeIn()
+    targetState.destination.route == AppRoute.Viewer -> EnterTransition.None
+    targetState.destination.route == AppRoute.CodexDetail -> codexEnterTransition()
+    else -> pushEnterTransition()
+}
+
+private fun ScreenTransitionScope.screenExit(): ExitTransition = when {
+    betweenViewers -> viewerForkFadeOut()
+    targetState.destination.route == AppRoute.Viewer -> ExitTransition.None
+    targetState.destination.route == AppRoute.CodexDetail -> codexUnderneathExit()
     else -> pushExitTransition()
 }
 
-private fun ScreenTransitionScope.screenPopEnter(): EnterTransition = when (initialState.destination.route) {
-    AppRoute.Viewer -> EnterTransition.None
-    AppRoute.CodexDetail -> codexUnderneathEnter()
+private fun ScreenTransitionScope.screenPopEnter(): EnterTransition = when {
+    betweenViewers -> viewerForkFadeIn()
+    initialState.destination.route == AppRoute.Viewer -> EnterTransition.None
+    initialState.destination.route == AppRoute.CodexDetail -> codexUnderneathEnter()
     else -> popEnterTransition()
 }
 
-private fun ScreenTransitionScope.screenPopExit(): ExitTransition =
-    if (initialState.destination.route == AppRoute.CodexDetail) codexExitTransition() else popExitTransition()
+private fun ScreenTransitionScope.screenPopExit(): ExitTransition = when {
+    initialState.destination.route == AppRoute.Viewer ->
+        if (betweenViewers || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
+    initialState.destination.route == AppRoute.CodexDetail -> codexExitTransition()
+    else -> popExitTransition()
+}
 
 @Composable
 internal fun TheoriaScreenHost(
@@ -151,7 +167,9 @@ internal fun NavGraphBuilder.opaqueScreen(
     content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
 ) {
     composable(route, arguments) { entry ->
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { this@composable.content(entry) }
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), propagateMinConstraints = true) {
+            this@composable.content(entry)
+        }
     }
 }
 

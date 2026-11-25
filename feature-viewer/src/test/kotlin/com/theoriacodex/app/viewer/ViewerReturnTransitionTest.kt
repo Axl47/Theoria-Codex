@@ -330,6 +330,22 @@ class ViewerReturnTransitionTest {
         compose.onNodeWithTag("returning media").assertDoesNotExist()
     }
 
+    @Test fun `a card tap that opened no Viewer leaves no origin for the next launch (ADR 0218)`() {
+        val unclaimed = ViewerReturnTransition()
+        unclaimed.openedFrom("grid", Rect(0f, 0f, 40f, 50f))
+        unclaimed.dropUnclaimedOrigin()
+        unclaimed.begin(postId)
+        assertNull(unclaimed.openingBounds)
+        assertNull(unclaimed.request)
+
+        val claimed = ViewerReturnTransition()
+        claimed.openedFrom("grid", Rect(0f, 0f, 40f, 50f))
+        claimed.claimOrigin()
+        claimed.dropUnclaimedOrigin()
+        claimed.begin(postId)
+        assertEquals("grid", claimed.request?.gridId)
+    }
+
     @Test fun `a Viewer opened without a card leaves in one frame when it closes (ADR 0218)`() {
         val returning = ViewerReturnTransition()
         lateinit var navigation: NavHostController

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -53,6 +54,33 @@ class ScreenExitFramesTest {
         }
         compose.runOnIdle { dispatcher.onBackPressed() }
         assertFramesNeverBlend("Gesture commit", 30)
+        assertHomeShown()
+    }
+
+    @Test fun `a back gesture out of the Viewer leaves it in place instead of sliding it like a screen (ADR 0218)`() {
+        lateinit var navigation: NavHostController
+        compose.setContent {
+            navigation = rememberNavController()
+            Box(Modifier.fillMaxSize().background(BEHIND).testTag("root")) {
+                TheoriaScreenHost(navigation, AppRoute.Home) {
+                    opaqueScreen(AppRoute.Home) { Box(Modifier.fillMaxSize().background(HOME)) }
+                    composable(AppRoute.Viewer) { Box(Modifier.fillMaxSize().background(TEXT)) }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.navigate(AppRoute.Viewer) }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        val dispatcher = compose.activity.onBackPressedDispatcher
+        compose.runOnIdle { dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 400f, 0f, BackEventCompat.EDGE_LEFT)) }
+        compose.runOnIdle { dispatcher.dispatchOnBackProgressed(BackEventCompat(200f, 400f, 0.5f, BackEventCompat.EDGE_LEFT)) }
+        repeat(3) { frame ->
+            compose.mainClock.advanceTimeByFrame()
+            val pixel = compose.onNodeWithTag("root").captureToImage().toPixelMap().let { it[it.width / 2, it.height / 2] }
+            assertTrue("Gesture frame $frame moved the Viewer: $pixel", TEXT.matches(pixel))
+        }
+        compose.runOnIdle { dispatcher.onBackPressed() }
         assertHomeShown()
     }
 

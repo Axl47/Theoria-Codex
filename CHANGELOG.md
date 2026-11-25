@@ -164,7 +164,7 @@
 
 - Leaving a chapter or an episode closes the reader or player all at once. The dark background no longer disappears first while the pages or video stay on screen a moment longer.
 - Swiping back from a series page, Settings, Extensions or another full screen slides it away, as the back arrow does. It no longer fades with its text drawn over the screen behind it.
-- Closing a gallery you read in vertical mode shrinks its pages back into the post's card along with the dark background, instead of leaving the pages on screen after the background is gone.
+- A gallery you read in vertical mode opens out of the post's card and shrinks back into it when closed, along with the dark background. Its pages no longer stay on screen after the background is gone.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.

@@ -170,7 +170,11 @@ internal fun ViewerRoute(
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
     val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
-    SideEffect { if (!level.isFork) viewerReturn?.retainPosts(retainedPostIds) }
+    SideEffect {
+        if (level.isFork) return@SideEffect
+        viewerReturn?.claimOrigin()
+        viewerReturn?.retainPosts(retainedPostIds)
+    }
     val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
         latestOnOwnerChanged.value(viewerOwner)
