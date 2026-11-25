@@ -62,6 +62,8 @@ class TriageDragOverlaysTest {
         compose.runOnIdle { assertNull(saveState.armed) }
         dragTo(Offset(0f, -110f))
         compose.runOnIdle { assertEquals("codex:codex-1", saveState.armed?.key) }
+        compose.runOnIdle { drag.lift() }
+        compose.runOnIdle { assertNull(saveState.armed) }
         dragTo(Offset(0f, -60f))
         compose.runOnIdle { assertNull(saveState.armed) }
         dragTo(Offset(-110f, -60f))

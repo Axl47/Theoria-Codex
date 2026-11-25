@@ -274,16 +274,17 @@ private fun BoxScope.VerticalEdgeHint(
 ) {
     val up = drag.offset.y < 0f
     val fade = Modifier.alpha(hints.vertical)
+    val held = drag.rowPointer != null
     when {
         up && targets.save.isEmpty() ->
-            TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
+            TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, held && hints.armed == SwipeDirection.Up)
         !up && targets.hide.isEmpty() ->
-            TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, hints.armed == SwipeDirection.Down)
+            TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, held && hints.armed == SwipeDirection.Down)
         up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState) { hovered ->
-            releasePick(hovered, targets.save, hints.armed == SwipeDirection.Up) { it is SaveTarget.Codex }
+            releasePick(hovered, targets.save, held && hints.armed == SwipeDirection.Up) { it is SaveTarget.Codex }
         }
         else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState) { hovered ->
-            releasePick(hovered, targets.hide, hints.armed == SwipeDirection.Down) { true }
+            releasePick(hovered, targets.hide, held && hints.armed == SwipeDirection.Down) { true }
         }
     }
 }
