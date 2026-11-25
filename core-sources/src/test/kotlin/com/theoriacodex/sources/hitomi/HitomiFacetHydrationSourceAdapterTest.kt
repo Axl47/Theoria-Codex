@@ -165,7 +165,7 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `still gallery cards lead with a thumbnail that survives media recovery`() = runTest {
+    fun `still gallery cards lead with a thumbnail that survives media recovery (ADR 0043)`() = runTest {
         val config = fixture("gg-shape.js")
         val http = RoutingHitomiHttpClient().apply {
             textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = config
@@ -262,7 +262,7 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `search hydration is bounded ordered isolated and sparse while resolve is complete`() = runTest {
+    fun `search hydration is bounded ordered isolated and sparse while resolve is complete (ADR 0043)`() = runTest {
         val all = HitomiNozomi.urlFor(HitomiNozomiRequest())
         val mediaCalls = AtomicInteger(0)
         val http = RoutingHitomiHttpClient().apply {

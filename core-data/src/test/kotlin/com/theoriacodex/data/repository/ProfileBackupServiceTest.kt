@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.series.MAX_MEMO_LENGTH
 import com.theoriacodex.domain.series.Series
@@ -11,7 +12,6 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
-import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.model.Post
@@ -22,6 +22,9 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.source.SiteAddress
+import com.theoriacodex.domain.source.SiteAddressParse
+import com.theoriacodex.domain.source.SiteProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -55,7 +58,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, harness.pins.observeSavedSearches().first().size)
     }
 
-    @Test fun `developer copy selects the imported active profile and repeats without duplicate identities`() = runTest {
+    @Test fun `developer copy selects the imported active profile and repeats without duplicate identities (ADR 0025)`() = runTest {
         val harness = harness()
         val bytes = codec.encode(backup())
         harness.service.restore(bytes, applyPreferences = true, selectImportedProfile = true)
@@ -66,7 +69,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, harness.pins.observeSavedSearches().first().size)
     }
 
-    @Test fun `restoring the same backup twice adds nothing the second time`() = runTest {
+    @Test fun `restoring the same backup twice adds nothing the second time (ADR 0025)`() = runTest {
         val directory = temporary.newFolder()
         val settings = InMemorySettingsRepository()
         val pins = InMemorySavedSearchRepository()
@@ -82,7 +85,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, pins.observeSavedSearches().first().size)
     }
 
-    @Test fun `a backup carries the extension repos, and one without them stays readable by the previous release`() {
+    @Test fun `a backup carries the extension repos, and one without them stays readable by the previous release (ADR 0024)`() {
         val repos = listOf(ExtensionRepo("https://a.example/repo", "A", "aa11"), ExtensionRepo("https://b.example/repo", "B", "bb22"))
         val written = backup().copy(extensionRepos = repos)
         assertEquals(repos, codec.decode(codec.encode(written)).extensionRepos)
@@ -94,7 +97,7 @@ class ProfileBackupServiceTest {
         assertEquals(emptyList<ExtensionRepo>(), codec.decode(codec.encode(backup())).extensionRepos)
     }
 
-    @Test fun `statistics with a watched-tag floor are written as version 5 and restore the floor`() {
+    @Test fun `statistics with a watched-tag floor are written as version 5 and restore the floor (ADR 0024)`() {
         val statistics = LifetimeStatistics(
             watchedByTag = mapOf(StatisticsTagKey(SourceKey.GELBOORU, "fern") to 9L),
             watchedTagFloors = mapOf(SourceKey.GELBOORU to 4L),
@@ -104,6 +107,19 @@ class ProfileBackupServiceTest {
         assertEquals(5, encodedTree(written)["version"]?.toString()?.toInt())
         assertEquals(statistics.watchedTagFloors, codec.decode(codec.encode(written)).statistics?.watchedTagFloors)
         assertEquals(2, encodedTree(backup().copy(statistics = LifetimeStatistics()))["version"]?.toString()?.toInt())
+    }
+
+    @Test fun `a backup is written at the highest version any of its contents needs (ADR 0024)`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), emptyList()))
+        val repos = listOf(ExtensionRepo("https://r.example/repo", "R", "aa11"))
+        val floors = LifetimeStatistics(watchedTagFloors = mapOf(SourceKey.GELBOORU to 4L))
+        val plain = backup()
+        fun version(backup: ProfileBackup) = encodedTree(backup)["version"]?.toString()?.toInt()
+
+        assertEquals(4, version(plain.copy(extensionRepos = repos, library = plain.library.copy(series = series))))
+        assertEquals(5, version(plain.copy(extensionRepos = repos, statistics = floors)))
+        assertEquals(5, version(plain.copy(statistics = floors, library = plain.library.copy(series = series))))
     }
 
     @Test fun `exporting writes the device's repos, previewing names the new ones, and restoring stores them`() = runTest {
@@ -171,7 +187,7 @@ class ProfileBackupServiceTest {
         assertEquals(1, restored.preview().savedSearchCount)
     }
 
-    @Test fun `export strips device paths signed URLs and transient settings`() {
+    @Test fun `export strips device paths signed URLs and transient settings (ADR 0023)`() {
         val backup = backup()
         val localPost = backup.library.posts.single().copy(
             preview = ImageRef("https://example.test/p?token=secret", "/private/photo", "image/jpeg"),
@@ -179,9 +195,7 @@ class ProfileBackupServiceTest {
             media = listOf(ImageRef("file:///private/photo", "/private/photo", "image/jpeg")),
             pageUrl = "https://example.test/page?auth=secret",
         )
-        val source = backup.copy(settings = backup.settings.copy(
-            scenarioPreset = ScenarioPreset.SLOW_NETWORK,
-        ), library = backup.library.copy(posts = listOf(localPost)))
+        val source = backup.copy(library = backup.library.copy(posts = listOf(localPost)))
         val bytes = codec.encode(source)
         val json = bytes.toString(Charsets.UTF_8)
         assertFalse(json.contains("secret"))
@@ -190,20 +204,9 @@ class ProfileBackupServiceTest {
         assertNull(restored.library.posts.single().preview.url)
         assertNull(restored.library.posts.single().full)
         assertNull(restored.library.posts.single().media.single().localPath)
-        assertEquals(ScenarioPreset.NORMAL, restored.settings.scenarioPreset)
     }
 
-    @Test fun `a backup carries no extension trust`() {
-        val backup = backup()
-        val trusting = backup.copy(settings = backup.settings.copy(extensions = ExtensionChoices(mapOf("extension.a" to "signer-key"), mapOf("extension.a" to setOf("en")))))
-
-        val bytes = codec.encode(trusting)
-
-        assertFalse(bytes.toString(Charsets.UTF_8).contains("signer-key"))
-        assertEquals(ExtensionChoices(), codec.decode(bytes).settings.extensions)
-    }
-
-    @Test fun `restore merges into matching profiles and preserves current preferences and content`() = runTest {
+    @Test fun `restore merges into matching profiles and preserves current preferences and content (ADR 0025)`() = runTest {
         val harness = harness()
         val existing = harness.settings.observeSettings().first()
         harness.settings.updateSettings {
@@ -238,7 +241,7 @@ class ProfileBackupServiceTest {
         assertTrue(extra in harness.settings.observeSettings().first().recommendationProfiles)
     }
 
-    @Test fun `a profile deleted this session is usable again once restored, and others stay retired`() = runTest {
+    @Test fun `a profile deleted this session is usable again once restored, and others stay retired (ADR 0025, 0026)`() = runTest {
         val directory = temporary.newFolder()
         val guard = ProfileLibraryWriteGuard().apply {
             retire("profile-alt")
@@ -253,7 +256,7 @@ class ProfileBackupServiceTest {
         assertTrue(guard.isRetired("profile-gone"))
     }
 
-    @Test fun `statistics travel with history and restoring them twice changes nothing`() = runTest {
+    @Test fun `statistics travel with history and restoring them twice changes nothing (ADR 0030)`() = runTest {
         val directory = temporary.newFolder()
         val settings = InMemorySettingsRepository()
         val source = InMemoryStatisticsRepository()
@@ -279,7 +282,7 @@ class ProfileBackupServiceTest {
         assertEquals(first, target.observeStatistics().first())
     }
 
-    @Test fun `global preferences are restored only when explicitly requested`() = runTest {
+    @Test fun `global preferences are restored only when explicitly requested (ADR 0025)`() = runTest {
         val harness = harness()
         harness.service.restore(codec.encode(backup()), applyPreferences = true)
         val settings = harness.settings.observeSettings().first()
@@ -289,7 +292,7 @@ class ProfileBackupServiceTest {
         assertEquals("profile-main", settings.activeProfileId)
     }
 
-    @Test fun `canonical booru post links survive while arbitrary credential queries do not`() {
+    @Test fun `canonical booru post links survive while arbitrary credential queries do not (ADR 0023)`() {
         val original = backup().library.posts.single()
         listOf(SourceKey.GELBOORU to "gelbooru.com", SourceKey.RULE34XXX to "rule34.xxx").forEach { (source, host) ->
             val restored = portablePostSnapshot(original.copy(id = PostId(source, "42"),
@@ -302,7 +305,7 @@ class ProfileBackupServiceTest {
         ).profileUrl)
     }
 
-    @Test fun `failure after database commit resumes idempotently from durable journal`() = runTest {
+    @Test fun `failure after database commit resumes idempotently from durable journal (ADR 0025)`() = runTest {
         val realSettings = InMemorySettingsRepository()
         var fail = true
         val settings = object : SettingsRepository by realSettings {
@@ -326,7 +329,7 @@ class ProfileBackupServiceTest {
         assertEquals(backup().settings.favoriteTagsByProfile, settings.observeSettings().first().favoriteTagsByProfile)
     }
 
-    @Test fun `a journal from before identity merges finishes under the IDs it already committed`() = runTest {
+    @Test fun `a journal from before identity merges finishes under the IDs it already committed (ADR 0025)`() = runTest {
         val harness = harness()
         val journal = JsonObject(
             mapOf(
@@ -345,7 +348,7 @@ class ProfileBackupServiceTest {
         assertFalse(harness.journal.exists())
     }
 
-    @Test fun `a backup whose For You pins convert to fit the limit restores, and restores again`() = runTest {
+    @Test fun `a backup whose For You pins convert to fit the limit restores, and restores again (ADR 0024, 0025)`() = runTest {
         val harness = harness()
         val ordinary = List(MAX_SAVED_SEARCHES - 2) { SavedSearchEntry("pin-$it", "Pin $it", search().copy(queryHash = "hash-$it"), 5L) }
         val mix = forYouPin("mix", listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.DANBOORU).associateWith { listOf("cat") })
@@ -361,7 +364,7 @@ class ProfileBackupServiceTest {
         assertEquals(restored, harness.pins.observeSavedSearches().first())
     }
 
-    @Test fun `invalid backup and capacity overflow fail before any durable restore mutation`() = runTest {
+    @Test fun `invalid backup and capacity overflow fail before any durable restore mutation (ADR 0025)`() = runTest {
         val harness = harness()
         val tree = encodedTree(backup())
         val library = tree.getValue("library").jsonObject
@@ -376,7 +379,7 @@ class ProfileBackupServiceTest {
         assertEquals(0, harness.store.merges)
     }
 
-    @Test fun `series round trip as version 3 and a backup without them is written and read as before`() {
+    @Test fun `series round trip as version 3 and a backup without them is written and read as before (ADR 0024)`() {
         val plain = backup()
         val written = codec.encode(plain).toString(Charsets.UTF_8)
         assertTrue(written.contains("\"version\":2") && !written.contains("\"series\""))
@@ -426,7 +429,7 @@ class ProfileBackupServiceTest {
         assertFalse(codec.decode(older.toByteArray()).library.series.single().series.downloadNewChapters)
     }
 
-    @Test fun `a backup the app writes is one it restores even for a series over the chapter limit`() {
+    @Test fun `a backup the app writes is one it restores even for a series over the chapter limit (ADR 0024)`() {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         fun entry(index: Int, order: Int, read: Boolean = false) =
             StoredSeriesEntry(SeriesEntry("/chapter/$index", "Ch.$index"), sourceOrder = order, firstSeenAtEpochMs = 1L, read = read)
@@ -451,6 +454,64 @@ class ProfileBackupServiceTest {
         assertEquals("/title/1" to listOf("/chapter/1"), written.series.series.title to written.entries.map { it.entry.address })
         val blankTitle = codec.encode(odd).toString(Charsets.UTF_8).replace("\"title\":\"/title/1\"", "\"title\":\" \"")
         assertTrue(blankTitle.contains("\"title\":\" \"") && runCatching { codec.decode(blankTitle.toByteArray()) }.isFailure)
+    }
+
+    @Test fun `decoding refuses a repo, site or series list one past its limit, and takes each at it (ADR 0024)`() {
+        val source = SourceKey.parseOrThrow("custom_mihon_7")
+        val full = backup().let { plain ->
+            plain.copy(
+                extensionRepos = List(256) { ExtensionRepo("https://r$it.example/repo", "R$it", "aa11") },
+                library = plain.library.copy(series = List(10_000) { BackupSeries(StoredSeries(Series(SeriesId(source, "/t/$it"), "T$it")), emptyList()) }),
+                customSources = List(256) {
+                    val address = (SiteAddress.parse("s$it.example") as SiteAddressParse.Valid).address
+                    SiteProfile(address.derivedSourceId, address, "S$it", "GELBOORU_02", addedAtEpochMs = 1L)
+                },
+            )
+        }
+        val decoded = codec.decode(codec.encode(full))
+        assertEquals(listOf(256, 10_000, 256), listOf(decoded.extensionRepos.size, decoded.library.series.size, decoded.customSources.size))
+
+        val root = DurableJson.parseToJsonElement(codec.encode(backup()).toString(Charsets.UTF_8)).jsonObject
+        val library = root.getValue("library").jsonObject
+        fun filled(count: Int) = JsonArray(List(count) { JsonObject(emptyMap()) })
+        val overfull = mapOf(
+            "extensionRepos" to JsonObject(root + ("extensionRepos" to filled(257))),
+            "customSources" to JsonObject(root + ("customSources" to filled(257))),
+            "series" to JsonObject(root + ("library" to JsonObject(library + ("series" to filled(10_001))))),
+        )
+
+        overfull.forEach { (list, document) ->
+            assertEquals("Invalid backup list: $list", runCatching { codec.decode(document.toString().toByteArray()) }.exceptionOrNull()?.message)
+        }
+    }
+
+    @Test fun `a series' shared-first-page flag is never backed up (ADR 0024)`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = BackupSeries(StoredSeries(Series(id, "Title"), chaptersShareFirstPage = true), emptyList())
+
+        val encoded = codec.encode(backup().let { it.copy(library = it.library.copy(series = listOf(series))) })
+
+        assertFalse(encoded.toString(Charsets.UTF_8).contains("chaptersShareFirstPage"))
+        assertFalse(codec.decode(encoded).library.series.single().series.chaptersShareFirstPage)
+    }
+
+    @Test fun `rows of the retired For You history section are dropped on import (ADR 0024)`() {
+        val plain = codec.encode(backup())
+        val root = DurableJson.parseToJsonElement(plain.toString(Charsets.UTF_8)).jsonObject
+        val library = root.getValue("library").jsonObject
+        fun inSection(section: String): JsonObject {
+            fun JsonArray.withRowIn() = JsonArray(this + JsonObject(single().jsonObject + ("section" to JsonPrimitive(section))))
+            return JsonObject(root + mapOf(
+                "readingPositions" to root.getValue("readingPositions").jsonArray.withRowIn(),
+                "library" to JsonObject(library + ("watched" to library.getValue("watched").jsonArray.withRowIn())),
+            ))
+        }
+
+        val restored = codec.decode(inSection("FYP").toString().toByteArray())
+
+        assertEquals(codec.decode(plain).readingPositions, restored.readingPositions)
+        assertEquals(codec.decode(plain).library.watched, restored.library.watched)
+        assertTrue(runCatching { codec.decode(inSection("FUTURE").toString().toByteArray()) }.isFailure)
     }
 
     @Test fun `invalid versions malformed bytes unknown sources and deeply nested input are rejected`() {

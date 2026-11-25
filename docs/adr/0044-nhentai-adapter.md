@@ -23,3 +23,10 @@ Comments fail visibly while challenged. Adding comments to a mirror would requir
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt`: `comments`, `jsonBody`, `ensureNhentaiOk`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiComments.kt`: `parseNhentaiComment`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiGalleryParser.kt`: `galleryLengthUnknown`
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiCommentsTest.kt`: `a page maps authors, absolute avatars and epoch milliseconds and points at the next page (ADR 0044)`, `a challenged comments request fails with the challenge instead of reading a mirror (ADR 0044)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiGalleryParserTest.kt`: `a listing with no pages, cover or page count is a gallery of unknown length (ADR 0006, 0044)`, `a listing that declares its page count knows its length (ADR 0044)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiResolutionSourceAdapterTest.kt`: `search falls back to mirrored web page when api is cloudflare blocked (ADR 0044)`, `resolve post falls back to mirrored reader page when api is cloudflare blocked (ADR 0044)`, `tags come from the first metadata mirror that lists any (ADR 0044)`, `metadata mirror requests take turns on the adapter's pacer (ADR 0044)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/nhentai/NhentaiSearchSourceAdapterTest.kt`: `search maps blocked html response to network failure (ADR 0044)`, `non-challenge forbidden response keeps nhentai unknown failure semantics (ADR 0044)`

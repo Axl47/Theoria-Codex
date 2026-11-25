@@ -19,25 +19,26 @@ class ProbeEvidenceTest {
     }
 
     @Test
-    fun `HTTP authentication and HTML denial pages are not Gelbooru refusals`() {
+    fun `HTTP authentication and HTML denial pages are not Gelbooru refusals (ADR 0040)`() {
         val basicAuth = SourceHttpResponse(401, "", mapOf("WWW-Authenticate" to listOf("Basic realm=\"site\"")))
         val deniedPage = SourceHttpResponse(403, "<!DOCTYPE html><html><title>Access denied</title></html>")
 
         assertFalse(basicAuth.isGelbooruAuthRefusal())
         assertFalse(deniedPage.isGelbooruAuthRefusal())
+        assertFalse(SourceHttpResponse(200, "<!DOCTYPE html><html><p>Access denied: api key required</p></html>").isGelbooruAuthRefusal())
         assertTrue(SourceHttpResponse(401, "").isGelbooruAuthRefusal())
         assertEquals(FamilyProbe.Failed(ProbeFailure.BLOCKED), deniedPage.unclaimed())
     }
 
     @Test
-    fun `an empty Gelbooru site still shows its envelope`() {
+    fun `an empty Gelbooru site still shows its envelope (ADR 0040)`() {
         assertTrue(SourceHttpResponse(200, """<?xml version="1.0" encoding="UTF-8"?><posts count="0" offset="0"></posts>""").isGelbooruPostsEnvelope())
         assertTrue(SourceHttpResponse(200, """<posts limit="1" offset="0" count="12">""").isGelbooruPostsEnvelope())
         assertFalse(SourceHttpResponse(200, "<html><posts count=\"1\">").isGelbooruPostsEnvelope())
     }
 
     @Test
-    fun `a verification challenge page is blocked, whatever its status`() {
+    fun `a verification challenge page is blocked, whatever its status (ADR 0040)`() {
         val challenge = fixture("challenge_gate/verification_challenge_200.html")
 
         assertTrue(SourceHttpResponse(200, challenge).isVerificationChallenge())
@@ -46,7 +47,7 @@ class ProbeEvidenceTest {
     }
 
     @Test
-    fun `ordinary pages are not verification challenges`() {
+    fun `ordinary pages are not verification challenges (ADR 0040)`() {
         assertFalse(SourceHttpResponse(200, "<!doctype html><p>we accept the challenge and a powerful counter</p></html>").isVerificationChallenge())
         assertFalse(SourceHttpResponse(200, "<!doctype html><noscript>JavaScript is disabled. Please enable it.</noscript></html>").isVerificationChallenge())
         assertEquals(FamilyProbe.NoMatch, SourceHttpResponse(200, "<!doctype html><p>we accept the challenge and a powerful counter</p></html>").unclaimed())

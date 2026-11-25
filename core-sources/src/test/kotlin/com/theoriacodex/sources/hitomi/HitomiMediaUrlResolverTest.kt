@@ -107,7 +107,7 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
-    fun `thumbnail urls follow the hash path and lead with the configured shard`() {
+    fun `thumbnail urls follow the hash path and lead with the configured shard (ADR 0043)`() {
         val hash = "2733fb24ac9ec065e6af94adb500554e56093df4481a92e85425955f368fa7f1"
 
         assertEquals(
@@ -116,6 +116,13 @@ class HitomiMediaUrlResolverTest {
                 "https://atn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
             ),
             hitomiThumbnailUrls(hash, primaryShard = 2, rendition = HitomiThumbnail.CARD),
+        )
+        assertEquals(
+            listOf(
+                "https://atn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
+                "https://btn.gold-usergeneratedcontent.net/webpbigtn/1/7f/$hash.webp",
+            ),
+            hitomiThumbnailUrls(hash, primaryShard = 1, rendition = HitomiThumbnail.CARD),
         )
     }
 
@@ -135,7 +142,7 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
-    fun `refreshes a stale failed version and reuses the newer configuration`() = runTest {
+    fun `refreshes a stale failed version and reuses the newer configuration (ADR 0043)`() = runTest {
         val updatedFixture = fixture().replace("1783681201/", "1783689999/")
         val client = QueueHttpClient(fixture(), updatedFixture)
         val resolver = HitomiMediaUrlResolver(client)
@@ -157,7 +164,7 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
-    fun `refreshes only once when provider returns the same failed version`() = runTest {
+    fun `refreshes only once when provider returns the same failed version (ADR 0043)`() = runTest {
         val client = QueueHttpClient(fixture(), fixture())
         val resolver = HitomiMediaUrlResolver(client)
         val file = mediaFile()
@@ -170,7 +177,7 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
-    fun `cancellation escapes refresh and leaves the version eligible to retry`() = runTest {
+    fun `cancellation escapes refresh and leaves the version eligible to retry (ADR 0043)`() = runTest {
         val updatedFixture = fixture().replace("1783681201/", "1783689999/")
         val client = QueueHttpClient(
             fixture(),
@@ -192,24 +199,23 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
-    fun `non cancellation refresh failure consumes the failed version retry`() = runTest {
-        val client = QueueHttpClient(
-            fixture(),
-            SourceHttpResponse(statusCode = 503, body = "unavailable"),
-        )
-        val resolver = HitomiMediaUrlResolver(client)
-        val file = mediaFile()
-        val initial = resolver.candidates(file)
-        val failedVersion = initial.first().configurationVersion
+    fun `non cancellation refresh failure consumes the failed version retry (ADR 0043)`() = runTest {
+        for (refreshFailure in listOf<Any>(SourceHttpResponse(statusCode = 503, body = "unavailable"), java.io.IOException("reset"))) {
+            val client = QueueHttpClient(fixture(), refreshFailure, fixture())
+            val resolver = HitomiMediaUrlResolver(client)
+            val file = mediaFile()
+            val initial = resolver.candidates(file)
+            val failedVersion = initial.first().configurationVersion
 
-        val failure = runCatching {
-            resolver.refreshCandidates(file, failedVersion)
-        }.exceptionOrNull()
-        val guardedRetry = resolver.refreshCandidates(file, failedVersion)
+            val failure = runCatching {
+                resolver.refreshCandidates(file, failedVersion)
+            }.exceptionOrNull()
+            val guardedRetry = resolver.refreshCandidates(file, failedVersion)
 
-        assertTrue(failure is HitomiProtocolException)
-        assertEquals(2, client.getCount)
-        assertEquals(initial, guardedRetry)
+            assertTrue("$failure", failure is HitomiProtocolException || failure is java.io.IOException)
+            assertEquals("$refreshFailure", 2, client.getCount)
+            assertEquals(initial, guardedRetry)
+        }
     }
 
     @Test

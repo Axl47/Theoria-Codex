@@ -15,6 +15,9 @@ internal fun ViewerPageState.hasPendingGalleryMedia(): Boolean {
     return (post.galleryLengthUnknown && post.media.isEmpty() && post.full == null) || (post.mediaCount ?: 0) > media.size
 }
 
+internal fun ViewerPageState.loadingGalleryMedia(): Boolean =
+    resolution.status != ViewerResolutionStatus.FAILED && hasPendingGalleryMedia()
+
 internal fun ViewerPageState.swipeMediaCount(): Int {
     return if (hasPendingGalleryMedia()) maxOf(media.size, post.mediaCount ?: 2) else media.size
 }

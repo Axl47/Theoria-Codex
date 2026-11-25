@@ -120,7 +120,10 @@ internal class ViewerVerticalGalleryState(val list: LazyListState, pendingPageFr
         panX = panX.coerceIn(0f, width * (scale - 1f))
     }
 
-    val scrollGesture = ViewerVerticalScroll(atTop = { !list.canScrollBackward }, atEnd = { !list.canScrollForward })
+    private val scroll = ViewerVerticalScroll(atTop = { !list.canScrollBackward }, atEnd = { !list.canScrollForward })
+    private val pendingScroll = ViewerVerticalScroll(atTop = { !list.canScrollBackward }, atEnd = { false })
+
+    fun scrollGesture(pagesPending: Boolean): ViewerVerticalScroll = if (pagesPending) pendingScroll else scroll
 }
 
 @Composable
