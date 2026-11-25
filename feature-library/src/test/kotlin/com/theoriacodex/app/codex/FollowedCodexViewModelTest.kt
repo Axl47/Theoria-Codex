@@ -218,7 +218,7 @@ class FollowedCodexViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `refresh keeps the loaded posts while offline and replaces them with the newest page once online`() = runTest {
+    @Test fun `refresh keeps the loaded posts while offline, shows the error, and Retry replaces them with the newest page (ADR 0152)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -239,14 +239,15 @@ class FollowedCodexViewModelTest {
             owner.refresh()
             advanceUntilIdle()
             assertEquals(listOf("1-old", "2-old"), owner.state.value.posts.map { it.id.sourcePostId })
-            assertTrue(owner.state.value.errors.isEmpty())
+            assertEquals(2, owner.state.value.errors.size)
             assertEquals(loadedAt, owner.state.value.loadedAtEpochMs)
             assertFalse(owner.state.value.loading)
 
             offline = false
-            owner.refresh()
+            owner.retry()
             advanceUntilIdle()
             assertEquals(listOf("1-new", "2-new"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertTrue(owner.state.value.errors.isEmpty())
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 

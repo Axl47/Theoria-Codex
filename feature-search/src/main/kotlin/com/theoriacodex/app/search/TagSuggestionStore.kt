@@ -46,6 +46,7 @@ class FileBackedTagSuggestionStore(
     private val persistenceMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + workDispatcher)
     private val inMemory: MutableMap<SourceKey, MutableList<CachedSuggestion>> = seedInitial()
+    private val trendingRefreshes = mutableMapOf<SourceKey, Long>()
     @Volatile private var countsBySource: Map<SourceKey, Map<String, Int>> =
         inMemory.mapValues { (source, entries) -> indexCounts(source, entries) }
     private var estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
@@ -146,6 +147,17 @@ class FileBackedTagSuggestionStore(
                 CachedSuggestion.fromLegacySuggestion(source, suggestion, origin)
             },
         )
+    }
+
+    override fun trendingRefreshedAt(source: SourceKey): Long? = synchronized(lock) { trendingRefreshes[source] }
+
+    override fun markTrendingRefreshed(source: SourceKey, atEpochMs: Long) {
+        synchronized(lock) {
+            if (closing || closed) return
+            trendingRefreshes[source] = atEpochMs
+            mutationVersion += 1L
+            schedulePersistenceLocked()
+        }
     }
 
     override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) {
@@ -307,6 +319,10 @@ class FileBackedTagSuggestionStore(
         )
         var pruned = false
         synchronized(lock) {
+            snapshot.trendingRefreshedAt.orEmpty().forEach { (sourceName, at) ->
+                val source = SourceKey.parse(sourceName) ?: return@forEach
+                trendingRefreshes[source] = maxOf(at, trendingRefreshes[source] ?: at)
+            }
             snapshot.sources.orEmpty().forEach { (sourceName, entries) ->
                 val source = SourceKey.parse(sourceName) ?: return@forEach
                 val parsed = entries.orEmpty().filterNotNull().mapNotNull(CachedSuggestion::fromStoreEntry)
@@ -393,7 +409,8 @@ class FileBackedTagSuggestionStore(
             .associate { (source, values) ->
                 source.id to values.map(CachedSuggestion::toStoreEntry)
             }
-        return TagStoreSnapshot(sources = sources)
+        val refreshes = trendingRefreshes.entries.sortedBy { (source, _) -> source.id }.associate { (source, at) -> source.id to at }
+        return TagStoreSnapshot(sources = sources, trendingRefreshedAt = refreshes)
     }
 
     private fun rebuildByteEstimateLocked() {
@@ -431,6 +448,8 @@ class FileBackedTagSuggestionStore(
 internal data class TagStoreSnapshot(
     @SerialName("sources")
     val sources: Map<String, List<TagStoreEntry?>?>? = emptyMap(),
+    @SerialName("trendingRefreshedAt")
+    val trendingRefreshedAt: Map<String, Long>? = emptyMap(),
 )
 
 @Serializable

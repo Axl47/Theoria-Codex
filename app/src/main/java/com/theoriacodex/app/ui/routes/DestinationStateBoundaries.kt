@@ -3,8 +3,6 @@ package com.theoriacodex.app.ui.routes
 import com.theoriacodex.app.di.SeriesDependencies
 import androidx.compose.runtime.Composable
 import com.theoriacodex.app.ui.components.FeedMarks
-import com.theoriacodex.app.ui.components.FeedTraceSections
-import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -24,8 +22,6 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.LocalCodexSaveRelevanceLoader
-import com.theoriacodex.app.codex.LiveCodexSortFrames
-import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexActionOptions
 import com.theoriacodex.app.codex.CodexUsage
@@ -520,12 +516,7 @@ private fun FollowedCodexDestinationStateBoundary(
     androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage, durations) {
         owner.synchronize(selected, available, sort, usage, durations)
     }
-    val posts = rememberComputedOffMain(
-        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT,
-        retainKey = LiveCodexSortFrames.at("codex-sort:$FOLLOWED_CODEX_ID"),
-    ) {
-        sortLiveCodexPosts(feed.posts, sort, usage, durations)
-    }
+    val posts = rememberSortedCodexPosts(FOLLOWED_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
         items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),
