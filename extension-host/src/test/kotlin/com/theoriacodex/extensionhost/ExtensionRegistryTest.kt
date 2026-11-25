@@ -25,7 +25,7 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
-import java.util.concurrent.CopyOnWriteArrayList
+import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
@@ -67,8 +67,6 @@ class ExtensionRegistryTest {
 
     private var listings = 0
 
-    private val fatalErrors = CopyOnWriteArrayList<Throwable>()
-
     private fun registry(settings: (SettingsHook) -> SourceSettings) = ExtensionRegistry(
         packages = { listings += 1; onDevice.toList() },
         load = { extension, host -> loads += extension.apk.path; hosted(extension, host) },
@@ -77,7 +75,6 @@ class ExtensionRegistryTest {
         settings = settings,
         deviceLanguages = { deviceLanguages },
         limitMs = 500,
-        fatal = { fatalErrors += it },
     )
 
     private fun fetchesImages(source: StubHttpSource): Boolean {
@@ -572,23 +569,22 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `a virtual machine error while an extension loads ends the process, also after its time ran out, and other failures are load problems (ADR 0060)`() = runBlocking {
-        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
-        sourcesOf = { throw NoClassDefFoundError("androidx/missing/Thing") }
-        assertEquals(emptyList<Any>(), registry.sources())
-        assertEquals(emptyList<Throwable>(), fatalErrors)
+    fun `a virtual machine error while an extension loads, thrown or wrapped, marks only that extension broken and the others still load (ADR 0060)`() = runBlocking {
+        onDevice = listOf(extension("thrown", signer = "key-1"), extension("wrapped", signer = "key-1"), extension("works", signer = "key-1"))
+        store.choices = ExtensionChoices(trusted = onDevice.associate { it.packageName to "key-1" })
+        sourcesOf = { extension ->
+            when (extension.name) {
+                "thrown" -> throw OutOfMemoryError("extension")
+                "wrapped" -> throw InvocationTargetException(OutOfMemoryError("extension"))
+                else -> listOf(StubSource(1, "en"))
+            }
+        }
 
-        sourcesOf = { throw OutOfMemoryError("now") }
-        assertFailsWith<OutOfMemoryError> { registry { error("No source here has settings") }.sources() }
-        assertEquals(listOf("now"), fatalErrors.map { it.message })
-
-        val release = CountDownLatch(1)
-        sourcesOf = { while (release.count > 0) Thread.onSpinWait(); throw OutOfMemoryError("late") }
-        assertEquals(emptyList<Any>(), registry { error("No source here has settings") }.sources())
-        release.countDown()
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (fatalErrors.size < 2 && System.nanoTime() < deadline) Thread.sleep(10)
-        assertEquals(listOf("now", "late"), fatalErrors.map { it.message })
+        assertEquals(listOf("custom_mihon_1"), registry.sources().map { it.key.id })
+        assertEquals(
+            mapOf("thrown" to "extension", "wrapped" to "java.lang.reflect.InvocationTargetException", "works" to null),
+            registry.installed().associate { it.name to it.problem },
+        )
     }
 
     @Test

@@ -7,7 +7,6 @@ import com.theoriacodex.sources.http.ChallengeBrowsers
 import com.theoriacodex.sources.http.HostOutageTracker
 import dalvik.system.DelegateLastClassLoader
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 
 class ExtensionRejectedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -50,19 +49,10 @@ class ExtensionLoader private constructor(private val context: Context, private 
     } catch (error: ExtensionRejectedException) {
         throw error
     } catch (error: Throwable) {
-        generateSequence(error, ::wrapped).take(MAX_WRAPPING).firstOrNull { it.endsTheProcess() }?.let { throw it }
         throw ExtensionRejectedException("$className in ${extension.packageName} could not be created: $error", error)
     }
 
-    private fun wrapped(error: Throwable): Throwable? = when (error) {
-        is InvocationTargetException -> error.targetException
-        is ExceptionInInitializerError -> error.cause
-        else -> null
-    }
-
     companion object {
-        private const val MAX_WRAPPING = 8
-
         fun installingHost(
             application: Application,
             versionName: String,

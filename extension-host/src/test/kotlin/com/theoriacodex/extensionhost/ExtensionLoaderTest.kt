@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.AppInfo
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,20 +36,15 @@ class ExtensionLoaderTest {
     private fun copies() = File(app.codeCacheDir, "mihon-extensions").listFiles().orEmpty().toList()
 
     @Test
-    fun `a virtual machine error while an extension is created ends the load, and any other throwable rejects only that extension (ADR 0060)`() {
+    fun `any throwable while an extension is created, a virtual machine error included, rejects only that extension (ADR 0060)`() {
         listOf(
             OutOfMemoryFactory::class.java to OutOfMemoryError::class.java,
             InternalErrorFactory::class.java to InternalError::class.java,
-            OutOfMemoryConstructor::class.java to OutOfMemoryError::class.java,
-            NestedOutOfMemoryConstructor::class.java to OutOfMemoryError::class.java,
-            OutOfMemoryInitializer::class.java to OutOfMemoryError::class.java,
-        ).forEach { (factory, error) ->
-            assertEquals(error, assertFailsWith<VirtualMachineError> { create(factory) }.javaClass)
-        }
-        listOf(
             AssertionFactory::class.java to AssertionError::class.java,
             MissingClassFactory::class.java to NoClassDefFoundError::class.java,
             ThrowableFactory::class.java to Throwable::class.java,
+            OutOfMemoryConstructor::class.java to InvocationTargetException::class.java,
+            OutOfMemoryInitializer::class.java to ExceptionInInitializerError::class.java,
             FailingInitializer::class.java to ExceptionInInitializerError::class.java,
         ).forEach { (factory, error) ->
             assertEquals(error, assertFailsWith<ExtensionRejectedException> { create(factory) }.cause?.javaClass)
@@ -149,11 +145,6 @@ class OutOfMemoryConstructor {
     }
 }
 
-class NestedOutOfMemoryConstructor {
-    init {
-        OutOfMemoryConstructor::class.java.getDeclaredConstructor().newInstance()
-    }
-}
 
 class OutOfMemoryInitializer {
     companion object {
