@@ -9,7 +9,7 @@ class OffMainNoteRuleTest {
     private fun messages(code: String): List<String> = OffMainNoteRule(Config.empty).lint(code.trimIndent()).map { it.message }
 
     @Test
-    fun `a note with a data label, in a suspend function or after other work is reported (ADR 0002)`() {
+    fun `a note with a data label, in a suspend function, in a deferred lambda or after other work is reported (ADR 0002)`() {
         val reported = mapOf(
             """
             override suspend fun search(
@@ -58,6 +58,14 @@ class OffMainNoteRuleTest {
                 OffMainWork.note(label = "source-parse")
             }
             """ to listOf(LABEL, PLACEMENT),
+            """
+            fun refresh() = scope.launch {
+                OffMainWork.note(OffMainWork.SOURCE_PARSE)
+            }
+            fun pages() = flow {
+                OffMainWork.note(OffMainWork.SOURCE_PARSE)
+            }
+            """ to listOf(PLACEMENT, PLACEMENT),
         )
 
         assertEquals(reported.values.toList(), reported.keys.map { messages(it) })

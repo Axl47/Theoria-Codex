@@ -11,7 +11,9 @@ import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtLambdaArgument
+import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
@@ -65,9 +67,16 @@ class OffMainNoteRule(config: Config) : Rule(
         val block = parent as? KtBlockExpression ?: return false
         if (block.statements.firstOrNull() != this) return false
         val owner = generateSequence(block.parent) { it.parent }.firstOrNull {
-            it is KtNamedFunction || it is KtBlockExpression || it is KtWhenExpression || it is KtClassBody || it is KtParameter || it is KtFile
+            it is KtNamedFunction || it is KtBlockExpression || it is KtWhenExpression || it is KtClassBody || it is KtParameter || it is KtFile ||
+                it is KtFunctionLiteral && !it.runsInPlace()
         }
         return owner is KtNamedFunction && owner.name != null && !owner.hasModifier(KtTokens.SUSPEND_KEYWORD)
+    }
+
+    private fun KtFunctionLiteral.runsInPlace(): Boolean {
+        val lambda = parent as? KtLambdaExpression ?: return false
+        val call = (lambda.parent as? KtLambdaArgument)?.parent as? KtCallExpression ?: return false
+        return (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() in IN_PLACE_SCOPE_FUNCTIONS
     }
 
     private companion object {
@@ -76,5 +85,6 @@ class OffMainNoteRule(config: Config) : Rule(
         const val OFF_MAIN_WORK = "OffMainWork"
         const val IMPORTED_NOTE = "com.theoriacodex.domain.diagnostics.OffMainWork.note"
         val CONSTANT = Regex("[A-Z][A-Z0-9_]*")
+        val IN_PLACE_SCOPE_FUNCTIONS = setOf("let", "run", "also", "apply", "takeIf", "takeUnless", "with")
     }
 }

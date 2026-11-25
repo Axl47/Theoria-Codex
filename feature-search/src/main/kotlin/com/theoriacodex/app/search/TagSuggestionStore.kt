@@ -3,12 +3,14 @@ package com.theoriacodex.app.search
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.WRITE_BEHIND_DIAGNOSTICS_AREA
 import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.data.storage.writeBehindSaves
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.legacyTagType
@@ -330,7 +332,11 @@ class FileBackedTagSuggestionStore(
     }
 
     private fun markChanged() {
-        scope.launch(Dispatchers.Unconfined) { runCatchingPreservingCancellation { saves.changed() } }
+        scope.launch(Dispatchers.Unconfined) {
+            runCatchingPreservingCancellation { saves.changed() }.onFailure { failure ->
+                Diagnostics.report(WRITE_BEHIND_DIAGNOSTICS_AREA, "Tag suggestions could not be saved", failure)
+            }
+        }
     }
 
     private suspend fun persistPending() {
