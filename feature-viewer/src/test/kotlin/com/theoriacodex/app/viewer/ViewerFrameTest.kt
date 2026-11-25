@@ -17,6 +17,7 @@ import com.theoriacodex.app.viewer.state.ViewerDwell
 import com.theoriacodex.app.viewer.state.ViewerPlaybackMode
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -73,16 +74,18 @@ class ViewerFrameTest {
         compose.runOnIdle { assertEquals("any other change builds a new frame", 2, frames.size) }
     }
 
-    @Test fun `a held or still-dwelling Play Next video repeats in the player until the dwell has passed`() {
+    @Test fun `a held or still-dwelling Play Next video repeats in the player until the dwell has passed (ADR 0217)`() {
         val post = ViewerOwnerTestData.post("a")
         val selection = ViewerSelection(post, post.media, 0, false, emptyList())
         val uiState = mutableStateOf(ViewerUiState())
-        var frame: ViewerFrame? = null
+        val frames = mutableListOf<ViewerFrame>()
         compose.mainClock.autoAdvance = false
         compose.setContent {
             val chromeVisible = rememberUpdatedState(true)
             val stage = remember { mutableIntStateOf(0) }
-            frame = rememberViewerFrame(uiState.value, viewerPostNavigation(uiState.value), listOf(post), selection, chromeVisible, stage, false, false, false, false, false)
+            val navigation = remember { viewerPostNavigation(ViewerUiState()) }
+            val frame = rememberViewerFrame(uiState.value, navigation, listOf(post), selection, chromeVisible, stage, false, false, false, false, false)
+            SideEffect { if (frames.lastOrNull() !== frame) frames += frame }
         }
         fun repeatsAfter(waitMs: Long, controls: (ViewerControlsState) -> ViewerControlsState): List<Boolean> {
             compose.runOnUiThread {
@@ -90,10 +93,12 @@ class ViewerFrameTest {
                 Snapshot.sendApplyNotifications()
             }
             compose.mainClock.advanceTimeByFrame()
-            val before = requireNotNull(frame).videoRepeats
+            val frame = frames.last()
+            val before = frame.videoRepeats
             compose.mainClock.advanceTimeBy(waitMs)
             compose.mainClock.advanceTimeByFrame()
-            return listOf(before, requireNotNull(frame).videoRepeats)
+            assertSame("the dwell passing keeps the frame", frame, frames.last())
+            return listOf(before, frame.videoRepeats)
         }
         fun dwelling(held: Boolean = false, interacting: Boolean = false): (ViewerControlsState) -> ViewerControlsState = {
             it.copy(playbackMode = ViewerPlaybackMode.NEXT, dwell = ViewerDwell(SystemClock.uptimeMillis(), held, interacting))

@@ -169,6 +169,7 @@
 
 ### Fixed
 
+- With Next in queue paused or held, a video that repeats starts over at once. It no longer shows a loading spinner for a second at every loop.
 - Dragging a For You card diagonally shows the side hint (Skip or Like) and the Codex or hide targets together, instead of flickering between them. The one letting go would pick is highlighted, and the other dims. The Codex your finger is on fills with the same accent as Like and Skip.
 - Leaving a chapter or an episode closes the reader or player all at once. The dark background no longer disappears first while the pages or video stay on screen a moment longer.
 - Swiping back from a series page, Settings, Extensions or another full screen slides it away, as the back arrow does. It no longer fades with its text drawn over the screen behind it.

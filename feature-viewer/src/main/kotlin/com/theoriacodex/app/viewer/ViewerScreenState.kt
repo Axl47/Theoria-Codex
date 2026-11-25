@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.viewer.state.ViewerDwell
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -223,7 +224,7 @@ internal fun rememberViewerFrame(
     isLandscape: Boolean,
 ): ViewerFrame {
     val requested = uiState.ignoringTransientControls()
-    val videoRepeats = rememberViewerVideoRepeats(uiState)
+    val videoRepeats = rememberUpdatedState(rememberViewerVideoRepeats(uiState))
     return remember(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, videoRepeats) {
         ViewerFrame(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, videoRepeats)
     }
@@ -259,9 +260,11 @@ internal class ViewerFrame(
     val inPictureInPicture: Boolean,
     val touchExplorationEnabled: Boolean,
     val isLandscape: Boolean,
-    val videoRepeats: Boolean,
+    private val videoRepeatsState: State<Boolean>,
 ) {
     val chromeVisible: Boolean get() = chromeVisibleState.value
+
+    val videoRepeats: Boolean get() = videoRepeatsState.value
 
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 

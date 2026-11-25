@@ -188,7 +188,7 @@ class ViewerWatchingTest {
             ViewerFrame(
                 state, viewerPostNavigation(state), listOf(episode), ViewerSelection(episode, episode.media, 0, false, emptyList()),
                 chromeVisibleState = mutableStateOf(false), chromeStage = mutableIntStateOf(0), opening = false, returning = false, inPictureInPicture = false,
-                touchExplorationEnabled = false, isLandscape = false, videoRepeats = false,
+                touchExplorationEnabled = false, isLandscape = false, videoRepeatsState = mutableStateOf(false),
             )
         }
         assertTrue(frame().systemControlsReady)

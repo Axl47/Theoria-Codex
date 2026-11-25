@@ -252,7 +252,7 @@ class VideoStreamPlaybackTest {
         pool.recycle(lease)
     }
 
-    @Test fun `a repeating post starts over on its own, without buffering or asking the server again`() {
+    @Test fun `a repeating post starts over on its own, without buffering or asking the server again (ADR 0217)`() {
         val lease = pool.acquire(VideoPlaybackRequest("${server.base}/main.wav", STREAM_FIXTURE_HEADERS), loop = true)
         val player = lease.player
         until { player.playbackState == Player.STATE_READY }
