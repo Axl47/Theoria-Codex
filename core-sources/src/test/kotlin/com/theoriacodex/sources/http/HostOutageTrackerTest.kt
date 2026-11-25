@@ -286,6 +286,11 @@ class SiteHealthCheckTest {
         assertEquals(setOf("site.example"), tracker.outages.value.keys)
     }
 
+    @Test fun `a browser check answered with too many requests holds the site off`() = runBlocking {
+        assertFalse(check(429).clearsChallenge("https://site.example/", emptyMap()))
+        assertTrue(tracker.isSiteRateLimited("https://site.example/"))
+    }
+
     @Test fun `a browser check that can't reach the site says so instead of reporting a refusal`() = runBlocking {
         val unreachable = SiteHealthCheck(tracker) { throw java.net.SocketTimeoutException() }
         assertTrue(runCatching { unreachable.clearsChallenge("https://site.example/", emptyMap()) }.exceptionOrNull() is IOException)

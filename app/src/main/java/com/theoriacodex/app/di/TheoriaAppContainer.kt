@@ -334,7 +334,7 @@ internal class DefaultTheoriaAppContainer(
     )
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
     private val fileMirrors = FileMirrorIndex()
-    private val listingPictures = ListingPictures(appContext, durableStoreScope, fileMirrors)
+    private val listingPictures = ListingPictures(appContext, durableStoreScope, fileMirrors, limited = hostOutages::isRateLimited)
     private val sourceRegistry = CompositeSourceAdapterRegistry(
         potentialBuiltIns = allPotentialSourceRegistry,
         availableBuiltIns = accountStore.availableSources,

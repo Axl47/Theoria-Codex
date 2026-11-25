@@ -63,6 +63,23 @@ class ChallengePassTest {
     }
 
     @Test
+    fun `a site rate limited while its challenge was being passed is not sent again`() {
+        browser = object : ChallengeBrowser {
+            override fun mayWait() = true
+
+            override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
+                challengedHosts += "site.test"
+                cookies.values["cf_clearance"] = "new"
+                return passed()
+            }
+        }
+        answers += { _, request -> challenge(request) }
+
+        assertEquals(403, call("https://site.test/list").use { it.code })
+        assertEquals(1, sent.size)
+    }
+
+    @Test
     fun `a challenge is passed out of sight with the request's agent, then sent once more`() {
         cookies.values["cf_clearance"] = "old"
         answers += { _, request -> challenge(request) }

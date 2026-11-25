@@ -119,10 +119,17 @@ class HostOutageTracker(
 
     fun recordChallenge(url: String, refused: RefusedRequest) {
         val host = hostKey(url) ?: return
+        workingHosts.update { it - host }
         val now = clock()
-        val active = state.value[host]?.takeIf { it.kind == HostOutageKind.CHALLENGE && it.untilEpochMs > now }
-        if (active == null) return record(url, HostOutageKind.CHALLENGE, refused)
-        if (active.refused == null) state.update { recorded -> recorded + (host to active.copy(refused = refused)) }
+        state.update { recorded ->
+            val current = recorded[host]?.takeIf { it.untilEpochMs > now }
+            when {
+                current == null -> recorded + (host to HostOutage(HostOutageKind.CHALLENGE, now + outageMs, refused))
+                current.kind == HostOutageKind.CHALLENGE && current.refused == null -> recorded + (host to current.copy(refused = refused))
+                current.kind == HostOutageKind.CHALLENGE || current.kind == HostOutageKind.RATE_LIMITED -> recorded
+                else -> recorded + (host to HostOutage(HostOutageKind.CHALLENGE, now + outageMs, refused))
+            }
+        }
     }
 
     fun isChallenged(url: String): Boolean {

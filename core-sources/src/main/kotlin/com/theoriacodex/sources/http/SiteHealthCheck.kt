@@ -36,7 +36,9 @@ class SiteHealthCheck internal constructor(
             if (error is IOException) throw error
             return@sourceCall true
         }
-        HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null
+        val kind = HostOutageTracker.outageKindOf(response.statusCode, response.headers)
+        if (kind == HostOutageKind.RATE_LIMITED) tracker.recordResponse(url, response.statusCode, response.headers)
+        kind == null
     }
 
     private suspend fun fetch(url: String, headers: Map<String, String>): SourceByteResponse = transport(

@@ -30,6 +30,8 @@ class SourceHealthTest {
 
         assertEquals(mapOf(SourceKey.IWARA to HostOutageKind.RATE_LIMITED), sourceIssues(limited("api.iwara.tv"), listOf(SourceKey.IWARA), now = 1_000))
         assertEquals(mapOf(SourceKey.NHENTAI to HostOutageKind.RATE_LIMITED), sourceIssues(limited("t.nhentai.net"), listOf(SourceKey.NHENTAI), now = 1_000))
+        val alsoDown = mapOf("nhentai.net" to HostOutage(HostOutageKind.MAINTENANCE, untilEpochMs = 2_000)) + limited("t.nhentai.net")
+        assertEquals(mapOf(SourceKey.NHENTAI to HostOutageKind.RATE_LIMITED), sourceIssues(alsoDown, listOf(SourceKey.NHENTAI), now = 1_000))
     }
 
     @Test fun `an extension source's issue comes from the host of its site or a subdomain`() {
