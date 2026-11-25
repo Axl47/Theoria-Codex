@@ -13,11 +13,14 @@ import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.appendedTo
 import com.theoriacodex.app.ui.components.RetainedFrames
 import com.theoriacodex.app.ui.components.rememberComputedOffMain
+import com.theoriacodex.app.ui.components.SortOption
+import com.theoriacodex.data.repository.CodexPostSortKey
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.sortKeys
 import java.util.IdentityHashMap
 import kotlinx.coroutines.flow.first
 
@@ -30,25 +33,26 @@ data class CodexUsage(val watchingMs: Long = 0L, val opens: Long = 0L) {
     }
 }
 
-internal val CodexSortMode.label: String
-    get() = when (this) {
-        CodexSortMode.NEWEST_SAVED -> "Recently added"
-        CodexSortMode.OLDEST_SAVED -> "Oldest first"
-        CodexSortMode.MOST_WATCHED -> "Most watched"
-        CodexSortMode.MOST_OPENED -> "Most opened"
-        CodexSortMode.MOST_PAGES -> "Most pages"
-        CodexSortMode.FEWEST_PAGES -> "Fewest pages"
-        CodexSortMode.LONGEST -> "Longest"
-        CodexSortMode.SHORTEST -> "Shortest"
-        CodexSortMode.CREATOR_ASCENDING -> "Creator (A–Z)"
-        CodexSortMode.BY_SOURCE -> "By source"
-    }
+internal val CodexPostSortOptions: List<SortOption<CodexPostSortKey>> = CodexSortMode.entries.sortKeys().map { key ->
+    SortOption(
+        key,
+        when (key) {
+            CodexPostSortKey.DATE_ADDED -> "Date added"
+            CodexPostSortKey.WATCH_TIME -> "Watch time"
+            CodexPostSortKey.OPENS -> "Opens"
+            CodexPostSortKey.PAGES -> "Pages"
+            CodexPostSortKey.LENGTH -> "Length"
+            CodexPostSortKey.CREATOR -> "Creator"
+            CodexPostSortKey.SOURCE -> "By source"
+        },
+    )
+}
 
 internal val CodexSortMode.usesUsage: Boolean
-    get() = this == CodexSortMode.MOST_WATCHED || this == CodexSortMode.MOST_OPENED
+    get() = choice.key == CodexPostSortKey.WATCH_TIME || choice.key == CodexPostSortKey.OPENS
 
 val CodexSortMode.usesDuration: Boolean
-    get() = this == CodexSortMode.LONGEST || this == CodexSortMode.SHORTEST
+    get() = choice.key == CodexPostSortKey.LENGTH
 
 val CodexSortMode.storeOrder: CodexSortMode
     get() = takeIf { it == CodexSortMode.OLDEST_SAVED || it == CodexSortMode.BY_SOURCE } ?: CodexSortMode.NEWEST_SAVED
@@ -62,17 +66,21 @@ internal fun codexPostRefinement(
     return when (sort) {
         CodexSortMode.NEWEST_SAVED, CodexSortMode.OLDEST_SAVED -> null
         CodexSortMode.MOST_WATCHED -> compareBy(CodexUsage.MostWatched, usageOf)
+        CodexSortMode.LEAST_WATCHED -> compareBy(CodexUsage.MostWatched.reversed(), usageOf)
         CodexSortMode.MOST_OPENED -> compareBy(CodexUsage.MostOpened, usageOf)
+        CodexSortMode.LEAST_OPENED -> compareBy(CodexUsage.MostOpened.reversed(), usageOf)
         CodexSortMode.MOST_PAGES -> compareByDescending(::postMediaCount)
         CodexSortMode.FEWEST_PAGES -> compareBy(::postMediaCount)
         CodexSortMode.LONGEST -> lengthGroups(durations).thenByDescending { durations[it.id] }
         CodexSortMode.SHORTEST -> lengthGroups(durations).thenBy { durations[it.id] }
-        CodexSortMode.CREATOR_ASCENDING -> compareBy(nullsLast(String.CASE_INSENSITIVE_ORDER)) { post: Post ->
-            (post.creatorProfile?.displayName ?: post.authorName)?.takeIf(String::isNotBlank)
-        }
+        CodexSortMode.CREATOR_ASCENDING -> compareBy(nullsLast(String.CASE_INSENSITIVE_ORDER), ::creatorName)
+        CodexSortMode.CREATOR_DESCENDING -> compareBy(nullsLast(String.CASE_INSENSITIVE_ORDER.reversed()), ::creatorName)
         CodexSortMode.BY_SOURCE -> compareBy { it.id.source }
     }
 }
+
+private fun creatorName(post: Post): String? =
+    (post.creatorProfile?.displayName ?: post.authorName)?.takeIf(String::isNotBlank)
 
 private fun lengthGroups(durations: Map<PostId, Long>): Comparator<Post> {
     val groups = IdentityHashMap<Post, Int>()

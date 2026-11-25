@@ -125,6 +125,7 @@ data class SeriesTabContent(
     val sources: List<SeriesSource>?,
     val browse: SeriesSourceListing?,
     val search: List<SeriesSourceListing>?,
+    val downloads: Map<SeriesId, Int> = emptyMap(),
 ) {
     val followedIds: Set<SeriesId> get() = followed.keys
     val offersFilter: Boolean get() = kinds.size > 1
@@ -133,7 +134,7 @@ data class SeriesTabContent(
     val checkWords: EntryWords? get() = followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull()?.words
 }
 
-internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabContent {
+internal fun SeriesTabState.content(followed: List<FollowedSeries>?, downloads: Map<SeriesId, Int>? = emptyMap()): SeriesTabContent {
     val all = followed.orEmpty()
     val kinds = (sources.orEmpty().map { it.key.seriesKind } + all.map { it.series.id.source.seriesKind }).toSet()
     val filter = kind.takeIf { kinds.size > 1 }
@@ -141,7 +142,8 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         kinds = kinds,
         filter = filter,
         view = view ?: SeriesView.FOLLOWING,
-        following = followed?.filter { filter.admits(it.series.id.source) }?.arranged(library, followingQuery),
+        following = followed?.takeIf { downloads != null || library.show != LibraryShow.DOWNLOADED }
+            ?.filter { filter.admits(it.series.id.source) }?.arranged(library, followingQuery, downloads.orEmpty()),
         followsAny = all.isNotEmpty(),
         followed = all.associateBy { it.series.id },
         library = library,
@@ -149,6 +151,7 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         sources = sources,
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
+        downloads = downloads.orEmpty(),
     )
 }
 
@@ -158,6 +161,7 @@ class SeriesTabViewModel(
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
     private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
+    downloads: Flow<Map<SeriesId, Int>> = flowOf(emptyMap()),
     private val download: (suspend (SeriesId, DownloadChoice) -> Unit)? = null,
     private val checkFollowed: suspend (only: Set<SeriesId>?, onProgress: (CheckProgress) -> Unit) -> FollowedCheck,
 ) : ViewModel() {
@@ -190,8 +194,9 @@ class SeriesTabViewModel(
     val content: StateFlow<SeriesTabContent> = combine(
         mutableState,
         repository.observeFollowed().map<List<FollowedSeries>, List<FollowedSeries>?> { it }.onStart { emit(null) },
-    ) { state, followed ->
-        state.content(followed.takeIf { state.libraryLoaded })
+        downloads.map<Map<SeriesId, Int>, Map<SeriesId, Int>?> { it }.onStart { emit(null) },
+    ) { state, followed, downloaded ->
+        state.content(followed.takeIf { state.libraryLoaded }, downloaded)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(null))
 
     init {

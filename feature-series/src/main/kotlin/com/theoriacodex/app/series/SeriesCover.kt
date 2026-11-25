@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,8 +28,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,28 +86,38 @@ internal fun SeriesCard(
     series: Series,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    unread: Int = 0,
+    counts: CardCounts = CardCounts(unread = 0, downloaded = 0),
     followed: Boolean = false,
     marked: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
     val kind = series.id.source.seriesKind
     val anime = marked && kind == SeriesKind.ANIME
+    val description = counts.description(kind)
+    Box(modifier.aspectRatio(COVER_ASPECT)) {
+        CardFace(series, onClick, onLongClick, followed, anime, description)
+        CountBadge(counts, Modifier.align(Alignment.TopStart).offset(-COUNT_OVERHANG, -COUNT_OVERHANG))
+    }
+}
+
+private fun CardCounts.description(kind: SeriesKind): String? = listOfNotNull(
+    unread.takeIf { it > 0 }?.let(kind.words::unfinished),
+    downloaded.takeIf { it > 0 }?.let { "$it downloaded" },
+).joinToString(", ").ifEmpty { null }
+
+@Composable
+private fun CardFace(series: Series, onClick: () -> Unit, onLongClick: (() -> Unit)?, followed: Boolean, anime: Boolean, counts: String?) {
     Box(
-        modifier
-            .aspectRatio(COVER_ASPECT)
+        Modifier
+            .fillMaxSize()
             .clip(COVER_SHAPE)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = onLongClick?.let { MORE_OPTIONS }),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = onLongClick?.let { MORE_OPTIONS })
+            .semantics { counts?.let { stateDescription = it } },
     ) {
         SeriesCover(series, Modifier.fillMaxSize())
         if (followed) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
         Box(Modifier.fillMaxSize().background(TITLE_SCRIM))
-        if (followed || anime) CardMarks(anime, followed, Modifier.align(Alignment.TopStart))
-        if (unread > 0) {
-            Badge(Modifier.align(Alignment.TopEnd).padding(6.dp).semantics { contentDescription = kind.words.unfinished(unread) }) {
-                Text("$unread")
-            }
-        }
+        if (followed || anime) CardMarks(anime, followed, Modifier.align(Alignment.TopEnd))
         Text(
             text = series.title,
             modifier = Modifier
@@ -121,6 +133,32 @@ internal fun SeriesCard(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+@Composable
+private fun CountBadge(counts: CardCounts, modifier: Modifier) {
+    if (counts.unread <= 0 && counts.downloaded <= 0) return
+    Row(
+        modifier
+            .background(MaterialTheme.colorScheme.background, COUNT_RING_SHAPE)
+            .padding(COUNT_RING)
+            .clip(COUNT_SHAPE)
+            .clearAndSetSemantics {},
+    ) {
+        if (counts.downloaded > 0) CountSegment(counts.downloaded, MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onTertiary)
+        if (counts.unread > 0) CountSegment(counts.unread, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary)
+    }
+}
+
+@Composable
+private fun CountSegment(count: Int, fill: Color, ink: Color) {
+    Text(
+        "$count",
+        Modifier.background(fill).padding(horizontal = 6.dp, vertical = 2.dp),
+        color = ink,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+    )
 }
 
 @Composable
@@ -163,6 +201,10 @@ private const val COVER_ASPECT = 2f / 3f
 private val ANIME_MARK_SIZE = 16.dp
 private val COVER_SHAPE = RoundedCornerShape(8.dp)
 private val BADGE_SHAPE = RoundedCornerShape(6.dp)
+private val COUNT_SHAPE = RoundedCornerShape(7.dp)
+private val COUNT_RING_SHAPE = RoundedCornerShape(9.dp)
+private val COUNT_RING = 2.dp
+private val COUNT_OVERHANG = 5.dp
 private val TITLE_SCRIM = Brush.verticalGradient(
     0.45f to Color.Transparent,
     0.78f to Color.Black.copy(alpha = 0.55f),

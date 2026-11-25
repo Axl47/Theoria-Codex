@@ -4,6 +4,8 @@ import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,7 +18,6 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -35,6 +36,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.components.SortLabel
+import com.theoriacodex.app.ui.components.SortOption
 import com.theoriacodex.app.ui.undo.LocalUndoSlot
 import com.theoriacodex.app.ui.undo.UndoAnchor
 import com.theoriacodex.app.ui.undo.UndoOffer
@@ -43,6 +46,7 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
+import com.theoriacodex.domain.model.SortChoice
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
@@ -72,17 +76,24 @@ internal fun FollowingBody(
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
     var switching by remember { mutableStateOf<Series?>(null) }
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
+    ScrollToTopOnSortChange(content.library.sort.takeIf { content.following != null }, grid)
     OffScreenFailuresNotice(checkRun, failed, grid, failureTools.snackbar)
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
-            FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
+            FollowingControls(
+                content,
+                onChooseKind,
+                onReverse = { onChooseLibrary(content.library.reversed()) },
+                onOpenOptions = { optionsOpen = true },
+                Modifier.hidesOnScroll().padding(horizontal = 16.dp),
+            )
         }
         FollowingRefreshBox(checking, found, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(CARD_WIDTH),
                 state = grid,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -132,7 +143,7 @@ private fun LazyGridScope.followingCards(
         !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
         following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
         else -> items(following, key = { it.series.id.toString() }) { item ->
-            HeldSeriesCard(item, content.marked, hold, onOpen = { onOpenSeries(item.series) }, onSwitchSource = { onSwitchSource(item.series) })
+            HeldSeriesCard(item, content.marked, hold, item.cardCounts(content.library.show, content.downloads), onOpen = { onOpenSeries(item.series) }, onSwitchSource = { onSwitchSource(item.series) })
         }
     }
 }
@@ -169,11 +180,11 @@ internal fun rememberSeriesHold(
 }
 
 @Composable
-private fun HeldSeriesCard(item: FollowedSeries, marked: Boolean, hold: SeriesHold, onOpen: () -> Unit, onSwitchSource: () -> Unit) {
+private fun HeldSeriesCard(item: FollowedSeries, marked: Boolean, hold: SeriesHold, counts: CardCounts, onOpen: () -> Unit, onSwitchSource: () -> Unit) {
     var held by remember { mutableStateOf(false) }
     val id = item.series.id
     Box {
-        SeriesCard(item.series, onOpen, unread = item.unreadCount, marked = marked, onLongClick = { held = true })
+        SeriesCard(item.series, onOpen, counts = counts, marked = marked, onLongClick = { held = true })
         SeriesHoldMenu(
             expanded = held,
             actions = hold.actions(item),
@@ -189,13 +200,35 @@ internal val FollowedCheck.message: String
     get() = if (failed == checked) "Couldn't check for updates" else "Couldn't check $failed series"
 
 @Composable
-private fun FollowingControls(content: SeriesTabContent, onChooseKind: (SeriesKind?) -> Unit, onOpenOptions: () -> Unit, modifier: Modifier = Modifier) {
+private fun ScrollToTopOnSortChange(sort: SortChoice<LibrarySort>?, grid: LazyGridState) {
+    var arrangedSort by remember { mutableStateOf(sort) }
+    LaunchedEffect(sort) {
+        val before = arrangedSort
+        if (sort == null) return@LaunchedEffect
+        arrangedSort = sort
+        if (before != null && before != sort) grid.scrollToItem(0)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FollowingControls(
+    content: SeriesTabContent,
+    onChooseKind: (SeriesKind?) -> Unit,
+    onReverse: () -> Unit,
+    onOpenOptions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val filtered = content.library.show != LibraryShow.ALL
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (content.offersFilter) KindFilter(content.filter, onChooseKind, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
-        IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
-            BadgedBox(badge = { if (filtered) Badge() }) {
-                Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
+    val sort = content.library.sort
+    FlowRow(modifier.fillMaxWidth(), itemVerticalAlignment = Alignment.CenterVertically) {
+        if (content.offersFilter) KindFilter(content.filter, onChooseKind)
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            SortLabel(sort.key.label(content.words), sort.direction, onReverse)
+            IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
+                BadgedBox(badge = { if (filtered) Badge() }) {
+                    Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
+                }
             }
         }
     }
@@ -213,14 +246,12 @@ private fun NoMatches(query: String, onShowAll: () -> Unit, onSearchAll: () -> U
 @Composable
 private fun LibraryOptionsSheet(options: LibraryOptions, words: EntryWords, onChoose: (LibraryOptions) -> Unit, onDismiss: () -> Unit) {
     SortFilterSheet(
-        filters = LibraryShow.entries.map { SheetChoice(it, it.label(words)) },
+        filters = LibraryShow.entries.map { SortOption(it, it.label(words)) },
         filter = options.show,
         onFilter = { onChoose(options.copy(show = it)) },
-        sorts = LibrarySort.entries.map { SheetChoice(it, it.label(words)) },
+        sorts = LibrarySort.entries.map { SortOption(it, it.label(words)) },
         sort = options.sort,
-        onSort = { onChoose(options.copy(sort = it)) },
-        sortMark = Icons.Default.Check,
-        sortMarkDescription = null,
+        onSort = { onChoose(options.picking(it)) },
         onReset = { onChoose(LibraryOptions()) }.takeUnless { options.isDefault },
         onDismiss = onDismiss,
     )

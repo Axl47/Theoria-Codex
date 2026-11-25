@@ -146,7 +146,7 @@ fun CodexDetailScreen(
     val filterScroll = rememberFeedScrollSignal()
     val resetFilters = { onFabRestoreStateChange(FeedFabRestoreState(sortMode = sortMode.name)) }
     val chips = CodexDetailChips(
-        sortMode, codexSortModes(posts.any(::isAnimatedPost), sortMode),
+        sortMode, codexSortOptions(posts.any(::isAnimatedPost), sortMode),
         { updatedSort -> onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name)) },
         tagFilter,
         rememberCodexTriageAction(codexId, real = customHeader == null, seed = feed.triageSeed()),

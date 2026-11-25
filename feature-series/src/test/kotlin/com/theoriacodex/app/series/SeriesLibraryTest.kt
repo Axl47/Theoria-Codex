@@ -1,6 +1,8 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.domain.model.SortChoice
+import com.theoriacodex.domain.model.SortDirection
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
@@ -19,7 +21,7 @@ class SeriesLibraryTest {
 
     @Test
     fun eachSortOrdersByItsTimeNewestFirstWithUnknownTimesLast() {
-        fun order(sort: LibrarySort) = library.arranged(LibraryOptions(sort = sort), "").map { it.series.title }
+        fun order(sort: LibrarySort) = library.arranged(LibraryOptions(sort = sort.choice()), "").map { it.series.title }
         assertEquals(listOf("Zeta", "alpha", "Mid"), order(LibrarySort.UNREAD))
         assertEquals(listOf("alpha", "Zeta", "Mid"), order(LibrarySort.LAST_UPDATED))
         assertEquals(listOf("Zeta", "Mid", "alpha"), order(LibrarySort.RECENTLY_READ))
@@ -36,7 +38,30 @@ class SeriesLibraryTest {
         assertEquals(listOf("Mid"), shown(LibraryShow.CAUGHT_UP))
         assertEquals(listOf("Mid"), shown(LibraryShow.COMPLETED))
         assertEquals(listOf("alpha"), shown(LibraryShow.ALL, query = " ALP "))
+        assertEquals(listOf("Mid"), library.arranged(LibraryOptions(show = LibraryShow.DOWNLOADED), "", downloads).map { it.series.title })
     }
+
+    @Test
+    fun pickingTheActiveSortReversesItAndAnotherSortStartsInItsNaturalDirection() {
+        val reversed = LibraryOptions().picking(LibrarySort.UNREAD)
+        assertEquals(SortChoice(LibrarySort.UNREAD, SortDirection.ASCENDING), reversed.sort)
+        assertEquals(listOf("Mid", "alpha", "Zeta"), library.arranged(reversed, "").map { it.series.title })
+        assertEquals(SortChoice(LibrarySort.TITLE, SortDirection.ASCENDING), reversed.picking(LibrarySort.TITLE).sort)
+        assertEquals(LibraryOptions(), reversed.reversed())
+        val oldestReadFirst = LibraryOptions(sort = SortChoice(LibrarySort.RECENTLY_READ, SortDirection.ASCENDING))
+        assertEquals(listOf("Mid", "Zeta", "alpha"), library.arranged(oldestReadFirst, "").map { it.series.title })
+    }
+
+    @Test
+    fun cardsShowTheDownloadedSegmentOnlyUnderTheDownloadedFilter() {
+        val mid = library.last()
+        assertEquals(CardCounts(unread = 0, downloaded = 0), mid.cardCounts(LibraryShow.ALL, downloads))
+        assertEquals(CardCounts(unread = 0, downloaded = 0), mid.cardCounts(LibraryShow.COMPLETED, downloads))
+        assertEquals(CardCounts(unread = 0, downloaded = 5), mid.cardCounts(LibraryShow.DOWNLOADED, downloads))
+        assertEquals(CardCounts(unread = 4, downloaded = 0), library.first().cardCounts(LibraryShow.DOWNLOADED, downloads))
+    }
+
+    private val downloads get() = mapOf(library.last().series.id to 5)
 
     private fun followed(title: String, unread: Int, started: Boolean, updated: Long?, read: Long?, added: Long, status: SeriesStatus = SeriesStatus.ONGOING) =
         FollowedSeries(

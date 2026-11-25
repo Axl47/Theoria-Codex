@@ -93,6 +93,8 @@
 
 ### Changed
 
+- Series' Following grid shows each series' unread chapters (or unwatched episodes) as a bold count on the cover's top-left corner, instead of the small red badge. A Downloaded filter in Sort & filter shows the series with chapters on the device, and while it's on, each count also shows how many are downloaded.
+- The current sort is shown by name with an arrow: above Series' Following grid (tap it to reverse the order), on a Codex's sort chip, and in place of the Codices sort icon. In every sort list, tapping the selected sort again reverses it. Opposite pairs such as Name (A–Z) and Name (Z–A), or Most and Fewest posts, are now one choice each, and Watch time, Opens and Creator can be reversed too. Following remembers the direction.
 - Series' top-right button opens Settings again, where the Settings tab used to be. Extensions is now the first row of Settings. When followed series need their extension or extensions have updates, the button and the row show how many, and the row lists each kind on its own line.
 - Importing a Codex moved from its own button in Library into Create Codex: tap +, then Import.
 - The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.

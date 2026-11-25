@@ -16,8 +16,6 @@ import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
@@ -52,6 +50,9 @@ import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
+import com.theoriacodex.app.ui.components.SortDirectionMark
+import com.theoriacodex.app.ui.components.label
+import com.theoriacodex.domain.model.SortDirection
 import com.theoriacodex.domain.series.Inclusion
 import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.changedFrom
@@ -196,7 +197,7 @@ private fun SortRows(filter: SeriesFilter.Sort, onChange: (SeriesFilter) -> Unit
         FilterLabel(filter.name)
         filter.options.forEachIndexed { index, option ->
             val ascending = filter.selection?.takeIf { it.index == index }?.ascending
-            SortOption(option, ascending) {
+            SourceSortRow(option, ascending?.let { if (it) SortDirection.ASCENDING else SortDirection.DESCENDING }) {
                 onChange(filter.copy(selection = SeriesFilter.Sort.Selection(index, ascending = ascending == false)))
             }
         }
@@ -204,19 +205,14 @@ private fun SortRows(filter: SeriesFilter.Sort, onChange: (SeriesFilter) -> Unit
 }
 
 @Composable
-private fun SortOption(label: String, ascending: Boolean?, onClick: () -> Unit) {
-    val direction = when (ascending) {
-        null -> null
-        true -> "Ascending" to Icons.Default.ArrowUpward
-        false -> "Descending" to Icons.Default.ArrowDownward
-    }
+private fun SourceSortRow(label: String, direction: SortDirection?, onClick: () -> Unit) {
     OptionRow(
         label,
         Modifier
             .selectable(direction != null, role = Role.RadioButton, onClick = onClick)
-            .semantics { direction?.let { stateDescription = it.first } },
+            .semantics { direction?.let { stateDescription = it.label } },
     ) {
-        direction?.let { Icon(it.second, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+        direction?.let { SortDirectionMark(it) }
     }
 }
 

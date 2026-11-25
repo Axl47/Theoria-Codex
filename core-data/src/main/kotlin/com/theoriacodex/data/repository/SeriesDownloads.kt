@@ -157,6 +157,10 @@ class SeriesDownloads(
 
     suspend fun downloaded(id: SeriesId): Set<String> = store.load().chapters(id)
 
+    fun downloadedCounts(): Flow<Map<SeriesId, Int>> = store.scannedSnapshots.map { snapshot ->
+        snapshot.postsByOwner.mapNotNull { (owner, posts) -> seriesIdOfOfflineOwner(owner)?.takeIf { posts.isNotEmpty() }?.let { it to posts.size } }.toMap()
+    }.distinctUntilChanged()
+
     suspend fun resume() {
         val queued = lock.withLock {
             load()

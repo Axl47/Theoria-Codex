@@ -46,7 +46,7 @@ class CodexTagFilterSheetTest {
     @Test fun `the first chip shows the chosen tags and clears them`() {
         compose.setContent {
             MaterialTheme {
-                CodexDetailChipRow(CodexDetailChips(CodexSortMode.NEWEST_SAVED, listOf(CodexSortMode.NEWEST_SAVED), {}, filter, null))
+                CodexDetailChipRow(CodexDetailChips(CodexSortMode.NEWEST_SAVED, CodexPostSortOptions, {}, filter, null))
             }
         }
         compose.onNodeWithText("Tags").assertExists()
@@ -62,7 +62,7 @@ class CodexTagFilterSheetTest {
         var opened = false
         compose.setContent {
             MaterialTheme {
-                CodexDetailChipRow(CodexDetailChips(CodexSortMode.NEWEST_SAVED, listOf(CodexSortMode.NEWEST_SAVED), {}, filter) { opened = true })
+                CodexDetailChipRow(CodexDetailChips(CodexSortMode.NEWEST_SAVED, CodexPostSortOptions, {}, filter) { opened = true })
             }
         }
         compose.onNodeWithText("Swipe").performClick()

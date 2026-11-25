@@ -30,8 +30,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -77,7 +75,10 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.theoriacodex.app.ui.motion.TheoriaMotion
+import com.theoriacodex.app.ui.components.SortOption
 import com.theoriacodex.data.repository.DownloadChoice
+import com.theoriacodex.domain.model.SortChoice
+import com.theoriacodex.domain.model.SortDirection
 import com.theoriacodex.domain.series.Series
 
 @Composable
@@ -333,17 +334,15 @@ internal fun ChapterOptionsSheet(
 ) {
     SortFilterSheet(
         filters = buildList {
-            add(SheetChoice(ChapterFilter.ALL, "All"))
-            add(SheetChoice(ChapterFilter.UNREAD, words.notDone.capitalized()))
-            if (canDownload) add(SheetChoice(ChapterFilter.DOWNLOADED, "Downloaded"))
+            add(SortOption(ChapterFilter.ALL, "All"))
+            add(SortOption(ChapterFilter.UNREAD, words.notDone.capitalized()))
+            if (canDownload) add(SortOption(ChapterFilter.DOWNLOADED, "Downloaded"))
         },
         filter = filter,
         onFilter = onSelectFilter,
-        sorts = ChapterSort.entries.map { SheetChoice(it, it.label(words)) },
-        sort = sort,
+        sorts = ChapterSort.entries.map { SortOption(it, it.label(words)) },
+        sort = SortChoice(sort, if (descending) SortDirection.DESCENDING else SortDirection.ASCENDING),
         onSort = onSelectSort,
-        sortMark = if (descending) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
-        sortMarkDescription = if (descending) "Descending" else "Ascending",
         onReset = onReset.takeIf { hasActiveOptions },
         onDismiss = onDismiss,
     )

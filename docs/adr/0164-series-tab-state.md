@@ -17,7 +17,7 @@ Source calls are slow, sources and extensions can change while answers are in fl
 - `openDedicatedSearch` reuses the listing the global search already loaded for that source, with its paging flags reset, so the switch is immediate and sends no duplicate request. When that listing is still loading or failed, it fetches page one for the query; with a blank query it fetches the source's popular series.
 - Nulls in `SeriesTabState` and `SeriesTabContent` mean "not yet" or "none", never an error: `sources` is null until the extensions that are on have loaded; `search` is null while no search shows, and an empty list for a search sent before the sources loaded, which then runs; `view` is null until the followed series are first read; `kind` (`filter` in `SeriesTabContent`) is null for both kinds; `following` is null until the followed series have been read.
 - The tab's query is hoisted above the dedicated-source switch so returning from a source's search keeps the query and scroll positions.
-- `arranged` keeps the stored order (unread first, most first) for ties and for series a time sort has no time for, which go last.
+- `arranged` keeps the stored order (unread first, most first) for ties, in either direction. Series a time sort has no time for go last in either direction, so reversing a sort never brings them to the top.
 
 ## Consequences
 

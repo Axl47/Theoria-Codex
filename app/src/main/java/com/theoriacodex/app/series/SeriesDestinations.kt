@@ -75,6 +75,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             series.extensions.revision,
             createSavedStateHandle(),
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
+            series.downloads.downloadedCounts(),
             download = { id, choice -> series.downloads.download(id, choice) },
         ) { only, onProgress -> series.checkFollowed(only = only, onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
     }
