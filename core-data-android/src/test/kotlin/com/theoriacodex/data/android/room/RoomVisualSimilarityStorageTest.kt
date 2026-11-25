@@ -108,13 +108,13 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(signatures.libraryPostsWithoutSignature(limit = 10).isEmpty())
     }
 
-    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried (ADR 0017)`() = runTest {
+    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried (ADR 0017, 0094)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
         library.addItems(codex.codexId, listOf(post("seen"), post("unreadable"), post("new")))
 
-        signatures.putVision(listOf(vision("seen", "m1", tags = emptyList()), vision("unreadable", "m1", embedding = null, tags = null), vision("never-stored", "m1")))
+        signatures.putVision(listOf(vision("seen", "m1", tags = emptyList(), frames = VisionFrames.WANTED), vision("unreadable", "m1", embedding = null, tags = null), vision("never-stored", "m1")))
 
         assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
         assertTrue(signatures.observePictureHashes().first().isEmpty())
@@ -147,7 +147,7 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(mapOf(id("offline") to 7L), signatures.observePictureHashes().first())
     }
 
-    @Test fun `a still analysis awaiting frames is listed until its frames are read or its reads run out (ADR 0017)`() = runTest {
+    @Test fun `a still analysis awaiting frames is listed until its frames are read or its reads run out (ADR 0017, 0094)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
@@ -160,17 +160,17 @@ class RoomVisualSimilarityStorageTest {
 
         assertEquals(setOf(id("clip"), id("flaky"), id("gone")), awaiting())
         assertEquals(2, signatures.libraryPostsAwaitingFrames("m1", limit = 10, skip = 1).size)
-        assertEquals(VisionProgress(analysed = 1, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 4, awaitingFrames = 3, total = 4), signatures.observeVisionProgress("m1").first())
         assertTrue(signatures.libraryPostsAwaitingFrames("m2", limit = 10).isEmpty())
         signatures.putVision(listOf(vision("clip", "m1", frames = VisionFrames.READ)))
         signatures.failFrames(id("gone"), "m1", permanently = true)
         repeat(2) { signatures.failFrames(id("flaky"), "m1", permanently = false) }
         assertEquals(setOf(id("flaky")), awaiting())
-        assertEquals(3, signatures.observeVisionProgress("m1").first().analysed)
+        assertEquals(VisionProgress(tagged = 4, awaitingFrames = 1, total = 4), signatures.observeVisionProgress("m1").first())
         signatures.failFrames(id("flaky"), "m1", permanently = false)
         assertTrue(awaiting().isEmpty())
 
-        assertEquals(4, signatures.observeVisionProgress("m1").first().analysed)
+        assertEquals(VisionProgress(tagged = 4, awaitingFrames = 0, total = 4), signatures.observeVisionProgress("m1").first())
         signatures.clearVision()
         assertTrue(awaiting().isEmpty())
     }
@@ -205,11 +205,11 @@ class RoomVisualSimilarityStorageTest {
         library.toggleLikeAndSyncSystemCodex("p", "likes-p", "Likes", post("c"), emptyList())
         signatures.putVision(listOf(vision("a", "m1", tags = listOf(tag("x", 0.4f))), vision("c", "m1", embedding = null, tags = null)))
 
-        assertEquals(VisionProgress(analysed = 2, total = 3), signatures.observeVisionProgress("m1").first())
-        assertEquals(VisionProgress(analysed = 0, total = 3), signatures.observeVisionProgress("m2").first())
+        assertEquals(VisionProgress(tagged = 2, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 0, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m2").first())
         signatures.putVision(listOf(vision("a", "m2", embedding = byteArrayOf(9), tags = listOf(tag("y", 0.6f)))))
 
-        assertEquals(VisionProgress(analysed = 1, total = 3), signatures.observeVisionProgress("m2").first())
+        assertEquals(VisionProgress(tagged = 1, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m2").first())
         assertTrue(signatures.predictedTags("m1").keys == setOf<PostId>())
         assertEquals(mapOf(id("a") to listOf(tag("y", 0.6f))), signatures.predictedTags("m2"))
         assertArrayEquals(byteArrayOf(9), database.openHelper.readableDatabase.query("SELECT embedding FROM post_visual_signatures WHERE source_post_id = 'a'").use { it.moveToFirst(); it.getBlob(0) })
@@ -229,7 +229,7 @@ class RoomVisualSimilarityStorageTest {
 
         assertEquals(mapOf(id("hashed") to 3L), signatures.observePictureHashes().first())
         assertTrue(signatures.predictedTags("m1").isEmpty())
-        assertEquals(VisionProgress(analysed = 0, total = 3), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 0, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m1").first())
         assertEquals(listOf(id("visionOnly")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
         database.openHelper.readableDatabase.query("SELECT source_post_id, model_id FROM post_visual_signatures ORDER BY source_post_id").use {
             assertEquals(listOf("flat" to null, "hashed" to null), buildList { while (it.moveToNext()) add(it.getString(0) to it.getString(1)) })
@@ -254,13 +254,13 @@ class RoomVisualSimilarityStorageTest {
         val signatures = RoomVisualSignatureRepository(database)
         library.addItems(library.ensureCodex("saved", "Saved").codexId, listOf("still", "still2", "clip", "older").map(::post))
         signatures.putVision(listOf("still", "still2", "clip").map { vision(it, "m1", frames = VisionFrames.WANTED) } + vision("older", "m2", frames = VisionFrames.WANTED))
-        assertEquals(VisionProgress(analysed = 0, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 3, awaitingFrames = 3, total = 4), signatures.observeVisionProgress("m1").first())
 
         signatures.unwantFrames(listOf(id("still"), id("still2"), id("older")), "m1")
         signatures.failFrames(id("older"), "m1", permanently = true)
 
         assertEquals(listOf(id("clip")), signatures.libraryPostsAwaitingFrames("m1", limit = 10).map(Post::id))
-        assertEquals(VisionProgress(analysed = 2, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 3, awaitingFrames = 1, total = 4), signatures.observeVisionProgress("m1").first())
         assertEquals(listOf(id("older")), signatures.libraryPostsAwaitingFrames("m2", limit = 10).map(Post::id))
     }
 

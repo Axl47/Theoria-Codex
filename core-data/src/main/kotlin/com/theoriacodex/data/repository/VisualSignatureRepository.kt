@@ -68,4 +68,6 @@ const val MAX_FRAME_ATTEMPTS = 3
 
 const val PREVIEW_RETRY_MS = 24 * 60 * 60 * 1000L
 
-data class VisionProgress(val analysed: Int, val total: Int)
+data class VisionProgress(val tagged: Int, val awaitingFrames: Int, val total: Int) {
+    val finished: Int get() = tagged - awaitingFrames
+}

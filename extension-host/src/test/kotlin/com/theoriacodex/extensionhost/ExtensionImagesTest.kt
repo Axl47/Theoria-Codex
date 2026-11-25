@@ -397,6 +397,24 @@ class ExtensionImagesTest {
         assertEquals(listOf("/p/1"), reader.asked)
     }
 
+    @Test
+    fun `an image's own fragment reaches its source through the tag (ADR 0059)`() {
+        val source = FragmentSource()
+        val key = MihonKind.sourceKey(source.id)
+        images.publish(listOf(server, mihon(source)))
+        val forgotten = MihonImages(source, key, images)
+        listOf("""{"tiles":[3,0,2,1],"tileCols":2,"n":"a%b#c/d"}""", "tile%20").forEachIndexed { index, tiles ->
+            val own = "https://img.test/#$tiles".toHttpUrl().encodedFragment
+            val page = checkNotNull(forgotten.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.webp#$tiles")))
+
+            assertEquals("fragment $own", fetch(page))
+            assertEquals("fragment $own", fetch(images.cover(key, "https://img.test/cover$index.webp#$tiles")))
+        }
+        val plain = images.cover(key, "https://img.test/plain.webp")
+        assertEquals(images.tag(key, "https://img.test/plain.webp#"), plain)
+        assertEquals("app https://img.test/plain.webp", fetch("$plain~e30"))
+    }
+
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
 
     private fun ExtensionImages.cover(source: SourceKey, url: String): String =
@@ -489,6 +507,20 @@ class ExtensionImagesTest {
         override fun headersBuilder() = Headers.Builder()
 
         override fun pageListParse(response: Response): List<Page> = listOf(Page(0, imageUrl = "https://img.test/listed.jpg"))
+    }
+
+    private class FragmentSource : HttpSource() {
+        override val id = 5L
+        override val name = "Tiles"
+        override val lang = "en"
+        override val baseUrl = "https://tiles.test"
+        override val supportsLatest = false
+
+        override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(answering { request -> cannedResponse(request, body = "fragment ${request.url.encodedFragment}") })
+            .build()
+
+        override fun headersBuilder() = Headers.Builder()
     }
 
     private class GatedPagesSource : HttpSource() {

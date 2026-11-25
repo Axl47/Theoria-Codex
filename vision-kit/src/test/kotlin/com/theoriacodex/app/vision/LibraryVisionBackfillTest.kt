@@ -33,6 +33,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -107,7 +108,7 @@ class LibraryVisionBackfillTest {
             tagReads += 1
             return stored.mapNotNull { vision -> vision.tags?.let { vision.postId to it } }.toMap()
         }
-        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0, 0))
         override fun observeLibraryTotal(): Flow<Int> = total
         override suspend fun clearVision() = stored.clear()
 
@@ -146,11 +147,14 @@ class LibraryVisionBackfillTest {
     )
 
     @Test
-    fun `stored tags are read once the Library settles, not once per write (ADR 0097)`() = runTest {
+    fun `stored tags fill the index at start with no write, then are read again once the Library settles (ADR 0097)`() = runTest {
         val library = Library(List(10) { post("p$it") })
-        PictureTagger(readyStore(), library, Pictures(), backgroundScope)
+        val solo = listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL))
+        library.putVision(listOf(PictureVision(post("stored").id, spec.id, null, solo)))
+        val tagger = PictureTagger(readyStore(), library, Pictures(), backgroundScope)
         runCurrent()
         assertEquals(1, library.tagReads)
+        assertEquals(solo, withContext(Dispatchers.Default) { withTimeout(5_000) { tagger.library.first { it[post("stored").id] != null } } }[post("stored").id])
 
         repeat(10) { index ->
             library.putVision(listOf(PictureVision(post("p$index").id, spec.id, null, emptyList())))
@@ -209,7 +213,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `a model that will not load asks for another run while it is installed, and none once it is gone (ADR 0094)`() = runBlocking {
+    fun `a model that will not load asks for another run while it is installed, and none once it is gone (ADR 0094, 0097)`() = runBlocking {
         val library = Library(listOf(post("a")))
         val installed = readyStore()
         val picture = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
@@ -246,6 +250,20 @@ class LibraryVisionBackfillTest {
         assertEquals(listOf(PredictedTag("solo", 0.75f, PredictedTag.Kind.GENERAL)), upgraded.tags)
         assertEquals(listOf(Pattern.TOP, Pattern.LEFT, Pattern.QUARTERS), analysed)
         assertTrue(library.signaturesAwaitingFrames().isEmpty())
+    }
+
+    @Test
+    fun `adding a post to a tagged Library analyses only that post (ADR 0094)`() = runBlocking {
+        val tagged = List(3) { post("tagged-$it") }
+        val library = Library(tagged + post("added"))
+        library.putVision(tagged.map { PictureVision(it.id, spec.id, null, emptyList(), VisionFrames.WANTED) })
+        val analysed = mutableListOf<Pattern>()
+        val tagger = PictureTagger(readyStore(), library, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(analysed) })
+
+        assertFalse(backfill(tagger, library).drain())
+
+        assertEquals(listOf(Pattern.TOP), analysed)
+        assertEquals(VisionFrames.WANTED, library.vision("tagged-0").frames)
     }
 
     @Test

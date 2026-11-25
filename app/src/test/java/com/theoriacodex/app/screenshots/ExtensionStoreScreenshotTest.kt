@@ -21,6 +21,7 @@ import com.theoriacodex.app.series.ExtensionsSubpage
 import com.theoriacodex.app.series.ExtensionsViewModel
 import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import com.theoriacodex.domain.series.ApkIcon
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
@@ -49,9 +50,24 @@ class ExtensionStoreScreenshotTest {
 
     @After fun resetImages() = Coil.reset()
 
+    @Test fun `extensions installed`() {
+        installSolidColorIcons()
+        val installed = listOf("Aurora", "Birch", "Cobalt", "Dune").mapIndexed { index, name ->
+            val pkg = "fixture.${name.lowercase()}"
+            InstalledExtension(pkg, name, "1.$index", signer = "key", on = index != 2, icon = ApkIcon(pkg, index.toLong(), "/data/app/$pkg.apk").takeIf { index != 3 })
+        }
+        val vm = ExtensionsViewModel(Device(installed), UpdatingRepos)
+        compose.setContent {
+            TheoriaNightTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ExtensionsScreen(vm, onBack = {}) } }
+        }
+        compose.waitUntilSettled { vm.state.value.extensions != null && vm.state.value.updates.isNotEmpty() }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("extensions_installed.png")
+    }
+
     @Test fun `extension store`() {
         installSolidColorIcons()
-        val vm = ExtensionsViewModel(NoDevice, FixtureRepos)
+        val vm = ExtensionsViewModel(Device(), FixtureRepos)
         compose.setContent {
             TheoriaNightTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ExtensionsScreen(vm, onBack = {}) } }
         }
@@ -97,9 +113,15 @@ class ExtensionStoreScreenshotTest {
         override suspend fun uninstall(id: String) = Unit
     }
 
-    private object NoDevice : SeriesExtensions {
+    private object UpdatingRepos : ExtensionRepos by FixtureRepos {
+        override suspend fun available(refresh: Boolean) = RepoListing(
+            listOf(RepoExtension(REPO, "fixture.aurora", "Aurora", listOf("en"), "1.1", SeriesKind.MANGA, RepoExtension.Status.UPDATE)),
+        )
+    }
+
+    private class Device(private val installed: List<InstalledExtension> = emptyList()) : SeriesExtensions {
         override val revision = MutableStateFlow(0)
-        override suspend fun installed() = emptyList<InstalledExtension>()
+        override suspend fun installed() = installed
         override suspend fun setOn(id: String, signer: String, on: Boolean) = emptyList<InstalledExtension>()
         override suspend fun setLanguage(id: String, language: String, on: Boolean) = emptyList<InstalledExtension>()
         override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()

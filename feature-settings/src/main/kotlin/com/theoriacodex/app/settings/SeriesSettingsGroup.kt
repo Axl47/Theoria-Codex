@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoDelete
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.runtime.Composable
@@ -37,7 +38,7 @@ internal fun SeriesSettingsGroup(
         SeriesUpdatesRow(state.settings.seriesUpdateInterval, onChooseInterval)
         SettingsRowDivider()
         val deleteAfterReading = SettingToggles.SeriesDeleteAfterReading
-        SwitchRow(deleteAfterReading, state.settings) { onAction(SettingsAction.SetToggle(deleteAfterReading, it)) }
+        SwitchRow(deleteAfterReading, state.settings, icon = Icons.Default.AutoDelete) { onAction(SettingsAction.SetToggle(deleteAfterReading, it)) }
     }
 }
 
