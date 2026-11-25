@@ -33,6 +33,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.CustomSourceIds
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteHeaders
+import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.SiteProbeResult
 import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.domain.source.clearedChallenge
@@ -168,6 +169,7 @@ internal class CustomSitesControllerImpl(
 
     override suspend fun retest(sourceId: String): SiteProbeResult {
         val profile = requireNotNull(find(sourceId)) { "Re-test needs a stored site" }
+        if (outages.isSiteRateLimited(profile.address.baseUrl)) return SiteProbeResult.Unreachable(profile.address, ProbeFailure.RATE_LIMITED)
         val result = prober.probe(profile.address.baseUrl, credentials.get(sourceId), profile.headers, knownFamily = profile.family)
         val working = result is SiteProbeResult.Supported && result.family == profile.family
         if (working) {
@@ -180,11 +182,13 @@ internal class CustomSitesControllerImpl(
 
 
     override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult {
+        if (sourceIssues(outages.outages.value, listOf(source), clock())[source] == HostOutageKind.RATE_LIMITED) return BuiltInTestResult.RATE_LIMITED
         outages.clearSource(source)
         val searched = runCatchingPreservingCancellation { withTimeoutOrNull(BUILT_IN_TEST_TIMEOUT_MS) { runBuiltInSearch(source) } }
         val result = when (sourceIssues(outages.outages.value, listOf(source), clock())[source]) {
             HostOutageKind.CHALLENGE -> BuiltInTestResult.NEEDS_BROWSER_CHECK
             HostOutageKind.MAINTENANCE -> BuiltInTestResult.DOWN
+            HostOutageKind.RATE_LIMITED -> BuiltInTestResult.RATE_LIMITED
             HostOutageKind.UNRESOLVED -> BuiltInTestResult.UNREACHABLE
             null -> searched.fold(
                 onSuccess = { finished ->
@@ -204,9 +208,11 @@ internal class CustomSitesControllerImpl(
     override suspend fun checkVerification(source: SourceKey, userAgent: String): Boolean {
         if (!source.isCustom) {
             val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
-            return (listOf(source.presentation().referer) + outageHosts).all { clearsChallenge(it, userAgent) }
+            val targets = listOf(source.presentation().referer) + outageHosts
+            return targets.none(outages::isSiteRateLimited) && targets.all { clearsChallenge(it, userAgent) }
         }
         val profile = requireNotNull(find(source.id)) { "Verification needs a stored site" }
+        if (outages.isSiteRateLimited(profile.address.baseUrl)) return false
         val result = prober.probe(
             profile.address.baseUrl,
             credentials.get(source.id),
@@ -295,6 +301,7 @@ private const val LIVE_SOURCE_WAIT_MS = 5_000L
 private fun builtInTestFailure(error: Throwable): BuiltInTestResult = when ((error as? SourceAdapterException)?.reason) {
     SourceFailureReason.AUTH_REQUIRED, SourceFailureReason.AUTH_EXPIRED -> BuiltInTestResult.NEEDS_ACCOUNT
     SourceFailureReason.NETWORK -> BuiltInTestResult.UNREACHABLE
+    SourceFailureReason.RATE_LIMITED -> BuiltInTestResult.RATE_LIMITED
     else -> if (error is IOException) BuiltInTestResult.UNREACHABLE else BuiltInTestResult.FAILED
 }
 

@@ -216,7 +216,7 @@ internal fun ViewerRoute(
 @Composable
 private fun rememberViewerTrail(level: ViewerLevel, session: ViewerSession?): ViewerTrail {
     LaunchedEffect(session?.sessionId) { session?.let { level.nameRoot(it.context, it.saveQuery) } }
-    return remember(level, session?.saveQuery) { ViewerTrail(level.crumbs, session?.saveQuery, level.popTo) }
+    return remember(level, session?.saveQuery) { ViewerTrail(level.crumbs, session?.saveQuery, level.popTo, level.remove, level.replay) }
 }
 
 @Composable
@@ -301,8 +301,8 @@ private fun rememberViewerScreenHost(
                 viewerOwner.recordVisiblePost(identity, post, viewedMediaNumber, callbacks.onVisiblePostChanged)
             }
         },
-        onVisibleMediaChanged = { post, viewedMediaNumber ->
-            viewerOwner.recordVisibleMedia(post, viewedMediaNumber, callbacks.onVisibleMediaChanged)
+        onVisibleMediaChanged = { post, viewedMediaNumber, pageOffset ->
+            viewerOwner.recordVisibleMedia(post, viewedMediaNumber, pageOffset, callbacks.onVisibleMediaChanged)
         },
         onPlaybackProgress = { post, progress ->
             viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)

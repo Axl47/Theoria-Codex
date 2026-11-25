@@ -16,6 +16,8 @@
 - Picture tags now cover videos and Pixiv animations in your Library too. Each is tagged from its preview first, then, while the phone charges and sits unused (usually overnight), a few frames from across the clip refine its tags, so a scene the preview doesn't show still counts. If the frames can't be read, the preview's tags stay.
 - Trails: in the Viewer, a row under the top bar shows the post's creator, Similar, and its most characteristic tags. Tapping one opens that stream in place, and you keep swiping from there. The steps you followed are listed beside it: tap one to return to it, or go Back one step at a time to the post you started from.
 - Tapping a tag in the Viewer's information sheet starts a trail too. Holding the tag opens the Search moves (include, exclude, save).
+- Holding a tag step in a trail lets you remove just that step: the steps after it run again without it, and a Creator or Similar step ends the path there. Holding a step or a suggested tag also saves it to your saved tags.
+- A "+" at the end of a trail's suggestions adds any tag as the next step, with that site's tag suggestions as you type.
 - The Viewer's Save button shows the Codex the post most likely belongs in. Tap to save there, with Undo on the button for a few seconds. Hold it and slide onto another Codex, or New, to save there instead.
 - Holding a post in any grid or shelf picks it up. Drop it on a Codex or New at the right edge to save it (with Undo), or on Like or Similar at the left. Letting go where you picked it up opens the post menu as before. Animated posts keep playing while you hold them, and in Search the Codices offered are the ones the Viewer's Save button would suggest.
 - Triage: a one-post-at-a-time way through a feed, opened from Triage in the feed's filter sheet. Swipe right to like, left to skip, up to save to a suggested Codex, and down to hide one of the post's tags from For You. Undo reverses the last choice. The next card plays while you drag the top one away. If more posts fail to load, the deck offers Retry.
@@ -82,6 +84,7 @@
 
 ### Changed
 
+- Settings has a Series group, after Sources, holding Extensions, Check for new chapters and Delete after reading. Sources now holds only what applies to every source.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
 - In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.
@@ -153,14 +156,24 @@
 
 ### Fixed
 
+- Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
+- A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
+- Opening a chapter loads its own pages before the chapters around it, so on sites that limit how fast they can be loaded, such as Asura Scans, its first page shows sooner.
 - A spinner shows over a chapter until its pages arrive.
 - Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
 - A Pixiv animation whose details came back garbled once gets its length again on the next try. It used to stay without one until the app restarted.
+- Going to Recents and back no longer repeats the check for new posts from followed creators and saved searches each time; each one is checked at most every three hours, even when you leave the app before the check finishes.
+- Reopening the app after Android closed it in the background no longer downloads trending tags again; they refresh at most every 12 hours.
+- When a site answers "too many requests", searches, trending tags, new-post checks and background picture work stop asking it for at least 10 minutes instead of retrying, so a short limit is less likely to turn into a block for hours. Searches on that site say "Too many requests. Try again later." until then, and testing it in Settings › Sites says the same without sending anything.
+- Library pictures whose preview fails to load are tried again after a day, not every time the phone charges, and pictures are not fetched from a site that is limiting requests.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - The notification saying chapters wait for their extension no longer stays up after chapter downloads fail. It comes back once downloads get through if those chapters are still waiting.
-- Saved searches and Followed show their new posts first when you open them after the count says there are some. They used to show the posts from your last visit, and the new ones only turned up while scrolling, some jumping to the top.
+- Searches shows each saved search's newest posts first, matching the new-posts count, even when the search was saved with Top, Popular or Random. It used to show the same top-scored page every time. Opening the saved search in Search still uses its own sort.
+- Scrolling Followed or Searches, sorted by Recently added or Oldest first, adds posts below the ones already shown instead of slotting them in throughout the grid.
+- Gelbooru, rule34.xxx and other Gelbooru-style sites date posts by when they were uploaded, not when their tags were last edited, so newest-first orders and date filters match the site.
+- When refreshing Followed or Searches fails, the posts you had stay and the error shows with Retry, instead of failing silently.
 - A series you followed before its source listed any chapters now notifies you when its first ones come out, when the source dates its chapters. Before, those first chapters arrived silently.
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
 - Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.

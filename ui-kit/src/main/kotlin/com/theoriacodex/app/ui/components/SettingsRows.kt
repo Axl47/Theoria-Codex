@@ -122,6 +122,7 @@ fun SettingsRow(
     summaryIsError: Boolean = false,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val clickModifier = if (onClick == null) Modifier else {
         Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -136,6 +137,7 @@ fun SettingsRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         icon?.let { Icon(it, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary) }
+        leading?.invoke()
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (!summary.isNullOrBlank()) {

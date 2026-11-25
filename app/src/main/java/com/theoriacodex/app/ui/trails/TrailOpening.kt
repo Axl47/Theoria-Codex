@@ -18,6 +18,7 @@ import com.theoriacodex.app.ui.navigation.TrailOpener
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.ui.routes.BrowsingMetadata
 import com.theoriacodex.app.ui.routes.browsingMetadataOwner
+import com.theoriacodex.app.viewer.CrumbTag
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.trailKey
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -31,7 +32,13 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
-internal class TrailLevel(val label: String, val trailKey: String, val feed: TrailFeed)
+internal class TrailLevel(
+    val label: String,
+    val trailKey: String,
+    val feed: TrailFeed,
+    val tag: CrumbTag? = null,
+    val replay: List<CrumbTag> = emptyList(),
+)
 
 internal class TrailHandoffViewModel : ViewModel() {
     private var pending: Pair<String, TrailLevel>? = null
@@ -67,6 +74,19 @@ private suspend fun TheoriaShell.openTrail(
     marks: () -> BrowsingMetadata?,
 ): Boolean {
     val origin = navController.currentBackStackEntry
+    val replay = origin?.savedStateHandle?.trailReplayAfter(request).orEmpty()
+    val opened = openLevel(request, handoff, marks, origin, replay)
+    origin?.savedStateHandle?.clearTrailReplay()
+    return opened
+}
+
+private suspend fun TheoriaShell.openLevel(
+    request: TrailRequest,
+    handoff: TrailHandoffViewModel,
+    marks: () -> BrowsingMetadata?,
+    origin: NavBackStackEntry?,
+    replay: List<CrumbTag>,
+): Boolean {
     val parent = routes.viewer.current?.session?.value?.searchVisibilityFilters
         ?.takeIf { origin?.destination?.route == AppRoute.Viewer } ?: SearchVisibilityFilters()
     val spec = trailSpec(request, shellTrailSources(), parent) ?: return false
@@ -86,7 +106,7 @@ private suspend fun TheoriaShell.openTrail(
         )
         if (session != null) {
             if (!stillOver(origin, request.from)) throw CancellationException("The screen or post this trail was opened from is gone")
-            handoff.hand(session.sessionId, TrailLevel(spec.label, request.trailKey(), feed))
+            handoff.hand(session.sessionId, TrailLevel(spec.label, request.trailKey(), feed, request.crumbTag(), replay))
             launchViewer(session, saveContext = false, singleTop = false)
             opened = true
         }
@@ -95,6 +115,8 @@ private suspend fun TheoriaShell.openTrail(
     }
     return opened
 }
+
+private fun TrailRequest.crumbTag(): CrumbTag? = (this as? TrailRequest.Tag)?.let { CrumbTag(it.tag, it.source) }
 
 private fun List<Post>.visibleUnder(filters: SearchVisibilityFilters, marks: BrowsingMetadata?): List<Post> = filterSearchResults(
     results = this,

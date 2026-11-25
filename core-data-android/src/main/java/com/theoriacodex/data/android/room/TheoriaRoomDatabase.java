@@ -30,7 +30,7 @@ import org.json.JSONObject;
                 SeriesEntity.class,
                 SeriesEntryEntity.class
         },
-        version = 23,
+        version = 25,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -160,6 +160,18 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
         }
     };
 
+    public static final Migration MIGRATION_23_24 = new Migration(23, 24) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `series_entries` ADD COLUMN `page_offset` REAL");
+        }
+    };
+
+    public static final Migration MIGRATION_24_25 = new Migration(24, 25) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `preview_failed_at_epoch_ms` INTEGER");
+        }
+    };
+
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_10_11,
             MIGRATION_11_12,
@@ -173,7 +185,9 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             MIGRATION_19_20,
             MIGRATION_20_21,
             MIGRATION_21_22,
-            MIGRATION_22_23
+            MIGRATION_22_23,
+            MIGRATION_23_24,
+            MIGRATION_24_25
     };
 
     public abstract CodexLikesDao codexLikesDao();

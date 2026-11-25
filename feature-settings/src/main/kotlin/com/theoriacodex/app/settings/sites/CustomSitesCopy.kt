@@ -39,6 +39,7 @@ internal fun unreachableMessage(host: String, reason: ProbeFailure): String = wh
     ProbeFailure.TIMEOUT -> "$host took too long to answer. Try again."
     ProbeFailure.HTTP_ERROR -> "$host answered with an error. Try again later."
     ProbeFailure.BLOCKED -> "$host blocked the check, possibly with a browser challenge. If you have an account there, your API key may get through."
+    ProbeFailure.RATE_LIMITED -> "Too many requests to $host. Try again later."
     ProbeFailure.INSECURE_REDIRECT -> "$host redirected to an insecure address."
     ProbeFailure.CROSS_HOST_REDIRECT -> "$host redirected to a different site."
 }
@@ -101,6 +102,7 @@ internal fun builtInTestStatus(site: BuiltInSiteSummary, result: BuiltInTestResu
     BuiltInTestResult.NEEDS_BROWSER_CHECK -> RetestStatus.Done("Needs browser verification.", ok = false, blocked = true)
     BuiltInTestResult.NEEDS_ACCOUNT -> RetestStatus.Done("Needs an account or API key.", ok = false)
     BuiltInTestResult.DOWN -> RetestStatus.Done("Down for maintenance. Try again later.", ok = false)
+    BuiltInTestResult.RATE_LIMITED -> RetestStatus.Done("Too many requests. Try again later.", ok = false)
     BuiltInTestResult.UNREACHABLE -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.TIMEOUT), ok = false)
     BuiltInTestResult.FAILED -> RetestStatus.Done(unreachableMessage(site.host, ProbeFailure.HTTP_ERROR), ok = false)
 }

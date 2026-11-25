@@ -310,6 +310,6 @@ private class PageMemoryRepository(stored: StoredSeries, entries: List<StoredSer
         if (restore.restoreLastOpened) storedFlow.value = storedFlow.value?.copy(lastOpenedEntry = restore.lastOpenedEntry)
     }
 
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) = Unit
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?, pageOffset: Float?) = Unit
     override suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>) = false
 }

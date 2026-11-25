@@ -269,9 +269,10 @@ internal class ViewerRouteWorkflow(
         post: Post,
         viewedMediaNumber: Int,
         session: ViewerSession?,
+        pageOffset: Float? = null,
     ) = withContext(NonCancellable) {
         recordings.withLock {
-            if (recordSeriesPage(post, viewedMediaNumber, session)) return@withLock
+            if (recordSeriesPage(post, viewedMediaNumber, session, pageOffset)) return@withLock
             val origin = historyOrigin(session?.context)
             recordReadingPosition(post, viewedMediaNumber, session)
             runCatchingPreservingCancellation {
@@ -290,8 +291,8 @@ internal class ViewerRouteWorkflow(
         recordSeriesProgress(session) { recordPlaybackProgress(it, post, progress) }
     }
 
-    private fun recordSeriesPage(post: Post, page: Int, session: ViewerSession?): Boolean =
-        recordSeriesProgress(session) { recordPageProgress(it, post, page) }
+    private fun recordSeriesPage(post: Post, page: Int, session: ViewerSession?, pageOffset: Float? = null): Boolean =
+        recordSeriesProgress(session) { recordPageProgress(it, post, page, pageOffset) }
 
     private fun recordSeriesProgress(session: ViewerSession?, record: SeriesReader.(ViewerSession) -> Unit): Boolean {
         if (session?.series == null) return false

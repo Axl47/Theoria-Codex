@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.networkFailure
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -112,11 +113,7 @@ internal class HitomiPostMapper(
         } catch (error: SourceAdapterException) {
             throw error
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "Hitomi media URL configuration request failed",
-                cause = error,
-            )
+            networkFailure("Hitomi media URL configuration request failed", error)
         } catch (error: Exception) {
             throw SourceAdapterException(
                 reason = SourceFailureReason.PARSE,

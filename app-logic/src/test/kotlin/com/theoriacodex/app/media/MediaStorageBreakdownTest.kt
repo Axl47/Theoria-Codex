@@ -6,13 +6,13 @@ import org.junit.Test
 
 class MediaStorageBreakdownTest {
     @Test
-    fun `offline and cache categories share one byte accurate total`() {
-        val breakdown = mediaStorageBreakdown(500, 200, 150, 100, 50, 0)
+    fun `every category, downloads included, shares one byte accurate total (ADR 0074)`() {
+        val breakdown = mediaStorageBreakdown(400, 200, 150, 100, 50, 100)
 
         assertEquals(1_000L, breakdown.totalBytes)
         assertEquals(MediaStorageCategory.entries, breakdown.categories.map(MediaStorageUsage::category))
-        assertEquals(listOf(500L, 200L, 150L, 100L, 50L, 0L), breakdown.categories.map(MediaStorageUsage::bytes))
-        assertEquals(listOf(50.0, 20.0, 15.0, 10.0, 5.0, 0.0), breakdown.categories.map(breakdown::percentage))
+        assertEquals(listOf(400L, 200L, 150L, 100L, 50L, 100L), breakdown.categories.map(MediaStorageUsage::bytes))
+        assertEquals(listOf(40.0, 20.0, 15.0, 10.0, 5.0, 10.0), breakdown.categories.map(breakdown::percentage))
         assertEquals(100.0, breakdown.categories.sumOf(breakdown::percentage), 0.0001)
     }
 
