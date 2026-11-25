@@ -15,6 +15,8 @@ import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.di.SourceDependencies
+import com.theoriacodex.app.codex.savedNewPosts
+import com.theoriacodex.app.ui.rememberNewPostMarkers
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Codex
@@ -50,10 +52,13 @@ internal fun SavedSearchesCodexBoundary(
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
     val posts = rememberSortedCodexPosts(SAVED_SEARCHES_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
+    val newPostIds = rememberNewPostMarkers(data, SAVED_SEARCHES_CODEX_ID, posts) {
+        savedNewPosts(emptyList(), entries.mapNotNull { news.marks[it.id] })[SAVED_SEARCHES_CODEX_ID].orEmpty()
+    }
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-        savedSearchOwner = owner, savedSearches = entries, loading = feed.loading || reloading,
+        savedSearchOwner = owner, savedSearches = entries, loading = feed.loading || reloading, newPostIds = newPostIds,
     ))
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
@@ -65,6 +66,27 @@ class ViewerPostStripTest {
             assertEquals(36, selected)
             org.junit.Assert.assertTrue(loadRequests > 0)
         }
+    }
+
+    @Test fun `on the first post the strip rests against its leading edge and will not drag past it (ADR 0172)`() =
+        checkEdgeLock(selected = 0, edgePost = 0) { swipeRight(durationMillis = 300) }
+
+    @Test fun `on the last post the strip rests against its trailing edge and will not drag past it (ADR 0172)`() =
+        checkEdgeLock(selected = 19, edgePost = 19) { swipeLeft(durationMillis = 300) }
+
+    @Test fun `posts loaded after the last post bring it back to the centre (ADR 0172)`() {
+        val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
+        var posts by mutableStateOf((0..7).map { testPost(sourcePostId = "strip-$it").copy(preview = image) })
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(posts, 7, {}, Modifier.width(320.dp).testTag("strip")) }
+        }
+        compose.waitForIdle()
+        val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
+        fun selected() = compose.onNodeWithContentDescription("Open post strip-7").fetchSemanticsNode().boundsInRoot
+        assertTrue("the last post rests at the trailing edge", selected().center.x > viewport.center.x + 1f)
+        compose.runOnIdle { posts = posts + (8..19).map { testPost(sourcePostId = "strip-$it").copy(preview = image) } }
+        compose.waitForIdle()
+        assertEquals(viewport.center.x, selected().center.x, 1.5f)
     }
 
     @Test fun `only animated posts show the play icon`() {
@@ -241,6 +263,25 @@ class ViewerPostStripTest {
             ViewerMediaOverviewItem(index, ImageRef(null, "/missing/$index.jpg", "image/jpeg"), ViewerMediaKind.IMAGE, "/missing/$index.jpg")
         }
         return ViewerStripPages(postId, items, currentPage, reversed = false, onSelect)
+    }
+
+    private fun checkEdgeLock(selected: Int, edgePost: Int, drag: androidx.compose.ui.test.TouchInjectionScope.() -> Unit) {
+        val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
+        val posts = (0..19).map { testPost(sourcePostId = "strip-$it").copy(preview = image) }
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(posts, selected, {}, Modifier.width(320.dp).testTag("strip")) }
+        }
+        compose.waitForIdle()
+        val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
+        fun bounds(index: Int) = compose.onNodeWithContentDescription("Open post strip-$index").fetchSemanticsNode().boundsInRoot
+        val neighbour = if (edgePost == 0) 1 else edgePost - 1
+        val gap = if (edgePost == 0) bounds(neighbour).left - bounds(edgePost).right else bounds(edgePost).left - bounds(neighbour).right
+        val edgeGap = { if (edgePost == 0) bounds(edgePost).left - viewport.left else viewport.right - bounds(edgePost).right }
+        assertEquals(gap, edgeGap(), 1.5f)
+        val before = bounds(edgePost)
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performTouchInput(drag)
+        compose.waitForIdle()
+        assertEquals(before.left, bounds(edgePost).left, 0.5f)
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertStateDescription(expected: String) = assert(hasStateDescription(expected))

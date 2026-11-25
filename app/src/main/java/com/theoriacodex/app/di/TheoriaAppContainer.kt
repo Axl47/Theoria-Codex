@@ -137,6 +137,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -171,6 +172,7 @@ data class DataDependencies(
     val forYouVerdicts: ForYouVerdictRepository,
     val visualSignatures: VisualSignatureRepository,
     private val writeBehind: WriteBehind,
+    val viewedNewPosts: MutableStateFlow<Map<String, Set<String>>> = MutableStateFlow(emptyMap()),
 ) {
     suspend fun flushPendingWrites() = writeBehind.flushAll()
 }
