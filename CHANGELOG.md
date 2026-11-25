@@ -235,7 +235,6 @@
 - The offline storage error told you to reopen storage. It now has a Retry button.
 - A Codex's tag list could show a post's raw ID. It no longer does.
 - A backup preview said "1 profiles". Counts now use the right singular and plural.
-- Holding a video for 2× sped it up a moment after the 2× label appeared, and released it a moment after the label left. Speed now changes with the label.
 - Using the Back gesture from the edge of the full-screen Viewer often swiped to the next post on the way out, marking a post you never saw as watched. The Back gesture no longer changes posts.
 - Tapping Retry on a Hitomi page while its gallery was still loading could shrink the gallery back to its cover when the retry finished. The full gallery now stays.
 - Pixiv animations in the Viewer started over from the first frame when you swiped away and back. They now continue where they left off, as GIFs do.

@@ -22,9 +22,13 @@ class StreamPlaybackDeviceTest {
     fun anHlsEpisodePlaysWithItsSeparateAudioAndSubtitles() {
         StreamFixtureServer(streamFixtureRoutes(instrumentation.context.assets)).use { server ->
             val cues = CopyOnWriteArrayList<String>()
+            val cueListener = object : Player.Listener {
+                override fun onCues(cueGroup: CueGroup) {
+                    cueGroup.cues.mapNotNullTo(cues) { it.text?.toString() }
+                }
+            }
             val lease = onMain {
-                val pool = VideoPlaybackInfrastructure(instrumentation.targetContext).viewerVideoPlayerPool
-                pool.acquire(
+                infrastructure.viewerVideoPlayerPool.acquire(
                     VideoPlaybackRequest(
                         location = "${server.base}/episode",
                         headers = STREAM_FIXTURE_HEADERS,
@@ -34,13 +38,7 @@ class StreamPlaybackDeviceTest {
                         cache = false,
                     ),
                     loop = false,
-                ).also { lease ->
-                    lease.player.addListener(object : Player.Listener {
-                        override fun onCues(cueGroup: CueGroup) {
-                            cueGroup.cues.mapNotNullTo(cues) { it.text?.toString() }
-                        }
-                    })
-                }
+                ).also { it.player.addListener(cueListener) }
             }
             val player = lease.player
             try {
@@ -62,7 +60,38 @@ class StreamPlaybackDeviceTest {
                 }
                 assertTrue(cues.toString(), "Fixture cue" in cues)
             } finally {
-                onMain { player.release() }
+                onMain {
+                    player.removeListener(cueListener)
+                    infrastructure.viewerVideoPlayerPool.recycle(lease)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aLoopingVideoKeepsPlayingAfterASeek() {
+        val clip = instrumentation.context.assets.open("looping-clip.mp4").use { it.readBytes() }
+        StreamFixtureServer(mapOf("/clip.mp4" to FixtureRoute.Body(clip))).use { server ->
+            val lease = onMain {
+                infrastructure.viewerVideoPlayerPool
+                    .acquire(VideoPlaybackRequest("${server.base}/clip.mp4", STREAM_FIXTURE_HEADERS, cache = false), loop = true)
+                    .also { it.player.play() }
+            }
+            val player = lease.player
+            try {
+                awaitOnMain { player.currentPosition >= 2_000L || player.playerError != null }
+                skipIfTheEmulatorDecoderFailed(player)
+                onMain {
+                    player.seekTo(1_000L)
+                    assertTrue(player.currentPosition < 2_000L)
+                }
+                awaitOnMain(timeoutMs = 5_000L, describe = { "state=${player.playbackState} playing=${player.isPlaying} position=${player.currentPosition}" }) {
+                    player.currentPosition >= 2_000L || player.playerError != null
+                }
+                skipIfTheEmulatorDecoderFailed(player)
+                onMain { assertNull(player.playerError) }
+            } finally {
+                onMain { infrastructure.viewerVideoPlayerPool.recycle(lease) }
             }
         }
     }
@@ -78,11 +107,15 @@ class StreamPlaybackDeviceTest {
         return requireNotNull(result).getOrThrow()
     }
 
-    private fun awaitOnMain(timeoutMs: Long = 15_000L, condition: () -> Boolean) {
+    private fun awaitOnMain(timeoutMs: Long = 15_000L, describe: () -> String = { "" }, condition: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!onMain(condition)) {
-            check(System.currentTimeMillis() < deadline) { "Timed out waiting for the player" }
+            check(System.currentTimeMillis() < deadline) { "Timed out waiting for the player ${onMain(describe)}".trim() }
             Thread.sleep(50L)
         }
+    }
+
+    private companion object {
+        val infrastructure by lazy { VideoPlaybackInfrastructure(InstrumentationRegistry.getInstrumentation().targetContext) }
     }
 }
