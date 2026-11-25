@@ -8,11 +8,13 @@ import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.theoriacodex.data.repository.CheckProgress
+import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -33,9 +35,18 @@ class FollowingRefreshTest {
         val short = refreshPill(null, emptyList(), 0.6f, EntryWords.CHAPTERS) as RefreshPill.Pulling
         assertEquals("Check for new chapters", short.label)
         assertFalse(short.armed)
+        assertFalse((refreshPill(null, emptyList(), 1f, EntryWords.CHAPTERS) as RefreshPill.Pulling).armed)
         assertTrue((refreshPill(null, emptyList(), 1.2f, EntryWords.CHAPTERS) as RefreshPill.Pulling).armed)
         assertEquals("Check for new episodes", (refreshPill(null, emptyList(), 0.5f, EntryWords.EPISODES) as RefreshPill.Pulling).label)
         assertEquals("Check for updates", (refreshPill(null, emptyList(), 0.5f, null) as RefreshPill.Pulling).label)
+    }
+
+    @Test
+    fun thePullNamesWhatTheCheckCoversWhicheverKindIsFiltered_adr_0218() {
+        val manga = FollowedSeries(update("custom_mihon_1", "/a", 0).series, unreadCount = 0)
+        val anime = FollowedSeries(update("custom_aniyomi_1", "/c", 0).series, unreadCount = 0)
+        assertNull(SeriesTabState(kind = SeriesKind.MANGA).content(listOf(manga, anime)).checkWords)
+        assertEquals(EntryWords.EPISODES, SeriesTabState().content(listOf(anime)).checkWords)
     }
 
     @Test

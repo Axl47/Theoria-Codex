@@ -128,7 +128,7 @@ data class SeriesTabContent(
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
     val words: EntryWords get() = (filter ?: kinds.singleOrNull() ?: SeriesKind.MANGA).words
-    val checkWords: EntryWords? get() = (filter ?: followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull())?.words
+    val checkWords: EntryWords? get() = followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull()?.words
 }
 
 internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabContent {

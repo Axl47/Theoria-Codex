@@ -41,7 +41,7 @@ import com.theoriacodex.domain.series.seriesKind
 
 internal sealed interface RefreshPill {
     data class Pulling(val label: String, val pull: Float) : RefreshPill {
-        val armed: Boolean get() = pull >= 1f
+        val armed: Boolean get() = pull > 1f
     }
 
     data class Checking(val progress: CheckProgress) : RefreshPill {
@@ -73,13 +73,17 @@ internal fun FollowingRefreshBox(
     content: @Composable () -> Unit,
 ) {
     val pullState = rememberPullToRefreshState()
+    var released by remember { mutableStateOf(false) }
+    if (checking != null) released = true
     PullToRefreshBox(
         isRefreshing = checking != null,
         onRefresh = onRefresh,
         state = pullState,
         modifier = modifier,
         indicator = {
-            val pull = if (pullState.isAnimating) 0f else pullState.distanceFraction
+            val fraction = pullState.distanceFraction
+            if (released && checking == null && fraction == 0f) released = false
+            val pull = if (released || pullState.isAnimating) 0f else fraction
             RefreshPillView(refreshPill(checking, found, pull, words), Modifier.align(Alignment.TopCenter))
         },
     ) { content() }
