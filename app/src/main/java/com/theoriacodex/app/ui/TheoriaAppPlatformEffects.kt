@@ -29,8 +29,9 @@ internal fun TheoriaAppPlatformEffects(
     }
 
     val pinned = viewerPinnedOrientation(orientationLock, viewerRotation?.held)
-    DisposableEffect(hostActivity, viewerActive, pinned) {
-        hostActivity?.requestedOrientation = if (viewerActive) viewerScreenOrientation(pinned) else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    val screen = if (orientation == Configuration.ORIENTATION_LANDSCAPE) ViewerOrientation.LANDSCAPE else ViewerOrientation.PORTRAIT
+    DisposableEffect(hostActivity, viewerActive, pinned, screen) {
+        hostActivity?.requestedOrientation = if (viewerActive) viewerScreenOrientation(pinned, screen) else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         onDispose {
             hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -58,10 +59,11 @@ internal fun TheoriaAppPlatformEffects(
     }
 }
 
-internal fun viewerScreenOrientation(pinned: ViewerOrientation?): Int = when (pinned) {
+internal fun viewerScreenOrientation(pinned: ViewerOrientation?, screen: ViewerOrientation): Int = when (pinned) {
+    null -> ActivityInfo.SCREEN_ORIENTATION_USER
+    screen -> ActivityInfo.SCREEN_ORIENTATION_LOCKED
     ViewerOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
     ViewerOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
-    null -> ActivityInfo.SCREEN_ORIENTATION_USER
 }
 
 @Composable

@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -60,15 +61,18 @@ internal fun rememberViewerRotation(
     }
     val key = ViewerMediaKey(selection.post.id, selection.mediaIndex)
     val fill = selection.fillOrientation(rotation.measured?.takeIf { it.key == key })
-    val pin = { orientation: ViewerOrientation? ->
-        rotation.held = null
-        onLockChange(orientation)
-    }
     return ViewerRotationOffer(
         fits = viewerOffersRotation(fill, screen, lock),
         lock = lock,
-        rotate = { if (lock != null) pin(lock.opposite) else rotation.held = screen.opposite },
-        toggleLock = { pin(if (lock == null) screen else null) },
+        rotate = { if (lock != null) onLockChange(lock.opposite) else rotation.held = screen.opposite },
+        toggleLock = {
+            if (lock == null) {
+                onLockChange(screen)
+            } else {
+                rotation.held = null
+                onLockChange(null)
+            }
+        },
     )
 }
 
@@ -116,14 +120,20 @@ internal fun BoxScope.ViewerRotationLockButton(
     inStripRow: Boolean = false,
 ) {
     offer ?: return
-    val locked = offer.lock != null
     ViewerFooterButton(
         selection, chromeVisible, visible = chromeVisible && !suppressed, alignment = alignment,
-        icon = if (locked) Icons.Filled.ScreenLockRotation else Icons.Outlined.ScreenLockRotation,
-        contentDescription = if (locked) "Unlock rotation" else "Lock rotation", testTag = "viewer-rotation-lock",
-        inStripRow = inStripRow, slot = slot, emphasized = locked, onClick = offer.toggleLock,
+        icon = offer.lockIcon, contentDescription = offer.lockDescription, testTag = VIEWER_ROTATION_LOCK_TAG,
+        inStripRow = inStripRow, slot = slot, emphasized = offer.lock != null, onClick = offer.toggleLock,
     )
 }
+
+internal val ViewerRotationOffer.lockIcon: ImageVector
+    get() = if (lock != null) Icons.Filled.ScreenLockRotation else Icons.Outlined.ScreenLockRotation
+
+internal val ViewerRotationOffer.lockDescription: String
+    get() = if (lock != null) "Unlock rotation" else "Lock rotation"
+
+internal const val VIEWER_ROTATION_LOCK_TAG = "viewer-rotation-lock"
 
 internal const val VIEWER_ROTATE_HINT_MS = 3_000L
 

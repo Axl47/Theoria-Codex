@@ -302,6 +302,10 @@ internal fun ViewerEpisodeBar(
             controls.markInteraction()
             onAction(ViewerAction.ToggleFillScreen)
         },
+        onToggleRotationLock = {
+            controls.markInteraction()
+            rotationOffer?.toggleLock?.invoke()
+        },
     )
 }
 
@@ -317,6 +321,7 @@ internal fun ViewerEpisodeControls(
     onOpenSpeed: () -> Unit,
     onPictureInPicture: (() -> Unit)?,
     onToggleFill: () -> Unit,
+    onToggleRotationLock: () -> Unit = {},
 ) {
     Row(
         Modifier.fillMaxWidth().height(VIEWER_EPISODE_CONTROLS_HEIGHT).padding(horizontal = 8.dp).testTag(VIEWER_EPISODE_CONTROLS_TAG),
@@ -325,7 +330,10 @@ internal fun ViewerEpisodeControls(
         IconButton(onClick = onLock, modifier = Modifier.testTag(VIEWER_LOCK_TAG)) {
             Icon(Icons.Outlined.LockOpen, contentDescription = "Lock controls", tint = Color.White)
         }
-        rotationOffer?.let { ViewerEpisodeRotateButton(it.fits, onRotate) }
+        rotationOffer?.let {
+            ViewerEpisodeRotateButton(it.fits, onRotate)
+            ViewerEpisodeRotationLockButton(it, onToggleRotationLock)
+        }
         ViewerEpisodeSpeedPill(playbackRate, speedEnabled, onOpenSpeed)
         Spacer(Modifier.weight(1f))
         onPictureInPicture?.let { ViewerEpisodePipButton(it) }
@@ -337,6 +345,13 @@ internal fun ViewerEpisodeControls(
 private fun ViewerEpisodeRotateButton(fits: Boolean, onRotate: () -> Unit) {
     IconButton(onClick = onRotate, modifier = Modifier.testTag("viewer-rotate")) {
         Icon(Icons.Default.ScreenRotation, contentDescription = if (fits) "Rotate to fit" else "Rotate", tint = Color.White)
+    }
+}
+
+@Composable
+private fun ViewerEpisodeRotationLockButton(offer: ViewerRotationOffer, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle, modifier = Modifier.testTag(VIEWER_ROTATION_LOCK_TAG)) {
+        Icon(offer.lockIcon, contentDescription = offer.lockDescription, tint = if (offer.lock != null) LocalViewerAccent.current else Color.White)
     }
 }
 

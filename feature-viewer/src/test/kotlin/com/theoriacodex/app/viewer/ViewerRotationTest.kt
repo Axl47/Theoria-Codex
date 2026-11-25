@@ -63,17 +63,17 @@ class ViewerRotationTest {
         compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
     }
 
-    @Test fun `the lock pins the current orientation, drops any hold, and hides the chip until unlocked (ADR 0174)`() {
+    @Test fun `the lock pins the current orientation and hides the chip until unlocked, which drops any hold (ADR 0174)`() {
         show()
         compose.onNodeWithContentDescription("Rotate to fit").performClick()
         compose.onNodeWithContentDescription("Lock rotation").performClick()
-        compose.runOnIdle {
-            assertEquals(ViewerOrientation.PORTRAIT, lock.value)
-            assertNull(rotation.held)
-        }
+        compose.runOnIdle { assertEquals(ViewerOrientation.PORTRAIT, lock.value) }
         compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
         compose.onNodeWithContentDescription("Unlock rotation").performClick()
-        compose.runOnIdle { assertNull(lock.value) }
+        compose.runOnIdle {
+            assertNull(lock.value)
+            assertNull(rotation.held)
+        }
         compose.onNodeWithContentDescription("Rotate to fit").assertExists()
     }
 
