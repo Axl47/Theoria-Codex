@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,10 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import java.text.DateFormat
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 internal enum class CheckProblem(val label: String) {
     UNREACHABLE("Couldn't reach site"),
@@ -141,10 +147,20 @@ internal fun OffScreenFailuresNotice(checkRun: Int, failed: FollowedCheck?, grid
         val shown = latest ?: return@LaunchedEffect
         if (atTopBeforeCard) return@LaunchedEffect grid.scrollToItem(0)
         withFrameNanos {}
-        if (snackbar == null || grid.layoutInfo.visibleItemsInfo.any { it.key == CHECK_FAILED_KEY }) return@LaunchedEffect
-        if (snackbar.showSnackbar(offScreenFailuresLine(shown.failed), actionLabel = "Show") == SnackbarResult.ActionPerformed) grid.animateScrollToItem(0)
+        if (snackbar == null || grid.showsCheckFailed()) return@LaunchedEffect
+        val line = offScreenFailuresLine(shown.failed)
+        val result = coroutineScope {
+            launch {
+                snapshotFlow { latest == null || grid.showsCheckFailed() }.first { it }
+                snackbar.currentSnackbarData?.takeIf { it.visuals.message == line }?.dismiss()
+            }
+            snackbar.showSnackbar(line, actionLabel = "Show", duration = SnackbarDuration.Long).also { coroutineContext.cancelChildren() }
+        }
+        if (result == SnackbarResult.ActionPerformed && latest != null) grid.animateScrollToItem(0)
     }
 }
+
+private fun LazyGridState.showsCheckFailed() = layoutInfo.visibleItemsInfo.any { it.key == CHECK_FAILED_KEY }
 
 internal fun offScreenFailuresLine(count: Int): String = "$count series couldn't be checked"
 

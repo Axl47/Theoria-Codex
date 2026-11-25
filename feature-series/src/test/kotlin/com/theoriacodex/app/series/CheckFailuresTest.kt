@@ -150,5 +150,11 @@ class CheckFailuresTest {
         compose.onNodeWithText(offScreenFailuresLine(1)).assertIsDisplayed()
         compose.onNodeWithText("Show").performClick()
         compose.onNodeWithText("Couldn't check 1 series").assertIsDisplayed()
+
+        compose.runOnIdle { runBlocking { grid.scrollToItem(30) } }
+        compose.runOnIdle(finish)
+        compose.onNodeWithText(offScreenFailuresLine(1)).assertIsDisplayed()
+        compose.runOnIdle { runBlocking { grid.scrollToItem(0) } }
+        compose.onAllNodesWithText(offScreenFailuresLine(1)).assertCountEquals(0)
     }
 }
