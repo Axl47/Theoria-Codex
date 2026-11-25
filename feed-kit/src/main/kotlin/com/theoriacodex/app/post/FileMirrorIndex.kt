@@ -58,6 +58,8 @@ class FileMirrorIndex {
         if (copies.isEmpty()) ids else ids + copies
     }
 
+    fun isCopy(post: Post, of: Post): Boolean = post.id == of.id || of.id in copiesOf(post) || post.id in copiesOf(of)
+
     fun copiesOf(post: Post): Set<PostId> = synchronized(lock) {
         val found = hashSetOf(post.id)
         groupOf[post.id]?.let(found::addAll)

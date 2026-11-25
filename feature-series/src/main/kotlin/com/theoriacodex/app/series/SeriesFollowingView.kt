@@ -21,7 +21,6 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,14 +32,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesKind
 
 @Composable
 internal fun FollowingBody(
     content: SeriesTabContent,
-    refreshing: Boolean,
+    checking: CheckProgress?,
+    found: List<SeriesUpdate>,
     failedCheck: FollowedCheck?,
     grid: LazyGridState,
     onRefresh: () -> Unit,
@@ -57,7 +59,7 @@ internal fun FollowingBody(
         if (content.followsAny) {
             FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
         }
-        PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        FollowingRefreshBox(checking, found, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(CARD_WIDTH),
                 state = grid,

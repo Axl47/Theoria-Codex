@@ -13,6 +13,7 @@
 - When followed series need their extension, such as after restoring a Mihon backup, the Extensions button in Series shows how many. Extensions then starts its Manga and Anime sections with Missing extensions, which lists those series by the extension that provides them, to install or turn on. Those series can't be checked for new chapters until their extension is on.
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and groups series no repo offers under the site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
+- Pulling down on Series' Following grid shows what letting go does, "Check for new chapters" (episodes if you only follow anime, updates if you follow both), and the pill fills once you've pulled far enough. While the check runs, it shows how many series are checked out of how many, and stays in view as you scroll or switch tabs. When it finishes, it says how many new chapters or episodes it found, then goes away.
 - For You has a Refresh button in its top bar that deals a fresh Mix.
 - When no sources are enabled, For You offers Manage sources, which opens Settings › Sites.
 - Restore backup also takes backups from Mihon, TachiyomiJ2K and Anikku. Their followed manga and anime appear in Series, with the chapters you read, the episodes you watched, where you stopped in each, and each manga's reading mode. Nothing you already have is removed, and importing the same backup twice adds nothing more. The extension repos the backup lists are added too, without contacting them. The preview names the extensions still missing, so you only need to install them, and a series opens once its extension is on here. The next background check for new chapters notifies you of chapters and episodes the backup didn't have yet, unless you already refreshed that series.
@@ -166,6 +167,8 @@
 
 ### Fixed
 
+- A trail step that would hold only the post you're on, which happens quickly on Hitomi where each post is a whole gallery, now says "No other posts" instead of opening a step with nothing new.
+- A trail step whose site couldn't be reached now says "Couldn't load" instead of claiming there were no posts, and a creator page's tag chip stays usable after a failed load.
 - A gallery that is the only post in the Viewer's thumbnail strip spreads its pages across the whole strip instead of leaving empty space beside them.
 - Missing extensions no longer says "Language off" for every installed extension that is on. It names the language that is off and turns it on, says when the extension couldn't load, or says the installed version doesn't offer that series' source.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.

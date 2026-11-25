@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.longClick
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
@@ -72,6 +74,22 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         assertEquals(setOf("multi", "pixiv_seed", "landscape"), rerun.toSet())
     }
 
+    @Test
+    fun aTagOnlyThisPostHasAddsNoStepAndSaysSo() {
+        openSearchPost(ORIGINAL_POST, ONLY_HERE_SEARCH, tags = listOf("landscape"))
+        waitFor("Viewer shows the original post") { selectedPost() == posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST].id.sourcePostId }
+
+        addTag("only", ONLY_HERE_TAG)
+        waitFor("the step says it has no other posts, on screen", timeoutMillis = 15_000) {
+            compose.onAllNodes(hasText("No other posts")).fetchSemanticsNodes().isNotEmpty() && compose.onNode(hasText("No other posts")).isDisplayed()
+        }
+        assertEquals(null, crumb(1))
+        assertEquals(posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST].id.sourcePostId, selectedPost())
+    }
+
+    override fun customizePost(index: Int, post: Post): Post =
+        if (index == ORIGINAL_POST) post.copy(canonicalTags = post.canonicalTags + ONLY_HERE_TAG + ROW_FILLERS) else post
+
     private fun addTag(typed: String, tag: String) {
         compose.onNodeWithTag("viewer-trail-row").performScrollToKey("add")
         activate(compose.onNodeWithContentDescription("Add tag"))
@@ -95,5 +113,8 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         const val ORIGINAL_POST = 3
         const val RECENT_SEARCH = "journey:trail"
         const val ADD_REMOVE_SEARCH = "journey:trail-edit"
+        const val ONLY_HERE_SEARCH = "journey:trail-only"
+        const val ONLY_HERE_TAG = "only_here"
+        val ROW_FILLERS = listOf("a_long_fixture_tag_one", "a_long_fixture_tag_two", "a_long_fixture_tag_three")
     }
 }
