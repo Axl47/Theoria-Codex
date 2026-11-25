@@ -4,13 +4,13 @@
 
 ### Added
 
-- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. At the end of a short list the header stays away, so the last row stays in view. Series keeps its search and Extensions buttons, and the bottom bar stays.
+- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. At the end of a short list the header stays away, so the last row stays in view. Series keeps its search and Settings buttons, and the bottom bar stays.
 - A saved search's Rename dialog has Edit search, which opens it in Search to change its tags, sources, filters or sort. Update saves the change under the same name and place, and its new-post count starts over. Closing Search's sheet without tapping Update leaves the saved search as it was.
 - The menu in Search's sheet has Filter and sort, which opens the filters over the sheet without closing it.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
-- When followed series need their extension, such as after restoring a Mihon backup, the Extensions button in Series shows how many. Extensions then starts its Manga and Anime sections with Missing extensions, which lists those series by the extension that provides them, to install or turn on. Those series can't be checked for new chapters until their extension is on.
+- When followed series need their extension, such as after restoring a Mihon backup, the Settings button in Series and the Extensions row in Settings show how many. Extensions then starts its Manga and Anime sections with Missing extensions, which lists those series by the extension that provides them, to install or turn on. Those series can't be checked for new chapters until their extension is on.
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and lists series no repo offers in a card per site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
 - Switch source searches only the sources you check under Sources, and remembers your choice for next time. Each extension's languages fold under it, and its box checks or unchecks them all. Sources you install later start checked.
@@ -95,6 +95,7 @@
 
 - Series' Following grid shows each series' unread chapters (or unwatched episodes) as a bold count on the cover's top-left corner, instead of the small red badge. A Downloaded filter in Sort & filter shows the series with chapters on the device, and while it's on, each count also shows how many are downloaded.
 - The current sort is shown by name with an arrow: above Series' Following grid (tap it to reverse the order), on a Codex's sort chip, and in place of the Codices sort icon. In every sort list, tapping the selected sort again reverses it. Opposite pairs such as Name (A–Z) and Name (Z–A), or Most and Fewest posts, are now one choice each, and Watch time, Opens and Creator can be reversed too. Following remembers the direction.
+- Series' top-right button opens Settings again, where the Settings tab used to be. Extensions is now the first row of Settings. When followed series need their extension or extensions have updates, the button and the row show how many, and the row lists each kind on its own line.
 - Importing a Codex moved from its own button in Library into Create Codex: tap +, then Import.
 - The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.
 - The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
@@ -174,6 +175,7 @@
 
 ### Fixed
 
+- Zooming into a video or animation in the Viewer keeps its thin progress bar at the bottom edge of what you see, instead of leaving it across the middle of the zoomed picture.
 - Dragging a For You card diagonally shows the side hint (Skip or Like) and the Codex or hide targets together, instead of flickering between them. The one letting go would pick is highlighted, and the other dims. The Codex your finger is on fills with the same accent as Like and Skip.
 - Leaving a chapter or an episode closes the reader or player all at once. The dark background no longer disappears first while the pages or video stay on screen a moment longer.
 - Swiping back from a series page, Settings, Extensions or another full screen slides it away, as the back arrow does. It no longer fades with its text drawn over the screen behind it.

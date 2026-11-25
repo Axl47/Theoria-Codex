@@ -80,7 +80,7 @@ class SeriesFollowingScreenshotTest {
         compose.setContent {
             TheoriaNightTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {})
+                    SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {})
                 }
             }
         }

@@ -19,6 +19,7 @@ import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.launchViewer
+import com.theoriacodex.app.ui.openSettings
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
@@ -90,11 +91,14 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     }
     val settings by shell.data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null)
     val content by viewModel.content.collectAsStateWithLifecycle()
+    val alerts by series.extensionAlerts.collectAsStateWithLifecycle()
     ReportLaunchContent(TopLevelDestination.Series, drawn = content.firstContentDrawn)
     SeriesTabScreen(
         viewModel,
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         onOpenExtensions = shell::openExtensions,
+        onOpenSettings = { shell.openSettings() },
+        extensionAlerts = alerts,
         oldSearchBar = settings?.oldSearchBar == true,
         snackbar = shell.snackbarHostState,
         switchSource = shell.switchSources(series),

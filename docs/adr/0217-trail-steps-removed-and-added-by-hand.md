@@ -15,6 +15,7 @@ A trail is a stack of Viewer entries, one per step, and each tag step's query is
 - A level waiting to replay does not report its visible post (`onVisiblePostChanged`), so passing through it marks nothing watched and feeds no statistics. Returning to it later composes it again and reports as usual.
 - The re-run stays on the navigation stack instead of loading every step and pushing the entries at once, because each Viewer entry claims its session from the single retained slot when it composes; pushing several entries would need per-entry session claiming across Viewer launch and restoration. A trail kept as data (backlog #458's bolder idea) would remove that limit.
 - The "+" pill opens a sheet whose suggestions come from `SearchSuggestionCoordinator.sourceTagSuggestions`, the general-tag autocomplete Unified search uses, for the post's source. A picked or typed tag opens as a fork of the current level.
+- The trail is the Viewer's level stack wherever the Viewer was opened (Search, Codex, For You and the rest), and it is active once it has a step beyond the first crumb. Holding a general tag in the info sheet adds `ViewerTrail.tagActions` before the Search moves: with no active trail, Start a trail, which is the tag's tap; otherwise Add to trail (the same fork) or, for a tag that matches a step after the first crumb as its source spells tags (`sourceTagsMatch`), Remove from trail with `removal`'s semantics, and Start a new trail. Start a new trail replaces the trail without asking, like tapping an earlier crumb: `ViewerLevel.restart` goes back to the first crumb and plans the tag as a one-step replay, so it opens through the same fork path as a step re-run.
 
 ## Consequences
 
@@ -22,12 +23,13 @@ Re-running reloads each later step's first page, so removing an early step in a 
 
 ## Applies to
 
-- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerTrail.kt`: `removal`, `CrumbTag`, `TrailRemoval`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerTrail.kt`: `removal`, `CrumbTag`, `TrailRemoval`, `tagActions`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerTrailRow.kt`: `ViewerTrailCrumb`, `ViewerForkChip`, `ViewerTrailReplay`, `HoldChrome`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerScreen.kt`: `ViewerLoadedScreen`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerTrailForks.kt`: `holdChrome`, `chromeHolds`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/TrailTagSheet.kt`: `TrailTagSheet`
-- `app/src/main/java/com/theoriacodex/app/ui/trails/ViewerTrailLevel.kt`: `planTrailReplay`, `trailReplayAfter`, `clearTrailReplay`, `recordStep`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/tags/PostTagActionSection.kt`: `PostTagSheetExtras.trailActions`
+- `app/src/main/java/com/theoriacodex/app/ui/trails/ViewerTrailLevel.kt`: `restart`, `planTrailReplay`, `trailReplayAfter`, `clearTrailReplay`, `recordStep`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/tags/TagForkChip.kt`: `TagActionMenu`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/tags/SavedTagAction.kt`: `rememberSavedTagAction`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchSuggestionCoordinator.kt`: `sourceTagSuggestions`
@@ -35,6 +37,9 @@ Re-running reloads each later step's first page, so removing an early step in a 
 ## Guarded by
 
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerTrailTest.kt`: `removing a middle step goes back before it and re-runs the later steps in order (ADR 0217)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerTrailTest.kt`: `a tag's trail moves are Start without a trail, then Add or Remove with Start a new trail (ADR 0217)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerTrailTest.kt`: `a step matches its tag as the source spells it, past a first crumb with the same tag (ADR 0217)`
+- `app/src/test/java/com/theoriacodex/app/tags/TagForkChipTest.kt`: `holding a forking chip offers its trail moves (ADR 0217)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerTrailTest.kt`: `the re-run ends before a creator or Similar step (ADR 0217)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerTrailTagActionsTest.kt`: `holding a step opens its menu without going back to it, and Remove removes that step (ADR 0217)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerTrailTagActionsTest.kt`: `an open step menu keeps the chrome from hiding until it closes (ADR 0217)`

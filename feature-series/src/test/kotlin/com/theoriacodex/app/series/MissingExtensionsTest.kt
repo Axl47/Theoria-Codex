@@ -1,6 +1,7 @@
 package com.theoriacodex.app.series
 
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.domain.series.ExtensionAlerts
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.Series
@@ -12,6 +13,11 @@ import com.theoriacodex.domain.series.languageName
 import java.text.DateFormat
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -30,6 +36,48 @@ class MissingExtensionsTest {
 
         assertEquals(listOf(dex to listOf(mangaOne, mangaTwo), onsen to listOf(animeOne)), groups.offered.map { it.extension to it.series })
         assertEquals(listOf(unknown), groups.unlisted)
+    }
+
+    @Test
+    fun `extension alerts add series missing their extension to extensions with an update, recount when extensions change, and keep the last count when a read fails (ADR 0221)`() = runTest {
+        fun followed(id: Long) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), "Series $id"), unreadCount = 0)
+        var loaded = listOf("custom_mihon_1")
+        val repos = FakeExtensionRepos().apply {
+            offered = listOf(
+                extension("dex", RepoExtension.Status.UPDATE, SeriesKind.MANGA, 2),
+                extension("onsen", RepoExtension.Status.UPDATE, SeriesKind.ANIME, 1),
+                extension("kaiju", RepoExtension.Status.INSTALLED, SeriesKind.MANGA, 1),
+                extension("reel", RepoExtension.Status.AVAILABLE, SeriesKind.ANIME, 2),
+            )
+        }
+        val changed = MutableStateFlow(0)
+        val alerts = observeExtensionAlerts(
+            StubSeriesRepository(listOf(followed(1), followed(2), followed(3))),
+            { loaded.map { FakeSeriesSource(it, "Ink Harbor", "en", count = 1) } },
+            repos,
+            changed,
+        ).stateIn(backgroundScope)
+
+        val both = alerts.first { it.updates > 0 }
+        assertEquals(ExtensionAlerts(missing = 2, updates = 2), both)
+        assertEquals(4, both.count)
+        assertEquals(listOf("2 series need their extension", "2 updates"), both.lines)
+
+        loaded = listOf("custom_mihon_1", "custom_mihon_2", "custom_mihon_3")
+        repos.offered = repos.offered.map { if (it.name == "dex") it.copy(status = RepoExtension.Status.INSTALLED) else it }
+        changed.value++
+        val updateOnly = alerts.first { it.missing == 0 && it.updates == 1 }
+        assertEquals(listOf("1 update"), updateOnly.lines)
+
+        repos.failing = true
+        changed.value++
+        testScheduler.runCurrent()
+        assertEquals(updateOnly, alerts.value)
+
+        repos.failing = false
+        repos.offered = repos.offered.map { it.copy(status = RepoExtension.Status.INSTALLED) }
+        changed.value++
+        assertEquals(ExtensionAlerts(), withTimeout(RECOUNT_MS) { alerts.first { it.updates == 0 } })
     }
 
     @Test
@@ -79,3 +127,5 @@ class MissingExtensionsTest {
     private fun extension(name: String, status: RepoExtension.Status, kind: SeriesKind, vararg ids: Long, repo: String = "https://repo.example") =
         RepoExtension(repo, "pkg.$name", name, listOf("en"), "1.0", kind, status, sources = ids.map(kind::extensionSourceKey))
 }
+
+private const val RECOUNT_MS = 1_000L

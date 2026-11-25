@@ -1,5 +1,6 @@
 package com.theoriacodex.app.settings
 
+import com.theoriacodex.domain.series.ExtensionAlerts
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -85,6 +86,7 @@ fun SettingsScreen(
     onClose: () -> Unit = {},
     closesFrom: SettingsPage = SettingsPage.HOME,
     onOpenExtensions: (() -> Unit)? = null,
+    extensionAlerts: ExtensionAlerts = ExtensionAlerts(),
 ) {
     val openHome = { if (state.page == closesFrom) onClose() else onAction(SettingsAction.OpenPage(SettingsPage.HOME)) }
     val openPost = rememberPostOpener(statsActions.openPost)
@@ -98,7 +100,7 @@ fun SettingsScreen(
     ) { page ->
         when (page) {
             SettingsPage.HOME -> SettingsHome(
-                state, statistics, onAction, storageSummary, sites, backup, pictures, diagnostics != null, showSeries, appLock, onClose, onOpenExtensions,
+                state, statistics, onAction, storageSummary, sites, backup, pictures, diagnostics != null, showSeries, appLock, onClose, onOpenExtensions, extensionAlerts,
             )
             SettingsPage.SITES -> sites?.page?.invoke(
                 openHome,
@@ -145,6 +147,7 @@ private fun SettingsHome(
     appLock: (@Composable () -> Unit)?,
     onClose: () -> Unit,
     onOpenExtensions: (() -> Unit)?,
+    extensionAlerts: ExtensionAlerts,
 ) {
     var profileMenu by rememberSaveable { mutableStateOf(false) }
     var showAddProfile by remember { mutableStateOf(false) }
@@ -152,6 +155,7 @@ private fun SettingsHome(
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsPageColumn {
         SettingsHeader(SettingDestinations.Home.title, onBack = onClose)
+        onOpenExtensions?.let { ExtensionsGroup(extensionAlerts, it) }
         ProfileCard(state, onAction, onAdd = { showAddProfile = true }, onMenu = { profileMenu = true })
         SettingsGroup("Stats") {
             SettingsRow(SettingDestinations.Stats.title, statsSummary(statistics), Icons.Default.BarChart, onClick = {
@@ -166,7 +170,7 @@ private fun SettingsHome(
                 open(SettingsPage.STATS_COMPARE)
             })
         }
-        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, showSeries, appLock, onOpenExtensions) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
+        SettingsHomeGroups(state, onAction, storageSummary, sites, backup, pictures, showDiagnostics, showSeries, appLock) { sheet -> onAction(SettingsAction.OpenPage(SettingsPage.HOME, sheet)) }
     }
     if (showAddProfile) {
         NameEntryDialog(
@@ -230,12 +234,11 @@ private fun SettingsHomeGroups(
     showDiagnostics: Boolean,
     showSeries: Boolean,
     appLock: (@Composable () -> Unit)?,
-    onOpenExtensions: (() -> Unit)?,
     onSheet: (SettingsSheet) -> Unit,
 ) {
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
     SettingsSourcesGroup(state, sites) { open(SettingsPage.SITES) }
-    if (showSeries) SeriesSettingsGroup(state, onAction, onOpenExtensions) { onSheet(SettingsSheet.SERIES_UPDATES) }
+    if (showSeries) SeriesSettingsGroup(state, onAction) { onSheet(SettingsSheet.SERIES_UPDATES) }
     SettingsGroup("Viewing") {
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)

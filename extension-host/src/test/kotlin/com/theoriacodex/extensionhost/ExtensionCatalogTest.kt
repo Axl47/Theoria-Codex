@@ -10,6 +10,16 @@ import java.io.File
 import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CountDownLatch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -110,6 +120,58 @@ class ExtensionCatalogTest {
         assertEquals("Names no signing key", refused["https://nokey.example/anime"])
         assertEquals("Answered 404", refused["https://gone.example"])
         assertEquals(emptyList<ExtensionRepo>(), catalog.repos())
+    }
+
+    @Test
+    fun `adding, restoring or removing a repo and re-reading the indexes each signal that the listing changed (ADR 0221)`() = runTest {
+        serve()
+        val signals = mutableListOf<Unit>()
+        val watching = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { catalog.changes.collect { signals += it } }
+
+        catalog.add(listOf(NewExtensionRepo(repoUrl)))
+        catalog.available(refresh = false)
+        assertEquals(1, signals.size)
+        catalog.available(refresh = true)
+        catalog.restore(emptyList())
+        catalog.remove(repoUrl)
+        assertEquals(4, signals.size)
+        watching.cancel()
+    }
+
+    @Test
+    fun `a refresh that overlaps a slower first read of the same repo keeps the refreshed index (ADR 0221)`() = runBlocking {
+        val reached = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val held = AtomicBoolean(false)
+        val slowFirst = catalog(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val url = chain.request().url.toString()
+                val body = site[url]
+                if (url.endsWith("index.min.json") && held.compareAndSet(false, true)) {
+                    reached.complete(Unit)
+                    release.await()
+                }
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
+                    .body(Buffer().write(body ?: ByteArray(0)).asResponseBody("application/octet-stream".toMediaType(), contentLength = -1)).build()
+            }.build(),
+        )
+        serve(Triple("old", 1, "16"))
+        slowFirst.restore(listOf(ExtensionRepo(repoUrl, "Anime", key)))
+
+        try {
+            val first = async(Dispatchers.IO) { slowFirst.available(refresh = false) }
+            withTimeout(OVERLAP_MS * 10) { reached.await() }
+            serve(Triple("old", 2, "16"))
+            val refreshed = async(Dispatchers.IO) { slowFirst.available(refresh = true) }
+            withTimeoutOrNull(OVERLAP_MS) { refreshed.await() }
+            release.countDown()
+            first.await()
+            refreshed.await()
+        } finally {
+            release.countDown()
+        }
+
+        assertEquals(listOf("16.2"), slowFirst.available().extensions.map { it.versionName })
     }
 
     @Test
@@ -311,3 +373,5 @@ class ExtensionCatalogTest {
         assertEquals(0, changes)
     }
 }
+
+private const val OVERLAP_MS = 500L

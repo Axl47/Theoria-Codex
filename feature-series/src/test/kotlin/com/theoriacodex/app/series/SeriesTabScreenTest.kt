@@ -4,6 +4,9 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.assertIsNotDisplayed
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -30,6 +33,7 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
+import com.theoriacodex.domain.series.ExtensionAlerts
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntries
 import com.theoriacodex.domain.series.SeriesEntry
@@ -72,7 +76,7 @@ class SeriesTabScreenTest {
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { _, _ -> NOTHING_CHECKED }
         compose.setContent {
             MaterialTheme {
-                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {})
+                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {})
             }
         }
         compose.waitForIdle()
@@ -99,7 +103,7 @@ class SeriesTabScreenTest {
     fun aSourcesListingFiltersStayClearOfTheCollapsedSearch() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 40))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { _, _ -> NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}) } }
         compose.waitForIdle()
         compose.runOnIdle { viewModel.openDedicatedSearch(sources.single().key) }
         compose.waitForIdle()
@@ -113,10 +117,10 @@ class SeriesTabScreenTest {
     }
 
     @Test
-    fun scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218() {
+    fun scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndSettingsStayPinned_adr_0218() {
         val followed = (1..40).map { FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/$it"), "Series $it"), unreadCount = 0) }
         val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }) { _, _ -> NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}) } }
         compose.waitForIdle()
         val following = compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING))
         following.assertIsDisplayed()
@@ -125,7 +129,7 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         following.assertIsNotDisplayed()
         compose.onNodeWithTag("collapsed-search-strip").assertIsDisplayed()
-        compose.onNodeWithContentDescription(EXTENSIONS_TITLE).assertIsDisplayed()
+        compose.onNodeWithContentDescription(SETTINGS).assertIsDisplayed()
 
         compose.onRoot().performTouchInput { swipeDown(startY = centerY, endY = centerY + 150f) }
         compose.waitForIdle()
@@ -133,34 +137,32 @@ class SeriesTabScreenTest {
     }
 
     @Test
-    fun missingExtensionsShowAsACountOnTheExtensionsButtonInsteadOfARow() {
-        fun followed(id: Long) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), "Series $id"), unreadCount = 0)
-        val repository = StubSeriesRepository(listOf(followed(1), followed(2), followed(3)))
-        val revision = MutableStateFlow(0)
-        var loaded = listOf("custom_mihon_1")
+    fun `the Series settings button opens Settings and badges extension alerts (ADR 0221)`() {
+        val viewModel = SeriesTabViewModel(EmptySeriesRepository, { emptyList() }) { _, _ -> NOTHING_CHECKED }
+        var alerts by mutableStateOf(ExtensionAlerts(missing = 2, updates = 1))
         var opened = 0
-        val viewModel = SeriesTabViewModel(repository, { loaded.map { FakeSeriesSource(it, "Ink Harbor", "en", count = 1) } }, revision) { _, _ -> NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = { opened++ }) } }
+        compose.setContent {
+            MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = { opened++ }, extensionAlerts = alerts) }
+        }
         compose.waitForIdle()
 
-        val button = compose.onNodeWithContentDescription(EXTENSIONS_TITLE)
-        button.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, missingExtensionsLine(2)))
-        compose.onNodeWithText(missingExtensionsLine(2)).assertDoesNotExist()
+        val button = compose.onNodeWithContentDescription(SETTINGS)
+        button.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "2 series need their extension, 1 update"))
+        compose.onNodeWithText("3").assertIsDisplayed()
         button.performClick()
         assertEquals(1, opened)
 
-        loaded = listOf("custom_mihon_1", "custom_mihon_2", "custom_mihon_3")
-        revision.value++
+        alerts = ExtensionAlerts()
         compose.waitForIdle()
         button.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
-        assertEquals("1 series needs its extension", missingExtensionsLine(1))
+        compose.onNodeWithText("3").assertDoesNotExist()
     }
 
     @Test
     fun browsePicksItsSourceAndListingFromOneHeader() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3), FakeSeriesSource("custom_aniyomi_2", "Moon Reel", "en", count = 3))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { _, _ -> NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}) } }
         compose.waitForIdle()
 
         compose.onNodeWithTag(seriesViewTag(SeriesView.BROWSE)).assertIsSelected()

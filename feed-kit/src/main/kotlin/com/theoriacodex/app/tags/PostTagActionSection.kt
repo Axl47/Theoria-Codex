@@ -74,6 +74,7 @@ class PostTagSheetExtras(
     val filterBehindIcon: Boolean = false,
     val afterTags: LazyListScope.() -> Unit = {},
     val onFork: ((SearchTerm) -> Unit)? = null,
+    val trailActions: (SearchTerm) -> List<TagChipAction> = { emptyList() },
     val levelQuery: Query? = null,
 )
 
@@ -231,6 +232,8 @@ private class PostTagEditor(
 ) {
     val onFork: ((SearchTerm) -> Unit)? get() = extras?.onFork
 
+    fun trailActions(term: SearchTerm): List<TagChipAction> = extras?.trailActions?.invoke(term).orEmpty()
+
     val levelSelection: PostTagSelection? = extras?.levelQuery?.let { PostTagSelection(post.id.source, it.includeTerms, it.excludeTerms) }
 
     fun commit(term: SearchTerm, excluded: Boolean): Boolean =
@@ -294,7 +297,7 @@ private fun PostTagChip(
     val icon = if (saved) Icons.Default.Star else null
     val fork = editor.onFork?.takeIf { term.isGeneralTag }
     if (fork != null) {
-        val moves = listOfNotNull(TagChipAction(tagTapLabel(name, state)) { editor.tap(term) }.takeIf { editor.canTap(term) }) +
+        val moves = editor.trailActions(term) + listOfNotNull(TagChipAction(tagTapLabel(name, state)) { editor.tap(term) }.takeIf { editor.canTap(term) }) +
             editor.alternateActions(term) + listOfNotNull(toggleSaved?.let { TagChipAction(savedLabel.orEmpty(), it) })
         val active = editor.levelSelection?.chipState(term)?.takeIf { it != TagChipState.NONE } ?: state
         TagForkChip(name, postTagChipLabel(term.value, translation), shownCount, compact, active, icon, "saved".takeIf { saved }, moves) { fork(term) }

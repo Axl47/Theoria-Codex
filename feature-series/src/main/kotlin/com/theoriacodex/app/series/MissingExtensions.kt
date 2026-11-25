@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionAlerts
+import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.Series
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.net.URI
@@ -47,6 +51,21 @@ class MissingSeriesViewModel(
         viewModelScope.launch { repository.setFollowed(id, false) }
     }
 }
+
+fun observeExtensionAlerts(
+    repository: SeriesRepository,
+    loadSources: suspend () -> List<SeriesSource>,
+    repos: ExtensionRepos,
+    changed: Flow<*>,
+): Flow<ExtensionAlerts> = combine(
+    repository.observeFollowed(),
+    channelFlow { changed.collectLatest { runCatchingPreservingCancellation { loadSources() }.onSuccess { send(it) } } },
+    channelFlow {
+        changed.collectLatest {
+            runCatchingPreservingCancellation { repos.available().extensions.count { it.status == RepoExtension.Status.UPDATE } }.onSuccess { send(it) }
+        }
+    }.onStart { emit(0) },
+) { followed, sources, updates -> ExtensionAlerts(missingSeries(followed, sources).size, updates) }
 
 internal fun missingSeries(followed: List<FollowedSeries>, sources: List<SeriesSource>): List<FollowedSeries> {
     val keys = sources.mapTo(HashSet()) { it.key }

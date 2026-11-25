@@ -196,9 +196,6 @@ private fun HeldSeriesCard(item: FollowedSeries, marked: Boolean, hold: SeriesHo
     }
 }
 
-internal fun missingExtensionsLine(count: Int): String =
-    if (count == 1) "1 series needs its extension" else "$count series need their extension"
-
 internal val FollowedCheck.message: String
     get() = if (failed == checked) "Couldn't check for updates" else "Couldn't check $failed series"
 
