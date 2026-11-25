@@ -24,7 +24,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,11 +35,27 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.seriesKind
+import kotlinx.coroutines.flow.first
+
+@Composable
+internal fun SwitchingSource(from: Series, create: (SeriesId) -> SwitchSourceViewModel, onOpenSeries: (SeriesId) -> Unit, onDone: () -> Unit) {
+    val switchSource = viewModel(key = "$SWITCHING_SOURCE_KEY${from.id}") { create(from.id) }
+    val done by rememberUpdatedState(onDone)
+    LaunchedEffect(switchSource) {
+        switchSource.state.first { it.others.isNotEmpty() }
+        switchSource.open(from.title)
+        switchSource.state.first { it.sheet == null }
+        done()
+    }
+    SwitchSourceSheet(switchSource, onOpenSeries, onSwitched = {})
+}
 
 @Composable
 internal fun SwitchSourceSheet(
@@ -124,3 +142,5 @@ private fun switchConsequence(kind: SeriesKind): String = when (kind) {
 }
 
 internal const val SWITCH_SOURCE = "Switch source"
+
+private const val SWITCHING_SOURCE_KEY = "switching-source-"
