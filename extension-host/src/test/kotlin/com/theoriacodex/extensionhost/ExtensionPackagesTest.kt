@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.FeatureInfo
 import android.content.pm.PackageInfo
+import android.content.pm.Signature
+import android.content.pm.SigningInfo
 import android.os.Bundle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -12,6 +14,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadow.api.Shadow
+import org.robolectric.shadows.ShadowSigningInfo
 
 @RunWith(RobolectricTestRunner::class)
 class ExtensionPackagesTest {
@@ -76,11 +80,27 @@ class ExtensionPackagesTest {
         )
     }
 
-    private fun install(packageName: String, feature: String, label: String, metaData: Bundle, version: String = "1.0") {
+    @Test
+    fun `only a package signed by exactly one certificate has a signer (ADR 0063)`() {
+        listOf("app.one" to listOf("01"), "app.two" to listOf("01", "02"), "app.none" to emptyList()).forEach { (name, signers) ->
+            install(name, MihonKind.feature, "Tachiyomi: $name", Bundle().apply {
+                putString(MihonKind.sourceClassesKey, ".Source")
+                putFloat("tachiyomix.extensionLib", 1.6f)
+            }, signers = signers)
+        }
+
+        assertEquals(
+            mapOf("app.one" to "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a", "app.two" to null, "app.none" to null),
+            packages.list().associate { it.packageName to it.signer },
+        )
+    }
+
+    private fun install(packageName: String, feature: String, label: String, metaData: Bundle, version: String = "1.0", signers: List<String> = emptyList()) {
         shadowOf(context.packageManager).installPackage(
             PackageInfo().apply {
                 this.packageName = packageName
                 versionName = version
+                if (signers.isNotEmpty()) signingInfo = SigningInfo().also { Shadow.extract<ShadowSigningInfo>(it).setSignatures(signers.map(::Signature).toTypedArray()) }
                 reqFeatures = arrayOf(FeatureInfo().apply { name = feature })
                 applicationInfo = ApplicationInfo().apply {
                     this.packageName = packageName

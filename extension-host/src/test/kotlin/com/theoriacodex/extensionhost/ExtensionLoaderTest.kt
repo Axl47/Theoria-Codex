@@ -94,6 +94,14 @@ class ExtensionLoaderTest {
     }
 
     @Test
+    fun `an installed package loads from Android's own copy, and no copy is made (ADR 0063)`() {
+        read = { null }
+
+        assertEquals(emptyList<HostedSource>(), loader.load(extension, host))
+        assertEquals(emptyList<File>(), copies())
+    }
+
+    @Test
     fun `the only way to get a loader installs the host first (ADR 0062)`() {
         loader("loader-installs", 7)
 

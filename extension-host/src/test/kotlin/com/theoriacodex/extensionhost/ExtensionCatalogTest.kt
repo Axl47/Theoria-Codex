@@ -227,6 +227,33 @@ class ExtensionCatalogTest {
     }
 
     @Test
+    fun `an extension download declared over its size limit is refused before any of it is read (ADR 0063)`() = runTest {
+        serve(Triple("big", 2, "16"))
+        var declared = 0L
+        var read = 0L
+        val sized = catalog(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val url = chain.request().url.toString()
+                val apk = url == "$repoUrl/apk/big.apk"
+                val body = if (apk) "big|$key|2".encodeToByteArray() else site[url]
+                val counted = object : ForwardingSource(Buffer().write(body ?: ByteArray(0))) {
+                    override fun read(sink: Buffer, byteCount: Long): Long = super.read(sink, byteCount).also { if (apk && it > 0) read += it }
+                }
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
+                    .body(counted.buffer().asResponseBody("application/octet-stream".toMediaType(), if (apk) declared else -1)).build()
+            }.build(),
+        )
+        sized.add(listOf(NewExtensionRepo(repoUrl)))
+
+        declared = 64L * 1024 * 1024 + 1
+        assertEquals("Too large", sized.install(repoUrl, "big"))
+        assertEquals(0L, read)
+        assertEquals(emptyList<String>(), folder.list().orEmpty().toList())
+        declared = "big|$key|2".length.toLong()
+        assertNull(sized.install(repoUrl, "big"))
+    }
+
+    @Test
     fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007, 0063)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("old", 7, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
