@@ -330,6 +330,34 @@ class ViewerReturnTransitionTest {
         compose.onNodeWithTag("returning media").assertDoesNotExist()
     }
 
+    @Test fun `a Viewer opened without a card leaves in one frame when it closes (ADR 0218)`() {
+        val returning = ViewerReturnTransition()
+        lateinit var navigation: NavHostController
+        compose.setContent {
+            navigation = rememberNavController()
+            CompositionLocalProvider(LocalViewerReturnTransition provides returning) {
+                NavHost(navigation, startDestination = "series", enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None }) {
+                    composable("series") { Box(Modifier.fillMaxSize()) }
+                    composable("viewer") {
+                        ViewerReturnLifetime(this) { true }
+                        Box(Modifier.fillMaxSize().testTag("viewer"))
+                    }
+                }
+            }
+        }
+        compose.runOnIdle { navigation.navigate("viewer") }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle {
+            returning.begin(postId)
+            assertNull(returning.request)
+            navigation.popBackStack()
+        }
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithTag("viewer").assertDoesNotExist()
+    }
+
     @Test fun `related return positions both the offscreen shelf and its offscreen card`() {
         val transition = ViewerReturnTransition()
         val related = (0..20).map { post("related-$it") }

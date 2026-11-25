@@ -70,6 +70,7 @@ class ViewerRouteRestorationUiTest {
 
     @Test fun `two quick Backs close the Viewer, then the screen behind once the Viewer leaves`() {
         val transition = ViewerReturnTransition()
+        transition.openedFrom("grid")
         val shown = mutableStateOf(true)
         var dispatcher: OnBackPressedDispatcher? = null
         var backsBehind = 0

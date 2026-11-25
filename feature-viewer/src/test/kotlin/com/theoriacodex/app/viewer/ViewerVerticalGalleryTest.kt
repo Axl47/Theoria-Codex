@@ -3,7 +3,10 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performSemanticsAction
@@ -66,20 +69,37 @@ class ViewerVerticalGalleryTest {
     @Before fun failImageLoads() { installFailingLoader() }
     @After fun resetCoil() = Coil.reset()
 
-    private fun show(modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL)) {
+    private fun show(
+        modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL),
+        returning: ViewerReturnTransition? = null,
+    ) {
         compose.setContent {
-            MaterialTheme {
-                ViewerScreen(
-                    uiState = state.value,
-                    host = ViewerScreenHost(onAction = { action ->
-                        actions += action
-                        state.value = reduceViewerState(state.value, action).state
-                    }),
-                    config = ViewerScreenConfig(galleryReadingModes = modes),
-                )
+            CompositionLocalProvider(LocalViewerReturnTransition provides returning) {
+                MaterialTheme {
+                    ViewerScreen(
+                        uiState = state.value,
+                        host = ViewerScreenHost(onAction = { action ->
+                            actions += action
+                            state.value = reduceViewerState(state.value, action).state
+                        }),
+                        config = ViewerScreenConfig(galleryReadingModes = modes),
+                    )
+                }
             }
         }
         compose.waitForIdle()
+    }
+
+    @Test fun `a vertical gallery closing into its card moves into the card with the backdrop (ADR 0218)`() {
+        val returning = ViewerReturnTransition()
+        returning.openedFrom("grid")
+        returning.begin(gallery.id)
+        returning.recordBounds("grid", gallery.id, Rect(0f, 0f, 40f, 50f))
+        returning.positioned("grid", gallery.id)
+        show(returning = returning)
+        val root = compose.onRoot().fetchSemanticsNode().size.width
+        val landed = compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode().layoutInfo.coordinates.boundsInRoot()
+        assertTrue("The pages stayed full width: $landed in $root", landed.width < root / 2)
     }
 
     @Test fun `scrolling a vertical gallery selects the page in view`() {

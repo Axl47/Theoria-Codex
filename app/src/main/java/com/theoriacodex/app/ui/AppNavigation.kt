@@ -2,6 +2,8 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.domain.series.SeriesId
 import android.net.Uri
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -12,10 +14,20 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
+import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TriageMode
@@ -91,6 +103,57 @@ internal fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
 internal fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
 internal fun codexUnderneathExit(): ExitTransition = ExitTransition.None
 internal fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
+
+private typealias ScreenTransitionScope = AnimatedContentTransitionScope<NavBackStackEntry>
+
+private fun ScreenTransitionScope.screenEnter(): EnterTransition =
+    if (targetState.destination.route == AppRoute.CodexDetail) codexEnterTransition() else pushEnterTransition()
+
+private fun ScreenTransitionScope.screenExit(): ExitTransition = when (targetState.destination.route) {
+    AppRoute.Viewer -> ExitTransition.None
+    AppRoute.CodexDetail -> codexUnderneathExit()
+    else -> pushExitTransition()
+}
+
+private fun ScreenTransitionScope.screenPopEnter(): EnterTransition = when (initialState.destination.route) {
+    AppRoute.Viewer -> EnterTransition.None
+    AppRoute.CodexDetail -> codexUnderneathEnter()
+    else -> popEnterTransition()
+}
+
+private fun ScreenTransitionScope.screenPopExit(): ExitTransition =
+    if (initialState.destination.route == AppRoute.CodexDetail) codexExitTransition() else popExitTransition()
+
+@Composable
+internal fun TheoriaScreenHost(
+    navController: NavHostController,
+    startDestination: String,
+    modifier: Modifier = Modifier,
+    builder: NavGraphBuilder.() -> Unit,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = modifier,
+        enterTransition = { screenEnter() },
+        exitTransition = { screenExit() },
+        popEnterTransition = { screenPopEnter() },
+        popExitTransition = { screenPopExit() },
+        predictivePopEnterTransition = { screenPopEnter() },
+        predictivePopExitTransition = { screenPopExit() },
+        builder = builder,
+    )
+}
+
+internal fun NavGraphBuilder.opaqueScreen(
+    route: String,
+    arguments: List<NamedNavArgument> = emptyList(),
+    content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
+) {
+    composable(route, arguments) { entry ->
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { this@composable.content(entry) }
+    }
+}
 
 @Composable
 internal fun RecordCodexEntryEffect(entry: NavBackStackEntry, codexId: String, statistics: StatisticsRepository) {

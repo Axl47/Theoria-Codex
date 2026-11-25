@@ -90,7 +90,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScope: SharedTransitionScope) {
-    composable(AppRoute.Home) {
+    opaqueScreen(AppRoute.Home) {
         CompositionLocalProvider(LocalCodexMorph provides remember { CodexMorphScope(sharedScope, this) }) {
             HomePager(shell)
         }
@@ -101,7 +101,7 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     ) { entry ->
         CodexDetailEntry(shell, entry, sharedScope, this)
     }
-    composable(AppRoute.CreatorProfile) { CreatorDestination(shell) }
+    opaqueScreen(AppRoute.CreatorProfile) { CreatorDestination(shell) }
     composable(
         AppRoute.Viewer,
         enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
@@ -117,10 +117,10 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
             ViewerDestination(shell, entry)
         }
     }
-    composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
-    composable(AppRoute.Series, arguments = seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
-    composable(AppRoute.Extensions, arguments = extensionsArguments) { entry -> ExtensionsDestination(shell, entry) }
-    composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
+    opaqueScreen(AppRoute.Settings) { SettingsScreenDestination(shell) }
+    opaqueScreen(AppRoute.Series, seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
+    opaqueScreen(AppRoute.Extensions, extensionsArguments) { entry -> ExtensionsDestination(shell, entry) }
+    opaqueScreen(AppRoute.Triage, triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 
 @Composable

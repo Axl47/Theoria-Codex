@@ -65,6 +65,7 @@ class ViewerReturnTransition {
         retainedPostIds = postIds
     }
 
+    private var openedFromCard = false
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
@@ -87,6 +88,7 @@ class ViewerReturnTransition {
 
     fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
         clear()
+        openedFromCard = true
         originGridId = gridId
         originShelfId = shelfId
         openingBounds = bounds?.takeUnless { it.isEmpty }
@@ -98,6 +100,7 @@ class ViewerReturnTransition {
     }
 
     fun begin(postId: PostId) {
+        if (!openedFromCard) return
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
         mediaSettling = true
@@ -137,6 +140,7 @@ class ViewerReturnTransition {
     }
 
     fun clear() {
+        openedFromCard = false
         mediaSettling = false
         retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()
