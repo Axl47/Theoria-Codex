@@ -180,10 +180,8 @@ private fun ViewerAddTagChip(enabled: Boolean, onClick: () -> Unit) {
 internal fun ViewerTrailReplay(trail: ViewerTrail, post: Post, forks: ViewerTrailForks) {
     val opener = LocalTrailOpener.current
     val tag = trail.replay ?: return
-    val latestPost by rememberUpdatedState(post)
-    LaunchedEffect(tag) {
-        val from = latestPost
-        forks.open(TrailFork.Tag(tag.value), from.id) { opener.openTrail(TrailRequest.Tag(tag.value, tag.source, trail.levelQuery, from)) }
+    LaunchedEffect(tag, post.id) {
+        forks.open(TrailFork.Tag(tag.value), post.id) { opener.openTrail(TrailRequest.Tag(tag.value, tag.source, trail.levelQuery, post)) }
     }
 }
 

@@ -14,18 +14,20 @@ class TrailReplayTest {
     private fun tags(vararg values: String) = values.map { CrumbTag(it, SourceKey.DANBOORU) }
 
     @Test
-    fun `opening the next replayed step hands the rest of the path to the new level (ADR 0217)`() {
+    fun `the replayed step's level gets the rest of the path, and the plan holds until the open ends (ADR 0217)`() {
         val level = SavedStateHandle().apply { planTrailReplay(tags("aurora", "snow")) }
 
-        assertEquals(tags("snow"), level.takeTrailReplay(tagRequest("aurora")))
-        assertEquals(emptyList<CrumbTag>(), level.takeTrailReplay(tagRequest("aurora")))
+        assertEquals(tags("snow"), level.trailReplayAfter(tagRequest("aurora")))
+        assertEquals(tags("snow"), level.trailReplayAfter(tagRequest("aurora")))
+        level.clearTrailReplay()
+        assertEquals(emptyList<CrumbTag>(), level.trailReplayAfter(tagRequest("aurora")))
     }
 
     @Test
     fun `opening anything else from the level drops the planned replay (ADR 0217)`() {
         val level = SavedStateHandle().apply { planTrailReplay(tags("aurora", "snow")) }
 
-        assertEquals(emptyList<CrumbTag>(), level.takeTrailReplay(tagRequest("aurora", SourceKey.GELBOORU)))
-        assertEquals(emptyList<CrumbTag>(), level.takeTrailReplay(tagRequest("aurora")))
+        assertEquals(emptyList<CrumbTag>(), level.trailReplayAfter(tagRequest("aurora", SourceKey.GELBOORU)))
+        assertEquals(emptyList<CrumbTag>(), level.trailReplayAfter(tagRequest("aurora")))
     }
 }

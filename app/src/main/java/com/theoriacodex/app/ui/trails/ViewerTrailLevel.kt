@@ -109,12 +109,16 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
     }
 }
 
-internal fun SavedStateHandle.takeTrailReplay(request: TrailRequest): List<CrumbTag> {
+internal fun SavedStateHandle.trailReplayAfter(request: TrailRequest): List<CrumbTag> {
     val pending = get<ArrayList<String>>(TRAIL_REPLAY_KEY).orEmpty().mapNotNull(::decodeReplayTag)
-    if (pending.isEmpty()) return emptyList()
-    this[TRAIL_REPLAY_KEY] = ArrayList<String>()
     val opened = (request as? TrailRequest.Tag)?.let { CrumbTag(it.tag, it.source) }
-    return pending.drop(1).takeIf { opened == pending.first() }.orEmpty()
+    if (pending.isNotEmpty() && opened == pending.first()) return pending.drop(1)
+    clearTrailReplay()
+    return emptyList()
+}
+
+internal fun SavedStateHandle.clearTrailReplay() {
+    if (get<ArrayList<String>>(TRAIL_REPLAY_KEY).orEmpty().isNotEmpty()) this[TRAIL_REPLAY_KEY] = ArrayList<String>()
 }
 
 internal fun SavedStateHandle.planTrailReplay(tags: List<CrumbTag>) {

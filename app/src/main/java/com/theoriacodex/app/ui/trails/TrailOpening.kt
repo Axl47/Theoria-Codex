@@ -74,7 +74,19 @@ private suspend fun TheoriaShell.openTrail(
     marks: () -> BrowsingMetadata?,
 ): Boolean {
     val origin = navController.currentBackStackEntry
-    val replay = origin?.savedStateHandle?.takeTrailReplay(request).orEmpty()
+    val replay = origin?.savedStateHandle?.trailReplayAfter(request).orEmpty()
+    val opened = openLevel(request, handoff, marks, origin, replay)
+    origin?.savedStateHandle?.clearTrailReplay()
+    return opened
+}
+
+private suspend fun TheoriaShell.openLevel(
+    request: TrailRequest,
+    handoff: TrailHandoffViewModel,
+    marks: () -> BrowsingMetadata?,
+    origin: NavBackStackEntry?,
+    replay: List<CrumbTag>,
+): Boolean {
     val parent = routes.viewer.current?.session?.value?.searchVisibilityFilters
         ?.takeIf { origin?.destination?.route == AppRoute.Viewer } ?: SearchVisibilityFilters()
     val spec = trailSpec(request, shellTrailSources(), parent) ?: return false

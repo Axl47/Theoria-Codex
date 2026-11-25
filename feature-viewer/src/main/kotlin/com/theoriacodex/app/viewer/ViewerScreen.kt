@@ -162,7 +162,7 @@ private fun ViewerLoadedScreen(
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
-        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
+        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged.takeIf { trail.replay == null }, config,
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
