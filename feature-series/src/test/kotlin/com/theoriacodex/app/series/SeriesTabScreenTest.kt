@@ -32,6 +32,8 @@ import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.SortChoice
+import com.theoriacodex.domain.model.SortDirection
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.ExtensionAlerts
@@ -157,6 +159,26 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         button.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         compose.onNodeWithText("3").assertDoesNotExist()
+    }
+
+    @Test
+    fun theFollowingSortShowsAShortNameButTalkBackHearsTheFullOne() {
+        val followed = listOf(
+            FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/m"), "Paper Moon"), unreadCount = 0),
+            FollowedSeries(Series(SeriesId(SeriesKind.ANIME.extensionSourceKey(2), "/a"), "Night Reel"), unreadCount = 0),
+        )
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { emptyList() }) { _, _ -> NOTHING_CHECKED }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}) } }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewModel.chooseKind(SeriesKind.ANIME)
+            viewModel.chooseLibrary(LibraryOptions(SortChoice(LibrarySort.RECENTLY_READ, SortDirection.DESCENDING)))
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Last watched")
+            .assert(hasText("Watched"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Descending"))
     }
 
     @Test
