@@ -15,12 +15,13 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollToIndex
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.fixtures.HeavyHistory
 import com.theoriacodex.app.library.LibrarySection
-import com.theoriacodex.app.recommend.FOR_YOU_CHIPS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_END_TAG
+import com.theoriacodex.app.recommend.FOR_YOU_FILTERS_TAG
+import com.theoriacodex.app.recommend.FOR_YOU_MIX_LANE_TAG_PREFIX
+import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_UNDO_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
@@ -55,21 +56,20 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
     fun theMixLeadsWithWhatTheProfileSeeksAndAHiddenTagTakesItsLaneUntilUndo() {
         launch()
         tab("For You")
-        compose.waitUntil(20_000) { visibleLaneChips().size > 1 }
-        val lanes = setOf(setOf("Mix"), setOf("frieren", "fern"), setOf("hatsune miku"), setOf("kitagawa marin"))
-        assertEquals(lanes.size, laneChipCount())
-        assertEquals(lanes, allLaneChips())
+        compose.waitUntil(20_000) { origin() != null }
+        val lanes = setOf(setOf("frieren", "fern"), setOf("hatsune miku"), setOf("kitagawa marin"))
+        assertMixLanes(lanes)
 
-        activate(compose.onNode(chip("hatsune miku")))
-        compose.waitUntil(10_000) { history.groupOf(currentPost()) == "miku" }
+        repeat(MAX_DEALS) { if (origin() != "hatsune miku") decide("Skip") }
+        assertEquals("miku", history.groupOf(currentPost()))
         val hiddenCard = currentPost()
         hideMiku()
-        compose.waitUntil(10_000) { visibleLaneChips() == lanes - setOf(setOf("hatsune miku")) }
-        assertNotEquals("miku", history.groupOf(currentPost()))
+        compose.waitUntil(10_000) { history.groupOf(currentPost()) != "miku" }
+        assertMixLanes(lanes - setOf(setOf("hatsune miku")))
         activate(compose.onNodeWithTag(FOR_YOU_UNDO_TAG))
         compose.waitUntil(10_000) { hiddenTags().isEmpty() }
-        compose.waitUntil(15_000) { visibleLaneChips() == lanes }
         compose.waitUntil(10_000) { currentPostOrNull() == hiddenCard }
+        assertMixLanes(lanes)
 
         hideMiku()
         repeat(MAX_DEALS) {
@@ -155,29 +155,19 @@ class HeavyLibraryJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { hiddenTags() == setOf("hatsune_miku") }
     }
 
-    private fun visibleLaneChips(): Set<Set<String>> =
-        compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG))).fetchSemanticsNodes()
-            .mapTo(mutableSetOf()) { it.text().split(" + ").toSet() }
-
-    private fun allLaneChips(): Set<Set<String>> {
-        val row = compose.onNodeWithTag(FOR_YOU_CHIPS_TAG)
-        val chips = (0 until laneChipCount()).flatMapTo(mutableSetOf()) { index ->
-            row.performScrollToIndex(index)
-            visibleLaneChips()
-        }
-        row.performScrollToIndex(0)
-        return chips
+    private fun assertMixLanes(expected: Set<Set<String>>) {
+        activate(compose.onNodeWithTag(FOR_YOU_FILTERS_TAG))
+        runCatching { compose.waitUntil(15_000) { mixLanes() == expected } }
+        assertEquals(expected, mixLanes())
+        pressSystemBack()
+        compose.waitUntil(10_000) { mixLanes().isEmpty() }
     }
 
-    private fun laneChipCount(): Int {
-        val row = compose.onNodeWithTag(FOR_YOU_CHIPS_TAG)
-        val count = generateSequence(0) { it + 1 }.first { index -> runCatching { row.performScrollToIndex(index) }.isFailure }
-        row.performScrollToIndex(0)
-        return count
-    }
+    private fun mixLanes(): Set<Set<String>> = compose.onAllNodes(SemanticsMatcher("a Mix lane") { node ->
+        node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(FOR_YOU_MIX_LANE_TAG_PREFIX) == true
+    }).fetchSemanticsNodes().mapTo(mutableSetOf()) { it.text().split(" + ").toSet() }
 
-    private fun chip(label: String) = hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG)) and
-        SemanticsMatcher("reads $label") { it.text() == label }
+    private fun origin(): String? = compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().singleOrNull()?.text()
 
     private fun deckEnded() = compose.onAllNodesWithTag(FOR_YOU_END_TAG).fetchSemanticsNodes().isNotEmpty()
 

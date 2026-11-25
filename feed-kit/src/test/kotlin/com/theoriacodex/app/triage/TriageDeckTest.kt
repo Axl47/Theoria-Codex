@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -27,6 +28,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -58,6 +60,31 @@ class TriageDeckTest {
         TriageDeck(deckScope, source, actions, quickSave, query, fromForYou, writeScope, removal, onDecision = events::add, ownerHidden = ownerHidden)
 
     private fun removingDeck(removal: TriageRemoval) = deck(removal = removal)
+
+    @Test fun `a lead shows before the feed's first page and stays first after it (ADR 0134)`() = runTest {
+        val pages = MutableSharedFlow<TriageFeedSnapshot>()
+        val source = object : TriageFeed {
+            override val snapshots = pages
+            override fun loadNextPage() = Unit
+            override fun retryPage() = Unit
+        }
+        val deck = TriageDeck(deckScope, source, actions, quickSave, null, false, writeScope, lead = posts[5])
+        assertSame(posts[5], deck.state.value.current)
+
+        pages.emit(TriageFeedSnapshot(listOf(posts[5]) + posts.take(2), canLoadMore = false))
+        assertEquals(listOf(posts[5]) + posts.take(2), deck.state.value.posts)
+        assertEquals(0, deck.state.value.index)
+    }
+
+    @Test fun `cards decided elsewhere are passed over, and forgetting Undo keeps it from reaching back (ADR 0134)`() = runTest {
+        val deck = deck()
+        deck.decideCurrent(TriageChoice.Skip)
+        deck.passOver(setOf(posts[1].id), forgetUndo = true)
+        assertSame(posts[2], deck.state.value.current)
+        assertNull(deck.state.value.last)
+        deck.undo()
+        assertSame(posts[2], deck.state.value.current)
+    }
 
     @Test fun `like moves on, likes the post once and confirms once committed`() = runTest {
         val deck = deck()

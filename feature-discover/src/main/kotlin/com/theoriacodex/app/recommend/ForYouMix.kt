@@ -60,12 +60,6 @@ internal class MixLane(val lane: ForYouLane, label: String = lane.label) {
         buffer = buffer.drop(count)
     }
 
-    fun putBack(posts: List<Post>, needLook: (Post) -> Boolean) {
-        val (unchecked, clean) = posts.partition(needLook)
-        unvetted = unchecked + unvetted
-        buffer = clean + buffer
-    }
-
     fun keep(shown: (Post) -> Boolean) {
         buffer = buffer.filter(shown)
         unvetted = unvetted.filter(shown)
@@ -104,7 +98,6 @@ internal class ForYouMix(
     var lanes: List<MixLane> = all
         private set
     var steering = DeckSteering()
-    var only: String? = null
     var released: List<Post> = leading
         private set
 
@@ -116,14 +109,13 @@ internal class ForYouMix(
 
     fun owed(whole: Int): Int = short ?: whole
     private val dealt = leading.mapTo(mutableSetOf(), Post::id)
-    private var leadCount = leading.size
+    private val leadCount = leading.size
 
     fun freshFirst(): List<Post> = released.drop(leadCount) + released.take(leadCount)
 
     val ready: Boolean get() = lanes.any { it.opened }
 
     val opening: Boolean get() = lanes.any { !it.opened }
-    private val running: List<MixLane> get() = lanes.filter { only == null || it.origin.laneId == only }
 
     fun isDealt(id: PostId): Boolean = id in dealt
 
@@ -132,7 +124,7 @@ internal class ForYouMix(
 
     fun deal(size: Int, seen: (PostId) -> Boolean) {
         if (!ready) return
-        val batch = nextBatch(lanes.map { DeckLane(it.origin, it.buffer) }, steering, { seen(it) || it in dealt }, size, only, copiesOf)
+        val batch = nextBatch(lanes.map { DeckLane(it.origin, it.buffer) }, steering, { seen(it) || it in dealt }, size, copiesOf)
         steering = batch.steering
         lanes.forEach { lane -> batch.taken[lane.origin.laneId]?.let(lane::drop) }
         batch.cards.forEach { card ->
@@ -143,23 +135,11 @@ internal class ForYouMix(
         short = size - batch.cards.size
     }
 
-    fun takeBack(decided: Set<PostId>, needLook: (Post) -> Boolean) {
-        val back = released.filterNot { it.id in decided }.groupBy { (origins[it.id] as? DeckOrigin.Lane)?.laneId }
-        lanes.forEach { lane -> back[lane.origin.laneId]?.let { lane.putBack(it, needLook) } }
-        val asked = back[null].orEmpty().mapNotNull { post -> origins[post.id]?.let { DeckCard(post, it) } }
-        steering = steering.copy(pending = asked + steering.pending)
-        released = emptyList()
-        leadCount = 0
-        dealt.clear()
-        short = null
-    }
-
     fun hideLanes(hidden: (ForYouLane) -> Boolean) {
         val shown = all.filterNot { hidden(it.lane) }
         if (shown == lanes) return
         lanes = shown
         steering = steering.keeping(shown.mapTo(mutableSetOf()) { it.origin.laneId })
-        if (shown.none { it.origin.laneId == only }) only = null
     }
 
     fun addLanes(plan: List<ForYouLane>): Boolean {
@@ -177,10 +157,10 @@ internal class ForYouMix(
         steering = steering.copy(pending = steering.pending.filter { shown(it.post) })
     }
 
-    fun lanesToRefill(): List<MixLane> = running.filter { it.canPage && it.waiting < LOW_WATER }
+    fun lanesToRefill(): List<MixLane> = lanes.filter { it.canPage && it.waiting < LOW_WATER }
 
     fun nextToVet(lookAhead: Int): Pair<MixLane, Post>? =
-        running.filter { it.unvetted.isNotEmpty() && (wanted || it.buffer.size < lookAhead) }
+        lanes.filter { it.unvetted.isNotEmpty() && (wanted || it.buffer.size < lookAhead) }
             .minWithOrNull(compareBy({ it.buffer.size }, { it.vets }))?.let { it to it.unvetted.first() }
 
     fun revet(needLook: (Post) -> Boolean) = all.forEach { it.revet(needLook) }
@@ -190,15 +170,14 @@ internal class ForYouMix(
     fun failures(): List<SourceRunStatus> = lanes.mapNotNull { lane -> lane.status.takeIf { lane.failed } }.distinctBy { it.source }
 
     fun snapshot(): TriageFeedSnapshot {
-        val running = running
-        val loading = running.any { it.loading }
-        val buffered = steering.pending.isNotEmpty() || running.any { it.buffer.isNotEmpty() }
-        val vetting = running.any { it.unvetted.isNotEmpty() }
+        val loading = lanes.any { it.loading }
+        val buffered = steering.pending.isNotEmpty() || lanes.any { it.buffer.isNotEmpty() }
+        val vetting = lanes.any { it.unvetted.isNotEmpty() }
         return TriageFeedSnapshot(
             posts = released,
-            canLoadMore = buffered || vetting || running.any { it.cursor != null },
-            loadingMore = if (ready) wanted && (loading || vetting) else running.any { !it.opened },
-            pageFailed = ready && wanted && !loading && !buffered && !vetting && running.any { it.failed },
+            canLoadMore = buffered || vetting || lanes.any { it.cursor != null },
+            loadingMore = if (ready) wanted && (loading || vetting) else lanes.any { !it.opened },
+            pageFailed = ready && wanted && !loading && !buffered && !vetting && lanes.any { it.failed },
         )
     }
 

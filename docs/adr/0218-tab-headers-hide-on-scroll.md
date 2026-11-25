@@ -34,7 +34,7 @@ button) must stay put. The Viewer has its own chrome rules and is out of scope.
   `HomePager`, because the pager can keep a page's state across a switch), while the screen is stopped (under the
   Viewer), while touch exploration is on (`rememberTouchExplorationEnabled`), and while a hideable holds keyboard
   focus. So TalkBack and keyboard focus never rest on an off-screen control.
-- Wired screens: Series (view switch, Following controls, Browse header), For You in grid mode (bar, chips or
+- Wired screens: Series (view switch, Following controls, Browse header), For You in grid mode (bar,
   crumbs, failure row), and Library (the shared `LibraryHeader`). Search keeps its existing collapse into the
   corner strip, and the bottom navigation bar stays pinned at the owner's choice.
 

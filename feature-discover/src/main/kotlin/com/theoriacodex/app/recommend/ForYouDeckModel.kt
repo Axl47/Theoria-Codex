@@ -52,7 +52,7 @@ data class ForYouEnvironment(
     val creatorBrowsingSources: Set<SourceKey>,
 )
 
-data class ForYouChip(val laneId: String, val label: String)
+data class ForYouLaneChoice(val laneId: String, val label: String, val cooled: Boolean = false)
 
 enum class ForYouMixState {
     Dealing,
@@ -66,8 +66,7 @@ data class ForYouDeckUiState(
     val activeProfileId: String = "",
     val availableSources: List<SourceKey> = emptyList(),
     val selectedSource: SourceKey? = null,
-    val chips: List<ForYouChip> = emptyList(),
-    val only: String? = null,
+    val lanes: List<ForYouLaneChoice> = emptyList(),
     val failures: List<SourceRunStatus> = emptyList(),
     val mix: ForYouMixState = ForYouMixState.Dealing,
     val failure: String? = null,
@@ -84,6 +83,8 @@ class ForYouLevel internal constructor(
     private val scope: CoroutineScope,
     private val onResolved: (Post) -> Unit,
 ) {
+    internal var leftWith: Set<PostId> = emptySet()
+
     fun loadNextPage() = source.loadNextPage()
     fun retryPage() = source.retryPage()
 

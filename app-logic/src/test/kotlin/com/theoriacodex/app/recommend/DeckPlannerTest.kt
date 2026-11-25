@@ -91,15 +91,6 @@ class DeckPlannerTest {
         assertEquals(mapOf("a" to -0.5, "b" to 0.5), undone.credit)
     }
 
-    @Test fun `a chip deals one lane and batches continue the rotation (ADR 0070)`() {
-        val lanes = listOf(lane(a, "a1", "a2"), lane(b, "b1", "b2"))
-        assertEquals(listOf("b1", "b2"), nextBatch(lanes, DeckSteering(), { false }, 4, only = "b").cards.map { it.post.id.sourcePostId })
-
-        val first = nextBatch(lanes, DeckSteering(), { false }, 1)
-        val rest = listOf(lane(a, "a2"), lane(b, "b1", "b2"))
-        assertEquals(listOf("a1", "b1"), first.cards.map { it.post.id.sourcePostId } + nextBatch(rest, first.steering, setOf(id("a1"))::contains, 1).cards.map { it.post.id.sourcePostId })
-    }
-
     @Test fun `one picture is dealt once, and not at all when a copy was seen (ADR 0070)`() {
         val copies = mapOf("a1" to setOf("a1", "b1"), "b1" to setOf("a1", "b1"), "b2" to setOf("b2", "k"))
         val batch = nextBatch(

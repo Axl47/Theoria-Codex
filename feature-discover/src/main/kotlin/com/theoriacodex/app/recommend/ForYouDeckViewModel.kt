@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -216,7 +217,7 @@ class ForYouDeckViewModel(
         plannedUnder = hidden
         heldAsks.clear()
         resetLevels()
-        ui.update { it.copy(mix = ForYouMixState.Dealing, failure = null, chips = emptyList(), only = null, failures = emptyList()) }
+        ui.update { it.copy(mix = ForYouMixState.Dealing, failure = null, lanes = emptyList(), failures = emptyList()) }
         if (request.availableSources.isEmpty()) return settle(ForYouMixState.NoSources)
         val restoring = !dealtBefore
         dealtBefore = true
@@ -258,7 +259,7 @@ class ForYouDeckViewModel(
     }
 
     private fun keepUpcoming() {
-        val mix = mix?.takeIf { it.only == null } ?: return
+        val mix = mix ?: return
         val request = request() ?: return
         val kept = request.deckKey() to mix.freshFirst().filter(::showsAgain).take(KEPT_DECK_SIZE)
         if (kept == lastKept) return
@@ -272,13 +273,6 @@ class ForYouDeckViewModel(
         return ForYouFeedRequest(settings, inputs.sources, inputs.source, inputs.sort, inputs.animatedOnly)
     }
 
-    fun selectChip(laneId: String?) {
-        val mix = mix ?: return
-        if (mix.only == laneId || stack.value.size > 1) return
-        mix.only = laneId
-        restartMixLevel(mix)
-    }
-
     fun retrySource(source: SourceKey? = null) {
         val mix = mix ?: return
         mix.failedLanes(source).forEach { lane ->
@@ -288,7 +282,7 @@ class ForYouDeckViewModel(
         publish()
     }
 
-    fun fork(request: TrailRequest) {
+    fun fork(request: TrailRequest, label: String? = null) {
         val from = top
         val animatedOnly = inputs?.animatedOnly == true
         forking.launchIfIdle {
@@ -296,9 +290,22 @@ class ForYouDeckViewModel(
             when {
                 top !== from -> Unit
                 spec == null -> messageChannel.trySend("Couldn't open ${request.name()}")
-                else -> push(request, spec)
+                else -> push(request, spec, label ?: spec.label, carried = from.deck.state.value.current?.takeIf { !grid && it.id == request.from.id })
             }
         }
+    }
+
+    fun focusLane(laneId: String, from: Post? = null) {
+        val lane = mix?.lanes?.firstOrNull { it.origin.laneId == laneId } ?: return
+        val post = from ?: top.deck.state.value.current ?: top.feed.value.posts.firstOrNull() ?: return
+        val query = lane.lane.cursor.queriesBySource[lane.lane.source]
+        fork(TrailRequest.Tag(lane.lane.tags.last(), lane.lane.source, query, post), lane.origin.label)
+    }
+
+    fun warmLanes() {
+        val mix = mix ?: return
+        mix.steering = mix.steering.warmed()
+        publish()
     }
 
     fun popTo(depth: Int) {
@@ -306,7 +313,14 @@ class ForYouDeckViewModel(
         if (depth !in 0 until levels.lastIndex) return
         levels.drop(depth + 1).forEach(ForYouLevel::close)
         relatedPosts.clear("level left")
+        resume(levels[depth])
         stack.value = levels.take(depth + 1)
+    }
+
+    private fun resume(level: ForYouLevel) {
+        val deck = level.deck.state.value
+        val decided = deck.posts.drop(deck.index).filter { it.copyOfAny(::isKnown) }.mapTo(mutableSetOf(), Post::id)
+        level.deck.passOver(decided, forgetUndo = seen != level.leftWith)
     }
 
     fun originOf(post: PostId): DeckOrigin? = mix?.origins?.get(post)
@@ -414,7 +428,8 @@ class ForYouDeckViewModel(
         mixFeed.value = mix.snapshot()
         keepUpcoming()
         ui.update { state ->
-            state.copy(chips = mix.lanes.map { ForYouChip(it.origin.laneId, it.origin.label) }, only = mix.only, failures = mix.failures())
+            val lanes = mix.lanes.map { ForYouLaneChoice(it.origin.laneId, it.origin.label, mix.steering.cooled(it.origin.laneId)) }
+            state.copy(lanes = lanes, failures = mix.failures())
         }
     }
 
@@ -443,14 +458,6 @@ class ForYouDeckViewModel(
         }
     }
 
-    private fun restartMixLevel(mix: ForYouMix) {
-        mix.takeBack(seen, ::needsLook)
-        lastDecision = null
-        mix.deal(dealSize, ::isKnown)
-        resetLevels()
-        refill(mix)
-    }
-
     private fun resetLevels() {
         stack.value.forEach(ForYouLevel::close)
         relatedPosts.clear("new mix level")
@@ -471,15 +478,24 @@ class ForYouDeckViewModel(
                 if (ui.value.mix == ForYouMixState.Failed) rebuild() else retrySource()
             }
         }
-        return level("$LEVEL_ID_PREFIX$session:mix:$level", "Mix", fork = null, query = null, source, DECK_PAGE_AHEAD) { event -> onMixDecision(level, event) }
+        return level("$LEVEL_ID_PREFIX$session:mix:$level", "Mix", fork = null, query = null, source, DECK_PAGE_AHEAD) { event ->
+            record(event)
+            if (level == sequence) steer(event)
+        }
     }
 
-    private fun push(request: TrailRequest, spec: TrailSpec) {
+    private fun push(request: TrailRequest, spec: TrailSpec, label: String, carried: Post?) {
         val scope = levelScope()
-        val known = seen + kept
-        val source = spec.pager.asTriageFeed(scope) { posts -> posts.filter { !it.copyOfAny(known::contains) && shows(it) } }
+        val known = seen + kept + carried?.let { wiring.copiesOf(it) + it.id }.orEmpty()
+        val trail = spec.pager.asTriageFeed(scope) { posts -> posts.filter { !it.copyOfAny(known::contains) && shows(it) } }
+        val source = carried?.let { trail.leadingWith(it) } ?: trail
+        top.leftWith = seen.toSet()
         relatedPosts.clear("level opened")
-        stack.update { it + level("$LEVEL_ID_PREFIX$session:trail:${++trailCount}", spec.label, request, spec.query, source, scope = scope, onDecision = ::onTrailDecision) }
+        val level = level("$LEVEL_ID_PREFIX$session:trail:${++trailCount}", label, request, spec.query, source, scope = scope, lead = carried) { event ->
+            record(event)
+            steer(event)
+        }
+        stack.update { it + level }
     }
 
     private fun level(
@@ -490,6 +506,7 @@ class ForYouDeckViewModel(
         source: TriageFeed,
         pageAhead: Int = TRAIL_PAGE_AHEAD,
         scope: CoroutineScope = levelScope(),
+        lead: Post? = null,
         onDecision: (TriageDecisionEvent) -> Unit,
     ): ForYouLevel {
         val resolved = MutableStateFlow(emptyMap<PostId, Post>())
@@ -502,7 +519,7 @@ class ForYouDeckViewModel(
         val shared = paging(feed, source)
         val deck = TriageDeck(
             scope, paging(fuller, source), wiring.actions, wiring.quickSave, query, fromForYou = true, wiring.writeScope,
-            pageAhead = pageAhead, onDecision = onDecision, ownerHidden = hiddenTokens, pictures = wiring.pictures,
+            pageAhead = pageAhead, onDecision = onDecision, ownerHidden = hiddenTokens, pictures = wiring.pictures, lead = lead,
         )
         return ForYouLevel(id, label, fork, query, deck, feed, shared, scope) { post -> resolved.update { it + (post.id to post) } }
     }
@@ -518,7 +535,7 @@ class ForYouDeckViewModel(
         return CoroutineScope(context + SupervisorJob(context.job))
     }
 
-    private fun onTrailDecision(event: TriageDecisionEvent) {
+    private fun record(event: TriageDecisionEvent) {
         val post = event.decision.post
         when (event) {
             is TriageDecisionEvent.Decided -> {
@@ -538,9 +555,7 @@ class ForYouDeckViewModel(
 
     private fun isKnown(id: PostId): Boolean = id in seen || id in verdictLog || id in kept
 
-    private fun onMixDecision(level: Int, event: TriageDecisionEvent) {
-        onTrailDecision(event)
-        if (level != sequence) return
+    private fun steer(event: TriageDecisionEvent) {
         val mix = mix ?: return holdAsk(event)
         val post = event.decision.post
         when (event) {
@@ -549,6 +564,7 @@ class ForYouDeckViewModel(
                 mix.origins[post.id]?.let { origin ->
                     lastDecision = post.id to mix.steering
                     mix.steering = mix.steering.after(signal, origin)
+                    publish()
                 }
                 if (signal == ForYouVerdictKind.LIKED || signal == ForYouVerdictKind.SAVED) askForMore(mix, post, saved = signal == ForYouVerdictKind.SAVED)
             }
@@ -628,6 +644,15 @@ private class KeptDeck(val request: ForYouFeedRequest, val posts: List<Post>)
 
 private fun ForYouFeedRequest.offers(post: Post): Boolean =
     post.id.source in availableSources && (selectedSource == null || post.id.source == selectedSource)
+
+private fun TriageFeed.leadingWith(lead: Post): TriageFeed {
+    val trail = this
+    return object : TriageFeed {
+        override val snapshots = trail.snapshots.map { it.copy(posts = listOf(lead) + it.posts) }
+        override fun loadNextPage() = trail.loadNextPage()
+        override fun retryPage() = trail.retryPage()
+    }
+}
 
 private fun TrailRequest.name(): String = when (this) {
     is TrailRequest.Tag -> tag.replace('_', ' ')
