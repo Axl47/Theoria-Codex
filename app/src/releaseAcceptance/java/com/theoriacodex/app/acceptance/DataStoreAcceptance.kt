@@ -84,8 +84,11 @@ private fun verifyCurrentKeys(current: File) {
     val restore = current.json(DATASTORE_UI_RESTORE_FILE_NAME)
     check(restore.keys == setOf("schemaVersion", "state")) { "restore keys were ${restore.keys}" }
     val state = restore.getValue("state").jsonObject
-    check(state.keys ==
-        setOf("lastTab", "searchScrollStates", "feedFabRestoreStates", "viewerLaunchContext", "savedSearchNewPosts")) { "state keys were ${state.keys}" }
+    check(
+        state.keys == setOf(
+            "lastTab", "searchScrollStates", "feedFabRestoreStates", "viewerLaunchContext", "savedSearchNewPosts", "switchSourceSkipped",
+        ),
+    ) { "state keys were ${state.keys}" }
     check(state.getValue("searchScrollStates").jsonObject.getValue("h").jsonObject.keys ==
         setOf("firstVisibleItemIndex", "firstVisibleItemOffsetPx")) { "scroll state keys were ${state.getValue("searchScrollStates").jsonObject.getValue("h").jsonObject.keys}" }
     check(state.getValue("viewerLaunchContext").jsonObject.keys ==
