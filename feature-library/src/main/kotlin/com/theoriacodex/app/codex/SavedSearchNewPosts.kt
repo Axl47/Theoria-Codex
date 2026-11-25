@@ -13,17 +13,27 @@ import com.theoriacodex.domain.model.SortMode
 
 class SavedSearchNewPostsChecker(
     private val store: UiRestoreRepository,
+    private val savedSearches: suspend () -> List<SavedSearchEntry>,
     private val firstPage: suspend (SavedSearchEntry) -> List<Post>?,
 ) {
-    suspend fun checkIfStale(entries: List<SavedSearchEntry>, nowEpochMs: Long) {
+    suspend fun checkIfStale(nowEpochMs: Long) {
+        val entries = savedSearches()
         val recent = entries.sortedByDescending { it.savedAtEpochMs }.take(MAX_CHECKED_SAVED_SEARCHES)
         val saved = entries.mapTo(mutableSetOf()) { it.id }
         recent.mapConcurrent(concurrency = 2) { entry ->
             if (!claim(entry.id, saved, nowEpochMs)) return@mapConcurrent
-            val ids = firstPage(entry.newestFirst())?.map { it.id.markKey() } ?: return@mapConcurrent
+            val ids = firstPage(entry.newestFirst())?.map { it.id.markKey() }
+            val unchanged = savedSearches().any { it.id == entry.id && it.search == entry.search }
             store.updateSavedSearchNewPosts { state ->
-                val kept = state.marks.filterKeys { it in saved }
-                state.copy(marks = kept + (entry.id to (kept[entry.id] ?: NewPostMarks()).checked(ids, nowEpochMs)))
+                when {
+                    state.attempts[entry.id] != nowEpochMs -> state
+                    !unchanged -> state.copy(attempts = state.attempts - entry.id)
+                    ids == null -> state
+                    else -> {
+                        val kept = state.marks.filterKeys { it in saved }
+                        state.copy(marks = kept + (entry.id to (kept[entry.id] ?: NewPostMarks()).checked(ids, nowEpochMs)))
+                    }
+                }
             }
         }
     }
@@ -52,6 +62,10 @@ suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
     updateSavedSearchNewPosts { state ->
         state.copy(marks = state.marks.mapValues { (_, marks) -> marks.seen { it in shown } })
     }
+}
+
+suspend fun UiRestoreRepository.resetSavedSearchNewPosts(id: String) {
+    updateSavedSearchNewPosts { state -> state.copy(attempts = state.attempts - id, marks = state.marks - id) }
 }
 
 class SavedSearchOpenMarks(private val store: UiRestoreRepository) {

@@ -54,6 +54,7 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.data.repository.replaysAs
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
@@ -99,6 +100,7 @@ fun SearchScreen(
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
+    onUpdateSavedSearch: (SavedSearchEntry, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
     omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
     sourceMix: SearchSourceMix? = null,
@@ -142,7 +144,8 @@ fun SearchScreen(
         SearchPostSheet(post, actionPost, state, related, onAction, onRequestSaveToCodex, onAddFavoriteTag, onToggleLike)
     }
     if (chrome.composerOpen) {
-        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
+        val update = { saved: SavedSearchEntry, search: RecentSearchEntry -> onUpdateSavedSearch(saved, search); chrome.closeComposer(onAction) }
+        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, update, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox() + sourceMixCommands(state, chrome, sourceMix, onAction))
     }
@@ -260,6 +263,7 @@ internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarD
     var showSourceMix by mutableStateOf(false)
 
     fun closeComposer(onAction: (SearchAction) -> Unit) {
+        onAction(SearchAction.EndSavedSearchEdit)
         onAction(SearchAction.ClearAutocomplete)
         onAction(SearchAction.SettleSearch)
         composerOpen = false
@@ -268,6 +272,7 @@ internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarD
 
     fun applyDraft(inputFocus: SearchInputFocus, onAction: (SearchAction) -> Unit) {
         inputFocus.clear(force = true)
+        onAction(SearchAction.EndSavedSearchEdit)
         onAction(SearchAction.ApplyDraft)
         composerOpen = false
         searchBarDismissedByScroll = false
@@ -317,6 +322,7 @@ private fun SearchComposerDialog(
             onRename = onRenameFavoriteTag,
         ),
         omnibox = omnibox,
+        onOpenFilters = { chrome.showFilterSheet = true },
     )
 }
 
@@ -510,37 +516,63 @@ private fun activeSearchFilterCount(state: SearchUiState, feed: SearchFeed, fabR
         language = state.query.nhentaiLanguageFilter,
     )
 
-private fun composerSavedSearches(
+internal fun composerSavedSearches(
     state: SearchUiState,
     entries: List<SavedSearchEntry>,
     onSave: (String, RecentSearchEntry) -> Unit,
+    onUpdate: (SavedSearchEntry, RecentSearchEntry) -> Unit,
     onManage: () -> Unit,
     onOpen: (SavedSearchEntry) -> Unit,
 ): ComposerSavedSearches {
-    val query = state.query
-    val current = query.appliedQueryHash.takeIf { it.isNotBlank() && query.applied.includeTermGroups.isNotEmpty() }
-        ?.let { hash ->
-            val scope = query.appliedSourceScope
-            RecentSearchEntry(
-                query = query.applied,
-                queryHash = hash,
-                searchedAtEpochMs = System.currentTimeMillis(),
-                kind = when (scope) {
-                    SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
-                    is SearchSourceScope.Single -> RecentSearchKind.SOURCE
-                    is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
-                },
-                sources = scope.explicitSources.ifEmpty { query.applied.defaultRecentSearchSources() },
-            )
-        }
+    val applied = appliedSearchEntry(state)
+    val current = applied?.takeIf { it.query.includeTermGroups.isNotEmpty() }
+    val editing = state.editingSavedSearchId?.let { id -> entries.firstOrNull { it.id == id } }
+    val action = when {
+        editing != null -> savedSearchUpdate(state, entries, editing, applied, onUpdate)
+        current != null -> ComposerSavedSearchAction.Save(
+            suggestedName = recentSearchPresentation(current).title.take(MAX_SAVED_SEARCH_NAME_LENGTH),
+            onSave = { name -> onSave(name, current) },
+        )
+        else -> null
+    }
     return ComposerSavedSearches(
         entries = entries,
         currentQueryHash = current?.queryHash,
         onOpen = onOpen,
-        onSaveCurrent = current?.let { entry -> { name: String -> onSave(name, entry) } },
-        suggestedName = current?.let { recentSearchPresentation(it).title.take(MAX_SAVED_SEARCH_NAME_LENGTH) }.orEmpty(),
+        action = action,
         onManage = onManage,
     )
+}
+
+private fun appliedSearchEntry(state: SearchUiState): RecentSearchEntry? {
+    val query = state.query
+    val hash = query.appliedQueryHash.takeIf(String::isNotBlank) ?: return null
+    val scope = query.appliedSourceScope
+    return RecentSearchEntry(
+        query = query.applied,
+        queryHash = hash,
+        searchedAtEpochMs = System.currentTimeMillis(),
+        kind = when (scope) {
+            SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
+            is SearchSourceScope.Single -> RecentSearchKind.SOURCE
+            is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
+        },
+        sources = scope.explicitSources.ifEmpty { query.applied.defaultRecentSearchSources() },
+    )
+}
+
+private fun savedSearchUpdate(
+    state: SearchUiState,
+    entries: List<SavedSearchEntry>,
+    editing: SavedSearchEntry,
+    applied: RecentSearchEntry?,
+    onUpdate: (SavedSearchEntry, RecentSearchEntry) -> Unit,
+): ComposerSavedSearchAction.Update {
+    val conflict = applied?.let { search -> entries.firstOrNull { it.id != editing.id && it.search.replaysAs(search) } }
+    val ready = applied?.takeIf {
+        conflict == null && !state.hasPendingChanges && !state.execution.liveSearchWaiting && !editing.search.replaysAs(it)
+    }
+    return ComposerSavedSearchAction.Update(editing.name, conflict?.name, ready?.let { search -> { onUpdate(editing, search) } })
 }
 
 private fun savedTagSource(state: SearchUiState): SourceKey? =

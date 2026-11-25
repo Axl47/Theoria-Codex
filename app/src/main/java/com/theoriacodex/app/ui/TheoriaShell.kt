@@ -33,6 +33,8 @@ import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.codex.SavedSearchOpenMarks
+import com.theoriacodex.app.codex.SavedSearchActions
+import com.theoriacodex.app.codex.resetSavedSearchNewPosts
 import com.theoriacodex.app.codex.CodexCommandViewModel
 import com.theoriacodex.app.codex.CodexSaveViewModel
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
@@ -259,7 +261,7 @@ internal class ShellOwners(
 private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Context): ShellOwners {
     val data = container.data
     val workflows = container.workflows
-    val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches) }
+    val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches, data.uiRestoreRepository::resetSavedSearchNewPosts) }
     val siteChecks = viewModel(key = "site-checks") {
         val app = appContext as? TheoriaApplication
         SiteChecks(
@@ -344,6 +346,7 @@ internal class TheoriaShell(
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry, data.fileMirrors::copiesOf)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
+    val savedSearchActions = SavedSearchActions(owners.savedSearches::rename, owners.savedSearches::remove, ::editSavedSearch)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val seriesReader = container.series?.let(::SeriesReader)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
@@ -654,15 +657,23 @@ internal class TheoriaShell(
         launchViewer(session, saveContext = true, singleTop = true)
     }
 
-    fun openHistoricalSearch(entry: RecentSearchEntry) {
-        val historicalScope = when (entry.kind) {
-            RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
-            RecentSearchKind.SOURCE,
-            RecentSearchKind.UNIFIED,
-            -> SearchSourceScope.fromQuery(entry.query)
-        }
-        routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = historicalScope))
+    fun editSavedSearch(entry: SavedSearchEntry) {
+        overlays.showSavedSearchManagement = false
+        routes.dispatchOrQueue(SearchAction.EditSavedSearch(entry.id, entry.search.query, entry.search.replayScope()))
         navigation.goToTab(TopLevelDestination.Search)
+        savedSearchOpens.opened(entry)
+    }
+
+    fun openHistoricalSearch(entry: RecentSearchEntry) {
+        routes.dispatchOrQueue(SearchAction.ApplyHistoricalQuery(query = entry.query, sourceScope = entry.replayScope()))
+        navigation.goToTab(TopLevelDestination.Search)
+    }
+
+    private fun RecentSearchEntry.replayScope(): SearchSourceScope = when (kind) {
+        RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(sources)
+        RecentSearchKind.SOURCE,
+        RecentSearchKind.UNIFIED,
+        -> SearchSourceScope.fromQuery(query)
     }
 
     suspend fun openDownloadedPost(item: PostDownloadItem) {

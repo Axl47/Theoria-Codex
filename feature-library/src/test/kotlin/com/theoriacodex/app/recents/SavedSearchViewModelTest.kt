@@ -1,13 +1,18 @@
 package com.theoriacodex.app.recents
 
 import androidx.lifecycle.ViewModelStore
+import com.theoriacodex.app.codex.resetSavedSearchNewPosts
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySavedSearchRepository
+import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
+import com.theoriacodex.data.repository.NewPostMarks
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.data.repository.SavedSearchNewPosts
 import com.theoriacodex.data.repository.SavedSearchRepository
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CompletableDeferred
@@ -32,6 +37,7 @@ class SavedSearchViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val store = ViewModelStore()
     private val repository = InMemorySavedSearchRepository()
+    private val newPosts = InMemoryUiRestoreRepository()
 
     @Before
     fun setUp() { Dispatchers.setMain(dispatcher) }
@@ -77,6 +83,41 @@ class SavedSearchViewModelTest {
         advanceUntilIdle()
         assertTrue(repository.observeSavedSearches().first().isEmpty())
         assertEquals("Saved search removed.", owner.effects.first())
+    }
+
+    @Test
+    fun `updating a saved search's query starts its new posts over, and an unchanged update keeps them (ADR 0218)`() = runTest {
+        val edited = repository.save("Edited", search())
+        val other = repository.save("Other", search().copy(queryHash = "other", query = search().query.copy(sort = SortMode.POPULAR)))
+        val marks = NewPostMarks(seenPostIds = listOf("PIXIV:1"), latestPostIds = listOf("PIXIV:2", "PIXIV:1"), checkedAtEpochMs = 5)
+        val state = SavedSearchNewPosts(attempts = mapOf(edited.id to 5, other.id to 5), marks = mapOf(edited.id to marks, other.id to marks))
+        newPosts.updateSavedSearchNewPosts { state }
+        val owner = owner()
+
+        owner.update(edited.id, search().copy(searchedAtEpochMs = 900))
+        advanceUntilIdle()
+        assertEquals(state, newPosts.observeSavedSearchNewPosts().first())
+
+        val night = search().copy(queryHash = "day", query = search().query.withIncludeTermsAsRequired(listOf(SearchTerm("day"))))
+        owner.update(edited.id, night)
+        advanceUntilIdle()
+
+        assertEquals(edited.copy(search = night), repository.observeSavedSearches().first().first { it.id == edited.id })
+        assertEquals(SavedSearchNewPosts(mapOf(other.id to 5L), mapOf(other.id to marks)), newPosts.observeSavedSearchNewPosts().first())
+        assertEquals("Saved search updated.", owner.effects.first())
+    }
+
+    @Test
+    fun `an update matching another saved search is refused and changes nothing (ADR 0218)`() = runTest {
+        val edited = repository.save("Edited", search())
+        val other = repository.save("Other", search().copy(queryHash = "other", query = search().query.copy(sort = SortMode.POPULAR)))
+        val owner = owner()
+
+        owner.update(edited.id, other.search)
+        advanceUntilIdle()
+
+        assertEquals("“Other” already saves this search.", owner.effects.first())
+        assertEquals(search(), repository.observeSavedSearches().first().first { it.id == edited.id }.search)
     }
 
     @Test
@@ -160,7 +201,7 @@ class SavedSearchViewModelTest {
         assertEquals(original.query, repository.observeSavedSearches().first().single().search.query)
     }
 
-    private fun owner(source: SavedSearchRepository = repository) = SavedSearchViewModel(source).also {
+    private fun owner(source: SavedSearchRepository = repository) = SavedSearchViewModel(source, newPosts::resetSavedSearchNewPosts).also {
         store.put("saved-searches", it)
     }
 

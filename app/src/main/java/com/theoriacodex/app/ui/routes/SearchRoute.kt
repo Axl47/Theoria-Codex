@@ -65,6 +65,7 @@ internal data class SearchRouteCallbacks(
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     val onResultsShown: suspend (Query, List<Post>) -> Unit = { _, _ -> },
     val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
+    val onUpdateSavedSearch: (SavedSearchEntry, RecentSearchEntry) -> Unit = { _, _ -> },
     val onManageSavedSearches: () -> Unit = {},
     val onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     val onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
@@ -169,15 +170,7 @@ internal fun SearchRoute(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    CollectRouteEffects(owner.effects) { effect ->
-        when (effect) {
-            is SearchEffect.OpenViewer -> {
-                if (effect.fromTypedId) composerOpen.value = false
-                callbacks.onOpenViewer(effect)
-            }
-            is SearchEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
-        }
-    }
+    SearchRouteEffects(owner, composerOpen, callbacks)
 
     SearchRouteContent(
         state = state,
@@ -191,6 +184,23 @@ internal fun SearchRoute(
         onFabRestoreStateChange = onFabRestoreStateChange,
         callbacks = callbacks,
     )
+}
+
+@Composable
+private fun SearchRouteEffects(owner: SearchViewModel, composerOpen: MutableState<Boolean>, callbacks: SearchRouteCallbacks) {
+    CollectRouteEffects(owner.effects) { effect ->
+        when (effect) {
+            is SearchEffect.OpenViewer -> {
+                if (effect.fromTypedId) {
+                    composerOpen.value = false
+                    owner.onAction(SearchAction.EndSavedSearchEdit)
+                }
+                callbacks.onOpenViewer(effect)
+            }
+            is SearchEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
+            SearchEffect.OpenComposer -> composerOpen.value = true
+        }
+    }
 }
 
 @Composable
@@ -221,6 +231,7 @@ private fun SearchRouteContent(
         savedSearches = config.savedSearches,
         onOpenSavedSearch = callbacks.onOpenSavedSearch,
         onSaveSearch = callbacks.onSaveSearch,
+        onUpdateSavedSearch = callbacks.onUpdateSavedSearch,
         onManageSavedSearches = callbacks.onManageSavedSearches,
         omnibox = config.omnibox,
         onAction = owner::onAction,

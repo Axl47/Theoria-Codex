@@ -5,6 +5,8 @@
 ### Added
 
 - Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
+- A saved search's Rename dialog has Edit search, which opens it in Search to change its tags, sources, filters or sort. Update saves the change under the same name and place, and its new-post count starts over. Closing Search's sheet without tapping Update leaves the saved search as it was.
+- The menu in Search's sheet has Filter and sort, which opens the filters over the sheet without closing it.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performTextInput
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
 import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.emptySearchQuery
@@ -68,19 +69,21 @@ class SearchComposerUiTest {
         include: List<SearchTermGroup> = groups,
         omnibox: List<OmniboxEntry> = emptyList(),
         onDismiss: () -> Unit = {},
+        savedSearches: (SearchUiState) -> ComposerSavedSearches = { ComposerSavedSearches(saved, onOpen = onOpenSaved) },
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
             includeTermGroups = include,
             excludeTerms = listOf(sketch),
         )
-        val state = base.copy(query = base.query.copy(draft = draft, scopesBySource = mapOf(source to scopes)), suggestions = suggestions)
+        val query = base.query.copy(draft = draft, applied = draft, appliedQueryHash = "applied", scopesBySource = mapOf(source to scopes))
+        val state = base.copy(query = query, suggestions = suggestions)
         compose.setContent {
             MaterialTheme {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
                     onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDismiss = onDismiss,
-                    savedSearches = ComposerSavedSearches(saved, onOpen = onOpenSaved), savedTags = savedTags, omnibox = omnibox,
+                    savedSearches = savedSearches(state), savedTags = savedTags, omnibox = omnibox,
                 )
             }
         }
@@ -97,6 +100,101 @@ class SearchComposerUiTest {
         compose.onNodeWithText("Saved searches").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
+    }
+
+    private fun editing(state: SearchUiState, id: String?) = state.copy(editingSavedSearchId = id)
+
+    @Test fun `editing a saved search swaps Save for Update, which hands over the search on screen (ADR 0218)`() {
+        val evening = SavedSearchEntry("evening", "Evening", RecentSearchEntry(emptySearchQuery(), "old", 1L), 1L)
+        var updated: Pair<SavedSearchEntry, RecentSearchEntry>? = null
+        var saves = 0
+        open(SourceKey.GELBOORU, emptyList(), savedSearches = { state ->
+            composerSavedSearches(editing(state, "evening"), listOf(evening), { _, _ -> saves++ }, { saved, search -> updated = saved to search }, {}, {})
+        })
+        compose.onNodeWithText("Save").assertDoesNotExist()
+        compose.onNodeWithText("Update “Evening”").performClick()
+        compose.runOnIdle {
+            assertEquals(evening, updated?.first)
+            assertEquals("applied", updated?.second?.queryHash)
+            assertEquals(groups, updated?.second?.query?.includeTermGroups)
+            assertEquals(0, saves)
+        }
+    }
+
+    @Test fun `Update waits for the edit to run and change the search, and names the saved search it would duplicate (ADR 0218)`() {
+        val state = SearchUiState().let { base ->
+            val draft = emptySearchQuery(QueryMode.Source(SourceKey.GELBOORU)).copy(includeTermGroups = groups)
+            val scope = SearchSourceScope.fromQuery(draft)
+            base.copy(query = base.query.copy(draft = draft, applied = draft, appliedQueryHash = "applied",
+                draftSourceScope = scope, appliedSourceScope = scope))
+        }
+        var onScreen: RecentSearchEntry? = null
+        val save = composerSavedSearches(state, emptyList(), { _, search -> onScreen = search }, { _, _ -> }, {}, {}).action
+        (save as ComposerSavedSearchAction.Save).onSave("x")
+        val shown = checkNotNull(onScreen)
+        val evening = SavedSearchEntry("evening", "Evening", RecentSearchEntry(emptySearchQuery(), "old", 1L), 1L)
+        val morning = SavedSearchEntry("morning", "Morning", shown.copy(queryHash = "older"), 1L)
+        fun update(state: SearchUiState, edited: SavedSearchEntry, entries: List<SavedSearchEntry>) =
+            composerSavedSearches(editing(state, edited.id), entries, { _, _ -> }, { _, _ -> }, {}, {}).action
+                as ComposerSavedSearchAction.Update
+
+        assertEquals(true, update(state, evening, listOf(evening)).onUpdate != null)
+        val unchanged = evening.copy(search = shown.copy(queryHash = "older"))
+        assertEquals(null, update(state, unchanged, listOf(unchanged)).onUpdate)
+        val pending = state.copy(query = state.query.copy(draft = state.query.draft.withIncludeTermsAsRequired(emptyList())))
+        assertEquals(null, update(pending, evening, listOf(evening)).onUpdate)
+        val untagged = state.copy(query = state.query.copy(
+            draft = state.query.draft.withIncludeTermsAsRequired(emptyList()),
+            applied = state.query.applied.withIncludeTermsAsRequired(emptyList()),
+        ))
+        assertEquals(true, update(untagged, evening, listOf(evening)).onUpdate != null)
+        val duplicate = update(state, evening, listOf(evening, morning))
+        assertEquals("Morning", duplicate.conflict)
+        assertEquals(null, duplicate.onUpdate)
+    }
+
+    @Test fun `a duplicate shows why Update is off (ADR 0218)`() {
+        open(SourceKey.GELBOORU, emptyList(), savedSearches = {
+            ComposerSavedSearches(action = ComposerSavedSearchAction.Update("Evening", conflict = "Morning"))
+        })
+        compose.onNodeWithText("Update “Evening”").assertIsNotEnabled()
+        compose.onNodeWithText("“Morning” already saves this search.").assertExists()
+    }
+
+    @Test fun `without a saved search being edited the composer offers Save, not Update (ADR 0218)`() {
+        open(SourceKey.GELBOORU, emptyList(), savedSearches = { state ->
+            composerSavedSearches(state, emptyList(), { _, _ -> }, { _, _ -> }, {}, {})
+        })
+        compose.onNodeWithText("Save").assertExists()
+        compose.onNodeWithText("Update", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun `closing the composer or applying its draft ends a saved-search edit first (ADR 0218)`() {
+        val chrome = SearchChromeState(androidx.compose.runtime.mutableStateOf(true), androidx.compose.runtime.mutableStateOf(false))
+        val sent = mutableListOf<SearchAction>()
+        chrome.closeComposer { sent += it }
+        assertEquals(SearchAction.EndSavedSearchEdit, sent.first())
+        sent.clear()
+        chrome.composerOpen = true
+        chrome.applyDraft(SearchInputFocus {}, { sent += it })
+        assertEquals(SearchAction.EndSavedSearchEdit, sent.first())
+        assertEquals(false, chrome.composerOpen)
+    }
+
+    @Test fun `the composer menu opens Filter and sort (ADR 0218)`() {
+        var opened = 0
+        val state = SearchUiState()
+        compose.setContent {
+            MaterialTheme {
+                SearchComposer(
+                    state = state, onAction = {}, sourcePicker = {}, onApply = {}, onReset = {}, onUndo = {},
+                    onManageSavedTags = {}, onOpenSourceAccounts = {}, onDismiss = {}, onOpenFilters = { opened++ },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("More search actions").performClick()
+        compose.onNodeWithText("Filter and sort").performClick()
+        compose.runOnIdle { assertEquals(1, opened) }
     }
 
     @Test fun `a saved search chip names its sort only when it is not Newest`() {

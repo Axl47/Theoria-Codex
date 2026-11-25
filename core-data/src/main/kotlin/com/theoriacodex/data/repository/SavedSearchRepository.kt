@@ -5,7 +5,9 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.SavedSearchSnapshot
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.normalizedForMode
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
@@ -32,10 +34,21 @@ fun List<SavedSearchEntry>.savedFor(search: RecentSearchEntry): SavedSearchEntry
     return firstOrNull { it.search.queryHash == search.queryHash && RecentSearchPayloadCodec.encodeJson(it.search) == payload }
 }
 
+fun RecentSearchEntry.replaysAs(other: RecentSearchEntry): Boolean = replay() == other.replay()
+
+private data class SearchReplay(val kind: RecentSearchKind, val query: Query, val sources: List<SourceKey>)
+
+private fun RecentSearchEntry.replay() = SearchReplay(
+    kind = kind,
+    query = query.normalizedForMode(query.mode).query,
+    sources = if (kind == RecentSearchKind.MULTI_SEARCH) sources.distinct().sortedBy(SourceKey::id) else emptyList(),
+)
+
 interface SavedSearchRepository {
     fun observeSavedSearches(): Flow<List<SavedSearchEntry>>
     suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry
     suspend fun rename(id: String, name: String)
+    suspend fun update(id: String, search: RecentSearchEntry): Boolean
     suspend fun remove(id: String)
 
     suspend fun replaceAll(entries: List<SavedSearchEntry>)
@@ -128,6 +141,17 @@ private class MutableSavedSearchRepository(
         val normalizedName = validateSavedSearchName(name)
         require(savedSearches.value.any { it.id == id }) { "This saved search is no longer available." }
         persist(savedSearches.value.map { if (it.id == id) it.copy(name = normalizedName) else it })
+    }
+
+    override suspend fun update(id: String, search: RecentSearchEntry): Boolean = mutex.withLock {
+        val entries = savedSearches.value
+        val current = requireNotNull(entries.firstOrNull { it.id == id }) { "This saved search is no longer available." }
+        if (current.search.replaysAs(search)) return@withLock false
+        entries.firstOrNull { it.id != id && it.search.replaysAs(search) }?.let { other ->
+            throw IllegalArgumentException("“${other.name}” already saves this search.")
+        }
+        persist(entries.map { if (it.id == id) it.copy(search = search) else it })
+        true
     }
 
     override suspend fun remove(id: String) = mutex.withLock {
