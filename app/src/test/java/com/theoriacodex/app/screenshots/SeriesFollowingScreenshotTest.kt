@@ -61,9 +61,13 @@ class SeriesFollowingScreenshotTest {
     @Test fun `series following narrow with both kinds`() =
         capture(LibraryOptions(SortChoice(LibrarySort.LAST_UPDATED, SortDirection.DESCENDING)), "series_following_narrow.png", followed + anime)
 
+    @Config(qualifiers = "w384dp-h832dp-xxhdpi")
+    @Test fun `series following anime fits its sort at 384dp`() =
+        capture(LibraryOptions(), "series_following_384_anime.png", followed + anime, SeriesKind.ANIME)
+
     private val anime = FollowedSeries(Series(SeriesId(SeriesKind.ANIME.extensionSourceKey(7), "/7"), "Kelp Row"), unreadCount = 9, followedAtEpochMs = 0, started = true)
 
-    private fun capture(options: LibraryOptions, name: String, followed: List<FollowedSeries> = this.followed) {
+    private fun capture(options: LibraryOptions, name: String, followed: List<FollowedSeries> = this.followed, kind: SeriesKind? = null) {
         val repository = object : SeriesRepository by StoredOnly(StoredSeries(followed.first().series), emptyList()) {
             override fun observeFollowed() = flowOf(followed)
 
@@ -77,6 +81,7 @@ class SeriesFollowingScreenshotTest {
         val viewModel = SeriesTabViewModel(repository, { emptyList() }, library = preferences, downloads = flowOf(downloads)) { _, _ ->
             FollowedCheck(emptyList(), checked = 0)
         }
+        kind?.let(viewModel::chooseKind)
         compose.setContent {
             TheoriaNightTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
