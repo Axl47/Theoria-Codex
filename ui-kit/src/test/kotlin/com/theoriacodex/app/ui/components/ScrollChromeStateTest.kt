@@ -58,6 +58,16 @@ class ScrollChromeStateTest {
         assertEquals(0f, chrome.preScroll(-40f))
     }
 
+    @Test fun `a list that fits even with the header shown is at its top, so a hidden header returns (ADR 0218)`() {
+        val chrome = state()
+        chrome.consume(-100f)
+        chrome.listAtStart = { true }
+        chrome.listAtEnd = { true }
+        chrome.listEndGap = { 100 }
+        assertEquals(0f, chrome.preScroll(-40f))
+        assertEquals(0f, chrome.settleTarget())
+    }
+
     @Test fun `a focused header control keeps the header shown (ADR 0218)`() {
         val chrome = state()
         chrome.consume(-60f)

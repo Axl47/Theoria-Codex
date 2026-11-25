@@ -100,7 +100,7 @@ internal fun SavedCodexRoute(
     Column(Modifier.fillMaxSize()) {
         header()
         ViewerReturnColumn(shelfIds, scroll) {
-            LazyColumn(state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
+            LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 children.forEach { child ->
                     item(key = child.codexId) {
