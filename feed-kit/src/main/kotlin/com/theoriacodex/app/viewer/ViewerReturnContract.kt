@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -60,11 +61,15 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
 class ViewerReturnOrigin internal constructor()
 
 class ViewerReturnTransition {
-    var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
+    var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet(), referentialEqualityPolicy())
         private set
 
     fun retainPosts(postIds: Set<PostId>) {
         retainedPostIds = postIds
+    }
+
+    fun releasePosts(postIds: Set<PostId>) {
+        if (retainedPostIds === postIds) retainedPostIds = emptySet()
     }
 
     var origin: ViewerReturnOrigin? = null

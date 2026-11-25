@@ -85,6 +85,20 @@ class ViewerReturnTransitionTest {
         compose.runOnIdle { assertTrue(visible.isEmpty()) }
     }
 
+    @Test fun `a Viewer that leaves releases only the posts it retained (ADR 0220)`() {
+        val transition = ViewerReturnTransition()
+        val leaving = setOf(postId)
+        transition.retainPosts(leaving)
+        transition.releasePosts(leaving)
+        assertTrue(transition.retainedPostIds.isEmpty())
+
+        val newer = setOf(postId)
+        transition.retainPosts(leaving)
+        transition.retainPosts(newer)
+        transition.releasePosts(leaving)
+        assertEquals(newer, transition.retainedPostIds)
+    }
+
     @Test fun `media counts as settling from the start of a close until it lands`() {
         val transition = ViewerReturnTransition()
         transition.openedFrom("origin", post = postId)

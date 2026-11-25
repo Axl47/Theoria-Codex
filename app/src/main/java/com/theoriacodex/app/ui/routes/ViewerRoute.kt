@@ -61,6 +61,7 @@ import com.theoriacodex.app.viewer.recoverMedia
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
+import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -124,6 +125,17 @@ internal data class ViewerRouteLiveSourceState(
     }
 }
 
+@Composable
+private fun RetainViewerPosts(viewerReturn: ViewerReturnTransition?, pages: List<ViewerPageState>, retains: Boolean) {
+    val postIds = remember(pages) { pages.mapTo(mutableSetOf()) { it.post.id } }
+    SideEffect { if (retains) viewerReturn?.retainPosts(postIds) }
+    val latestPostIds = rememberUpdatedState(postIds)
+    val latestRetains = rememberUpdatedState(retains)
+    DisposableEffect(viewerReturn) {
+        onDispose { if (latestRetains.value) viewerReturn?.releasePosts(latestPostIds.value) }
+    }
+}
+
 internal data class ViewerDownloadRequest(
     val post: Post,
     val media: ImageRef,
@@ -168,8 +180,7 @@ internal fun ViewerRoute(
     )
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
-    val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
-    SideEffect { if (!level.isFork) viewerReturn?.retainPosts(retainedPostIds) }
+    RetainViewerPosts(viewerReturn, viewerState.pages, retains = !level.isFork)
     val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
         latestOnOwnerChanged.value(viewerOwner)
