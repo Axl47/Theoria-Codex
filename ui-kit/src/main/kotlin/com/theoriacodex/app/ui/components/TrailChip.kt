@@ -1,7 +1,7 @@
 package com.theoriacodex.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
@@ -36,13 +36,22 @@ fun TrailChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     busy: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     Row(
         modifier
             .height(32.dp)
             .clip(RoundedCornerShape(50))
             .background(container)
-            .clickable(enabled = !busy, role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
+            .combinedClickable(
+                enabled = !busy,
+                role = Role.Button,
+                onClickLabel = onClickLabel,
+                onLongClick = onLongClick,
+                onLongClickLabel = onLongClickLabel,
+                onClick = onClick,
+            )
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

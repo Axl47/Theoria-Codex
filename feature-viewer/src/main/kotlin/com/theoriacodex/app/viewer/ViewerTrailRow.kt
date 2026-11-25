@@ -1,6 +1,23 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import com.theoriacodex.app.tags.TagActionMenu
+import com.theoriacodex.app.tags.TagChipAction
+import com.theoriacodex.app.tags.rememberSavedTagAction
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyRow
@@ -28,6 +45,7 @@ import com.theoriacodex.app.ui.components.TrailCrumbArrow
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.ui.navigation.request
 import com.theoriacodex.app.ui.navigation.trailForks
 import com.theoriacodex.domain.model.Post
@@ -60,46 +78,111 @@ internal fun ViewerTrailRow(
     val active = forks.busy ?: forks.failed
     val shown = if (active == null || chips.any { it.key == active.key }) chips else listOf(active) + chips
     val crumbs = trail.crumbs.takeIf { it.size > 1 }.orEmpty()
-    if (crumbs.isEmpty() && shown.isEmpty()) return
+    val canAdd = opener != TrailOpener.None
+    if (crumbs.isEmpty() && shown.isEmpty() && !canAdd) return
+    var adding by remember { mutableStateOf(false) }
+    val start: (TrailFork) -> Boolean = { chip ->
+        onInteraction()
+        forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
+    }
     LazyRow(
         modifier.fillMaxWidth().testTag("viewer-trail-row"),
         contentPadding = PaddingValues(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(TrailChipGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        itemsIndexed(crumbs) { index, crumb ->
-            TrailCrumb(
-                crumb.label,
-                current = index == crumbs.lastIndex,
-                color = Color.White,
-                dimColor = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA),
-                arrow = TrailCrumbArrow.After,
-                maxWidth = 140.dp,
-                verticalPadding = 6.dp,
-                testTag = "viewer-trail-crumb-$index",
-            ) { trail.onCrumb(index) }
-        }
+        itemsIndexed(crumbs) { index, crumb -> ViewerTrailCrumb(crumb, index, crumbs, trail, forks) }
         items(shown, key = { it.key }) { chip ->
-            ViewerForkChip(chip, busy = forks.busy?.key == chip.key, failed = forks.failed?.key == chip.key) {
-                onInteraction()
-                forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
-            }
+            ViewerForkChip(chip, post.id.source, forks) { start(chip) }
+        }
+        if (canAdd) item(key = "add") { ViewerAddTagChip(enabled = forks.busy == null) { onInteraction(); adding = true } }
+    }
+    if (adding) {
+        HoldChrome(forks)
+        TrailTagSheet(post.id.source, onDismiss = { adding = false }) { tag ->
+            if (start(TrailFork.Tag(tag))) adding = false
         }
     }
 }
 
 @Composable
-private fun ViewerForkChip(chip: TrailFork, busy: Boolean, failed: Boolean, onClick: () -> Unit) {
-    TrailChip(
-        if (failed) "No posts" else chip.label,
-        chip.icon,
-        container = ViewerVeil.Capsule,
-        content = Color.White,
-        onClickLabel = "Start a trail",
-        onClick = onClick,
-        modifier = Modifier.testTag("viewer-trail-chip-${chip.key}"),
-        busy = busy,
-    )
+private fun ViewerTrailCrumb(crumb: ViewerCrumb, index: Int, crumbs: List<ViewerCrumb>, trail: ViewerTrail, forks: ViewerTrailForks) {
+    val remove = TagChipAction("Remove from trail") { trail.onRemove(index) }.takeIf { crumbs.removal(index) != null }
+    val save = crumb.tag?.let { rememberSavedTagAction(it.source, it.value) }
+    val actions = listOfNotNull(remove, save)
+    var menuOpen by remember { mutableStateOf(false) }
+    if (menuOpen) HoldChrome(forks)
+    Box {
+        TrailCrumb(
+            crumb.label,
+            current = index == crumbs.lastIndex,
+            color = Color.White,
+            dimColor = Color.White.copy(alpha = ViewerVeil.SECONDARY_TEXT_ALPHA),
+            arrow = TrailCrumbArrow.After,
+            maxWidth = 140.dp,
+            verticalPadding = 6.dp,
+            testTag = "viewer-trail-crumb-$index",
+            onLongClick = { menuOpen = true }.takeIf { actions.isNotEmpty() },
+            onLongClickLabel = "Manage ${crumb.label}",
+        ) { trail.onCrumb(index) }
+        TagActionMenu(menuOpen, actions) { menuOpen = false }
+    }
+}
+
+@Composable
+private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrailForks, onClick: () -> Unit) {
+    val save = (chip as? TrailFork.Tag)?.let { rememberSavedTagAction(source, it.tag) }
+    val busy = forks.busy?.key == chip.key
+    val failed = forks.failed?.key == chip.key
+    var menuOpen by remember { mutableStateOf(false) }
+    if (menuOpen) HoldChrome(forks)
+    Box {
+        TrailChip(
+            if (failed) "No posts" else chip.label,
+            chip.icon,
+            container = ViewerVeil.Capsule,
+            content = Color.White,
+            onClickLabel = "Start a trail",
+            onClick = onClick,
+            modifier = Modifier.testTag("viewer-trail-chip-${chip.key}"),
+            busy = busy,
+            onLongClick = { menuOpen = true }.takeIf { save != null },
+            onLongClickLabel = "Manage ${chip.label}",
+        )
+        TagActionMenu(menuOpen, listOfNotNull(save)) { menuOpen = false }
+    }
+}
+
+@Composable
+private fun HoldChrome(forks: ViewerTrailForks) {
+    DisposableEffect(forks) {
+        val release = forks.holdChrome()
+        onDispose { release() }
+    }
+}
+
+@Composable
+private fun ViewerAddTagChip(enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(ViewerVeil.Capsule)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .testTag("viewer-trail-add"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Default.Add, contentDescription = "Add tag", tint = Color.White, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+internal fun ViewerTrailReplay(trail: ViewerTrail, post: Post, forks: ViewerTrailForks) {
+    val opener = LocalTrailOpener.current
+    val tag = trail.replay ?: return
+    LaunchedEffect(tag, post.id) {
+        forks.open(TrailFork.Tag(tag.value), post.id) { opener.openTrail(TrailRequest.Tag(tag.value, tag.source, trail.levelQuery, post)) }
+    }
 }
 
 @Composable

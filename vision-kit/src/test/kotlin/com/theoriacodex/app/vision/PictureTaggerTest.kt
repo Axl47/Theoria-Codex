@@ -48,7 +48,7 @@ class PictureTaggerTest {
         override fun observeVisionChanges(): Flow<Unit> = flowOf(Unit)
         override suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>> =
             mapOf(PostId(SourceKey.DANBOORU, "stored") to listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)))
-        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0, 0))
         override fun observeLibraryTotal(): Flow<Int> = flowOf(0)
         override suspend fun clearVision() = Unit
     }
