@@ -80,6 +80,8 @@ internal object RepoReader {
 
 private const val ANIYOMI_LABEL = "Aniyomi: "
 
+private fun httpsOnly(url: String): String? = url.takeIf { it.startsWith("https://") }
+
 @Serializable
 private class LegacyRepo(@SerialName("index_v2") val indexV2: String? = null, val meta: Meta) {
     @Serializable
@@ -109,7 +111,7 @@ private class LegacyExtension(
             languages = sources.orEmpty().map(LegacySource::lang).ifEmpty { listOf(lang) }.distinct(),
             kind = if (anime) SeriesKind.ANIME else SeriesKind.MANGA,
             torrent = torrent == 1,
-            iconUrl = "$folder/icon/$pkg.png",
+            iconUrl = httpsOnly("$folder/icon/$pkg.png"),
         )
     }
 }
@@ -174,7 +176,7 @@ private class AnimeEntry(
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "", @ProtoNumber(2) val iconUrl: String = "") {
-    val icon: String? get() = iconUrl.takeIf { it.startsWith("https://") }
+    val icon: String? get() = httpsOnly(iconUrl)
 }
 
 @OptIn(ExperimentalSerializationApi::class)
