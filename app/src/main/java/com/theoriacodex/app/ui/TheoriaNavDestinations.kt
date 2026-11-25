@@ -214,8 +214,9 @@ private fun CodexDetailContent(
             onOpenActions = { shell.overlays.codexActionTargetId = codexId },
             onTopUpOffline = { shell.transfers.offline.makeAvailableOffline(codexId) },
         ),
-        customHeader = markingNewPostsSeen(shell, codexId, state.loading, virtualUi?.header),
+        customHeader = markingNewPostsSeen(shell.data, codexId, state.loading, virtualUi?.header),
         likedPostIds = state.likedPostIds,
+        newPostIds = state.newPostIds,
         onToggleLike = liveOwner?.let { owner ->
             { post -> shell.toggleLikeAndSyncCodex(post) { outcome -> owner.related.onLikeCommitted(post, outcome) } }
         },

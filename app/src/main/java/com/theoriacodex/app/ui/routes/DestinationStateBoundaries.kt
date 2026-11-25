@@ -119,6 +119,7 @@ internal data class CodexDetailDestinationState(
     val follows: List<com.theoriacodex.data.repository.FollowedCreator> = emptyList(),
     val loading: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
+    val newPostIds: Set<PostId> = emptySet(),
 )
 
 internal data class SaveToCodexDestinationState(
@@ -517,11 +518,14 @@ private fun FollowedCodexDestinationStateBoundary(
         owner.synchronize(selected, available, sort, usage, durations)
     }
     val posts = rememberSortedCodexPosts(FOLLOWED_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
+    val newPostIds = com.theoriacodex.app.ui.rememberNewPostMarkers(data, FOLLOWED_CODEX_ID, posts) {
+        com.theoriacodex.app.codex.savedNewPosts(settings.followedCreators)[FOLLOWED_CODEX_ID].orEmpty()
+    }
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
         items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),
         availableSources = available,
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-        followedOwner = owner, follows = settings.followedCreators, loading = feed.loading || reloading,
+        followedOwner = owner, follows = settings.followedCreators, loading = feed.loading || reloading, newPostIds = newPostIds,
     ))
 }

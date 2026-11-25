@@ -4,6 +4,7 @@
 
 ### Added
 
+- New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
 - Following says how many followed series need their extension, such as after restoring a Mihon backup, with a button to Extensions. Those series can't be checked for new chapters until their extension is on.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
