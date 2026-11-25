@@ -8,17 +8,17 @@ class PictureTagsProgressTest {
     @Test
     fun `videos tagged from their preview count as tagged while their frames wait (ADR 0094)`() {
         assertEquals(
-            listOf("765 of 765 Library posts tagged", "687 videos finish from their frames while charging and idle on Wi-Fi"),
+            LibraryProgress("765 of 765 Library posts tagged", "687 videos finish from their frames while charging and idle on Wi-Fi"),
             libraryProgress(VisionProgress(analysed = 78, awaitingFrames = 687, total = 765)),
         )
         assertEquals(
-            listOf("765 of 768 Library posts tagged", "The rest are tagged while charging on Wi-Fi"),
+            LibraryProgress("765 of 768 Library posts tagged", "The rest are tagged while charging on Wi-Fi"),
             libraryProgress(VisionProgress(analysed = 765, awaitingFrames = 0, total = 768)),
         )
         assertEquals(
-            listOf("10 of 11 Library posts tagged", "The rest are tagged while charging on Wi-Fi, and 1 video finishes from its frames once the phone is also idle"),
+            LibraryProgress("10 of 11 Library posts tagged", "The rest are tagged while charging on Wi-Fi, and 1 video finishes from its frames once the phone is also idle"),
             libraryProgress(VisionProgress(analysed = 9, awaitingFrames = 1, total = 11)),
         )
-        assertEquals(listOf("768 of 768 Library posts tagged"), libraryProgress(VisionProgress(analysed = 768, awaitingFrames = 0, total = 768)))
+        assertEquals(LibraryProgress("768 of 768 Library posts tagged", null), libraryProgress(VisionProgress(analysed = 768, awaitingFrames = 0, total = 768)))
     }
 }

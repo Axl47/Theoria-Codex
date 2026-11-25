@@ -103,7 +103,7 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(signatures.libraryPostsWithoutSignature(limit = 10).isEmpty())
     }
 
-    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried`() = runTest {
+    @Test fun `a post only the tagger saw still waits for its hash, and a post the tagger cannot read is not retried (ADR 0094)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")

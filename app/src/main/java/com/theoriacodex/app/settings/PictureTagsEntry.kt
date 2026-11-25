@@ -72,11 +72,10 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
                         Button(onClick = model::download) { Text("Try again") }
                     }
                     ModelState.Ready -> {
-                        libraryProgress(progress).forEachIndexed { line, text ->
-                            if (line == 0) {
-                                Text(text)
-                            } else {
-                                Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        libraryProgress(progress)?.let { library ->
+                            Text(library.count)
+                            library.pending?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete") }
@@ -105,8 +104,10 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
     }
 }
 
-internal fun libraryProgress(progress: VisionProgress): List<String> {
-    if (progress.total == 0) return emptyList()
+internal data class LibraryProgress(val count: String, val pending: String?)
+
+internal fun libraryProgress(progress: VisionProgress): LibraryProgress? {
+    if (progress.total == 0) return null
     val count = progress.awaitingFrames
     val videos = if (count == 1) "1 video finishes from its frames" else "$count videos finish from their frames"
     val pending = when {
@@ -115,7 +116,7 @@ internal fun libraryProgress(progress: VisionProgress): List<String> {
         count > 0 -> "$videos while charging and idle on Wi-Fi"
         else -> null
     }
-    return listOfNotNull("${progress.tagged} of ${progress.total} Library posts tagged", pending)
+    return LibraryProgress("${progress.tagged} of ${progress.total} Library posts tagged", pending)
 }
 
 private fun percent(bytes: Long, total: Long): Long = if (total <= 0) 0 else bytes * 100 / total

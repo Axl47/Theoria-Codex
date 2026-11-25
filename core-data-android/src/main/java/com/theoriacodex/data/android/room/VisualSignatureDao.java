@@ -71,22 +71,17 @@ public interface VisualSignatureDao {
             + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
     List<PostEntity> libraryPostsAwaitingFrames(String modelId, int maxAttempts, int limit, int skip);
 
-    @Query("SELECT (SELECT COUNT(*) FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "
-            + "AND NOT (signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts) "
-            + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = signature.source "
-            + "AND codex_items.source_post_id = signature.source_post_id) "
-            + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = signature.source "
-            + "AND liked_posts.source_post_id = signature.source_post_id))) AS analysed, "
-            + "(SELECT COUNT(*) FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "
-            + "AND signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts "
-            + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = signature.source "
-            + "AND codex_items.source_post_id = signature.source_post_id) "
-            + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = signature.source "
-            + "AND liked_posts.source_post_id = signature.source_post_id))) AS awaitingFrames, "
+    @Query("SELECT COALESCE(SUM(NOT (signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts)), 0) AS analysed, "
+            + "COALESCE(SUM(signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts), 0) AS awaitingFrames, "
             + "(SELECT COUNT(*) FROM posts WHERE EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
-            + "AND liked_posts.source_post_id = posts.source_post_id)) AS total")
+            + "AND liked_posts.source_post_id = posts.source_post_id)) AS total "
+            + "FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "
+            + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = signature.source "
+            + "AND codex_items.source_post_id = signature.source_post_id) "
+            + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = signature.source "
+            + "AND liked_posts.source_post_id = signature.source_post_id))")
     Flow<ProgressRow> observeVisionProgress(String modelId, int maxAttempts);
 
     @Query("SELECT COUNT(*) FROM posts WHERE EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
