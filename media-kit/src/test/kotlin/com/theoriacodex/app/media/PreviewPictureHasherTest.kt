@@ -82,6 +82,7 @@ class PreviewPictureHasherTest {
             loads += name
             when (name) {
                 "gone.jpg" -> PictureHashResult.Unavailable
+                "broken.jpg" -> throw java.io.IOException("load failed")
                 "flat.jpg" -> PictureHashResult.Unhashable
                 "shared.jpg" -> {
                     delay(50)
@@ -90,16 +91,20 @@ class PreviewPictureHasherTest {
                 else -> PictureHashResult.Hashed(5)
             }
         })
-        val posts = listOf(post("seen"), post("flat"), post("gone"))
+        val custom = post("custom").copy(id = PostId(requireNotNull(SourceKey.parse("custom_booru_example")), "custom"))
+        val posts = listOf(post("seen"), post("flat"), post("gone"), post("broken"), custom)
 
-        hasher.annotate(posts)
+        assertEquals(5L, hasher.annotate(posts).last().pictureHash)
         hasher.annotate(posts)
         val first = async { hasher.annotate(listOf(post("shared"))) }
         val second = async { hasher.annotate(listOf(post("shared"))) }
         assertEquals(listOf(9L), first.await().map { it.pictureHash })
         assertEquals(listOf(9L), second.await().map { it.pictureHash })
 
-        assertEquals(mapOf("seen.jpg" to 1, "flat.jpg" to 1, "gone.jpg" to 2, "shared.jpg" to 1), loads.groupingBy { it }.eachCount())
+        assertEquals(
+            mapOf("seen.jpg" to 1, "flat.jpg" to 1, "gone.jpg" to 2, "broken.jpg" to 2, "custom.jpg" to 1, "shared.jpg" to 1),
+            loads.groupingBy { it }.eachCount(),
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -145,6 +150,7 @@ class PreviewPictureHasherTest {
                 assertEquals(Size(96, 96), size)
                 assertTrue(request.decoderFactory is BitmapFactoryDecoder.Factory)
                 assertEquals(CachePolicy.DISABLED, request.memoryCachePolicy)
+                assertEquals("The still fills the disk cache the card reads", CachePolicy.ENABLED, request.diskCachePolicy)
                 assertEquals(false, request.allowHardware)
                 assertEquals(Dispatchers.Default, request.interceptorDispatcher)
             }

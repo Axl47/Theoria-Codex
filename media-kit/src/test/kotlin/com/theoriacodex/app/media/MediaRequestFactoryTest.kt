@@ -39,6 +39,8 @@ class MediaRequestFactoryTest {
         seed("https://gelbooru.com/images/empty.jpg", ByteArray(0))
         Coil.setImageLoader(ImageLoader.Builder(context).diskCache(diskCache).build())
         try {
+            val written = MediaRequestFactory.imageRequest(context, "https://video-cdn4.gelbooru.com/images/page.jpg", SourceKey.GELBOORU, crossfade = false)
+            assertEquals("Coil writes the entry under the address that is read back", "https://gelbooru.com/images/page.jpg", written.data)
             val copy = folder.newFile()
             assertTrue(copyCachedMediaBytes(context, SourceKey.GELBOORU, "https://video-cdn4.gelbooru.com/images/page.jpg", copy, maxBytes = 10))
             assertArrayEquals(page, copy.readBytes())

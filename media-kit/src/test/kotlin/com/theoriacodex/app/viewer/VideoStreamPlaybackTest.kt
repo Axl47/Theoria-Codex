@@ -84,6 +84,7 @@ class VideoStreamPlaybackTest {
         assertEquals(403 to 0, get("/hls/master.m3u8", emptyMap()))
         assertEquals(403 to 0, get("/hls/master.m3u8", STREAM_FIXTURE_HEADERS.mapValues { "wrong" }))
         assertEquals(404 to 0, get("/hls/missing", STREAM_FIXTURE_HEADERS))
+        assertEquals(403 to 0, get("/hls/missing", emptyMap()))
         assertEquals(206 to 10, get("/hls/video0.ts", STREAM_FIXTURE_HEADERS, "bytes=0-9"))
         assertEquals(206 to 5, get("/hls/video0.ts", STREAM_FIXTURE_HEADERS, "bytes=100-104"))
         assertEquals(
@@ -91,6 +92,7 @@ class VideoStreamPlaybackTest {
                 StreamFixtureServer.Request("/hls/master.m3u8", authorised = false),
                 StreamFixtureServer.Request("/hls/master.m3u8", authorised = false),
                 StreamFixtureServer.Request("/hls/missing", authorised = true),
+                StreamFixtureServer.Request("/hls/missing", authorised = false),
                 StreamFixtureServer.Request("/hls/video0.ts", authorised = true),
                 StreamFixtureServer.Request("/hls/video0.ts", authorised = true),
             ),
