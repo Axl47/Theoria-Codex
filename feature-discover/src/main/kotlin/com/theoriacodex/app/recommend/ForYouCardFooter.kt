@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,21 +48,23 @@ internal fun ForYouCardFooter(
     val pills = remember(post, affinity, feedShare, similarSupported, creatorBrowsingSources, level, origin) {
         val creator = creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile }
             ?.takeUnless { (level.fork as? TrailRequest.Creator)?.creator == it }
-        val covered = level.query?.includeTags.orEmpty() + owner.laneTags(post.id)
-        val forks = trailForks(creator, similarSupported, tagAffinities(post, affinity, feedShare), covered)
+        val similar = similarSupported && (level.fork as? TrailRequest.Similar)?.from?.id != post.id
+        val covered = level.query?.includeTags.orEmpty() + if (origin is DeckOrigin.Lane) owner.laneTags(post.id) else emptyList()
+        val forks = trailForks(creator, similar, tagAffinities(post, affinity, feedShare), covered)
         val leading = when (origin) {
-            is DeckOrigin.Similar -> forks.firstOrNull { it is TrailFork.Similar }
-            is DeckOrigin.Creator -> forks.firstOrNull { it is TrailFork.Creator }
+            is DeckOrigin.Similar -> TrailFork.Similar.takeIf { similar }
+            is DeckOrigin.Creator -> TrailFork.Creator(origin.creator)
             is DeckOrigin.Lane, null -> null
         }
-        val pill = { fork: TrailFork -> ForYouPill(fork.key, fork.label, fork.icon, fork == leading) { owner.fork(fork.request(post, level.query)) } }
-        val lane = (origin as? DeckOrigin.Lane)?.let { lane ->
-            ForYouPill("lane", lane.label, Icons.Outlined.AutoAwesome, origin = true) { owner.focusLane(lane.laneId, post) }
+        val open = { fork: TrailFork -> { owner.fork(fork.request(post, level.query)) } }
+        val lead = when (origin) {
+            is DeckOrigin.Lane -> ForYouPill(ORIGIN_KEY, origin.label, Icons.Outlined.AutoAwesome, origin = true) { owner.focusLane(origin.laneId, post) }
+            else -> leading?.let { ForYouPill(ORIGIN_KEY, it.label, it.icon, origin = true, open(it)) }
         }
-        listOfNotNull(lane, leading?.let(pill)) + forks.filterNot { it == leading }.map(pill)
+        listOfNotNull(lead) + forks.filterNot { it == leading }.map { ForYouPill(it.key, it.label, it.icon, origin = false, open(it)) }
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-        ForYouPillRow(pills)
+        key(level.id) { ForYouPillRow(pills) }
     }
 }
 
@@ -90,6 +93,8 @@ internal fun ForYouPillRow(pills: List<ForYouPill>) {
         }
     }
 }
+
+private const val ORIGIN_KEY = "origin"
 
 const val FOR_YOU_ORIGIN_TAG = "for-you-origin"
 const val FOR_YOU_FORK_ROW_TAG = "for-you-forks"

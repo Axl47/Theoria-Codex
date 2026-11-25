@@ -141,6 +141,7 @@ class TriageDeck(
             val told = deck.copy(
                 elsewhere = deck.elsewhere + decidedElsewhere,
                 last = if (forgetUndo) null else deck.last,
+                notice = null,
                 restored = deck.restored.takeUnless { it in decidedElsewhere },
             )
             told.copy(index = told.shownFrom(told.index))

@@ -15,9 +15,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -157,8 +157,7 @@ internal fun ForYouFilterSheet(
 
 @Composable
 private fun MixLaneChip(lane: ForYouLaneChoice, onClick: () -> Unit) {
-    FilterChip(
-        selected = false,
+    AssistChip(
         onClick = onClick,
         label = { Text(lane.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp)) },
         modifier = Modifier

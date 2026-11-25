@@ -76,12 +76,13 @@ class TriageDeckTest {
         assertEquals(0, deck.state.value.index)
     }
 
-    @Test fun `cards decided elsewhere are passed over, and forgetting Undo keeps it from reaching back (ADR 0134)`() = runTest {
+    @Test fun `cards decided elsewhere are passed over, their notice goes, and forgetting Undo keeps it from reaching back (ADR 0134)`() = runTest {
         val deck = deck()
-        deck.decideCurrent(TriageChoice.Skip)
+        deck.decideCurrent(TriageChoice.Like)
         deck.passOver(setOf(posts[1].id), forgetUndo = true)
         assertSame(posts[2], deck.state.value.current)
         assertNull(deck.state.value.last)
+        assertNull(deck.state.value.notice)
         deck.undo()
         assertSame(posts[2], deck.state.value.current)
     }

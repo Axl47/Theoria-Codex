@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -9,7 +10,7 @@ sealed interface DeckOrigin {
 
     data class Similar(val of: PostId) : DeckOrigin
 
-    data class Creator(val of: PostId, val name: String) : DeckOrigin
+    data class Creator(val of: PostId, val creator: CreatorProfile) : DeckOrigin
 }
 
 data class DeckCard(val post: Post, val origin: DeckOrigin)
@@ -27,6 +28,8 @@ data class DeckSteering(
     fun cooled(laneId: String): Boolean = weight(laneId) < 1.0
 
     fun warmed(): DeckSteering = copy(weights = emptyMap(), skipRuns = emptyMap())
+
+    fun signals(): DeckSteering = DeckSteering(weights, skipRuns)
 
     fun after(signal: ForYouVerdictKind, origin: DeckOrigin): DeckSteering {
         val lane = (origin as? DeckOrigin.Lane)?.laneId ?: return this

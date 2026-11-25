@@ -4,6 +4,8 @@ import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.trails.TrailPage
+import com.theoriacodex.app.trails.TrailPager
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
@@ -160,7 +162,7 @@ class ForYouDeckViewModelTest {
         val saved = owner.decide(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         owner.skip(1)
 
-        assertEquals(DeckOrigin.Creator(saved.id, "artist"), owner.originOf(owner.posts[4].id))
+        assertEquals(DeckOrigin.Creator(saved.id, checkNotNull(saved.creatorProfile)), owner.originOf(owner.posts[4].id))
         assertEquals(listOf(saved.id), quickSave.saved)
         assertTrue(quickSave.fromForYou)
     }
@@ -376,6 +378,30 @@ class ForYouDeckViewModelTest {
         assertEquals(mix.id, owner.viewerFeed.queryHash)
         mix.deck.undo()
         assertEquals("a-0-0", owner.current.id.sourcePostId)
+    }
+
+    @Test fun `a trail's page that lands after a deeper focus closes passes over what was decided there (ADR 0134)`() {
+        val gate = CompletableDeferred<Unit>()
+        val late = testPost(DECK_SOURCE, "t-late")
+        val first = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
+        var pages = 0
+        trails.tag = emptyList()
+        trails.pager = TrailPager {
+            if (pages++ == 0) TrailPage(first, canLoadMore = true) else gate.await().let { TrailPage(first + late, canLoadMore = false) }
+        }
+        val owner = owner()
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        owner.skip(1)
+        trails.pager = null
+        trails.similar = listOf(late)
+        owner.fork(TrailRequest.Similar(owner.current))
+        owner.skip(2)
+
+        owner.popTo(1)
+        gate.complete(Unit)
+        assertEquals("t-2", owner.current.id.sourcePostId)
+        owner.skip(1)
+        assertTrue(owner.top.deck.state.value.finished)
     }
 
     @Test fun `the Mix passes over cards decided while focused, and Undo cannot reach back over them (ADR 0134)`() {

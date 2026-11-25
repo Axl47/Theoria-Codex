@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -69,7 +70,7 @@ class DeckPlannerTest {
         val injected = DeckSteering().inject(
             listOf(
                 DeckCard(post("s1"), DeckOrigin.Similar(liked)),
-                DeckCard(post("c1"), DeckOrigin.Creator(liked, "maker")),
+                DeckCard(post("c1"), DeckOrigin.Creator(liked, CreatorProfile(SourceKey.PIXIV, "maker"))),
                 DeckCard(post("s2"), DeckOrigin.Similar(id("other"))),
             ),
         )

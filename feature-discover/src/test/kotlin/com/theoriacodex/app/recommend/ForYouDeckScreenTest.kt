@@ -52,6 +52,7 @@ import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
@@ -214,6 +215,17 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertDoesNotExist()
     }
 
+    @Test fun `a card asked for through its creator leads with that creator though the post names another first (ADR 0134)`() {
+        trails.creator = listOf(testPost(DECK_SOURCE, "co-1", creatorProfile = CreatorProfile(DECK_SOURCE, "co-author", uploadsQuery = "user:co")))
+        render()
+        decide("Like")
+        repeat(3) { decide("Skip") }
+
+        card("co-1").assertExists()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("artist")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertTextEquals("co-author")
+    }
+
     @Test fun `a card a like asked for leads with Similar, which focuses on it (ADR 0134)`() {
         trails.similar = listOf(lanePost("like", 0, 0))
         val owner = render()
@@ -225,6 +237,7 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}similar").assertDoesNotExist()
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).performClick()
         compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("Similar")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}similar").assertDoesNotExist()
         compose.runOnIdle { assertEquals("like-0-0", owner.levels.value.last().deck.state.value.current?.id?.sourcePostId) }
     }
 
