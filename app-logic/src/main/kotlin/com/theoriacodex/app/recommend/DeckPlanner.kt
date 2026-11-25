@@ -1,15 +1,16 @@
 package com.theoriacodex.app.recommend
 
 import com.theoriacodex.data.repository.ForYouVerdictKind
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
 sealed interface DeckOrigin {
     data class Lane(val laneId: String, val label: String) : DeckOrigin
 
-    data class Similar(val of: PostId, val saved: Boolean) : DeckOrigin
+    data class Similar(val of: PostId) : DeckOrigin
 
-    data class Creator(val of: PostId, val name: String) : DeckOrigin
+    data class Creator(val of: PostId, val creator: CreatorProfile) : DeckOrigin
 }
 
 data class DeckCard(val post: Post, val origin: DeckOrigin)
@@ -23,6 +24,12 @@ data class DeckSteering(
     val credit: Map<String, Double> = emptyMap(),
 ) {
     fun weight(laneId: String): Double = weights[laneId] ?: 1.0
+
+    fun cooled(laneId: String): Boolean = weight(laneId) < 1.0
+
+    fun warmed(): DeckSteering = copy(weights = emptyMap(), skipRuns = emptyMap())
+
+    fun signals(): DeckSteering = DeckSteering(weights, skipRuns)
 
     fun after(signal: ForYouVerdictKind, origin: DeckOrigin): DeckSteering {
         val lane = (origin as? DeckOrigin.Lane)?.laneId ?: return this
@@ -66,7 +73,6 @@ fun nextBatch(
     steering: DeckSteering,
     seen: (PostId) -> Boolean,
     size: Int,
-    only: String? = null,
     copiesOf: (Post) -> Set<PostId> = { setOf(it.id) },
 ): DeckBatch {
     val used = HashSet<PostId>()
@@ -85,11 +91,10 @@ fun nextBatch(
             cards += card
         }
     }
-    val running = lanes.filter { only == null || it.origin.laneId == only }
-    val cursor = running.associateTo(mutableMapOf()) { it.origin.laneId to 0 }
+    val cursor = lanes.associateTo(mutableMapOf()) { it.origin.laneId to 0 }
     val credit = steering.credit.toMutableMap()
     while (cards.size < size) {
-        val ready = running.filter { lane ->
+        val ready = lanes.filter { lane ->
             var at = cursor.getValue(lane.origin.laneId)
             while (at < lane.posts.size && isUsed(lane.posts[at])) at++
             cursor[lane.origin.laneId] = at

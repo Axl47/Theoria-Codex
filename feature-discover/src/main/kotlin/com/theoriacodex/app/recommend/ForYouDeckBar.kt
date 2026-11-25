@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -27,9 +29,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.search.sortModeLabel
@@ -104,9 +110,26 @@ private fun FiltersButton(active: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeckCallbacks, onDismiss: () -> Unit) {
+internal fun ForYouFilterSheet(
+    config: ForYouScreenConfig,
+    callbacks: ForYouDeckCallbacks,
+    lanes: List<ForYouLaneChoice>,
+    onFocusLane: (laneId: String) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val hiddenTags = LocalHiddenTagsOpener.current
-    FeedFilterSheet(onDismiss = onDismiss, onReset = callbacks.onResetFilters) {
+    FeedFilterSheet(onDismiss = onDismiss, onReset = onReset) {
+        if (lanes.isNotEmpty()) {
+            FilterSection("Mix") {
+                lanes.forEach { lane ->
+                    MixLaneChip(lane) {
+                        onDismiss()
+                        onFocusLane(lane.laneId)
+                    }
+                }
+            }
+        }
         FilterSection("Sort") {
             SortMode.entries.forEach { mode ->
                 FilterChoiceChip(sortModeLabel(mode), config.sortMode == mode) { callbacks.onSelectSort(mode) }
@@ -132,6 +155,21 @@ internal fun ForYouFilterSheet(config: ForYouScreenConfig, callbacks: ForYouDeck
     }
 }
 
+@Composable
+private fun MixLaneChip(lane: ForYouLaneChoice, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(lane.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp)) },
+        modifier = Modifier
+            .testTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${lane.laneId}")
+            .alpha(if (lane.cooled) COOLED_ALPHA else 1f)
+            .semantics { if (lane.cooled) stateDescription = "Cooled" },
+    )
+}
+
+private const val COOLED_ALPHA = 0.45f
+
+const val FOR_YOU_MIX_LANE_TAG_PREFIX = "for-you-mix-lane-"
 const val FOR_YOU_REFRESH_TAG = "for-you-refresh"
 const val FOR_YOU_UNDO_TAG = "for-you-undo"
 const val FOR_YOU_VIEW_TOGGLE_TAG = "for-you-view-toggle"
