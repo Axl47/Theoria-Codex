@@ -4,6 +4,7 @@
 
 ### Added
 
+- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
@@ -22,7 +23,7 @@
 - A "+" at the end of a trail's suggestions adds any tag as the next step, with that site's tag suggestions as you type.
 - The Viewer's Save button shows the Codex the post most likely belongs in. Tap to save there, with Undo on the button for a few seconds. Hold it and slide onto another Codex, or New, to save there instead.
 - Holding a post in any grid or shelf picks it up. Drop it on a Codex or New at the right edge to save it (with Undo), or on Like or Similar at the left. Letting go where you picked it up opens the post menu as before. Animated posts keep playing while you hold them, and in Search the Codices offered are the ones the Viewer's Save button would suggest.
-- Triage: a one-post-at-a-time way through a feed, opened from Triage in the feed's filter sheet. Swipe right to like, left to skip, up to save to a suggested Codex, and down to hide one of the post's tags from For You. Undo reverses the last choice. The next card plays while you drag the top one away. If more posts fail to load, the deck offers Retry.
+- Swipe: a one-post-at-a-time way through a feed, opened from Swipe in the feed's filter sheet. Swipe right to like, left to skip, up to save to a suggested Codex, and down to hide one of the post's tags from For You. While you drag, the card says what letting go does. Undo reverses the last choice. The next card plays while you drag the top one away. If more posts fail to load, the deck offers Retry.
 - The search box also finds your Codices, creators you follow or recently viewed, saved and recent searches, Settings pages, and a few switches you can flip right in the list.
 - Codices found from the search box show their cover and how many posts they hold.
 - Swiping the collapsed search bar sideways steps back and forward through earlier searches, each at the place you left it.
@@ -30,9 +31,9 @@
 - Galleries can be read left to right, right to left, or as one vertical scroll. Choose the mode at the top of a gallery's page overview; each gallery keeps its own choice, and the others follow Invert Scroll Direction. In vertical mode, swipe sideways to change post, pull down at the top to close, and the controls hide as you scroll down and return as you scroll up. The mode switch in the overview does the same as you scroll its pages. Vertical is offered for galleries of still images. Tall webtoon pages show sharp from the first page, the next six pages load ahead as you read, and with TalkBack the page in view offers Zoom and Media information.
 - Search, creator profiles and For You show "No more results" at the bottom once a feed has no further pages, where the list used to just stop.
 - A Codex's name is editable in place: tap it at the top of the Codex, type, and press Done.
-- A Codex has a row of chips under its name. Filter by tag lists every tag in the Codex (type to narrow the list) and shows only posts that have all the tags you choose; the most common tags are one-tap shortcuts; the sort is a chip; Triage opens the deck. Search sites, in the tag list, searches the sites with the chosen tags.
+- A Codex has a row of chips under its name. Filter by tag lists every tag in the Codex (type to narrow the list) and shows only posts that have all the tags you choose; the most common tags are one-tap shortcuts; the sort is a chip; Swipe opens the deck. Search sites, in the tag list, searches the sites with the chosen tags.
 - With the Manual sort in Library, hold a Codex and drag it to move it, with Undo. Letting go without moving it opens its menu as before.
-- Triage on a Codex goes through its posts one at a time: swipe left to remove a post from the Codex, right to keep it. Undo reverses the last choice.
+- Swipe on a Codex goes through its posts one at a time: swipe left to remove a post from the Codex, right to keep it. Undo reverses the last choice.
 - Cleaning a Codex shows how many posts each comparison would remove before you confirm, and Review opens exactly those posts as a deck where left removes and right keeps.
 - A Codex kept offline shows a ring on its tile and at the top of its page: how much is downloaded, and whether something failed. At the top of the Codex, tapping a full ring removes the offline copy (with Undo), tapping it during a download shows progress, and tapping an incomplete or failed one downloads the rest.
 - While anything is downloading, a pill at the top of Library shows what's left. It opens one sheet listing offline Codices and downloads.
@@ -123,7 +124,7 @@
 - The composer's built-in "Animated" saved tag group is gone: Animated only now does that job everywhere.
 - A tag trail keeps the filters of the level it starts from: Animated only, the date range, the sort, excluded tags, and hiding liked, saved or watched posts.
 - Trail chips lead with tags that are clearly more common in what you like and save than in what you watch, such as the characters, series and artists you follow, plus your saved tags, saved searches and repeated searches, then add tags too rare to judge yet. Tags that are on everything alike, such as "image", "blush" or "censored", tags on nearly every post in the current stream, and tags for text on the image, such as "artist name", "watermark" or "twitter username", are left out.
-- Triage no longer offers to hide tags that are on nearly everything you watch.
+- Swipe no longer offers to hide tags that are on nearly everything you watch.
 - The Save button and the Save to Codex list suggest the right Codex more often. A tag that is rare in your library counts for more than one that is on half of it, and a Codex you just saved into moves up for the next half hour or so.
 - The app has three tabs: Search, For You and Library. Library holds Codices, Saved (Likes, Followed, Searches) and History, which was Recents. Settings opens from the gear at the top of Library.
 - The Viewer's actions (Like, Info, playback settings, page overview, More) moved from the top bar to a dock at the bottom of the screen.
@@ -164,6 +165,7 @@
 ### Fixed
 
 - Unlocking the Viewer's rotation keeps the orientation you chose with rotate before locking, instead of snapping back to portrait when system auto-rotate is off.
+- A gallery that is the only post in the Viewer's thumbnail strip spreads its pages across the whole strip instead of leaving empty space beside them.
 - Missing extensions no longer says "Language off" for every installed extension that is on. It names the language that is off and turns it on, says when the extension couldn't load, or says the installed version doesn't offer that series' source.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
