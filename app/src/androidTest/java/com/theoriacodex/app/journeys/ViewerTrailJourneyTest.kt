@@ -3,6 +3,7 @@ package com.theoriacodex.app.journeys
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -75,6 +76,21 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
     }
 
     @Test
+    fun holdingAnInfoSheetTagStartsAddsRemovesAndRestartsTheTrail() {
+        openSearchPost(ORIGINAL_POST, INFO_SHEET_SEARCH, tags = listOf("landscape"))
+        waitFor("Viewer shows the original post") { selectedPost() == posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST].id.sourcePostId }
+
+        holdInfoTag("multi", "Start a trail")
+        waitFor("multi starts the trail", timeoutMillis = 15_000) { crumb(1) == "multi" }
+        holdInfoTag("pixiv_seed", "Add to trail")
+        waitFor("pixiv seed is added", timeoutMillis = 15_000) { crumb(2) == "pixiv seed" }
+        holdInfoTag("multi", "Remove from trail")
+        waitFor("the trail re-ran without multi", timeoutMillis = 20_000) { crumb(1) == "pixiv seed" && crumb(2) == null }
+        holdInfoTag("multi", "Start a new trail")
+        waitFor("a new trail starts from multi", timeoutMillis = 20_000) { crumb(1) == "multi" && crumb(2) == null }
+    }
+
+    @Test
     fun aTagOnlyThisPostHasAddsNoStepAndSaysSo() {
         openSearchPost(ORIGINAL_POST, ONLY_HERE_SEARCH, tags = listOf("landscape"))
         waitFor("Viewer shows the original post") { selectedPost() == posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST].id.sourcePostId }
@@ -89,6 +105,14 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
 
     override fun customizePost(index: Int, post: Post): Post =
         if (index == ORIGINAL_POST) post.copy(canonicalTags = post.canonicalTags + ONLY_HERE_TAG + ROW_FILLERS) else post
+
+    private fun holdInfoTag(tag: String, action: String) {
+        activate(compose.onNodeWithContentDescription("Info"))
+        val sheetTag = hasText(tag) and SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription)
+        waitFor("info sheet shows $tag") { compose.onAllNodes(sheetTag).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodes(sheetTag)[0].performTouchInput { longClick() }
+        activate(compose.onNodeWithText(action))
+    }
 
     private fun addTag(typed: String, tag: String) {
         compose.onNodeWithTag("viewer-trail-row").performScrollToKey("add")
@@ -114,6 +138,7 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         const val RECENT_SEARCH = "journey:trail"
         const val ADD_REMOVE_SEARCH = "journey:trail-edit"
         const val ONLY_HERE_SEARCH = "journey:trail-only"
+        const val INFO_SHEET_SEARCH = "journey:trail-info"
         const val ONLY_HERE_TAG = "only_here"
         val ROW_FILLERS = listOf("a_long_fixture_tag_one", "a_long_fixture_tag_two", "a_long_fixture_tag_three")
     }

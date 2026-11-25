@@ -1,11 +1,15 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.runtime.Immutable
+import com.theoriacodex.app.tags.TagChipAction
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.sourceTagsMatch
 
-data class CrumbTag(val value: String, val source: SourceKey)
+data class CrumbTag(val value: String, val source: SourceKey) {
+    fun matches(other: CrumbTag): Boolean = source == other.source && sourceTagsMatch(source, value, other.value)
+}
 
 data class ViewerCrumb(val label: String, val trailKey: String? = null, val tag: CrumbTag? = null)
 
@@ -18,8 +22,16 @@ class ViewerTrail(
     val onCrumb: (Int) -> Unit,
     val onRemove: (Int) -> Unit = {},
     val replay: CrumbTag? = null,
+    val onRestart: (CrumbTag) -> Unit = {},
 ) {
     val levelTrailKey: String? get() = crumbs.lastOrNull()?.trailKey
+
+    fun tagActions(tag: CrumbTag, fork: () -> Unit): List<TagChipAction> {
+        if (crumbs.size <= 1) return listOf(TagChipAction("Start a trail", fork))
+        val step = (1..crumbs.lastIndex).firstOrNull { index -> crumbs[index].tag?.matches(tag) == true }
+        val move = if (step == null) TagChipAction("Add to trail", fork) else TagChipAction("Remove from trail") { onRemove(step) }
+        return listOf(move, TagChipAction("Start a new trail") { onRestart(tag) })
+    }
 
     companion object {
         val None = ViewerTrail(emptyList(), null, {})
