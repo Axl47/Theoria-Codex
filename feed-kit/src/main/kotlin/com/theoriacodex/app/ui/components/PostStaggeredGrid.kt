@@ -12,12 +12,11 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.saveable.rememberSaveable
 import com.theoriacodex.app.search.FeedImagePreloadEffect
 import com.theoriacodex.app.viewer.LocalViewerReturnGrid
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.viewer.ViewerReturnGridEffect
-import java.util.UUID
+import com.theoriacodex.app.viewer.rememberViewerReturnGridId
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layoutBounds
@@ -137,7 +136,7 @@ fun AdaptivePostGrid(
 ) {
     val postIds = remember(posts) { posts.map { it?.id } }
     FeedImagePreloadEffect(posts, state)
-    val gridId = rememberSaveable { UUID.randomUUID().toString() }
+    val gridId = rememberViewerReturnGridId()
     ViewerReturnGridEffect(gridId, postIds, state, shelfIds)
     FeedLaneJumpLogger(gridId, state)
     val viewport = rememberFeedViewport()

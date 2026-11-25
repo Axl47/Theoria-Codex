@@ -57,6 +57,8 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
         if (titleFooter) CornerRadius.Zero else rounded.bottomLeftCornerRadius)
 }
 
+class ViewerReturnOrigin internal constructor()
+
 class ViewerReturnTransition {
     var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
         private set
@@ -65,7 +67,8 @@ class ViewerReturnTransition {
         retainedPostIds = postIds
     }
 
-    private var hasOrigin = false
+    var origin: ViewerReturnOrigin? = null
+        private set
     private var unclaimedPost: PostId? = null
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
@@ -95,7 +98,7 @@ class ViewerReturnTransition {
         post: PostId,
     ) {
         clear()
-        hasOrigin = true
+        origin = ViewerReturnOrigin()
         unclaimedPost = post
         originGridId = gridId
         originShelfId = shelfId
@@ -114,7 +117,7 @@ class ViewerReturnTransition {
     }
 
     fun begin(postId: PostId) {
-        if (!hasOrigin) return
+        if (origin == null) return
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
         mediaSettling = true
@@ -153,8 +156,12 @@ class ViewerReturnTransition {
         targetCorners = mediaCorners[postId] ?: ViewerReturnCorners()
     }
 
+    fun release(released: ViewerReturnOrigin?) {
+        if (released != null && released === origin) clear()
+    }
+
     fun clear() {
-        hasOrigin = false
+        origin = null
         unclaimedPost = null
         mediaSettling = false
         retainedPostIds = emptySet()
@@ -223,8 +230,11 @@ fun viewerReturnScrollDirection(targetIndex: Int, lastVisibleIndex: Int): Float 
 private const val MAX_VIEWER_RETURN_SCROLL_STEPS = 48
 
 @Composable
+internal fun rememberViewerReturnGridId(): String = rememberSaveable { UUID.randomUUID().toString() }
+
+@Composable
 internal fun ViewerReturnCard(postId: PostId, content: @Composable () -> Unit) {
-    val gridId = rememberSaveable { UUID.randomUUID().toString() }
+    val gridId = rememberViewerReturnGridId()
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
     LaunchedEffect(request, gridId, postId) {
@@ -263,7 +273,7 @@ fun ViewerReturnColumn(
     rowOf: (ViewerReturnRequest) -> Int,
     content: @Composable () -> Unit,
 ) {
-    val gridId = rememberSaveable { UUID.randomUUID().toString() }
+    val gridId = rememberViewerReturnGridId()
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
     LaunchedEffect(request, gridId, rowsKey) {

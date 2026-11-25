@@ -30,8 +30,9 @@ only while an origin is recorded, and `ViewerReturnLifetime` holds the Viewer's 
 A Viewer opened from no card therefore leaves in one frame, the same way it opens.
 
 The origin belongs to the root Viewer's back stack entry, not to its composition: the entry's
-`ViewerTrailEntryViewModel` clears it when the entry leaves the back stack, which navigation does only after the
-closing hold ends. A Viewer covered by a full screen, such as a creator profile or a series page, or by a trail fork,
+`ViewerTrailEntryViewModel` keeps the `ViewerReturnOrigin` current when the entry was created and releases it when the
+entry leaves the back stack, which navigation does only after the closing hold ends. A release clears only that origin,
+so a card tapped during the hold keeps its own. A Viewer covered by a full screen, such as a creator profile or a series page, or by a trail fork,
 therefore still closes into its card when the user comes back to it, and a covered Viewer removed from the back stack
 without being shown again lets its card go.
 
@@ -58,7 +59,7 @@ one that must show what is beneath it would need its own transitions that never 
 
 ## Applies to
 
-- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnTransition.openedFrom`, `ViewerReturnTransition.launching`, `ViewerReturnTransition.begin`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnTransition.openedFrom`, `ViewerReturnTransition.launching`, `ViewerReturnTransition.begin`, `ViewerReturnTransition.release`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaViewerLaunch.kt`: `launchViewer`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransition.kt`: `ViewerReturnLifetime`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGallery.kt`: `ViewerVerticalGallery`
@@ -80,6 +81,7 @@ one that must show what is beneath it would need its own transitions that never 
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card is gone once the backdrop is (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/trails/ViewerReturnOriginLifetimeTest.kt`: `a Viewer covered by a full screen still closes into its card (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/trails/ViewerReturnOriginLifetimeTest.kt`: `the card origin outlives the Viewer's closing hold and ends with it (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/trails/ViewerReturnOriginLifetimeTest.kt`: `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/trails/ViewerReturnOriginLifetimeTest.kt`: `a covered Viewer removed from the back stack lets its card go (ADR 0220)`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/triage/TriageCardsTest.kt`: `a Viewer opened from the top card closes into that card (ADR 0220)`
 - Left to prose: that every new full-screen destination uses `opaqueScreen`; a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.

@@ -178,13 +178,13 @@ internal fun TriageCards(
         }
         TriageCard(next, support, ratioFloor, footer, onClick = {}, likeEnabled = false, modifier = peek)
     }
-    key(current.id) {
-        val dragged = Modifier.graphicsLayer {
-            translationX = drag.offset.x
-            translationY = drag.offset.y
-            rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
-        }
-        ViewerReturnCard(current.id) {
+    ViewerReturnCard(current.id) {
+        key(current.id) {
+            val dragged = Modifier.graphicsLayer {
+                translationX = drag.offset.x
+                translationY = drag.offset.y
+                rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
+            }
             TriageCard(current, support, ratioFloor, footer, onClick = onOpen, likeEnabled = true, modifier = dragged)
         }
     }

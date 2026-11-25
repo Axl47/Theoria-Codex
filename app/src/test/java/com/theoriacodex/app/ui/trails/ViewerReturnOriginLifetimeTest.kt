@@ -17,6 +17,7 @@ import com.theoriacodex.app.ui.opaqueScreen
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.domain.model.PostId
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -31,6 +32,7 @@ class ViewerReturnOriginLifetimeTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val post = testPost(sourcePostId = "tapped").id
+    private val nextPost = testPost(sourcePostId = "tapped-next").id
     private val viewerReturn = ViewerReturnTransition()
     private lateinit var navigation: NavHostController
 
@@ -55,6 +57,20 @@ class ViewerReturnOriginLifetimeTest {
         assertFalse(returnsToCard())
     }
 
+    @Test fun `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle { viewerReturn.begin(post) }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
+        compose.runOnIdle { openViewer(nextPost) }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertTrue(returnsToCard(nextPost))
+    }
+
     @Test fun `a covered Viewer removed from the back stack lets its card go (ADR 0220)`() {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack(AppRoute.Home, inclusive = false) }
@@ -69,7 +85,7 @@ class ViewerReturnOriginLifetimeTest {
                 TheoriaScreenHost(navigation, AppRoute.Home) {
                     opaqueScreen(AppRoute.Home) { Box(Modifier.fillMaxSize()) }
                     composable(AppRoute.Viewer) { entry ->
-                        rememberViewerLevel(navigation, entry, null, viewerReturn)
+                        rememberViewerLevel(navigation, entry, null)
                         ViewerReturnLifetime(this) { navigation.currentDestination?.route != AppRoute.Viewer }
                         Box(Modifier.fillMaxSize())
                     }
@@ -78,18 +94,20 @@ class ViewerReturnOriginLifetimeTest {
             }
         }
         compose.waitForIdle()
-        compose.runOnIdle {
-            viewerReturn.openedFrom(gridId = "feed", post = post)
-            viewerReturn.launching(listOf(post), keepsRoot = false)
-            navigation.navigate(AppRoute.Viewer)
-        }
+        compose.runOnIdle { openViewer(post) }
         compose.waitForIdle()
         compose.runOnIdle { navigation.navigate(AppRoute.Settings) }
         compose.waitForIdle()
     }
 
-    private fun returnsToCard(): Boolean = compose.runOnIdle {
-        viewerReturn.begin(post)
+    private fun openViewer(tapped: PostId) {
+        viewerReturn.openedFrom(gridId = "feed", post = tapped)
+        viewerReturn.launching(listOf(tapped), keepsRoot = false)
+        navigation.navigate(AppRoute.Viewer)
+    }
+
+    private fun returnsToCard(tapped: PostId = post): Boolean = compose.runOnIdle {
+        viewerReturn.begin(tapped)
         (viewerReturn.request != null).also { viewerReturn.finishLanding() }
     }
 

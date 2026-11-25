@@ -22,7 +22,7 @@ import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.viewer.CrumbTag
 import com.theoriacodex.app.viewer.ViewerCrumb
-import com.theoriacodex.app.viewer.ViewerReturnTransition
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.removal
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -73,15 +73,16 @@ internal fun rememberViewerLevel(
     navController: NavHostController,
     entry: NavBackStackEntry,
     pendingSessionId: String?,
-    viewerReturn: ViewerReturnTransition?,
 ): ViewerLevel {
     val handoff = rememberTrailHandoff()
+    val viewerReturn = LocalViewerReturnTransition.current
     val saved = entry.savedStateHandle
     val owner = viewModel<ViewerTrailEntryViewModel>(
         viewModelStoreOwner = entry,
         factory = viewModelFactory {
             initializer {
-                ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) { if (!saved.isForkLevel()) viewerReturn?.clear() }
+                val origin = viewerReturn?.origin
+                ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) { if (!saved.isForkLevel()) viewerReturn?.release(origin) }
             }
         },
     )
