@@ -42,6 +42,7 @@ import com.theoriacodex.app.ui.components.rememberCollectTargetsState
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.TrailOutcome
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
@@ -108,7 +109,11 @@ private suspend fun failureOf(
         is LiftAction.Save -> return saveFailure(drop, ChosenCodex.Existing(action.codexId, action.codexName), quickSave, onSaved)
         LiftAction.NewCodex, LiftAction.OpenPicker -> Unit
         LiftAction.ToggleLike -> drop.lift.like?.toggle?.invoke()
-        LiftAction.Similar -> if (!session.whilePending { trails.openTrail(TrailRequest.Similar(post)) }) return "No similar posts found"
+        LiftAction.Similar -> when (session.whilePending { trails.openTrail(TrailRequest.Similar(post)) }) {
+            TrailOutcome.Opened -> Unit
+            TrailOutcome.Empty -> return "No similar posts found"
+            TrailOutcome.Failed -> return "Couldn't load similar posts"
+        }
     }
     return null
 }
