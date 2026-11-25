@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.data.repository.FirstPageStore
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
@@ -18,6 +19,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -35,10 +37,15 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
+    @get:Rule val folder = TemporaryFolder()
+
     @Test
     fun `initial execution returns immutable posts status and continuation`() = runTest {
         val coordinator = coordinator(TestAdapter(SourceKey.PIXIV))
@@ -147,7 +154,28 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `temporary execution key binds canonical source selection`() = runTest {
+    fun `a source whose first page failed is asked for its first page on retry while a paged source gets its continuation (ADR 0069)`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU, requiresExactTags = false).apply {
+            failure = SourceAdapterException(SourceFailureReason.UNKNOWN, "offline")
+        }
+        val coordinator = coordinator(pixiv, gelbooru)
+        coordinator.initializeRoute()
+        val query = unifiedQuery("mixed")
+        val first = coordinator.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
+        gelbooru.failure = null
+
+        val page = coordinator.executePage(first.continuation) as SearchPageResult.Success
+        val retried = coordinator.retrySource(query, SearchSourceScope.GlobalUnified, page.continuation, SourceKey.GELBOORU)
+            as SearchPageResult.Success
+
+        fun pages(posts: List<Post>) = posts.map { "${it.id.source}:${it.id.sourcePostId.substringAfterLast('-')}" }
+        assertEquals(listOf("PIXIV:1"), pages(page.posts))
+        assertEquals(listOf("GELBOORU:0"), pages(retried.posts))
+    }
+
+    @Test
+    fun `temporary execution key binds canonical source selection (ADR 0080)`() = runTest {
         val query = unifiedQuery("temporary")
         val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
 
@@ -155,6 +183,22 @@ class SearchCoordinatorTest {
             "${QueryHash.from(query)}|temporary-sources:GELBOORU,PIXIV",
             searchExecutionKey(query, scope),
         )
+    }
+
+    @Test
+    fun `a cached first page returns only posts from enabled sources (ADR 0080)`() = runTest {
+        val store = FirstPageStore(File(folder.root, "first-page.json"))
+        val enabled = cachedPost(SourceKey.PIXIV)
+        val disabled = cachedPost(SourceKey.GELBOORU)
+        store.save("key", listOf(disabled, enabled))
+        val coordinator = testSearchCoordinator(
+            registry = TestRegistry(listOf(TestAdapter(SourceKey.PIXIV), TestAdapter(SourceKey.GELBOORU))),
+            firstPageStore = store,
+        )
+
+        val posts = coordinator.cachedFirstPage("key", setOf(SourceKey.PIXIV))
+
+        assertEquals(listOf(enabled.id), posts.map { it.id })
     }
 
     @Test
@@ -465,6 +509,19 @@ class SearchCoordinatorTest {
         assertEquals(setOf("pixiv", "gelbooru"), trending.mapTo(mutableSetOf(), TagSuggestion::text))
         assertFalse(trending.any { it.text == "hitomi" })
     }
+
+    private fun cachedPost(source: SourceKey) = Post(
+        id = PostId(source, "1"),
+        preview = ImageRef(url = "https://example.test/1.jpg", localPath = null, mime = "image/jpeg"),
+        full = null,
+        pageUrl = null,
+        width = 100,
+        height = 100,
+        canonicalTags = emptyList(),
+        rawTags = emptyList(),
+        authorName = null,
+        createdAtEpochMs = null,
+    )
 
     private fun coordinator(vararg adapters: TestAdapter): SearchCoordinator = coordinator(
         InMemoryQueryRepository(),

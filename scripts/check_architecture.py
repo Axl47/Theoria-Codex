@@ -142,14 +142,22 @@ def quality_gates_cover_app_logic() -> list[str]:
     return [message for passed, message in expectations if not passed]
 
 
+PIXIV_MEDIUM_FIRST_EXCEPTION = "if (post.id.source == SourceKey.PIXIV && full != null) {"
+SOURCE_DECISION = re.compile(r"source\.id\b|isCustom|source\s*[!=]=")
+
+
 @rule
 def delivery_plans_ignore_source_names() -> list[str]:
     post_media = read("media-kit/src/main/kotlin/com/theoriacodex/app/media/PostMedia.kt")
     plans = post_media.split("fun previewMediaDeliveryPlan", 1)[-1].split("private fun ImageRef.hasLighterRenditions", 1)[0]
+    candidate = post_media.split("fun postPreviewImageCandidate", 1)[-1].split("fun postPlaybackMediaCandidate", 1)[0]
+    decided = candidate.replace(PIXIV_MEDIUM_FIRST_EXCEPTION, "") + plans
     expectations = [
         ("hasLighterRenditions()" in plans.split("private fun mediaDeliveryPlan", 1)[-1],
          "PostMedia.kt's mediaDeliveryPlan must upgrade quality from hasLighterRenditions()"),
-        ("SourceKey." not in plans, "PostMedia.kt's delivery plans must decide from the media, not from SourceKey"),
+        ("SourceKey." not in decided, "PostMedia.kt's delivery plans must decide from the media, not from SourceKey"),
+        (not SOURCE_DECISION.search(decided),
+         "PostMedia.kt's delivery plans must not decide from a source id or isCustom"),
         (not re.search(r"setOf\(\s*SourceKey", post_media), "PostMedia.kt must not keep a set of SourceKeys"),
     ]
     return [message for passed, message in expectations if not passed]

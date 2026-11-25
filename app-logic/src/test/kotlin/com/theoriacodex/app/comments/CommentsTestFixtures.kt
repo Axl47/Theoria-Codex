@@ -32,6 +32,7 @@ internal class FakeCommentsLoader(
     private val pages: Map<String, CommentPage> = emptyMap(),
     var supported: Boolean = true,
     private val anchors: Map<String, String> = emptyMap(),
+    private val failKeys: Set<String> = emptySet(),
 ) : CommentsLoading {
     val requests = mutableListOf<String>()
     var failNext = false
@@ -43,6 +44,7 @@ internal class FakeCommentsLoader(
     override suspend fun load(post: Post, pageToken: String?, parent: PostComment?): CommentPage {
         val key = "${parent?.id.orEmpty()}/${pageToken.orEmpty()}"
         requests += "${post.id.sourcePostId}:$key"
+        if (key in failKeys) error("offline")
         if (failNext) {
             failNext = false
             error("offline")

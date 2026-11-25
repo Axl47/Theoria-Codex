@@ -12,7 +12,7 @@ import org.junit.Test
 
 class TagSuggestionRankingTest {
     @Test
-    fun `exact and prefix relevance beat incomparable counts`() {
+    fun `exact and prefix relevance beat incomparable counts (ADR 0083)`() {
         val ranked = rankTagSuggestions(
             suggestions = listOf(
                 suggestion("wildcat", count = 1_000_000),
@@ -35,7 +35,7 @@ class TagSuggestionRankingTest {
     }
 
     @Test
-    fun `searched tags rank by closeness, then search count, merging spellings within the sources in scope`() {
+    fun `searched tags rank by closeness, then search count, merging spellings within the sources in scope (ADR 0083)`() {
         val counts = mapOf(
             SearchedTagKey(SourceKey.PIXIV, SearchTerm("Animation")) to 2L,
             SearchedTagKey(SourceKey.GELBOORU, SearchTerm("animation")) to 5L,
@@ -55,7 +55,7 @@ class TagSuggestionRankingTest {
     }
 
     @Test
-    fun `searched terms keep their type, rank per type and follow the scope`() {
+    fun `searched terms keep their type, rank per type and follow the scope (ADR 0083)`() {
         val artist = SearchTerm("mika", SearchFacet.ARTIST, "artist")
         val female = SearchTerm("milf", SearchFacet.TAG, "female")
         val counts = mapOf(
@@ -91,14 +91,14 @@ class TagSuggestionRankingTest {
     }
 
     @Test
-    fun `null-count provider order is stable`() {
+    fun `null-count provider order is stable (ADR 0083)`() {
         val providerOrder = listOf(suggestion("blue archive"), suggestion("blue eyes"))
 
         assertEquals(providerOrder, rankTagSuggestions(providerOrder, "blue", 10))
     }
 
     @Test
-    fun `unified ranking interleaves providers within each relevance band`() {
+    fun `unified ranking interleaves providers within each relevance band (ADR 0083)`() {
         val ranked = rankUnifiedTagSuggestions(
             suggestionsBySource = listOf(
                 SourceKey.GELBOORU to listOf(suggestion("blue_hair", 100), suggestion("blue_eyes", 90)),
@@ -112,6 +112,15 @@ class TagSuggestionRankingTest {
             listOf("blue_hair", "blue archive", "blue_eyes", "blue sky"),
             ranked.map(TagSuggestion::text),
         )
+        val banded = rankUnifiedTagSuggestions(
+            suggestionsBySource = listOf(
+                SourceKey.GELBOORU to listOf(suggestion("blue_hair", 100), suggestion("cat_blue", 90)),
+                SourceKey.PIXIV to listOf(suggestion("light blue"), suggestion("blue")),
+            ),
+            prefix = "blue",
+            limit = 4,
+        )
+        assertEquals(listOf("blue", "blue_hair", "cat_blue", "light blue"), banded.map(TagSuggestion::text))
     }
 
     @Test

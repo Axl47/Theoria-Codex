@@ -19,3 +19,10 @@ Search stays independent of Codex, creator and command features.
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/TagSuggestionRanking.kt`: `rankUnifiedTagSuggestions`, `rankSearchedTags`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/omnibox/OmniboxEntry.kt`: `OmniboxEntry`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/omnibox/OmniboxMatcher.kt`: `SUBSTRING_MIN_LENGTH`, `OMNIBOX_CAP_PER_KIND`, `TAG_ROWS_BEFORE_OMNIBOX`, `placeOmniboxMatches`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionRankingTest.kt`: `unified ranking interleaves providers within each relevance band (ADR 0083)`, `exact and prefix relevance beat incomparable counts (ADR 0083)`, `null-count provider order is stable (ADR 0083)`, `searched tags rank by closeness, then search count, merging spellings within the sources in scope (ADR 0083)`, `searched terms keep their type, rank per type and follow the scope (ADR 0083)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/search/omnibox/OmniboxMatcherTest.kt`: `keywords find an entry and one letter only matches the start of a word (ADR 0083)`, `each kind keeps its best few and equal matches follow the kinds' order (ADR 0083)`, `when anything else matches, only the top two tags come before it (ADR 0083)`
+- `scripts/policy_checks.sh`: `module_layering`
+- Left to prose: `module_layering` keeps `feature-search` from depending on another feature module; that omnibox entries bind their own actions inside `app-logic` is unguarded, since no check can tell a binding from a dependency there.
