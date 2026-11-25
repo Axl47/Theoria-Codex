@@ -37,16 +37,21 @@ internal fun TagForkChip(
             leadingIcon = leadingIcon,
             stateSuffix = stateSuffix,
         )
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            moves.forEach { move ->
-                DropdownMenuItem(
-                    text = { Text(move.label) },
-                    onClick = {
-                        menuOpen = false
-                        move.run()
-                    },
-                )
-            }
+        TagActionMenu(menuOpen, moves) { menuOpen = false }
+    }
+}
+
+@Composable
+fun TagActionMenu(expanded: Boolean, actions: List<TagChipAction>, onDismiss: () -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        actions.forEach { action ->
+            DropdownMenuItem(
+                text = { Text(action.label) },
+                onClick = {
+                    onDismiss()
+                    action.run()
+                },
+            )
         }
     }
 }

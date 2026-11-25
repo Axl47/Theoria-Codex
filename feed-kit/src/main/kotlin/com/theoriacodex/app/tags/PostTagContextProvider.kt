@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchTerm
@@ -45,6 +46,8 @@ class PostTagSavedTags(
 
 internal val LocalPostTagSavedTags = staticCompositionLocalOf { PostTagSavedTags() }
 
+val LocalTagSuggestions = staticCompositionLocalOf<suspend (SourceKey, String) -> List<TagSuggestion>> { { _, _ -> emptyList() } }
+
 @Composable
 fun PostTagContextProvider(
     state: StateFlow<SearchUiState>?,
@@ -53,6 +56,7 @@ fun PostTagContextProvider(
     savedTags: PostTagSavedTags = PostTagSavedTags(),
     tagVideoCount: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    tagSuggestions: suspend (SourceKey, String) -> List<TagSuggestion> = { _, _ -> emptyList() },
     content: @Composable () -> Unit,
 ) {
     val draft = remember(state) { state?.map { it.query.draft }?.distinctUntilChanged() ?: noSearchDraft }
@@ -64,6 +68,7 @@ fun PostTagContextProvider(
         LocalPostTagCounts provides counts,
         LocalPostTagSearchActions provides searchActions,
         LocalPostTagSavedTags provides savedTags,
+        LocalTagSuggestions provides tagSuggestions,
         content = content,
     )
 }

@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.navigation.TrailFork
@@ -24,6 +25,9 @@ internal class ViewerTrailForks(
         private set
 
     var failed by mutableStateOf<TrailFork?>(null)
+        private set
+
+    var chromeHolds by mutableIntStateOf(0)
         private set
 
     private var from: PostId? = null
@@ -49,6 +53,11 @@ internal class ViewerTrailForks(
         job = launched
         launched.start()
         return true
+    }
+
+    fun holdChrome(): () -> Unit {
+        chromeHolds++
+        return { chromeHolds-- }
     }
 
     fun follow(post: PostId) {
