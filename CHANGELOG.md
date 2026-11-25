@@ -10,7 +10,7 @@
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
-- When followed series need their extension, such as after restoring a Mihon backup, the Settings button in Series and the Extensions row in Settings show how many. Extensions then starts its Manga and Anime sections with Missing extensions, which lists those series by the extension that provides them, to install or turn on. Those series can't be checked for new chapters until their extension is on.
+- When followed series need their extension, such as after restoring a Mihon backup, the Settings buttons in Series and Library and the Extensions row in Settings show how many. Extensions then starts its Manga and Anime sections with Missing extensions, which lists those series by the extension that provides them, to install or turn on. Those series can't be checked for new chapters until their extension is on.
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and lists series no repo offers in a card per site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
 - Switch source searches only the sources you check under Sources, and remembers your choice for next time. Each extension's languages fold under it, and its box checks or unchecks them all. Sources you install later start checked.
@@ -175,6 +175,7 @@
 
 ### Fixed
 
+- In For You's deck, dragging a post up far enough to save it now highlights the Codex it will go to, instead of saving to one you couldn't see. Sliding onto another Codex moves the highlight there. Dragging down far enough highlights the tag it will hide the same way.
 - With Next in queue paused or held, a video that repeats starts over at once. It no longer shows a loading spinner for a second at every loop.
 - Zooming into a video or animation in the Viewer keeps its thin progress bar at the bottom edge of what you see, instead of leaving it across the middle of the zoomed picture.
 - Dragging a For You card diagonally shows the side hint (Skip or Like) and the Codex or hide targets together, instead of flickering between them. The one letting go would pick is highlighted, and the other dims. The Codex your finger is on fills with the same accent as Like and Skip.

@@ -12,6 +12,8 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -86,10 +88,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScope: SharedTransitionScope) {
-    opaqueScreen(AppRoute.Home) {
-        CompositionLocalProvider(LocalCodexMorph provides remember { CodexMorphScope(sharedScope, this) }) {
-            HomePager(shell)
+internal fun NavGraphBuilder.theoriaDestinations(
+    shell: TheoriaShell,
+    sharedScope: SharedTransitionScope,
+    homeChrome: @Composable (@Composable (Modifier) -> Unit) -> Unit,
+) {
+    opaqueScreen(AppRoute.Home, reachesBottomEdge = true) {
+        val codexMorph = remember { CodexMorphScope(sharedScope, this) }
+        homeChrome { modifier ->
+            Box(modifier) {
+                CompositionLocalProvider(LocalCodexMorph provides codexMorph) { HomePager(shell) }
+            }
         }
     }
     composable(
@@ -103,7 +112,7 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
         val top by shell.navController.currentBackStackEntryAsState()
         ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
         ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
-            ViewerDestination(shell, entry)
+            Box(Modifier.padding(screenBottomInsets.asPaddingValues()), propagateMinConstraints = true) { ViewerDestination(shell, entry) }
         }
     }
     opaqueScreen(AppRoute.Settings) { SettingsScreenDestination(shell) }
@@ -123,7 +132,10 @@ private fun CodexDetailEntry(
     val codexId = requireNotNull(entry.arguments?.getString("codexId"))
     RecordCodexEntryEffect(entry, codexId, shell.data.statisticsRepository)
     val codexMorph = remember { CodexMorphScope(sharedScope, entryScope) }
-    Box(Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)) {
+    Box(
+        Modifier.fillMaxSize().codexMorph(codexId, codexMorph).background(MaterialTheme.colorScheme.background)
+            .padding(screenBottomInsets.asPaddingValues()),
+    ) {
         if (codexId == SAVED_CODEX_ID) {
             SavedCodexRoute(
                 data = shell.data,

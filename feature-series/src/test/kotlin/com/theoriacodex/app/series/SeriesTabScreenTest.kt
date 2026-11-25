@@ -25,12 +25,15 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import com.theoriacodex.app.ui.components.SETTINGS_LABEL
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.SortChoice
+import com.theoriacodex.domain.model.SortDirection
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.ExtensionAlerts
@@ -129,7 +132,7 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         following.assertIsNotDisplayed()
         compose.onNodeWithTag("collapsed-search-strip").assertIsDisplayed()
-        compose.onNodeWithContentDescription(SETTINGS).assertIsDisplayed()
+        compose.onNodeWithContentDescription(SETTINGS_LABEL).assertIsDisplayed()
 
         compose.onRoot().performTouchInput { swipeDown(startY = centerY, endY = centerY + 150f) }
         compose.waitForIdle()
@@ -146,7 +149,7 @@ class SeriesTabScreenTest {
         }
         compose.waitForIdle()
 
-        val button = compose.onNodeWithContentDescription(SETTINGS)
+        val button = compose.onNodeWithContentDescription(SETTINGS_LABEL)
         button.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "2 series need their extension, 1 update"))
         compose.onNodeWithText("3").assertIsDisplayed()
         button.performClick()
@@ -156,6 +159,26 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         button.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         compose.onNodeWithText("3").assertDoesNotExist()
+    }
+
+    @Test
+    fun theFollowingSortShowsAShortNameButTalkBackHearsTheFullOne() {
+        val followed = listOf(
+            FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/m"), "Paper Moon"), unreadCount = 0),
+            FollowedSeries(Series(SeriesId(SeriesKind.ANIME.extensionSourceKey(2), "/a"), "Night Reel"), unreadCount = 0),
+        )
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { emptyList() }) { _, _ -> NOTHING_CHECKED }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}) } }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewModel.chooseKind(SeriesKind.ANIME)
+            viewModel.chooseLibrary(LibraryOptions(SortChoice(LibrarySort.RECENTLY_READ, SortDirection.DESCENDING)))
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Last watched")
+            .assert(hasText("Watched"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Descending"))
     }
 
     @Test

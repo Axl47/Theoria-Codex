@@ -1,11 +1,19 @@
 package com.theoriacodex.app.viewer
 
 import android.app.Application
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.app.codex.LocalQuickSave
 import com.theoriacodex.app.codex.QuickSave
 import com.theoriacodex.app.codex.QuickSaveRecord
@@ -49,16 +57,49 @@ class ViewerSaveButtonTest {
         compose.onNodeWithContentDescription("Save to Cats").assertExists()
     }
 
-    private class SuggestsCatsOnce : QuickSave {
+    @Test fun `holding Save and releasing on a fanned Codex saves there`() {
+        val fan = ViewerSaveFanState()
+        val quickSave = SuggestsCatsOnce(SaveSuggestion("dogs", "Dogs", emptyList()))
+        compose.setContent {
+            CompositionLocalProvider(LocalQuickSave provides quickSave) {
+                Box(Modifier.fillMaxSize()) {
+                    Box(Modifier.align(Alignment.BottomCenter)) {
+                        ViewerSaveButton(POST, ViewerSaveContext(), fan, onInteraction = {}, onOpenPicker = {})
+                    }
+                    ViewerSaveFanOverlay(fan)
+                }
+            }
+        }
+        compose.waitUntilSettled { compose.onAllNodesWithContentDescription("Save to Cats").fetchSemanticsNodes().isNotEmpty() }
+        val button = compose.onNodeWithTag("viewer-dock-save").getBoundsInRoot()
+        compose.onNodeWithTag("viewer-dock-save").performTouchInput {
+            down(center)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            move()
+        }
+        val dogs = compose.onNodeWithTag("Collect target codex:dogs").getBoundsInRoot()
+        compose.onNodeWithTag("viewer-dock-save").performTouchInput {
+            val toDogs = with(density) { Offset((dogs.left + dogs.right - button.left * 2).toPx() / 2, (dogs.top + dogs.bottom - button.top * 2).toPx() / 2) }
+            moveTo(toDogs)
+        }
+        compose.onNodeWithTag("viewer-dock-save").performTouchInput { up() }
+        compose.waitUntilSettled { quickSave.saved == "dogs" }
+    }
+
+    private class SuggestsCatsOnce(private vararg val more: SaveSuggestion) : QuickSave {
         private var scored = false
+        var saved: String? = null
         override val lastQuickSave: StateFlow<QuickSaveRecord?> = MutableStateFlow(null)
-        override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? = null
+        override suspend fun quickSave(post: Post, codexId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? {
+            saved = codexId
+            return null
+        }
         override suspend fun saveToNew(post: Post, name: String, profileId: String, query: Query?, fromForYou: Boolean): QuickSaveRecord? = null
         override suspend fun undoQuickSave(record: QuickSaveRecord) = Unit
         override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> = flow {
             if (scored) awaitCancellation()
             scored = true
-            emit(SaveSuggestions(listOf(SaveSuggestion("cats", "Cats", emptyList()))))
+            emit(SaveSuggestions(listOf(SaveSuggestion("cats", "Cats", emptyList())) + more))
         }
     }
 
