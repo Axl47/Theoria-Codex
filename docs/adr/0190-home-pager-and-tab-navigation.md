@@ -29,7 +29,7 @@ A new tab must be considered in `tabTap`, `tabShown` and the saved-route restore
 
 - `app/src/main/java/com/theoriacodex/app/ui/AppNavigation.kt`: `topLevelPagerFling`, `tabShown`, `TabTap`, `tabTap`, `tabSwipeEnabled`, `codexEnterTransition`, `codexExitTransition`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaAdaptiveScaffold.kt`: `TheoriaAdaptiveScaffold`, `TheoriaNavigationChrome`, `navigateTopLevelDestination`
-- `app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt`: `TheoriaNavigationSurface` (`onDestinationSelected`, `containerColor`)
+- `app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt`: `TheoriaNavigationSurface` (`containerColor`), `selectTopLevelDestination`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShell.kt`: `showTab`, `goToTab`, `homeTabRoute`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShellEffects.kt`: `HomeTabEffects`
 - `feature-discover/src/main/kotlin/com/theoriacodex/app/recommend/ForYouDeckScreen.kt`: `ForYouDeckScreen`

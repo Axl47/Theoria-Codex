@@ -272,16 +272,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
             destinations = TopLevelDestination.entries,
             marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
             windowWidthDp = windowWidthDp,
-            onDestinationSelected = { destination ->
-                val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
-                    tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
-                navigation.homeTabRoute = destination.route
-                if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
-                    shell.data.librarySections.select(LibrarySection.Saved)
-                }
-                if (alreadyShowing) tabReselects.tryEmit(destination)
-                else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
-            },
+            onDestinationSelected = { selectTopLevelDestination(shell, it, libraryHasNew, tabReselects) },
             content = homeContent,
         )
     }
@@ -296,6 +287,24 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
             }
         }
     }
+}
+
+private fun selectTopLevelDestination(
+    shell: TheoriaShell,
+    destination: TopLevelDestination,
+    libraryHasNew: Boolean,
+    tabReselects: MutableSharedFlow<TopLevelDestination>,
+) {
+    val navigation = shell.navigation
+    val pagerState = navigation.pagerState
+    val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
+        tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
+    navigation.homeTabRoute = destination.route
+    if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
+        shell.data.librarySections.select(LibrarySection.Saved)
+    }
+    if (alreadyShowing) tabReselects.tryEmit(destination)
+    else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
 }
 
 @Composable
