@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -113,7 +114,7 @@ class CheckFailuresTest {
         compose.onNodeWithText("Couldn't check 1 series").performClick()
         compose.onNodeWithContentDescription("More options").performClick()
         compose.onNodeWithText(SWITCH_SOURCE).performClick()
-        compose.waitUntil { compose.onAllNodesWithText("Paper Lantern", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntilSettled { compose.onAllNodesWithText("Paper Lantern", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText(COULDNT_CHECK).assertCountEquals(0)
     }
 
