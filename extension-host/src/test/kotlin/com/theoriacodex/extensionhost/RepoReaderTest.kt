@@ -23,7 +23,7 @@ class RepoReaderTest {
     ]"""
 
     @Test
-    fun `a legacy repo is read from its folder, its index address or its repo address alike`() = runTest {
+    fun `a legacy repo is read from its folder, its index address or its repo address alike (ADR 0063)`() = runTest {
         val site = mapOf(
             "https://repo.example/anime/repo.json" to legacyRepo,
             "https://repo.example/anime/index.min.json" to legacyIndex,
@@ -35,6 +35,7 @@ class RepoReaderTest {
             val onsen = index.extensions.first()
             assertEquals("AnimeOnsen", onsen.name)
             assertEquals("https://repo.example/anime/apk/aniyomi-all.animeonsen-v16.12.apk", onsen.apkUrl)
+            assertEquals("https://repo.example/anime/icon/eu.kanade.tachiyomi.animeextension.all.animeonsen.png", onsen.iconUrl)
             assertEquals("16", onsen.libVersion)
             assertEquals(SeriesKind.ANIME, onsen.kind)
             assertEquals(listOf(false, true), index.extensions.map { it.torrent })
@@ -45,7 +46,7 @@ class RepoReaderTest {
     }
 
     @Test
-    fun `a legacy repo naming a newer index is read from that index, as Keiyoushi's is`() = runTest {
+    fun `a legacy repo naming a newer index is read from that index, as Keiyoushi's is (ADR 0063)`() = runTest {
         val stub = """{"index_v2":"https://repo.example/store/index.pb","meta":{"name":"Old","website":"w","signingKeyFingerprint":"$signingKey"}}"""
         val site = mapOf(
             "https://repo.example/store/repo.json" to stub.encodeToByteArray(),
@@ -58,13 +59,13 @@ class RepoReaderTest {
         assertEquals("Fixture", index.name)
         assertEquals("The key is compared as lowercase hex", signingKey, index.signingKey)
         assertEquals(
-            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA)),
+            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA, iconUrl = "https://cdn.example.org/achy.png")),
             index.extensions,
         )
     }
 
     @Test
-    fun `an anime store is read from its own address, with its torrent flag where a manga store has sources`() = runTest {
+    fun `an anime store is read from its own address, with its torrent flag where a manga store has sources (ADR 0063)`() = runTest {
         val index = RepoReader.read("https://repo.example/anime/index.pb") { url -> if (url.endsWith("index.pb")) animeStore else throw IOException("404 $url") }
         assertEquals("Anime fixture", index.name)
         assertEquals(
@@ -74,10 +75,20 @@ class RepoReaderTest {
             ),
             index.extensions,
         )
+        val plain = RepoReader.read("https://repo.example/plain/index.pb") { url -> if (url.endsWith("index.pb")) resource("anime-plain.pb.gz") else throw IOException("404 $url") }
+        assertEquals(listOf(SeriesKind.ANIME to listOf("all")), plain.extensions.map { it.kind to it.languages })
     }
 
     @Test
-    fun `a manga store whose extensions list no sources is still read as manga`() = runTest {
+    fun `a legacy repo naming a newer index that cannot be read fails instead of reading the stub list (ADR 0063)`() = runTest {
+        val repo = """{"index_v2":"https://repo.example/anime/index.pb","meta":{"name":"Stub","website":"w","signingKeyFingerprint":"$signingKey"}}"""
+        val site = mapOf("https://repo.example/anime/repo.json" to repo, "https://repo.example/anime/index.min.json" to legacyIndex).mapValues { it.value.encodeToByteArray() }
+
+        assertFailsWith<IOException> { RepoReader.read("https://repo.example/anime") { url -> site[url] ?: throw IOException("404 $url") } }
+    }
+
+    @Test
+    fun `a manga store whose extensions list no sources is still read as manga (ADR 0063)`() = runTest {
         val index = RepoReader.read("https://repo.example/quiet/index.pb") { url -> if (url.endsWith("index.pb")) resource("quiet.pb.gz") else throw IOException("404 $url") }
         assertEquals(listOf(SeriesKind.MANGA to "1.6"), index.extensions.map { it.kind to it.libVersion })
     }

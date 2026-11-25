@@ -55,11 +55,15 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         coldGraphRelaunch()
         assertEquals(listOf(savedSearch), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
+        waitFor("the launch new-posts check finishes", timeoutMillis = 15_000) {
+            io { savedSearch.id in container.data.uiRestoreRepository.observeSavedSearchNewPosts().first().marks }
+        }
+        container.registry.requests.clear()
         library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))
-        waitFor("at least two first-page requests use the saved sort") { container.registry.requests.count { it.pageToken == null && it.query.sort == query.sort } >= 2 }
+        waitFor("at least two first-page requests run newest first") { container.registry.requests.count { it.pageToken == null && it.query.sort == SortMode.NEWEST } >= 2 }
         val requests = container.registry.requests.filter { it.pageToken == null }
-        assertEquals(participating.toSet(), requests.filter { it.query.sort == query.sort }.map { it.source }.toSet())
+        assertEquals(participating.toSet(), requests.filter { it.query.sort == SortMode.NEWEST }.map { it.source }.toSet())
         assertTrue(requests.all {
             it.query.effectiveIncludeTermGroups == query.effectiveIncludeTermGroups && it.query.excludeTags == query.excludeTags
         })

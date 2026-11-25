@@ -36,7 +36,7 @@ object ExtensionHost {
     @Volatile
     private var client: OkHttpClient? = null
 
-    fun install(
+    internal fun install(
         application: Application,
         versionName: String,
         versionCode: Int,
@@ -71,7 +71,7 @@ object ExtensionHost {
         .cookieJar(BrowserCookieJar(cookies) { true })
         .addInterceptor(UncaughtExceptionInterceptor())
         .addInterceptor(UserAgentInterceptor { DEFAULT_USER_AGENT })
-        .addInterceptor(CloudflareInterceptor(ChallengePass(browsers, outages::isChallenged), outages))
+        .addInterceptor(CloudflareInterceptor(ChallengePass(browsers, outages::holdsOffChallengePass), outages))
         .addNetworkInterceptor { chain ->
             requestCount.incrementAndGet()
             chain.proceed(chain.request())
