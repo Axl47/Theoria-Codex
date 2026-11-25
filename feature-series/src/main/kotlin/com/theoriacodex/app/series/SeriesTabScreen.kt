@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
@@ -352,8 +353,8 @@ private fun GlobalSearchBody(
 }
 
 @Composable
-internal fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+internal fun KindFilter(chosen: SeriesKind?, onChoose: (SeriesKind?) -> Unit, modifier: Modifier = Modifier, spacing: Dp = 8.dp) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(spacing)) {
         FilterChoiceChip("All", selected = chosen == null) { onChoose(null) }
         SeriesKind.entries.forEach { kind -> FilterChoiceChip(kind.label, selected = chosen == kind) { onChoose(kind) } }
     }

@@ -220,7 +220,7 @@ private fun FollowingControls(
     val filtered = content.library.show != LibraryShow.ALL
     val sort = content.library.sort
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (content.offersFilter) KindFilter(content.filter, onChooseKind)
+        if (content.offersFilter) KindFilter(content.filter, onChooseKind, spacing = 4.dp)
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
             val name = sort.key.label(content.words)
             SortLabel(
@@ -228,7 +228,7 @@ private fun FollowingControls(
                 sort.direction,
                 onReverse,
                 modifier = Modifier.semantics { contentDescription = name },
-                contentPadding = PaddingValues(start = 8.dp),
+                contentPadding = PaddingValues(start = 4.dp),
             )
         }
         IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
