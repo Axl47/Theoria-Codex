@@ -9,9 +9,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchBranch
@@ -27,10 +29,12 @@ import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @Composable
@@ -64,7 +68,7 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
 }
 
 internal fun markingNewPostsSeen(
-    shell: TheoriaShell,
+    data: DataDependencies,
     codexId: String,
     loading: Boolean,
     header: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)?,
@@ -77,7 +81,7 @@ internal fun markingNewPostsSeen(
         LaunchedEffect(codexId, rendered) {
             if (!rendered || marked) return@LaunchedEffect
             withFrameNanos {}
-            shell.data.markNewPostsSeen(codexId, shown.mapTo(mutableSetOf()) { it.id.markKey() })
+            data.markNewPostsSeen(codexId, shown.mapTo(mutableSetOf()) { it.id.markKey() })
             marked = true
         }
     }
@@ -93,7 +97,29 @@ private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Se
 }
 
 internal suspend fun DataDependencies.markViewedNewPost(post: Post, session: ViewerSession?) {
-    markNewPostsSeen(newPostsCollection(session?.context) ?: return, setOf(post.id.markKey()))
+    val collection = newPostsCollection(session?.context) ?: return
+    val key = post.id.markKey()
+    viewedNewPosts.update { viewed -> viewed + (collection to viewed[collection].orEmpty() + key) }
+    markNewPostsSeen(collection, setOf(key))
+}
+
+private class OpenedNewPosts(val markKeys: Set<String>) : ViewModel()
+
+@Composable
+internal fun rememberNewPostMarkers(
+    data: DataDependencies,
+    codexId: String,
+    posts: List<Post>,
+    newOnOpen: () -> Set<String>,
+): Set<PostId> {
+    val opened = viewModel(key = "opened-new-posts:$codexId") { OpenedNewPosts(newOnOpen()) }.markKeys
+    val viewed = data.viewedNewPosts.collectAsStateWithLifecycle().value[codexId].orEmpty()
+    return remember(posts, opened, viewed) {
+        if (opened.isEmpty()) return@remember emptySet()
+        posts.mapNotNullTo(mutableSetOf()) { post ->
+            post.id.takeIf { id -> id.markKey().let { key -> key in opened && key !in viewed } }
+        }
+    }
 }
 
 internal fun newPostsCollection(context: ViewerLaunchContext?): String? = statisticsCodexId(context)?.takeIf { it in newPostCodexIds }

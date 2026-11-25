@@ -142,6 +142,7 @@ private val VIEWER_TOP_SCRIM_HEIGHT = 170.dp
 internal fun PlaybackSettingsMenu(
     playbackRateEnabled: Boolean,
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode?,
+    autoAdvancePaused: Boolean,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
@@ -164,7 +165,7 @@ internal fun PlaybackSettingsMenu(
     fun interact() { interactionSerial++ }
     Box {
         IconButton(onClick = { interact(); onExpandedChange(!expanded) }) {
-            Icon(Icons.Default.Settings, contentDescription = "Playback settings")
+            ViewerPausedBadge(autoAdvancePaused) { Icon(Icons.Default.Settings, contentDescription = "Playback settings") }
         }
         DropdownMenu(
             expanded = expanded,
@@ -179,7 +180,7 @@ internal fun PlaybackSettingsMenu(
                 }
             },
         ) {
-            if (playbackMode != null) PlaybackModeChoices(playbackMode, { interact(); onPlaybackModeSelected(it) }, ::interact)
+            if (playbackMode != null) PlaybackModeChoices(playbackMode, autoAdvancePaused, { interact(); onPlaybackModeSelected(it) }, ::interact)
             VideoQualityChoices(videoVariants, quality, qualityHeight, { selected, height ->
                 interact(); onQualitySelected(selected, height)
             })
@@ -191,6 +192,7 @@ internal fun PlaybackSettingsMenu(
 @Composable
 internal fun PlaybackModeChoices(
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
+    autoAdvancePaused: Boolean,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
     onInteraction: () -> Unit,
 ) {
@@ -204,14 +206,16 @@ internal fun PlaybackModeChoices(
                 .semantics { this.selected = selected },
             text = { Text(mode.label) },
             leadingIcon = {
-                Icon(
-                    imageVector = when (mode) {
-                        com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP -> Icons.Default.Repeat
-                        com.theoriacodex.app.viewer.state.ViewerPlaybackMode.ONCE -> Icons.Default.PlayArrow
-                        com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT -> Icons.AutoMirrored.Filled.PlaylistPlay
-                    },
-                    contentDescription = null,
-                )
+                ViewerPausedBadge(autoAdvancePaused && mode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT) {
+                    Icon(
+                        imageVector = when (mode) {
+                            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP -> Icons.Default.Repeat
+                            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.ONCE -> Icons.Default.PlayArrow
+                            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT -> Icons.AutoMirrored.Filled.PlaylistPlay
+                        },
+                        contentDescription = null,
+                    )
+                }
             },
             colors = MenuDefaults.itemColors(textColor = contentColor, leadingIconColor = contentColor),
             onClick = { onPlaybackModeSelected(mode); onInteraction() },

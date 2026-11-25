@@ -7,7 +7,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -19,15 +18,15 @@ class RoomUpgradeJourneyTest {
     @get:Rule
     val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), TheoriaRoomDatabase::class.java)
 
-    @Test fun `oldest saved library survives the entire registered upgrade and two reopens`() = runTest {
+    @Test fun `oldest saved library survives the entire registered upgrade and two reopens (ADR 0012)`() = runTest {
         RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 10)
     }
 
-    @Test fun `a library from the shipped schema keeps likes, collections, automatic tags and recents through every later write`() = runTest {
+    @Test fun `a library from the shipped schema keeps likes, collections, automatic tags and recents through every later write (ADR 0012)`() = runTest {
         RoomUpgradeScenario.verify(ApplicationProvider.getApplicationContext<Context>(), helper, 11)
     }
 
-    @Test fun `a library older than schema 10 is refused and left intact`() = runTest {
+    @Test fun `a library older than schema 10 is refused and left intact (ADR 0012)`() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "schema-9.db"
         context.deleteDatabase(name)
@@ -50,153 +49,78 @@ class RoomUpgradeJourneyTest {
         context.deleteDatabase(name)
     }
 
-    @Test fun `a version 14 picture hash keeps its meaning when the tagger columns arrive`() = runTest {
+    @Test fun `a version 14 picture hash keeps its meaning when the tagger columns arrive (ADR 0012)`() = runTest {
         RoomUpgradeScenario.verifyPictureVisionUpgrade(ApplicationProvider.getApplicationContext<Context>(), helper)
     }
 
-    @Test fun `a series stored before chapter downloads keeps everything and does not download new chapters`() {
-        val name = "series-downloads.db"
-        helper.createDatabase(name, 14).use {
-            it.execSQL(
-                "INSERT INTO series (source, address, title, genres, language, followed, reading_mode) " +
-                    "VALUES ('custom_mihon_7', '/title/1', 'Title', '[]', 'en', 1, 'VERTICAL')",
-            )
-        }
-        helper.runMigrationsAndValidate(name, 15, true, TheoriaRoomDatabase.MIGRATION_14_15).use { database ->
-            database.query("SELECT title, followed, reading_mode, download_new FROM series").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("Title", "1", "VERTICAL", "0"), (0..3).map(it::getString))
-            }
-        }
-    }
-
-    @Test fun `a series followed before follow times takes its first stored time, and nothing is read yet`() {
-        val name = "series-following.db"
-        helper.createDatabase(name, 18).use {
-            it.execSQL("INSERT INTO series (source, address, title, genres, language, followed) VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1)")
-            it.execSQL("INSERT INTO series (source, address, title, genres, language, followed) VALUES ('custom_mihon_7', '/b', 'B', '', 'en', 0)")
-            for ((address, seen) in listOf("/a/1" to 30L, "/a/2" to 10L)) {
-                it.execSQL(
-                    "INSERT INTO series_entries (source, series_address, address, name, source_order, first_seen_at_epoch_ms, read, last_page) " +
-                        "VALUES ('custom_mihon_7', '/a', '$address', 'Chapter', 0, $seen, 0, 0)",
-                )
-            }
-        }
-        helper.runMigrationsAndValidate(name, 19, true, TheoriaRoomDatabase.MIGRATION_18_19).use { database ->
-            database.query("SELECT address, followed_at_epoch_ms FROM series ORDER BY address").use {
-                val rows = buildList { while (it.moveToNext()) add(it.getString(0) to it.getString(1)) }
-                assertEquals(listOf("/a" to "10", "/b" to null), rows)
-            }
-            database.query("SELECT COUNT(*) FROM series_entries WHERE last_read_at_epoch_ms IS NULL").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(2, it.getInt(0))
-            }
-        }
-    }
-
-    @Test fun `a series and chapter stored before memos keep everything and have none`() {
-        val name = "series-memos.db"
-        helper.createDatabase(name, 19).use {
-            it.execSQL("INSERT INTO series (source, address, title, genres, language, followed) VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1)")
-            it.execSQL(
-                "INSERT INTO series_entries (source, series_address, address, name, source_order, first_seen_at_epoch_ms, read, last_page) " +
-                    "VALUES ('custom_mihon_7', '/a', '/a/1', 'Chapter', 0, 10, 1, 4)",
-            )
-        }
-        helper.runMigrationsAndValidate(name, 20, true, TheoriaRoomDatabase.MIGRATION_19_20).use { database ->
-            database.query("SELECT title, followed, memo FROM series").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("A", "1", null), (0..2).map(it::getString))
-            }
-            database.query("SELECT read, last_page, memo FROM series_entries").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("1", "4", null), (0..2).map(it::getString))
-            }
-        }
-    }
-
-    @Test fun `a series stored with a check time keeps everything else when the column goes`() {
-        val name = "series-check-time.db"
-        helper.createDatabase(name, 20).use {
-            it.execSQL(
-                "INSERT INTO series (source, address, title, genres, language, followed, last_opened_entry, last_checked_at_epoch_ms, memo) " +
-                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, '/a/1', 50, '{}')",
-            )
-        }
-        helper.runMigrationsAndValidate(name, 21, true, TheoriaRoomDatabase.MIGRATION_20_21).use { database ->
-            database.query("SELECT title, followed, last_opened_entry, memo FROM series").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("A", "1", "/a/1", "{}"), (0..3).map(it::getString))
-            }
-        }
-    }
-
-    @Test fun `the viewer translation cache goes and the library stays`() {
-        val name = "translation-cache-drop.db"
-        helper.createDatabase(name, 21).use {
+    @Test fun `a library from a newer schema is refused and left intact (ADR 0012)`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "schema-newer.db"
+        val current = createdVersion(context)
+        context.deleteDatabase(name)
+        helper.createDatabase(name, current).use {
             it.execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
-            it.execSQL(
-                "INSERT INTO viewer_translation_cache(backend_version,source_language,source_text_sha256,translated_text," +
-                    "expires_at_epoch_ms,last_used_at_epoch_ms) VALUES('google-nmt-v1','JAPANESE','hash','English',100,1)",
-            )
+            it.version = current + 1
         }
-        helper.runMigrationsAndValidate(name, 22, true, TheoriaRoomDatabase.MIGRATION_21_22).use { database ->
-            database.query("SELECT name FROM codices").use {
-                assertTrue(it.moveToFirst())
-                assertEquals("Saved", it.getString(0))
-            }
-            database.query("SELECT name FROM sqlite_master WHERE name LIKE '%viewer_translation_cache%'").use {
-                assertFalse(it.moveToFirst())
+        val database = TheoriaRoomDatabase.create(context, name)
+        val failure = runCatching { openProfileLibrary(database) }.exceptionOrNull()
+        database.close()
+        assertTrue(failure.toString(), failure is IllegalStateException)
+        SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY).use {
+            assertEquals(current + 1, it.version)
+            it.rawQuery("SELECT name FROM codices", null).use { rows ->
+                assertTrue(rows.moveToFirst())
+                assertEquals("Saved", rows.getString(0))
             }
         }
+        context.deleteDatabase(name)
     }
 
-    @Test fun `chapters read before in-page offsets resume at the top of their page (ADR 0192)`() {
-        val name = "series-page-offset.db"
-        helper.createDatabase(name, 23).use {
-            it.execSQL(
-                "INSERT INTO series (source, address, title, genres, language, followed, followed_at_epoch_ms, memo) " +
-                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, 40, '{}')",
-            )
-            it.execSQL(
-                "INSERT INTO series_entries (source, series_address, address, name, source_order, first_seen_at_epoch_ms, read, last_page, page_count) " +
-                    "VALUES ('custom_mihon_7', '/a', '/c/1', 'Chapter 1', 0, 1, 0, 5, 12)",
-            )
-        }
-        helper.runMigrationsAndValidate(name, 24, true, TheoriaRoomDatabase.MIGRATION_23_24).use { database ->
-            database.query("SELECT last_page, page_count, read, page_offset FROM series_entries").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("5", "12", "0", null), (0..3).map(it::getString))
-            }
-        }
+    @Test fun `version 13 adds a verdict log without a post and signatures that follow their post (ADR 0017)`() = RoomMigrationScenarios.verdictsAndSignaturesArrive(helper)
+
+    @Test fun `version 14 removes spike rows from the seven named tables, keeps named Custom Sites and spares verdicts (ADR 0012)`() = RoomMigrationScenarios.spikeRowsGo(helper)
+
+    @Test fun `version 14 removes searches naming a spike source in any source field and keeps ones that only mention it (ADR 0012)`() = RoomMigrationScenarios.spikeSearchesGo(helper)
+
+    @Test fun `a series stored before chapter downloads keeps everything and does not download new chapters (ADR 0012)`() = RoomMigrationScenarios.downloadFlagArrivesOff(helper)
+
+    @Test fun `version 16 keeps picture hashes as tried and adds empty vision columns (ADR 0012)`() = RoomMigrationScenarios.hashesStayTried(helper)
+
+    @Test fun `version 17 marks every existing analysis as awaiting frames and nothing else (ADR 0012)`() = RoomMigrationScenarios.analysesAwaitFrames(helper)
+
+    @Test fun `a series stored before shared first pages keeps everything and does not share them (ADR 0012)`() = RoomMigrationScenarios.sharingArrivesOff(helper)
+
+    @Test fun `a series followed before follow times takes its first stored time, and nothing is read yet (ADR 0012)`() = RoomMigrationScenarios.followTimesFromFirstSeen(helper)
+
+    @Test fun `a series and chapter stored before memos keep everything and have none (ADR 0012)`() = RoomMigrationScenarios.memosArriveEmpty(helper)
+
+    @Test fun `a series stored with a check time keeps everything else when the column goes (ADR 0012)`() = RoomMigrationScenarios.checkTimeGoes(helper)
+
+    @Test fun `the viewer translation cache goes and the library stays (ADR 0012)`() = RoomMigrationScenarios.translationCacheGoes(helper)
+
+    @Test fun `a stored series starts with no check time, so the next background run checks it (ADR 0015)`() = RoomMigrationScenarios.checkTimeReturnsEmpty(helper)
+
+    @Test fun `chapters read before in-page offsets resume at the top of their page (ADR 0192)`() = RoomMigrationScenarios.pageOffsetsArriveEmpty(helper)
+
+    @Test fun `a stored picture signature keeps its hash and starts with no failed load`() = RoomMigrationScenarios.previewFailuresArriveEmpty(helper)
+
+    @Test fun `registered migrations step one version at a time from 10 to the version a new library is created at, each with a scenario (ADR 0012)`() {
+        val created = createdVersion(ApplicationProvider.getApplicationContext<Context>())
+        val steps = TheoriaRoomDatabase.MIGRATIONS.map { it.startVersion to it.endVersion }
+
+        assertEquals((10 until created).map { it to it + 1 }, steps)
+        assertEquals(steps.map { it.first }.toSet(), RoomMigrationScenarios.steps.keys)
     }
 
-    @Test fun `a stored series starts with no check time, so the next background run checks it`() {
-        val name = "series-check-time-back.db"
-        helper.createDatabase(name, 22).use {
-            it.execSQL(
-                "INSERT INTO series (source, address, title, genres, language, followed, followed_at_epoch_ms, memo) " +
-                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, 40, '{}')",
-            )
-        }
-        helper.runMigrationsAndValidate(name, 23, true, TheoriaRoomDatabase.MIGRATION_22_23).use { database ->
-            database.query("SELECT title, followed, followed_at_epoch_ms, memo, checked_at_epoch_ms FROM series").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("A", "1", "40", "{}", null), (0..4).map(it::getString))
-            }
-        }
-    }
-
-    @Test fun `a stored picture signature keeps its hash and starts with no failed load`() {
-        val name = "picture-hash-failure-back.db"
-        helper.createDatabase(name, 23).use {
-            it.execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,phash_checked,indexed_at_epoch_ms) VALUES('PIXIV','1',94,1,5)")
-        }
-        helper.runMigrationsAndValidate(name, 25, true, TheoriaRoomDatabase.MIGRATION_23_24, TheoriaRoomDatabase.MIGRATION_24_25).use { database ->
-            database.query("SELECT phash, phash_checked, preview_failed_at_epoch_ms FROM post_visual_signatures").use {
-                assertTrue(it.moveToFirst())
-                assertEquals(listOf("94", "1", null), (0..2).map(it::getString))
-            }
+    private fun createdVersion(context: Context): Int {
+        val name = "created-version.db"
+        context.deleteDatabase(name)
+        val database = TheoriaRoomDatabase.create(context, name)
+        return try {
+            database.openHelper.writableDatabase.version
+        } finally {
+            database.close()
+            context.deleteDatabase(name)
         }
     }
 }

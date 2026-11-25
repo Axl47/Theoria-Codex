@@ -2,19 +2,21 @@ package com.theoriacodex.app.vision
 
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import okhttp3.Call
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -54,15 +56,6 @@ class VisualModelStoreTest {
 
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun client(serve: (name: String) -> Response.Builder): OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor(
-            Interceptor { chain ->
-                serve(chain.request().url.pathSegments.last())
-                    .request(chain.request()).protocol(Protocol.HTTP_1_1).build()
-            },
-        )
-        .build()
-
     private fun ok(bytes: ByteArray) = Response.Builder().code(200).message("OK").body(bytes.toResponseBody())
 
     private fun storeOver(client: OkHttpClient) = VisualModelStore(spec, folder.root, client, scope) { deleted.incrementAndGet() }
@@ -76,7 +69,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `download verifies both files, moves them into place and ends Ready`() {
+    fun `download verifies both files, moves them into place and ends Ready (ADR 0101)`() {
         val store = storeOver(serving())
         assertEquals(ModelState.Absent, store.states.value)
 
@@ -89,7 +82,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `bytes that are not the pinned ones fail as a mismatch and leave no file behind`() {
+    fun `bytes that are not the pinned ones fail as a mismatch and leave no file behind (ADR 0101)`() {
         val tampered = modelBytes.copyOf().also { it[100] = (it[100] + 1).toByte() }
         val store = storeOver(serving(model = tampered))
 
@@ -101,7 +94,21 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a file longer than pinned fails as a mismatch`() {
+    fun `a download that fails on its second file leaves neither file behind (ADR 0101)`() {
+        val tampered = vocabularyBytes.copyOf().also { it[3] = (it[3] + 1).toByte() }
+        val failures = listOf(ok(tampered) to true, Response.Builder().code(500).message("Server Error").body(ByteArray(0).toResponseBody()) to false)
+        for ((second, mismatch) in failures) {
+            val store = storeOver(client { name -> if (name == spec.model.name) ok(modelBytes) else second })
+
+            store.download()
+
+            assertEquals(ModelState.Failed(mismatch = mismatch), store.awaitSettled())
+            assertFalse(store.modelFile.parentFile!!.exists())
+        }
+    }
+
+    @Test
+    fun `a file longer than pinned fails as a mismatch (ADR 0101)`() {
         val store = storeOver(serving(model = modelBytes + 1))
 
         store.download()
@@ -111,7 +118,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `an HTTP error fails without calling the bytes a mismatch`() {
+    fun `an HTTP error fails without calling the bytes a mismatch (ADR 0101)`() {
         val store = storeOver(client { Response.Builder().code(500).message("Server Error").body(ByteArray(0).toResponseBody()) })
 
         store.download()
@@ -121,7 +128,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a failed download can be started again`() {
+    fun `a failed download can be started again (ADR 0101)`() {
         var healthy = false
         val store = storeOver(
             client { name ->
@@ -139,7 +146,7 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a store over a folder holding both verified-size files starts Ready`() {
+    fun `a store over a folder holding both verified-size files starts Ready (ADR 0101)`() {
         val first = storeOver(serving())
         first.modelFile.parentFile!!.mkdirs()
         first.modelFile.writeBytes(modelBytes)
@@ -149,16 +156,38 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `a folder holding only one file starts Absent`() {
+    fun `a folder holding only one file starts Absent and is cleared (ADR 0101)`() {
         val first = storeOver(serving())
         first.modelFile.parentFile!!.mkdirs()
         first.modelFile.writeBytes(modelBytes)
+        File(first.modelFile.parentFile, "tags.csv.part").writeBytes(vocabularyBytes.copyOf(4))
+
+        assertEquals(ModelState.Absent, storeOver(serving()).states.value)
+        assertFalse(first.modelFile.parentFile!!.exists())
+    }
+
+    @Test
+    fun `a file cut short by an interrupted download does not start Ready (ADR 0101)`() {
+        val first = storeOver(serving())
+        first.modelFile.parentFile!!.mkdirs()
+        first.modelFile.writeBytes(modelBytes.copyOf(1_000))
+        first.vocabularyFile.writeBytes(vocabularyBytes)
 
         assertEquals(ModelState.Absent, storeOver(serving()).states.value)
     }
 
     @Test
-    fun `delete after a download removes the folder and reports it`() = runBlocking {
+    fun `files of the pinned sizes start Ready without being hashed again (ADR 0101)`() {
+        val first = storeOver(serving())
+        first.modelFile.parentFile!!.mkdirs()
+        first.modelFile.writeBytes(ByteArray(modelBytes.size))
+        first.vocabularyFile.writeBytes(ByteArray(vocabularyBytes.size))
+
+        assertEquals(ModelState.Ready, storeOver(serving()).states.value)
+    }
+
+    @Test
+    fun `delete after a download removes the folder and reports it (ADR 0101)`() = runBlocking {
         val store = storeOver(serving())
         store.download()
         store.awaitSettled()
@@ -171,35 +200,51 @@ class VisualModelStoreTest {
     }
 
     @Test
-    fun `delete during a download stops it and nothing is left or restored`() = runBlocking {
+    fun `delete during a download stops it and nothing is left or restored (ADR 0101)`() = runBlocking {
         val reading = CountDownLatch(1)
-        val slowModel = object : InputStream() {
-            private val chunk = ByteArray(1024)
-            override fun read(): Int = error("unused")
-            override fun read(b: ByteArray, off: Int, len: Int): Int {
-                reading.countDown()
-                Thread.sleep(5)
-                val n = minOf(len, chunk.size)
-                System.arraycopy(chunk, 0, b, off, n)
-                return n
-            }
-        }
         val slowSpec = spec.copy(model = spec.model.copy(bytes = 50_000_000L))
         val client = client { name ->
-            val body = if (name == slowSpec.model.name) slowModel.source().buffer().asResponseBody("application/octet-stream".toMediaType())
-            else ByteArrayInputStream(vocabularyBytes).source().buffer().asResponseBody()
-            Response.Builder().code(200).message("OK").body(body)
+            Response.Builder().code(200).message("OK").body(
+                if (name == slowSpec.model.name) StallingStream(reading).source().buffer().asResponseBody("application/octet-stream".toMediaType())
+                else ByteArrayInputStream(vocabularyBytes).source().buffer().asResponseBody(),
+            )
         }
         val store = VisualModelStore(slowSpec, folder.root, client, scope) { deleted.incrementAndGet() }
         store.download()
-        withTimeout(10_000) { store.states.first { it is ModelState.Downloading } }
         assertTrue(reading.await(10, TimeUnit.SECONDS))
+        assertEquals(listOf("model.tflite.part"), store.modelFile.parentFile!!.leftovers())
 
-        store.delete()
-        delay(200)
+        withTimeout(5_000) { store.delete() }
 
         assertEquals(ModelState.Absent, store.states.value)
         assertFalse(store.modelFile.parentFile!!.exists())
         assertEquals(1, deleted.get())
+    }
+
+    private fun client(serve: (name: String) -> Response.Builder): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(
+            Interceptor { chain ->
+                calls.set(chain.call())
+                serve(chain.request().url.pathSegments.last())
+                    .request(chain.request()).protocol(Protocol.HTTP_1_1).build()
+            },
+        )
+        .build()
+
+    private val calls = AtomicReference<Call>()
+
+    private inner class StallingStream(private val reading: CountDownLatch) : InputStream() {
+        override fun read(): Int = error("unused")
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            reading.countDown()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(STALL_SECONDS)
+            while (calls.get()?.isCanceled() != true && System.nanoTime() < deadline) Thread.sleep(1)
+            throw IOException("Canceled")
+        }
+    }
+
+    private companion object {
+        const val STALL_SECONDS = 20L
     }
 }

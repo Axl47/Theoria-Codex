@@ -72,7 +72,7 @@ class ViewerLockTest {
         assertTrue(state.controls.chromeVisible)
 
         val key0 = requireNotNull(state.currentMedia).key
-        state = reduceViewerState(state, ViewerAction.PlaybackCompleted(identity, key0, 0L)).state
+        state = reduceViewerState(state, ViewerAction.PlaybackCompleted(identity, key0, 0L, 0L)).state
         assertEquals(1, state.currentPageIndex)
         assertTrue(state.controls.locked)
         assertTrue(state.controls.fillScreen)

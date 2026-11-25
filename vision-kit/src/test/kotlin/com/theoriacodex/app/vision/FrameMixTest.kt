@@ -12,14 +12,14 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FrameMixTest {
     @Test
-    fun `a single picture keeps its own scores`() {
+    fun `a single picture keeps its own scores (ADR 0092)`() {
         val scores = floatArrayOf(0.9f, 0.4f, 0.1f)
 
         assertArrayEquals(scores, combineScores(listOf(scores), listOf(1)), 1e-6f)
     }
 
     @Test
-    fun `each score is the mean of its top third of weighted pictures`() {
+    fun `each score is the mean of its top third of weighted pictures (ADR 0092)`() {
         val combined = combineScores(
             listOf(floatArrayOf(0.9f, 0.0f), floatArrayOf(0.1f, 0.8f), floatArrayOf(0.2f, 0.3f)),
             listOf(1, 2, 1),
@@ -29,14 +29,21 @@ class FrameMixTest {
     }
 
     @Test
-    fun `the embedding is the weighted mean direction at unit length`() {
+    fun `the embedding is the weighted mean direction at unit length (ADR 0092)`() {
         val combined = combineEmbeddings(listOf(floatArrayOf(2f, 0f), floatArrayOf(0f, 1f)), listOf(1, 1))
 
         assertArrayEquals(floatArrayOf(0.70710677f, 0.70710677f), combined, 1e-6f)
     }
 
     @Test
-    fun `near copies fold into the first and flat pictures drop`() {
+    fun `a heavier picture pulls the embedding toward its direction (ADR 0092)`() {
+        val combined = combineEmbeddings(listOf(floatArrayOf(1f, 0f), floatArrayOf(0f, 1f)), listOf(3, 1))
+
+        assertArrayEquals(floatArrayOf(0.94868326f, 0.31622776f), combined, 1e-6f)
+    }
+
+    @Test
+    fun `near copies fold into the first and flat pictures drop (ADR 0092)`() {
         val top = Pattern.TOP.bitmap()
         val left = Pattern.LEFT.bitmap()
 
@@ -44,10 +51,11 @@ class FrameMixTest {
 
         assertEquals(listOf(1, 2, 1), distinct.map(WeightedPicture::weight))
         assertEquals(listOf(top, left), distinct.take(2).map(WeightedPicture::bitmap))
+        assertEquals(listOf(2, 1), distinctPictures(listOf(top, left, Pattern.TOP.bitmap())).map(WeightedPicture::weight))
     }
 
     @Test
-    fun `when every picture is flat the first stands for them all`() {
+    fun `when every picture is flat the first stands for them all (ADR 0092)`() {
         val first = flat()
 
         val distinct = distinctPictures(listOf(first, flat()))

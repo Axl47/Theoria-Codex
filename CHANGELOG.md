@@ -4,6 +4,7 @@
 
 ### Added
 
+- New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
 - Following says how many followed series need their extension, such as after restoring a Mihon backup, with a button to Extensions. Those series can't be checked for new chapters until their extension is on.
@@ -84,6 +85,8 @@
 
 ### Changed
 
+- In Play Next and slideshows, every post stays on screen for at least five seconds. A shorter clip, GIF or Pixiv animation replays until then and moves on at the end of a play-through, and touching, zooming, seeking or showing the controls starts the five seconds again.
+- Swiping back to an earlier post in Play Next or a slideshow stops it moving on by itself until you go forward again. A small pause badge on the playback settings and slideshow buttons shows while it's stopped.
 - Settings has a Series group, after Sources, holding Extensions, Check for new chapters and Delete after reading. Sources now holds only what applies to every source.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.

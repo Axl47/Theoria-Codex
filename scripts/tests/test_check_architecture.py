@@ -330,5 +330,64 @@ class CoreDomainRulesTest(unittest.TestCase):
         )
 
 
+class VisionCommitRuleTest(unittest.TestCase):
+    def test_reports_vision_results_written_outside_the_tagger_adr_0097(self) -> None:
+        self.assertIn(check_architecture.vision_results_are_written_under_commits, check_architecture.RULES)
+        opt_in = "@OptIn(VisionCommit::class)\nfun writeAround() = Unit\n"
+        with main_sources({
+            check_architecture.VISION_TAGGER: (
+                "@OptIn(ExperimentalCoroutinesApi::class)\nclass PictureTagger {\n    @OptIn(VisionCommit::class)\n    suspend fun forget() = Unit\n}\n"
+            ),
+            check_architecture.VISION_PROPAGATORS[0]: "annotation class VisionCommit\n@VisionCommit suspend fun clearVision()\n",
+            check_architecture.VISION_PROPAGATORS[1]: "@VisionCommit override suspend fun clearVision() = Unit\n",
+            "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt": opt_in,
+            "app/src/debug/java/com/theoriacodex/app/DebugTools.kt": opt_in,
+            "app/src/main/java/com/theoriacodex/app/Writer.java": "@kotlin.OptIn(markerClass = VisionCommit.class) class Writer {}\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt": "@file:OptIn(com.theoriacodex.data.repository.VisionCommit::class)\n",
+            "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/Sibling.kt": opt_in,
+            "core-data/src/main/kotlin/com/theoriacodex/data/repository/Other.kt": "@VisionCommit fun passOn() = Unit\n",
+            "vision-kit/build.gradle.kts": "kotlin { compilerOptions { optIn.add(\"com.theoriacodex.data.repository.VisionCommit\") } }\n",
+            "media-kit/build.gradle": "kotlinOptions { freeCompilerArgs += '-opt-in=com.theoriacodex.data.repository.VisionCommit' }\n",
+            "app/src/main/java/com/theoriacodex/app/Message.kt": "val why = \"VisionCommit is held by the tagger\"\n",
+            "app/src/test/java/com/theoriacodex/app/FakeTest.kt": opt_in,
+            "app/src/androidTest/java/com/theoriacodex/app/DeviceTest.kt": opt_in,
+            "core-data-android/src/sharedTest/kotlin/Scenario.kt": opt_in,
+            "vision-kit/build/generated/Stale.gradle.kts": "VisionCommit\n",
+        }):
+            failures = check_architecture.vision_results_are_written_under_commits()
+            self.assertEqual(
+                [
+                    "app/src/debug/java/com/theoriacodex/app/DebugTools.kt",
+                    "app/src/main/java/com/theoriacodex/app/Writer.java",
+                    "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt",
+                    "core-data/src/main/kotlin/com/theoriacodex/data/repository/Other.kt",
+                    "media-kit/src/main/kotlin/com/theoriacodex/app/media/Backfill.kt",
+                    "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/Sibling.kt",
+                    "media-kit/build.gradle",
+                    "vision-kit/build.gradle.kts",
+                ],
+                [failure.split(" ", 1)[0] for failure in failures],
+            )
+            (check_architecture.ROOT / check_architecture.VISION_PROPAGATORS[1]).write_text(
+                "@OptIn(VisionCommit::class)\nclass RoomVisualSignatureRepository\n", encoding="utf-8",
+            )
+            self.assertIn(
+                check_architecture.VISION_PROPAGATORS[1],
+                [failure.split(" ", 1)[0] for failure in check_architecture.vision_results_are_written_under_commits()],
+            )
+            tagger = check_architecture.ROOT / check_architecture.VISION_TAGGER
+            for wide in (
+                "@OptIn(ExperimentalCoroutinesApi::class, VisionCommit::class)\nclass PictureTagger\n",
+                "@OptIn(VisionCommit::class)\n@Suppress(\"x\")\ninternal class PictureTagger\n",
+                "@file:OptIn(com.theoriacodex.data.repository.VisionCommit::class)\npackage x\n",
+            ):
+                tagger.write_text(wide, encoding="utf-8")
+                self.assertIn(
+                    check_architecture.VISION_TAGGER,
+                    [failure.split(" ", 1)[0] for failure in check_architecture.vision_results_are_written_under_commits()],
+                    wide,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
