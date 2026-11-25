@@ -120,6 +120,11 @@ fun SearchResultCard(
     val visibility = rememberMediaVisibility(post.id, hasFeedViewport = viewport != null, onViewportChanged)
     val lifecycleStarted by viewport?.lifecycleStarted ?: rememberLifecycleStarted()
     val playbackActive = visibility.visible && lifecycleStarted
+    val autoplayProbe = rememberFeedAutoplayProbe(post.id)
+    FeedAutoplayTraceEffect(
+        post.id, autoplayProbe, mediaGeometry::boundsInWindow, { visibility.inWindow },
+        { visibility.inFeed.takeIf { visibility.hasFeedViewport } }, { lifecycleStarted },
+    )
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
     val cardShape = CardDefaults.elevatedShape
     val layoutDirection = LocalLayoutDirection.current
@@ -152,7 +157,7 @@ fun SearchResultCard(
             post, resolution, pixivUgoiraClient, playbackActive, acquiredDurationMs, showSourceBadge, metadataLabel,
             viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, isNew, onToggleLike, resolvePostById,
             recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
-            mediaGeometry, mediaTracking,
+            mediaGeometry, mediaTracking, autoplayProbe,
         )
     }
 }
@@ -331,6 +336,7 @@ private fun SearchCardContent(
     onAuthoritativeDurationKnown: (Long) -> Unit,
     mediaGeometry: SearchCardMediaGeometry,
     mediaTracking: Modifier,
+    autoplayProbe: FeedAutoplayProbe?,
 ) {
     val resolvedPost = resolution.resolvedPost
     val effectivePost = remember(post, resolvedPost) {
@@ -382,6 +388,7 @@ private fun SearchCardContent(
             effectivePost, watch.watchedPost, pixivUgoiraClient, title ?: effectivePost.id.sourcePostId, playbackActive,
             videoRef, imageModel, imageDeliveryPlan.candidates.lastIndex, previewCandidate, progress, resolution,
             resolvePostById, recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
+            autoplayProbe,
         )
         SearchCardBadges(
             effectivePost, watch.viewedMediaNumber, watch.watchedDescription, liked, onToggleLike, metadataLabel, showSourceBadge,
@@ -510,11 +517,13 @@ private fun SearchCardMedia(
     refreshOnPreviewError: Boolean,
     playbackDiagnosticsEnabled: Boolean,
     onAuthoritativeDurationKnown: (Long) -> Unit,
+    autoplayProbe: FeedAutoplayProbe?,
 ) {
     val scope = rememberCoroutineScope()
     var videoPlaybackFailed by remember(post.id.source, post.id.sourcePostId, videoRef?.url, videoRef?.localPath) {
         mutableStateOf(false)
     }
+    FeedAutoplayVideoEffect(autoplayProbe, videoRef, post, videoPlaybackFailed)
     when {
         isPixivUgoiraPost(post) && pixivUgoiraClient != null -> PixivUgoiraPlayer(
             postId = post.id.sourcePostId,
@@ -534,6 +543,7 @@ private fun SearchCardMedia(
             sourceKey = post.id.source,
             playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
             isActive = playbackActive,
+            autoplayProbe = autoplayProbe,
             previewModel = imageModel,
             modifier = Modifier.fillMaxSize(),
             onPlaybackError = {
