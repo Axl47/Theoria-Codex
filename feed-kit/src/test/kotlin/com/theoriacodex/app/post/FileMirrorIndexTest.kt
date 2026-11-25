@@ -3,6 +3,8 @@ package com.theoriacodex.app.post
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -19,6 +21,16 @@ class FileMirrorIndexTest {
 
         assertEquals(setOf(liked.id, mirror.id), index.withCopies(setOf(liked.id)))
         assertEquals(setOf(liked.id, mirror.id), index.copiesOf(mirror))
+    }
+
+    @Test
+    fun `a listing not learned yet is a copy of a known post with the same file (ADR 0180)`() {
+        val index = FileMirrorIndex()
+        val origin = filePost(SourceKey.DANBOORU, "1", HASH)
+        index.learn(listOf(origin))
+
+        assertTrue(index.isCopy(filePost(SourceKey.GELBOORU, "9", HASH), origin))
+        assertFalse(index.isCopy(filePost(SourceKey.GELBOORU, "8", OTHER), origin))
     }
 
     @Test

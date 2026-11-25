@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -81,12 +83,15 @@ internal fun ViewerTrailRow(
     val canAdd = opener != TrailOpener.None
     if (crumbs.isEmpty() && shown.isEmpty() && !canAdd) return
     var adding by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    ScrollActiveChipIntoView(listState, active, forks.failed, shown, crumbs.size)
     val start: (TrailFork) -> Boolean = { chip ->
         onInteraction()
         forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
     }
     LazyRow(
         modifier.fillMaxWidth().testTag("viewer-trail-row"),
+        state = listState,
         contentPadding = PaddingValues(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(TrailChipGap),
         verticalAlignment = Alignment.CenterVertically,
@@ -103,6 +108,18 @@ internal fun ViewerTrailRow(
             if (start(TrailFork.Tag(tag))) adding = false
         }
     }
+}
+
+@Composable
+private fun ScrollActiveChipIntoView(listState: LazyListState, active: TrailFork?, failed: TrailFork?, shown: List<TrailFork>, before: Int) {
+    LaunchedEffect(active?.key, failed?.key) {
+        val index = shown.indexOfFirst { it.key == active?.key }
+        if (index >= 0 && !listState.fullyShows(before + index)) listState.animateScrollToItem(before + index)
+    }
+}
+
+private fun LazyListState.fullyShows(index: Int): Boolean = layoutInfo.let { info ->
+    info.visibleItemsInfo.any { it.index == index && it.offset >= info.viewportStartOffset && it.offset + it.size <= info.viewportEndOffset }
 }
 
 @Composable
@@ -138,7 +155,7 @@ private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrai
     if (menuOpen) HoldChrome(forks)
     Box {
         TrailChip(
-            if (failed) "No posts" else chip.label,
+            if (failed) failedLabel(forks.failedEmpty) else chip.label,
             chip.icon,
             container = ViewerVeil.Capsule,
             content = Color.White,
@@ -152,6 +169,8 @@ private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrai
         TagActionMenu(menuOpen, listOfNotNull(save)) { menuOpen = false }
     }
 }
+
+private fun failedLabel(empty: Boolean): String = if (empty) "No other posts" else "Couldn't load"
 
 @Composable
 private fun HoldChrome(forks: ViewerTrailForks) {
