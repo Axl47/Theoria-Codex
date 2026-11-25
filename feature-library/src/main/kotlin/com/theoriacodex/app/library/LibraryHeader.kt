@@ -1,5 +1,6 @@
 package com.theoriacodex.app.library
 
+import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,7 +60,7 @@ fun LibraryHeader(
     transfers: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.hidesOnScroll(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Library", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge,

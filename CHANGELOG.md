@@ -4,6 +4,7 @@
 
 ### Added
 
+- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
@@ -164,6 +165,7 @@
 
 ### Fixed
 
+- A gallery that is the only post in the Viewer's thumbnail strip spreads its pages across the whole strip instead of leaving empty space beside them.
 - Missing extensions no longer says "Language off" for every installed extension that is on. It names the language that is off and turns it on, says when the extension couldn't load, or says the installed version doesn't offer that series' source.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
