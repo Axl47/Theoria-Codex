@@ -135,57 +135,11 @@ class RoomCollectionStorageTest {
         assertNull(repository.getPost(post("last").id))
     }
 
-    @Test fun `migration ten to eleven drops retired importer proof tables with or without rows`() {
-        for (withProofRows in listOf(true, false)) {
-            val name = "collection-storage-migration-10-11-$withProofRows-test"
-            migrationHelper.createDatabase(name, 10).apply {
-                execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
-                if (withProofRows) {
-                    execSQL("INSERT INTO migration_metadata VALUES('codex-likes','s','c','l','d','p',1,1,1,1,1,1,1,1,1)")
-                    execSQL("INSERT INTO recents_migration_metadata VALUES('recents','s',1,1,0,'d',1,1,'p',1,1)")
-                }
-                close()
-            }
-            val migrated = migrationHelper.runMigrationsAndValidate(name, 11, true, TheoriaRoomDatabase.MIGRATION_10_11)
-            migrated.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
-                assertTrue(cursor.moveToFirst())
-                assertEquals("Saved", cursor.getString(0))
-            }
-            migrated.query(
-                "SELECT name FROM sqlite_master WHERE name IN ('migration_metadata','recents_migration_metadata')",
-            ).use { cursor -> assertEquals(0, cursor.count) }
-            migrated.close()
-        }
-    }
+    @Test fun `migration ten to eleven drops retired importer proof tables with or without rows (ADR 0012)`() =
+        RoomMigrationScenarios.proofTablesGo(migrationHelper)
 
-    @Test fun `migration eleven to twelve deletes For You history and keeps every other recent`() {
-        val name = "collection-storage-migration-11-12-test"
-        val fyp = """{"recentSearchSchemaVersion":1,"query":{"schemaVersion":2,"modeType":"unified","includeTags":["x"],""" +
-            """"excludeTags":[],"sort":"TOP"},"kind":"FYP","sources":["PIXIV"],"sourceTags":{"PIXIV":["x"]}}"""
-        val unified = fyp.replace("FYP", "UNIFIED").replace(""""sourceTags":{"PIXIV":["x"]}""", """"sourceTags":{}""")
-        migrationHelper.createDatabase(name, 11).apply {
-            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','1','{}')")
-            for (section in listOf("FYP", "WATCHED")) {
-                execSQL("INSERT INTO recent_watched(source,source_post_id,section,viewed_at_epoch_ms,sort_sequence,origin) " +
-                    "VALUES('PIXIV','1',?,1,1,'SEARCH')", arrayOf(section))
-            }
-            execSQL("INSERT INTO recent_searches VALUES('for_you:seed',?,1,1)", arrayOf(fyp))
-            execSQL("INSERT INTO recent_searches VALUES('unified',?,2,2)", arrayOf(unified))
-            close()
-        }
-        val migrated = migrationHelper.runMigrationsAndValidate(name, 12, true, TheoriaRoomDatabase.MIGRATION_11_12)
-        migrated.query("SELECT section FROM recent_watched").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("WATCHED", cursor.getString(0))
-            assertEquals(1, cursor.count)
-        }
-        migrated.query("SELECT query_hash FROM recent_searches").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("unified", cursor.getString(0))
-            assertEquals(1, cursor.count)
-        }
-        migrated.close()
-    }
+    @Test fun `migration eleven to twelve deletes For You history and keeps every other recent (ADR 0012)`() =
+        RoomMigrationScenarios.forYouHistoryGoes(migrationHelper)
 
     private fun post(id: String): Post {
         val full = ImageRef("https://example.com/$id-full.jpg", null, "image/jpeg")
