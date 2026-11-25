@@ -5,6 +5,7 @@ import androidx.room.migration.Migration
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 
 private typealias Row = Map<String, Any?>
@@ -196,13 +197,18 @@ object RoomMigrationScenarios {
         expected: (table: String, row: Row) -> Row?,
     ) {
         val name = "migration-$from.db"
-        val before = helper.createDatabase(name, from).use { database ->
+        val (before, columns) = helper.createDatabase(name, from).use { database ->
             database.seed()
-            tables.associateWith { database.rows(it) }
+            tables.associateWith { database.rows(it) } to tables.associateWith { database.columns(it) }
         }
         for (table in tables) assertTrue(table, before.getValue(table).isNotEmpty())
+        val expectedRows = tables.associateWith { table -> before.getValue(table).mapNotNull { expected(table, it) }.sortedBy(::key) }
         helper.runMigrationsAndValidate(name, from + 1, true, migration(from)).use { database ->
-            for (table in tables) assertEquals(table, before.getValue(table).mapNotNull { expected(table, it) }.sortedBy(::key), database.rows(table))
+            assertFalse(
+                "the scenario for version $from expects the seeded tables to come through unchanged",
+                expectedRows == before && tables.all { database.columns(it) == columns.getValue(it) },
+            )
+            for (table in tables) assertEquals(table, expectedRows.getValue(table), database.rows(table))
         }
     }
 

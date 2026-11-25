@@ -56,17 +56,18 @@ class RoomUpgradeJourneyTest {
     @Test fun `a library from a newer schema is refused and left intact (ADR 0012)`() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "schema-newer.db"
+        val current = createdVersion(context)
         context.deleteDatabase(name)
-        helper.createDatabase(name, 23).use {
+        helper.createDatabase(name, current).use {
             it.execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
-            it.version = 24
+            it.version = current + 1
         }
         val database = TheoriaRoomDatabase.create(context, name)
         val failure = runCatching { openProfileLibrary(database) }.exceptionOrNull()
         database.close()
         assertTrue(failure.toString(), failure is IllegalStateException)
         SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READONLY).use {
-            assertEquals(24, it.version)
+            assertEquals(current + 1, it.version)
             it.rawQuery("SELECT name FROM codices", null).use { rows ->
                 assertTrue(rows.moveToFirst())
                 assertEquals("Saved", rows.getString(0))
@@ -100,19 +101,22 @@ class RoomUpgradeJourneyTest {
     @Test fun `a stored series starts with no check time, so the next background run checks it (ADR 0015)`() = RoomMigrationScenarios.checkTimeReturnsEmpty(helper)
 
     @Test fun `registered migrations step one version at a time from 10 to the version a new library is created at, each with a scenario (ADR 0012)`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val name = "registry.db"
+        val created = createdVersion(ApplicationProvider.getApplicationContext<Context>())
+        val steps = TheoriaRoomDatabase.MIGRATIONS.map { it.startVersion to it.endVersion }
+
+        assertEquals((10 until created).map { it to it + 1 }, steps)
+        assertEquals(steps.map { it.first }.toSet(), RoomMigrationScenarios.steps.keys)
+    }
+
+    private fun createdVersion(context: Context): Int {
+        val name = "created-version.db"
         context.deleteDatabase(name)
         val database = TheoriaRoomDatabase.create(context, name)
-        val created = try {
+        return try {
             database.openHelper.writableDatabase.version
         } finally {
             database.close()
             context.deleteDatabase(name)
         }
-        val steps = TheoriaRoomDatabase.MIGRATIONS.map { it.startVersion to it.endVersion }
-
-        assertEquals((10 until created).map { it to it + 1 }, steps)
-        assertEquals(steps.map { it.first }.toSet(), RoomMigrationScenarios.steps.keys)
     }
 }
