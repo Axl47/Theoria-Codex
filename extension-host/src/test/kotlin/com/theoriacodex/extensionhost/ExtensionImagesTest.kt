@@ -382,10 +382,11 @@ class ExtensionImagesTest {
         val source = FragmentSource()
         images.publish(listOf(server, mihon(source)))
         val forgotten = MihonImages(source, MihonKind.sourceKey(source.id), images)
-        val tiles = """{"tiles":[3,0,2,1],"tileCols":2,"n":"a%b#c/d"}"""
-        val address = checkNotNull(forgotten.pageAddress(chapter, Page(0, imageUrl = "https://img.test/1.webp#$tiles")))
+        listOf("""{"tiles":[3,0,2,1],"tileCols":2,"n":"a%b#c/d"}""", "tile%20").forEachIndexed { index, tiles ->
+            val address = checkNotNull(forgotten.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.webp#$tiles")))
 
-        assertEquals("fragment $tiles", fetch(address))
+            assertEquals("fragment ${"https://img.test/#$tiles".toHttpUrl().fragment}", fetch(address))
+        }
     }
 
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
