@@ -18,7 +18,7 @@ import org.junit.Test
 
 class DanbooruProviderJourneyTest {
     @Test
-    fun `filtered scored search keeps paging after duplicates and can retry a failed detail request`() = runTest {
+    fun `filtered scored search keeps paging after duplicates and can retry a failed detail request (ADR 0045)`() = runTest {
         val query = query()
         val http = ScriptedHttpClient().apply {
             enqueueGet("$BASE/posts.json", searchParams("1"), body =

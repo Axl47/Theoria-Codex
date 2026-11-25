@@ -27,7 +27,7 @@ class SourceParsingTest {
     }
 
     @Test
-    fun `comment markup is read as a body fragment`() {
+    fun `comment markup is read as a body fragment (ADR 0054)`() {
         val text = htmlFragmentToText("<title>Spoiler:</title> ending<br>second line")
 
         assertEquals("Spoiler: ending\nsecond line", text)

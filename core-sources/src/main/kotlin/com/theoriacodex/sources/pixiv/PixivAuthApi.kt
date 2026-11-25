@@ -54,7 +54,7 @@ class PixivAuthApi(
         )
     }
 
-    suspend fun refresh(refreshToken: String): PixivAuthTokens = sourceCall {
+    internal suspend fun refresh(refreshToken: String): PixivAuthTokens = sourceCall {
         requestTokens(step = "refresh", grant = mapOf("grant_type" to "refresh_token", "refresh_token" to refreshToken))
     }
 
