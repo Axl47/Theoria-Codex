@@ -66,7 +66,8 @@ internal fun readingSummary(followed: FollowedSeries, dates: DateFormat): String
 internal fun siteHint(coverUrl: String?): String? {
     val uri = coverUrl?.let { runCatching { URI(it.trim()) }.getOrNull() } ?: return null
     if (uri.scheme?.lowercase() !in WEB_SCHEMES) return null
-    val labels = uri.host?.lowercase()?.trimEnd('.')?.split('.')?.filter { it.isNotEmpty() } ?: return null
+    val host = uri.host?.lowercase()?.trimEnd('.')?.takeUnless { ':' in it || it.startsWith('[') } ?: return null
+    val labels = host.split('.').filter { it.isNotEmpty() }
     if (labels.size < 2 || labels.last().all(Char::isDigit)) return null
     val keep = if (labels.size >= 3 && labels.last().length == 2 && labels[labels.size - 2] in SECOND_LEVEL_LABELS) 3 else 2
     return labels.takeLast(keep).joinToString(".")
@@ -100,7 +101,7 @@ internal sealed interface InstalledGap {
 internal fun installedGap(copy: InstalledExtension, series: List<Series>, off: Map<SourceKey, SourceOff>): InstalledGap = when {
     !copy.on -> InstalledGap.Off
     copy.problem != null -> InstalledGap.NotLoaded
-    else -> series.mapNotNull { off[it.id.source]?.language }.distinct().takeIf { it.isNotEmpty() }?.let(InstalledGap::LanguagesOff) ?: InstalledGap.NotInVersion
+    else -> series.mapNotNull { off[it.id.source]?.takeIf { gap -> gap.extension == copy.name }?.language }.distinct().takeIf { it.isNotEmpty() }?.let(InstalledGap::LanguagesOff) ?: InstalledGap.NotInVersion
 }
 
 internal fun installedCopy(extension: RepoExtension, installed: List<InstalledExtension>?): InstalledExtension? {

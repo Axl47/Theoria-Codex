@@ -113,6 +113,7 @@ class MissingExtensionsScreenTest {
                 installed("pkg.reel", "Moon Reel", on = true),
                 installed("pkg.salt", "Salt Port", on = true, problem = "Unsupported", removable = true),
                 installed("pkg.tide", "Tide Works", on = true),
+                installed("pkg.kelp", "Kelp", on = true),
             ),
         ).apply { off = mapOf(SeriesKind.MANGA.extensionSourceKey(3) to SourceOff("Moon Reel", "es")) }
         val missing = MissingSeriesViewModel(repository, { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }, device.revision)

@@ -42,6 +42,7 @@ class MissingExtensionsTest {
         assertEquals(null, siteHint("content://media/1"))
         assertEquals(null, siteHint("http://192.168.1.4/a.jpg"))
         assertEquals(null, siteHint("https://localhost/a.jpg"))
+        assertEquals(null, siteHint("https://[::ffff:192.0.2.1]/a.jpg"))
     }
 
     @Test
@@ -69,6 +70,7 @@ class MissingExtensionsTest {
         assertEquals(InstalledGap.LanguagesOff(listOf("es")), installedGap(copy, listOf(kaiju, dandadan), off))
         assertEquals(InstalledGap.NotLoaded, installedGap(copy.copy(problem = "Unsupported"), listOf(kaiju), off))
         assertEquals(InstalledGap.NotInVersion, installedGap(copy, listOf(kaiju), emptyMap()))
+        assertEquals(InstalledGap.NotInVersion, installedGap(copy, listOf(kaiju), mapOf(kaiju.id.source to SourceOff("Other Dex", "es"))))
         assertEquals("${languageName("es")} off", languagesOffLine(listOf("es")))
     }
 
