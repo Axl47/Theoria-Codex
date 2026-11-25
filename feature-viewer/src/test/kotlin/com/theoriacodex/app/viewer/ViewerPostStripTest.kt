@@ -127,6 +127,20 @@ class ViewerPostStripTest {
         assertTrue("page 12 ends at ${last.right}", last.right < next.left)
     }
 
+    @Test fun `a long open post alone in the strip spreads its pages across the whole row (ADR 0172)`() {
+        val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
+        val post = testPost(sourcePostId = "strip-alone").copy(preview = image)
+        compose.setContent {
+            MaterialTheme {
+                ViewerPostStrip(listOf(post), 0, {}, Modifier.width(360.dp).testTag("strip"), openPages = stripPages(post.id, 15, 0))
+            }
+        }
+        compose.waitForIdle()
+        val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
+        val pagesRight = compose.onAllNodes(hasContentDescription("of 15", substring = true)).fetchSemanticsNodes().maxOf { it.boundsInRoot.right }
+        assertTrue("pages end at $pagesRight of ${viewport.right}", pagesRight > viewport.right - 24f)
+    }
+
     @Test fun `a short open post takes only the room its pages need`() {
         setUnfolded(pageCount = 3, currentPage = 1)
         val pages = (1..3).map { compose.onNodeWithContentDescription("Go to page $it of 3").fetchSemanticsNode().boundsInRoot }
