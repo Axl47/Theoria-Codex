@@ -45,7 +45,7 @@ class DiagnosticLogStore(
             repeats += 1
             return
         }
-        check(directory.isDirectory || directory.mkdirs()) { "Could not create the diagnostics directory" }
+        check(directoryExists()) { "Could not create the diagnostics directory" }
         val repeatLine = if (repeats > 0) "  (repeated $repeats more times)\n" else ""
         lastKey = key
         repeats = 0
@@ -59,7 +59,7 @@ class DiagnosticLogStore(
     }
 
     fun writeCrash(thread: Thread, error: Throwable) {
-        if (!directory.isDirectory && !directory.mkdirs()) return
+        if (!directoryExists()) return
         val timestamp = now()
         val report = "${Instant.ofEpochMilli(timestamp)} on thread ${thread.name}\n${error.stackTraceToString()}"
         directory.resolve("crash-$timestamp.txt").writeText(DiagnosticRedaction.redact(report))
@@ -77,6 +77,8 @@ class DiagnosticLogStore(
         lastKey = null
         repeats = 0
     }
+
+    private fun directoryExists(): Boolean = directory.mkdirs() || directory.isDirectory
 
     private fun crashFiles(): List<File> = directory.listFiles { file -> file.name.startsWith("crash-") }
         .orEmpty().sortedByDescending(File::getName)
