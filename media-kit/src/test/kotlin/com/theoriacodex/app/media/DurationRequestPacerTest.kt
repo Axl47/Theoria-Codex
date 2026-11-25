@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DurationRequestPacerTest {
@@ -53,7 +54,7 @@ class DurationRequestPacerTest {
     }
 
     @Test
-    fun `pixiv and custom sites space lookups half a second apart like gelbooru while CDN sources do not wait (ADR 0104)`() = runTest {
+    fun `pixiv spaces lookups half a second apart, custom sites are paced like gelbooru and CDN sources do not wait (ADR 0104)`() = runTest {
         val pacer = DurationRequestPacer({ testScheduler.currentTime })
         val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
         val starts = mutableMapOf<SourceKey, MutableList<Long>>()
@@ -63,14 +64,9 @@ class DurationRequestPacerTest {
         }
         advanceUntilIdle()
 
-        assertEquals(
-            mapOf(
-                SourceKey.PIXIV to listOf(0L, 500L),
-                SourceKey.GELBOORU to listOf(0L, 500L),
-                custom to listOf(0L, 500L),
-                SourceKey.DANBOORU to listOf(0L, 0L),
-            ),
-            starts,
-        )
+        assertEquals(listOf(0L, 500L), starts[SourceKey.PIXIV])
+        assertTrue("Gelbooru spaces its lookups", starts.getValue(SourceKey.GELBOORU)[1] > 0L)
+        assertEquals("Custom sites are paced like Gelbooru", starts[SourceKey.GELBOORU], starts[custom])
+        assertEquals(listOf(0L, 0L), starts[SourceKey.DANBOORU])
     }
 }

@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -228,7 +229,7 @@ class MediaDurationAcquisitionEngineTest {
         )
         assertEquals(
             MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TIMEOUT),
-            slowProvider.acquire(post("slow provider").copy(full = null, media = emptyList())),
+            withTimeout(1_000L) { slowProvider.acquire(post("slow provider").copy(full = null, media = emptyList())) },
         )
         assertEquals(20L, testScheduler.currentTime)
     }

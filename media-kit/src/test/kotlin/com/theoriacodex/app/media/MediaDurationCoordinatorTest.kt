@@ -499,7 +499,7 @@ class MediaDurationCoordinatorTest {
         coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
         runCurrent()
 
-        now = 5L * 60L * 1_000L - 1
+        now = DEFAULT_DURATION_RETRY_DELAY_MS - 1
         coordinator.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE))
         runCurrent()
         assertEquals(1, acquisitions)

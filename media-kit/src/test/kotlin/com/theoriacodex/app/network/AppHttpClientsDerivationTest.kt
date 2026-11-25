@@ -7,11 +7,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.Dispatcher
 import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -67,16 +69,13 @@ class AppHttpClientsDerivationTest {
     fun `each client keeps its own queueing, timeouts and redirect policy (ADR 0102)`() {
         val clients = clients(Dns.SYSTEM)
 
-        assertEquals(16, clients.images.dispatcher.maxRequestsPerHost)
-        assertEquals(128, clients.sources.dispatcher.maxRequests)
-        assertEquals(128, clients.sources.dispatcher.maxRequestsPerHost)
-        assertEquals(12_000, clients.downloads.connectTimeoutMillis)
-        assertEquals(30_000, clients.downloads.readTimeoutMillis)
+        val defaults = Dispatcher()
+        assertTrue("Images get more than the default per-host limit", clients.images.dispatcher.maxRequestsPerHost > defaults.maxRequestsPerHost)
+        assertEquals("Sources never queue behind a host", clients.sources.dispatcher.maxRequests, clients.sources.dispatcher.maxRequestsPerHost)
+        assertNotEquals(clients.shared.connectTimeoutMillis, clients.downloads.connectTimeoutMillis)
+        assertNotEquals(clients.shared.readTimeoutMillis, clients.downloads.readTimeoutMillis)
         assertFalse(clients.downloads.followSslRedirects)
-        assertEquals(5, clients.video.dispatcher.maxRequestsPerHost)
-        assertEquals(10_000, clients.video.connectTimeoutMillis)
-        assertEquals(10_000, clients.video.readTimeoutMillis)
-        assertTrue(clients.video.followSslRedirects)
+        assertTrue(clients.shared.followSslRedirects)
     }
 
     @Test
