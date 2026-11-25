@@ -72,7 +72,13 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
                         Button(onClick = model::download) { Text("Try again") }
                     }
                     ModelState.Ready -> {
-                        libraryProgress(progress)?.let { Text(it) }
+                        libraryProgress(progress).forEachIndexed { line, text ->
+                            if (line == 0) {
+                                Text(text)
+                            } else {
+                                Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete") }
                     }
                 }
@@ -99,15 +105,17 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
     }
 }
 
-internal fun libraryProgress(progress: VisionProgress): String? {
-    if (progress.total == 0) return null
-    val previews = when (val videos = progress.awaitingFrames) {
-        0 -> ""
-        1 -> ", 1 video from its preview only"
-        else -> ", $videos videos from their preview only"
+internal fun libraryProgress(progress: VisionProgress): List<String> {
+    if (progress.total == 0) return emptyList()
+    val count = progress.awaitingFrames
+    val videos = if (count == 1) "1 video finishes from its frames" else "$count videos finish from their frames"
+    val pending = when {
+        progress.tagged < progress.total && count > 0 -> "The rest are tagged while charging on Wi-Fi, and $videos once the phone is also idle"
+        progress.tagged < progress.total -> "The rest are tagged while charging on Wi-Fi"
+        count > 0 -> "$videos while charging and idle on Wi-Fi"
+        else -> null
     }
-    val tagged = "${progress.tagged} of ${progress.total} Library posts tagged$previews"
-    return if (progress.analysed < progress.total) "$tagged. The rest finish while charging on Wi-Fi, videos once the phone sits unused." else tagged
+    return listOfNotNull("${progress.tagged} of ${progress.total} Library posts tagged", pending)
 }
 
 private fun percent(bytes: Long, total: Long): Long = if (total <= 0) 0 else bytes * 100 / total
