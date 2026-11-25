@@ -23,7 +23,8 @@ Following.
   always agree. Updates come from the repo listing the Extensions page reads (`ExtensionRepos.available`), which
   fetches each repo's index at most once per process. The counts are taken again whenever the installed extensions
   change and whenever the listing does (`ExtensionRepos.changes`: a repo added, restored or removed, or the indexes
-  read again). No separate update check exists.
+  read again). Reads of one repo's index run one at a time, so a slow first read can't overwrite a refresh that
+  started after it, and Series, Settings and the Extensions page agree. No separate update check exists.
 
 ## Consequences
 
@@ -47,3 +48,4 @@ something else (failed checks, broken sources) belongs in `ExtensionAlerts`, not
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `the Series settings button opens Settings and badges extension alerts (ADR 0221)`
 - `feature-settings/src/test/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroupTest.kt`: `extensions sit above everything else and list each alert on its own line (ADR 0221)`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCatalogTest.kt`: `adding, restoring or removing a repo and re-reading the indexes each signal that the listing changed (ADR 0221)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCatalogTest.kt`: `a refresh that overlaps a slower first read of the same repo keeps the refreshed index (ADR 0221)`

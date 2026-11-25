@@ -49,6 +49,8 @@ class ExtensionCatalog(
 
     private val installing = Mutex()
 
+    private val reading = ConcurrentHashMap<String, Mutex>()
+
     private val changed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     override val changes: Flow<Unit> = changed
@@ -164,7 +166,9 @@ class ExtensionCatalog(
     }
 
     private suspend fun index(repo: ExtensionRepo, refresh: Boolean): RepoIndex {
-        val index = indexes[repo.url]?.takeUnless { refresh } ?: RepoReader.read(repo.url, ::get).also { indexes[repo.url] = it }
+        val index = indexes[repo.url]?.takeUnless { refresh } ?: reading.getOrPut(repo.url, ::Mutex).withLock {
+            indexes[repo.url]?.takeUnless { refresh } ?: RepoReader.read(repo.url, ::get).also { indexes[repo.url] = it }
+        }
         if (index.signingKey != repo.signingKey) throw RepoProblem("Now signed with another key; remove it and add it again to trust that key")
         return index
     }
