@@ -24,7 +24,13 @@ import com.theoriacodex.app.viewer.state.slideshowImageHold
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boolean, inStripRow: Boolean, onAction: (ViewerAction) -> Unit) {
+internal fun BoxScope.ViewerSlideshowControl(
+    frame: ViewerFrame,
+    chromeVisible: Boolean,
+    suppressed: Boolean,
+    inStripRow: Boolean,
+    onAction: (ViewerAction) -> Unit,
+) {
     val state = frame.uiState
     val running = state.controls.slideshow
     val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
@@ -43,7 +49,7 @@ internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boo
     }
     val offered = running || !state.controls.playback.available
     ViewerFooterButton(
-        frame.selection, frame.chromeVisible, visible = frame.chromeVisible && offered && !suppressed, alignment = Alignment.BottomEnd,
+        frame.selection, chromeVisible, visible = chromeVisible && offered && !suppressed, alignment = Alignment.BottomEnd,
         icon = if (running) Icons.Default.Pause else Icons.Default.PlayArrow,
         contentDescription = if (running) "Stop slideshow" else "Start slideshow", testTag = "viewer-slideshow", inStripRow = inStripRow,
         onClick = { onAction(ViewerAction.SetSlideshow(!running)) },

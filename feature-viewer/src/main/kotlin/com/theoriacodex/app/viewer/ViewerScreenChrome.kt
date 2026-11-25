@@ -393,11 +393,12 @@ private fun BoxScope.ViewerFooterButtons(
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
     val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
     val inStripRow = frame.isLandscape && !watching
+    val chromeVisible = frame.chromeVisible && (!inStripRow || frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS)
     ViewerRotationControl(
-        frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow,
+        frame.selection, activity?.viewerRotation, frame.inPictureInPicture, chromeVisible, rotationSuppressed, bottomRow,
         existingOffer = rotationOffer, inStripRow = inStripRow,
     )
-    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture || watching, inStripRow, onAction)
+    ViewerSlideshowControl(frame, chromeVisible, suppressed = bottomOwned || frame.inPictureInPicture || watching, inStripRow, onAction)
 }
 
 internal const val VIEWER_LOCK_OVERLAY_TAG = "viewer-lock-overlay"
