@@ -1,16 +1,13 @@
 package com.theoriacodex.app.di
 
 import android.content.Context
-import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionRepo
-import com.theoriacodex.extensionhost.ExtensionHost
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -62,13 +59,9 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
     }
 
     companion object {
+        @Suppress("StoredJsonUsesDurableJsonRule")
         private val json = Json { ignoreUnknownKeys = true }
 
         fun on(context: Context) = DeviceExtensionChoices(File(context.noBackupFilesDir, "extension_choices.json"))
     }
-}
-
-internal suspend fun forgetLegacyExtensionData(context: Context, settings: SettingsRepository) {
-    if (settings.observeSettings().first().extensions != ExtensionChoices()) settings.updateSettings { it.copy(extensions = ExtensionChoices()) }
-    ExtensionHost.deleteLegacyPreferences(context)
 }

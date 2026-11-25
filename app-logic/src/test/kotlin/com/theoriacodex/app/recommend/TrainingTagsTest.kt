@@ -12,7 +12,7 @@ import org.junit.Test
 
 class TrainingTagsTest {
     @Test
-    fun `recommendations keep tag facets and ignore search-only taxonomy`() {
+    fun `recommendations keep tag facets and ignore search-only taxonomy (ADR 0088)`() {
         val post = Post(
             id = PostId(SourceKey.NHENTAI, "1"),
             preview = ImageRef(url = "https://example.com/1.jpg", localPath = null, mime = "image/jpeg"),
@@ -36,8 +36,9 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `a Like keeps every tag, however far down the provider's alphabetical list`() {
-        val tags = (1..60).map { "tag_%02d".format(it) }
+    fun `a Like keeps every tag, however far down the provider's alphabetical list (ADR 0088)`() {
+        val tags = (1..60).map { "tag_%02d".format((it * 37) % 60 + 1) }
+        val listed = tags + listOf(tags[3].uppercase(), tags[0])
         val post = Post(
             id = PostId(SourceKey.GELBOORU, "7"),
             preview = ImageRef(url = "https://example.com/7.jpg", localPath = null, mime = "image/jpeg"),
@@ -45,8 +46,8 @@ class TrainingTagsTest {
             pageUrl = null,
             width = null,
             height = null,
-            canonicalTags = tags,
-            rawTags = tags,
+            canonicalTags = listed,
+            rawTags = listed,
             authorName = null,
             createdAtEpochMs = null,
         )
@@ -55,7 +56,30 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `a post with raw tags and no typed taxonomy teaches its raw tags`() {
+    fun `a tag held under two namespaces is taught once (ADR 0088)`() {
+        val post = Post(
+            id = PostId(SourceKey.GELBOORU, "9"),
+            preview = ImageRef(url = "https://example.com/9.jpg", localPath = null, mime = "image/jpeg"),
+            full = null,
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = listOf("wolf", "moth"),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+            taxonomy = listOf(
+                PostTaxonomyTerm(value = "wolf", facet = SearchFacet.TAG, sourceNamespace = "general"),
+                PostTaxonomyTerm(value = "wolf", facet = SearchFacet.TAG, sourceNamespace = "character"),
+                PostTaxonomyTerm(value = "moth", facet = SearchFacet.TAG, sourceNamespace = "general"),
+            ),
+        )
+
+        assertEquals(listOf("wolf", "moth"), trainingTagsFor(post))
+    }
+
+    @Test
+    fun `a post with raw tags and no typed taxonomy teaches its raw tags (ADR 0088)`() {
         val post = Post(
             id = PostId(SourceKey.GELBOORU, "8"),
             preview = ImageRef(url = "https://example.com/8.jpg", localPath = null, mime = "image/jpeg"),
@@ -73,7 +97,7 @@ class TrainingTagsTest {
     }
 
     @Test
-    fun `pixiv recommendation training keeps native raw tags instead of translated aliases`() {
+    fun `pixiv recommendation training keeps native raw tags instead of translated aliases (ADR 0088)`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "42"),
             preview = ImageRef(url = "https://example.com/42.jpg", localPath = null, mime = "image/jpeg"),

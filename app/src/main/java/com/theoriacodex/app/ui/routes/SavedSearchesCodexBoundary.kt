@@ -9,6 +9,7 @@ import com.theoriacodex.app.codex.rememberCodexPostDurations
 import com.theoriacodex.app.codex.rememberCodexPostUsage
 import com.theoriacodex.app.codex.rememberNewPostsReload
 import com.theoriacodex.app.media.MediaDurationStates
+import com.theoriacodex.app.codex.LiveCodexSortFrames
 import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
@@ -52,7 +53,8 @@ internal fun SavedSearchesCodexBoundary(
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
     val posts = rememberComputedOffMain(
-        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = "codex-sort:$SAVED_SEARCHES_CODEX_ID",
+        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT,
+        retainKey = LiveCodexSortFrames.at("codex-sort:$SAVED_SEARCHES_CODEX_ID"),
     ) {
         sortLiveCodexPosts(feed.posts, sort, usage, durations)
     }

@@ -36,7 +36,7 @@ class RoomProfileDeletionTest {
         } finally { database.close() }
     }
 
-    @Test fun `a later collection deletion failure rolls back the entire profile and preserves shared Posts`() = runTest {
+    @Test fun `a later collection deletion failure rolls back the entire profile and preserves shared Posts (ADR 0018)`() = runTest {
         val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
             TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
         try {

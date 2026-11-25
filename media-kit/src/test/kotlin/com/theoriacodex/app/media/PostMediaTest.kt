@@ -191,22 +191,9 @@ class PostMediaTest {
     }
 
     @Test
-    fun `any source with a lighter rendition steps up to the original in the Viewer and on cards (ADR 0105)`() {
+    fun `every source treats a first page's original as a card fallback and steps a small original up (ADR 0105)`() {
         val customSite = requireNotNull(SourceKey.parse("custom_booru_example"))
         listOf(SourceKey.DANBOORU, SourceKey.RULE34PAHEAL, customSite).forEach { source ->
-            val full = ref("full.jpg", "image/jpeg").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
-            val post = post(source, full)
-
-            val viewer = viewerMediaDeliveryPlan(post, full)
-            assertEquals(
-                listOf("https://example.test/sample.jpg", "https://example.test/full.jpg"),
-                viewer.candidates.take(2).map { it.location },
-            )
-            assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, viewer.candidates[1].activation)
-            val card = previewMediaDeliveryPlan(post).candidates
-            assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, card.first { it.location.endsWith("sample.jpg") }.activation)
-            assertEquals(MediaDeliveryActivation.FAILURE_FALLBACK, card.first { it.location.endsWith("full.jpg") }.activation)
-
             val page = ref("page.jpg", "image/jpeg").copy(progressiveUrls = listOf("https://example.test/page-sample.jpg"))
             val paged = post(source, ref("full.jpg", "image/jpeg")).copy(media = listOf(page))
             assertEquals(

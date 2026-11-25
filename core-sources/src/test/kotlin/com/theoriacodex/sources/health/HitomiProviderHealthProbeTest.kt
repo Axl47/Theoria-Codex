@@ -58,7 +58,7 @@ class HitomiProviderHealthProbeTest {
     }
 
     @Test
-    fun `disabling media ranges skips both byte probes and keeps configuration and gallery steps`() = runTest {
+    fun `disabling media ranges skips both byte probes and keeps configuration and gallery steps (ADR 0047)`() = runTest {
         val http = ProbeHttpClient()
 
         val results = HitomiProviderHealthProbe(

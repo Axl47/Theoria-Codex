@@ -64,8 +64,9 @@ class FeedRetainedStateTest {
     @Test fun `forgetting keeps the kept feeds and their parts in every retained map, and leaves keys outside the prefix alone (ADR 0106)`() {
         val retained = FeedRetainedState()
         val keys = listOf("for_you:mix:1", "for_you:mix:1:related", "for_you:mix:10", "for_you:trail:2", "search")
+        val frames = RetainedFrames<String, String>()
         fun snapshot() = keys.associateWith { key ->
-            listOf(retained.gridState(key) { LazyStaggeredGridState() }, retained.durationProjection(key), retained.frameCache<String, String>(key))
+            listOf(retained.gridState(key) { LazyStaggeredGridState() }, retained.durationProjection(key), retained.frameCache(frames.at(key)))
         }
         val before = snapshot()
 
@@ -78,5 +79,16 @@ class FeedRetainedStateTest {
         listOf("for_you:mix:10", "for_you:trail:2").forEach { key ->
             before.getValue(key).zip(after.getValue(key)).forEach { (old, new) -> assertNotSame(old, new) }
         }
+    }
+
+    @Test fun `a retained frame cache is shared only by the frames that created it (ADR 0106)`() {
+        val retained = FeedRetainedState()
+        val counts = RetainedFrames<String, Int>()
+        val labels = RetainedFrames<String, String>()
+        val first = retained.frameCache(counts.at("feed"))
+
+        assertSame(first, retained.frameCache(counts.at("feed")))
+        assertNotSame(first, retained.frameCache(labels.at("feed")))
+        assertNotSame(first, retained.frameCache(counts.at("feed")))
     }
 }

@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.theoriacodex.app.statistics.observeAppBackground
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,6 +59,7 @@ internal fun ShellOwnerHosts(shell: TheoriaShell) {
         owners.codexSaves.effects.collect { message -> snackbarHostState.showSnackbar(message) }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { shell.flushPendingWrites() }
+    LaunchedEffect(shell.container) { shell.container.observeAppBackground(ProcessLifecycleOwner.get().lifecycle) }
     DisposableEffect(shell.routes) {
         onDispose { shell.routes.close() }
     }

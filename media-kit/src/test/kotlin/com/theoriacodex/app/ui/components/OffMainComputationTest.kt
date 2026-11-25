@@ -153,11 +153,12 @@ class OffMainComputationTest {
     fun `a returning feed reuses its retained frame only for the same list and inputs (ADR 0106)`() {
         var shown by mutableStateOf(true)
         var shownList by mutableStateOf(listOf("p1", "p2"), referentialEqualityPolicy())
+        val frames = RetainedFrames<String, List<String>>()
         compose.setContent {
             if (shown) {
                 val list = shownList
                 val input = input
-                rememberComputedOffMain<String, List<String>>(list, input, retainKey = "feed", extend = { previous ->
+                rememberComputedOffMain<String, List<String>>(list, input, retainKey = frames.at("feed"), extend = { previous ->
                     list.appendedTo(previous.list)?.let { extend(previous.value, it, input) }
                 }) { compute(list, input) }
             }

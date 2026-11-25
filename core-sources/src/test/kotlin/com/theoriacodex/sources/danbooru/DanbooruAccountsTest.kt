@@ -29,7 +29,7 @@ class DanbooruAccountsTest {
     private fun postsQuery(tags: String, page: String) = mapOf("limit" to "40", "page" to page, "tags" to tags)
 
     @Test
-    fun `only user creators are accounts, told apart by the profile alone (ADR 0008)`() {
+    fun `only user creators are accounts, told apart by the profile alone (ADR 0008, 0041)`() {
         assertEquals(listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES), adapter.accountFeeds(account))
         assertEquals(emptyList<AccountFeed>(), adapter.accountFeeds(artistTag))
         assertEquals(emptyList<AccountFeed>(), adapter.accountFeeds(account.copy(uploadsQuery = "user:")))
@@ -52,7 +52,7 @@ class DanbooruAccountsTest {
     }
 
     @Test
-    fun `private favorites count as zero`() = runTest {
+    fun `private favorites count as zero (ADR 0041)`() = runTest {
         http.enqueueGet("$base/users/11.json", body = """{"id":11,"post_upload_count":2}""")
         http.enqueueGet("$base/counts/posts.json", mapOf("tags" to "ordfav:alice"), body = """{"counts":{"posts":0}}""")
 
@@ -60,19 +60,22 @@ class DanbooruAccountsTest {
     }
 
     @Test
-    fun `an artist tag has no account details and asks for nothing`() = runTest {
+    fun `an artist tag has no account details and asks for nothing (ADR 0041)`() = runTest {
         assertNull(adapter.accountDetails(artistTag))
         http.assertExhausted()
     }
 
     @Test
-    fun `favorites page by number because ordfav is not id ordered`() = runTest {
+    fun `favorites page by number because ordfav is not id ordered (ADR 0041)`() = runTest {
         http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "1"), body = fullPage(500))
-        http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "2"), body = "[]")
+        http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "2"), body = fullPage(400))
+        http.enqueueGet("$base/posts.json", postsQuery("ordfav:alice", "3"), body = "[]")
 
         val first = adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = null)
         assertEquals("2", first.nextPageToken)
-        assertNull(adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = "2").nextPageToken)
+        val second = adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = "2")
+        assertEquals("3", second.nextPageToken)
+        assertNull(adapter.accountPosts(account, AccountFeed.FAVORITES, pageToken = "3").nextPageToken)
     }
 
     @Test

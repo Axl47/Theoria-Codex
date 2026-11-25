@@ -1,11 +1,13 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
@@ -14,11 +16,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.media.isVideoMediaRef
@@ -75,11 +80,11 @@ internal fun ViewerPostPagerSurface(
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
                     holdScrub = LocalViewerHoldScrub.current,
                     reservedBottomPx = reservedBottom,
-                    verticalScroll = verticalGallery?.scrollGesture,
+                    verticalScroll = verticalGallery?.scrollGesture(pagesPending = frame.reading && frame.uiState.currentPage?.loadingGalleryMedia() == true),
                 ),
                 viewerGestureHandler(
                     swipe, dismissDrag, screen, controls, haptics, flingVelocity, scope, frame.uiState.controls.slideshow,
-                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && frame.uiState.series is ViewerSeries.Reading },
+                    openNextChapter = nextPostOpener(frame.navigation.currentIndex, frame, swipe, config).takeIf { vertical && frame.reading },
                 ),
             )
             .graphicsLayer { translationX = swipe.edgeOffset },
@@ -92,10 +97,13 @@ internal fun ViewerPostPagerSurface(
                 reverseLayout = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series).reversed,
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
-                ViewerPostPage(
-                    postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
-                    qualityHeight, videoPositions, host, config,
-                )
+                Box(Modifier.fillMaxSize()) {
+                    ViewerPostPage(
+                        postPage, frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls, readReturnProgress, quality,
+                        qualityHeight, videoPositions, host, config,
+                    )
+                    if (frame.reading && frame.navigation.pages[postPage].loadingGalleryMedia()) ChapterPagesLoading()
+                }
             }
         }
     }
@@ -140,6 +148,11 @@ private fun viewerGestureHandler(
     override fun onScrubEnd() = controls.endScrub()
 }
 
+@Composable
+private fun BoxScope.ChapterPagesLoading() {
+    CircularProgressIndicator(Modifier.align(Alignment.Center).semantics { contentDescription = "Loading pages" })
+}
+
 internal fun previousPostOpener(index: Int, frame: ViewerFrame, swipe: ViewerSwipeController, config: ViewerScreenConfig): (() -> Unit)? {
     val previous = frame.navigation.pages.getOrNull(index - 1) ?: return null
     return { swipe.navigateTo(ViewerHorizontalSwipeTarget(index - 1, config.entryMediaIndex(previous, frame.uiState.series, back = true))) }
@@ -167,7 +180,7 @@ private fun ViewerVerticalPostPage(
         postPage, pageState, frame, screen, controls, host,
         dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
         readReturnProgress = readReturnProgress,
-        onOpenNext = nextPostOpener(postPage, frame, swipe, config),
+        onOpenNext = nextPostOpener(postPage, frame, swipe, config).takeUnless { frame.reading && pageState.loadingGalleryMedia() },
     )
 }
 
@@ -326,7 +339,7 @@ private fun ViewerPostPageEffects(
     controls: ViewerControls,
     swipe: ViewerSwipeController,
     onAction: (ViewerAction) -> Unit,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
+    onVisibleMediaChanged: ((Post, Int, Float?) -> Unit)?,
 ) {
     val currentPostIndex = frame.navigation.currentIndex
     val selectedMediaIndex = frame.selection.mediaIndex
@@ -370,11 +383,11 @@ private fun reportSettledMedia(
     selectedMediaIndex: Int,
     post: Post,
     onAction: (ViewerAction) -> Unit,
-    onVisibleMediaChanged: ((Post, Int) -> Unit)?,
+    onVisibleMediaChanged: ((Post, Int, Float?) -> Unit)?,
 ) {
     if (!isCurrentPost) return
     if (settledPage != selectedMediaIndex) onAction(ViewerAction.SelectMedia(settledPage))
-    onVisibleMediaChanged?.invoke(post, settledPage + 1)
+    onVisibleMediaChanged?.invoke(post, settledPage + 1, null)
 }
 
 private val restingReturnProgress = { 0f }

@@ -10,12 +10,12 @@ class BrowserAddressDnsTest {
     private val v6 = InetAddress.getByName("2001:db8::1")
 
     @Test
-    fun `where the system lists IPv4 first, IPv6 is left out as the browser leaves it`() {
+    fun `where the system lists IPv4 first, IPv6 is left out as the browser leaves it (ADR 0050)`() {
         assertEquals(listOf(v4), BrowserAddressDns(answering(v4, v6)).lookup("site.test"))
     }
 
     @Test
-    fun `where the system lists IPv6 first, every address is kept`() {
+    fun `where the system lists IPv6 first, every address is kept (ADR 0050)`() {
         assertEquals(listOf(v6, v4), BrowserAddressDns(answering(v6, v4)).lookup("site.test"))
     }
 

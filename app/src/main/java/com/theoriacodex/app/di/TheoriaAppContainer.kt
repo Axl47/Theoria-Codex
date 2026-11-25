@@ -43,6 +43,7 @@ import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.AndroidPixivPkceSessionStore
 import com.theoriacodex.app.sourceauth.ObservableSourceAccountStore
 import com.theoriacodex.app.sourceauth.PixivPkceController
+import com.theoriacodex.extensionhost.ExtensionHost
 import com.theoriacodex.app.sourceauth.SourceAccountStore
 import com.theoriacodex.app.update.AndroidApkInstaller
 import com.theoriacodex.app.update.ApkDownloadManager
@@ -84,7 +85,6 @@ import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileDeletionService
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.SettingsRepository
-import com.theoriacodex.data.repository.STATISTICS_WRITE_DELAY
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.storage.WriteBehind
@@ -168,14 +168,9 @@ data class DataDependencies(
     val librarySections: LibrarySectionStore = LibrarySectionStore(uiRestoreRepository),
     val forYouVerdicts: ForYouVerdictRepository,
     val visualSignatures: VisualSignatureRepository,
+    private val writeBehind: WriteBehind,
 ) {
-    suspend fun flushPendingWrites() {
-        val failures = listOf(
-            runCatchingPreservingCancellation { readingPositions.flush() },
-            runCatchingPreservingCancellation { statisticsRepository.flush() },
-        ).mapNotNull { it.exceptionOrNull() }
-        failures.firstOrNull()?.let { throw it }
-    }
+    suspend fun flushPendingWrites() = writeBehind.flushAll()
 }
 
 data class SourceDependencies(
@@ -262,6 +257,7 @@ internal class DefaultTheoriaAppContainer(
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val writeBehind = WriteBehind(durableStoreScope)
     override val applicationScope: CoroutineScope get() = durableStoreScope
     private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
     private val fileStoreRecoveryRegistry = FileStoreRecoveryRegistry()
@@ -384,7 +380,7 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
         recoveryRegistry = fileStoreRecoveryRegistry,
-        writeBehind = WriteBehind(durableStoreScope, STATISTICS_WRITE_DELAY),
+        writeBehind = writeBehind,
     )
     private val statisticsRepository = com.theoriacodex.app.statistics.ThumbnailStatisticsRepository(
         delegate = statisticsStore,
@@ -410,7 +406,7 @@ internal class DefaultTheoriaAppContainer(
         awaitSources = sourceReadiness::await,
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
-    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeBehind = WriteBehind(durableStoreScope))
+    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory, writeBehind = writeBehind)
     override val series: SeriesDependencies? = extensionHost?.let { host ->
         val choices = DeviceExtensionChoices.on(appContext)
         host.bind(choices)
@@ -501,6 +497,7 @@ internal class DefaultTheoriaAppContainer(
         fileMirrors = fileMirrors,
         forYouVerdicts = RoomForYouVerdictRepository(contentDatabase, profileWriteGuard),
         visualSignatures = visualSignatures,
+        writeBehind = writeBehind,
     )
 
     private val postResolutions = PostResolutionFlights()
@@ -643,7 +640,7 @@ internal class DefaultTheoriaAppContainer(
         if (series != null) {
             durableStoreScope.launch {
                 File(appContext.noBackupFilesDir, "series_downloads").deleteRecursively()
-                runCatchingPreservingCancellation { forgetLegacyExtensionData(appContext, settingsRepository) }
+                runCatchingPreservingCancellation { ExtensionHost.deleteLegacyPreferences(appContext) }
                     .onFailure { Diagnostics.report("extensions", "Old extension data could not be removed", it) }
             }
         }

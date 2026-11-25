@@ -33,7 +33,7 @@ class Rule34PahealSourceAdapterTest {
     }
 
     @Test
-    fun `rss types extensionless files from data-mime and keeps thumbnails as images`() = runTest {
+    fun `rss types extensionless files from data-mime and keeps thumbnails as images (ADR 0053)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -48,7 +48,23 @@ class Rule34PahealSourceAdapterTest {
     }
 
     @Test
-    fun `no tags reads the listing page with the same file types`() = runTest {
+    fun `data-mime wins over data-ext and an older card's data-ext still types the file (ADR 0053)`() = runTest {
+        suspend fun fullMime(rss: String): String? {
+            val httpClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = rss) }
+            return Rule34PahealSourceAdapter(httpClient = httpClient).search(sampleQuery(), pageToken = null).items.single().full?.mime
+        }
+
+        assertEquals("image/png", fullMime(SAMPLE_PAHEAL_RSS))
+        assertEquals("image/gif", fullMime(SAMPLE_PAHEAL_RSS.replace("data-ext='png'", "data-mime='image/gif; animated=true' data-ext='png'")))
+
+        val postPage = SAMPLE_PAHEAL_POST_HTML.replace("data-mime=\"image/jpeg\"", "data-mime=\"image/gif; animated=true\"")
+        val pageClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = postPage) }
+        val post = Rule34PahealSourceAdapter(httpClient = pageClient).resolvePost(PostId(source = SourceKey.RULE34PAHEAL, sourcePostId = "5773878"))
+        assertEquals("image/gif", post?.full?.mime)
+    }
+
+    @Test
+    fun `no tags reads the listing page with the same file types (ADR 0053)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_PAHEAL_LISTING_HTML)
         }

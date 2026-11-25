@@ -32,7 +32,6 @@ class DataStoreFormatTest {
             instantSeek = true,
             viewerAutoRotateVideos = false,
             viewerCommentOrder = "NEWEST",
-            scenarioPreset = "EMPTY_RESULTS",
             recommendationProfiles = listOf(RecommendationProfileRecord("profile-main", "Main = 1")),
             activeProfileId = "profile-main",
             forYouBlacklistByProfile = mapOf("profile-main" to listOf(ForYouBlacklistEntryRecord("PIXIV", listOf("x")))),
@@ -40,11 +39,9 @@ class DataStoreFormatTest {
                 "profile-main" to listOf(FavoriteTagEntryRecord("GELBOORU", "cat_ears", listOf("cat_ears", "fox_ears"), "Ears")),
             ),
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
-            trustedExtensions = mapOf("extension.a" to "ab12"),
-            extensionLanguages = mapOf("extension.a" to listOf("en", "es")),
         )
         val full = SettingsDataStoreFile(settings = settings)
-        assertStoredFormat(golden("settings-full.json") to full)
+        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = setOf("settings.scenarioPreset"))
     }
 
     @Test
@@ -75,7 +72,10 @@ class DataStoreFormatTest {
             savedSearchNewPosts = SavedSearchNewPosts(5L, mapOf("saved" to NewPostMarks(listOf("PIXIV:1"), listOf("PIXIV:2", "PIXIV:1"), 4L))),
         )
         val full = UiRestoreDataStoreFile(state = state)
-        assertStoredFormat(golden("ui-restore-full.json") to full)
+        assertStoredFormat(
+            golden("ui-restore-full.json") to full,
+            retiredKeys = setOf("state.feedFabRestoreStates{}.searchAnimationByScope{}.animatedOnly"),
+        )
     }
 
     @Test

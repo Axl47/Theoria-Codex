@@ -22,3 +22,12 @@ Every adapter that filters records must compute its next-page token before filte
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapter.kt`: `comments`, `searchTags`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapter.kt`: post paging
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/common/CanonicalPostPage.kt`: `canonicalPostPage`
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/RealProviderPageContractTest.kt`: `real provider pages deduplicate canonical identities after parsing without losing continuation or order (ADR 0045)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruCommentsTest.kt`: `a short page maps live comments and knows its total (ADR 0045)`, `a full page points at the next one and hides the total (ADR 0045)`, `a full page that loses deleted comments still points at the next one (ADR 0045)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruProviderJourneyTest.kt`: `filtered scored search keeps paging after duplicates and can retry a failed detail request (ADR 0045)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/danbooru/DanbooruSourceAdapterTest.kt`: `a full raw page with non-object entries still pages from the lowest object id, and a short one ends paging (ADR 0045)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt`: `search keeps pagination when a full provider page contains an unparseable post (ADR 0045)`
+- Left to prose: every future adapter computing its token before filtering is guidance for new code, since each provider has its own continuation.
