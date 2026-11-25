@@ -73,8 +73,6 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.dropWhile
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -108,7 +106,6 @@ fun SearchScreen(
     sourceMix: SearchSourceMix? = null,
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
-    SavedSearchEditEndEffect(state.editingSavedSearchId, { chrome.composerOpen }) { onAction(SearchAction.EndSavedSearchEdit) }
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
@@ -147,14 +144,8 @@ fun SearchScreen(
         SearchPostSheet(post, actionPost, state, related, onAction, onRequestSaveToCodex, onAddFavoriteTag, onToggleLike)
     }
     if (chrome.composerOpen) {
-        val update = { saved: SavedSearchEntry, search: RecentSearchEntry ->
-            onUpdateSavedSearch(saved, search)
-            chrome.closeComposer(onAction)
-        }
-        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, update, onManageSavedSearches) {
-            chrome.closeComposer(onAction)
-            onOpenSavedSearch(it)
-        }
+        val update = { saved: SavedSearchEntry, search: RecentSearchEntry -> onUpdateSavedSearch(saved, search); chrome.closeComposer(onAction) }
+        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, update, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox() + sourceMixCommands(state, chrome, sourceMix, onAction))
     }
@@ -272,6 +263,7 @@ internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarD
     var showSourceMix by mutableStateOf(false)
 
     fun closeComposer(onAction: (SearchAction) -> Unit) {
+        onAction(SearchAction.EndSavedSearchEdit)
         onAction(SearchAction.ClearAutocomplete)
         onAction(SearchAction.SettleSearch)
         composerOpen = false
@@ -280,6 +272,7 @@ internal class SearchChromeState(composerOpen: MutableState<Boolean>, searchBarD
 
     fun applyDraft(inputFocus: SearchInputFocus, onAction: (SearchAction) -> Unit) {
         inputFocus.clear(force = true)
+        onAction(SearchAction.EndSavedSearchEdit)
         onAction(SearchAction.ApplyDraft)
         composerOpen = false
         searchBarDismissedByScroll = false
@@ -566,16 +559,6 @@ private fun appliedSearchEntry(state: SearchUiState): RecentSearchEntry? {
         },
         sources = scope.explicitSources.ifEmpty { query.applied.defaultRecentSearchSources() },
     )
-}
-
-@Composable
-internal fun SavedSearchEditEndEffect(editingId: String?, composerOpen: () -> Boolean, onEnd: () -> Unit) {
-    val end by rememberUpdatedState(onEnd)
-    LaunchedEffect(editingId) {
-        if (editingId == null) return@LaunchedEffect
-        snapshotFlow(composerOpen).dropWhile { open -> !open }.first { open -> !open }
-        end()
-    }
 }
 
 private fun savedSearchUpdate(

@@ -3,9 +3,6 @@ package com.theoriacodex.app.search
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -172,15 +169,16 @@ class SearchComposerUiTest {
         compose.onNodeWithText("Update", substring = true).assertDoesNotExist()
     }
 
-    @Test fun `the edit ends when the composer closes after opening, not before it opens (ADR 0218)`() {
-        var open by mutableStateOf(false)
-        var editingId by mutableStateOf<String?>(null)
-        var ended = 0
-        compose.setContent { SavedSearchEditEndEffect(editingId, { open }) { ended++ } }
-        compose.runOnIdle { editingId = "evening" }
-        compose.runOnIdle { assertEquals(0, ended); open = true }
-        compose.runOnIdle { assertEquals(0, ended); open = false }
-        compose.runOnIdle { assertEquals(1, ended) }
+    @Test fun `closing the composer or applying its draft ends a saved-search edit first (ADR 0218)`() {
+        val chrome = SearchChromeState(androidx.compose.runtime.mutableStateOf(true), androidx.compose.runtime.mutableStateOf(false))
+        val sent = mutableListOf<SearchAction>()
+        chrome.closeComposer { sent += it }
+        assertEquals(SearchAction.EndSavedSearchEdit, sent.first())
+        sent.clear()
+        chrome.composerOpen = true
+        chrome.applyDraft(SearchInputFocus {}, { sent += it })
+        assertEquals(SearchAction.EndSavedSearchEdit, sent.first())
+        assertEquals(false, chrome.composerOpen)
     }
 
     @Test fun `the composer menu opens Filter and sort (ADR 0218)`() {

@@ -170,16 +170,7 @@ internal fun SearchRoute(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    CollectRouteEffects(owner.effects) { effect ->
-        when (effect) {
-            is SearchEffect.OpenViewer -> {
-                if (effect.fromTypedId) composerOpen.value = false
-                callbacks.onOpenViewer(effect)
-            }
-            is SearchEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
-            SearchEffect.OpenComposer -> composerOpen.value = true
-        }
-    }
+    SearchRouteEffects(owner, composerOpen, callbacks)
 
     SearchRouteContent(
         state = state,
@@ -193,6 +184,23 @@ internal fun SearchRoute(
         onFabRestoreStateChange = onFabRestoreStateChange,
         callbacks = callbacks,
     )
+}
+
+@Composable
+private fun SearchRouteEffects(owner: SearchViewModel, composerOpen: MutableState<Boolean>, callbacks: SearchRouteCallbacks) {
+    CollectRouteEffects(owner.effects) { effect ->
+        when (effect) {
+            is SearchEffect.OpenViewer -> {
+                if (effect.fromTypedId) {
+                    composerOpen.value = false
+                    owner.onAction(SearchAction.EndSavedSearchEdit)
+                }
+                callbacks.onOpenViewer(effect)
+            }
+            is SearchEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
+            SearchEffect.OpenComposer -> composerOpen.value = true
+        }
+    }
 }
 
 @Composable

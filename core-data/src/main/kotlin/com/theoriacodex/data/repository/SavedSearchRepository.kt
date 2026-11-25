@@ -41,7 +41,7 @@ private data class SearchReplay(val kind: RecentSearchKind, val query: Query, va
 private fun RecentSearchEntry.replay() = SearchReplay(
     kind = kind,
     query = query.normalizedForMode(query.mode).query,
-    sources = if (kind == RecentSearchKind.MULTI_SEARCH) sources.distinct() else emptyList(),
+    sources = if (kind == RecentSearchKind.MULTI_SEARCH) sources.distinct().sortedBy(SourceKey::id) else emptyList(),
 )
 
 interface SavedSearchRepository {

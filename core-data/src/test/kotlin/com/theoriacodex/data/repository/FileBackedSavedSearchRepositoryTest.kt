@@ -222,7 +222,7 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     @Test
     fun `update to the same search changes nothing and to another pin's search is refused (ADR 0218)`() = runTest {
         val repository = FileBackedSavedSearchRepository(tempDir("pin-update-identity"))
-        val other = repository.save("Other", execution().copy(queryHash = "other", sources = execution().sources.reversed()))
+        val other = repository.save("Other", execution().copy(queryHash = "other", sources = listOf(SourceKey.PIXIV, SourceKey.AIBOORU)))
         val edited = repository.save("Edited", execution())
         val before = repository.observeSavedSearches().first()
 
@@ -233,11 +233,12 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
     }
 
     @Test
-    fun `searches replay alike whatever their stored hash, and Unified ones whatever sources Recents recorded (ADR 0218)`() {
+    fun `searches replay alike whatever their stored hash or source order, and Unified ones whatever sources Recents recorded (ADR 0218)`() {
         val unified = execution().copy(kind = RecentSearchKind.UNIFIED, sources = emptyList())
         assertTrue(unified.replaysAs(unified.copy(queryHash = "older", sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU))))
         assertTrue(execution().replaysAs(execution().copy(queryHash = "older")))
-        assertFalse(execution().replaysAs(execution().copy(sources = execution().sources.reversed())))
+        assertTrue(execution().replaysAs(execution().copy(sources = execution().sources.reversed())))
+        assertFalse(execution().replaysAs(execution().copy(sources = listOf(SourceKey.PIXIV, SourceKey.AIBOORU))))
         assertFalse(execution().replaysAs(unified))
     }
 

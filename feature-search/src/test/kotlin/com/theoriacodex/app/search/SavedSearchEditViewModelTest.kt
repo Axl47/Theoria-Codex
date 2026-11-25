@@ -55,6 +55,17 @@ internal class SavedSearchEditViewModelTest : SearchViewModelTestFixture() {
         assertFalse(SearchEffect.OpenComposer in effects)
     }
 
+    @Test fun `a Multi-Search missing one of its sources starts no edit, so Update cannot drop that source (ADR 0218)`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val owner = viewModel(ViewModelSearchAdapter(), additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.AIBOORU)))
+            restore(owner)
+            val query = Query(QueryMode.Unified, listOf("landscape"), emptyList(), SortMode.NEWEST, null, null)
+            val scope = SearchSourceScope.fromSources(listOf(SourceKey.PIXIV, SourceKey.AIBOORU, SourceKey.GELBOORU))
+            owner.onAction(SearchAction.EditSavedSearch("evening", query, scope))
+            advanceUntilIdle()
+            assertEquals(null, owner.state.value.editingSavedSearchId)
+        }
+
     @Test fun `opening another search, stepping history or ending the edit leaves edit mode (ADR 0218)`() =
         runTest(mainDispatcherRule.dispatcher) {
             val owner = viewModel(ViewModelSearchAdapter())

@@ -590,38 +590,8 @@ private fun ComposerSavedSection(
     onManageSavedTags: () -> Unit,
     onAction: (SearchAction) -> Unit,
 ) {
-    val action = savedSearches.action
-    val showSearches = savedSearches.entries.isNotEmpty() || action != null
-    if (showSearches) {
-        var naming by remember { mutableStateOf(false) }
-        SavedPartHeader("Saved searches") {
-            if (action is ComposerSavedSearchAction.Save) {
-                TextButton(onClick = { naming = true }) {
-                    Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
-                    Text("Save", Modifier.padding(start = 4.dp))
-                }
-            }
-            if (savedSearches.entries.isNotEmpty()) {
-                TextButton(
-                    onClick = savedSearches.onManage,
-                    modifier = Modifier.semantics { contentDescription = "Manage saved searches" },
-                ) { Text("Manage") }
-            }
-        }
-        if (action is ComposerSavedSearchAction.Update) SavedSearchUpdateRow(action)
-        if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
-        if (naming && action is ComposerSavedSearchAction.Save) {
-            SavedSearchNameDialog(
-                initialName = action.suggestedName,
-                renaming = false,
-                onDismiss = { naming = false },
-                onConfirm = { name ->
-                    action.onSave(name)
-                    naming = false
-                },
-            )
-        }
-    }
+    val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.action != null
+    if (showSearches) SavedSearchesPart(savedSearches)
     if (savedTags.entries.isEmpty()) return
     if (showSearches) HorizontalDivider(Modifier.padding(top = 8.dp))
     SavedPartHeader("Saved tags") {
@@ -633,6 +603,39 @@ private fun ComposerSavedSection(
         }
     }
     SavedTagChips(savedTags, draft, targetIndex, onAction)
+}
+
+@Composable
+private fun SavedSearchesPart(savedSearches: ComposerSavedSearches) {
+    val action = savedSearches.action
+    var naming by remember { mutableStateOf(false) }
+    SavedPartHeader("Saved searches") {
+        if (action is ComposerSavedSearchAction.Save) {
+            TextButton(onClick = { naming = true }) {
+                Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
+                Text("Save", Modifier.padding(start = 4.dp))
+            }
+        }
+        if (savedSearches.entries.isNotEmpty()) {
+            TextButton(
+                onClick = savedSearches.onManage,
+                modifier = Modifier.semantics { contentDescription = "Manage saved searches" },
+            ) { Text("Manage") }
+        }
+    }
+    if (action is ComposerSavedSearchAction.Update) SavedSearchUpdateRow(action)
+    if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
+    if (naming && action is ComposerSavedSearchAction.Save) {
+        SavedSearchNameDialog(
+            initialName = action.suggestedName,
+            renaming = false,
+            onDismiss = { naming = false },
+            onConfirm = { name ->
+                action.onSave(name)
+                naming = false
+            },
+        )
+    }
 }
 
 @Composable

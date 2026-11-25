@@ -1,7 +1,7 @@
 package com.theoriacodex.app.recents
 
 import com.theoriacodex.app.ui.components.focusOnOpen
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,24 +31,22 @@ fun SavedSearchNameDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (renaming) "Rename search" else "Save search") },
         text = {
-            OutlinedTextField(
-                modifier = Modifier.focusOnOpen(),
-                value = name,
-                onValueChange = { if (it.text.length <= MAX_SAVED_SEARCH_NAME_LENGTH) name = it },
-                label = { Text("Name") },
-                singleLine = true,
-            )
+            Column {
+                OutlinedTextField(
+                    modifier = Modifier.focusOnOpen(),
+                    value = name,
+                    onValueChange = { if (it.text.length <= MAX_SAVED_SEARCH_NAME_LENGTH) name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                )
+                onEdit?.let { edit -> TextButton(onClick = { edit(name.text.trim()) }) { Text("Edit search") } }
+            }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(name.text.trim()) }, enabled = name.text.isNotBlank()) {
                 Text("Save")
             }
         },
-        dismissButton = {
-            Row {
-                onEdit?.let { edit -> TextButton(onClick = { edit(name.text.trim()) }) { Text("Edit search") } }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
