@@ -46,7 +46,7 @@ internal fun NewPostsCheckEffect(shell: TheoriaShell) {
         withFrameNanos {}
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             val now = System.currentTimeMillis()
-            launch { searches.checkIfStale(shell.data.savedSearches.observeSavedSearches().first(), now) }
+            launch { searches.checkIfStale(now) }
             try {
                 follows.refreshIfStale(now)
                 awaitCancellation()
@@ -59,7 +59,8 @@ internal fun NewPostsCheckEffect(shell: TheoriaShell) {
 
 private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker {
     val loader = SavedSearchFeedLoader(shell.features.search)
-    return SavedSearchNewPostsChecker(shell.data.uiRestoreRepository) { entry ->
+    val saved = shell.data.savedSearches.observeSavedSearches()
+    return SavedSearchNewPostsChecker(shell.data.uiRestoreRepository, { saved.first() }) { entry ->
         val runtime = shell.data.settingsRepository.observeSettings().first().runtime
         val sources = shell.sources.availableSources.value
         loader.updateEnvironment(sources, runtime.copy(enabledSources = runtime.enabledSources.intersect(sources)))
