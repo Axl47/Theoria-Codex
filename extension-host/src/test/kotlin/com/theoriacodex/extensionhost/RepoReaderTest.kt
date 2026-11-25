@@ -1,6 +1,7 @@
 package com.theoriacodex.extensionhost
 
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.extensionSourceKey
 import com.theoriacodex.domain.series.storedRepoAddress
 import java.io.IOException
 import kotlinx.coroutines.test.runTest
@@ -38,6 +39,7 @@ class RepoReaderTest {
             assertEquals("https://repo.example/anime/icon/eu.kanade.tachiyomi.animeextension.all.animeonsen.png", onsen.iconUrl)
             assertEquals("16", onsen.libVersion)
             assertEquals(SeriesKind.ANIME, onsen.kind)
+            assertEquals(listOf(SeriesKind.ANIME.extensionSourceKey(85)), onsen.sources)
             assertEquals(listOf(false, true), index.extensions.map { it.torrent })
             assertEquals(listOf("en"), index.extensions[1].languages)
         }
@@ -59,7 +61,7 @@ class RepoReaderTest {
         assertEquals("Fixture", index.name)
         assertEquals("The key is compared as lowercase hex", signingKey, index.signingKey)
         assertEquals(
-            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA, iconUrl = "https://cdn.example.org/achy.png")),
+            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA, iconUrl = "https://cdn.example.org/achy.png", sources = listOf(1L, 2L).map(SeriesKind.MANGA::extensionSourceKey))),
             index.extensions,
         )
     }
@@ -70,8 +72,8 @@ class RepoReaderTest {
         assertEquals("Anime fixture", index.name)
         assertEquals(
             listOf(
-                IndexedExtension("Onsen", "eu.kanade.tachiyomi.animeextension.all.onsen", "https://cdn.example.org/onsen-v16.12.apk", "16", 12, "16.12", listOf("all"), SeriesKind.ANIME),
-                IndexedExtension("Torrents", "eu.kanade.tachiyomi.animeextension.all.torrents", "https://cdn.example.org/t-v14.6.apk", "14", 6, "14.6", listOf("all"), SeriesKind.ANIME, torrent = true),
+                IndexedExtension("Onsen", "eu.kanade.tachiyomi.animeextension.all.onsen", "https://cdn.example.org/onsen-v16.12.apk", "16", 12, "16.12", listOf("all"), SeriesKind.ANIME, sources = listOf(SeriesKind.ANIME.extensionSourceKey(3))),
+                IndexedExtension("Torrents", "eu.kanade.tachiyomi.animeextension.all.torrents", "https://cdn.example.org/t-v14.6.apk", "14", 6, "14.6", listOf("all"), SeriesKind.ANIME, torrent = true, sources = listOf(SeriesKind.ANIME.extensionSourceKey(4))),
             ),
             index.extensions,
         )

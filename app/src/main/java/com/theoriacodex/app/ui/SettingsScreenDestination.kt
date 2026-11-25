@@ -35,7 +35,7 @@ internal fun SettingsScreenDestination(shell: TheoriaShell) {
         series = shell.container.series,
         onClose = { shell.navController.popBackStack() },
         closesFrom = entryPage,
-        onOpenExtensions = shell.container.series?.let { shell::openExtensions },
+        onOpenExtensions = shell.container.series?.let { { shell.openExtensions() } },
     )
 }
 

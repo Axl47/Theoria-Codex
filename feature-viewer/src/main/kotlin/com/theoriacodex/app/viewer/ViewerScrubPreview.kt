@@ -2,6 +2,7 @@
 
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.domain.coroutines.runCatchingUnlessCallerCancelled
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.content.Context
@@ -29,8 +30,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,15 +54,9 @@ internal fun ViewerVideoScrubPreview(previews: ViewerScrubPreviews, positionMs: 
     var frame by remember(previews) { mutableStateOf<Pair<Long, Bitmap>?>(null) }
     var failed by remember(previews) { mutableStateOf(false) }
     LaunchedEffect(previews) {
-        try {
+        runCatchingUnlessCallerCancelled {
             previews.follow(targets) { requested, bitmap -> frame = requested to bitmap }
-        } catch (_: TimeoutCancellationException) {
-            failed = true
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            failed = true
-        }
+        }.onFailure { failed = true }
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         frame?.second?.let { bitmap ->
@@ -99,18 +92,12 @@ class ViewerScrubPreviews(
         val frames = previewPlayer(location)
         var healthy = true
         try {
-            followScrubTargets(targets, { positionMs -> withTimeout(SCRUB_FRAME_TIMEOUT_MS) { frames.frameAt(positionMs) } }) { requested, frame ->
-                shown = requested to frame.positionMs
-                publish(requested, frame.bitmap)
-            }
-        } catch (timeout: TimeoutCancellationException) {
-            healthy = false
-            throw timeout
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Exception) {
-            healthy = false
-            throw error
+            runCatchingUnlessCallerCancelled {
+                followScrubTargets(targets, { positionMs -> withTimeout(SCRUB_FRAME_TIMEOUT_MS) { frames.frameAt(positionMs) } }) { requested, frame ->
+                    shown = requested to frame.positionMs
+                    publish(requested, frame.bitmap)
+                }
+            }.onFailure { healthy = false }.getOrThrow()
         } finally {
             shown = null
             if (healthy) frames.idle() else close()

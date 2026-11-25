@@ -73,9 +73,11 @@ fun SeriesTabScreen(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (SeriesId) -> Unit,
     onOpenExtensions: () -> Unit,
+    missingExtensions: MissingExtensionsActions,
     modifier: Modifier = Modifier,
     oldSearchBar: Boolean = false,
 ) {
+    var missingOpen by rememberSaveable { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
     val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
@@ -110,8 +112,12 @@ fun SeriesTabScreen(
             oldSearchBar = oldSearchBar,
             onOpenSeries = open,
             onOpenExtensions = onOpenExtensions,
+            onShowMissing = { missingOpen = true },
             modifier = modifier,
         )
+    }
+    if (missingOpen) {
+        MissingExtensionsOverlay(content, missingExtensions, viewModel::unfollow, onOpenSeries, onDismiss = { missingOpen = false })
     }
 
     val sheet = state.filterSheet
@@ -134,6 +140,7 @@ private fun SeriesTabHomeContent(
     oldSearchBar: Boolean,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    onShowMissing: () -> Unit,
     modifier: Modifier,
 ) {
     var searchBarDismissed by rememberSaveable { mutableStateOf(false) }
@@ -179,7 +186,7 @@ private fun SeriesTabHomeContent(
         },
     ) {
         SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
-        SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions)
+        SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, onShowMissing)
     }
 }
 
@@ -239,6 +246,7 @@ private fun SeriesTabViewBody(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    onShowMissing: () -> Unit,
 ) {
     val search = content.search
     when {
@@ -254,7 +262,7 @@ private fun SeriesTabViewBody(
             onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
-            onOpenExtensions = onOpenExtensions,
+            onShowMissing = onShowMissing,
         )
         search != null -> GlobalSearchBody(
             sourcesLoaded = state.sources != null,

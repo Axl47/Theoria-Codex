@@ -93,17 +93,18 @@ internal data class BackupSeriesEntryRecord(
     @SerialName("pageCount") val length: Long? = null,
     @SerialName("lastReadAt") val lastReadAt: Long? = null,
     @SerialName("memo") val memo: String? = null,
+    @SerialName("pageOffset") val pageOffset: Float? = null,
 ) {
     fun toDomain() = StoredSeriesEntry(
         SeriesEntry(address, name, number, translatorGroup, uploadedAt, storedMemo(memo)),
-        sourceOrder, firstSeenAt, read, position, length, lastReadAt,
+        sourceOrder, firstSeenAt, read, position, length, lastReadAt, PageFraction.of(position, pageOffset),
     )
 
     companion object {
         fun fromDomain(stored: StoredSeriesEntry): BackupSeriesEntryRecord = with(stored) {
             BackupSeriesEntryRecord(
                 entry.address, entry.name, entry.number, entry.translatorGroup, entry.uploadedAtEpochMs,
-                sourceOrder, firstSeenAtEpochMs, read, position, length, lastReadAtEpochMs, entry.memo,
+                sourceOrder, firstSeenAtEpochMs, read, position, length, lastReadAtEpochMs, entry.memo, pageOffset,
             )
         }
     }

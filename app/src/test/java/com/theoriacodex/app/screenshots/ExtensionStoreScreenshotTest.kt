@@ -8,7 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import coil.Coil
 import coil.ImageLoader
@@ -16,11 +18,20 @@ import coil.decode.DataSource
 import coil.fetch.DrawableResult
 import coil.fetch.Fetcher
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import com.theoriacodex.app.series.ExtensionsScreen
 import com.theoriacodex.app.series.ExtensionsSubpage
 import com.theoriacodex.app.series.ExtensionsViewModel
+import com.theoriacodex.app.series.MissingExtensionsActions
+import com.theoriacodex.app.series.SeriesTabScreen
+import com.theoriacodex.app.series.SeriesTabViewModel
+import com.theoriacodex.app.series.StoredOnly
 import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.domain.series.ApkIcon
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
@@ -30,10 +41,14 @@ import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesExtensions
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.extensionSourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +90,42 @@ class ExtensionStoreScreenshotTest {
         compose.waitUntilSettled { vm.state.value.listing != null }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("extension_store.png")
+    }
+
+    @Test fun `missing extensions`() {
+        installSolidColorIcons()
+        val followed = listOf(1L to "Paper Lantern", 2L to "Quiet Harbor", 3L to "Salt Road", 9L to "Tin Orchard").map { (id, title) ->
+            FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title), unreadCount = 0)
+        }
+        val repository = object : SeriesRepository by StoredOnly(StoredSeries(followed.first().series), emptyList()) {
+            override fun observeFollowed() = flowOf(followed)
+
+            override fun observeHasFollowed() = flowOf(true)
+        }
+        val repos = object : ExtensionRepos by FixtureRepos {
+            override suspend fun available(refresh: Boolean) = RepoListing(
+                listOf(
+                    RepoExtension(REPO, "fixture.aurora", "Aurora", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.AVAILABLE, "$REPO/icon/aurora.png", listOf(1L, 2L).map(SeriesKind.MANGA::extensionSourceKey)),
+                    RepoExtension(REPO, "fixture.birch", "Birch", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.OTHER_KEY, "$REPO/icon/birch.png", listOf(SeriesKind.MANGA.extensionSourceKey(3))),
+                ),
+            )
+        }
+        val extensions = ExtensionsViewModel(Device(), repos)
+        val tab = SeriesTabViewModel(repository, { emptyList() }) { FollowedCheck(emptyList(), checked = 0, failed = 0) }
+        val actions = MissingExtensionsActions({ extensions }, { error("unused") }, onOpenRepos = {})
+        compose.setContent {
+            TheoriaNightTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = actions)
+                }
+            }
+        }
+        compose.waitUntilSettled { tab.content.value.missingExtensions.isNotEmpty() }
+        compose.onNodeWithText("Show").performClick()
+        compose.waitUntilSettled { extensions.state.value.listing != null }
+        compose.onNodeWithText("Aurora").performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage("missing_extensions.png")
     }
 
     private fun installSolidColorIcons() {

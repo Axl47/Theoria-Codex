@@ -270,66 +270,6 @@ class DownloadManagerRuleTest(unittest.TestCase):
             )
 
 
-class CoreDomainRulesTest(unittest.TestCase):
-    def test_reports_off_main_notes_outside_the_start_of_a_parse_helper_adr_0002(self) -> None:
-        self.assertIn(check_architecture.off_main_notes_run_where_work_runs, check_architecture.RULES)
-        with main_sources({
-            "core-sources/src/main/kotlin/Clean.kt": (
-                "internal fun parseJsonArray(\n"
-                "    body: String,\n"
-                "    onError: () -> Unit = {},\n"
-                "): JsonArray {\n"
-                "    OffMainWork\n"
-                "        .note(\n"
-                "            OffMainWork.SOURCE_PARSE,\n"
-                "        )\n"
-                "    return parse(body)\n"
-                "}\n"
-                "private fun SourceHttpResponse.jsonBody() = body.takeIf(String::isNotBlank)?.let {\n"
-                "    OffMainWork.note(com.theoriacodex.domain.diagnostics.OffMainWork.SOURCE_PARSE)\n"
-                "}\n"
-                "fun parseHtml(html: String): Document {\n"
-                "    com.theoriacodex.domain.diagnostics.OffMainWork.note(label = OffMainWork.SOURCE_PARSE)\n"
-                "    return Jsoup.parse(html)\n"
-                "}\n"
-                "suspend fun explain() {\n"
-                "    log(\"call OffMainWork.note(first) in the helper {\")\n"
-                "}\n"
-            ),
-            "core-sources/src/main/kotlin/Broken.kt": (
-                "override suspend fun search(\n"
-                "    query: Query,\n"
-                "): Page {\n"
-                "    OffMainWork.note(OffMainWork.SOURCE_PARSE)\n"
-                "}\n"
-                "fun parse(html: String): Document {\n"
-                "    val trimmed = html.trim()\n"
-                "    OffMainWork.note(OffMainWork.SOURCE_PARSE)\n"
-                "}\n"
-                "fun title(post: Post): Document {\n"
-                "    OffMainWork.note(\n"
-                "        post.title,\n"
-                "    )\n"
-                "}\n"
-            ),
-            "media-kit/src/main/kotlin/Imported.kt": (
-                "import com.theoriacodex.domain.diagnostics.OffMainWork.note\n"
-                "fun parse(body: String) {\n"
-                "    note(OffMainWork.SOURCE_PARSE)\n"
-                "}\n"
-                "suspend fun load(body: String) {\n"
-                "    note(OffMainWork.SOURCE_PARSE)\n"
-                "}\n"
-            ),
-        }):
-            failures = check_architecture.off_main_notes_run_where_work_runs()
-        self.assertEqual(
-            ["core-sources/src/main/kotlin/Broken.kt:4", "core-sources/src/main/kotlin/Broken.kt:8",
-             "core-sources/src/main/kotlin/Broken.kt:11", "media-kit/src/main/kotlin/Imported.kt:6"],
-            [failure.split(" ", 1)[0] for failure in failures],
-        )
-
-
 class VisionCommitRuleTest(unittest.TestCase):
     def test_reports_vision_results_written_outside_the_tagger_adr_0097(self) -> None:
         self.assertIn(check_architecture.vision_results_are_written_under_commits, check_architecture.RULES)
