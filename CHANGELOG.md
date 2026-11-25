@@ -4,7 +4,7 @@
 
 ### Added
 
-- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
+- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. At the end of a short list the header stays away, so the last row stays in view. Series keeps its search and Extensions buttons, and the bottom bar stays.
 - A saved search's Rename dialog has Edit search, which opens it in Search to change its tags, sources, filters or sort. Update saves the change under the same name and place, and its new-post count starts over. Closing Search's sheet without tapping Update leaves the saved search as it was.
 - The menu in Search's sheet has Filter and sort, which opens the filters over the sheet without closing it.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
@@ -13,6 +13,7 @@
 - When followed series need their extension, such as after restoring a Mihon backup, the Extensions button in Series shows how many. Extensions then starts its Manga and Anime sections with Missing extensions, which lists those series by the extension that provides them, to install or turn on. Those series can't be checked for new chapters until their extension is on.
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and lists series no repo offers in a card per site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
+- Switch source searches only the sources you check under Sources, and remembers your choice for next time. Each extension's languages fold under it, and its box checks or unchecks them all. Sources you install later start checked.
 - Pulling down on Series' Following grid shows what letting go does, "Check for new chapters" (episodes if you only follow anime, updates if you follow both), and the pill fills once you've pulled far enough. While the check runs, it shows how many series are checked out of how many, and stays in view as you scroll or switch tabs. When it finishes, it says how many new chapters or episodes it found, then goes away.
 - When Series couldn't check some series, its row now sits on a card. Tap it to see which series failed, grouped by extension and then by reason (Couldn't reach site, Timed out, Blocked, Rate limited, Source error), with Retry for each group. ✕ hides the row until a later check fails again. Each failed series offers Switch source in its menu. If a check fails while you are scrolled down, "N series couldn't be checked" appears with Show, which scrolls up to the card.
 - Holding a series in Series' Following grid opens the same menu as its page's ⋮ button (Mark all as read or unread, Refresh, Switch source), plus Download for manga, which offers the page's Next 5 unread, All unread or All.
@@ -92,6 +93,7 @@
 
 ### Changed
 
+- Importing a Codex moved from its own button in Library into Create Codex: tap +, then Import.
 - The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.
 - The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
