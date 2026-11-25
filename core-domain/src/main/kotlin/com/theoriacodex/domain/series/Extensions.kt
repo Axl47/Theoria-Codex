@@ -27,7 +27,10 @@ data class InstalledExtension(
     val languages: List<ExtensionLanguage> = emptyList(),
     val kind: SeriesKind = SeriesKind.MANGA,
     val removable: Boolean = false,
+    val icon: ApkIcon? = null,
 )
+
+data class ApkIcon(val packageName: String, val versionCode: Long, val apk: String, val modified: Long = 0, val size: Long = 0)
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
 

@@ -1,6 +1,6 @@
 package com.theoriacodex.app.ui.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +35,8 @@ fun TrailCrumb(
     maxWidth: Dp,
     verticalPadding: Dp,
     testTag: String,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     onClick: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -49,7 +51,7 @@ fun TrailCrumb(
             modifier = Modifier
                 .widthIn(max = maxWidth)
                 .clip(RoundedCornerShape(8.dp))
-                .then(if (current) Modifier else Modifier.clickable(role = Role.Button, onClickLabel = "Back to $label", onClick = onClick))
+                .then(crumbClicks(current, label, onLongClick, onLongClickLabel, onClick))
                 .padding(horizontal = 4.dp, vertical = verticalPadding)
                 .testTag(testTag),
         )
@@ -60,4 +62,16 @@ fun TrailCrumb(
 @Composable
 private fun CrumbArrow(tint: Color) {
     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+}
+
+private fun crumbClicks(current: Boolean, label: String, onLongClick: (() -> Unit)?, onLongClickLabel: String?, onClick: () -> Unit): Modifier = when {
+    !current -> Modifier.combinedClickable(
+        role = Role.Button,
+        onClickLabel = "Back to $label",
+        onLongClick = onLongClick,
+        onLongClickLabel = onLongClickLabel,
+        onClick = onClick,
+    )
+    onLongClick != null -> Modifier.combinedClickable(onLongClick = onLongClick, onLongClickLabel = onLongClickLabel, onClick = {})
+    else -> Modifier
 }

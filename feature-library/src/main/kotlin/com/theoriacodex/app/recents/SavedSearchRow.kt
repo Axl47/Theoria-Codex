@@ -53,8 +53,8 @@ internal fun SavedSearchRow(
                 modifier = Modifier.weight(1f).clickable { onOpen(entry) }.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(entry.name, style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SavedSearchName(entry, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleSmall)
                     newPostsLabel(newCount)?.let {
                         Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
