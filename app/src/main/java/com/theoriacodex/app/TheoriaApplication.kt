@@ -74,7 +74,8 @@ class TheoriaApplication :
         siteCookieBridge::isAllowed,
         siteCookieBridge::mediaAuthorizationFor,
         extensionHost.mediaInterceptor,
-        ChallengePass(challengeBrowsers, { hostOutages.isChallenged(it) }, siteCookieBridge::keepsCookies, Request::siteRoot),
+        ChallengePass(challengeBrowsers, { hostOutages.holdsOffChallengePass(it) }, siteCookieBridge::keepsCookies, Request::siteRoot),
+        hostOutages,
     )
 
     override val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {

@@ -19,10 +19,17 @@ internal class Harness(private val tag: String) {
     fun apkNamed(name: String): String? = InstrumentationRegistry.getArguments().getString(name)
 
     fun load(apkName: String, services: HostServices): Pair<ExtensionPackage, List<HostedSource>> {
-        ExtensionHost.install(context.applicationContext as Application, versionName = "harness", versionCode = 1, cookies = NoCookies, browsers = ChallengeBrowsers(NoCookies, NoBrowser), outages = HostOutageTracker())
         val packages = ExtensionPackages(context, listOf(MihonKind, AniyomiKind))
+        val loader = ExtensionLoader.installingHost(
+            context.applicationContext as Application,
+            versionName = "harness",
+            versionCode = 1,
+            cookies = NoCookies,
+            browsers = ChallengeBrowsers(NoCookies, NoBrowser),
+            outages = HostOutageTracker(),
+        ) { packages.read(it) }
         val extension = checkNotNull(packages.read(File(context.getExternalFilesDir(null), apkName))) { "$apkName is not an extension" }
-        val sources = timed("load") { ExtensionLoader(context, packages).load(extension, services) }
+        val sources = timed("load") { loader.load(extension, services) }
         report("extension", "${extension.name} ${extension.versionName}, ${extension.kind.seriesKind}, ${sources.size} sources, signer ${extension.signer}")
         return extension to sources
     }

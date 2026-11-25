@@ -1,6 +1,9 @@
 package com.theoriacodex.sources.http
 
 import com.sun.net.httpserver.HttpServer
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.sources.common.sourceNetworkFailure
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.UnknownHostException
@@ -147,6 +150,106 @@ class HostOutageTrackerTest {
         }
     }
 
+    @Test fun `a rate limit holds the site and its subdomains for as long as Retry-After asks, within an hour`() {
+        assertEquals(
+            HostOutageKind.RATE_LIMITED,
+            tracker.recordResponse("https://nhentai.net/api/v2/search", 429, mapOf("Retry-After" to listOf("120"))),
+        )
+        assertTrue(tracker.isRateLimited("https://t.nhentai.net/galleries/1/thumb.webp"))
+        assertTrue(tracker.holdsOffChallengePass("https://nhentai.net/"))
+        assertFalse(tracker.isRateLimited("https://nhentai.to/"))
+        val refused = runCatching { tracker.ensureAvailable("https://i.nhentai.net/galleries/1/1.webp") }.exceptionOrNull()
+        assertEquals(HostOutageKind.RATE_LIMITED, (refused as HostUnavailableException).kind)
+        now += 119_999L
+        assertTrue(tracker.isRateLimited("https://nhentai.net/"))
+        now += 1L
+        assertFalse(tracker.isRateLimited("https://nhentai.net/"))
+        tracker.recordResponse("https://nhentai.net/", 429, mapOf("Retry-After" to listOf("86400")))
+        now += 60 * 60 * 1000L
+        assertFalse(tracker.isRateLimited("https://nhentai.net/"))
+    }
+
+    @Test fun `only time lifts a rate limit, clears and passes and other outages leave it, and a later limit keeps the longer hold`() {
+        tracker.recordResponse("https://nhentai.net/", 429, mapOf("Retry-After" to listOf("1800")))
+        tracker.clear("nhentai.net")
+        tracker.pass("nhentai.net")
+        tracker.record("https://nhentai.net/", HostOutageKind.MAINTENANCE)
+        tracker.recordChallenge("https://nhentai.net/", RefusedRequest("https://nhentai.net/", "agent"))
+        tracker.recordResponse("https://nhentai.net/", 429, emptyMap())
+        assertEquals(HostOutage(HostOutageKind.RATE_LIMITED, 1_000L + 1_800_000L), tracker.outages.value["nhentai.net"])
+        now += 1_800_000L
+        tracker.clear("nhentai.net")
+        assertTrue(tracker.outages.value.isEmpty())
+    }
+
+    @Test fun `a 429 whose body never arrives still fails at once without a retry`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                hits.incrementAndGet()
+                exchange.sendResponseHeaders(429, 1_000L)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 2, retryBaseDelayMs = 1L, outages = HostOutageTracker())
+        try {
+            val failure = runCatching { client.get("http://127.0.0.1:${server.address.port}/api/v2/search") }.exceptionOrNull()
+            assertEquals(HostOutageKind.RATE_LIMITED, (failure as HostUnavailableException).kind)
+            assertEquals(1, hits.get())
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test fun `a 429 fails at once without a retry and the next request never reaches the host (ADR 0050, 0051)`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                hits.incrementAndGet()
+                exchange.sendResponseHeaders(429, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 2, retryBaseDelayMs = 1L, outages = HostOutageTracker())
+        val url = "http://127.0.0.1:${server.address.port}/api/v2/search"
+        try {
+            val first = runCatching { client.get(url) }.exceptionOrNull()
+            assertEquals(HostOutageKind.RATE_LIMITED, (first as HostUnavailableException).kind)
+            assertTrue(runCatching { client.get(url) }.exceptionOrNull() is HostUnavailableException)
+            assertEquals(1, hits.get())
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test fun `a source call to a rate-limited host fails as rate limited, not unreachable`() {
+        val failure = runCatching {
+            sourceNetworkFailure("NHentai", HostUnavailableException("nhentai.net", HostOutageKind.RATE_LIMITED))
+        }.exceptionOrNull()
+        assertEquals(SourceFailureReason.RATE_LIMITED, (failure as SourceAdapterException).reason)
+        assertEquals("Too many requests. Try again later.", failure.message)
+    }
+
+    @Test fun `server errors are still retried`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                exchange.sendResponseHeaders(if (hits.incrementAndGet() < 3) 500 else 200, -1)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 2, retryBaseDelayMs = 1L, outages = HostOutageTracker())
+        try {
+            assertEquals(200, client.get("http://127.0.0.1:${server.address.port}/").statusCode)
+            assertEquals(3, hits.get())
+        } finally {
+            server.stop(0)
+        }
+    }
+
     @Test fun `a maintenance page fails at once and the next request never reaches the host (ADR 0050, 0051)`() = runBlocking {
         val hits = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -195,6 +298,11 @@ class SiteHealthCheckTest {
         assertEquals(setOf("site.example"), tracker.outages.value.keys)
     }
 
+    @Test fun `a browser check answered with too many requests holds the site off`() = runBlocking {
+        assertFalse(check(429).clearsChallenge("https://site.example/", emptyMap()))
+        assertTrue(tracker.isSiteRateLimited("https://site.example/"))
+    }
+
     @Test fun `a browser check that can't reach the site says so instead of reporting a refusal`() = runBlocking {
         val unreachable = SiteHealthCheck(tracker) { throw java.net.SocketTimeoutException() }
         assertTrue(runCatching { unreachable.clearsChallenge("https://site.example/", emptyMap()) }.exceptionOrNull() is IOException)
@@ -218,6 +326,16 @@ class SiteHealthCheckTest {
         }
         assertEquals(listOf<String?>("WebView/2"), seenAgents)
         assertEquals(setOf("127.0.0.1"), tracker.working.value)
+    }
+
+    @Test fun `the startup check leaves a rate-limited site alone`() = runBlocking {
+        var calls = 0
+        tracker.recordResponse("https://nhentai.net/api/v2/search", 429, emptyMap())
+        SiteHealthCheck(tracker) { calls++; SourceByteResponse(200, ByteArray(0), emptyMap()) }
+            .check("https://nhentai.net/", emptyMap(), countChallenges = false)
+        assertEquals(0, calls)
+        check(429).check("https://hitomi.la/", emptyMap(), countChallenges = false)
+        assertEquals(HostOutageKind.RATE_LIMITED, tracker.outages.value["hitomi.la"]?.kind)
     }
 
     @Test fun `an oversized home page counts as answered and clears a standing outage (ADR 0050)`() = runBlocking {

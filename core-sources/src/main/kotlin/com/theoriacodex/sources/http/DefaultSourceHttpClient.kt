@@ -180,6 +180,7 @@ private fun HttpRequestSpec.toRequest(): Request = try {
 }
 
 private fun Response.toSourceResponse(maxBodyBytes: Int): SourceByteResponse {
+    if (code == HTTP_TOO_MANY_REQUESTS) return SourceByteResponse(code, ByteArray(0), headers.toCaseInsensitiveMap())
     if (body.contentLength() > maxBodyBytes.toLong()) throw SourceHttpBodyTooLargeException(maxBodyBytes)
     return SourceByteResponse(
         statusCode = code,
@@ -193,6 +194,7 @@ private fun Headers.toCaseInsensitiveMap(): Map<String, List<String>> =
         forEach { (name, value) -> map.getOrPut(name) { mutableListOf() } += value }
     }
 
+private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val PLATFORM_AGENT_PROPERTY = "http.agent"
 private const val USER_AGENT_HEADER = "User-Agent"
 
