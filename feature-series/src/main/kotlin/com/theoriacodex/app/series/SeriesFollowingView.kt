@@ -53,6 +53,7 @@ internal fun FollowingBody(
     checking: CheckProgress?,
     found: List<SeriesUpdate>,
     failedCheck: FollowedCheck?,
+    checkRun: Int,
     grid: LazyGridState,
     onRefresh: () -> Unit,
     onRetryFailed: (Set<SeriesId>) -> Unit,
@@ -65,11 +66,13 @@ internal fun FollowingBody(
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
     hold: SeriesHold,
+    failureTools: CheckFailureTools = CheckFailureTools(),
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
     var switching by remember { mutableStateOf<Series?>(null) }
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
+    OffScreenFailuresNotice(checkRun, failed, grid, failureTools.snackbar)
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
             FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
@@ -84,7 +87,7 @@ internal fun FollowingBody(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (failed != null) {
-                    fullWidth("following-check-failed") {
+                    fullWidth(CHECK_FAILED_KEY) {
                         CheckFailedCard(failed.message, onOpen = { failuresOpen = true }, onRetry = onRefresh, onDismiss = onDismissFailures)
                     }
                 }
@@ -93,16 +96,19 @@ internal fun FollowingBody(
         }
     }
     LaunchedEffect(failed == null) { if (failed == null) failuresOpen = false }
-    if (failuresOpen && failed != null) {
-        FollowedFailuresSheet(failed, content, onUnfollow, onOpenSeries, onRetry = { ids ->
+    val from = switching
+    val switchSource = failureTools.switchSource
+    if (from != null && switchSource != null) {
+        SwitchingSource(from, switchSource, onOpenSeries = { id ->
+            failuresOpen = false
+            failureTools.onOpenSeries(id)
+        }) { switching = null }
+    } else if (failuresOpen && failed != null) {
+        val switchable: (Series) -> Boolean = { series -> switchSource != null && content.sources.orEmpty().switchTargets(series.id).isNotEmpty() }
+        FollowedFailuresSheet(failed, content, FailedTitleActions(onUnfollow, onOpenSeries, switchable) { switching = it }, onRetry = { ids ->
             failuresOpen = false
             onRetryFailed(ids)
         }) { failuresOpen = false }
-    }
-    val from = switching
-    val createSwitch = hold.switchSource
-    if (from != null && createSwitch != null) {
-        SwitchSourceFor(from, createSwitch, hold.onOpenSeries) { switching = null }
     }
     if (optionsOpen) {
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
@@ -137,22 +143,19 @@ internal class SeriesHold(
     val onMarkAllRead: (SeriesId, Boolean) -> Unit,
     val onRefresh: (SeriesId) -> Unit,
     val onDownload: (SeriesId, DownloadChoice) -> Unit,
-    val onOpenSeries: (SeriesId) -> Unit,
-    val switchSource: ((SeriesId) -> SwitchSourceViewModel)?,
 )
 
 @Composable
 internal fun rememberSeriesHold(
     state: SeriesTabState,
     viewModel: SeriesTabViewModel,
-    onOpenSeries: (SeriesId) -> Unit,
-    switchSource: ((SeriesId) -> SwitchSourceViewModel)?,
+    canSwitchSource: Boolean,
 ): SeriesHold {
     val undo = LocalUndoSlot.current
     return SeriesHold(
         actions = { item ->
             val actions = item.actions(state.sources, checking = state.checking != null)
-            actions.copy(canSwitchSource = actions.canSwitchSource && switchSource != null)
+            actions.copy(canSwitchSource = actions.canSwitchSource && canSwitchSource)
         },
         canDownload = viewModel::canDownload,
         onMarkAllRead = { id, read ->
@@ -162,8 +165,6 @@ internal fun rememberSeriesHold(
         },
         onRefresh = { id -> viewModel.retry(setOf(id)) },
         onDownload = viewModel::download,
-        onOpenSeries = onOpenSeries,
-        switchSource = switchSource,
     )
 }
 

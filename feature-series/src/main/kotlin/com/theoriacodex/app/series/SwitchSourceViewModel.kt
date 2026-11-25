@@ -47,6 +47,8 @@ data class SwitchSourceSheet(
 
 data class SwitchSourceState(val others: List<SeriesSource> = emptyList(), val sheet: SwitchSourceSheet? = null)
 
+internal fun List<SeriesSource>.switchTargets(from: SeriesId): List<SeriesSource> = filter { it.key != from.source && it.kind == from.source.seriesKind }
+
 class SwitchSourceViewModel(
     private val from: SeriesId,
     private val loadSources: suspend () -> List<SeriesSource>,

@@ -73,9 +73,6 @@ internal fun FollowedSeries.actions(sources: List<SeriesSource>?, checking: Bool
     )
 }
 
-internal fun List<SeriesSource>.switchTargets(from: SeriesId): List<SeriesSource> =
-    filter { it.key != from.source && it.kind == from.source.seriesKind }
-
 @Composable
 internal fun SeriesActionItems(actions: SeriesActions, onChoose: (SeriesAction) -> Unit) {
     actions.items.forEach { item ->

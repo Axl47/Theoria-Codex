@@ -62,6 +62,4 @@ internal val NO_HOLD = SeriesHold(
     onMarkAllRead = { _, _ -> },
     onRefresh = {},
     onDownload = { _, _ -> },
-    onOpenSeries = {},
-    switchSource = null,
 )
