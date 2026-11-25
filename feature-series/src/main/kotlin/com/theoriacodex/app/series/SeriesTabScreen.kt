@@ -1,6 +1,5 @@
 package com.theoriacodex.app.series
 
-import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
 import com.theoriacodex.app.ui.components.ScrollChromeBox
 import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.activity.compose.BackHandler
@@ -154,13 +153,6 @@ private fun SeriesTabHomeContent(
     val scrollable = grids.shown(content.view, state.search != null)
 
     SeriesScrollChromeEffect(scrollable = scrollable, onScrollStarted = { searchBarDismissed = true })
-    ScrollToTopOnTabReselect(TopLevelDestination.Series) {
-        when (scrollable) {
-            is LazyGridState -> scrollable.animateScrollToItem(0)
-            is LazyListState -> scrollable.animateScrollToItem(0)
-        }
-        searchBarDismissed = false
-    }
     BackHandler(enabled = search.searching, onBack = search.onClear)
 
     CollapsingSearchChrome(
@@ -188,7 +180,7 @@ private fun SeriesTabHomeContent(
         },
     ) {
         ScrollChromeBox(Modifier.fillMaxSize()) {
-            ScrollChromeTopEffect(scrollable)
+            ScrollToTopOnTabReselect(TopLevelDestination.Series, scrollable) { searchBarDismissed = false }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
                 SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions)

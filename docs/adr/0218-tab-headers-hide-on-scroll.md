@@ -23,13 +23,17 @@ button) must stay put. The Viewer has its own chrome rules and is out of scope.
   own coordinates, so the translation cancels out and a header that changes size updates the range once.
   Anything outside the box, such as the overlay row of `CollapsingSearchChrome`, stays pinned.
 - `ScrollChromeState` takes a scroll-up first, so any scroll-up reveals the header before the list moves, and
-  the header follows the finger 1:1. A scroll-down at the list's top goes to the list and pull-to-refresh first
-  (`preScroll`), and only what they leave hides the header (`postScroll`). On release it settles toward the last
-  direction, but never stays hidden while the list is at its top (`ScrollChromeTopEffect`, which also catches
-  programmatic scrolls such as tab reselect).
-- The header returns when its tab is left (`LocalTabShown`, provided per page by `HomePager`, because the pager can keep a page's state across a switch) and when the screen stops, such as under the Viewer (`LifecycleStartEffect`). A focused
-  hideable shows it, and with touch exploration on (`rememberTouchExplorationEnabled`) nothing hides, so TalkBack
-  and keyboard focus never rest on an off-screen control.
+  the header follows the finger 1:1. A scroll-down at the list's top goes to the list and pull-to-refresh
+  (`preScroll`), so a list that fits on screen never hides its header. When the list stops scrolling, or a fling
+  ends, the header settles toward the last direction, but never stays hidden while the list is at its top.
+- Lists bind to the header through `ScrollToTopOnTabReselect(destination, scrollable)`, which every tab list
+  already calls: it scrolls to the top and reveals the header on reselect, reports the list's top
+  (`ScrollChromeTopEffect`, which also catches programmatic scrolls), and reveals the header when the list
+  leaves, such as for an empty state.
+- Hiding is off, and the header shown, while its tab is not shown (`LocalTabShown`, provided per page by
+  `HomePager`, because the pager can keep a page's state across a switch), while the screen is stopped (under the
+  Viewer), while touch exploration is on (`rememberTouchExplorationEnabled`), and while a hideable holds keyboard
+  focus. So TalkBack and keyboard focus never rest on an off-screen control.
 - Wired screens: Series (view switch, Following controls, Browse header), For You in grid mode (bar, chips or
   crumbs, failure row), and Library (the shared `LibraryHeader`). Search keeps its existing collapse into the
   corner strip, and the bottom navigation bar stays pinned at the owner's choice.
@@ -50,7 +54,7 @@ is why it was left out.
 - `feature-library/src/main/kotlin/com/theoriacodex/app/library/LibraryHeader.kt`: `LibraryHeader`
 - `app/src/main/java/com/theoriacodex/app/ui/LibraryDestination.kt`: `LibraryDestination`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaHomeDestinations.kt`: `HomePager`
-- `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/SharedNavigation.kt`: `LocalTabShown`
+- `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/SharedNavigation.kt`: `LocalTabShown`, `ScrollToTopOnTabReselect`
 
 ## Guarded by
 
@@ -61,5 +65,6 @@ is why it was left out.
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `show returns the header at once (ADR 0218)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218`
 - `app/src/androidTest/java/com/theoriacodex/app/journeys/HeaderHidesOnScrollJourneyTest.kt`: `theLibraryHeaderLeavesOnScrollDownAndReturnsOnScrollUpAndAfterATabSwitchWhileTabsStay_adr_0218`
-- `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `at the top the list and pull to refresh take a downward scroll before the header hides (ADR 0218)`
+- `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `at the top a downward scroll goes to the list and pull to refresh, never the header (ADR 0218)`
+- `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `a focused header control keeps the header shown (ADR 0218)`
 - Left to prose: that a list's viewport equals its visible area is a layout property, covered by the Library journey reaching its header and lists on a device rather than by a host test.

@@ -138,8 +138,8 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
 private fun ForYouDestination(shell: TheoriaShell) {
     val quickSave = LocalQuickSave.current
     val writes = rememberTriageHandOff()
-    val pager = shell.navigation.pagerState
-    val shown by remember(pager) { derivedStateOf { tabShown(TopLevelDestination.ForYou, pager.targetPage, pager.settledPage) } }
+    val tabShown = LocalTabShown.current
+    val shown by remember(tabShown) { derivedStateOf(tabShown) }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
         ForYouRoute(
