@@ -1,7 +1,9 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.pager.PagerState
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -9,6 +11,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.viewer.state.ViewerDwell
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -17,9 +20,11 @@ import com.theoriacodex.app.viewer.state.ViewerMediaState
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.viewer.state.repeatsVideo
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.delay
 
 internal enum class InfoSheetTarget { Top, Comments }
 
@@ -219,9 +224,23 @@ internal fun rememberViewerFrame(
     isLandscape: Boolean,
 ): ViewerFrame {
     val requested = uiState.ignoringTransientControls()
-    return remember(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
-        ViewerFrame(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
+    val videoRepeats = rememberUpdatedState(rememberViewerVideoRepeats(uiState))
+    return remember(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, videoRepeats) {
+        ViewerFrame(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape, videoRepeats)
     }
+}
+
+@Composable
+private fun rememberViewerVideoRepeats(uiState: ViewerUiState): Boolean {
+    val dwell = uiState.controls.dwell
+    val startedAtMs = remember(dwell) { SystemClock.uptimeMillis() }
+    var elapsed by remember(dwell) { mutableStateOf(dwell.elapsed(startedAtMs)) }
+    LaunchedEffect(dwell) {
+        val remainingMs = dwell.remainingMs(startedAtMs) ?: return@LaunchedEffect
+        delay(remainingMs)
+        elapsed = true
+    }
+    return uiState.repeatsVideo(elapsed)
 }
 
 private fun ViewerUiState.ignoringTransientControls(): ViewerUiState {
@@ -241,8 +260,11 @@ internal class ViewerFrame(
     val inPictureInPicture: Boolean,
     val touchExplorationEnabled: Boolean,
     val isLandscape: Boolean,
+    private val videoRepeatsState: State<Boolean>,
 ) {
     val chromeVisible: Boolean get() = chromeVisibleState.value
+
+    val videoRepeats: Boolean get() = videoRepeatsState.value
 
     val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 
