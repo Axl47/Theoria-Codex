@@ -3,7 +3,7 @@ import ipaddress
 import re
 import sys
 import xml.etree.ElementTree as ElementTree
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -176,6 +176,99 @@ def host_tests_wait_settled() -> list[str]:
     return failures
 
 
+KOTLIN_LITERAL = re.compile(r"'(?:\\.|[^'\\\n])'|\"\"\"[\s\S]*?\"\"\"|\"(?:\\.|[^\"\\\n])*\"")
+
+
+VISION_COMMIT = re.compile(r"\bVisionCommit\b")
+VISION_OPT_IN = re.compile(r"\bOptIn\s*\([^)]*\bVisionCommit\b")
+VISION_TAGGER = "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt"
+VISION_WIDE_OPT_IN = re.compile(
+    r"@file:OptIn\s*\([^)]*\bVisionCommit\b"
+    r"|\bOptIn\s*\([^)]*\bVisionCommit\b[^)]*\)\s*(?:@[\w.]+(?:\([^)]*\))?\s*|(?:public|internal|private|open|abstract|data|sealed)\s+)*(?:class|object|interface)\b"
+)
+VISION_PROPAGATORS = (
+    "core-data/src/main/kotlin/com/theoriacodex/data/repository/VisualSignatureRepository.kt",
+    "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomVisualSignatureRepository.kt",
+)
+TEST_SOURCE_SET = re.compile(r"^(test|androidTest|sharedTest|testFixtures)")
+
+
+def shipped_sources() -> list[tuple[str, str]]:
+    sources = []
+    for path in sorted(ROOT.glob("*/src/*/**/*")):
+        relative = path.relative_to(ROOT)
+        if path.suffix in (".kt", ".java") and path.is_file() and not TEST_SOURCE_SET.match(relative.parts[2]):
+            sources.append((relative.as_posix(), KOTLIN_LITERAL.sub('""', path.read_text(encoding="utf-8"))))
+    return sources
+
+
+def build_scripts() -> list[tuple[str, str]]:
+    return [
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
+        for path in sorted([*ROOT.glob("**/*.gradle.kts"), *ROOT.glob("**/*.gradle")])
+        if path.is_file() and not {"build", ".gradle"} & set(path.relative_to(ROOT).parts[:-1])
+    ]
+
+
+@rule
+def vision_results_are_written_under_commits() -> list[str]:
+    reason = "only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)"
+    failures = []
+    for relative, text in shipped_sources() + build_scripts():
+        if relative == VISION_TAGGER:
+            if VISION_WIDE_OPT_IN.search(text):
+                failures.append(f"{relative} opts into VisionCommit for a whole class or file; opt in on each function that writes; {reason}")
+            continue
+        if relative in VISION_PROPAGATORS:
+            if VISION_OPT_IN.search(text):
+                failures.append(f"{relative} opts into VisionCommit; it may only pass the marker on; {reason}")
+        elif VISION_COMMIT.search(text):
+            failures.append(f"{relative} names VisionCommit; {reason}")
+    return failures
+
+
+READ_LOGS_REQUEST = re.compile(r"<uses-permission\b[^>]*>")
+XML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+REMOVED_BY_MERGER = re.compile(r"""tools:node\s*=\s*["']remove["']""")
+
+
+@rule
+def no_manifest_reads_other_apps_logs() -> list[str]:
+    return [
+        f"{path.relative_to(ROOT).as_posix()} requests READ_LOGS; the diagnostic report reads only the app's own log "
+        "(docs/adr/0103-diagnostics-log-and-usage.md)"
+        for path in sorted(ROOT.glob("*/src/*/AndroidManifest.xml"))
+        if any(
+            "android.permission.READ_LOGS" in tag and not REMOVED_BY_MERGER.search(tag)
+            for tag in READ_LOGS_REQUEST.findall(XML_COMMENT.sub("", path.read_text(encoding="utf-8")))
+        )
+    ]
+
+
+DOWNLOAD_MANAGER = re.compile(r"\bDownloadManager\b|\bDOWNLOAD_SERVICE\b")
+DOWNLOAD_MANAGER_OWNERS = re.compile(r"media-kit/src/main/kotlin/(?:.+/)?(?:PostDownloads|PostDownloadService|PostDownloadFiles)\.kt")
+STRINGS_AND_COMMENTS = re.compile(r"'(?:\\.|[^'\\\n])'|" r'""".*?"""|"(?:\\.|[^"\\\n])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
+TEST_SOURCE_SETS = ("test", "androidTest", "sharedTest")
+
+
+def shipping_sources() -> Iterable[Path]:
+    return sorted(
+        path for pattern in ("*/src/*/**/*.kt", "*/src/*/**/*.java") for path in ROOT.glob(pattern)
+        if not path.relative_to(ROOT).parts[2].startswith(TEST_SOURCE_SETS)
+    )
+
+
+@rule
+def only_post_downloads_use_download_manager() -> list[str]:
+    return [
+        f"{relative} uses Android's DownloadManager; only post downloads queue there, and animation export uses the "
+        "app's own transport (docs/adr/0110-offline-media-jobs.md)"
+        for path in shipping_sources()
+        if not DOWNLOAD_MANAGER_OWNERS.fullmatch(relative := path.relative_to(ROOT).as_posix())
+        and DOWNLOAD_MANAGER.search(STRINGS_AND_COMMENTS.sub("", path.read_text(encoding="utf-8")))
+    ]
+
+
 ANDROID_NAMESPACE = "{http://schemas.android.com/apk/res/android}"
 TOOLS_NAMESPACE = "{http://schemas.android.com/tools}"
 CLEARTEXT_ADR = "(docs/adr/0048-provider-media-urls.md)"
@@ -239,6 +332,28 @@ def cleartext_hosts(parent: ElementTree.Element, inherited: bool) -> set[str]:
         hosts |= cleartext_hosts(domain_config, permitted)
     return hosts
 
+
+
+OKHTTP_CLIENT_CONSTRUCTION = re.compile(r"\bOkHttpClient\s*(?:\.\s*Builder\s*)?\(\s*\)")
+OKHTTP_CLIENT_OWNERS = (
+    "core-sources/src/main/kotlin/com/theoriacodex/sources/http/DefaultSourceHttpClient.kt",
+    "extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionHost.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/network/AppHttpClients.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraClient.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoHttpDataSource.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
+)
+
+
+@rule
+def http_clients_derive_from_the_shared_client() -> list[str]:
+    return [
+        f"{relative} builds its own OkHttpClient; derive it from AppHttpClients' shared client with newBuilder() "
+        "(docs/adr/0102-app-http-clients.md)"
+        for path in shipping_sources()
+        if (relative := path.relative_to(ROOT).as_posix()) not in OKHTTP_CLIENT_OWNERS
+        and OKHTTP_CLIENT_CONSTRUCTION.search(STRINGS_AND_COMMENTS.sub("", path.read_text(encoding="utf-8")))
+    ]
 
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]

@@ -1,5 +1,7 @@
 package com.theoriacodex.app.network
 
+import com.theoriacodex.app.network.ConnectionMemory.Companion.IPV6_AVOID_MS
+import com.theoriacodex.app.network.ConnectionMemory.Companion.IPV6_LOSSES_TO_AVOID
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -38,21 +40,32 @@ class ConnectionMemoryTest {
 
     private fun families(host: String) = memory.lookup(host).map { it.address.size }
 
+    private fun loseRaces(count: Int) = repeat(count) { ipv4Beats("lost$it.example") }
+
     @Test
-    fun `IPv6 is set aside once IPv4 keeps winning, then gets another chance`() {
-        ipv4Beats("a.example")
-        assertEquals("One lost race proves nothing", listOf(16, 4), families("c.example"))
+    fun `IPv6 is set aside once IPv4 keeps winning, then gets another chance (ADR 0102)`() {
+        repeat(IPV6_LOSSES_TO_AVOID) { memory.connectEnd(call, InetSocketAddress(v4("v4only.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2) }
+        assertEquals("A site offering only IPv4 is no race", listOf(16, 4), families("c.example"))
+
+        loseRaces(IPV6_LOSSES_TO_AVOID - 1)
+        assertEquals("Fewer lost races than the threshold prove nothing", listOf(16, 4), families("c.example"))
 
         ipv4Beats("b.example")
         assertEquals(listOf(4), families("c.example"))
 
-        now += 10 * 60 * 1000L
+        now += IPV6_AVOID_MS - 1
+        assertEquals(listOf(4), families("c.example"))
+
+        now += 1
         assertEquals(listOf(16, 4), families("c.example"))
+
+        loseRaces(IPV6_LOSSES_TO_AVOID - 1)
+        assertEquals("The second chance starts from no losses", listOf(16, 4), families("c.example"))
     }
 
     @Test
-    fun `a site reached over IPv6 proves it works`() {
-        ipv4Beats("a.example")
+    fun `a site reached over IPv6 proves it works (ADR 0102)`() {
+        loseRaces(IPV6_LOSSES_TO_AVOID - 1)
         memory.connectEnd(call, InetSocketAddress(v6("a.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2)
         ipv4Beats("b.example")
 
@@ -60,27 +73,29 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `sites with nothing but IPv6 stay reachable`() {
-        ipv4Beats("a.example")
-        ipv4Beats("b.example")
+    fun `sites with nothing but IPv6 stay reachable (ADR 0102)`() {
+        loseRaces(IPV6_LOSSES_TO_AVOID)
 
         assertEquals(listOf(16), families("ipv6only.example"))
     }
 
     @Test
-    fun `another network is judged on its own`() {
-        ipv4Beats("a.example")
-        ipv4Beats("b.example")
+    fun `another network is judged on its own (ADR 0102)`() {
+        loseRaces(IPV6_LOSSES_TO_AVOID)
 
         network = "cellular"
 
         assertEquals(listOf(16, 4), families("c.example"))
+
+        loseRaces(IPV6_LOSSES_TO_AVOID - 1)
+        network = "wifi"
+        loseRaces(IPV6_LOSSES_TO_AVOID - 1)
+        assertEquals("A loss on another network does not count here", listOf(16, 4), families("c.example"))
     }
 
     @Test
-    fun `IPv4 failing while IPv6 is set aside brings IPv6 back`() {
-        ipv4Beats("a.example")
-        ipv4Beats("b.example")
+    fun `IPv4 failing while IPv6 is set aside brings IPv6 back (ADR 0102)`() {
+        loseRaces(IPV6_LOSSES_TO_AVOID)
 
         memory.connectFailed(call, InetSocketAddress(v4("a.example"), 443), Proxy.NO_PROXY, null, java.io.IOException("refused"))
 
@@ -88,7 +103,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `recent hosts stay newest first and bounded`() {
+    fun `recent hosts stay newest first and bounded (ADR 0102)`() {
         repeat(14) { memory.connectEnd(call, InetSocketAddress(v4("host$it.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2) }
         memory.connectEnd(call, InetSocketAddress(v4("host5.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2)
 
@@ -96,5 +111,22 @@ class ConnectionMemoryTest {
         assertEquals("host5.example", hosts.first())
         assertEquals(12, hosts.size)
         assertEquals(hosts, saved.last())
+    }
+
+    @Test
+    fun `the host list is not read from the store until it is asked for (ADR 0102)`() {
+        var loads = 0
+        val counting = object : RecentHostStore {
+            override fun load(): List<String> {
+                loads++
+                return listOf("earlier.example")
+            }
+            override fun save(hosts: List<String>) = Unit
+        }
+        val unread = ConnectionMemory(counting, activeNetwork = { network })
+        assertEquals(0, loads)
+
+        assertEquals(listOf("earlier.example"), unread.recentHosts())
+        assertEquals(1, loads)
     }
 }

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.ImageRef
@@ -26,6 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
+@OptIn(VisionCommit::class)
 class PictureTaggerTest {
     @get:Rule
     val folder = TemporaryFolder()
@@ -48,13 +50,13 @@ class PictureTaggerTest {
         override fun observeVisionChanges(): Flow<Unit> = flowOf(Unit)
         override suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>> =
             mapOf(PostId(SourceKey.DANBOORU, "stored") to listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)))
-        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0, 0))
         override fun observeLibraryTotal(): Flow<Int> = flowOf(0)
         override suspend fun clearVision() = Unit
     }
 
     @Test
-    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005)`() = runBlocking {
+    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005, 0097)`() = runBlocking {
         val spec = VisualModelSpec.wdVitTaggerV3("https://models.test/")
         val store = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
         val tagger = PictureTagger(

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import com.theoriacodex.app.viewer.state.ViewerPlaybackMode
 import org.junit.Assert.assertEquals
@@ -33,7 +34,7 @@ class ViewerPlaybackSettingsTest {
         compose.setContent {
             MaterialTheme {
                 PlaybackSettingsMenu(
-                    playbackRateEnabled = true, playbackMode = mode.value, onPlaybackModeSelected = { mode.value = it },
+                    playbackRateEnabled = true, playbackMode = mode.value, autoAdvancePaused = false, onPlaybackModeSelected = { mode.value = it },
                     quality = com.theoriacodex.domain.model.VideoQuality.AUTO, qualityHeight = null, videoVariants = emptyList(),
                     onQualitySelected = { _, _ -> }, expanded = expanded.value, onExpandedChange = { expanded.value = it },
                     playbackRate = ViewerPlaybackRate.Normal, onPlaybackRateSelected = {},
@@ -57,7 +58,7 @@ class ViewerPlaybackSettingsTest {
         compose.setContent {
             MaterialTheme {
                 Column {
-                    PlaybackModeChoices(mode.value, { mode.value = it }, {})
+                    PlaybackModeChoices(mode.value, false, { mode.value = it }, {})
                     PlaybackRateSlider(rate.value) { rate.value = it }
                 }
             }
@@ -76,5 +77,22 @@ class ViewerPlaybackSettingsTest {
             compose.runOnIdle { assertEquals(option, rate.value) }
             compose.onNodeWithText("Speed: ${option.menuLabel}").assertExists()
         }
+    }
+
+    @Test fun `the settings button carries a pause badge only while auto-advance is held (ADR 0217)`() {
+        val paused = mutableStateOf(true)
+        compose.setContent {
+            MaterialTheme {
+                PlaybackSettingsMenu(
+                    playbackRateEnabled = true, playbackMode = ViewerPlaybackMode.NEXT, autoAdvancePaused = paused.value, onPlaybackModeSelected = {},
+                    quality = com.theoriacodex.domain.model.VideoQuality.AUTO, qualityHeight = null, videoVariants = emptyList(),
+                    onQualitySelected = { _, _ -> }, expanded = false, onExpandedChange = {},
+                    playbackRate = ViewerPlaybackRate.Normal, onPlaybackRateSelected = {},
+                )
+            }
+        }
+        compose.onNodeWithTag(VIEWER_AUTO_ADVANCE_PAUSED_TAG, useUnmergedTree = true).assertExists()
+        compose.runOnIdle { paused.value = false }
+        compose.onNodeWithTag(VIEWER_AUTO_ADVANCE_PAUSED_TAG, useUnmergedTree = true).assertDoesNotExist()
     }
 }

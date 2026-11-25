@@ -62,5 +62,6 @@ fun SwitchRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentPadding: PaddingValues = SwitchRowPadding,
+    icon: ImageVector? = null,
     onCheckedChange: (Boolean) -> Unit,
-) = SwitchRow(toggle.title, toggle.read(settings), modifier, toggle.description, enabled, contentPadding, onCheckedChange = onCheckedChange)
+) = SwitchRow(toggle.title, toggle.read(settings), modifier, toggle.description, enabled, contentPadding, icon, onCheckedChange)

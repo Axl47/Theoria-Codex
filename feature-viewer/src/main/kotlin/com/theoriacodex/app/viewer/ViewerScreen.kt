@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.viewer.state.dwellApplies
+import android.os.SystemClock
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -148,6 +150,7 @@ private fun ViewerLoadedScreen(
     LaunchedEffect(uiState.controls.slideshow) { if (uiState.controls.slideshow) screen.verticalGalleries.values.forEach { it.resetZoom() } }
     val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
+    ViewerTrailReplay(trail, selection.post, screen.trailForks)
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)
     val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
@@ -161,7 +164,7 @@ private fun ViewerLoadedScreen(
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
-        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
+        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged.takeIf { trail.replay == null }, config,
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
@@ -176,7 +179,7 @@ private fun ViewerLoadedScreen(
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
         LocalViewerPlayingVideos provides screen.playingVideos,
     ) {
-        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { screen.touchSerial += 1 }) {
+        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = rememberViewerTouch(screen, uiState, host.onAction)) {
             ViewerContentSurface(
                 frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
                 readReturnProgress, flingVelocity, quality, qualityHeight, videoPositions, host, config, scope,
@@ -259,11 +262,25 @@ private fun rememberViewerLoadMore(
 }
 
 @Composable
+private fun rememberViewerTouch(screen: ViewerScreenState, uiState: ViewerUiState, onAction: (ViewerAction) -> Unit): (Boolean) -> Unit {
+    val dwellApplies by rememberUpdatedState(uiState.dwellApplies)
+    val dispatch by rememberUpdatedState(onAction)
+    SideEffect { screen.dwellStartedAtMs = uiState.controls.dwell.startedAtMs }
+    return remember(screen) {
+        { down ->
+            screen.touching = down
+            screen.touchSerial += 1
+            if (dwellApplies) dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = down))
+        }
+    }
+}
+
+@Composable
 private fun ViewerBackdrop(
     returnProgress: State<Float>,
     dismissDrag: ViewerDismissDrag,
     keepScreenOn: Boolean,
-    onTouch: () -> Unit,
+    onTouch: (Boolean) -> Unit,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
@@ -273,7 +290,14 @@ private fun ViewerBackdrop(
             .pointerInput(onTouch) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    onTouch()
+                    onTouch(true)
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        onTouch(false)
+                    }
                 }
             }
             .drawBehind {

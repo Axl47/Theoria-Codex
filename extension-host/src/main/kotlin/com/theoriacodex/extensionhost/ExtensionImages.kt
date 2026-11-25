@@ -8,6 +8,7 @@ import com.theoriacodex.domain.series.isExtensionSource
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -90,7 +91,8 @@ class ExtensionImages(
 
     fun tag(source: SourceKey, address: String, data: String? = null): String {
         val url = address.toHttpUrlOrNull() ?: return address
-        return url.newBuilder().fragment(marker(source, url, data)).build().toString()
+        val own = url.encodedFragment?.takeIf(String::isNotEmpty)?.let { OWN_FRAGMENT.encodeToString(it.toByteArray()) }
+        return url.newBuilder().fragment(marker(source, url, own, data)).build().toString()
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -100,38 +102,46 @@ class ExtensionImages(
         val untagged = url.newBuilder().fragment(null).build()
         if (chain.request().cacheControl.onlyIfCached) return chain.proceed(chain.request().newBuilder().url(untagged).build())
         if (chain.call().isCanceled()) throw IOException(CANCELED)
-        val (source, data) = issued(untagged, fragment) ?: return chain.proceed(chain.request().newBuilder().url(untagged).build())
-        return failingAsIo { source.fetch(url.toString(), untagged, data, chain.call()) }
+        val issued = issued(untagged, fragment) ?: return chain.proceed(chain.request().newBuilder().url(untagged).build())
+        return failingAsIo { issued.images.fetch(url.toString(), issued.url, issued.data, chain.call()) }
     }
 
-    private fun issued(url: HttpUrl, fragment: String): Pair<SourceImages, String?>? {
+    private class Issued(val images: SourceImages, val url: HttpUrl, val data: String?)
+
+    private fun issued(url: HttpUrl, fragment: String): Issued? {
         val parts = fragment.removePrefix(TAG).split('/', limit = 2)
-        val source = SourceKey.parse(parts[0].substringBeforeLast('.')) ?: return null
+        val head = parts[0].split(OWN, limit = 2)
+        val source = SourceKey.parse(head[0].substringBeforeLast('.')) ?: return null
+        val own = head.getOrNull(1)
         val data = parts.getOrNull(1)
-        if (!MessageDigest.isEqual(marker(source, url, data).toByteArray(), fragment.toByteArray())) {
+        if (!MessageDigest.isEqual(marker(source, url, own, data).toByteArray(), fragment.toByteArray())) {
             reportOnce("${url.host} image sent without its source: tag not issued here")
             return null
         }
         val images = published(source)
         if (images == null) reportOnce("${url.host} image of source ${source.id} sent without its source: source not on")
-        return images?.let { it to data }
+        val named = own?.let { url.newBuilder().encodedFragment(String(Base64.getUrlDecoder().decode(it))).build() } ?: url
+        return images?.let { Issued(it, named, data) }
     }
 
     private fun reportOnce(message: String) {
         if (reported.add(message)) Diagnostics.report(LOG_AREA, message)
     }
 
-    private fun marker(source: SourceKey, url: HttpUrl, data: String?): String {
-        val signed = "$TAG${source.id}/${data.orEmpty()}\n${url.newBuilder().fragment(null).build()}"
+    private fun marker(source: SourceKey, url: HttpUrl, own: String?, data: String?): String {
+        val kept = own?.let { "$OWN$it" }.orEmpty()
+        val signed = "$TAG${source.id}$kept/${data.orEmpty()}\n${url.newBuilder().fragment(null).build()}"
         val code = Mac.getInstance(MAC).apply { init(SecretKeySpec(key.value, MAC)) }.doFinal(signed.toByteArray())
         val shown = code.take(CODE_BYTES).joinToString("") { (it.toInt() and BYTE).toString(HEX).padStart(2, '0') }
-        return "$TAG${source.id}.$shown" + if (data == null) "" else "/$data"
+        return "$TAG${source.id}.$shown$kept" + if (data == null) "" else "/$data"
     }
 
     internal companion object {
         private const val TAG = "mihon="
 
         const val FRAGMENT = "#$TAG"
+        private const val OWN = "~"
+        private val OWN_FRAGMENT = Base64.getUrlEncoder().withoutPadding()
 
         const val KEY_BYTES = 32
         private const val MAC = "HmacSHA256"

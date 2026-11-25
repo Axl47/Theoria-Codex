@@ -45,7 +45,7 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
-    fun `nearby posts resolve with background resolution off and others stay idle`() = runTest {
+    fun `nearby posts resolve with background resolution off and others stay idle (ADR 0104)`() = runTest {
         val requested = mutableListOf<String>()
         val coordinator = coordinator { post ->
             requested += post.id.sourcePostId
@@ -53,20 +53,21 @@ class MediaDurationRouteViewModelTest {
         }
         val owner = MediaDurationRouteViewModel(coordinator, "viewer-test", backgroundScope)
         val near = animatedTestPost(sourcePostId = "near")
+        val alsoNear = animatedTestPost(sourcePostId = "also near")
         val far = animatedTestPost(sourcePostId = "far")
 
-        owner.onNearbyPostsChanged(setOf(near.id))
-        owner.synchronize("session", listOf(near, far), resolveInBackground = false)
+        owner.onNearbyPostsChanged(setOf(near.id, alsoNear.id))
+        owner.synchronize("session", listOf(near, alsoNear, far), resolveInBackground = false)
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
 
-        assertEquals(listOf("near"), requested)
+        assertEquals(setOf("near", "also near"), requested.toSet())
         assertEquals(7_000L, (owner.observeState(near).first() as MediaDurationState.Known).durationMs)
         coordinator.close()
     }
 
     @Test
-    fun `active filter resolves loaded posts without rewriting them`() = runTest {
+    fun `active filter resolves loaded posts without rewriting them (ADR 0104)`() = runTest {
         val requested = mutableListOf<String>()
         val coordinator = coordinator { post ->
             requested += post.id.sourcePostId
@@ -173,7 +174,7 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
-    fun `a feed-supplied duration answers from the post without lookup or storage`() = runTest {
+    fun `a feed-supplied duration answers from the post without lookup or storage (ADR 0104)`() = runTest {
         var acquisitions = 0
         val coordinator = coordinator {
             acquisitions += 1

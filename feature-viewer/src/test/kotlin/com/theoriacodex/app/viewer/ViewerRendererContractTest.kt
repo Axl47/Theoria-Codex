@@ -60,6 +60,7 @@ class ViewerRendererContractTest {
             requireNotNull(state.session), requireNotNull(state.currentMedia).key,
             requireNotNull(state.currentMedia).loadGeneration,
             onAction = { state = reduceViewerState(state, it).state },
+            nowMs = { 0L },
             onTimelineInteractionActiveChanged = {}, onDurationKnown = {},
         )
         val old = events()

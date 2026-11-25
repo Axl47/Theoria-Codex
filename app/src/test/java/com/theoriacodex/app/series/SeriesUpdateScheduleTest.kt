@@ -41,7 +41,7 @@ class SeriesUpdateScheduleTest {
     private fun job(): JobInfo? = scheduler.getPendingJob(AppJob.SERIES_UPDATE.id)
 
     @Test
-    fun `the check is scheduled only while a series is followed and the setting is on`() = runTest(UnconfinedTestDispatcher()) {
+    fun `the check is scheduled only while a series is followed and the setting is on (ADR 0015)`() = runTest(UnconfinedTestDispatcher()) {
         val keeping = launch { keepSeriesUpdatesScheduled(context, followed, settings) }
         assertNull(job())
 
@@ -65,7 +65,7 @@ class SeriesUpdateScheduleTest {
     }
 
     @Test
-    fun `a check scheduled before it waited for a healthy battery is scheduled again with that condition`() {
+    fun `a check scheduled before it waited for a healthy battery is scheduled again with that condition (ADR 0015)`() {
         scheduler.schedule(
             AppJob.SERIES_UPDATE.builder(context).setPeriodic(12.hours.inWholeMilliseconds)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true).build(),

@@ -4,6 +4,7 @@
 
 ### Added
 
+- A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
 - Following says how many followed series need their extension, such as after restoring a Mihon backup, with a button to Extensions. Those series can't be checked for new chapters until their extension is on.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
@@ -15,6 +16,8 @@
 - Picture tags now cover videos and Pixiv animations in your Library too. Each is tagged from its preview first, then, while the phone charges and sits unused (usually overnight), a few frames from across the clip refine its tags, so a scene the preview doesn't show still counts. If the frames can't be read, the preview's tags stay.
 - Trails: in the Viewer, a row under the top bar shows the post's creator, Similar, and its most characteristic tags. Tapping one opens that stream in place, and you keep swiping from there. The steps you followed are listed beside it: tap one to return to it, or go Back one step at a time to the post you started from.
 - Tapping a tag in the Viewer's information sheet starts a trail too. Holding the tag opens the Search moves (include, exclude, save).
+- Holding a tag step in a trail lets you remove just that step: the steps after it run again without it, and a Creator or Similar step ends the path there. Holding a step or a suggested tag also saves it to your saved tags.
+- A "+" at the end of a trail's suggestions adds any tag as the next step, with that site's tag suggestions as you type.
 - The Viewer's Save button shows the Codex the post most likely belongs in. Tap to save there, with Undo on the button for a few seconds. Hold it and slide onto another Codex, or New, to save there instead.
 - Holding a post in any grid or shelf picks it up. Drop it on a Codex or New at the right edge to save it (with Undo), or on Like or Similar at the left. Letting go where you picked it up opens the post menu as before. Animated posts keep playing while you hold them, and in Search the Codices offered are the ones the Viewer's Save button would suggest.
 - Triage: a one-post-at-a-time way through a feed, opened from Triage in the feed's filter sheet. Swipe right to like, left to skip, up to save to a suggested Codex, and down to hide one of the post's tags from For You. Undo reverses the last choice. The next card plays while you drag the top one away. If more posts fail to load, the deck offers Retry.
@@ -81,6 +84,8 @@
 
 ### Changed
 
+- In Play Next and slideshows, every post stays on screen for at least five seconds. A shorter clip, GIF or Pixiv animation replays until then and moves on at the end of a play-through, and touching, zooming, seeking or showing the controls starts the five seconds again.
+- Swiping back to an earlier post in Play Next or a slideshow stops it moving on by itself until you go forward again. A small pause badge on the playback settings and slideshow buttons shows while it's stopped.
 - Settings has a Series group, after Sources, holding Extensions, Check for new chapters and Delete after reading. Sources now holds only what applies to every source.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
@@ -153,8 +158,10 @@
 
 ### Fixed
 
+- Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
 - A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
+- Asura Scans pages no longer risk showing scrambled when they load again after the app has dropped them from memory.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
 - Opening a chapter loads its own pages before the chapters around it, so on sites that limit how fast they can be loaded, such as Asura Scans, its first page shows sooner.
 - A spinner shows over a chapter until its pages arrive.

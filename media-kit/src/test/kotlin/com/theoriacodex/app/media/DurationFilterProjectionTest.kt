@@ -31,7 +31,7 @@ class DurationFilterProjectionTest {
         assertTrue(failed.isVisibilityResolved(anchor, resolveInBackground = true))
     }
 
-    @Test fun `decisions published for one snapshot do not answer a replacement of the same post`() {
+    @Test fun `decisions published for one snapshot do not answer a replacement of the same post (ADR 0106)`() {
         val projection = DurationFilterProjection()
         val post = testPost().copy(full = ImageRef("https://example.test/movie.mp4", null, "video/mp4"), media = emptyList())
         val posts = listOf(post)
@@ -47,7 +47,7 @@ class DurationFilterProjectionTest {
         assertTrue(fresh.knownDurationMsByPostId.isEmpty())
     }
 
-    @Test fun `a length that changes nothing shown keeps the presented list, and only an in-place length change renews its key`() {
+    @Test fun `a length that changes nothing shown keeps the presented list, and only an in-place length change renews its key (ADR 0106)`() {
         val posts = List(12) { testPost(SourceKey.RULE34VIDEO, "v$it") }
         val projection = DurationFilterProjection()
         fun known(vararg lengths: Pair<Int, Long>) = mediaDurationStates(posts, lengths.associate { (index, ms) ->
@@ -67,5 +67,9 @@ class DurationFilterProjectionTest {
         val changed = projection.project(posts, known(0 to 2_000, 1 to 1_000, 5 to 1_000), true)
         assertSame(revealing.presentedPosts, changed.presentedPosts)
         assertNotSame(revealing.presentedDurationsKey, changed.presentedDurationsKey)
+
+        val edited = posts.toMutableList().apply { this[0] = posts[0].copy(title = "edited") }
+        val replaced = projection.project(edited, known(0 to 2_000, 1 to 1_000, 5 to 1_000), true)
+        assertSame("A replaced post is shown, even with the same id", edited[0], replaced.presentedPosts?.get(0))
     }
 }

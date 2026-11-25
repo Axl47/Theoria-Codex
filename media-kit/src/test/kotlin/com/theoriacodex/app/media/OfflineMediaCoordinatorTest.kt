@@ -10,6 +10,8 @@ import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
@@ -91,7 +93,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `cache on save stores actual bytes independently from disposable caches`() = runTest {
+    fun `cache on save stores actual bytes independently from disposable caches (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { _, _, file ->
             file.writeText("real media")
@@ -105,7 +107,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `automatic saves return promptly accumulate during acquisition and drain without loss`() = runTest {
+    fun `automatic saves return promptly accumulate during acquisition and drain without loss (ADR 0110)`() = runTest {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
         val coordinator = OfflineMediaCoordinator(
@@ -129,7 +131,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `clear and owner removal cancel automatic saves still resolving and discard queued posts`() = runTest {
+    fun `clear and owner removal cancel automatic saves still resolving and discard queued posts (ADR 0110)`() = runTest {
         for (clearAll in listOf(false, true)) {
             val started = CompletableDeferred<Unit>()
             val coordinator = OfflineMediaCoordinator(
@@ -172,7 +174,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `posts saved into a kept owner download alone and other owners are left alone`() = runTest {
+    fun `posts saved into a kept owner download alone and other owners are left alone (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, file ->
@@ -193,7 +195,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `posts saved before the first scan finishes wait for it to tell kept owners apart`() = runTest {
+    fun `posts saved before the first scan finishes wait for it to tell kept owners apart (ADR 0110)`() = runTest {
         val directory = temporary.newFolder()
         val acquisitions = mutableListOf<String>()
         val acquire: suspend (Post, ImageRef, java.io.File) -> Unit = { post, _, file ->
@@ -236,7 +238,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `an owner with neither copies nor a running job gets nothing when posts are saved`() = runTest {
+    fun `an owner with neither copies nor a running job gets nothing when posts are saved (ADR 0110)`() = runTest {
         val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
         val acquisitions = mutableListOf<String>()
         val coordinator = OfflineMediaCoordinator(store, backgroundScope, { it }, { it.media }, { post, _, _ ->
@@ -254,7 +256,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a replaced preparation that already loaded cannot start a job after the removal`() = runTest {
+    fun `a replaced preparation that already loaded cannot start a job after the removal (ADR 0110)`() = runTest {
         val (coordinator, store) = gatedCoordinator()
         val proceed = loadedPreparation(coordinator)
         coordinator.prepare("codex:a") { awaitCancellation() }
@@ -266,7 +268,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a cancelled preparation that already loaded cannot start a job`() = runTest {
+    fun `a cancelled preparation that already loaded cannot start a job (ADR 0110)`() = runTest {
         val (coordinator, _) = gatedCoordinator()
         val proceed = loadedPreparation(coordinator)
         coordinator.cancel("codex:a")
@@ -276,7 +278,7 @@ class OfflineMediaCoordinatorTest {
     }
 
     @Test
-    fun `a save while clear waits on a preparation starts no job and leaves no copy`() = runTest {
+    fun `a save while clear waits on a preparation starts no job and leaves no copy (ADR 0110)`() = runTest {
         val (coordinator, store) = gatedCoordinator()
         val proceed = loadedPreparation(coordinator)
         val clearing = launch { coordinator.clear() }
@@ -287,6 +289,55 @@ class OfflineMediaCoordinatorTest {
         advanceUntilIdle()
         assertTrue(coordinator.jobs.value.isEmpty())
         assertEquals(0, store.snapshot.value!!.postCount)
+    }
+
+    @Test
+    fun `a save made while clear or a removal runs publishes no job, and a removal leaves other owners alone (ADR 0110)`() = runTest {
+        val (clearingCoordinator, _) = gatedCoordinator()
+        val clearProceeds = loadedPreparation(clearingCoordinator)
+        val clearing = launch { clearingCoordinator.clear() }
+        runCurrent()
+        clearingCoordinator.makeAvailableOffline("codex:b", listOf(post("b")))
+        assertTrue(clearingCoordinator.jobs.value.isEmpty())
+        clearProceeds.complete(Unit)
+        clearing.join()
+
+        val (removingCoordinator, _) = gatedCoordinator()
+        val removalProceeds = loadedPreparation(removingCoordinator)
+        val removing = launch { removingCoordinator.remove("codex:a") }
+        runCurrent()
+        removingCoordinator.makeAvailableOffline("codex:a", listOf(post("again")))
+        removingCoordinator.makeAvailableOffline("codex:other", listOf(post("c")))
+        assertEquals(setOf("codex:other"), removingCoordinator.jobs.value.keys)
+        removalProceeds.complete(Unit)
+        removing.join()
+    }
+
+    @Test
+    fun `a save stays refused until the last of two removals of its owner ends (ADR 0110)`() = runTest {
+        val (coordinator, _) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        val first = launch { coordinator.remove("codex:a") }
+        val second = launch { coordinator.remove("codex:a") }
+        runCurrent()
+        var savedBetween: Job? = null
+        val jobsBetween = mutableListOf<Set<String>>()
+        listOf(first, second).forEach { removal ->
+            removal.invokeOnCompletion {
+                if (savedBetween == null && !(first.isCompleted && second.isCompleted)) {
+                    savedBetween = launch(start = CoroutineStart.UNDISPATCHED) {
+                        coordinator.makeAvailableOffline("codex:a", listOf(post("again")))
+                        jobsBetween += coordinator.jobs.value.keys
+                    }
+                }
+            }
+        }
+        proceed.complete(Unit)
+        first.join()
+        second.join()
+        savedBetween?.join()
+
+        assertEquals(listOf(emptySet<String>()), jobsBetween)
     }
 
     private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {

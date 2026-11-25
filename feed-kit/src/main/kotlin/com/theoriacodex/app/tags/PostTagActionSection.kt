@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.IconButton
@@ -289,12 +288,7 @@ private fun PostTagChip(
     val state = editor.selection.chipState(term)
     val favorite = onFavoriteLongPress?.takeIf { term.isGeneralTag }
     val haptics = LocalHapticFeedback.current
-    val toggleSaved = favorite?.let { save ->
-        {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            if (saved) onRemoveSaved(editor.post.id.source, term.value) else save(editor.post.id.source, term.value)
-        }
-    }
+    val toggleSaved = favorite?.let { save -> savedTagToggle(haptics, saved, save, onRemoveSaved, editor.post.id.source, term.value) }
     val savedLabel = favorite?.let { if (saved) "Remove $name from saved tags" else "Save $name" }
     val shownCount = count?.takeUnless { compact }?.let(::compactTagCount)
     val icon = if (saved) Icons.Default.Star else null

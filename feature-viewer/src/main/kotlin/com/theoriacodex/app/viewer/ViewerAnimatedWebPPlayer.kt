@@ -58,6 +58,12 @@ internal fun ViewerAnimatedWebPPlayer(
     }
     ViewerWebPCompletion(state.drawable, controls.loopPlayback, events.onPlaybackCompleted)
     val drawable = state.drawable
+    LaunchedEffect(drawable, controls.restartRequest) {
+        if (drawable != null && controls.restartRequest > 0L && controls.isActive && !drawable.isRunning) {
+            drawable.reset()
+            drawable.start()
+        }
+    }
     ViewerPlayWhileStarted(
         drawable, controls.isActive && controls.isPlaying,
         play = { drawable?.let { if (it.isPaused) it.resume() else it.start() } },

@@ -95,8 +95,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     LaunchedEffect(selection.post.id) { screen.trailForks.follow(selection.post.id) }
     val swipingToAnotherPost = swipe.loadTarget?.let { it.postIndex != navigation.currentIndex } == true
     LaunchedEffect(swipingToAnotherPost) { if (swipingToAnotherPost) screen.trailForks.leave() }
-    val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
-    val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
+    val fadesWhileScrubbing = rememberViewerScrubFade(screen)
     val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture)
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
@@ -388,12 +387,18 @@ private fun BoxScope.ViewerFooterButtons(
     rotationOffer: ViewerRotationOffer?,
     onAction: (ViewerAction) -> Unit,
 ) {
-    val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
+    val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive || screen.chromeShownForScrub
     val watching = frame.watching
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
     val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
     ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow, existingOffer = rotationOffer)
-    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture || watching, onAction)
+    ViewerSlideshowControl(frame, screen.dwellStartedAtMs, suppressed = bottomOwned || frame.inPictureInPicture || watching, onAction)
 }
 
 internal const val VIEWER_LOCK_OVERLAY_TAG = "viewer-lock-overlay"
+
+@Composable
+internal fun rememberViewerScrubFade(screen: ViewerScreenState): Modifier {
+    val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
+    return Modifier.graphicsLayer { alpha = if (screen.chromeShownForScrub) 0f else scrubFade }
+}

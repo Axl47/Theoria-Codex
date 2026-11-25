@@ -194,7 +194,7 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
     public abstract RecentsDao recentsDao();
     public abstract MediaDurationDao mediaDurationDao();
     public abstract ForYouVerdictDao forYouVerdictDao();
-    public abstract VisualSignatureDao visualSignatureDao();
+    abstract VisualSignatureDao visualSignatureDao();
     public abstract SeriesDao seriesDao();
 
     @NonNull

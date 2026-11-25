@@ -127,6 +127,20 @@ class SeriesProgressTest {
         assertNull(continueEntry(series(lastOpened = "c1"), emptyList()))
     }
 
+    @Test
+    fun `with its opened chapter no longer listed, continue takes the latest one partway through, else the first unread, else the last (ADR 0014)`() {
+        val unlisted = series(lastOpened = "gone")
+
+        val partway = listOf(entry("c3", order = 0), entry("c2", order = 1, position = 3), entry("c1", order = 2, position = 2))
+        assertEquals("c2", continueEntry(unlisted, partway)?.entry?.address)
+        val unread = listOf(entry("c3", order = 0), entry("c2", order = 1), entry("c1", order = 2, read = true))
+        assertEquals("c2", continueEntry(unlisted, unread)?.entry?.address)
+        val read = listOf(entry("c2", order = 0, read = true), entry("c1", order = 1, read = true))
+        assertEquals("c2", continueEntry(unlisted, read)?.entry?.address)
+        val readWithPage = listOf(entry("c3", order = 0), entry("c2", order = 1, read = true, position = 9), entry("c1", order = 2, read = true))
+        assertEquals("c3", continueEntry(unlisted, readWithPage)?.entry?.address)
+    }
+
     private fun series(lastOpened: String?) =
         StoredSeries(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/s"), "Series"), lastOpenedEntry = lastOpened)
 
