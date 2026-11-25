@@ -3,6 +3,11 @@ package com.theoriacodex.app.recommend
 import com.theoriacodex.app.ui.components.hidesOnScroll
 import com.theoriacodex.app.ui.components.ScrollChromeBox
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +77,8 @@ fun ForYouDeckScreen(
     val levels by owner.levels.collectAsStateWithLifecycle()
     val level = levels.last()
     val onTrail = levels.size > 1
+    var trail by remember { mutableStateOf(ForYouTrail(emptyList(), null)) }
+    if (onTrail) trail = ForYouTrail(levels.map { ForYouCrumb(it.id, it.label) }, level.query)
     var showFilters by remember { mutableStateOf(false) }
     var actionPost by remember { mutableStateOf<Post?>(null) }
     ForgetRetainedFeedsEffect(LEVEL_ID_PREFIX, levels.mapTo(mutableSetOf(), ForYouLevel::id))
@@ -81,14 +88,14 @@ fun ForYouDeckScreen(
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.hidesOnScroll()) {
                 ForYouBar(state, level, config, callbacks, onRefresh = owner::rebuild, onShowFilters = { showFilters = true })
-                if (onTrail) {
-                    val query = level.query
+                AnimatedVisibility(onTrail, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                    val query = trail.query
                     ForYouCrumbs(
-                        levels, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
+                        trail.crumbs, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
                         onSaveSearch = query?.let { { callbacks.onSaveSearch(it) } },
                     )
-                } else {
-                    ForYouChips(state.chips, state.only, owner::selectChip)
+                }
+                if (!onTrail) {
                     if (state.failures.isNotEmpty()) {
                         Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                             StatusRow(state.failures, onRetrySource = owner::retrySource, onOpenAccounts = callbacks.onOpenSourceAccounts)
@@ -97,7 +104,7 @@ fun ForYouDeckScreen(
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                key(level.id, config.grid) {
+                key(level.id.takeIf { config.grid }, config.grid) {
                     ForYouBody(owner, state, level, config, related, callbacks) { actionPost = it }
                 }
             }
@@ -111,5 +118,16 @@ fun ForYouDeckScreen(
             onShowRelated = { related.controller.show(post) },
         )
     }
-    if (showFilters) ForYouFilterSheet(config, callbacks, onDismiss = { showFilters = false })
+    if (showFilters) {
+        ForYouFilterSheet(
+            config, callbacks, lanes = if (onTrail) emptyList() else state.lanes, onFocusLane = owner::focusLane,
+            onReset = {
+                callbacks.onResetFilters()
+                owner.warmLanes()
+            },
+            onDismiss = { showFilters = false },
+        )
+    }
 }
+
+private data class ForYouTrail(val crumbs: List<ForYouCrumb>, val query: Query?)

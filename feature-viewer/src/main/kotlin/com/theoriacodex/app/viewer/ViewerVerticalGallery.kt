@@ -160,6 +160,7 @@ internal fun ViewerVerticalGallery(
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize()
+            .graphicsLayer { alpha = 1f - readReturnProgress().coerceIn(0f, 1f) }
             .viewerDismissDrag(dismissDrag, readReturnProgress)
             .onSizeChanged { gallery.resize(it.width) }
             .nestedScroll(quickReturn)

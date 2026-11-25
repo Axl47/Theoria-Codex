@@ -20,7 +20,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
@@ -53,6 +52,7 @@ import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
@@ -169,25 +169,41 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag(FOR_YOU_REFRESH_TAG).assertDoesNotExist()
     }
 
-    @Test fun `a fork opens a trail whose crumbs replace the chips, and a crumb returns to the Mix`() {
-        trails.creator = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
+    @Test fun `a pill focuses in place, keeping the card's node and so its player lease, and Mix resumes on it (ADR 0134)`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
         val owner = render()
-        compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertExists()
-        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertTextEquals("artist").performClick()
+        val before = card("fog-0-0").fetchSemanticsNode().id
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("fog").performClick()
 
         compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0").assertTextEquals("Mix")
-        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("artist")
-        compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertDoesNotExist()
-        compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG).assertDoesNotExist()
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("fog")
         compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertDoesNotExist()
-        card("t-1").assertExists()
+        assertEquals(before, card("fog-0-0").fetchSemanticsNode().id)
+        compose.runOnIdle { assertEquals(listOf("fog-0-0", "t-1", "t-2"), owner.levels.value.last().feed.value.posts.map { it.id.sourcePostId }) }
 
         compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0").performClick()
-        compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertExists()
+        compose.onNodeWithTag(FOR_YOU_CRUMBS_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("fog")
+        assertEquals(before, card("fog-0-0").fetchSemanticsNode().id)
         compose.runOnIdle { assertEquals(1, owner.levels.value.size) }
     }
 
-    @Test fun `a card a like asked for says so and does not offer its own creator again`() {
+    @Test fun `a creator's pill opens a trail, and a card decided there is passed over on the way back`() {
+        trails.creator = listOf(testPost(DECK_SOURCE, "t-1"))
+        render()
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertTextEquals("artist").performClick()
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("artist")
+        compose.onNodeWithTag(FOR_YOU_SAVE_SEARCH_TAG).assertDoesNotExist()
+        decide("Skip")
+        card("t-1").assertExists()
+
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0").performClick()
+        card("fog-0-0").assertDoesNotExist()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("sea")
+        compose.onNodeWithTag(FOR_YOU_UNDO_TAG).assertIsNotEnabled()
+    }
+
+    @Test fun `a card a like asked for leads with its creator's pill instead of a second one (ADR 0134)`() {
         trails.creator = listOf(lanePost("more", 0, 0))
         render()
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertExists()
@@ -195,15 +211,43 @@ class ForYouDeckScreenTest {
         repeat(3) { decide("Skip") }
 
         card("more-0-0").assertExists()
-        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("More by artist")
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("artist")
         compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertDoesNotExist()
+    }
+
+    @Test fun `a card asked for through its creator leads with that creator though the post names another first (ADR 0134)`() {
+        trails.creator = listOf(testPost(DECK_SOURCE, "co-1", creatorProfile = CreatorProfile(DECK_SOURCE, "co-author", uploadsQuery = "user:co")))
+        render()
+        decide("Like")
+        repeat(3) { decide("Skip") }
+
+        card("co-1").assertExists()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("artist")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}creator").assertTextEquals("co-author")
+    }
+
+    @Test fun `a card a like asked for leads with Similar, which focuses on it (ADR 0134)`() {
+        trails.similar = listOf(lanePost("like", 0, 0))
+        val owner = render()
+        decide("Like")
+        repeat(3) { decide("Skip") }
+
+        card("like-0-0").assertExists()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("Similar")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}similar").assertDoesNotExist()
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).performClick()
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("Similar")
+        compose.onNodeWithTag("${FOR_YOU_FORK_TAG_PREFIX}similar").assertDoesNotExist()
+        compose.runOnIdle { assertEquals("like-0-0", owner.levels.value.last().deck.state.value.current?.id?.sourcePostId) }
     }
 
     @Test fun `the fork row scrolls only when its forks overflow it, so a card that fits still swipes from it`() {
         val similar = TrailFork.Similar
         val long = List(5) { TrailFork.Tag("long_".repeat(100) + it) }
         var forks by mutableStateOf<List<TrailFork>>(listOf(similar))
-        compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) { ForYouForkRow(forks) {} } } }
+        compose.setContent {
+            MaterialTheme { Box(Modifier.width(320.dp)) { ForYouPillRow(forks.map { ForYouPill(it.key, it.label, it.icon, origin = false) {} }) } }
+        }
 
         compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.ScrollBy))
         forks = listOf(similar) + long
@@ -247,12 +291,24 @@ class ForYouDeckScreenTest {
         assertEquals(1, counter.count(FEED_POST_CARD))
     }
 
-    @Test fun `a chip narrows the deck to its interest`() {
+    @Test fun `Filters lists the Mix's lanes, dims one cooled by skips until Reset, and a tap focuses it in place (ADR 0134)`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
         val owner = render()
-        compose.onNode(hasText("Mix") and hasClickAction()).assertIsSelected()
-        compose.onNode(hasText("sea") and hasClickAction()).performClick().assertIsSelected()
-        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertTextEquals("sea")
-        compose.runOnIdle { assertEquals(laneId("sea"), owner.state.value.only) }
+        repeat(6) { decide(if (it % 2 == 1) "Skip" else "Like") }
+        compose.onNodeWithTag(FOR_YOU_FILTERS_TAG).performClick()
+        compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${laneId("fog")}").assertTextEquals("fog")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${laneId("sea")}").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Cooled"))
+
+        compose.onNodeWithText("Reset").performClick()
+        compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${laneId("sea")}").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        val current = compose.runOnIdle { checkNotNull(owner.levels.value.single().deck.state.value.current).id }
+        val lane = compose.runOnIdle { owner.originOf(current) as DeckOrigin.Lane }
+        compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${lane.laneId}").performClick()
+
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals(lane.label)
+        compose.onNodeWithText("Animated only").assertDoesNotExist()
+        compose.onNodeWithTag(searchCardTestTag(current)).assertExists()
     }
 
     @Test fun `the toggle shows the same level as a grid, where a tap opens the Viewer on it`() {
@@ -296,7 +352,6 @@ class ForYouDeckScreenTest {
         engine.tags = emptyList()
         render()
         compose.onNodeWithText("No recommendations yet").assertExists()
-        compose.onNodeWithTag(FOR_YOU_CHIPS_TAG).assertDoesNotExist()
         compose.onNodeWithText("Go to Search").performClick()
         compose.runOnIdle { assertEquals(1, wentToSearch) }
     }

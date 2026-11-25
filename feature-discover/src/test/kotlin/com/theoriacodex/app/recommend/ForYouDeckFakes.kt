@@ -140,9 +140,11 @@ internal class FakeDeckActions : TriageActions {
     val unliked = mutableListOf<PostId>()
     val hidden = mutableListOf<Pair<SourceKey, String>>()
     var failLike = false
+    var likeGate: CompletableDeferred<Unit>? = null
     override val hiddenTags: Flow<Set<HiddenTag>> = flowOf(emptySet())
 
     override suspend fun like(post: Post): TriageReversal? {
+        likeGate?.await()
         check(!failLike)
         liked += post.id
         return { unliked += post.id }

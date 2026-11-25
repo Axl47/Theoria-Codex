@@ -98,6 +98,7 @@ data class TriageDeckState(
     val pictures: PictureTags = PictureTags.None,
     val restored: PostId? = null,
     val removed: Set<PostId> = emptySet(),
+    val elsewhere: Set<PostId> = emptySet(),
 ) {
     val current: Post? get() = posts.getOrNull(index)
     val next: Post? get() = posts.getOrNull(shownFrom(index + 1))
@@ -119,7 +120,7 @@ data class TriageDeckState(
 
     private fun passesOver(post: Post): Boolean {
         if (post.id == restored) return false
-        return post.hiddenBy(passedOverTags, pictures) || post.hiddenBy(ownerHiddenTags, pictures)
+        return post.id in elsewhere || post.hiddenBy(passedOverTags, pictures) || post.hiddenBy(ownerHiddenTags, pictures)
     }
 }
 

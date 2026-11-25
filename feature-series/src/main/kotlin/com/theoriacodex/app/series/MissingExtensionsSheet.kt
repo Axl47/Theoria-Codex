@@ -108,8 +108,6 @@ internal fun MissingExtensionsOverlay(
     }
 }
 
-private class TitleActions(val canSwitch: (Series) -> Boolean, val onSwitch: (Series) -> Unit, val onUnfollow: (SeriesId) -> Unit, val summary: (Series) -> String?)
-
 @Composable
 private fun MissingExtensionsSheet(missing: List<Series>, extensions: ExtensionsViewModel, titles: TitleActions, request: MissingSheetRequest) {
     val state by extensions.state.collectAsStateWithLifecycle()
@@ -156,7 +154,7 @@ private fun UnlistedGroup(unlisted: List<Series>, title: String, actions: TitleA
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            series.forEach { MissingTitleRow(it, nested = false, actions) }
+            series.forEach { FollowedTitleRow(it, nested = false, actions) }
         }
     }
 }
@@ -203,7 +201,7 @@ private fun ProviderRow(provider: MissingProvider, state: ExtensionsState, open:
             Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
         },
     ) { ExtensionIcon(extension.iconUrl) }
-    if (open) provider.series.forEach { MissingTitleRow(it, nested = true, actions) }
+    if (open) provider.series.forEach { FollowedTitleRow(it, nested = true, actions) }
 }
 
 @Composable
@@ -220,35 +218,6 @@ private fun GapAction(copy: InstalledExtension, gap: InstalledGap?, handlers: Pr
 
 internal fun languagesOffLine(languages: List<String>): String = "${languages.joinToString { languageName(it) }} off"
 
-@Composable
-private fun MissingTitleRow(series: Series, nested: Boolean, actions: TitleActions) {
-    var menu by remember { mutableStateOf(false) }
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = if (nested) 64.dp else 12.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(series.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            actions.summary(series)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (actions.canSwitch(series)) {
-                    DropdownMenuItem(text = { Text(SWITCH_SOURCE) }, onClick = {
-                        menu = false
-                        actions.onSwitch(series)
-                    })
-                }
-                DropdownMenuItem(text = { Text(UNFOLLOW) }, onClick = {
-                    menu = false
-                    actions.onUnfollow(series.id)
-                })
-            }
-        }
-    }
-}
-
 internal fun unreadReposLine(count: Int): String = if (count == 1) "Couldn't read 1 repo" else "Couldn't read $count repos"
 
 internal const val MISSING_EXTENSIONS_TITLE = "Missing extensions"
@@ -256,7 +225,6 @@ internal const val IN_YOUR_REPOS = "In your repos"
 internal const val NOT_IN_YOUR_REPOS = "Not in your repos"
 internal const val REPOS = "Repos"
 internal const val NOT_FOUND = "Not found"
-internal const val UNFOLLOW = "Unfollow"
 internal const val TURN_ON = "Turn on"
 internal const val OFF = "Off"
 internal const val COULDNT_LOAD = "Couldn't load"

@@ -65,6 +65,8 @@ class ViewerReturnTransition {
         retainedPostIds = postIds
     }
 
+    private var hasOrigin = false
+    private var unclaimedPost: PostId? = null
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
@@ -85,12 +87,26 @@ class ViewerReturnTransition {
     private var rowPositioned = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
-    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
+    fun openedFrom(
+        gridId: String?,
+        bounds: Rect? = null,
+        shelfId: ViewerReturnShelfId? = null,
+        corners: ViewerReturnCorners = ViewerReturnCorners(),
+        post: PostId,
+    ) {
         clear()
+        hasOrigin = true
+        unclaimedPost = post
         originGridId = gridId
         originShelfId = shelfId
         openingBounds = bounds?.takeUnless { it.isEmpty }
         openingCorners = corners
+    }
+
+    fun launching(postIds: Collection<PostId>, keepsRoot: Boolean) {
+        if (keepsRoot) return
+        val tapped = unclaimedPost
+        if (tapped != null && tapped in postIds) unclaimedPost = null else clear()
     }
 
     fun finishOpening() {
@@ -98,6 +114,7 @@ class ViewerReturnTransition {
     }
 
     fun begin(postId: PostId) {
+        if (!hasOrigin) return
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
         mediaSettling = true
@@ -137,6 +154,8 @@ class ViewerReturnTransition {
     }
 
     fun clear() {
+        hasOrigin = false
+        unclaimedPost = null
         mediaSettling = false
         retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()

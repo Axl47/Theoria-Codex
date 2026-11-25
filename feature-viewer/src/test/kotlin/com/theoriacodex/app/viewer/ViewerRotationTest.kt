@@ -39,42 +39,63 @@ class ViewerRotationTest {
         }
     }
 
-    @Test fun `with the controls hidden the chip shows for a few seconds on a post that fits the other way, then fades (ADR 0174)`() {
-        compose.mainClock.autoAdvance = false
-        show(chromeVisible = false)
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithContentDescription("Rotate to fit").assertExists()
-        compose.mainClock.advanceTimeBy(VIEWER_ROTATE_HINT_MS + 500)
-        compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
-        compose.runOnIdle { assertNull(rotation.held) }
+    @Test fun `the rotate button shows with the controls even when the post already fits, naming its direction (ADR 0174)`() {
+        selection.value = selection("a", SQUARE)
+        show()
+        compose.onNodeWithContentDescription("Rotate to landscape").assertExists()
+        selection.value = selection("b", TALL)
+        compose.onNodeWithContentDescription("Rotate to landscape").assertExists()
     }
 
-    @Test fun `a chip tap rotates once and the hold survives swiping (ADR 0174)`() {
+    @Test fun `the rotate button leaves with the controls`() {
+        show(chromeVisible = false)
+        compose.onNodeWithContentDescription("Rotate to landscape").assertDoesNotExist()
+    }
+
+    @Test fun `a tap rotates once and the hold survives swiping (ADR 0174)`() {
         show()
-        compose.onNodeWithContentDescription("Rotate to fit").performClick()
+        compose.onNodeWithContentDescription("Rotate to landscape").performClick()
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
         selection.value = selection("b", TALL)
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
     }
 
-    @Test fun `media that fits either way offers no chip`() {
-        selection.value = selection("a", SQUARE)
+    @Test fun `the lock pins the current orientation and hides rotate until unlocked (ADR 0174)`() {
         show()
-        compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
-    }
-
-    @Test fun `the lock pins the current orientation and hides the chip until unlocked, which drops any hold (ADR 0174)`() {
-        show()
-        compose.onNodeWithContentDescription("Rotate to fit").performClick()
         compose.onNodeWithContentDescription("Lock rotation").performClick()
         compose.runOnIdle { assertEquals(ViewerOrientation.PORTRAIT, lock.value) }
-        compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Rotate to landscape").assertDoesNotExist()
         compose.onNodeWithContentDescription("Unlock rotation").performClick()
         compose.runOnIdle {
             assertNull(lock.value)
             assertNull(rotation.held)
         }
-        compose.onNodeWithContentDescription("Rotate to fit").assertExists()
+        compose.onNodeWithContentDescription("Rotate to landscape").assertExists()
+    }
+
+    @Test fun `unlocking returns to the rotation chosen before the lock (ADR 0174)`() {
+        show()
+        compose.onNodeWithContentDescription("Rotate to landscape").performClick()
+        compose.onNodeWithContentDescription("Lock rotation").performClick()
+        compose.onNodeWithContentDescription("Unlock rotation").performClick()
+        compose.runOnIdle {
+            assertNull(lock.value)
+            assertEquals(ViewerOrientation.LANDSCAPE, rotation.held)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "land")
+    fun `unlocking returns to a rotation to portrait too (ADR 0174)`() {
+        selection.value = selection("a", TALL)
+        show()
+        compose.onNodeWithContentDescription("Rotate to portrait").performClick()
+        compose.onNodeWithContentDescription("Lock rotation").performClick()
+        compose.onNodeWithContentDescription("Unlock rotation").performClick()
+        compose.runOnIdle {
+            assertNull(lock.value)
+            assertEquals(ViewerOrientation.PORTRAIT, rotation.held)
+        }
     }
 
     private fun show(chromeVisible: Boolean = true) {
@@ -83,7 +104,7 @@ class ViewerRotationTest {
             Box(Modifier.fillMaxSize()) {
                 val offer = rememberViewerRotation(selection.value, rotation, inPictureInPicture = false, lock.value) { lock.value = it }
                 ViewerRotationLockButton(selection.value, offer, chrome.value, suppressed = false, Alignment.BottomStart)
-                ViewerRotationChip(selection.value, offer, chrome.value, suppressed = false, slot = 1)
+                ViewerRotateButton(selection.value, offer, chrome.value, suppressed = false, slot = 1)
             }
         }
     }

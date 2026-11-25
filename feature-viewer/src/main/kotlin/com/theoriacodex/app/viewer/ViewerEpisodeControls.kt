@@ -331,7 +331,7 @@ internal fun ViewerEpisodeControls(
             Icon(Icons.Outlined.LockOpen, contentDescription = "Lock controls", tint = Color.White)
         }
         rotationOffer?.let {
-            ViewerEpisodeRotateButton(it.fits, onRotate)
+            if (it.lock == null) ViewerEpisodeRotateButton(it, onRotate)
             ViewerEpisodeRotationLockButton(it, onToggleRotationLock)
         }
         ViewerEpisodeSpeedPill(playbackRate, speedEnabled, onOpenSpeed)
@@ -342,9 +342,9 @@ internal fun ViewerEpisodeControls(
 }
 
 @Composable
-private fun ViewerEpisodeRotateButton(fits: Boolean, onRotate: () -> Unit) {
-    IconButton(onClick = onRotate, modifier = Modifier.testTag("viewer-rotate")) {
-        Icon(Icons.Default.ScreenRotation, contentDescription = if (fits) "Rotate to fit" else "Rotate", tint = Color.White)
+private fun ViewerEpisodeRotateButton(offer: ViewerRotationOffer, onRotate: () -> Unit) {
+    IconButton(onClick = onRotate, modifier = Modifier.testTag(VIEWER_ROTATE_TAG)) {
+        Icon(Icons.Default.ScreenRotation, contentDescription = offer.rotateDescription, tint = if (offer.fits) LocalViewerAccent.current else Color.White)
     }
 }
 

@@ -233,7 +233,7 @@ class SearchFeedFramesTest {
         fab = fab.copy(hideLiked = true)
         show()
         feedShown = false
-        transition.openedFrom("search")
+        transition.openedFrom("search", post = posts[2].id)
         liked = setOf(posts[2].id)
         transition.retainPosts(setOf(posts[2].id))
         assertEquals(Frame(null, filterPasses = 0), frame())
