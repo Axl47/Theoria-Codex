@@ -11,25 +11,50 @@ import org.junit.Test
 class LazyMediaResolutionTest {
     private val video = ImageRef(url = "https://cdn.example.test/v.mp4", localPath = null, mime = "video/mp4")
     private val customSite = requireNotNull(SourceKey.parse("custom_booru_example"))
-    private val boorus = listOf(SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.GELBOORU, SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL)
+    private val sources = (SourceKey.builtIns + customSite).toSet()
 
     @Test
-    fun `remote video on a built-in booru or a custom site refreshes its link, a saved copy does not (ADR 0105)`() {
-        val sources = boorus + customSite + SourceKey.PIXIV
+    fun `each source decides whether its remote video refreshes its link, and a saved copy never does (ADR 0105)`() {
+        val refreshes = setOf(
+            SourceKey.AIBOORU, SourceKey.DANBOORU, SourceKey.GELBOORU, SourceKey.HITOMI, SourceKey.IWARA,
+            SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL, SourceKey.RULE34VIDEO, SourceKey.RULE34GEN, customSite,
+        )
+        val keeps = setOf(SourceKey.PIXIV, SourceKey.NHENTAI)
 
+        assertEquals("Every source needs a decision", sources, refreshes + keeps)
+        assertEquals(emptySet<SourceKey>(), refreshes intersect keeps)
         assertEquals(
-            sources.associateWith { it != SourceKey.PIXIV },
+            sources.associateWith { it in refreshes },
             sources.associateWith { source -> requiresLazyMediaResolution(post(source, video)) },
         )
-        assertEquals(false, requiresLazyMediaResolution(post(SourceKey.GELBOORU, video.copy(localPath = "/saved/v.mp4"))))
+        assertEquals(
+            sources.associateWith { false },
+            sources.associateWith { source -> requiresLazyMediaResolution(post(source, video.copy(localPath = "/saved/v.mp4"))) },
+        )
     }
 
     @Test
-    fun `an episode's streams are fetched as it opens, not resolved lazily (ADR 0105)`() {
+    fun `each source decides whether a post whose listing named no media address is resolved when opened (ADR 0105)`() {
+        val unnamed = ImageRef(url = null, localPath = null, mime = "image/jpeg")
+        val resolves = setOf(SourceKey.NHENTAI, SourceKey.HITOMI, SourceKey.IWARA, SourceKey.RULE34VIDEO, SourceKey.RULE34GEN)
+        val keeps = setOf(
+            SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.DANBOORU,
+            SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL, customSite,
+        )
+
+        assertEquals("Every source needs a decision", sources, resolves + keeps)
+        assertEquals(emptySet<SourceKey>(), resolves intersect keeps)
+        assertEquals(
+            sources.associateWith { it in resolves },
+            sources.associateWith { source -> requiresLazyMediaResolution(post(source, unnamed)) },
+        )
+    }
+
+    @Test
+    fun `an episode is not resolved lazily (ADR 0105)`() {
         val episode = video.copy(streams = listOf(MediaStream(url = "https://cdn.example.test/e.m3u8", label = "1080p")))
 
-        assertEquals(false, requiresLazyMediaResolution(post(SourceKey.GELBOORU, episode)))
-        assertEquals(false, requiresLazyMediaResolution(post(customSite, episode)))
+        assertEquals(sources.associateWith { false }, sources.associateWith { source -> requiresLazyMediaResolution(post(source, episode)) })
     }
 
     @Test
