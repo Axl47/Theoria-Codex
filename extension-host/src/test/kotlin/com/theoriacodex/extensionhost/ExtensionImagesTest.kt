@@ -377,6 +377,17 @@ class ExtensionImagesTest {
         assertEquals(listOf("/p/1"), reader.asked)
     }
 
+    @Test
+    fun `a page's image fragment reaches its source after the page is forgotten (ADR 0059)`() {
+        val source = FragmentSource()
+        images.publish(listOf(server, mihon(source)))
+        val forgotten = MihonImages(source, MihonKind.sourceKey(source.id), images)
+        val tiles = """{"tiles":[3,0,2,1],"tileCols":2}"""
+        val address = checkNotNull(forgotten.pageAddress(chapter, Page(0, imageUrl = "https://img.test/1.webp#$tiles")))
+
+        assertEquals("fragment $tiles", fetch(address))
+    }
+
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
 
     private fun ExtensionImages.cover(source: SourceKey, url: String): String =
@@ -469,6 +480,20 @@ class ExtensionImagesTest {
         override fun headersBuilder() = Headers.Builder()
 
         override fun pageListParse(response: Response): List<Page> = listOf(Page(0, imageUrl = "https://img.test/listed.jpg"))
+    }
+
+    private class FragmentSource : HttpSource() {
+        override val id = 5L
+        override val name = "Tiles"
+        override val lang = "en"
+        override val baseUrl = "https://tiles.test"
+        override val supportsLatest = false
+
+        override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(answering { request -> cannedResponse(request, body = "fragment ${request.url.fragment}") })
+            .build()
+
+        override fun headersBuilder() = Headers.Builder()
     }
 
     private class GatedPagesSource : HttpSource() {

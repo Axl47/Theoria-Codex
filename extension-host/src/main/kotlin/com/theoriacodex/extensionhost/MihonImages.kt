@@ -29,7 +29,8 @@ internal class MihonImages(
 
     fun pageAddress(chapter: SChapter, page: Page): String? {
         val address = if (page.imageUrl != null) {
-            images.tag(key, source.imageCall(page).request().url.toString())
+            val named = source.imageCall(page).request().url
+            images.tag(key, named.toString(), named.fragment?.let { "$NAMED_FRAGMENT$it" })
         } else {
             val names = page.url.takeIf(String::isNotBlank)?.let { it.toHttpUrlOrNull() ?: source.baseUrl.toHttpUrlOrNull()?.resolve(it) }
             names?.let { images.tag(key, it.toString(), "${page.index}/${chapter.url}") } ?: return null
@@ -39,9 +40,10 @@ internal class MihonImages(
     }
 
     override fun fetch(address: String, url: HttpUrl, data: String?, caller: Call): Response {
-        if (data == null) {
+        if (data == null || data.startsWith(NAMED_FRAGMENT)) {
             val page = pages[address]
-            return (if (page != null) source.imageCall(page) else source.imageCall(url.toString())).executeFor(caller)
+            val named = data?.let { url.newBuilder().fragment(it.removePrefix(NAMED_FRAGMENT)).build() } ?: url
+            return (if (page != null) source.imageCall(page) else source.imageCall(named.toString())).executeFor(caller)
         }
         val page = unresolvedPage(address, data, caller)
         val (call, named) = page.imageCall(caller)
@@ -78,5 +80,6 @@ internal class MihonImages(
 
     private companion object {
         const val MAX_PAGES = 8_192
+        const val NAMED_FRAGMENT = "#"
     }
 }
