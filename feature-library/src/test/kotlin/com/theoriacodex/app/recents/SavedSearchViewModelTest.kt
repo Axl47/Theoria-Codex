@@ -97,7 +97,7 @@ class SavedSearchViewModelTest {
         advanceUntilIdle()
         assertEquals(state, newPosts.observeSavedSearchNewPosts().first())
 
-        val night = search().copy(queryHash = "night", query = search().query.withIncludeTermsAsRequired(listOf(SearchTerm("night"))))
+        val night = search().copy(queryHash = "day", query = search().query.withIncludeTermsAsRequired(listOf(SearchTerm("day"))))
         owner.update(edited.id, night)
         advanceUntilIdle()
 

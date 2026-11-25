@@ -5,7 +5,9 @@ import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.data.storage.SavedSearchSnapshot
 import com.theoriacodex.data.storage.SavedSearchSnapshotSerializer
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.normalizedForMode
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
@@ -31,6 +33,12 @@ fun List<SavedSearchEntry>.savedFor(search: RecentSearchEntry): SavedSearchEntry
     val payload by lazy { RecentSearchPayloadCodec.encodeJson(search) }
     return firstOrNull { it.search.queryHash == search.queryHash && RecentSearchPayloadCodec.encodeJson(it.search) == payload }
 }
+
+fun RecentSearchEntry.replaysAs(other: RecentSearchEntry): Boolean =
+    kind == other.kind && query.replayed() == other.query.replayed() &&
+        (kind != RecentSearchKind.MULTI_SEARCH || sources == other.sources)
+
+private fun Query.replayed(): Query = normalizedForMode(mode).query
 
 interface SavedSearchRepository {
     fun observeSavedSearches(): Flow<List<SavedSearchEntry>>
@@ -134,8 +142,8 @@ private class MutableSavedSearchRepository(
     override suspend fun update(id: String, search: RecentSearchEntry): Boolean = mutex.withLock {
         val entries = savedSearches.value
         val current = requireNotNull(entries.firstOrNull { it.id == id }) { "This saved search is no longer available." }
-        if (listOf(current).savedFor(search) != null) return@withLock false
-        entries.filterNot { it.id == id }.savedFor(search)?.let { other ->
+        if (current.search.replaysAs(search)) return@withLock false
+        entries.firstOrNull { it.id != id && it.search.replaysAs(search) }?.let { other ->
             throw IllegalArgumentException("“${other.name}” already saves this search.")
         }
         persist(entries.map { if (it.id == id) it.copy(search = search) else it })

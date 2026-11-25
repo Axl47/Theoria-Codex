@@ -126,7 +126,7 @@ class SavedSearchNewPostsTest {
         assertEquals(mapOf("a" to 0), counts())
     }
 
-    @Test fun `a check started before an edit drops what the old query found even when it claims after the edit (ADR 0218)`() = runTest {
+    @Test fun `a check started before an edit drops what the old query found and leaves the edited search due (ADR 0218)`() = runTest {
         val original = savedSearchWithTwoNew()
         val edited = original.copy(search = original.search.copy(queryHash = "edited"))
         stored = listOf(edited)
@@ -135,7 +135,7 @@ class SavedSearchNewPostsTest {
         checker.checkIfStale(listOf(original), 6 * hour)
         assertEquals(emptyMap<String, Int>(), counts())
         pages = mapOf("a" to listOf("9", "3"))
-        check(listOf(edited), 9 * hour)
+        check(listOf(edited), 6 * hour + 1)
         assertEquals(mapOf("a" to 0), counts())
     }
 

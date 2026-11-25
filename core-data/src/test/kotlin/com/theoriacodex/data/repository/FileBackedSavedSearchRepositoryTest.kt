@@ -226,10 +226,19 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         val edited = repository.save("Edited", execution())
         val before = repository.observeSavedSearches().first()
 
-        assertFalse(repository.update(edited.id, execution().copy(searchedAtEpochMs = 900)))
-        val refusal = runCatching { repository.update(edited.id, other.search.copy(searchedAtEpochMs = 900)) }.exceptionOrNull()
+        assertFalse(repository.update(edited.id, execution().copy(searchedAtEpochMs = 900, queryHash = "rehashed")))
+        val refusal = runCatching { repository.update(edited.id, other.search.copy(queryHash = "rehashed")) }.exceptionOrNull()
         assertEquals("“Other” already saves this search.", (refusal as IllegalArgumentException).message)
         assertEquals(before, repository.observeSavedSearches().first())
+    }
+
+    @Test
+    fun `searches replay alike whatever their stored hash, and Unified ones whatever sources Recents recorded (ADR 0218)`() {
+        val unified = execution().copy(kind = RecentSearchKind.UNIFIED, sources = emptyList())
+        assertTrue(unified.replaysAs(unified.copy(queryHash = "older", sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU))))
+        assertTrue(execution().replaysAs(execution().copy(queryHash = "older")))
+        assertFalse(execution().replaysAs(execution().copy(sources = execution().sources.reversed())))
+        assertFalse(execution().replaysAs(unified))
     }
 
     private fun execution() = RecentSearchEntry(

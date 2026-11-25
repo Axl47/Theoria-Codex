@@ -22,9 +22,10 @@ class SavedSearchNewPostsChecker(
         recent.mapConcurrent(concurrency = 2) { entry ->
             if (!claim(entry.id, saved, nowEpochMs)) return@mapConcurrent
             val ids = firstPage(entry.newestFirst())?.map { it.id.markKey() } ?: return@mapConcurrent
-            if (savedSearches().none { it.id == entry.id && it.search == entry.search }) return@mapConcurrent
+            val unchanged = savedSearches().any { it.id == entry.id && it.search == entry.search }
             store.updateSavedSearchNewPosts { state ->
                 if (state.attempts[entry.id] != nowEpochMs) return@updateSavedSearchNewPosts state
+                if (!unchanged) return@updateSavedSearchNewPosts state.copy(attempts = state.attempts - entry.id)
                 val kept = state.marks.filterKeys { it in saved }
                 state.copy(marks = kept + (entry.id to (kept[entry.id] ?: NewPostMarks()).checked(ids, nowEpochMs)))
             }

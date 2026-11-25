@@ -107,7 +107,7 @@ class SearchComposerUiTest {
         var updated: Pair<SavedSearchEntry, RecentSearchEntry>? = null
         var saves = 0
         open(SourceKey.GELBOORU, emptyList(), savedSearches = { state ->
-            composerSavedSearches(state, listOf(evening), evening, { _, _ -> saves++ }, { saved, search -> updated = saved to search }, {}, {})
+            composerSavedSearches(state, listOf(evening), evening, true, { _, _ -> saves++ }, { saved, search -> updated = saved to search }, {}, {})
         })
         compose.onNodeWithText("Save").assertDoesNotExist()
         compose.onNodeWithText("Update “Evening”").performClick()
@@ -119,7 +119,7 @@ class SearchComposerUiTest {
         }
     }
 
-    @Test fun `Update waits for a change that has run and names the saved search it would duplicate (ADR 0218)`() {
+    @Test fun `Update waits for the saved search to load and a change to run, and names the saved search it would duplicate (ADR 0218)`() {
         val state = SearchUiState().let { base ->
             val draft = emptySearchQuery(QueryMode.Source(SourceKey.GELBOORU)).copy(includeTermGroups = groups)
             val scope = SearchSourceScope.fromQuery(draft)
@@ -127,14 +127,20 @@ class SearchComposerUiTest {
                 draftSourceScope = scope, appliedSourceScope = scope))
         }
         var onScreen: RecentSearchEntry? = null
-        composerSavedSearches(state, emptyList(), null, { _, search -> onScreen = search }, { _, _ -> }, {}, {}).onSaveCurrent?.invoke("x")
+        composerSavedSearches(state, emptyList(), null, false, { _, search -> onScreen = search }, { _, _ -> }, {}, {}).onSaveCurrent?.invoke("x")
         val shown = checkNotNull(onScreen)
         val evening = SavedSearchEntry("evening", "Evening", RecentSearchEntry(emptySearchQuery(), "old", 1L), 1L)
         val morning = SavedSearchEntry("morning", "Morning", shown, 1L)
-        fun update(state: SearchUiState, editing: SavedSearchEntry, entries: List<SavedSearchEntry>) =
-            checkNotNull(composerSavedSearches(state, entries, editing, { _, _ -> }, { _, _ -> }, {}, {}).update)
+        fun update(state: SearchUiState, editing: SavedSearchEntry, entries: List<SavedSearchEntry>, loaded: Boolean = true) =
+            checkNotNull(composerSavedSearches(state, entries, editing, loaded, { _, _ -> }, { _, _ -> }, {}, {}).update)
 
         assertEquals(true, update(state, evening, listOf(evening)).onUpdate != null)
+        assertEquals(null, update(state, evening, listOf(evening), loaded = false).onUpdate)
+        val untagged = state.copy(query = state.query.copy(
+            draft = state.query.draft.withIncludeTermsAsRequired(emptyList()),
+            applied = state.query.applied.withIncludeTermsAsRequired(emptyList()),
+        ))
+        assertEquals(true, update(untagged, evening, listOf(evening)).onUpdate != null)
         assertEquals(null, update(state, evening.copy(search = shown), listOf(evening)).onUpdate)
         val pending = state.copy(query = state.query.copy(draft = state.query.draft.withIncludeTermsAsRequired(emptyList())))
         assertEquals(null, update(pending, evening, listOf(evening)).onUpdate)
@@ -153,7 +159,7 @@ class SearchComposerUiTest {
 
     @Test fun `without a saved search being edited the composer offers Save, not Update (ADR 0218)`() {
         open(SourceKey.GELBOORU, emptyList(), savedSearches = { state ->
-            composerSavedSearches(state, emptyList(), null, { _, _ -> }, { _, _ -> }, {}, {})
+            composerSavedSearches(state, emptyList(), null, false, { _, _ -> }, { _, _ -> }, {}, {})
         })
         compose.onNodeWithText("Save").assertExists()
         compose.onNodeWithText("Update", substring = true).assertDoesNotExist()
