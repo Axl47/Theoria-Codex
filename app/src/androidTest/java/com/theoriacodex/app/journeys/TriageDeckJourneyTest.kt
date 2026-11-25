@@ -35,7 +35,7 @@ class TriageDeckJourneyTest : AppJourneyFixture() {
         val card = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV).first().id))
         waitFor("Triage launch card is displayed") { card.isDisplayed() }
         activate(compose.onNodeWithContentDescription("Filter and sort"))
-        activate(compose.onNodeWithText("Triage"))
+        activate(compose.onNodeWithText("Swipe"))
     }
 
     @Test
@@ -69,7 +69,7 @@ class TriageDeckJourneyTest : AppJourneyFixture() {
         launch()
         library(LibrarySection.Codices)
         activate(compose.onNodeWithText("Removal deck"))
-        activate(compose.onNodeWithText("Triage"))
+        activate(compose.onNodeWithText("Swipe"))
         val deck = compose.onNodeWithTag("triage-deck")
         waitFor("triage deck is displayed") { deck.isDisplayed() }
 

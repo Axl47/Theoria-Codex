@@ -130,7 +130,7 @@ private class ReleasedOn(val save: SaveTarget?, val hide: String?) {
 private fun TriageDeckCallbacks.saveElsewhere(post: Post, target: SaveTarget?) =
     if (target == SaveTarget.New) onNewCodex(post) else onOpenSavePicker(post)
 
-private class TriageTargets(val save: List<CollectTarget<SaveTarget>>, val hide: List<CollectTarget<String>>)
+internal class TriageTargets(val save: List<CollectTarget<SaveTarget>>, val hide: List<CollectTarget<String>>)
 
 @Composable
 private fun rememberTriageTargets(
@@ -236,7 +236,7 @@ private fun triageActions(
 )
 
 @Composable
-private fun TriageDragOverlays(
+internal fun TriageDragOverlays(
     drag: TriageDrag,
     targets: TriageTargets,
     saveState: CollectTargetsState<SaveTarget>,
@@ -250,18 +250,17 @@ private fun TriageDragOverlays(
         val vertical = abs(offset.y) > abs(offset.x)
         val progress = (max(abs(offset.x), abs(offset.y)) / thresholds.commitPx).coerceIn(0f, 1f)
         when {
-            !vertical -> TriageEdgeCue(
-                when {
-                    offset.x > 0f && removes -> Icons.Filled.Check
-                    offset.x > 0f -> Icons.Filled.Favorite
-                    removes -> Icons.Outlined.RemoveCircleOutline
-                    else -> Icons.Filled.Close
-                },
-                if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart,
-                progress,
-            )
+            !vertical -> {
+                val (icon, label) = when {
+                    offset.x > 0f && removes -> Icons.Filled.Check to "Keep"
+                    offset.x > 0f -> Icons.Filled.Favorite to "Like"
+                    removes -> Icons.Outlined.RemoveCircleOutline to "Remove"
+                    else -> Icons.Filled.Close to "Skip"
+                }
+                TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, progress)
+            }
             offset.y < -thresholds.cuePx && targets.save.isEmpty() ->
-                TriageEdgeCue(Icons.Outlined.CollectionsBookmark, Alignment.TopCenter, progress)
+                TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Choose Codex", Alignment.TopCenter, progress)
             offset.y < -thresholds.cuePx ->
                 CollectTargets(targets.save, pointer, CollectTargetsLayout.EdgeRow(atTop = true), state = saveState)
             offset.y > thresholds.cuePx ->
