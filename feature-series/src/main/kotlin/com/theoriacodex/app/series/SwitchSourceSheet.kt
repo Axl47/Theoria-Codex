@@ -111,21 +111,31 @@ private fun SourceChecklist(others: List<SeriesSource>, skipped: Set<SourceKey>,
     if (collapsed) return
     groups.forEach { group ->
         val open = group.name in expanded
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SourceCheckRow(group.name, group.state(skipped), enabled, Modifier.weight(1f)) { onToggle(group.keys) }
-            if (group.choices.size > 1) {
-                IconButton(onClick = { expanded = if (open) expanded - group.name else expanded + group.name }) {
-                    Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (open) "Hide languages" else "Show languages")
-                }
-            }
-        }
-        if (open && group.choices.size > 1) {
-            group.choices.forEach { choice ->
-                val state = if (choice.key in skipped) ToggleableState.Off else ToggleableState.On
-                SourceCheckRow(choice.language, state, enabled, Modifier.padding(start = 32.dp)) { onToggle(listOf(choice.key)) }
-            }
-        }
+        SourceGroupRows(group, skipped, enabled, open, onOpen = { expanded = if (open) expanded - group.name else expanded + group.name }, onToggle = onToggle)
     }
+}
+
+@Composable
+private fun SourceGroupRows(group: SourceGroup, skipped: Set<SourceKey>, enabled: Boolean, open: Boolean, onOpen: () -> Unit, onToggle: (List<SourceKey>) -> Unit) {
+    val languages = group.choices.size > 1
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SourceCheckRow(group.name, group.state(skipped), enabled, Modifier.weight(1f)) { onToggle(group.keys) }
+        if (languages) LanguagesToggle(open, onOpen)
+    }
+    if (open && languages) group.choices.forEach { choice -> LanguageRow(choice, skipped, enabled, onToggle) }
+}
+
+@Composable
+private fun LanguagesToggle(open: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (open) "Hide languages" else "Show languages")
+    }
+}
+
+@Composable
+private fun LanguageRow(choice: SourceChoice, skipped: Set<SourceKey>, enabled: Boolean, onToggle: (List<SourceKey>) -> Unit) {
+    val state = if (choice.key in skipped) ToggleableState.Off else ToggleableState.On
+    SourceCheckRow(choice.language, state, enabled, Modifier.padding(start = 32.dp)) { onToggle(listOf(choice.key)) }
 }
 
 @Composable
