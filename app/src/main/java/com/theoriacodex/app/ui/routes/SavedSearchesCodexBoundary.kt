@@ -6,18 +6,15 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.codex.rememberCodexPostDurations
+import com.theoriacodex.app.codex.rememberSortedCodexPosts
 import com.theoriacodex.app.codex.rememberCodexPostUsage
 import com.theoriacodex.app.codex.rememberNewPostsReload
 import com.theoriacodex.app.media.MediaDurationStates
-import com.theoriacodex.app.codex.LiveCodexSortFrames
-import com.theoriacodex.app.codex.sortLiveCodexPosts
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.SavedSearchesCodexViewModel
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.FeatureDependencies
 import com.theoriacodex.app.di.SourceDependencies
-import com.theoriacodex.app.ui.components.FeedTraceSections
-import com.theoriacodex.app.ui.components.rememberComputedOffMain
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Codex
@@ -52,12 +49,7 @@ internal fun SavedSearchesCodexBoundary(
     LaunchedEffect(selected, settings.runtime, available, sort, usage, durations) {
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
-    val posts = rememberComputedOffMain(
-        feed.posts, sort, usage, durations, section = FeedTraceSections.SORT,
-        retainKey = LiveCodexSortFrames.at("codex-sort:$SAVED_SEARCHES_CODEX_ID"),
-    ) {
-        sortLiveCodexPosts(feed.posts, sort, usage, durations)
-    }
+    val posts = rememberSortedCodexPosts(SAVED_SEARCHES_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
     content(CodexDetailDestinationState(
         codex = Codex(SAVED_SEARCHES_CODEX_ID, "Searches", 0), items = emptyList(), posts = posts,
         activeProfile = settings.activeRecommendationProfile(), availableSources = available,

@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.sources.common.networkFailure
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
@@ -69,11 +70,7 @@ internal class HitomiQueryCompiler(
         } catch (error: SourceHttpBodyTooLargeException) {
             throw hitomiParseFailure("Hitomi global search version exceeded its bounded response", error)
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "Hitomi global search version request failed",
-                cause = error,
-            )
+            networkFailure("Hitomi global search version request failed", error)
         }
     }
 
@@ -94,11 +91,7 @@ internal class HitomiQueryCompiler(
             } catch (error: SourceHttpBodyTooLargeException) {
                 throw hitomiParseFailure("Hitomi global search exceeded its bounded response", error)
             } catch (error: IOException) {
-                throw SourceAdapterException(
-                    reason = SourceFailureReason.NETWORK,
-                    message = "Hitomi global search request failed",
-                    cause = error,
-                )
+                networkFailure("Hitomi global search request failed", error)
             }
         }
         return CompiledIndex(

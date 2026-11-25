@@ -31,5 +31,5 @@ Moving to a new phone means re-enabling extensions and re-trusting their signers
 ## Guarded by
 
 - `app/src/test/java/com/theoriacodex/app/di/DeviceExtensionChoicesTest.kt`: `nothing is on until it is turned on here and choices are kept in the device file (ADR 0189)`
-- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/FilePreferencesTest.kt`: `preferencesLiveWhereAndroidDoesNotBackUpAndOldFilesAreDeletedNotImported_adr_0189`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/FilePreferencesTest.kt`: `preferencesLiveWhereAndroidDoesNotBackUpAndOldFilesAreDeletedNotImported_adr_0061_adr_0189`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionRegistryTest.kt`: `an extension that is off is listed without running its code (ADR 0007, 0189)`

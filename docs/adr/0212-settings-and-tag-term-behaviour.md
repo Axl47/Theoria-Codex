@@ -17,8 +17,9 @@ Settings:
   task opens its own page.
 - Settings can be opened at any page (`closesFrom`). Back on that page closes Settings; Back on any other page returns
   to the Settings home. When Settings was opened at Compare, closing the comparison closes Settings too.
-- The Series rows (how often followed series are checked, and Delete after reading) and the Extensions row appear only
-  in a build with extensions, where the app has a series container.
+- Settings that only apply to Series (Extensions, how often followed series are checked, and Delete after reading) sit
+  in their own Series group right after Sources, so Sources holds only what applies to every source. The Series group
+  appears only in a build with extensions, where the app has a series container.
 - The Series updates sheet holds a single choice, so choosing an interval closes it. Its Notification settings button
   leaves the sheet open.
 - While a series check is scheduled but the app may not post notifications, the Series updates row reads
@@ -50,8 +51,16 @@ normalization means changing it for both the chips and the supplied counts.
 ## Applies to
 
 - `feature-settings/src/main/kotlin/com/theoriacodex/app/settings/SettingsScreen.kt`: `SettingsScreen`,
-  `SettingsSourcesGroup`, `SeriesUpdatesRow`, `notificationSettingsOpener`, `StatsFilePicker`, `FallbackCacheControls`
+  `SettingsSourcesGroup`, `StatsFilePicker`, `FallbackCacheControls`
+- `feature-settings/src/main/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroup.kt`: `SeriesSettingsGroup`,
+  `SeriesUpdatesRow`, `notificationSettingsOpener`
 - `feature-settings/src/main/kotlin/com/theoriacodex/app/settings/DownloadPreferencesSection.kt`: `SeriesUpdatesSection`
 - `app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt`: `showSeries`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/tags/PostTagActionTerms.kt`: `postTagFacetOrder`, `tagTranslations`,
   `postTagChipLabel`, `postActionSuppliedCounts`
+
+## Guarded by
+
+- `feature-settings/src/test/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroupTest.kt`: `series settings sit in their own group after sources (ADR 0212)`
+- `feature-settings/src/test/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroupTest.kt`: `without series the group and its rows are absent (ADR 0212)`
+- Left to prose: the notification-permission row text, sheet closing, Compare picker and tag-chip rules have no test yet.

@@ -6,6 +6,7 @@ import com.theoriacodex.app.search.TestRegistry
 import com.theoriacodex.app.search.testSearchCoordinator
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
@@ -28,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -44,7 +46,7 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SavedSearchesCodexViewModelTest {
-    @Test fun `saved searches on different sources merge by canonical identity without Search writes`() = runTest {
+    @Test fun `saved searches on different sources run newest first and merge by canonical identity without Search writes`() = runTest {
         val calls = mutableListOf<Query>()
         val adapters = listOf(SourceKey.PIXIV, SourceKey.AIBOORU).map { source -> adapter(source) { query, _ ->
             calls += query
@@ -73,7 +75,7 @@ class SavedSearchesCodexViewModelTest {
             assertTrue(recents.observeSearches().first().isEmpty())
             assertEquals(beforeStats, statistics.observeStatistics().first())
             assertTrue(calls.filter { it.includeTags.any { tag -> tag == "red" || tag == "blue" } }
-                .all { it.excludeTags == listOf("rain") && it.sort == SortMode.POPULAR })
+                .all { it.excludeTags == listOf("rain") && it.sort == SortMode.NEWEST })
         }
     }
 
@@ -212,11 +214,12 @@ class SavedSearchesCodexViewModelTest {
         }
     }
 
-    @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page, keeping old pages if that fails`() = runTest {
+    @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page, keeping old pages and showing the error if that fails (ADR 0152)`() = runTest {
         var uploads = listOf("old1", "old2", "old3", "old4")
         var offline = false
+        var dogRequests = 0
         val source = adapter(SourceKey.PIXIV) { query, token ->
-            if (query.includeTags.single() == "dogs") return@adapter Page(listOf(testPost(SourceKey.PIXIV, "dog")), null)
+            if (query.includeTags.single() == "dogs") return@adapter Page(listOf(testPost(SourceKey.PIXIV, "dog")), null).also { dogRequests++ }
             check(!offline) { "offline" }
             val page = token?.toInt() ?: 0
             Page(uploads.drop(page * 2).take(2).map { testPost(SourceKey.PIXIV, it) }, "${page + 1}".takeIf { (page + 1) * 2 < uploads.size })
@@ -240,17 +243,137 @@ class SavedSearchesCodexViewModelTest {
             assertEquals(listOf("old1", "old2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
             advanceUntilIdle()
             assertEquals(listOf("old1", "old2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
-            assertTrue(owner.state.value.errors.isEmpty())
+            assertEquals(setOf("cats"), owner.state.value.errors.keys)
             assertTrue(owner.state.value.predates(found))
 
             offline = false
-            owner.refresh()
+            val dogsBeforeRetry = dogRequests
+            owner.retry()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(dogsBeforeRetry, dogRequests)
+            assertEquals(listOf("dog", "new1", "new2"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertTrue(owner.state.value.errors.isEmpty())
 
             owner.loadMore()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2", "new3", "old1", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(listOf("dog", "new1", "new2", "new3", "old1"), owner.state.value.posts.map { it.id.sourcePostId })
+        }
+    }
+
+    @Test fun `load more on one newest-first saved search appends below the posts already shown, also when an explicit sort ties (ADR 0152)`() = runTest {
+        val edited = mapOf("p1" to 50L, "p2" to 90L, "p3" to 40L, "p4" to 95L, "p5" to 30L, "p6" to 99L)
+        val pages = listOf(listOf("p1", "p2", "p3"), listOf("p4", "p5", "p6"))
+        val source = adapter(SourceKey.GELBOORU) { _, token ->
+            val page = token?.toInt() ?: 0
+            Page(pages[page].map { testPost(SourceKey.GELBOORU, it, createdAtEpochMs = edited.getValue(it)) }, "1".takeIf { page == 0 })
+        }
+        withOwner(listOf(source)) { owner ->
+            val saved = SavedSearchEntry("gel", "gel",
+                RecentSearchEntry(query("tag", QueryMode.Source(SourceKey.GELBOORU)), "gel", 1), 1)
+            owner.synchronize(listOf(saved), AppSettings(), setOf(SourceKey.GELBOORU))
+            advanceUntilIdle()
+            val sorts = listOf(CodexSortMode.NEWEST_SAVED, CodexSortMode.BY_SOURCE)
+            val shown = { sort: CodexSortMode ->
+                sortCodexPosts(owner.state.value.posts, sort, emptyMap()).map { it.id.sourcePostId }
+            }
+            val firstScreens = sorts.map(shown)
+
+            owner.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(firstScreens, sorts.map { sort -> shown(sort).take(3) })
+        }
+    }
+
+    @Test fun `every feed published during a load more keeps the posts already shown as its prefix (ADR 0152)`() = runTest {
+        val source = adapter(SourceKey.PIXIV) { query, token ->
+            val tag = query.includeTags.single()
+            if (tag == "slow" && token != null) delay(1_000)
+            val dated = if (token == null) 10L else if (tag == "slow") 90L else 20L
+            Page(listOf(testPost(SourceKey.PIXIV, "$tag-${token ?: "first"}", createdAtEpochMs = dated)), "next".takeIf { token == null })
+        }
+        withOwner(listOf(source)) { owner ->
+            owner.synchronize(listOf(entry("fast", "fast"), entry("slow", "slow")), AppSettings(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val published = mutableListOf<List<String>>()
+            backgroundScope.launch { owner.state.collect { state -> published += state.posts.map { it.id.sourcePostId } } }
+            runCurrent()
+
+            owner.loadMore()
+            advanceUntilIdle()
+            runCurrent()
+
+            assertEquals(4, published.last().size)
+            assertTrue(published.toString(), published.zipWithNext().all { (before, after) -> after.take(before.size) == before })
+        }
+    }
+
+    @Test fun `a later page repeating a post another search already showed leaves the shown order alone (ADR 0152)`() = runTest {
+        val source = adapter(SourceKey.PIXIV) { query, token ->
+            when (query.includeTags.single()) {
+                "a" -> if (token == null) Page(listOf(testPost(SourceKey.PIXIV, "A")), "2") else Page(listOf(testPost(SourceKey.PIXIV, "C")), null)
+                else -> Page(listOf(testPost(SourceKey.PIXIV, "B"), testPost(SourceKey.PIXIV, "C")), null)
+            }
+        }
+        withOwner(listOf(source)) { owner ->
+            owner.synchronize(listOf(entry("a", "a"), entry("b", "b")), AppSettings(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val shown = { owner.state.value.posts.map { it.id.sourcePostId } }
+            val firstScreen = shown()
+
+            owner.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(listOf("A", "B", "C"), firstScreen)
+            assertEquals(firstScreen, shown())
+        }
+    }
+
+    @Test fun `load more after a failed refresh still appends below the restored posts (ADR 0152)`() = runTest {
+        var offline = false
+        val source = adapter(SourceKey.GELBOORU) { _, token ->
+            check(!offline) { "offline" }
+            val page = token?.toInt() ?: 0
+            Page(listOf(testPost(SourceKey.GELBOORU, "p$page", createdAtEpochMs = page * 10L)), "${page + 1}".takeIf { page < 3 })
+        }
+        withOwner(listOf(source)) { owner ->
+            val saved = SavedSearchEntry("gel", "gel",
+                RecentSearchEntry(query("tag", QueryMode.Source(SourceKey.GELBOORU)), "gel", 1), 1)
+            owner.synchronize(listOf(saved), AppSettings(), setOf(SourceKey.GELBOORU))
+            advanceUntilIdle()
+            repeat(2) { owner.loadMore(); advanceUntilIdle() }
+            val shown = { owner.state.value.posts.map { it.id.sourcePostId } }
+            offline = true
+            owner.refresh()
+            advanceUntilIdle()
+            offline = false
+
+            owner.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(listOf("p0", "p1", "p2", "p3"), shown())
+        }
+    }
+
+    @Test fun `a Top saved search's collection refreshes to the newest uploads, not its top-scored page (ADR 0152)`() = runTest {
+        var uploads = listOf("old1" to 20L, "old2" to 10L)
+        val topScored = listOf("best1" to 2L, "best2" to 1L)
+        val source = adapter(SourceKey.GELBOORU) { query, _ ->
+            val ids = if (query.sort == SortMode.NEWEST) uploads else topScored
+            Page(ids.map { (id, uploaded) -> testPost(SourceKey.GELBOORU, id, createdAtEpochMs = uploaded) }, null)
+        }
+        withOwner(listOf(source)) { owner ->
+            val top = query("tag", QueryMode.Source(SourceKey.GELBOORU)).copy(sort = SortMode.TOP)
+            val saved = SavedSearchEntry("gel", "gel", RecentSearchEntry(top, "gel", 1), 1)
+            owner.synchronize(listOf(saved), AppSettings(), setOf(SourceKey.GELBOORU))
+            advanceUntilIdle()
+            uploads = listOf("new1" to 30L) + uploads
+
+            owner.refresh()
+            advanceUntilIdle()
+
+            val shown = owner.state.value.posts
+            assertEquals(listOf("new1", "old1", "old2"), shown.map { it.id.sourcePostId })
         }
     }
 
