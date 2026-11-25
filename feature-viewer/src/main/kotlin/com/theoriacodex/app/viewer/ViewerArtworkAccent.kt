@@ -147,19 +147,18 @@ internal class ViewerAccentState(private val pager: State<PagerState>, private v
     }
 
     fun settle(id: PostId, index: Int) {
-        if (id == settledId) return
         val pager = pager.value
-        val known = samples[id]
-        val reached = settledPager === pager && id !in reveals && abs(pager.currentPage + pager.currentPageOffsetFraction - index) < 1f
-        if (known != null && reached) {
-            settledFrom = known
-            settledTo = known
-        } else {
-            val shown = blend()
-            retarget(shown, known ?: shown)
-        }
-        settledId = id
+        val samePager = settledPager === pager
         settledPager = pager
+        if (id == settledId) return
+        val settled = settledColor()
+        val shown = when {
+            !samePager -> settled
+            abs(pager.currentPage + pager.currentPageOffsetFraction - index) < 1f -> colorAt(index, settled)
+            else -> blend()
+        }
+        retarget(shown, samples[id] ?: shown)
+        settledId = id
     }
 
     private fun retarget(from: Color, to: Color) {
@@ -168,17 +167,18 @@ internal class ViewerAccentState(private val pager: State<PagerState>, private v
         progress = 0f
     }
 
-    suspend fun load(post: Post, index: Int, sampler: ViewerAccentSampler) {
+    suspend fun load(post: Post, sampler: ViewerAccentSampler) {
         if (samples[post.id] == null) {
             val color = sampler.sample(post, cachedOnly = false) ?: Color.White
             samples[post.id] = color
             if (settledId == post.id) retarget(settledColor(), color)
         }
-        coroutineScope {
-            launch { animate(progress, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ -> progress = value } }
-            listOf(index - 1, index + 1).mapNotNull(posts.value::getOrNull).filter { samples[it.id] == null }.forEach { neighbour ->
-                launch { sampler.sample(neighbour, cachedOnly = true)?.let { reveal(neighbour.id, it) } }
-            }
+        animate(progress, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ -> progress = value }
+    }
+
+    suspend fun sampleNeighbours(neighbours: List<Post>, sampler: ViewerAccentSampler) = coroutineScope {
+        neighbours.filter { samples[it.id] == null }.forEach { neighbour ->
+            launch { sampler.sample(neighbour, cachedOnly = true)?.let { reveal(neighbour.id, it) } }
         }
     }
 
@@ -214,7 +214,12 @@ internal fun rememberViewerAccent(
     val accent = remember { ViewerAccentState(pagerState, postsState) }
     SideEffect { if (enabled) accent.settle(post.id, index) }
     LaunchedEffect(post.id, enabled) {
-        if (enabled) accent.load(post, index, sampler)
+        if (enabled) accent.load(post, sampler)
+    }
+    val before = posts.getOrNull(index - 1)
+    val after = posts.getOrNull(index + 1)
+    LaunchedEffect(before?.id, after?.id, enabled) {
+        if (enabled) accent.sampleNeighbours(listOfNotNull(before, after), sampler)
     }
     return accent
 }

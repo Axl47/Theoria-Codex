@@ -10,6 +10,7 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
@@ -22,6 +23,7 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,6 +42,7 @@ class ViewerAccentBlendTest {
     private lateinit var accent: ViewerAccentState
     private var probeCompositions = 0
     private lateinit var pager: PagerState
+    private val selected = mutableIntStateOf(0)
 
     @Test fun `halfway through a swipe between known tints the accent is their blend (ADR 0166)`() {
         show { post, _ -> if (post == first) red else blue }
@@ -69,6 +72,23 @@ class ViewerAccentBlendTest {
         assertEquals(lerp(red, blue, 0.5f), accent())
     }
 
+    @Test fun `a swipe caught while the next tint fades in commits without pulling the accent back (ADR 0166)`() {
+        val arriving = CompletableDeferred<Color>()
+        show { post, cachedOnly -> if (post == first) red else if (cachedOnly) arriving.await() else blue }
+        swipeBy(0.5f)
+        compose.mainClock.autoAdvance = false
+        arriving.complete(blue)
+        compose.mainClock.advanceTimeBy(TheoriaMotion.SHORT_MS / 2L)
+        compose.waitForIdle()
+        val caught = accent()
+
+        compose.runOnIdle { selected.intValue = 1 }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+
+        assertTrue("the accent fell back toward the post being left", accent().blue >= caught.blue)
+    }
+
     @Test fun `swiping changes the accent without recomposing its readers (ADR 0166)`() {
         show { post, _ -> if (post == first) red else blue }
         val settled = probeCompositions
@@ -83,7 +103,7 @@ class ViewerAccentBlendTest {
         val posts = listOf(first, second)
         compose.setContent {
             pager = rememberPagerState { posts.size }
-            accent = rememberViewerAccent(first, 0, posts, pager, enabled = true, sampler = ViewerAccentSampler { post, cachedOnly -> tint(post, cachedOnly) })
+            accent = rememberViewerAccent(posts[selected.intValue], selected.intValue, posts, pager, enabled = true, sampler = ViewerAccentSampler { post, cachedOnly -> tint(post, cachedOnly) })
             Column {
                 HorizontalPager(pager, Modifier.size(200.dp)) { Box(Modifier.fillMaxSize()) }
                 CompositionLocalProvider(LocalViewerAccent provides accent) { AccentProbe() }

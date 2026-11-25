@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
+import kotlin.math.ceil
+import kotlin.math.min
 
 private val ViewerWhite = ColorProducer { Color.White }
 
@@ -40,7 +42,7 @@ fun ViewerAccentIcon(icon: ImageVector, contentDescription: String?, accented: B
 }
 
 fun Modifier.viewerAccentBorder(width: Dp, accent: ColorProducer, shape: Shape): Modifier = drawWithCache {
-    val stroke = Stroke(width.toPx())
+    val stroke = Stroke(min(ceil(width.toPx()), ceil(size.minDimension / 2f)))
     val half = stroke.width / 2f
     val corner = (shape.createOutline(size, layoutDirection, this) as? Outline.Rounded)?.roundRect?.topLeftCornerRadius ?: CornerRadius.Zero
     val inner = CornerRadius((corner.x - half).coerceAtLeast(0f), (corner.y - half).coerceAtLeast(0f))
