@@ -4,8 +4,6 @@ import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -210,7 +208,6 @@ private fun ScrollToTopOnSortChange(sort: SortChoice<LibrarySort>?, grid: LazyGr
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FollowingControls(
     content: SeriesTabContent,
@@ -221,14 +218,20 @@ private fun FollowingControls(
 ) {
     val filtered = content.library.show != LibraryShow.ALL
     val sort = content.library.sort
-    FlowRow(modifier.fillMaxWidth(), itemVerticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (content.offersFilter) KindFilter(content.filter, onChooseKind)
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            SortLabel(sort.key.label(content.words), sort.direction, onReverse)
-            IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
-                BadgedBox(badge = { if (filtered) Badge() }) {
-                    Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
-                }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            SortLabel(
+                sort.key.shortLabel(content.words),
+                sort.direction,
+                onReverse,
+                description = sort.key.label(content.words),
+                contentPadding = PaddingValues(start = 8.dp),
+            )
+        }
+        IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
+            BadgedBox(badge = { if (filtered) Badge() }) {
+                Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
             }
         }
     }

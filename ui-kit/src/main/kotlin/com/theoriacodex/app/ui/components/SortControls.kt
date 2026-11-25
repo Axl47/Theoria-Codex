@@ -3,6 +3,7 @@ package com.theoriacodex.app.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -25,11 +27,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.SortChoice
 import com.theoriacodex.domain.model.SortDirection
@@ -50,15 +56,29 @@ fun SortDirectionMark(direction: SortDirection?, modifier: Modifier = Modifier, 
 }
 
 @Composable
-fun SortLabel(label: String, direction: SortDirection?, onClick: () -> Unit, modifier: Modifier = Modifier, actionLabel: String = REVERSE_ORDER) {
+fun SortLabel(
+    label: String,
+    direction: SortDirection?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    actionLabel: String = REVERSE_ORDER,
+    description: String = label,
+    contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
+) {
     TextButton(
         onClick = onClick,
+        contentPadding = contentPadding,
         modifier = modifier.semantics {
             direction?.let { stateDescription = it.label }
             onClick(label = actionLabel) { onClick(); true }
         },
     ) {
-        Text(label, maxLines = 1)
+        Text(
+            label,
+            Modifier.weight(1f, fill = false).clearAndSetSemantics { text = AnnotatedString(description) },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         direction?.let { SortDirectionMark(it, Modifier.padding(start = 4.dp), tint = MaterialTheme.colorScheme.primary) }
     }
 }
