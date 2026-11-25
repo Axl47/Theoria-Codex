@@ -115,7 +115,7 @@ class SeriesTabScreenTest {
     @Test
     fun scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218() {
         val followed = (1..40).map { FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/$it"), "Series $it"), unreadCount = 0) }
-        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }) { _, _ -> NOTHING_CHECKED }
         compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
         val following = compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING))

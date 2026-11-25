@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -24,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,7 +39,6 @@ import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
-import java.text.DateFormat
 
 @Composable
 internal fun FollowingBody(
@@ -61,7 +60,6 @@ internal fun FollowingBody(
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
-    val following = content.following
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
@@ -81,34 +79,39 @@ internal fun FollowingBody(
                         CheckFailedCard(failed.message, onOpen = { failuresOpen = true }, onRetry = onRefresh, onDismiss = onDismissFailures)
                     }
                 }
-                when {
-                    following == null -> Unit
-                    following.isEmpty() && content.followingQuery.isNotBlank() ->
-                        fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
-                    !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
-                    following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
-                    else -> items(following, key = { it.series.id.toString() }) { item ->
-                        SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
-                    }
-                }
+                followingCards(content, onShowAll, onSearchAll, onBrowse, onOpenSeries)
             }
         }
     }
     LaunchedEffect(failed == null) { if (failed == null) failuresOpen = false }
     if (failuresOpen && failed != null) {
-        val dates = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
-        CheckFailuresSheet(
-            sources = failed.bySource { key -> content.sources?.firstOrNull { it.key == key }?.name },
-            titles = TitleActions({ false }, {}, onUnfollow, onOpen = { onOpenSeries(content.followed[it.id]?.series ?: it) }) { series -> content.followed[series.id]?.let { readingSummary(it, dates) } },
-            onRetry = { ids ->
-                failuresOpen = false
-                onRetryFailed(ids)
-            },
-            onDismiss = { failuresOpen = false },
-        )
+        FollowedFailuresSheet(failed, content, onUnfollow, onOpenSeries, onRetry = { ids ->
+            failuresOpen = false
+            onRetryFailed(ids)
+        }) { failuresOpen = false }
     }
     if (optionsOpen) {
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
+    }
+}
+
+private fun LazyGridScope.followingCards(
+    content: SeriesTabContent,
+    onShowAll: () -> Unit,
+    onSearchAll: () -> Unit,
+    onBrowse: () -> Unit,
+    onOpenSeries: (Series) -> Unit,
+) {
+    val following = content.following
+    when {
+        following == null -> Unit
+        following.isEmpty() && content.followingQuery.isNotBlank() ->
+            fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
+        !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
+        following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
+        else -> items(following, key = { it.series.id.toString() }) { item ->
+            SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
+        }
     }
 }
 

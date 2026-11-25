@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +38,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import java.text.DateFormat
 
 internal enum class CheckProblem(val label: String) {
     UNREACHABLE("Couldn't reach site"),
@@ -88,24 +90,47 @@ internal fun CheckFailedCard(message: String, onOpen: () -> Unit, onRetry: () ->
 }
 
 @Composable
+internal fun FollowedFailuresSheet(
+    failed: FollowedCheck,
+    content: SeriesTabContent,
+    onUnfollow: (SeriesId) -> Unit,
+    onOpenSeries: (Series) -> Unit,
+    onRetry: (Set<SeriesId>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val dates = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
+    CheckFailuresSheet(
+        sources = failed.bySource { key -> content.sources?.firstOrNull { it.key == key }?.name },
+        titles = TitleActions({ false }, {}, onUnfollow, onOpen = { onOpenSeries(content.followed[it.id]?.series ?: it) }) { series ->
+            content.followed[series.id]?.let { readingSummary(it, dates) }
+        },
+        onRetry = onRetry,
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
 internal fun CheckFailuresSheet(sources: List<SourceFailures>, titles: TitleActions, onRetry: (Set<SeriesId>) -> Unit, onDismiss: () -> Unit) {
     var toggled by rememberSaveable { mutableStateOf(emptySet<String>()) }
     ExpandedBottomSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             SheetHeader(COULDNT_CHECK, closeDescription = "Close", onDismiss = onDismiss)
             sources.forEach { source ->
-                SettingsGroup(source.name) {
-                    source.groups.forEachIndexed { index, group ->
-                        if (index > 0) SettingsRowDivider()
-                        val key = "${source.source.id}/${group.problem.name}"
-                        val open = (group.series.size <= COLLAPSE_OVER) != (key in toggled)
-                        ProblemRow(group, open, onToggle = { toggled = if (key in toggled) toggled - key else toggled + key }) {
-                            onRetry(group.series.mapTo(HashSet()) { it.id })
-                        }
-                        if (open) group.series.forEach { FollowedTitleRow(it, nested = true, titles) }
-                    }
-                }
+                SourceFailuresGroup(source, toggled, onToggle = { key -> toggled = if (key in toggled) toggled - key else toggled + key }, titles, onRetry)
             }
+        }
+    }
+}
+
+@Composable
+private fun SourceFailuresGroup(source: SourceFailures, toggled: Set<String>, onToggle: (String) -> Unit, titles: TitleActions, onRetry: (Set<SeriesId>) -> Unit) {
+    SettingsGroup(source.name) {
+        source.groups.forEachIndexed { index, group ->
+            if (index > 0) SettingsRowDivider()
+            val key = "${source.source.id}/${group.problem.name}"
+            val open = (group.series.size <= COLLAPSE_OVER) != (key in toggled)
+            ProblemRow(group, open, onToggle = { onToggle(key) }) { onRetry(group.series.mapTo(HashSet()) { it.id }) }
+            if (open) group.series.forEach { FollowedTitleRow(it, nested = true, titles) }
         }
     }
 }
