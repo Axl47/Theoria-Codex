@@ -70,11 +70,11 @@ internal class StoredOnly(stored: StoredSeries, private var entries: List<Stored
     override suspend fun setAllRead(id: SeriesId, read: Boolean) = EntryProgressRestore()
     override suspend fun setEntriesRead(id: SeriesId, entryAddresses: List<String>, read: Boolean) = EntryProgressRestore()
     override suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore) = Unit
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?, pageOffset: Float?) {
         progress += "$entryAddress $position/$length"
         stored.update { it.copy(lastOpenedEntry = entryAddress) }
         if (length == null || length <= 0) return
-        entries = entries.map { if (it.entry.address == entryAddress) it.withProgress(position, length, id.source.seriesKind) else it }
+        entries = entries.map { if (it.entry.address == entryAddress) it.withProgress(position, length, id.source.seriesKind, pageOffset) else it }
     }
 }
 

@@ -31,6 +31,7 @@ public final class SeriesEntryEntity {
     @Nullable @ColumnInfo(name = "page_count") private final Long pageCount;
     @Nullable @ColumnInfo(name = "last_read_at_epoch_ms") private final Long lastReadAtEpochMs;
     @Nullable @ColumnInfo(name = "memo") private final String memo;
+    @Nullable @ColumnInfo(name = "page_offset") private final Float pageOffset;
 
     public SeriesEntryEntity(
             @NonNull String source,
@@ -46,7 +47,8 @@ public final class SeriesEntryEntity {
             long lastPage,
             @Nullable Long pageCount,
             @Nullable Long lastReadAtEpochMs,
-            @Nullable String memo
+            @Nullable String memo,
+            @Nullable Float pageOffset
     ) {
         this.source = source;
         this.seriesAddress = seriesAddress;
@@ -62,6 +64,7 @@ public final class SeriesEntryEntity {
         this.pageCount = pageCount;
         this.lastReadAtEpochMs = lastReadAtEpochMs;
         this.memo = memo;
+        this.pageOffset = pageOffset;
     }
 
     @NonNull public String getSource() { return source; }
@@ -78,4 +81,5 @@ public final class SeriesEntryEntity {
     @Nullable public Long getPageCount() { return pageCount; }
     @Nullable public Long getLastReadAtEpochMs() { return lastReadAtEpochMs; }
     @Nullable public String getMemo() { return memo; }
+    @Nullable public Float getPageOffset() { return pageOffset; }
 }

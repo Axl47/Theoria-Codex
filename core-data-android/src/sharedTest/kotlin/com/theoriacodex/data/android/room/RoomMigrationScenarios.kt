@@ -16,6 +16,7 @@ object RoomMigrationScenarios {
     const val NAMED_SITE = "custom_mihon_example_org"
     const val DIGIT_SITE = "custom_mihon_9anime_org"
     private const val SITE = "custom_mihon_example_org"
+    private const val ANIME = "custom_aniyomi_3"
 
     val steps: Map<Int, (MigrationTestHelper) -> Unit> = mapOf(
         10 to ::proofTablesGo,
@@ -31,6 +32,7 @@ object RoomMigrationScenarios {
         20 to ::checkTimeGoes,
         21 to ::translationCacheGoes,
         22 to ::checkTimeReturnsEmpty,
+        23 to ::pageOffsetsArriveEmpty,
     )
 
     fun proofTablesGo(helper: MigrationTestHelper) {
@@ -188,6 +190,12 @@ object RoomMigrationScenarios {
     fun checkTimeReturnsEmpty(helper: MigrationTestHelper) = step(helper, 22, SERIES_TABLES, { seedSeries() }) { table, row ->
         if (table == "series") row + ("checked_at_epoch_ms" to null) else row
     }
+
+    fun pageOffsetsArriveEmpty(helper: MigrationTestHelper) = step(helper, 23, SERIES_TABLES, {
+        seedSeries()
+        insert("series", series("/show", followed = 1, null, opened = "/show/1", checked = null, download = 0, share = 0, followedAt = 9, memo = null) + ("source" to ANIME))
+        insert("series_entries", entry("/show", "/show/1", order = 0, firstSeen = 12, read = 0, page = 90_000, pages = 1_440_000, readAt = 95, memo = null) + ("source" to ANIME))
+    }) { table, row -> if (table == "series_entries") row + ("page_offset" to null) else row }
 
     private fun step(
         helper: MigrationTestHelper,

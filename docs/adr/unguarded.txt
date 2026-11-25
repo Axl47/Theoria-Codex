@@ -101,7 +101,6 @@
 0188-custom-source-runtime.md
 0190-home-pager-and-tab-navigation.md
 0191-series-background-work.md
-0192-series-reader-session.md
 0193-settings-and-search-entry-points.md
 0194-shell-activity-owned-state.md
 0195-shell-overlays-and-library-surfaces.md

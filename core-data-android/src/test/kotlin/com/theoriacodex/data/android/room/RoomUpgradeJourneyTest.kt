@@ -100,6 +100,8 @@ class RoomUpgradeJourneyTest {
 
     @Test fun `a stored series starts with no check time, so the next background run checks it (ADR 0015)`() = RoomMigrationScenarios.checkTimeReturnsEmpty(helper)
 
+    @Test fun `chapters read before in-page offsets resume at the top of their page (ADR 0192)`() = RoomMigrationScenarios.pageOffsetsArriveEmpty(helper)
+
     @Test fun `registered migrations step one version at a time from 10 to the version a new library is created at, each with a scenario (ADR 0012)`() {
         val created = createdVersion(ApplicationProvider.getApplicationContext<Context>())
         val steps = TheoriaRoomDatabase.MIGRATIONS.map { it.startVersion to it.endVersion }
