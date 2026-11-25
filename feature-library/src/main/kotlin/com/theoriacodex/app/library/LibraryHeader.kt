@@ -1,6 +1,8 @@
 package com.theoriacodex.app.library
 
+import com.theoriacodex.app.ui.components.SettingsButton
 import com.theoriacodex.app.ui.components.hidesOnScroll
+import com.theoriacodex.domain.series.ExtensionAlerts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,10 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -57,6 +55,7 @@ fun LibraryHeader(
     onSelect: (LibrarySection) -> Unit,
     onOpenSettings: () -> Unit,
     marked: Set<LibrarySection>,
+    extensionAlerts: ExtensionAlerts = ExtensionAlerts(),
     transfers: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit,
 ) {
@@ -68,9 +67,7 @@ fun LibraryHeader(
             )
             actions()
             transfers()
-            IconButton(onClick = onOpenSettings, modifier = Modifier.testTag(LIBRARY_SETTINGS_TAG)) {
-                Icon(Icons.Default.Settings, "Settings")
-            }
+            SettingsButton(extensionAlerts, onOpenSettings, Modifier.testTag(LIBRARY_SETTINGS_TAG))
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             LibrarySection.entries.forEachIndexed { index, entry ->

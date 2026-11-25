@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.codex.CodexListDeletes
+import com.theoriacodex.app.di.extensionAlertsOrNone
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.library.BareSectionHeader
@@ -53,10 +54,11 @@ import kotlinx.coroutines.launch
 internal fun LibraryDestination(shell: TheoriaShell) {
     val store = shell.data.librarySections
     val section by store.section.collectAsStateWithLifecycle()
+    val alerts by shell.container.series.extensionAlertsOrNone.collectAsStateWithLifecycle()
     val marked = if (rememberSavedNewPosts(shell.data).isEmpty()) emptySet() else setOf(LibrarySection.Saved)
     val header: LibrarySectionHeader = { actions ->
         LibraryHeader(
-            section, store::select, onOpenSettings = { shell.openSettings() }, marked = marked,
+            section, store::select, onOpenSettings = { shell.openSettings() }, marked = marked, extensionAlerts = alerts,
             transfers = { LibraryTransfersHeaderButton(shell.transfers) }, actions = actions,
         )
     }
