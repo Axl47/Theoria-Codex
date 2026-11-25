@@ -1,7 +1,7 @@
 package com.theoriacodex.app.viewer
 
-import com.theoriacodex.app.viewer.ViewerOrientation.LANDSCAPE
-import com.theoriacodex.app.viewer.ViewerOrientation.PORTRAIT
+import com.theoriacodex.domain.model.ViewerOrientation.LANDSCAPE
+import com.theoriacodex.domain.model.ViewerOrientation.PORTRAIT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -21,11 +21,34 @@ class ViewerOrientationPolicyTest {
         assertNull(viewerFillOrientation(1000, 0))
     }
 
-    @Test fun `rotation is offered for mismatched videos, and for other media only while holding a rotation`() {
-        assertTrue(viewerOffersRotation(LANDSCAPE, PORTRAIT, isVideo = true, holdingRotation = false))
-        assertFalse(viewerOffersRotation(LANDSCAPE, LANDSCAPE, isVideo = true, holdingRotation = true))
-        assertFalse(viewerOffersRotation(null, PORTRAIT, isVideo = true, holdingRotation = true))
-        assertFalse(viewerOffersRotation(PORTRAIT, LANDSCAPE, isVideo = false, holdingRotation = false))
-        assertTrue(viewerOffersRotation(PORTRAIT, LANDSCAPE, isVideo = false, holdingRotation = true))
+    @Test fun `the chip is offered when media fits the other orientation, never while locked (ADR 0174)`() {
+        assertTrue(viewerOffersRotation(LANDSCAPE, PORTRAIT, lock = null))
+        assertFalse(viewerOffersRotation(LANDSCAPE, LANDSCAPE, lock = null))
+        assertFalse(viewerOffersRotation(null, PORTRAIT, lock = null))
+        assertFalse(viewerOffersRotation(LANDSCAPE, PORTRAIT, lock = PORTRAIT))
+    }
+
+    @Test fun `the sensor reads portrait or landscape only near those angles`() {
+        assertEquals(PORTRAIT, viewerPhysicalOrientation(10))
+        assertEquals(PORTRAIT, viewerPhysicalOrientation(350))
+        assertEquals(PORTRAIT, viewerPhysicalOrientation(180))
+        assertEquals(LANDSCAPE, viewerPhysicalOrientation(90))
+        assertEquals(LANDSCAPE, viewerPhysicalOrientation(265))
+        assertNull(viewerPhysicalOrientation(45))
+        assertNull(viewerPhysicalOrientation(-1))
+    }
+
+    @Test fun `a chip rotation holds until the phone is turned to match, and only while auto-rotate is on (ADR 0174)`() {
+        assertFalse(viewerHoldEnds(LANDSCAPE, PORTRAIT, autoRotate = true))
+        assertFalse(viewerHoldEnds(LANDSCAPE, null, autoRotate = true))
+        assertTrue(viewerHoldEnds(LANDSCAPE, LANDSCAPE, autoRotate = true))
+        assertFalse(viewerHoldEnds(LANDSCAPE, LANDSCAPE, autoRotate = false))
+        assertFalse(viewerHoldEnds(null, LANDSCAPE, autoRotate = true))
+    }
+
+    @Test fun `the lock pins the orientation over any hold, and with neither the sensor decides (ADR 0174)`() {
+        assertEquals(PORTRAIT, viewerPinnedOrientation(lock = PORTRAIT, held = LANDSCAPE))
+        assertEquals(LANDSCAPE, viewerPinnedOrientation(lock = null, held = LANDSCAPE))
+        assertNull(viewerPinnedOrientation(lock = null, held = null))
     }
 }

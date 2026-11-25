@@ -22,6 +22,7 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
     if ("viewerPlaybackMode" in root) {
         com.theoriacodex.domain.model.ViewerPlaybackMode.valueOf(root.backupString("viewerPlaybackMode"))
     }
+    if ("viewerOrientationLock" in root) com.theoriacodex.domain.model.ViewerOrientation.valueOf(root.backupString("viewerOrientationLock"))
     if ("viewerCommentOrder" in root) com.theoriacodex.domain.model.CommentOrder.valueOf(root.backupString("viewerCommentOrder"))
     if ("codexLibrarySort" in root) CodexLibrarySort.valueOf(root.backupString("codexLibrarySort"))
     if ("seriesUpdateInterval" in root) SeriesUpdateInterval.valueOf(root.backupString("seriesUpdateInterval"))
@@ -31,7 +32,7 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
         "resolveUnknownAnimatedDurations", "invertMultiImageScrollDirection").forEach { key ->
         require(root[key].isBackupBoolean()) { "Invalid backup preference: $key" }
     }
-    listOf("instantSeek", "viewerAutoRotateVideos", "oldSearchBar", "seriesDeleteAfterReading").filter(root::containsKey).forEach { key ->
+    listOf("instantSeek", "oldSearchBar", "seriesDeleteAfterReading").filter(root::containsKey).forEach { key ->
         require(root[key].isBackupBoolean()) { "Invalid backup preference: $key" }
     }
     validateProfileTags(root, "favoriteTagsByProfile", profileIds, grouped = false)

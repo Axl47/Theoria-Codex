@@ -53,7 +53,7 @@ class SourceIdentityGoldenTest {
     }
 }
 
-private val RETIRED_SETTING = Regex(""""scenarioPreset":"[A-Z_]+",""")
+private val RETIRED_SETTING = Regex(""""(scenarioPreset":"[A-Z_]+"|viewerAutoRotateVideos":(true|false)),""")
 
 private val pixivCreator = CreatorProfile(SourceKey.PIXIV, "Artist", "3", "https://www.pixiv.net/users/3", "user:3")
 private val gelbooruCreator = CreatorProfile(SourceKey.GELBOORU, "uploader", "uploader", null, "user:uploader")

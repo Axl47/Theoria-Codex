@@ -96,7 +96,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     val swipingToAnotherPost = swipe.loadTarget?.let { it.postIndex != navigation.currentIndex } == true
     LaunchedEffect(swipingToAnotherPost) { if (swipingToAnotherPost) screen.trailForks.leave() }
     val fadesWhileScrubbing = rememberViewerScrubFade(screen)
-    val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture)
+    val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture, config.orientationLock, host.onOrientationLockChanged)
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
 
@@ -105,7 +105,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     }
     ViewerDockOverlay(watching, frame, screen, controls, activity, quality, qualityHeight, host, config, comments, saveContext, fadesWhileScrubbing)
     ViewerEpisodeCenterOverlay(watching, frame, screen, controls, swipe, config, host.onAction, fadesWhileScrubbing)
-    ViewerFooterButtons(frame, screen, activity, rotationOffer, host.onAction)
+    ViewerFooterButtons(frame, screen, rotationOffer, host.onAction)
     ViewerTopBarOverlay(watching, frame, screen, controls, episodeStream, config, trail, host.onAction, fadesWhileScrubbing)
     ViewerRelatedStripOverlay(frame, screen, controls, swipe, pendingPostId, relatedShelf, fadesWhileScrubbing)
     ViewerSaveFanOverlay(screen.saveFan)
@@ -370,7 +370,7 @@ private fun ViewerBottomStack(
         } else {
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
                 pendingPostId.value = navigation.originalPosts[index].id
-            }, Modifier.testTag("viewer-post-navigation-strip"),
+            }, Modifier.viewerStripRowPadding(frame.isLandscape).testTag("viewer-post-navigation-strip"),
                 onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
                 openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
                     controls.jumpToMedia(selection.post.id, it)
@@ -383,19 +383,46 @@ private fun ViewerBottomStack(
 private fun BoxScope.ViewerFooterButtons(
     frame: ViewerFrame,
     screen: ViewerScreenState,
-    activity: ViewerHostActivity?,
     rotationOffer: ViewerRotationOffer?,
     onAction: (ViewerAction) -> Unit,
 ) {
-    val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive || screen.chromeShownForScrub
-    val watching = frame.watching
-    val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
-    val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
-    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow, existingOffer = rotationOffer)
-    ViewerSlideshowControl(frame, screen.dwellStartedAtMs, suppressed = bottomOwned || frame.inPictureInPicture || watching, onAction)
+    val rules = ViewerFooterRules(frame, screen)
+    if (rules.inStripRow) ViewerStripRowRotation(frame, rotationOffer, rules) else ViewerFloatingRotation(frame, rotationOffer, rules)
+    ViewerSlideshowControl(frame, screen.dwellStartedAtMs, rules.chromeVisible, suppressed = rules.slideshowSuppressed, rules.inStripRow, onAction)
+}
+
+private class ViewerFooterRules(frame: ViewerFrame, screen: ViewerScreenState) {
+    private val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive || screen.chromeShownForScrub
+    val inStripRow = frame.isLandscape && !frame.watching
+    val chromeVisible = frame.chromeVisible && (!inStripRow || frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS)
+    val bottomRow = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
+    val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (frame.watching && frame.chromeVisible)
+    val slideshowSuppressed = bottomOwned || frame.inPictureInPicture || frame.watching
+    val lockSuppressed = bottomOwned || frame.locked || frame.watching
+}
+
+@Composable
+private fun BoxScope.ViewerStripRowRotation(frame: ViewerFrame, offer: ViewerRotationOffer?, rules: ViewerFooterRules) {
+    ViewerRotationChip(frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, inStripRow = true)
+    val slideshowShown = frame.offersSlideshow && !rules.slideshowSuppressed
+    ViewerRotationLockButton(
+        frame.selection, offer, rules.chromeVisible, rules.lockSuppressed, Alignment.BottomEnd, slot = if (slideshowShown) 1 else 0, inStripRow = true,
+    )
+}
+
+@Composable
+private fun BoxScope.ViewerFloatingRotation(frame: ViewerFrame, offer: ViewerRotationOffer?, rules: ViewerFooterRules) {
+    ViewerRotationLockButton(frame.selection, offer, rules.chromeVisible, rules.lockSuppressed, Alignment.BottomStart)
+    val lockShown = offer != null && rules.chromeVisible && !rules.lockSuppressed
+    ViewerRotationChip(
+        frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, slot = if (lockShown) 1 else 0, bottomRowHeight = rules.bottomRow,
+    )
 }
 
 internal const val VIEWER_LOCK_OVERLAY_TAG = "viewer-lock-overlay"
+
+private fun Modifier.viewerStripRowPadding(landscape: Boolean): Modifier =
+    if (landscape) padding(start = VIEWER_STRIP_ROW_BUTTON_SLOT, end = VIEWER_STRIP_ROW_BUTTON_SLOT + VIEWER_STRIP_ROW_BUTTON_WIDTH) else this
 
 @Composable
 internal fun rememberViewerScrubFade(screen: ViewerScreenState): Modifier {

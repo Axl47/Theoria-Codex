@@ -147,7 +147,7 @@ private fun acceptanceSearch() = RecentSearchEntry(
 private fun shippedBackupAsWrittenNow(): JsonObject {
     val shipped = Json.parseToJsonElement(SHIPPED_BACKUP).jsonObject
     val settings = shipped.getValue("settings").jsonObject -
-        setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages", "scenarioPreset")
+        setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages", "scenarioPreset", "viewerAutoRotateVideos")
     val statistics = shipped.getValue("statistics").jsonObject - setOf("translatedPhraseCount", "translatedSourceCharacterCount") +
         listOf("readingMs", "animeMs").associateWith { JsonPrimitive(0L) }
     return JsonObject(shipped + ("settings" to JsonObject(settings)) + ("statistics" to JsonObject(statistics)))

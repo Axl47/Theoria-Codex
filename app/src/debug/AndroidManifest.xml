@@ -4,6 +4,7 @@
         <activity android:name="com.theoriacodex.app.developercopy.DeveloperCopyActivity"
             android:exported="true" android:process=":developerCopy"
             android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Dialog.NoActionBar" />
-        <activity android:name="com.theoriacodex.app.fixtures.JourneyTestActivity" android:exported="false" />
+        <activity android:name="com.theoriacodex.app.fixtures.JourneyTestActivity" android:exported="false"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize" />
     </application>
 </manifest>

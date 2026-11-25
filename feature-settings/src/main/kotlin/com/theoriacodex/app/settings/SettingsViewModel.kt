@@ -281,6 +281,9 @@ class SettingsViewModel(
             is SettingsAction.SetViewerPlaybackMode -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(playbackMode = action.mode)) }
             }
+            is SettingsAction.SetViewerOrientationLock -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(orientationLock = action.lock)) }
+            }
             else -> return false
         }
         return true

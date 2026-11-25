@@ -85,6 +85,9 @@
 
 ### Changed
 
+- The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. When a post would fit better the other way, a rotate button shows for a few seconds; tap it to turn once, and the Viewer follows the phone again once you turn it to match.
+- The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
+- In landscape, the Viewer's rotate, lock and slideshow buttons sit in the thumbnail strip's row instead of floating over the picture.
 - In Play Next and slideshows, every post stays on screen for at least five seconds. A shorter clip, GIF or Pixiv animation replays until then and moves on at the end of a play-through, and touching, zooming, seeking or showing the controls starts the five seconds again.
 - Swiping back to an earlier post in Play Next or a slideshow stops it moving on by itself until you go forward again. A small pause badge on the playback settings and slideshow buttons shows while it's stopped.
 - Settings has a Series group, after Sources, holding Extensions, Check for new chapters and Delete after reading. Sources now holds only what applies to every source.
