@@ -287,10 +287,10 @@ class SeriesTabViewModel(
             } finally {
                 mutableState.update { state ->
                     val failed = check?.let { done -> state.failedCheck?.retried(only.orEmpty(), done) ?: done } ?: state.failedCheck
-                    state.copy(checking = null, finished = check, failedCheck = failed?.takeIf { it.failed > 0 }, checkRun = state.checkRun + if (check?.failures.isNullOrEmpty()) 0 else 1)
+                    state.copy(checking = null, finished = check?.takeIf { it.refreshed > 0 }, failedCheck = failed?.takeIf { it.failed > 0 }, checkRun = state.checkRun + if (check?.failures.isNullOrEmpty()) 0 else 1)
                 }
             }
-            if (check.refreshed > 0) {
+            if (state.value.finished != null) {
                 delay(FINISHED_SHOWN)
                 mutableState.update { it.copy(finished = null) }
             }

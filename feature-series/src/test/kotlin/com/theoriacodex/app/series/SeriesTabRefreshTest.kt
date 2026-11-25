@@ -8,10 +8,8 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.domain.series.SeriesKind
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
-import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesId
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
@@ -59,14 +57,13 @@ class SeriesTabRefreshTest {
     fun aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenItsResult_adr_0219() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val step = Channel<Unit>()
-        val update = SeriesUpdate(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/a"), "A"), listOf(SeriesEntry("/c/2", "Chapter 2")))
         val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { _, onProgress ->
             (0..2).forEach { done ->
                 step.receive()
                 onProgress(CheckProgress(done, 2))
             }
             step.receive()
-            FollowedCheck(listOf(update), checked = 2)
+            FollowedCheck(emptyList(), checked = 2)
         }
         viewModel.refresh()
         runCurrent()
@@ -79,7 +76,7 @@ class SeriesTabRefreshTest {
         step.send(Unit)
         advanceTimeBy(1.seconds)
         assertNull(viewModel.state.value.checking)
-        assertEquals(FollowedCheck(listOf(update), checked = 2), viewModel.state.value.finished)
+        assertEquals(FollowedCheck(emptyList(), checked = 2), viewModel.state.value.finished)
         advanceUntilIdle()
         assertNull(viewModel.state.value.finished)
     }
