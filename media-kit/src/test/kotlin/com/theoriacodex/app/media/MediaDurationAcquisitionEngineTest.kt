@@ -35,7 +35,7 @@ class MediaDurationAcquisitionEngineTest {
     }
 
     @Test
-    fun `a throttled lookup pauses its source and retries before giving up`() = runTest {
+    fun `a throttled lookup pauses its source and retries before giving up (ADR 0104)`() = runTest {
         val results = ArrayDeque(listOf(rateLimited(), known(4_000L)))
         val startedAt = mutableListOf<Long>()
         val pacer = DurationRequestPacer(clock = { testScheduler.currentTime }, startIntervalMs = { 0L }, cooldownMs = 15_000L)
@@ -97,6 +97,24 @@ class MediaDurationAcquisitionEngineTest {
     }
 
     @Test
+    fun `the last throttled try still pauses its source (ADR 0104)`() = runTest {
+        val pacer = DurationRequestPacer(clock = { testScheduler.currentTime }, startIntervalMs = { 0L }, cooldownMs = 15_000L)
+        val engine = MediaDurationAcquisitionEngine(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = { DurationMetadataSourceResult.Unsupported },
+            probeDuration = { rateLimited() },
+            traceRecorder = NoOpMediaDurationTraceRecorder,
+            pacer = pacer,
+        )
+
+        engine.acquire(post("busy"))
+        val gaveUpAt = testScheduler.currentTime
+        pacer.awaitTurn(SourceKey.HITOMI)
+
+        assertEquals(15_000L, testScheduler.currentTime - gaveUpAt)
+    }
+
+    @Test
     fun `time spent waiting for the pacer does not count against the lookup timeout (ADR 0104)`() = runTest {
         val engine = MediaDurationAcquisitionEngine(
             hasProviderDurationResolver = { false },
@@ -114,7 +132,7 @@ class MediaDurationAcquisitionEngineTest {
     }
 
     @Test
-    fun `media that needs no lookup settles without work`() {
+    fun `media that needs no lookup settles without work (ADR 0104)`() {
         val gif = post("gif").let { base ->
             val ref = ImageRef(url = "https://example.test/gif.gif", localPath = null, mime = "image/gif")
             base.copy(preview = ref, full = ref, media = listOf(ref))
@@ -201,6 +219,18 @@ class MediaDurationAcquisitionEngineTest {
         )
         assertEquals(true, cancelled)
         assertEquals(10L, testScheduler.currentTime)
+
+        val slowProvider = engine(
+            hasProvider = { true },
+            resolveProvider = { awaitCancellation() },
+            probe = { error("Probe should not run") },
+            timeoutMs = 10L,
+        )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TIMEOUT),
+            slowProvider.acquire(post("slow provider").copy(full = null, media = emptyList())),
+        )
+        assertEquals(20L, testScheduler.currentTime)
     }
 
     private fun engine(

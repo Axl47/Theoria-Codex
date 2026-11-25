@@ -154,6 +154,7 @@ class MediaDurationCoordinatorTest {
         var cancelled = false
         val coordinator = coordinator(
             scope = this,
+            maxConcurrentWork = 4,
             acquirer = MediaDurationAcquirer {
                 acquisitions += 1
                 started.complete(Unit)
@@ -512,9 +513,10 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `a duration that cannot be stored is still published (ADR 0104)`() = runTest {
+    fun `a duration that cannot be read or stored is still published (ADR 0104)`() = runTest {
         val refusing = object : MediaDurationRepository {
-            override suspend fun get(key: StoredMediaDurationKey): StoredMediaDurationState? = null
+            override suspend fun get(key: StoredMediaDurationKey): StoredMediaDurationState? =
+                throw IOException("disk unreadable")
             override suspend fun put(key: StoredMediaDurationKey, state: StoredMediaDurationState) =
                 throw IOException("disk full")
         }
@@ -558,13 +560,14 @@ class MediaDurationCoordinatorTest {
         durationRepository: MediaDurationRepository? = null,
         traceRecorder: MediaDurationTraceRecorder = NoOpMediaDurationTraceRecorder,
         clock: () -> Long = System::currentTimeMillis,
+        maxConcurrentWork: Int = 1,
     ): MediaDurationCoordinator {
         return MediaDurationCoordinator(
             acquirer = acquirer,
             durationRepository = durationRepository,
             parentScope = scope,
             clock = clock,
-            maxConcurrentWork = 1,
+            maxConcurrentWork = maxConcurrentWork,
             traceRecorder = traceRecorder,
         )
     }

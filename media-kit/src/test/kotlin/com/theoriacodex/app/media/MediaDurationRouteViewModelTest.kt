@@ -53,14 +53,15 @@ class MediaDurationRouteViewModelTest {
         }
         val owner = MediaDurationRouteViewModel(coordinator, "viewer-test", backgroundScope)
         val near = animatedTestPost(sourcePostId = "near")
+        val alsoNear = animatedTestPost(sourcePostId = "also near")
         val far = animatedTestPost(sourcePostId = "far")
 
-        owner.onNearbyPostsChanged(setOf(near.id))
-        owner.synchronize("session", listOf(near, far), resolveInBackground = false)
+        owner.onNearbyPostsChanged(setOf(near.id, alsoNear.id))
+        owner.synchronize("session", listOf(near, alsoNear, far), resolveInBackground = false)
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
 
-        assertEquals(listOf("near"), requested)
+        assertEquals(setOf("near", "also near"), requested.toSet())
         assertEquals(7_000L, (owner.observeState(near).first() as MediaDurationState.Known).durationMs)
         coordinator.close()
     }

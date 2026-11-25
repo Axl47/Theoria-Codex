@@ -19,6 +19,13 @@ class DurationRequestPacerTest {
         advanceUntilIdle()
 
         assertEquals(listOf(0L, 500L, 1_000L), starts)
+
+        advanceTimeBy(5_000L)
+        starts.clear()
+        repeat(2) { launch { pacer.awaitTurn(SourceKey.GELBOORU); starts += testScheduler.currentTime } }
+        advanceUntilIdle()
+
+        assertEquals("After an idle spell the interval counts from the next start", listOf(6_000L, 6_500L), starts)
     }
 
     @Test

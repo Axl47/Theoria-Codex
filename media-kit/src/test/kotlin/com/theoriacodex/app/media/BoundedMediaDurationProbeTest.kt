@@ -53,6 +53,16 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
+    fun `metadata behind two boxes is reached one box at a time (ADR 0104)`() = runTest {
+        val media = box("ftyp", byteArrayOf()) + box("mdat", ByteArray(160)) + box("free", ByteArray(160)) +
+            box("moov", box("mvhd", movieHeader(6_000)))
+        val http = FakeHttpClient(media)
+
+        assertEquals(MediaDurationState.Known(6_000L, MediaDurationProvenance.CONTAINER_PROBE), probe(http).probe(post("deep")))
+        assertEquals(listOf(0L, 176L, 344L), http.requests.map { it.range.startInclusive })
+    }
+
+    @Test
     fun `metadata in the first bytes needs only the small window (ADR 0104)`() = runTest {
         val http = FakeHttpClient(mp4File(durationMs = 5_000) + ByteArray(4_096))
         val probe = BoundedMediaDurationProbe(
@@ -124,6 +134,10 @@ class BoundedMediaDurationProbeTest {
             MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
             probe(StatusHttpClient(410)).probe(post("removed", SourceKey.GELBOORU)),
         )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.RATE_LIMITED),
+            probe(FakeHttpClient(mp4WithTailDuration(durationMs = 8_000), laterStatus = 404)).probe(post("busy later", SourceKey.GELBOORU)),
+        )
     }
 
     @Test
@@ -171,6 +185,7 @@ class BoundedMediaDurationProbeTest {
         private val media: ByteArray,
         private val ignoreRange: Boolean = false,
         private val omitContentRange: Boolean = false,
+        private val laterStatus: Int? = null,
     ) : SourceHttpClient {
         val requests = mutableListOf<Request>()
 
@@ -182,6 +197,7 @@ class BoundedMediaDurationProbeTest {
             maxBodyBytes: Int,
         ): SourceByteResponse {
             requests += Request(requireNotNull(range), maxBodyBytes, headers)
+            if (laterStatus != null && requests.size > 1) return SourceByteResponse(laterStatus, "not found".toByteArray(), emptyMap())
             if (ignoreRange) {
                 return SourceByteResponse(
                     statusCode = 200,
