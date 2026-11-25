@@ -453,7 +453,7 @@ class ExtensionRegistryTest {
     }
 
     @Test
-    fun `settings are built only for the extension asked about and an edit for one turned off does nothing (ADR 0062)`() = runBlocking {
+    fun `no settings are read during refresh, and an edit for an extension turned off does nothing (ADR 0062)`() = runBlocking {
         var built = 0
         val configurable = ConfigurableStub {}
         sourcesOf = { listOf(configurable) }
