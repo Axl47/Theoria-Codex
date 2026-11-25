@@ -58,7 +58,7 @@ class ViewerSaveButtonTest {
         override fun suggestions(post: Post, query: Query?, limit: Int): Flow<SaveSuggestions> = flow {
             if (scored) awaitCancellation()
             scored = true
-            emit(SaveSuggestions(listOf(SaveSuggestion("cats", "Cats", emptyList())), inAnyCodex = false))
+            emit(SaveSuggestions(listOf(SaveSuggestion("cats", "Cats", emptyList()))))
         }
     }
 

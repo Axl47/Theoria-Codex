@@ -75,7 +75,6 @@
 0149-library-offline-and-download-removals.md
 0150-library-section-persistence.md
 0151-likes-codex-sync-writes.md
-0152-live-saved-collections.md
 0153-pixiv-pkce-login.md
 0154-recents-history-behavior.md
 0155-settings-backup.md
@@ -95,7 +94,6 @@
 0172-viewer-page-strip-and-scrubber.md
 0173-viewer-reading-modes-and-navigation.md
 0174-viewer-rotation-pip-and-system-controls.md
-0175-viewer-save-button.md
 0176-viewer-scrub-preview-player.md
 0177-viewer-episode-resume-positions.md
 0178-viewer-session-state-rules.md

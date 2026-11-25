@@ -80,7 +80,7 @@ class SavedSearchFeedLoader(
     }
 
     private fun plans(entry: SavedSearchEntry): List<SavedSearchQueryBranch> {
-        val search = entry.search
+        val search = entry.newestFirst().search
         return listOf(SavedSearchQueryBranch(search.query,
             if (search.kind == RecentSearchKind.MULTI_SEARCH) SearchSourceScope.fromSources(search.sources)
             else SearchSourceScope.fromQuery(search.query),
