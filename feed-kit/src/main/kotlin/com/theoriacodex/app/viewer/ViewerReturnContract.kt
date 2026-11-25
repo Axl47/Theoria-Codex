@@ -103,8 +103,8 @@ class ViewerReturnTransition {
         openingCorners = corners
     }
 
-    fun launching(postIds: Collection<PostId>, fork: Boolean) {
-        if (fork) return
+    fun launching(postIds: Collection<PostId>, keepsRoot: Boolean) {
+        if (keepsRoot) return
         val tapped = unclaimedPost
         if (tapped != null && tapped in postIds) unclaimedPost = null else clear()
     }

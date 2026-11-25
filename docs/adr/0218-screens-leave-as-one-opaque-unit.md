@@ -21,10 +21,11 @@ text over it.
 ## Decision
 
 A card tap records its origin with `openedFrom`, naming the tapped post. Every Viewer launch goes through
-`TheoriaShell.launchViewer`, which hands the origin to `ViewerReturnTransition.launching`: a trail fork opened over an
-active Viewer keeps its root's origin, and any other launch keeps it only when its posts include the tapped post,
-clearing it otherwise. A tap that opened no Viewer (a Codex in edit mode, a launch that failed) therefore never lends
-its card to the next launch, whatever screen that launch starts from. `ViewerReturnTransition.begin` starts a return
+`TheoriaShell.launchViewer`, which hands the origin to `ViewerReturnTransition.launching`: a launch that leaves the
+root Viewer in place (a trail fork pushed over it, or a single-top launch that replaces only a fork) keeps the root's
+origin, and any other launch keeps it only when its posts include the tapped post, clearing it otherwise. A Codex in
+edit mode gives its cards no return transition, since a tap there selects instead of opening. A tap that opened no
+Viewer therefore never lends its card to the next launch, whatever screen that launch starts from. `ViewerReturnTransition.begin` starts a return
 only while an origin is recorded, and `ViewerReturnLifetime` holds the Viewer's exit only while a return is running.
 A Viewer opened from no card therefore leaves in one frame, the same way it opens.
 
@@ -56,6 +57,7 @@ closes in one frame rather than into its card.
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGallery.kt`: `ViewerVerticalGallery`
 - `app/src/main/java/com/theoriacodex/app/ui/AppNavigation.kt`: `TheoriaScreenHost`, `opaqueScreen`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShell.kt`: `TheoriaShell.viewerReturn`
+- `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailScreen.kt`: `CodexSelectablePostCard`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaNavDestinations.kt`: `theoriaDestinations`
 
 ## Guarded by
@@ -68,3 +70,4 @@ closes in one frame rather than into its card.
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card is gone once the backdrop is (ADR 0218)`
 - Left to prose: that every new full-screen destination uses `opaqueScreen`; a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.
 - Left to prose: that every Viewer launch passes through `launchViewer`; a new `navigate(AppRoute.Viewer)` elsewhere would skip `launching`.
+- Left to prose: that a Codex in edit mode records no origin; no host test composes the Codex detail grid, and the launch binding above still clears such an origin for any launch of another post.
