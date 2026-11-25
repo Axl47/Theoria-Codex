@@ -1,6 +1,10 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -54,7 +58,18 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithText("Searches"))
         waitFor("reopened Searches shows the new post") { inCollection() && shows(fresh.id) }
         waitFor("the new post counts as seen") { io { newPosts().marks.getValue(saved.id).newPostCount == 0 } }
+        waitFor("only the new post's card is marked new") { markedNew() == 1 }
+
+        activate(compose.onNodeWithTag(searchCardTestTag(fresh.id)))
+        waitFor("the Viewer opens the new post") { compose.onAllNodesWithContentDescription("Media actions").fetchSemanticsNodes().isNotEmpty() }
+        pressSystemBack()
+        waitFor("Searches is back") { inCollection() && shows(fresh.id) }
+        waitFor("opening the post cleared its marker") { markedNew() == 0 }
     }
+
+    private fun markedNew() = compose.onAllNodes(hasStateDescription("New"), useUnmergedTree = true).fetchSemanticsNodes().size
+
+    private fun hasStateDescription(value: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value)
 
     private suspend fun newPosts() = container.data.uiRestoreRepository.observeSavedSearchNewPosts().first()
 
