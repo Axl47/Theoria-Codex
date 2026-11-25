@@ -3,6 +3,7 @@ package com.theoriacodex.app.series
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
+import com.theoriacodex.data.repository.SwitchSourceSkips
 import com.theoriacodex.data.repository.matchKey
 import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
@@ -12,16 +13,21 @@ import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 
 data class SwitchMatch(val series: Series, val entries: Int? = null)
 
@@ -38,6 +44,7 @@ data class SwitchSourceResult(val key: SourceKey, val name: String, val listing:
 data class SwitchSourceSheet(
     val results: List<SwitchSourceResult>,
     val query: String = "",
+    val skipped: Set<SourceKey> = emptySet(),
     val confirming: SwitchMatch? = null,
     val switching: Boolean = false,
     val failure: String? = null,
@@ -52,6 +59,7 @@ class SwitchSourceViewModel(
     private val loadSources: suspend () -> List<SeriesSource>,
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val store: suspend (Series) -> Unit,
+    private val choices: SwitchSourceSkips,
     private val switch: suspend (SeriesSource, Series) -> Boolean,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(SwitchSourceState())
@@ -64,13 +72,19 @@ class SwitchSourceViewModel(
     private val switching get() = state.value.sheet?.switching == true
 
     private var searching: Job? = null
+    private val searches = mutableMapOf<SourceKey, Job>()
+
+    private var storedSkips = emptySet<SourceKey>()
+    private val saves = Mutex()
 
     private val calls = Semaphore(MAX_SOURCE_CALLS)
 
     init {
+        viewModelScope.launch { choices.observeSwitchSourceSkipped().collect { storedSkips = it } }
         viewModelScope.launch {
             sourcesChanged.collectLatest {
                 sources = loadSources()
+                storedSkips = choices.observeSwitchSourceSkipped().first()
                 mutableState.update { state -> state.copy(others = sources.filter { it.key != from.source && it.kind == from.source.seriesKind }) }
             }
         }
@@ -79,8 +93,33 @@ class SwitchSourceViewModel(
     fun open(title: String) {
         if (switching) return
         closeSheet()
-        mutableState.update { it.copy(sheet = SwitchSourceSheet(results = emptyList(), query = title)) }
+        mutableState.update { it.copy(sheet = SwitchSourceSheet(results = emptyList(), query = title, skipped = storedSkips)) }
         searchAll(title)
+    }
+
+    fun toggle(keys: Collection<SourceKey>) {
+        val sheet = state.value.sheet ?: return
+        if (sheet.switching) return
+        val skipped = sheet.skipped.toggled(keys)
+        val added = keys.filter { it in sheet.skipped && it !in skipped }
+        keys.filter { it in skipped }.forEach { searches.remove(it)?.cancel() }
+        updateSheet { current ->
+            val shown = current.results.associateBy(SwitchSourceResult::key)
+            current.copy(
+                skipped = skipped,
+                results = others.filter { it.key !in skipped }.map { shown[it.key] ?: SwitchSourceResult(it.key, it.label(sources), SwitchListing.Loading) },
+            )
+        }
+        keep(skipped)
+        val job = searching ?: return
+        others.filter { it.key in added }.forEach { search(it, job) }
+    }
+
+    private fun keep(skipped: Set<SourceKey>) {
+        val shown = others.mapTo(HashSet(), SeriesSource::key)
+        storedSkips = storedSkips.filterNot(shown::contains).toSet() + skipped.filter(shown::contains)
+        val saved = storedSkips
+        viewModelScope.launch { withContext(NonCancellable) { saves.withLock { choices.setSwitchSourceSkipped(saved) } } }
     }
 
     fun editQuery(query: String) = updateSheet { it.copy(query = query) }
@@ -93,17 +132,19 @@ class SwitchSourceViewModel(
     private fun searchAll(query: String) {
         searching?.cancel()
         searched = query
+        searches.clear()
         val job = SupervisorJob(viewModelScope.coroutineContext[Job]).also { searching = it }
+        val checked = others.filter { it.key !in state.value.sheet?.skipped.orEmpty() }
         updateSheet { sheet ->
-            sheet.copy(results = others.map { SwitchSourceResult(it.key, it.label(sources), SwitchListing.Loading) }, confirming = null, failure = null)
+            sheet.copy(results = checked.map { SwitchSourceResult(it.key, it.label(sources), SwitchListing.Loading) }, confirming = null, failure = null)
         }
-        others.forEach { search(it, job) }
+        checked.forEach { search(it, job) }
     }
 
     fun retry(key: SourceKey) {
         if (switching) return
         val job = searching ?: return
-        val source = others.firstOrNull { it.key == key } ?: return
+        val source = others.firstOrNull { it.key == key && key !in state.value.sheet?.skipped.orEmpty() } ?: return
         updateResult(key) { it.copy(listing = SwitchListing.Loading) }
         search(source, job)
     }
@@ -115,6 +156,7 @@ class SwitchSourceViewModel(
     private fun closeSheet() {
         searching?.cancel()
         searching = null
+        searches.clear()
         mutableState.update { it.copy(sheet = null) }
     }
 
@@ -150,7 +192,7 @@ class SwitchSourceViewModel(
 
     private fun search(source: SeriesSource, job: Job) {
         val query = searched
-        viewModelScope.launch(job) {
+        searches[source.key] = viewModelScope.launch(job) {
             val listing = calls.withPermit { firstPage { source.search(query, 1) } }
             val matches = (listing as? SeriesListing.Loaded)?.let { bestMatches(query, it.series) }
             updateResult(source.key) {

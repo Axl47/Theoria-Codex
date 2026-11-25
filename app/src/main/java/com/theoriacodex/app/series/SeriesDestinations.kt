@@ -13,13 +13,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.ui.AppRoute
 import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.launchViewer
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -103,15 +106,16 @@ internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry
         MissingExtensionsActions(
             missing = { MissingSeriesViewModel(series.repository, series.sources, series.extensions.revision) },
             switchSource = { id ->
-                SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
-                    series.switchSource(id, source, to)
-                }
+                shell.switchSourceViewModel(series, id) { source, to -> series.switchSource(id, source, to) }
             },
             onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         )
     }
     ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() }, missing = missing)
 }
+
+private fun TheoriaShell.switchSourceViewModel(series: SeriesDependencies, id: SeriesId, switch: suspend (SeriesSource, Series) -> Boolean) =
+    SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }, choices = data.uiRestoreRepository, switch = switch)
 
 internal fun TheoriaShell.openExtensions(page: ExtensionsSubpage? = null) {
     navController.navigate(AppRoute.extensions(page)) { launchSingleTop = true }
@@ -135,9 +139,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
         )
     }
     val switchSource = viewModel {
-        SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
-            viewModel.whileMoving { series.switchSource(id, source, to) }
-        }
+        shell.switchSourceViewModel(series, id) { source, to -> viewModel.whileMoving { series.switchSource(id, source, to) } }
     }
     val openEntry: suspend (String) -> Unit = { address ->
         shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }

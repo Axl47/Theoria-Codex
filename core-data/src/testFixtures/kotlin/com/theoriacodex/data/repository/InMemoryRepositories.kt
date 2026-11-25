@@ -500,6 +500,14 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     override suspend fun setViewerLaunchContext(context: ViewerLaunchContext?) {
         viewerLaunchContext.value = context
     }
+
+    private val switchSourceSkipped = MutableStateFlow(emptySet<SourceKey>())
+
+    override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> = switchSourceSkipped
+
+    override suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>) {
+        switchSourceSkipped.value = sources
+    }
 }
 
 suspend fun RecentsRepository.activity(): List<RecentActivityEntry> =

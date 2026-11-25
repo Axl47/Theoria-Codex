@@ -8,6 +8,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -25,13 +27,17 @@ import com.theoriacodex.app.series.ExtensionsViewModel
 import com.theoriacodex.app.series.MissingExtensionsActions
 import com.theoriacodex.app.series.MissingSeriesViewModel
 import com.theoriacodex.app.series.StoredOnly
+import com.theoriacodex.app.series.SwitchListing
+import com.theoriacodex.app.series.SwitchSourceViewModel
 import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ApkIcon
+import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
@@ -42,15 +48,21 @@ import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesEntries
+import com.theoriacodex.domain.series.SeriesEntry
 import com.theoriacodex.domain.series.SeriesExtensions
+import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.SeriesPage
+import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.domain.series.SourceOff
 import com.theoriacodex.domain.series.extensionSourceKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -140,6 +152,62 @@ class ExtensionStoreScreenshotTest {
         compose.onNodeWithText("Aurora").performClick()
         compose.waitForIdle()
         captureScreenRoboImage("missing_extensions.png")
+    }
+
+    @Test fun `switch source checklist`() {
+        installSolidColorIcons()
+        val lantern = Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/1"), "Paper Lantern")
+        val repository = object : SeriesRepository by StoredOnly(StoredSeries(lantern), emptyList()) {
+            override fun observeFollowed() = flowOf(listOf(FollowedSeries(lantern, unreadCount = 0)))
+
+            override fun observeHasFollowed() = flowOf(true)
+        }
+        val french = SeriesKind.MANGA.extensionSourceKey(13)
+        val sources = listOf(
+            FixtureSource(11, "Aurora", "en", listOf("Paper Lantern", "Paper Lantern: Embers")),
+            FixtureSource(12, "Aurora", "es", listOf("Linterna de Papel")),
+            FixtureSource(13, "Aurora", "fr"),
+            FixtureSource(14, "Birch", "en", listOf("Paper Lantern")),
+            FixtureSource(15, "Cobalt", "en"),
+        )
+        val skips = InMemoryUiRestoreRepository().apply { runBlocking { setSwitchSourceSkipped(setOf(french)) } }
+        val missing = MissingSeriesViewModel(repository, { sources }, flowOf(Unit))
+        var switchSource: SwitchSourceViewModel? = null
+        val actions = MissingExtensionsActions(
+            { missing },
+            { id -> SwitchSourceViewModel(id, { sources }, store = {}, choices = skips) { _, _ -> false }.also { switchSource = it } },
+            onOpenSeries = {},
+        )
+        val extensions = ExtensionsViewModel(Device(), FixtureRepos)
+        compose.setContent {
+            TheoriaNightTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    ExtensionsScreen(extensions, onBack = {}, missing = actions)
+                }
+            }
+        }
+        compose.waitUntilSettled { missing.state.value != null && extensions.state.value.extensions != null }
+        compose.onNodeWithText("Missing extensions").performClick()
+        compose.waitUntilSettled { compose.onAllNodesWithContentDescription("More options").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.onNodeWithText("Switch source").performClick()
+        compose.waitUntilSettled {
+            switchSource?.state?.value?.sheet?.results?.let { results -> results.size == 4 && results.all { it.listing is SwitchListing.Found } } == true
+        }
+        compose.onNodeWithText("Sources").performClick()
+        compose.onNodeWithContentDescription("Show languages").performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage("switch_source_checklist.png")
+    }
+
+    private class FixtureSource(id: Long, override val name: String, override val language: String, private val titles: List<String> = emptyList()) : SeriesSource {
+        override val key = SeriesKind.MANGA.extensionSourceKey(id)
+        override suspend fun popular(page: Int) = SeriesPage(emptyList(), hasNextPage = false)
+        override suspend fun search(text: String, page: Int, filters: List<SeriesFilter>) =
+            SeriesPage(titles.mapIndexed { index, title -> Series(SeriesId(key, "/$index"), title, coverUrl = "https://covers.example/${key.id}/$index.png") }, hasNextPage = false)
+        override suspend fun details(series: Series) = series
+        override suspend fun entries(series: Series, stored: List<SeriesEntry>) = SeriesEntries(List(12) { SeriesEntry("/c$it", "Chapter ${it + 1}") })
+        override suspend fun media(entry: SeriesEntry) = EntryMedia.Pages(emptyList())
     }
 
     private fun installSolidColorIcons() {

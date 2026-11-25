@@ -139,7 +139,9 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
         savedSearchNewPosts = state.savedSearchNewPosts.copy(
             marks = state.savedSearchNewPosts.marks.entries.take(MAX_SAVED_SEARCHES).associate { it.key to it.value },
         ),
+        switchSourceSkipped = state.switchSourceSkipped.take(MAX_SWITCH_SOURCE_SKIPPED).toSet(),
     )
 }
 
 private const val MAX_PERSISTED_FEED_FAB_STATES = 128
+private const val MAX_SWITCH_SOURCE_SKIPPED = 1024

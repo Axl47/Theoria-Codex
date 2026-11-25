@@ -276,7 +276,7 @@ private fun pageHarness(chapterCount: Int, readIndices: Set<Int> = emptySet()): 
     val repository = PageMemoryRepository(StoredSeries(series, followed = true), entries)
     val sources = listOf(primary, alternate)
     val page = SeriesPageViewModel(id, repository, loadSources = { sources }, ioDispatcher = Dispatchers.Unconfined)
-    val switchSource = SwitchSourceViewModel(id, loadSources = { sources }, store = {}, switch = { _, _ -> false })
+    val switchSource = SwitchSourceViewModel(id, loadSources = { sources }, store = {}, choices = MemorySwitchSourceSkips(), switch = { _, _ -> false })
     return PageHarness(page, switchSource, repository)
 }
 

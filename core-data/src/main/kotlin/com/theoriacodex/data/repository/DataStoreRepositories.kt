@@ -247,6 +247,13 @@ class DataStoreUiRestoreRepository(
         mutateState { current -> current.copy(viewerLaunchContext = context) }
     }
 
+    override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> =
+        dataStore.data.map { it.toMemoryState().switchSourceSkipped }.distinctUntilChanged()
+
+    override suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>) {
+        mutateState { current -> current.copy(switchSourceSkipped = sources) }
+    }
+
     private suspend fun mutateState(
         transform: (PersistedUiRestoreState) -> PersistedUiRestoreState,
     ): PersistedUiRestoreState {

@@ -250,7 +250,7 @@ private fun FilterLabel(name: String) {
 }
 
 @Composable
-private fun OptionRow(label: String, modifier: Modifier, control: @Composable () -> Unit) {
+internal fun OptionRow(label: String, modifier: Modifier, control: @Composable () -> Unit) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { control() }
         Text(label, style = MaterialTheme.typography.bodyLarge)
