@@ -257,6 +257,8 @@ def off_main_notes_run_where_work_runs() -> list[str]:
 
 
 READ_LOGS_REQUEST = re.compile(r"<uses-permission\b[^>]*>")
+XML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+REMOVED_BY_MERGER = re.compile(r"""tools:node\s*=\s*["']remove["']""")
 
 
 @rule
@@ -266,14 +268,15 @@ def no_manifest_reads_other_apps_logs() -> list[str]:
         "(docs/adr/0103-diagnostics-log-and-usage.md)"
         for path in sorted(ROOT.glob("*/src/*/AndroidManifest.xml"))
         if any(
-            "android.permission.READ_LOGS" in tag and 'tools:node="remove"' not in tag
-            for tag in READ_LOGS_REQUEST.findall(path.read_text(encoding="utf-8"))
+            "android.permission.READ_LOGS" in tag and not REMOVED_BY_MERGER.search(tag)
+            for tag in READ_LOGS_REQUEST.findall(XML_COMMENT.sub("", path.read_text(encoding="utf-8")))
         )
     ]
 
 
 DOWNLOAD_MANAGER = re.compile(r"\bDownloadManager\b|\bDOWNLOAD_SERVICE\b")
-DOWNLOAD_MANAGER_OWNERS = re.compile(r"media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownload\w*\.kt")
+DOWNLOAD_MANAGER_OWNERS = re.compile(r"media-kit/src/main/kotlin/(?:.+/)?(?:PostDownloads|PostDownloadService|PostDownloadFiles)\.kt")
+STRINGS_AND_COMMENTS = re.compile(r'""".*?"""|"(?:\\.|[^"\\\n])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
 TEST_SOURCE_SETS = ("test", "androidTest", "sharedTest")
 
 
@@ -291,7 +294,7 @@ def only_post_downloads_use_download_manager() -> list[str]:
         "app's own transport (docs/adr/0110-offline-media-jobs.md)"
         for path in shipping_sources()
         if not DOWNLOAD_MANAGER_OWNERS.fullmatch(relative := path.relative_to(ROOT).as_posix())
-        and DOWNLOAD_MANAGER.search(path.read_text(encoding="utf-8"))
+        and DOWNLOAD_MANAGER.search(STRINGS_AND_COMMENTS.sub("", path.read_text(encoding="utf-8")))
     ]
 
 

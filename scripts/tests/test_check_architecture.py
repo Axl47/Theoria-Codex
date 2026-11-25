@@ -82,10 +82,13 @@ class DiagnosticsRulesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             manifests = {
-                "app/src/debug": '<uses-permission\n    android:name="android.permission.READ_LOGS" />',
+                "app/src/debug": '<uses-permission android:name="android.permission.INTERNET" />\n'
+                                 '<uses-permission\n    android:name="android.permission.READ_LOGS" />',
                 "app/src/release": '<uses-permission-sdk-23 android:name="android.permission.READ_LOGS"/>',
                 "media-kit/src/main": '<uses-permission android:name="android.permission.READ_LOGS" tools:node="remove" />',
                 "feature-viewer/src/main": '<uses-permission android:name="android.permission.INTERNET" />',
+                "feature-search/src/main": '<!-- <uses-permission android:name="android.permission.READ_LOGS" /> -->',
+                "feature-settings/src/main": '<uses-permission android:name="android.permission.READ_LOGS" tools:node = "remove" />',
             }
             for source_set, text in manifests.items():
                 manifest = root / source_set / "AndroidManifest.xml"
@@ -115,6 +118,12 @@ class DownloadManagerRuleTest(unittest.TestCase):
             "app/src/androidTest/java/com/theoriacodex/app/DownloadsDeviceTest.kt": "val queue: DownloadManager? = null\n",
             "media-kit/src/test/kotlin/com/theoriacodex/app/media/QueueTest.kt": "val queue: DownloadManager? = null\n",
             "media-kit/src/sharedTest/kotlin/com/theoriacodex/app/viewer/Fixture.kt": "val queue: DownloadManager? = null\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadAnimationExport.kt":
+                "val queue = context.getSystemService(DownloadManager::class.java)\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/downloads/PostDownloads.kt":
+                "val queue = context.getSystemService(DownloadManager::class.java)\n",
+            "feature-settings/src/main/kotlin/com/theoriacodex/app/settings/About.kt":
+                'val label = "Android DownloadManager"\n// DownloadManager is not used here\n',
         }
         with main_sources(files):
             self.assertIn(check_architecture.only_post_downloads_use_download_manager, check_architecture.RULES)
@@ -124,6 +133,7 @@ class DownloadManagerRuleTest(unittest.TestCase):
                  for path in [
                      "app/src/personalRelease/java/com/theoriacodex/app/Export.java",
                      "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Export.kt",
+                     "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadAnimationExport.kt",
                      "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/UgoiraMp4Export.kt",
                  ]],
                 check_architecture.only_post_downloads_use_download_manager(),
