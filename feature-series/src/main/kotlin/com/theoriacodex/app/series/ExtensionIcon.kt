@@ -58,10 +58,11 @@ fun ComponentRegistry.Builder.addExtensionIcons(): ComponentRegistry.Builder =
             app.sourceDir = icon.apk
             app.publicSourceDir = icon.apk
             val side = options.size.width.pxOrElse { APK_ICON_PX }
-            val bitmap = app.loadIcon(packages).toBitmap(side, side)
+            val drawable = packages.getResourcesForApplication(app).getDrawable(app.icon, null)
+            val bitmap = drawable.toBitmap(side, side)
             DrawableResult(bitmap.toDrawable(options.context.resources), isSampled = false, DataSource.DISK)
         }
-    }).add(Keyer<ApkIcon> { icon, _ -> "extension-icon:${icon.packageName}:${icon.versionCode}" })
+    }).add(Keyer<ApkIcon> { icon, _ -> "extension-icon:${icon.packageName}:${icon.versionCode}:${icon.apk}" })
 
 private val ICON_SIZE = 40.dp
 private val ICON_SHAPE = RoundedCornerShape(8.dp)

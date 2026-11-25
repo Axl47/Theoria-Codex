@@ -98,8 +98,8 @@ class ExtensionsScreenTest {
         assertEquals(3, icons.size)
         val expected = with(compose.density) { 40.dp.roundToPx() }
         icons.forEach { assertEquals(IntSize(expected, expected), it.size) }
-        compose.waitUntilSettled { requested.isNotEmpty() }
-        assertEquals(listOf<Any>(icon), requested.distinct())
+        compose.waitUntilSettled { requested.size >= 2 }
+        assertEquals(listOf<Any>(icon, icon), requested)
     }
 
     private fun show(repos: ExtensionRepos, device: SeriesExtensions = Device()): ExtensionsViewModel {

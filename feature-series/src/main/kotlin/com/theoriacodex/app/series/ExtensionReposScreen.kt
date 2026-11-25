@@ -271,7 +271,7 @@ internal fun UpdatesGroup(state: ExtensionsState, viewModel: ExtensionsViewModel
     val updates = state.updates
     if (updates.isEmpty()) return
     val action: (@Composable () -> Unit)? = if (updates.size > 1) ({ TextButton(onClick = viewModel::updateAll) { Text("Update all") } }) else null
-    val installedIcons = state.extensions.orEmpty().mapNotNull(InstalledExtension::icon).associateBy(ApkIcon::packageName)
+    val installedIcons = state.extensions.orEmpty().mapNotNull(InstalledExtension::icon).distinctBy(ApkIcon::packageName).associateBy(ApkIcon::packageName)
     SettingsGroup("Updates", action) {
         updates.forEachIndexed { index, extension ->
             if (index > 0) SettingsRowDivider()
