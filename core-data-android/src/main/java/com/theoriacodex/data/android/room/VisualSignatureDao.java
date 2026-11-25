@@ -14,14 +14,14 @@ public interface VisualSignatureDao {
             + "SELECT :source, :sourcePostId, :phash, 1, :indexedAtEpochMs WHERE EXISTS "
             + "(SELECT 1 FROM posts WHERE source = :source AND source_post_id = :sourcePostId) "
             + "ON CONFLICT(source, source_post_id) DO UPDATE SET phash = excluded.phash, phash_checked = 1, "
-            + "phash_failed_at_epoch_ms = NULL")
+            + "preview_failed_at_epoch_ms = NULL")
     void put(String source, String sourcePostId, Long phash, long indexedAtEpochMs);
 
     @Query("INSERT INTO post_visual_signatures (source, source_post_id, phash, phash_checked, indexed_at_epoch_ms, "
-            + "phash_failed_at_epoch_ms) SELECT :source, :sourcePostId, NULL, 0, :failedAtEpochMs, :failedAtEpochMs WHERE EXISTS "
+            + "preview_failed_at_epoch_ms) SELECT :source, :sourcePostId, NULL, 0, :failedAtEpochMs, :failedAtEpochMs WHERE EXISTS "
             + "(SELECT 1 FROM posts WHERE source = :source AND source_post_id = :sourcePostId) "
-            + "ON CONFLICT(source, source_post_id) DO UPDATE SET phash_failed_at_epoch_ms = excluded.phash_failed_at_epoch_ms")
-    void failHash(String source, String sourcePostId, long failedAtEpochMs);
+            + "ON CONFLICT(source, source_post_id) DO UPDATE SET preview_failed_at_epoch_ms = excluded.preview_failed_at_epoch_ms")
+    void failPreview(String source, String sourcePostId, long failedAtEpochMs);
 
     @Query("INSERT INTO post_visual_signatures (source, source_post_id, phash, phash_checked, indexed_at_epoch_ms, "
             + "model_id, embedding, predicted_tags, frame_state, frame_attempts) "
@@ -50,7 +50,7 @@ public interface VisualSignatureDao {
 
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
-            + "AND (signature.phash_checked = 1 OR signature.phash_failed_at_epoch_ms > :failedSinceEpochMs)) "
+            + "AND (signature.phash_checked = 1 OR signature.preview_failed_at_epoch_ms > :failedSinceEpochMs)) "
             + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
@@ -60,13 +60,13 @@ public interface VisualSignatureDao {
 
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
-            + "AND signature.model_id = :modelId) "
+            + "AND (signature.model_id = :modelId OR signature.preview_failed_at_epoch_ms > :failedSinceEpochMs)) "
             + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
             + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
-    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit, int skip);
+    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit, int skip, long failedSinceEpochMs);
 
     @Query("SELECT posts.* FROM posts JOIN post_visual_signatures AS signature "
             + "ON signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
@@ -100,7 +100,7 @@ public interface VisualSignatureDao {
             + "frame_attempts = 0")
     void clearVision();
 
-    @Query("DELETE FROM post_visual_signatures WHERE phash_checked = 0 AND phash_failed_at_epoch_ms IS NULL")
+    @Query("DELETE FROM post_visual_signatures WHERE phash_checked = 0 AND preview_failed_at_epoch_ms IS NULL")
     void deleteUnhashedRows();
 
     final class HashRow {

@@ -178,6 +178,31 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
+    @Test fun `creators checked before leaving the app keep their results`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            (1..2).forEach { repository.follow(CreatorProfile(SourceKey.PIXIV, "Artist $it", "$it", uploadsQuery = "user:$it"), emptyList()) }
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    if (creator.profileId == "2") delay(30_000)
+                    return Page(listOf(testPost(SourceKey.PIXIV, "new-${creator.profileId}")), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(0L)
+            runCurrent()
+            owner.cancelAutomaticRefresh()
+            runCurrent()
+            val follows = repository.observe().first().associateBy { it.creator.profileId }
+            assertEquals(0L, follows.getValue("1").checkedAtEpochMs)
+            assertEquals(null, follows.getValue("2").checkedAtEpochMs)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
     @Test fun `app-open checks wait out the interval even after a failure`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()

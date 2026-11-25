@@ -12,9 +12,9 @@ Likes and creator follows are local actions with no remote bookmarks. New-post b
 - Following marks the supplied visible posts of that creator as both latest and seen, so only later posts count as new; the follow list holds at most `MAX_FOLLOWED_CREATORS` (200).
 - Undo of an unfollow restores the record unchanged, including marks, at its old position. It does nothing if the creator was followed again meanwhile (the newer record stays) or the follow list filled up in the meantime.
 - Marks (latest ids, seen ids) are kept on the device for followed creators and saved searches; the first check with nothing seen only sets the baseline. Saved-search marks live with UI state because they are device-local and disposable.
-- Each follow and each saved search is stamped as attempted when its check starts (`claimChecks`, `SavedSearchNewPostsChecker.claim`), in the same write that tests it is due. A check that fails, or is cancelled by leaving the app, therefore waits out the check interval, restarts included, and overlapping checks send each request once. Follows and saved searches a cancelled run never started stay due.
+- Each follow and each saved search is stamped as attempted when its own request starts (`claimCheck`, `SavedSearchNewPostsChecker.claim`), in the same write that tests it is due, which is one settings write per creator checked. A check that fails, or is cancelled by leaving the app, therefore waits out the check interval, restarts included, and overlapping checks send each request once. Follows and saved searches a cancelled run never started stay due.
 - `CreatorFollowsViewModel.refreshIfStale` (the app-open check) refreshes only follows whose own last check or attempt, both saved with the follow, is older than the check interval.
-- Checks are recorded in batches of `WRITE_BATCH_SIZE` (25) creators per settings write, so a large list neither rewrites settings per creator nor loses its progress when cancelled.
+- Results are recorded in batches of `WRITE_BATCH_SIZE` (25) creators per settings write; a batch cut short by leaving the app still records the creators it finished (`NonCancellable`), since their attempts are already stamped.
 - `cancelAutomaticRefresh` stops the automatic check when the app leaves the foreground; a refresh the user started carries on. A refresh the user asks for during the automatic check replaces it and covers every follow rather than only the stale ones; the checks the automatic run already recorded stay. An automatic check never replaces a running refresh.
 - `unfollowWithUndo` unfollows at once and its Undo restores the same record, so nothing the creator posted meanwhile counts as seen.
 - `NewPostsCheckEffect` checks followed creators and saved searches whenever the app comes to the foreground (`repeatOnLifecycle(STARTED)`), once the first frame is drawn and only when the last check is stale (`checkIfStale`, `refreshIfStale`). Leaving the app cancels checks in flight (`cancelAutomaticRefresh`); what they already started is not sent again until the interval passes, so going to Recents and back repeatedly costs no more than one check. Saved searches run read-only (`retry = false`), on the sources and settings their collection uses.
@@ -27,7 +27,7 @@ Never add server-side follows or notifications.
 
 ## Applies to
 
-- `core-data/src/main/kotlin/com/theoriacodex/data/repository/CreatorFollowsRepository.kt`: `followKey`, `follow`, `restore`, `claimChecks`, `recordChecks`, `MAX_FOLLOWED_CREATORS`
+- `core-data/src/main/kotlin/com/theoriacodex/data/repository/CreatorFollowsRepository.kt`: `followKey`, `follow`, `restore`, `claimCheck`, `recordChecks`, `MAX_FOLLOWED_CREATORS`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/NewPostMarks.kt`: `NewPostMarks`, `SavedSearchNewPosts`, `newPostsCheckDue`
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt`: `observeSavedSearchNewPosts`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/SavedSearchNewPosts.kt`: `SavedSearchNewPostsChecker`, `checkIfStale`, `claim`

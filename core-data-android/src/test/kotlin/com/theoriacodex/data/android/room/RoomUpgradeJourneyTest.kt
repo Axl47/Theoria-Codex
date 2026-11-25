@@ -173,7 +173,7 @@ class RoomUpgradeJourneyTest {
             it.execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,phash_checked,indexed_at_epoch_ms) VALUES('PIXIV','1',94,1,5)")
         }
         helper.runMigrationsAndValidate(name, 24, true, TheoriaRoomDatabase.MIGRATION_23_24).use { database ->
-            database.query("SELECT phash, phash_checked, phash_failed_at_epoch_ms FROM post_visual_signatures").use {
+            database.query("SELECT phash, phash_checked, preview_failed_at_epoch_ms FROM post_visual_signatures").use {
                 assertTrue(it.moveToFirst())
                 assertEquals(listOf("94", "1", null), (0..2).map(it::getString))
             }

@@ -10,7 +10,7 @@ interface VisualSignatureRepository {
 
     suspend fun putHashes(hashes: Map<PostId, Long?>)
 
-    suspend fun failHashes(postIds: Collection<PostId>)
+    suspend fun failPreviews(postIds: Collection<PostId>)
 
     suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int = 0): List<Post>
 
@@ -54,6 +54,6 @@ enum class VisionFrames { NONE, WANTED, READ }
 
 const val MAX_FRAME_ATTEMPTS = 3
 
-const val PICTURE_HASH_RETRY_MS = 24 * 60 * 60 * 1000L
+const val PREVIEW_RETRY_MS = 24 * 60 * 60 * 1000L
 
 data class VisionProgress(val analysed: Int, val total: Int)

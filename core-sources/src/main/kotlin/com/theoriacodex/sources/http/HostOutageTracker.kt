@@ -58,6 +58,14 @@ class HostOutageTracker(
 
     fun isRateLimited(url: String): Boolean = hostKey(url)?.let(::rateLimitingSite) != null
 
+    fun isSiteRateLimited(url: String): Boolean {
+        val site = hostKey(url) ?: return false
+        val now = clock()
+        return state.value.any { (host, outage) ->
+            outage.isActiveRateLimit(now) && (hostBelongsToSite(host, site) || hostBelongsToSite(site, host))
+        }
+    }
+
     fun holdsOffChallengePass(url: String): Boolean = isChallenged(url) || isRateLimited(url)
 
     private fun rateLimitingSite(host: String): String? {
@@ -69,10 +77,9 @@ class HostOutageTracker(
 
     fun recordResponse(url: String, statusCode: Int, headers: Map<String, List<String>>): HostOutageKind? =
         outageKindOf(statusCode, headers)?.also { kind ->
-            val retryAfterMs = headers.header("Retry-After")?.trim()?.toLongOrNull()?.times(1_000L)
-            val holdMs = if (kind == HostOutageKind.RATE_LIMITED) {
-                maxOf(outageMs, retryAfterMs ?: 0L).coerceAtMost(maxOf(outageMs, MAX_RATE_LIMIT_MS))
-            } else outageMs
+            val longestMs = maxOf(outageMs, MAX_RATE_LIMIT_MS)
+            val retryAfterMs = headers.header("Retry-After")?.trim()?.toLongOrNull()?.coerceIn(0L, longestMs / 1_000L)?.times(1_000L)
+            val holdMs = if (kind == HostOutageKind.RATE_LIMITED) maxOf(outageMs, retryAfterMs ?: 0L) else outageMs
             record(url, kind, holdMs = holdMs)
         }
 

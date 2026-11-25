@@ -162,7 +162,7 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
 
     public static final Migration MIGRATION_23_24 = new Migration(23, 24) {
         @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
-            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `phash_failed_at_epoch_ms` INTEGER");
+            database.execSQL("ALTER TABLE `post_visual_signatures` ADD COLUMN `preview_failed_at_epoch_ms` INTEGER");
         }
     };
 

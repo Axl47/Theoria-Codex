@@ -27,7 +27,9 @@ class LibraryVisionBackfill(
             }
             if (results.isEmpty()) continue
             if (PictureResult.Unavailable in results.values) return tagger.ready.value
-            unreachable += results.filterValues { it == PictureResult.Unreachable }.keys.map { it.id }
+            val failed = results.filterValues { it == PictureResult.Unreachable }.keys
+            unreachable += failed.map { it.id }
+            signatures.failPreviews(failed.filter(reachable).map { it.id })
             if (!tagger.store(results)) return false
             delay(started.elapsedNow())
         }

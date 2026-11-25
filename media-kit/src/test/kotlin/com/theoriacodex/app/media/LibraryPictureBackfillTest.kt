@@ -1,6 +1,6 @@
 package com.theoriacodex.app.media
 
-import com.theoriacodex.data.repository.PICTURE_HASH_RETRY_MS
+import com.theoriacodex.data.repository.PREVIEW_RETRY_MS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
@@ -43,10 +43,10 @@ class LibraryPictureBackfillTest {
         val backfill = LibraryPictureBackfill(library) { asked++; PictureHashResult.Unavailable }
 
         backfill.drain()
-        library.now = PICTURE_HASH_RETRY_MS - 1
+        library.now = PREVIEW_RETRY_MS - 1
         backfill.drain()
         assertEquals(1, asked)
-        library.now = PICTURE_HASH_RETRY_MS
+        library.now = PREVIEW_RETRY_MS
         backfill.drain()
         assertEquals(2, asked)
     }
@@ -99,12 +99,12 @@ class LibraryPictureBackfillTest {
         }
         var now = 0L
         val failedAt = LinkedHashMap<PostId, Long>()
-        override suspend fun failHashes(postIds: Collection<PostId>) {
+        override suspend fun failPreviews(postIds: Collection<PostId>) {
             postIds.forEach { failedAt[it] = now }
         }
         val listed = mutableListOf<Int>()
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> =
-            library.filterNot { it.id in records || (failedAt[it.id] ?: Long.MIN_VALUE) > now - PICTURE_HASH_RETRY_MS }
+            library.filterNot { it.id in records || (failedAt[it.id] ?: Long.MIN_VALUE) > now - PREVIEW_RETRY_MS }
                 .drop(skip).take(limit).also { listed += it.size }
         override suspend fun putVision(entries: List<PictureVision>) = Unit
         override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()

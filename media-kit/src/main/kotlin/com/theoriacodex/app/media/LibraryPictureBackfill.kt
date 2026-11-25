@@ -10,15 +10,16 @@ class LibraryPictureBackfill(
     private val reachable: (Post) -> Boolean = { true },
     private val hash: suspend (Post) -> PictureHashResult,
 ) {
-    suspend fun drain() {
+    suspend fun drain(): Boolean {
         val held = HashSet<PostId>()
         val tried = HashSet<PostId>()
         while (true) {
             val batch = signatures.libraryPostsWithoutSignature(BATCH, skip = held.size).filterNot { it.id in held }
-            if (batch.isEmpty() || batch.any { it.id in tried }) return
+            if (batch.isEmpty() || batch.any { it.id in tried }) return held.isNotEmpty()
             val hashes = HashMap<PostId, Long?>()
             val failed = ArrayList<PostId>()
-            batch.mapConcurrent(concurrency = LOADS) { post -> post to if (reachable(post)) hash(post) else null }.forEach { (post, result) ->
+            batch.mapConcurrent(concurrency = LOADS) { post -> post to if (reachable(post)) hash(post) else null }.forEach { (post, loaded) ->
+                val result = loaded.takeUnless { it == PictureHashResult.Unavailable && !reachable(post) }
                 if (result == null) held += post.id else tried += post.id
                 when (result) {
                     is PictureHashResult.Hashed -> hashes[post.id] = result.hash
@@ -28,7 +29,7 @@ class LibraryPictureBackfill(
                 }
             }
             signatures.putHashes(hashes)
-            signatures.failHashes(failed)
+            signatures.failPreviews(failed)
         }
     }
 

@@ -77,10 +77,7 @@ fun sourceIssues(
     val active = outages.filterValues { it.untilEpochMs > now }
     if (active.isEmpty()) return emptyMap()
     return sourceSites(sources, extensionSites).mapNotNull { (source, site) ->
-        active.entries.firstOrNull { (host, outage) ->
-            if (outage.kind == HostOutageKind.RATE_LIMITED) HostOutageTracker.hostBelongsToSite(site, host)
-            else HostOutageTracker.hostBelongsToSite(host, site)
-        }?.let { source to it.value.kind }
+        active.entries.firstOrNull { (host, _) -> HostOutageTracker.hostBelongsToSite(host, site) }?.let { source to it.value.kind }
     }.toMap()
 }
 

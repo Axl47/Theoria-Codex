@@ -19,8 +19,10 @@ import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import java.util.Collections
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 class CreatorFollowsViewModel(
@@ -101,10 +104,14 @@ class CreatorFollowsViewModel(
             try {
                 val due = { follow: FollowedCreator -> !automatic || follow.checkDue(at) }
                 repository.observe().first().filter(due).chunked(WRITE_BATCH_SIZE).forEach { batch ->
-                    val results = batch.mapConcurrent(concurrency = 2) { listed ->
-                        repository.claimCheck(listed.membershipId, at, due)?.let { follow -> follow.membershipId to checkCreator(follow) }
+                    val results = Collections.synchronizedMap(LinkedHashMap<String, List<Post>?>())
+                    try {
+                        batch.mapConcurrent(concurrency = 2) { listed ->
+                            repository.claimCheck(listed.membershipId, at, due)?.let { follow -> results[follow.membershipId] = checkCreator(follow) }
+                        }
+                    } finally {
+                        withContext(NonCancellable) { repository.recordChecks(results.toMap(), at) }
                     }
-                    repository.recordChecks(results.filterNotNull().toMap(), at)
                 }
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) { messageChannel.send("Could not load followed creators") }

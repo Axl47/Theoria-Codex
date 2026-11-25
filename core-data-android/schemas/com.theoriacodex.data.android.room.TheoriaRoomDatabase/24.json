@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 24,
-    "identityHash": "46a6fe4c2b40b7ee1efec9f17a694b76",
+    "identityHash": "6c0a9d092fe601fb435cda68276819d9",
     "entities": [
       {
         "tableName": "codices",
@@ -573,7 +573,7 @@
       },
       {
         "tableName": "post_visual_signatures",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `phash_checked` INTEGER NOT NULL DEFAULT 1, `indexed_at_epoch_ms` INTEGER NOT NULL, `model_id` TEXT, `embedding` BLOB, `predicted_tags` TEXT, `frame_state` INTEGER NOT NULL DEFAULT 0, `frame_attempts` INTEGER NOT NULL DEFAULT 0, `phash_failed_at_epoch_ms` INTEGER, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `phash_checked` INTEGER NOT NULL DEFAULT 1, `indexed_at_epoch_ms` INTEGER NOT NULL, `model_id` TEXT, `embedding` BLOB, `predicted_tags` TEXT, `frame_state` INTEGER NOT NULL DEFAULT 0, `frame_attempts` INTEGER NOT NULL DEFAULT 0, `preview_failed_at_epoch_ms` INTEGER, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "source",
@@ -635,8 +635,8 @@
             "defaultValue": "0"
           },
           {
-            "fieldPath": "phashFailedAtEpochMs",
-            "columnName": "phash_failed_at_epoch_ms",
+            "fieldPath": "previewFailedAtEpochMs",
+            "columnName": "preview_failed_at_epoch_ms",
             "affinity": "INTEGER"
           }
         ],
@@ -881,7 +881,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '46a6fe4c2b40b7ee1efec9f17a694b76')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6c0a9d092fe601fb435cda68276819d9')"
     ]
   }
 }

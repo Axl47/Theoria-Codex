@@ -25,13 +25,11 @@ class SourceHealthTest {
         )
     }
 
-    @Test fun `a rate limit marks a source only when it covers the source's site, as requests are held off`() {
-        val nhentai = listOf(SourceKey.NHENTAI)
-        val pictures = mapOf("t.nhentai.net" to HostOutage(HostOutageKind.RATE_LIMITED, untilEpochMs = 2_000))
-        val site = mapOf("nhentai.net" to HostOutage(HostOutageKind.RATE_LIMITED, untilEpochMs = 2_000))
+    @Test fun `a rate limit on a source's API or picture host marks the source`() {
+        val limited = { host: String -> mapOf(host to HostOutage(HostOutageKind.RATE_LIMITED, untilEpochMs = 2_000)) }
 
-        assertEquals(emptyMap<SourceKey, HostOutageKind>(), sourceIssues(pictures, nhentai, now = 1_000))
-        assertEquals(mapOf(SourceKey.NHENTAI to HostOutageKind.RATE_LIMITED), sourceIssues(site, nhentai, now = 1_000))
+        assertEquals(mapOf(SourceKey.IWARA to HostOutageKind.RATE_LIMITED), sourceIssues(limited("api.iwara.tv"), listOf(SourceKey.IWARA), now = 1_000))
+        assertEquals(mapOf(SourceKey.NHENTAI to HostOutageKind.RATE_LIMITED), sourceIssues(limited("t.nhentai.net"), listOf(SourceKey.NHENTAI), now = 1_000))
     }
 
     @Test fun `an extension source's issue comes from the host of its site or a subdomain`() {

@@ -263,7 +263,7 @@ class CustomSitesControllerImplTest {
         assertEquals(BuiltInTestResult.RATE_LIMITED, controller.testBuiltIn(SourceKey.NHENTAI))
         assertEquals(0, searches)
         assertTrue(outages.isRateLimited("https://nhentai.net/"))
-        assertTrue(controller.checkVerification(SourceKey.NHENTAI, "WebView/2"))
+        assertFalse(controller.checkVerification(SourceKey.NHENTAI, "WebView/2"))
         assertTrue(clearanceChecks.isEmpty())
     }
 

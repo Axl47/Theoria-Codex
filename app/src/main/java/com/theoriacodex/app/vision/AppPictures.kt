@@ -35,8 +35,8 @@ class AppPictures(
     val libraryTotal: Flow<Int>,
 ) {
     suspend fun indexLibrary(): Boolean {
-        hashes.drain()
-        return tags.drain()
+        val held = hashes.drain()
+        return tags.drain() || held
     }
 
     suspend fun readFrames(): Boolean = tags.drainFrames()

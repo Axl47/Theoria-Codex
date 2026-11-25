@@ -39,6 +39,7 @@ internal fun unreachableMessage(host: String, reason: ProbeFailure): String = wh
     ProbeFailure.TIMEOUT -> "$host took too long to answer. Try again."
     ProbeFailure.HTTP_ERROR -> "$host answered with an error. Try again later."
     ProbeFailure.BLOCKED -> "$host blocked the check, possibly with a browser challenge. If you have an account there, your API key may get through."
+    ProbeFailure.RATE_LIMITED -> "Too many requests to $host. Try again later."
     ProbeFailure.INSECURE_REDIRECT -> "$host redirected to an insecure address."
     ProbeFailure.CROSS_HOST_REDIRECT -> "$host redirected to a different site."
 }

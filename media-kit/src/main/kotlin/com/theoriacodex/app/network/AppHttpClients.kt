@@ -94,9 +94,10 @@ class AppHttpClients(
         if (!warmed.compareAndSet(false, true)) return
         val client = shared.newBuilder().followRedirects(false).followSslRedirects(false)
             .callTimeout(WARM_UP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .apply { outages?.let { addNetworkInterceptor(recordingRateLimits(it)) } }
             .build()
         coroutineScope {
-            memory.recentHosts().filterNot(sharesBrowserIdentity).forEach { host ->
+            memory.recentHosts().filterNot(sharesBrowserIdentity).filterNot { outages?.isSiteRateLimited("https://$it/") == true }.forEach { host ->
                 launch {
                     runCatchingPreservingCancellation {
                         val request = Request.Builder().url("https://$host/").head().header("User-Agent", WARM_UP_USER_AGENT).build()
