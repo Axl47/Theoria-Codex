@@ -84,10 +84,7 @@ internal fun ViewerTrailRow(
     if (crumbs.isEmpty() && shown.isEmpty() && !canAdd) return
     var adding by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    LaunchedEffect(active?.key, forks.failed?.key) {
-        val index = shown.indexOfFirst { it.key == active?.key }
-        if (index >= 0 && !listState.fullyShows(crumbs.size + index)) listState.animateScrollToItem(crumbs.size + index)
-    }
+    ScrollActiveChipIntoView(listState, active, forks.failed, shown, crumbs.size)
     val start: (TrailFork) -> Boolean = { chip ->
         onInteraction()
         forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
@@ -110,6 +107,14 @@ internal fun ViewerTrailRow(
         TrailTagSheet(post.id.source, onDismiss = { adding = false }) { tag ->
             if (start(TrailFork.Tag(tag))) adding = false
         }
+    }
+}
+
+@Composable
+private fun ScrollActiveChipIntoView(listState: LazyListState, active: TrailFork?, failed: TrailFork?, shown: List<TrailFork>, before: Int) {
+    LaunchedEffect(active?.key, failed?.key) {
+        val index = shown.indexOfFirst { it.key == active?.key }
+        if (index >= 0 && !listState.fullyShows(before + index)) listState.animateScrollToItem(before + index)
     }
 }
 
