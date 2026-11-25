@@ -286,7 +286,7 @@ def no_manifest_reads_other_apps_logs() -> list[str]:
 
 DOWNLOAD_MANAGER = re.compile(r"\bDownloadManager\b|\bDOWNLOAD_SERVICE\b")
 DOWNLOAD_MANAGER_OWNERS = re.compile(r"media-kit/src/main/kotlin/(?:.+/)?(?:PostDownloads|PostDownloadService|PostDownloadFiles)\.kt")
-STRINGS_AND_COMMENTS = re.compile(r'""".*?"""|"(?:\\.|[^"\\\n])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
+STRINGS_AND_COMMENTS = re.compile(r"'(?:\\.|[^'\\\n])'|" r'""".*?"""|"(?:\\.|[^"\\\n])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
 TEST_SOURCE_SETS = ("test", "androidTest", "sharedTest")
 
 
@@ -371,6 +371,28 @@ def cleartext_hosts(parent: ElementTree.Element, inherited: bool) -> set[str]:
         hosts |= cleartext_hosts(domain_config, permitted)
     return hosts
 
+
+
+OKHTTP_CLIENT_CONSTRUCTION = re.compile(r"\bOkHttpClient\s*(?:\.\s*Builder\s*)?\(\s*\)")
+OKHTTP_CLIENT_OWNERS = (
+    "core-sources/src/main/kotlin/com/theoriacodex/sources/http/DefaultSourceHttpClient.kt",
+    "extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionHost.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/network/AppHttpClients.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraClient.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoHttpDataSource.kt",
+    "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
+)
+
+
+@rule
+def http_clients_derive_from_the_shared_client() -> list[str]:
+    return [
+        f"{relative} builds its own OkHttpClient; derive it from AppHttpClients' shared client with newBuilder() "
+        "(docs/adr/0102-app-http-clients.md)"
+        for path in shipping_sources()
+        if (relative := path.relative_to(ROOT).as_posix()) not in OKHTTP_CLIENT_OWNERS
+        and OKHTTP_CLIENT_CONSTRUCTION.search(STRINGS_AND_COMMENTS.sub("", path.read_text(encoding="utf-8")))
+    ]
 
 def main() -> int:
     failures = [failure for rule in RULES for failure in rule()]

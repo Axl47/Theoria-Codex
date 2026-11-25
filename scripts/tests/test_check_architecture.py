@@ -201,6 +201,34 @@ class DiagnosticsRulesTest(unittest.TestCase):
                     check_architecture.no_manifest_reads_other_apps_logs(),
                 )
 
+class HttpClientRuleTest(unittest.TestCase):
+    def test_reports_a_client_built_outside_the_shared_one_adr_0102(self) -> None:
+        files = {
+            "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Thumbnails.kt": "val client = OkHttpClient()\n",
+            "app/src/personalRelease/java/com/theoriacodex/app/Probe.java": "OkHttpClient client = new OkHttpClient.Builder().build();\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/network/AppHttpClients.kt": "val shared = OkHttpClient.Builder().build()\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/PixivUgoiraClient.kt": "val download: OkHttpClient = OkHttpClient()\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/media/Covers.kt": "val covers = shared.newBuilder().build()\n",
+            "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoCache.kt": "val cache = OkHttpClient()\n",
+            "feature-settings/src/main/kotlin/com/theoriacodex/app/settings/About.kt":
+                'val label = "OkHttpClient()"\n// OkHttpClient.Builder() is not used here\n',
+            "media-kit/src/test/kotlin/com/theoriacodex/app/network/ClientTest.kt": "val client = OkHttpClient()\n",
+            "media-kit/src/sharedTest/kotlin/com/theoriacodex/app/viewer/Fixture.kt": "val client = OkHttpClient()\n",
+        }
+        with main_sources(files):
+            self.assertIn(check_architecture.http_clients_derive_from_the_shared_client, check_architecture.RULES)
+            self.assertEqual(
+                [f"{path} builds its own OkHttpClient; derive it from AppHttpClients' shared client with newBuilder() "
+                 "(docs/adr/0102-app-http-clients.md)"
+                 for path in [
+                     "app/src/personalRelease/java/com/theoriacodex/app/Probe.java",
+                     "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Thumbnails.kt",
+                     "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/VideoCache.kt",
+                 ]],
+                check_architecture.http_clients_derive_from_the_shared_client(),
+            )
+
+
 class DownloadManagerRuleTest(unittest.TestCase):
     def test_reports_animation_export_through_download_manager_adr_0110(self) -> None:
         files = {
@@ -221,6 +249,8 @@ class DownloadManagerRuleTest(unittest.TestCase):
                 "val queue = context.getSystemService(DownloadManager::class.java)\n",
             "media-kit/src/main/kotlin/com/theoriacodex/app/media/downloads/PostDownloads.kt":
                 "val queue = context.getSystemService(DownloadManager::class.java)\n",
+            "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Quotes.kt":
+                'val quotes = text.count { it == \'"\' } + DOWNLOAD_SERVICE.length + "".length\n',
             "feature-settings/src/main/kotlin/com/theoriacodex/app/settings/About.kt":
                 'val label = "Android DownloadManager"\n// DownloadManager is not used here\n',
         }
@@ -232,6 +262,7 @@ class DownloadManagerRuleTest(unittest.TestCase):
                  for path in [
                      "app/src/personalRelease/java/com/theoriacodex/app/Export.java",
                      "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Export.kt",
+                     "feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/Quotes.kt",
                      "media-kit/src/main/kotlin/com/theoriacodex/app/media/PostDownloadAnimationExport.kt",
                      "media-kit/src/main/kotlin/com/theoriacodex/app/viewer/UgoiraMp4Export.kt",
                  ]],
