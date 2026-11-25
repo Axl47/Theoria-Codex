@@ -44,7 +44,7 @@ sealed interface ViewerAction {
     data class PlaybackCompleted(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val loadGeneration: Long, val atMs: Long) : ViewerAction
     data class RestartDwell(val atMs: Long, val interacting: Boolean) : ViewerAction
     data class SetSlideshow(val running: Boolean) : ViewerAction
-    data class SlideshowAdvance(val session: ViewerSessionIdentity, val key: ViewerMediaKey) : ViewerAction
+    data class SlideshowAdvance(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val dwellStartedAtMs: Long? = null) : ViewerAction
     data object Play : ViewerAction
     data object Pause : ViewerAction
     data object TogglePlayback : ViewerAction

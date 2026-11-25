@@ -173,8 +173,8 @@ private fun ViewerDwellEffect(frame: ViewerFrame, screen: ViewerScreenState, onA
     val dispatch by rememberUpdatedState(onAction)
     LaunchedEffect(dwellApplies) {
         if (!dwellApplies) return@LaunchedEffect
-        snapshotFlow { activity() to screen.touching }.collect { (_, touching) ->
-            dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = touching))
+        snapshotFlow { activity() }.collect {
+            dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = screen.touching))
         }
     }
 }

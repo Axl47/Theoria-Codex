@@ -37,7 +37,7 @@ internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, dwellStartedAtM
         elapsed.snapTo(0f)
         if (hold == null) return@LaunchedEffect
         launch { elapsed.animateTo(1f, tween(VIEWER_SLIDESHOW_IMAGE_MS.toInt(), easing = LinearEasing)) }
-        holdViewerSlideshowImage(currentState) { currentOnAction(it) }
+        holdViewerSlideshowImage(currentState, dwellStartedAtMs) { currentOnAction(it) }
     }
     if (hold != null) {
         ViewerPassiveProgressBar({ (elapsed.value * VIEWER_SLIDESHOW_IMAGE_MS).toLong() }, VIEWER_SLIDESHOW_IMAGE_MS, Modifier.align(Alignment.BottomCenter))

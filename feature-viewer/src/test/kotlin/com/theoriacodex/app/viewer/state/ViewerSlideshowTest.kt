@@ -25,7 +25,7 @@ class ViewerSlideshowTest {
         assertFalse(state.controls.chromeVisible)
         val actions = mutableListOf<ViewerAction>()
         val held = state
-        launch { holdViewerSlideshowImage(held, actions::add) }
+        launch { holdViewerSlideshowImage(held, null, actions::add) }
         advanceTimeBy(VIEWER_SLIDESHOW_IMAGE_MS - 1)
         runCurrent()
         assertTrue(actions.isEmpty())
@@ -47,7 +47,7 @@ class ViewerSlideshowTest {
         assertEquals(ViewerPlaybackMode.LOOP, state.controls.playbackMode)
         assertNull(state.slideshowImageHold())
         val actions = mutableListOf<ViewerAction>()
-        holdViewerSlideshowImage(state, actions::add)
+        holdViewerSlideshowImage(state, null, actions::add)
         assertTrue(actions.isEmpty())
         val media = requireNotNull(state.currentMedia)
         state = reduceViewerState(state, ViewerAction.PlaybackCompleted(session, media.key, media.loadGeneration, 0L)).state

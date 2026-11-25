@@ -72,6 +72,14 @@ class ViewerClipDwellTest {
         assertEquals(null, state.slideshowImageHold())
     }
 
+    @Test fun `a slideshow image timer from before a dwell restart is ignored (ADR 0217)`() {
+        var state = reduceViewerState(createViewerUiState(session, listOf(post("a", "image/jpeg"), post("b", "image/jpeg"))), ViewerAction.SetSlideshow(true)).state
+        state = state.ready().act(ViewerAction.RestartDwell(0L, interacting = false)).act(ViewerAction.RestartDwell(2_000L, interacting = false))
+        val key = requireNotNull(state.currentMedia).key
+        assertEquals(0, state.act(ViewerAction.SlideshowAdvance(session, key, dwellStartedAtMs = 0L)).currentPageIndex)
+        assertEquals(1, state.act(ViewerAction.SlideshowAdvance(session, key, dwellStartedAtMs = 2_000L)).currentPageIndex)
+    }
+
     private fun playNext(): ViewerUiState {
         val posts = listOf(post("a", "video/mp4"), post("b", "video/mp4"), post("c", "video/mp4"))
         return reduceViewerState(createViewerUiState(session, posts), ViewerAction.SetPlaybackMode(ViewerPlaybackMode.NEXT)).state

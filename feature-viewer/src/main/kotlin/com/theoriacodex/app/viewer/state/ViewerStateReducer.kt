@@ -429,7 +429,12 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
 }
 
 private fun ViewerUiState.movedByUser(moved: ViewerReduction): ViewerReduction {
-    val order = compareValuesBy(queuePosition(this), moved.state.queuePosition(this), { it.first }, { it.second })
+    val positions = listOf(this, moved.state).firstNotNullOfOrNull { order ->
+        val from = queuePosition(order) ?: return@firstNotNullOfOrNull null
+        val to = moved.state.queuePosition(order) ?: return@firstNotNullOfOrNull null
+        from to to
+    } ?: return moved
+    val order = compareValuesBy(positions.first, positions.second, { it.first }, { it.second })
     val held = when {
         order > 0 -> true
         order < 0 -> false
@@ -439,9 +444,8 @@ private fun ViewerUiState.movedByUser(moved: ViewerReduction): ViewerReduction {
     return moved.copy(state = state.copy(controls = state.controls.copy(dwell = state.controls.dwell.copy(held = held))))
 }
 
-private fun ViewerUiState.queuePosition(order: ViewerUiState): Pair<Int, Int> {
-    val queue = com.theoriacodex.app.viewer.viewerPostNavigation(order).sourceIndices
-    val index = queue.indexOf(currentPageIndex).takeIf { it >= 0 } ?: com.theoriacodex.app.viewer.viewerPostNavigation(this).currentIndex
+private fun ViewerUiState.queuePosition(order: ViewerUiState): Pair<Int, Int>? {
+    val index = com.theoriacodex.app.viewer.viewerPostNavigation(order).sourceIndices.indexOf(currentPageIndex).takeIf { it >= 0 } ?: return null
     return index to (currentPage?.selectedMediaIndex ?: 0)
 }
 
@@ -462,7 +466,8 @@ private fun ViewerUiState.setSlideshow(running: Boolean): ViewerUiState {
 }
 
 private fun ViewerUiState.advanceSlideshow(action: ViewerAction.SlideshowAdvance): ViewerReduction {
-    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key || controls.dwell.held || controls.dwell.interacting) {
+    val dwell = controls.dwell
+    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key || dwell.held || dwell.interacting || dwell.startedAtMs != action.dwellStartedAtMs) {
         return ViewerReduction(this)
     }
     return advanceInQueue() ?: ViewerReduction(setSlideshow(false))

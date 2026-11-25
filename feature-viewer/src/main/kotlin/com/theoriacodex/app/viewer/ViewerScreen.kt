@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.viewer.state.dwellApplies
+import android.os.SystemClock
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -165,6 +167,7 @@ private fun ViewerLoadedScreen(
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     SideEffect { screen.dwellStartedAtMs = uiState.controls.dwell.startedAtMs }
+    val dwellApplies by rememberUpdatedState(uiState.dwellApplies)
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     val timelineInset = viewerTimelineInset(chromeVisible, frame.watching)
     val bottomRowHeight = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
@@ -180,6 +183,7 @@ private fun ViewerLoadedScreen(
         ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { down ->
             screen.touching = down
             screen.touchSerial += 1
+            if (dwellApplies) host.onAction(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = down))
         }) {
             ViewerContentSurface(
                 frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
@@ -278,10 +282,13 @@ private fun ViewerBackdrop(
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     onTouch(true)
-                    do {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                    } while (event.changes.any { it.pressed })
-                    onTouch(false)
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        onTouch(false)
+                    }
                 }
             }
             .drawBehind {
