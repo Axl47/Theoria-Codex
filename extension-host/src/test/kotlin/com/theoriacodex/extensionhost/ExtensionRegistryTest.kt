@@ -539,7 +539,7 @@ class ExtensionRegistryTest {
         assertEquals(setOf(MihonKind.sourceKey('a'.code.toLong())), availability.on)
         assertEquals(
             mapOf(
-                MihonKind.sourceKey('a'.code + 100L) to SourceOff("a", "es"),
+                MihonKind.sourceKey('a'.code + 100L) to SourceOff("a", "es", registry.installed().first { it.name == "a" }.id),
                 MihonKind.sourceKey('b'.code.toLong()) to SourceOff("b"),
                 MihonKind.sourceKey('b'.code + 100L) to SourceOff("b"),
             ),

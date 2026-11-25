@@ -34,7 +34,7 @@ data class ApkIcon(val packageName: String, val versionCode: Long, val apk: Stri
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
 
-data class SourceOff(val extension: String, val language: String? = null)
+data class SourceOff(val extension: String, val language: String? = null, val extensionId: String? = null)
 
 data class SourceAvailability(val on: Set<SourceKey> = emptySet(), val off: Map<SourceKey, SourceOff> = emptyMap())
 
@@ -92,6 +92,8 @@ interface SeriesExtensions {
     suspend fun settings(id: String): List<ExtensionSourceSettings>
 
     suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings>
+
+    suspend fun availability(): SourceAvailability = SourceAvailability()
 }
 
 fun ExtensionChoices.trusts(extension: String, signer: String?): Boolean = !signer.isNullOrBlank() && trusted[extension] == signer
