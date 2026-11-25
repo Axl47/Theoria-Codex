@@ -180,7 +180,7 @@ private fun SeriesTabHomeContent(
                 onQueryChange = search.onQueryChange,
                 onSearch = search.onSearch,
                 onClear = search.onClear,
-                trailing = { if (oldSearchBar) settingsButton() },
+                trailing = { if (oldSearchBar) Box(Modifier.padding(end = 8.dp)) { settingsButton() } },
             )
         },
     ) {
