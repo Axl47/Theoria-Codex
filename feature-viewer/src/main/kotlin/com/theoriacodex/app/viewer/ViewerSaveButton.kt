@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -157,12 +158,15 @@ internal fun ViewerSaveButton(
 }
 
 @Composable
-private fun ViewerSaveLabel(text: String, color: Color = Color.Unspecified) {
-    Text(text, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 128.dp))
+private fun RowScope.ViewerSaveLabel(text: String, color: Color = Color.Unspecified) {
+    Text(
+        text, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f, fill = false).widthIn(max = 128.dp),
+    )
 }
 
 @Composable
-private fun ViewerSavedInLabel(savedIn: SaveSuggestion, next: SaveSuggestion?) {
+private fun RowScope.ViewerSavedInLabel(savedIn: SaveSuggestion, next: SaveSuggestion?) {
     val accent = LocalViewerAccent.current
     Icon(Icons.Default.Check, contentDescription = null, tint = accent, modifier = Modifier.size(28.dp).padding(2.dp))
     ViewerSaveLabel(savedIn.name, accent)

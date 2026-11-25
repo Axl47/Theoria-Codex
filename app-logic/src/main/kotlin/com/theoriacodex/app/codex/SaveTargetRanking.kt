@@ -36,7 +36,7 @@ fun rankSaveTargets(
         suggestions = open.sortedWith(
             compareByDescending(score).thenByDescending { lastSavedAt[it.codexId] ?: Long.MIN_VALUE },
         ),
-        savedIn = profileCodices.filter { it.codexId in containingCodexIds }.sortedByDescending(score).firstOrNull(),
+        savedIn = profileCodices.filter { it.codexId in containingCodexIds }.maxByOrNull(score),
     )
 }
 
