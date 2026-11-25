@@ -61,7 +61,7 @@ fun ExtensionsScreen(viewModel: ExtensionsViewModel, onBack: () -> Unit, missing
         state.subpage == ExtensionsSubpage.REPOS -> ReposPage(state, viewModel, onBack = closeSubpage)
         state.subpage == ExtensionsSubpage.BROWSE -> BrowsePage(state, viewModel, onBack = closeSubpage)
         else -> {
-            val shown = missingSeries?.state?.collectAsStateWithLifecycle()?.value?.series.orEmpty()
+            val shown = missingSeries?.state?.collectAsStateWithLifecycle()?.value?.series.orEmpty().map { it.series }
             ExtensionsList(state, shown, viewModel, onShowMissing = { missingKind = it }, onBack = onBack)
         }
     }
@@ -220,7 +220,7 @@ private fun ExtensionPage(extension: InstalledExtension, settings: List<Extensio
     }
 }
 
-private val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty() || removable
+internal val InstalledExtension.hasPage: Boolean get() = on && languages.isNotEmpty() || removable
 
 internal fun extensionSummary(extension: InstalledExtension): String = when {
     extension.problem != null -> listOf(extension.versionName, extension.problem).joinToString(SEPARATOR)

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -44,7 +45,9 @@ import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.languageName
 import com.theoriacodex.domain.series.seriesKind
+import java.text.DateFormat
 import kotlinx.coroutines.flow.first
 
 class MissingExtensionsActions(
@@ -63,7 +66,7 @@ internal fun MissingExtensionsOverlay(
     actions: MissingExtensionsActions,
 ) {
     val state by missing.state.collectAsStateWithLifecycle()
-    val shown = state?.series.orEmpty().filter { it.id.source.seriesKind == request.kind }
+    val shown = state?.series.orEmpty().filter { it.series.id.source.seriesKind == request.kind }
     val resolved = state != null && shown.isEmpty()
     LaunchedEffect(resolved) { if (resolved) request.onDismiss() }
     var resumed by rememberSaveable { mutableStateOf(false) }
@@ -76,10 +79,14 @@ internal fun MissingExtensionsOverlay(
     val from = switching
     if (from == null) {
         val switchable = state?.switchable.orEmpty()
+        val dates = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
+        val progress = shown.associateBy { it.series.id }
         MissingExtensionsSheet(
-            missing = shown,
+            missing = shown.map { it.series },
             extensions = extensions,
-            titles = TitleActions({ it.id.source.seriesKind in switchable }, { switching = it }, missing::unfollow),
+            titles = TitleActions({ it.id.source.seriesKind in switchable }, { switching = it }, missing::unfollow) { series ->
+                progress[series.id]?.let { readingSummary(it, dates) }
+            },
             request = request,
         )
     } else {
@@ -101,12 +108,12 @@ internal fun MissingExtensionsOverlay(
     }
 }
 
-private class TitleActions(val canSwitch: (Series) -> Boolean, val onSwitch: (Series) -> Unit, val onUnfollow: (SeriesId) -> Unit)
+private class TitleActions(val canSwitch: (Series) -> Boolean, val onSwitch: (Series) -> Unit, val onUnfollow: (SeriesId) -> Unit, val summary: (Series) -> String?)
 
 @Composable
 private fun MissingExtensionsSheet(missing: List<Series>, extensions: ExtensionsViewModel, titles: TitleActions, request: MissingSheetRequest) {
     val state by extensions.state.collectAsStateWithLifecycle()
-    val provider = ProviderActions(extensions::install, extensions::ask, request.onOpenExtension)
+    val provider = ProviderActions(extensions::install, extensions::ask, { copy, languages -> languages.forEach { extensions.setLanguage(copy.id, it, true) } }, request.onOpenExtension)
     ExpandedBottomSheet(onDismiss = request.onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             SheetHeader(MISSING_EXTENSIONS_TITLE, closeDescription = "Close", onDismiss = request.onDismiss) {
@@ -137,10 +144,19 @@ private fun MissingGroups(
 
 @Composable
 private fun UnlistedGroup(unlisted: List<Series>, title: String, actions: TitleActions) {
+    val sites = unlisted.groupBy { siteHint(it.coverUrl) }.entries.sortedWith(compareBy(nullsLast()) { it.key })
     SettingsGroup(title) {
-        unlisted.forEachIndexed { index, series ->
+        sites.forEachIndexed { index, (site, series) ->
             if (index > 0) SettingsRowDivider()
-            MissingTitleRow(series, nested = false, actions)
+            if (site != null) {
+                Text(
+                    site,
+                    Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            series.forEach { MissingTitleRow(it, nested = false, actions) }
         }
     }
 }
@@ -157,16 +173,24 @@ private fun OfferedGroup(providers: List<MissingProvider>, state: ExtensionsStat
     }
 }
 
-private class ProviderActions(val onInstall: (RepoExtension) -> Unit, val onTurnOn: (InstalledExtension) -> Unit, val onOpenExtension: (String) -> Unit)
+private class ProviderActions(
+    val onInstall: (RepoExtension) -> Unit,
+    val onTurnOn: (InstalledExtension) -> Unit,
+    val onTurnOnLanguages: (InstalledExtension, List<String>) -> Unit,
+    val onOpenExtension: (String) -> Unit,
+)
 
 @Composable
 private fun ProviderRow(provider: MissingProvider, state: ExtensionsState, open: Boolean, onToggle: () -> Unit, handlers: ProviderActions, actions: TitleActions) {
     val extension = provider.extension
     val copy = installedCopy(extension, state.extensions)
-    val status = when {
-        copy == null -> repoExtensionStatus(extension)
-        copy.on -> LANGUAGE_OFF
-        else -> OFF
+    val gap = copy?.let { installedGap(it, provider.series, state.sourcesOff) }
+    val status = when (gap) {
+        null -> repoExtensionStatus(extension)
+        InstalledGap.Off -> OFF
+        is InstalledGap.LanguagesOff -> languagesOffLine(gap.languages)
+        InstalledGap.NotLoaded -> COULDNT_LOAD
+        InstalledGap.NotInVersion -> NOT_IN_THIS_VERSION
     }
     RepoExtensionRow(
         extension,
@@ -175,16 +199,26 @@ private fun ProviderRow(provider: MissingProvider, state: ExtensionsState, open:
         onInstall = handlers.onInstall,
         onClick = onToggle,
         after = {
-            when {
-                copy == null -> Unit
-                copy.on -> TextButton(onClick = { handlers.onOpenExtension(copy.id) }) { Text(OPEN) }
-                else -> TextButton(onClick = { handlers.onTurnOn(copy) }) { Text(TURN_ON) }
-            }
+            if (copy != null) GapAction(copy, gap, handlers)
             Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
         },
     ) { ExtensionIcon(extension.iconUrl) }
     if (open) provider.series.forEach { MissingTitleRow(it, nested = true, actions) }
 }
+
+@Composable
+private fun GapAction(copy: InstalledExtension, gap: InstalledGap?, handlers: ProviderActions) {
+    when (gap) {
+        InstalledGap.Off -> TextButton(onClick = { handlers.onTurnOn(copy) }) { Text(TURN_ON) }
+        is InstalledGap.LanguagesOff -> TextButton(onClick = { handlers.onTurnOnLanguages(copy, gap.languages) }) { Text(TURN_ON) }
+        InstalledGap.NotLoaded -> if (copy.hasPage) {
+            IconButton(onClick = { handlers.onOpenExtension(copy.id) }) { Icon(Icons.Default.Settings, contentDescription = "${copy.name} settings") }
+        }
+        InstalledGap.NotInVersion, null -> Unit
+    }
+}
+
+internal fun languagesOffLine(languages: List<String>): String = "${languages.joinToString { languageName(it) }} off"
 
 @Composable
 private fun MissingTitleRow(series: Series, nested: Boolean, actions: TitleActions) {
@@ -193,7 +227,10 @@ private fun MissingTitleRow(series: Series, nested: Boolean, actions: TitleActio
         Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = if (nested) 64.dp else 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(series.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f)) {
+            Text(series.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            actions.summary(series)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -221,7 +258,7 @@ internal const val REPOS = "Repos"
 internal const val NOT_FOUND = "Not found"
 internal const val UNFOLLOW = "Unfollow"
 internal const val TURN_ON = "Turn on"
-internal const val OPEN = "Open"
 internal const val OFF = "Off"
-internal const val LANGUAGE_OFF = "Language off"
+internal const val COULDNT_LOAD = "Couldn't load"
+internal const val NOT_IN_THIS_VERSION = "Not in this version"
 private const val SWITCH_SOURCE_KEY = "missing-extensions-switch-"

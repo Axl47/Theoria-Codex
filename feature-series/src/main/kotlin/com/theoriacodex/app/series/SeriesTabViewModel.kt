@@ -141,7 +141,7 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         sources = sources,
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
-        missingExtensions = sources?.let { missingSeries(all.map { it.series }, it) }.orEmpty(),
+        missingExtensions = sources?.let { missingSeries(all, it).map(FollowedSeries::series) }.orEmpty(),
     )
 }
 

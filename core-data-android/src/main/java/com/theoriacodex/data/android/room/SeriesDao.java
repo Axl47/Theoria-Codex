@@ -15,6 +15,8 @@ public interface SeriesDao {
     @Query("SELECT series.*, (SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
             + "AND series_entries.series_address = series.address AND series_entries.read = 0 "
             + "AND series_entries.source_order >= 0) AS unread_count, "
+            + "(SELECT COUNT(*) FROM series_entries WHERE series_entries.source = series.source "
+            + "AND series_entries.series_address = series.address AND series_entries.source_order >= 0) AS entry_count, "
             + "(SELECT MAX(COALESCE(uploaded_at_epoch_ms, first_seen_at_epoch_ms)) FROM series_entries "
             + "WHERE series_entries.source = series.source AND series_entries.series_address = series.address "
             + "AND series_entries.source_order >= 0) AS last_updated_at_epoch_ms, "

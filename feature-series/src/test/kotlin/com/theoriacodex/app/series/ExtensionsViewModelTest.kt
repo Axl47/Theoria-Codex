@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
@@ -10,6 +11,8 @@ import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.SourceAvailability
+import com.theoriacodex.domain.series.SourceOff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -196,7 +199,16 @@ internal class FakeSeriesExtensions(var listed: List<InstalledExtension>) : Seri
         return listed
     }
 
-    override suspend fun setLanguage(id: String, language: String, on: Boolean) = listed
+    val languagesSet = mutableListOf<Triple<String, String, Boolean>>()
+
+    override suspend fun setLanguage(id: String, language: String, on: Boolean): List<InstalledExtension> {
+        languagesSet += Triple(id, language, on)
+        return listed
+    }
+
+    var off: Map<SourceKey, SourceOff> = emptyMap()
+
+    override suspend fun availability() = SourceAvailability(off = off)
 
     override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()
 
