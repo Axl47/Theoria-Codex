@@ -122,7 +122,7 @@ fun SearchResultCard(
     val playbackActive = visibility.visible && lifecycleStarted
     val autoplayProbe = rememberFeedAutoplayProbe(post.id)
     FeedAutoplayTraceEffect(
-        post.id, autoplayProbe, mediaGeometry::boundsInWindow, { visibility.inWindow },
+        post.id, autoplayProbe, mediaGeometry::visibleBoundsInWindow, { visibility.inWindow },
         { visibility.inFeed.takeIf { visibility.hasFeedViewport } }, { lifecycleStarted },
     )
     val resolution = remember(post.id) { SearchCardResolution(post.id) }
@@ -221,6 +221,8 @@ private class SearchCardMediaGeometry {
     private var cachedCorners: ViewerReturnCorners? = null
 
     fun boundsInWindow(): Rect? = coordinates?.takeIf { it.isAttached }?.boundsInWindow(clipBounds = false)
+
+    fun visibleBoundsInWindow(): Rect? = coordinates?.takeIf { it.isAttached }?.boundsInWindow()
 
     fun corners(shape: Shape, layoutDirection: LayoutDirection, density: Density): ViewerReturnCorners {
         val size = coordinates?.size ?: IntSize.Zero

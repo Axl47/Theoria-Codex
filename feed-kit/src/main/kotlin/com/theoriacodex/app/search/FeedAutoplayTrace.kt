@@ -9,9 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalWindowInfo
 import com.theoriacodex.app.diagnostics.debugDiagnosticsEnabled
-import com.theoriacodex.app.media.PostMediaKind
 import com.theoriacodex.app.media.awaitsVideoStream
-import com.theoriacodex.app.media.mediaKind
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -68,9 +66,7 @@ internal class FeedAutoplayStallTrace(private val label: String, private val sta
     fun close(): String? = reported?.let { "$label left while stalled" }
 }
 
-internal fun Post.expectsFeedVideo(): Boolean =
-    awaitsVideoStream || id.source.videoUrlComesFromPostDetails() ||
-        (listOfNotNull(preview, full) + media).any { ref -> mediaKind(ref) == PostMediaKind.VIDEO }
+internal fun Post.expectsFeedVideo(): Boolean = awaitsVideoStream || id.source.videoUrlComesFromPostDetails()
 
 @Composable
 internal fun rememberFeedAutoplayProbe(postId: PostId): FeedAutoplayProbe? {
@@ -99,7 +95,7 @@ internal fun FeedAutoplayLeaseWantedEffect(probe: FeedAutoplayProbe?, wanted: Bo
 internal fun FeedAutoplayTraceEffect(
     postId: PostId,
     probe: FeedAutoplayProbe?,
-    boundsInWindow: () -> Rect?,
+    visibleBoundsInWindow: () -> Rect?,
     inWindow: () -> Boolean,
     inFeed: () -> Boolean?,
     started: () -> Boolean,
@@ -111,7 +107,9 @@ internal fun FeedAutoplayTraceEffect(
         try {
             while (true) {
                 val size = window.containerSize
-                val onScreen = boundsInWindow()?.overlaps(Rect(0f, 0f, size.width.toFloat(), size.height.toFloat())) == true
+                val visible = visibleBoundsInWindow()
+                val onScreen = visible != null && !visible.isEmpty &&
+                    visible.overlaps(Rect(0f, 0f, size.width.toFloat(), size.height.toFloat()))
                 val gates = probe.gates(onScreen, window.isWindowFocused, inWindow(), inFeed(), started())
                 trace.observe(gates, SystemClock.uptimeMillis())?.let { line -> Diagnostics.report(FEED_AUTOPLAY_AREA, line) }
                 delay(FEED_AUTOPLAY_POLL_MS)
