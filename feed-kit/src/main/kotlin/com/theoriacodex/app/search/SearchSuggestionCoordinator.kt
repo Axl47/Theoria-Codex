@@ -8,6 +8,7 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.coroutines.runCatchingUnlessCallerCancelled
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -15,15 +16,11 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.util.LinkedHashMap
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 
 class SearchSuggestionCoordinator internal constructor(
@@ -268,18 +265,9 @@ class SearchSuggestionCoordinator internal constructor(
         block: suspend () -> List<T>,
     ): List<T> {
         if (autocompleteIsFresh(key)) return emptyList()
-        return try {
-            val fetched = withTimeout(AUTOCOMPLETE_REQUEST_TIMEOUT_MS) { block() }
-            recordAutocompleteRefresh(key)
-            fetched
-        } catch (_: TimeoutCancellationException) {
-            currentCoroutineContext().ensureActive()
-            emptyList()
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            emptyList()
-        }
+        return runCatchingUnlessCallerCancelled {
+            withTimeout(AUTOCOMPLETE_REQUEST_TIMEOUT_MS) { block() }.also { recordAutocompleteRefresh(key) }
+        }.getOrDefault(emptyList())
     }
 
     private fun autocompleteIsFresh(key: AutocompleteFetchKey): Boolean =
