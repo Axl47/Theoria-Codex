@@ -166,7 +166,7 @@ private fun <T> CollectTargetBubble(
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .then(if (hovered) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.padding(if (hovered) ARMED_INSET else 0.dp), contentAlignment = Alignment.Center) {
                 when (val visual = target.visual) {
                     CollectTargetVisual.Busy -> CircularProgressIndicator(Modifier.size(TARGET_SIZE / 2), strokeWidth = 3.dp)
                     is CollectTargetVisual.Icon -> Icon(visual.icon, contentDescription = null)
@@ -192,5 +192,6 @@ private val TARGET_SIZE = 56.dp
 private val LABEL_WIDTH = TARGET_SIZE + 16.dp
 private val ROW_GAP = 12.dp
 private val HIT_SLOP = 12.dp
+private val ARMED_INSET = 6.dp
 private val RISING_GAP = 12.dp
 private const val HOVERED_SCALE = 1.2f
