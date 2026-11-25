@@ -94,7 +94,7 @@ private suspend fun TheoriaShell.openLevel(
     val feed = TrailFeed("trail:${UUID.randomUUID()}", spec.pager, features.relatedPosts)
     var opened = false
     try {
-        val posts = feed.start(request.from.id) { results -> results.visibleUnder(filters, marks()) }
+        val posts = feed.start({ post -> post.id in data.fileMirrors.copiesOf(request.from) }) { results -> results.visibleUnder(filters, marks()) }
         val session = if (posts.isEmpty()) null else viewerRouteWorkflow.prepareResumableSession(
             ViewerSession(
                 posts = posts,

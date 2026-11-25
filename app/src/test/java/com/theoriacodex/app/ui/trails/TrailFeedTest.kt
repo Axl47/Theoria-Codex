@@ -38,12 +38,13 @@ class TrailFeedTest {
     }
 
     @Test
-    fun `a step opens only with a post besides the one it was opened from (ADR 0180)`() = runTest {
-        val origin = post("here").id
-        assertTrue(feed(ScriptedPager(page("here", more = false))).start(origin).isEmpty())
+    fun `a step opens only with a post besides the one it was opened from or its mirrors (ADR 0180)`() = runTest {
+        val origin = setOf(post("here").id, post("mirror").id)
+        val isOrigin: (Post) -> Boolean = { it.id in origin }
+        assertTrue(feed(ScriptedPager(page("here", "mirror", more = false))).start(isOrigin).isEmpty())
 
         val later = ScriptedPager(page("here", more = true), page("here", "other", more = false))
-        assertEquals(listOf("here", "other"), feed(later).start(origin).map { it.id.sourcePostId })
+        assertEquals(listOf("here", "other"), feed(later).start(isOrigin).map { it.id.sourcePostId })
         assertEquals(2, later.calls)
     }
 

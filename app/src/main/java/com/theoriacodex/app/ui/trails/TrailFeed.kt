@@ -9,7 +9,6 @@ import com.theoriacodex.app.trails.TrailPager
 import com.theoriacodex.app.trails.nextOrNull
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,11 +34,11 @@ internal class TrailFeed(
         scope, relatedLoader, currentState = { RelatedPostsUiState.Idle }, canonicalPosts = { snapshot.value.results }, updateState = {},
     )
 
-    suspend fun start(from: PostId? = null, visible: (List<Post>) -> List<Post> = { it }): List<Post> {
+    suspend fun start(isOrigin: (Post) -> Boolean = { false }, visible: (List<Post>) -> List<Post> = { it }): List<Post> {
         repeat(FIRST_PAGE_LIMIT) {
             if (!step()) return emptyList()
             val shown = visible(snapshot.value.results)
-            if (shown.any { it.id != from }) return shown
+            if (shown.any { !isOrigin(it) }) return shown
             if (!snapshot.value.canLoadMore) return emptyList()
         }
         return emptyList()

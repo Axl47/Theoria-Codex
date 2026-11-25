@@ -80,15 +80,15 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         waitFor("Viewer shows the original post") { selectedPost() == posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST].id.sourcePostId }
 
         addTag("only", ONLY_HERE_TAG)
-        waitFor("the step says it has no other posts", timeoutMillis = 15_000) {
-            compose.onAllNodes(hasText("No other posts")).fetchSemanticsNodes().isNotEmpty()
+        waitFor("the step says it has no other posts, on screen", timeoutMillis = 15_000) {
+            compose.onAllNodes(hasText("No other posts")).fetchSemanticsNodes().isNotEmpty() && compose.onNode(hasText("No other posts")).isDisplayed()
         }
         assertEquals(null, crumb(1))
         assertEquals(posts.getValue(SourceKey.PIXIV)[ORIGINAL_POST].id.sourcePostId, selectedPost())
     }
 
     override fun customizePost(index: Int, post: Post): Post =
-        if (index == ORIGINAL_POST) post.copy(canonicalTags = post.canonicalTags + ONLY_HERE_TAG) else post
+        if (index == ORIGINAL_POST) post.copy(canonicalTags = post.canonicalTags + ONLY_HERE_TAG + ROW_FILLERS) else post
 
     private fun addTag(typed: String, tag: String) {
         compose.onNodeWithTag("viewer-trail-row").performScrollToKey("add")
@@ -115,5 +115,6 @@ class ViewerTrailJourneyTest : AppJourneyFixture() {
         const val ADD_REMOVE_SEARCH = "journey:trail-edit"
         const val ONLY_HERE_SEARCH = "journey:trail-only"
         const val ONLY_HERE_TAG = "only_here"
+        val ROW_FILLERS = listOf("a_long_fixture_tag_one", "a_long_fixture_tag_two", "a_long_fixture_tag_three")
     }
 }

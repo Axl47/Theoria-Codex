@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -81,12 +82,18 @@ internal fun ViewerTrailRow(
     val canAdd = opener != TrailOpener.None
     if (crumbs.isEmpty() && shown.isEmpty() && !canAdd) return
     var adding by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(active?.key, forks.failed?.key) {
+        val index = shown.indexOfFirst { it.key == active?.key }
+        if (index >= 0) listState.animateScrollToItem(crumbs.size + index)
+    }
     val start: (TrailFork) -> Boolean = { chip ->
         onInteraction()
         forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
     }
     LazyRow(
         modifier.fillMaxWidth().testTag("viewer-trail-row"),
+        state = listState,
         contentPadding = PaddingValues(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(TrailChipGap),
         verticalAlignment = Alignment.CenterVertically,
