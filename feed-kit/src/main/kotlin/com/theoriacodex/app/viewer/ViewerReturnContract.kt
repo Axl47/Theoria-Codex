@@ -223,6 +223,19 @@ fun viewerReturnScrollDirection(targetIndex: Int, lastVisibleIndex: Int): Float 
 private const val MAX_VIEWER_RETURN_SCROLL_STEPS = 48
 
 @Composable
+internal fun ViewerReturnCard(postId: PostId, content: @Composable () -> Unit) {
+    val gridId = rememberSaveable { UUID.randomUUID().toString() }
+    val transition = LocalViewerReturnTransition.current
+    val request = transition?.request
+    LaunchedEffect(request, gridId, postId) {
+        if (request?.gridId != gridId || request.postId != postId) return@LaunchedEffect
+        withFrameNanos { }
+        transition.positioned(gridId, postId)
+    }
+    CompositionLocalProvider(LocalViewerReturnGrid provides gridId, content = content)
+}
+
+@Composable
 internal fun ViewerReturnShelfEffect(shelfId: ViewerReturnShelfId, postIds: List<PostId>, state: LazyListState) {
     val transition = LocalViewerReturnTransition.current ?: return
     val gridId = LocalViewerReturnGrid.current ?: return

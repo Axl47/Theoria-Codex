@@ -56,6 +56,7 @@ import com.theoriacodex.app.ui.components.CollectTargetsLayout
 import com.theoriacodex.app.ui.components.CollectTargetsState
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.viewer.ViewerReturnCard
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -183,7 +184,9 @@ internal fun TriageCards(
             translationY = drag.offset.y
             rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
         }
-        TriageCard(current, support, ratioFloor, footer, onClick = onOpen, likeEnabled = true, modifier = dragged)
+        ViewerReturnCard(current.id) {
+            TriageCard(current, support, ratioFloor, footer, onClick = onOpen, likeEnabled = true, modifier = dragged)
+        }
     }
 }
 
