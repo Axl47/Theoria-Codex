@@ -29,6 +29,7 @@ fun SavedSearchesCodexFilters(
     onChange: (FeedFabRestoreState) -> Unit,
     onRename: (String, String) -> Unit,
     onRemove: (String) -> Unit,
+    onEdit: (SavedSearchEntry) -> Unit,
     newCounts: Map<String, Int> = emptyMap(),
 ) {
     var filter by remember { mutableStateOf("") }
@@ -59,8 +60,9 @@ fun SavedSearchesCodexFilters(
         }
     }
     renaming?.let { entry ->
-        SavedSearchNameDialog(entry.name, renaming = true, onDismiss = { renaming = null }, onConfirm = {
-            onRename(entry.id, it); renaming = null
-        })
+        SavedSearchNameDialog(entry.name, renaming = true, onDismiss = { renaming = null },
+            onConfirm = { onRename(entry.id, it); renaming = null },
+            onEdit = { renaming = null; onEdit(entry) },
+        )
     }
 }

@@ -36,6 +36,7 @@ interface SavedSearchRepository {
     fun observeSavedSearches(): Flow<List<SavedSearchEntry>>
     suspend fun save(name: String, search: RecentSearchEntry): SavedSearchEntry
     suspend fun rename(id: String, name: String)
+    suspend fun update(id: String, search: RecentSearchEntry): Boolean
     suspend fun remove(id: String)
 
     suspend fun replaceAll(entries: List<SavedSearchEntry>)
@@ -128,6 +129,17 @@ private class MutableSavedSearchRepository(
         val normalizedName = validateSavedSearchName(name)
         require(savedSearches.value.any { it.id == id }) { "This saved search is no longer available." }
         persist(savedSearches.value.map { if (it.id == id) it.copy(name = normalizedName) else it })
+    }
+
+    override suspend fun update(id: String, search: RecentSearchEntry): Boolean = mutex.withLock {
+        val entries = savedSearches.value
+        val current = requireNotNull(entries.firstOrNull { it.id == id }) { "This saved search is no longer available." }
+        if (listOf(current).savedFor(search) != null) return@withLock false
+        entries.filterNot { it.id == id }.savedFor(search)?.let { other ->
+            throw IllegalArgumentException("“${other.name}” already saves this search.")
+        }
+        persist(entries.map { if (it.id == id) it.copy(search = search) else it })
+        true
     }
 
     override suspend fun remove(id: String) = mutex.withLock {

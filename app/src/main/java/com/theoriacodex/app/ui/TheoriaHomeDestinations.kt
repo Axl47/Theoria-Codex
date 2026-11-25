@@ -91,6 +91,10 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenSavedSearch = shell::openSavedSearch,
                 onResultsShown = shell.savedSearchOpens::resultsShown,
                 onSaveSearch = shell.owners.savedSearches::save,
+                onUpdateSavedSearch = { saved, search ->
+                    shell.owners.savedSearches.update(saved.id, search) { shell.endSavedSearchEdit(saved.id) }
+                },
+                onEndSavedSearchEdit = { shell.endSavedSearchEdit(it.id) },
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },
                 onSetSourceWeights = { sources, weights -> shell.owners.settings.onAction(SettingsAction.SetSourceWeights(sources, weights)) },
@@ -111,6 +115,7 @@ private fun SearchDestination(shell: TheoriaShell) {
 
 private fun searchRouteConfig(shell: TheoriaShell, state: BrowsingDestinationState) = SearchRouteConfig(
     savedSearches = shell.savedSearches,
+    editingSavedSearch = shell.editingSavedSearchId?.let { id -> shell.savedSearches.firstOrNull { it.id == id } },
     marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
     settings = state.settings,
     availableSources = state.availableSources,

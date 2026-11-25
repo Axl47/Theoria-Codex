@@ -259,7 +259,7 @@ internal class ShellOwners(
 private fun rememberShellOwners(container: TheoriaAppContainer, appContext: Context): ShellOwners {
     val data = container.data
     val workflows = container.workflows
-    val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches) }
+    val savedSearches = viewModel(key = "saved-searches") { SavedSearchViewModel(data.savedSearches, data.uiRestoreRepository) }
     val siteChecks = viewModel(key = "site-checks") {
         val app = appContext as? TheoriaApplication
         SiteChecks(
@@ -344,6 +344,8 @@ internal class TheoriaShell(
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry, data.fileMirrors::copiesOf)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
+    var editingSavedSearchId by mutableStateOf<String?>(null)
+        private set
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val seriesReader = container.series?.let(::SeriesReader)
     val viewerRouteWorkflow = ViewerRouteWorkflow(
@@ -654,7 +656,17 @@ internal class TheoriaShell(
         launchViewer(session, saveContext = true, singleTop = true)
     }
 
+    fun editSavedSearch(entry: SavedSearchEntry) {
+        openSavedSearch(entry)
+        editingSavedSearchId = entry.id
+    }
+
+    fun endSavedSearchEdit(id: String) {
+        if (editingSavedSearchId == id) editingSavedSearchId = null
+    }
+
     fun openHistoricalSearch(entry: RecentSearchEntry) {
+        editingSavedSearchId = null
         val historicalScope = when (entry.kind) {
             RecentSearchKind.MULTI_SEARCH -> SearchSourceScope.fromSources(entry.sources)
             RecentSearchKind.SOURCE,

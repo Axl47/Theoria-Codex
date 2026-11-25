@@ -2,8 +2,10 @@ package com.theoriacodex.app.recents
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.app.codex.resetSavedSearchNewPosts
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.SavedSearchRepository
+import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.savedFor
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.Job
@@ -18,7 +20,10 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class SavedSearchViewModel(private val repository: SavedSearchRepository) : ViewModel() {
+class SavedSearchViewModel(
+    private val repository: SavedSearchRepository,
+    private val newPosts: UiRestoreRepository,
+) : ViewModel() {
     val savedSearches = repository.observeSavedSearches()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val messages = Channel<String>(Channel.BUFFERED)
@@ -39,6 +44,11 @@ class SavedSearchViewModel(private val repository: SavedSearchRepository) : View
     fun rename(id: String, name: String) = mutate("Saved search renamed.") {
         justSaved.compareAndSet(id, null)
         repository.rename(id, name)
+    }
+
+    fun update(id: String, search: RecentSearchEntry, onUpdated: () -> Unit = {}) = mutate("Saved search updated.") {
+        if (repository.update(id, search)) newPosts.resetSavedSearchNewPosts(id)
+        onUpdated()
     }
 
     fun remove(id: String) = mutate("Saved search removed.") {

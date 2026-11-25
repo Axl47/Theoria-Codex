@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
@@ -24,10 +25,12 @@ class SavedSearchNewPostsTest {
     private val checked = mutableListOf<String>()
     private val checkedSorts = mutableListOf<SortMode>()
     private var hang = false
+    private var gate: CompletableDeferred<Unit>? = null
     private val checker = SavedSearchNewPostsChecker(store) { entry ->
         checked += entry.id
         checkedSorts += entry.search.query.sort
         if (hang) awaitCancellation()
+        gate?.await()
         pages[entry.id]?.map { testPost(SourceKey.PIXIV, it) }
     }
 
@@ -98,6 +101,23 @@ class SavedSearchNewPostsTest {
         assertEquals(2, checked.size)
         first.cancelAndJoin()
         second.cancelAndJoin()
+    }
+
+    @Test fun `editing a saved search starts its new posts over and drops a check of the old query still running (ADR 0218)`() = runTest {
+        val saved = savedSearchWithTwoNew()
+        val oldQueryAnswer = CompletableDeferred<Unit>()
+        gate = oldQueryAnswer
+        pages = mapOf("a" to listOf("old2", "old1"))
+        val running = launch { checker.checkIfStale(listOf(saved), 6 * hour) }
+        runCurrent()
+        store.resetSavedSearchNewPosts(saved.id)
+        oldQueryAnswer.complete(Unit)
+        running.join()
+        assertEquals(emptyMap<String, Int>(), counts())
+        gate = null
+        pages = mapOf("a" to listOf("9", "3"))
+        checker.checkIfStale(listOf(saved), 6 * hour + 1)
+        assertEquals(mapOf("a" to 0), counts())
     }
 
     private suspend fun savedSearchWithTwoNew(): SavedSearchEntry {

@@ -204,7 +204,7 @@ private fun CodexDetailContent(
     val virtualUi = virtualCodexUi(
         state, fabRestoreState, { shell.feedFabRestoreRegistry.update(fabContext, it) },
         { shell.navController.popBackStack() }, { shell.overlays.showFollowedCreators = true },
-        shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
+        shell.owners.savedSearches::rename, shell.owners.savedSearches::remove, shell::editSavedSearch,
     )
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     CodexDetailScreen(

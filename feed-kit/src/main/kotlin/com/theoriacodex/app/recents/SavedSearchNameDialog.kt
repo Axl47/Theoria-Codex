@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recents
 
 import com.theoriacodex.app.ui.components.focusOnOpen
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -21,6 +22,7 @@ fun SavedSearchNameDialog(
     renaming: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    onEdit: (() -> Unit)? = null,
 ) {
     var name by rememberSaveable(initialName, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length)))
@@ -42,6 +44,11 @@ fun SavedSearchNameDialog(
                 Text("Save")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            Row {
+                onEdit?.let { TextButton(onClick = it) { Text("Edit search") } }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
     )
 }

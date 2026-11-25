@@ -22,6 +22,7 @@ class SavedSearchNewPostsChecker(
             if (!claim(entry.id, saved, nowEpochMs)) return@mapConcurrent
             val ids = firstPage(entry.newestFirst())?.map { it.id.markKey() } ?: return@mapConcurrent
             store.updateSavedSearchNewPosts { state ->
+                if (state.attempts[entry.id] != nowEpochMs) return@updateSavedSearchNewPosts state
                 val kept = state.marks.filterKeys { it in saved }
                 state.copy(marks = kept + (entry.id to (kept[entry.id] ?: NewPostMarks()).checked(ids, nowEpochMs)))
             }
@@ -52,6 +53,10 @@ suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
     updateSavedSearchNewPosts { state ->
         state.copy(marks = state.marks.mapValues { (_, marks) -> marks.seen { it in shown } })
     }
+}
+
+suspend fun UiRestoreRepository.resetSavedSearchNewPosts(id: String) {
+    updateSavedSearchNewPosts { state -> state.copy(attempts = state.attempts - id, marks = state.marks - id) }
 }
 
 class SavedSearchOpenMarks(private val store: UiRestoreRepository) {

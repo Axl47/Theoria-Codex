@@ -92,6 +92,7 @@ private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
 private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
 
 private val SAVED_CHIP_MAX_WIDTH = 240.dp
+private val UPDATE_BUTTON_MAX_WIDTH = 200.dp
 
 @Composable
 internal fun SearchComposer(
@@ -592,6 +593,11 @@ private fun ComposerSavedSection(
                 TextButton(onClick = { naming = true }) {
                     Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
                     Text("Save", Modifier.padding(start = 4.dp))
+                }
+            }
+            savedSearches.onUpdateCurrent?.let { update ->
+                TextButton(onClick = update, modifier = Modifier.widthIn(max = UPDATE_BUTTON_MAX_WIDTH)) {
+                    Text("Update “${savedSearches.editing?.name}”", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (savedSearches.entries.isNotEmpty()) {

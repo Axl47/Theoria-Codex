@@ -68,19 +68,21 @@ class SearchComposerUiTest {
         include: List<SearchTermGroup> = groups,
         omnibox: List<OmniboxEntry> = emptyList(),
         onDismiss: () -> Unit = {},
+        savedSearches: (SearchUiState) -> ComposerSavedSearches = { ComposerSavedSearches(saved, onOpen = onOpenSaved) },
     ) {
         val base = SearchUiState()
         val draft = emptySearchQuery(QueryMode.Source(source)).copy(
             includeTermGroups = include,
             excludeTerms = listOf(sketch),
         )
-        val state = base.copy(query = base.query.copy(draft = draft, scopesBySource = mapOf(source to scopes)), suggestions = suggestions)
+        val query = base.query.copy(draft = draft, applied = draft, appliedQueryHash = "applied", scopesBySource = mapOf(source to scopes))
+        val state = base.copy(query = query, suggestions = suggestions)
         compose.setContent {
             MaterialTheme {
                 SearchComposer(
                     state = state, onAction = { actions += it }, sourcePicker = {}, onApply = {}, onReset = {},
                     onUndo = {}, onManageSavedTags = onManageSavedTags, onOpenSourceAccounts = {}, onDismiss = onDismiss,
-                    savedSearches = ComposerSavedSearches(saved, onOpen = onOpenSaved), savedTags = savedTags, omnibox = omnibox,
+                    savedSearches = savedSearches(state), savedTags = savedTags, omnibox = omnibox,
                 )
             }
         }
@@ -97,6 +99,31 @@ class SearchComposerUiTest {
         compose.onNodeWithText("Saved searches").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
+    }
+
+    @Test fun `editing a saved search swaps Save for Update, which hands over the search on screen (ADR 0218)`() {
+        val evening = SavedSearchEntry("evening", "Evening", RecentSearchEntry(emptySearchQuery(), "old", 1L), 1L)
+        var updated: Pair<SavedSearchEntry, RecentSearchEntry>? = null
+        var saves = 0
+        open(SourceKey.GELBOORU, emptyList(), savedSearches = { state ->
+            composerSavedSearches(state, listOf(evening), evening, { _, _ -> saves++ }, { saved, search -> updated = saved to search }, {}, {})
+        })
+        compose.onNodeWithText("Save").assertDoesNotExist()
+        compose.onNodeWithText("Update “Evening”").performClick()
+        compose.runOnIdle {
+            assertEquals(evening, updated?.first)
+            assertEquals("applied", updated?.second?.queryHash)
+            assertEquals(groups, updated?.second?.query?.includeTermGroups)
+            assertEquals(0, saves)
+        }
+    }
+
+    @Test fun `without a saved search being edited the composer offers Save, not Update (ADR 0218)`() {
+        open(SourceKey.GELBOORU, emptyList(), savedSearches = { state ->
+            composerSavedSearches(state, emptyList(), null, { _, _ -> }, { _, _ -> }, {}, {})
+        })
+        compose.onNodeWithText("Save").assertExists()
+        compose.onNodeWithText("Update", substring = true).assertDoesNotExist()
     }
 
     @Test fun `a saved search chip names its sort only when it is not Newest`() {

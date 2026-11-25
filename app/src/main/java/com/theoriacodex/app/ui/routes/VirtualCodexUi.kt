@@ -8,6 +8,7 @@ import com.theoriacodex.app.codex.SavedSearchesCodexFilters
 import com.theoriacodex.app.codex.SavedSearchesCodexHeader
 import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.data.repository.FeedFabRestoreState
+import com.theoriacodex.data.repository.SavedSearchEntry
 
 internal data class VirtualCodexUi(
     val header: @Composable (FeedView, LazyStaggeredGridState) -> Unit,
@@ -24,6 +25,7 @@ internal fun virtualCodexUi(
     onManageFollowed: () -> Unit,
     onRenameSearch: (String, String) -> Unit,
     onRemoveSearch: (String) -> Unit,
+    onEditSearch: (SavedSearchEntry) -> Unit,
 ): VirtualCodexUi? {
     state.followedOwner?.let { owner ->
         val filtersActive = restore.followedSources.isNotEmpty() || restore.followedAuthors.isNotEmpty()
@@ -44,9 +46,11 @@ internal fun virtualCodexUi(
         return VirtualCodexUi(
             header = { feed, grid ->
                 SavedSearchesCodexHeader(owner, state.savedSearches, feed, state.posts, grid,
-                    onBack, restore, onChange, onRenameSearch, onRemoveSearch)
+                    onBack, restore, onChange, onRenameSearch, onRemoveSearch, onEditSearch)
             },
-            filters = { SavedSearchesCodexFilters(state.savedSearches, restore, onChange, onRenameSearch, onRemoveSearch) },
+            filters = { dismiss ->
+                SavedSearchesCodexFilters(state.savedSearches, restore, onChange, onRenameSearch, onRemoveSearch, { dismiss(); onEditSearch(it) })
+            },
             filtersActive = state.savedSearches.any { it.id in restore.excludedSavedSearches },
             emptyMessage = when {
                 state.savedSearches.isEmpty() -> "No saved searches"

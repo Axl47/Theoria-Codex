@@ -99,6 +99,8 @@ fun SearchScreen(
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
+    editingSavedSearch: SavedSearchEntry? = null,
+    onUpdateSavedSearch: (SavedSearchEntry, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
     omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
     sourceMix: SearchSourceMix? = null,
@@ -142,7 +144,10 @@ fun SearchScreen(
         SearchPostSheet(post, actionPost, state, related, onAction, onRequestSaveToCodex, onAddFavoriteTag, onToggleLike)
     }
     if (chrome.composerOpen) {
-        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, onManageSavedSearches) { chrome.closeComposer(onAction); onOpenSavedSearch(it) }
+        val saved = composerSavedSearches(state, savedSearches, editingSavedSearch, onSaveSearch, onUpdateSavedSearch, onManageSavedSearches) {
+            chrome.closeComposer(onAction)
+            onOpenSavedSearch(it)
+        }
         SearchComposerDialog(state, feed, chrome, gridState, sourcePicker, applyDraft, onAction, onOpenSourceAccounts, saved,
             favoriteTags, onAddFavoriteTag, onRemoveFavoriteTag, onRenameFavoriteTag, omnibox() + sourceMixCommands(state, chrome, sourceMix, onAction))
     }
@@ -510,10 +515,12 @@ private fun activeSearchFilterCount(state: SearchUiState, feed: SearchFeed, fabR
         language = state.query.nhentaiLanguageFilter,
     )
 
-private fun composerSavedSearches(
+internal fun composerSavedSearches(
     state: SearchUiState,
     entries: List<SavedSearchEntry>,
+    editing: SavedSearchEntry?,
     onSave: (String, RecentSearchEntry) -> Unit,
+    onUpdate: (SavedSearchEntry, RecentSearchEntry) -> Unit,
     onManage: () -> Unit,
     onOpen: (SavedSearchEntry) -> Unit,
 ): ComposerSavedSearches {
@@ -537,7 +544,9 @@ private fun composerSavedSearches(
         entries = entries,
         currentQueryHash = current?.queryHash,
         onOpen = onOpen,
-        onSaveCurrent = current?.let { entry -> { name: String -> onSave(name, entry) } },
+        onSaveCurrent = current?.takeIf { editing == null }?.let { entry -> { name: String -> onSave(name, entry) } },
+        editing = editing,
+        onUpdateCurrent = current?.let { entry -> editing?.let { saved -> { onUpdate(saved, entry) } } },
         suggestedName = current?.let { recentSearchPresentation(it).title.take(MAX_SAVED_SEARCH_NAME_LENGTH) }.orEmpty(),
         onManage = onManage,
     )

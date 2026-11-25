@@ -36,7 +36,7 @@ class SavedSearchesCodexFiltersTest {
         var removed: String? = null
         compose.setContent { MaterialTheme { Column {
             SavedSearchesCodexFilters(entries.value, state.value, { state.value = it },
-                { id, name -> renamed = id to name }, { removed = it })
+                { id, name -> renamed = id to name }, { removed = it }, {})
         } } }
         compose.onNodeWithContentDescription("Include First").assertIsOn().performClick()
         compose.onNodeWithContentDescription("Include First").assertIsOff()
@@ -53,6 +53,22 @@ class SavedSearchesCodexFiltersTest {
         compose.runOnIdle { assertEquals("b" to "Renamed", renamed) }
         compose.onNodeWithContentDescription("Remove Second").performClick()
         compose.runOnIdle { assertEquals("b", removed) }
+    }
+
+    @Test fun `the rename dialog's Edit search hands over that saved search and renames nothing (ADR 0218)`() {
+        val entries = listOf(entry("a", "First"), entry("b", "Second"))
+        var renamed: Pair<String, String>? = null
+        var edited: SavedSearchEntry? = null
+        compose.setContent { MaterialTheme { Column {
+            SavedSearchesCodexFilters(entries, FeedFabRestoreState(), {}, { id, name -> renamed = id to name }, {}, { edited = it })
+        } } }
+        compose.onNodeWithContentDescription("Rename Second").performClick()
+        compose.onNodeWithText("Edit search").performClick()
+        compose.runOnIdle {
+            assertEquals(entries[1], edited)
+            assertEquals(null, renamed)
+        }
+        compose.onNodeWithText("Edit search").assertDoesNotExist()
     }
 
     private fun entry(id: String, name: String) = SavedSearchEntry(id, name, RecentSearchEntry(
