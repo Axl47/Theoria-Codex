@@ -15,3 +15,9 @@ New tag families are caught by wording; truly new vocabulary needs a list entry.
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/recommend/TagAffinity.kt`: `isImageTextTag`, `isFileTag`, `PictureEvidence`, `evidence`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TagAffinityTest.kt`: `text drawn on the image is never offered unless chosen, however specific (ADR 0072)`, `a tag about the file is never offered unless chosen, however much more often it is kept (ADR 0072)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/ForYouInterestsTest.kt`: `before any history, text on the image and tags about the file never lead (ADR 0071, 0072)`, `a tag about the file proves nothing by its picture, though a profile that chose it still gets it (ADR 0072, 0087)`, `text on the image and tags on half of Danbooru are never evidence (ADR 0072)`, `picture evidence counts kept posts' confident predictions, weighted by score (ADR 0072, 0085)`
+- Left to prose: membership of every single list entry, ending and prefix is unguarded; the tests check each kind of match with one member.

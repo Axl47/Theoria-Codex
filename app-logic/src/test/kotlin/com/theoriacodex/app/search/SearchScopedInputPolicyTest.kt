@@ -19,7 +19,19 @@ import org.junit.Test
 
 class SearchScopedInputPolicyTest {
     @Test
-    fun `all scoped prefixes preserve facet namespace aliases and polarity`() {
+    fun `a prefix the source cannot search gives no scope, except tag, which means general tags (ADR 0079)`() {
+        val artistOnly = listOf(FacetedSearchScope(SearchFacet.ARTIST, "artist"))
+
+        assertEquals(FacetedSearchScope(SearchFacet.TAG), typedInputScope(parseScopedInput("tag:cat"), FacetedSearchScope.All, artistOnly))
+        assertNull(typedInputScope(parseScopedInput("character:miku"), FacetedSearchScope.All, artistOnly))
+        assertNull(typedInputScope(parseScopedInput("female:fox"), FacetedSearchScope.All, artistOnly))
+        assertEquals(FacetedSearchScope(SearchFacet.TAG), typedInputScope(parseScopedInput("tag:cat"), artistOnly.single(), artistOnly))
+        assertNull(typedInputScope(parseScopedInput("character:miku"), artistOnly.single(), artistOnly))
+        assertEquals(artistOnly.single(), typedInputScope(parseScopedInput("cat"), artistOnly.single(), artistOnly))
+    }
+
+    @Test
+    fun `all scoped prefixes preserve facet namespace aliases and polarity (ADR 0079)`() {
         val expected = mapOf(
             "tag" to SearchScopePrefix(SearchFacet.TAG, "tag"),
             "female" to SearchScopePrefix(SearchFacet.TAG, "female", true),
@@ -53,7 +65,7 @@ class SearchScopedInputPolicyTest {
     }
 
     @Test
-    fun `namespace aliases resolve exactly while general aliases may fall back by facet`() {
+    fun `namespace aliases resolve exactly while general aliases may fall back by facet (ADR 0079)`() {
         val genericTag = FacetedSearchScope(SearchFacet.TAG, null)
         val female = FacetedSearchScope(SearchFacet.TAG, "female")
         val artist = FacetedSearchScope(SearchFacet.ARTIST, "artist")
@@ -65,7 +77,7 @@ class SearchScopedInputPolicyTest {
     }
 
     @Test
-    fun `draft commit uses canonical unified unsupported and removal messages`() {
+    fun `draft commit uses canonical unified unsupported and removal messages (ADR 0079)`() {
         val unified = state(QueryMode.Unified)
         val unifiedRejected = SearchDraftReducer.commitInput(unified, "artist:najar")
         assertFalse(unifiedRejected.accepted)
