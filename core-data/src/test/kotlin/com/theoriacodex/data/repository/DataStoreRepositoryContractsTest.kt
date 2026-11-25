@@ -107,6 +107,10 @@ class DataStoreRepositoryContractsTest(
         assertEquals(mapOf("a" to 9L), repository.observeSavedSearchNewPosts().first().attempts)
         assertEquals(5, repository.getSearchScrollState("query")?.firstVisibleItemIndex)
         assertEquals(launch, repository.observeViewerLaunchContext().first())
+        assertEquals(emptySet<SourceKey>(), repository.observeSwitchSourceSkipped().first())
+        repository.updateSwitchSourceSkipped { setOf(SourceKey.PIXIV, SourceKey.IWARA) }
+        repository.updateSwitchSourceSkipped { it - SourceKey.IWARA }
+        assertEquals(setOf(SourceKey.PIXIV), repository.observeSwitchSourceSkipped().first())
     }
 
     private fun createSettingsRepository(): SettingsRepository {

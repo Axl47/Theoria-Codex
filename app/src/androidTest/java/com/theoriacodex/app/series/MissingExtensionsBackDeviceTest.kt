@@ -30,6 +30,7 @@ import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
+import com.theoriacodex.data.repository.SwitchSourceSkips
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
@@ -130,7 +131,7 @@ class MissingExtensionsBackDeviceTest {
                     composable(EXTENSIONS) {
                         val actions = MissingExtensionsActions(
                             missing = { missing },
-                            switchSource = { id -> SwitchSourceViewModel(id, { listOf(Loaded) }, store = {}) { _, _ -> false } },
+                            switchSource = { id -> SwitchSourceViewModel(id, { listOf(Loaded) }, store = {}, choices = NoSkips) { _, _ -> false } },
                             onOpenSeries = { nav.navigate(SERIES) },
                         )
                         ExtensionsScreen(extensions, onBack = {}, missing = actions)
@@ -228,4 +229,9 @@ private object NoRepos : ExtensionRepos {
     override suspend fun available(refresh: Boolean) = RepoListing(emptyList())
     override suspend fun install(repo: String, packageName: String): String? = null
     override suspend fun uninstall(id: String) = Unit
+}
+
+private object NoSkips : SwitchSourceSkips {
+    override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> = flowOf(emptySet())
+    override suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>) = Unit
 }

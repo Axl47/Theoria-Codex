@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.ui.sourceFailureDetail
 import com.theoriacodex.data.repository.CheckProgress
+import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
@@ -157,6 +158,7 @@ class SeriesTabViewModel(
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
     private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
+    private val download: (suspend (SeriesId, DownloadChoice) -> Unit)? = null,
     private val checkFollowed: suspend (only: Set<SeriesId>?, onProgress: (CheckProgress) -> Unit) -> FollowedCheck,
 ) : ViewModel() {
     private var foundShown: Job? = null
@@ -245,6 +247,24 @@ class SeriesTabViewModel(
 
     fun dismissFailures() {
         mutableState.update { it.copy(failedCheck = null) }
+    }
+
+    fun canDownload(item: FollowedSeries): Boolean {
+        val id = item.series.id
+        return download != null && id.source.seriesKind == SeriesKind.MANGA && state.value.sources.orEmpty().any { it.key == id.source }
+    }
+
+    fun download(id: SeriesId, choice: DownloadChoice) {
+        val download = download ?: return
+        viewModelScope.changeDownloads { download(id, choice) }
+    }
+
+    fun markAllRead(id: SeriesId, read: Boolean, onUndo: (BulkReadUndo) -> Unit) {
+        viewModelScope.launch { repository.markAllRead(id, read)?.let(onUndo) }
+    }
+
+    fun undoBulkRead(id: SeriesId, undo: BulkReadUndo) {
+        viewModelScope.launch { repository.restoreProgress(id, undo.restore) }
     }
 
     fun unfollow(id: SeriesId) {

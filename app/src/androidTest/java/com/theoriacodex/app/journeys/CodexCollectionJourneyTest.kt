@@ -25,7 +25,9 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         val saved = posts.getValue(SourceKey.PIXIV).take(3)
         launch()
         library(LibrarySection.Codices)
+        compose.onNodeWithContentDescription("Import Codex").assertDoesNotExist()
         activate(compose.onNodeWithContentDescription("Create Codex"))
+        compose.onNodeWithText("Import").assertExists()
         compose.onNodeWithText("Name").performTextInput("Second collection")
         activate(compose.onNodeWithText("Save"))
         waitFor("repository holds a collection named Second collection") { io { container.content.observeCodices().first().any { it.name == "Second collection" } } }

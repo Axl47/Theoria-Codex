@@ -126,6 +126,7 @@ fun SeriesTabScreen(
             onOpenSeries = open,
             onOpenExtensions = onOpenExtensions,
             settingsButton = { SettingsButton(extensionAlerts, onOpenSettings) },
+            hold = rememberSeriesHold(state, viewModel, canSwitchSource = switchSource != null),
             failureTools = CheckFailureTools(snackbar, switchSource, onOpenSeries),
             modifier = modifier,
         )
@@ -152,6 +153,7 @@ private fun SeriesTabHomeContent(
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
     settingsButton: @Composable () -> Unit,
+    hold: SeriesHold,
     failureTools: CheckFailureTools,
     modifier: Modifier,
 ) {
@@ -191,7 +193,7 @@ private fun SeriesTabHomeContent(
             ScrollToTopOnTabReselect(TopLevelDestination.Series, scrollable) { searchBarDismissed = false }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
-                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, failureTools)
+                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, hold, failureTools)
             }
         }
     }
@@ -253,6 +255,7 @@ private fun SeriesTabViewBody(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    hold: SeriesHold,
     failureTools: CheckFailureTools,
 ) {
     val search = content.search
@@ -274,6 +277,7 @@ private fun SeriesTabViewBody(
             onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
+            hold = hold,
             failureTools = failureTools,
         )
         search != null -> GlobalSearchBody(

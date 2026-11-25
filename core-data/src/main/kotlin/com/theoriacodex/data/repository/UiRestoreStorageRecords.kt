@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -17,6 +18,8 @@ internal data class UiRestoreStoreRecord(
     val librarySection: String? = null,
     @SerialName("savedSearchNewPosts")
     val savedSearchNewPosts: SavedSearchNewPosts = SavedSearchNewPosts(),
+    @SerialName("switchSourceSkipped")
+    val switchSourceSkipped: List<String> = emptyList(),
 ) {
     fun toMemoryState(): PersistedUiRestoreState {
         return PersistedUiRestoreState(
@@ -30,6 +33,7 @@ internal data class UiRestoreStoreRecord(
             viewerLaunchContext = viewerLaunchContext?.toDomain(),
             librarySection = librarySection,
             savedSearchNewPosts = savedSearchNewPosts,
+            switchSourceSkipped = switchSourceSkipped.mapNotNullTo(LinkedHashSet(), SourceKey::parse),
         )
     }
 
@@ -44,6 +48,7 @@ internal data class UiRestoreStoreRecord(
                 viewerLaunchContext = state.viewerLaunchContext?.let(ViewerLaunchContextRecord::fromDomain),
                 librarySection = state.librarySection,
                 savedSearchNewPosts = state.savedSearchNewPosts,
+                switchSourceSkipped = state.switchSourceSkipped.map(SourceKey::id),
             )
         }
     }
@@ -56,6 +61,7 @@ internal data class PersistedUiRestoreState(
     val viewerLaunchContext: ViewerLaunchContext?,
     val librarySection: String? = null,
     val savedSearchNewPosts: SavedSearchNewPosts = SavedSearchNewPosts(),
+    val switchSourceSkipped: Set<SourceKey> = emptySet(),
 )
 
 @Serializable
