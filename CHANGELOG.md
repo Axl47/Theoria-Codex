@@ -91,6 +91,7 @@
 
 ### Changed
 
+- Importing a Codex moved from its own button in Library into Create Codex: tap +, then Import.
 - The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.
 - The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
