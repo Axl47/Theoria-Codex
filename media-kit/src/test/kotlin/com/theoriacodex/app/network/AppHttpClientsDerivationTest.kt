@@ -9,6 +9,7 @@ import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.Dns
 import okhttp3.HttpUrl
+import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -40,13 +41,17 @@ class AppHttpClientsDerivationTest {
 
     @Test
     fun `every client shares the one connection pool, cookie jar and address lookup (ADR 0102)`() {
-        val clients = clients(Dns.SYSTEM)
+        val memory = ConnectionMemory(NoRecentHosts, activeNetwork = { null })
+        val clients = AppHttpClients(jar, memory = memory)
+        val call = clients.shared.newCall(Request.Builder().url("https://example.com/").build())
 
         assertTrue(clients.shared.dns is BrowserAddressDns)
-        listOf(clients.video, clients.sources, clients.images, clients.downloads).forEach { client ->
+        listOf(clients.shared, clients.video, clients.sources, clients.images, clients.downloads).forEach { client ->
             assertSame(clients.shared.connectionPool, client.connectionPool)
             assertSame(jar, client.cookieJar)
             assertSame(clients.shared.dns, client.dns)
+            assertTrue("IPv6 and IPv4 race on each new connection", client.fastFallback)
+            assertSame("Connections teach the memory hosts and IPv6 health", memory, client.eventListenerFactory.create(call))
         }
     }
 

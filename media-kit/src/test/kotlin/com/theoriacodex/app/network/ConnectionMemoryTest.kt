@@ -40,6 +40,9 @@ class ConnectionMemoryTest {
 
     @Test
     fun `IPv6 is set aside once IPv4 keeps winning, then gets another chance (ADR 0102)`() {
+        repeat(2) { memory.connectEnd(call, InetSocketAddress(v4("v4only.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2) }
+        assertEquals("A site offering only IPv4 is no race", listOf(16, 4), families("c.example"))
+
         ipv4Beats("a.example")
         assertEquals("One lost race proves nothing", listOf(16, 4), families("c.example"))
 
@@ -51,6 +54,9 @@ class ConnectionMemoryTest {
 
         now += 1
         assertEquals(listOf(16, 4), families("c.example"))
+
+        ipv4Beats("d.example")
+        assertEquals("The second chance starts from no losses", listOf(16, 4), families("c.example"))
     }
 
     @Test
@@ -78,6 +84,11 @@ class ConnectionMemoryTest {
         network = "cellular"
 
         assertEquals(listOf(16, 4), families("c.example"))
+
+        ipv4Beats("a.example")
+        network = "wifi"
+        ipv4Beats("b.example")
+        assertEquals("A loss on another network does not count here", listOf(16, 4), families("c.example"))
     }
 
     @Test
@@ -91,7 +102,7 @@ class ConnectionMemoryTest {
     }
 
     @Test
-    fun `recent hosts stay newest first and bounded`() {
+    fun `recent hosts stay newest first and bounded (ADR 0102)`() {
         repeat(14) { memory.connectEnd(call, InetSocketAddress(v4("host$it.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2) }
         memory.connectEnd(call, InetSocketAddress(v4("host5.example"), 443), Proxy.NO_PROXY, Protocol.HTTP_2)
 

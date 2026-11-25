@@ -41,6 +41,29 @@ class StalledPageRescueTest {
             }
             runCatching { exchange.close() }
         }
+        createContext("/whole") { exchange ->
+            val range = exchange.requestHeaders.getFirst("Range")
+            requests += range
+            exchange.sendResponseHeaders(200, page.size.toLong())
+            if (range == null) {
+                exchange.responseBody.write(page, 0, STALLS_AFTER)
+                exchange.responseBody.flush()
+                Thread.sleep(STALL_LENGTH_MS)
+            } else {
+                exchange.responseBody.write(page)
+            }
+            runCatching { exchange.close() }
+        }
+        createContext("/silent") { exchange ->
+            requests += exchange.requestHeaders.getFirst("Range")
+            if (requests.size == 1) {
+                Thread.sleep(STALL_LENGTH_MS)
+            } else {
+                exchange.sendResponseHeaders(200, long.size.toLong())
+                runCatching { exchange.responseBody.write(long) }
+            }
+            runCatching { exchange.close() }
+        }
         createContext("/long") { exchange ->
             val range = exchange.requestHeaders.getFirst("Range")
             requests += range
@@ -73,6 +96,34 @@ class StalledPageRescueTest {
 
         assertEquals(page.toList(), body.toList())
         assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
+    }
+
+    @Test
+    fun `a host that ignores the range and sends the whole page again is read from the same byte (ADR 0102)`() {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(StalledPageRescue(rescue = { OkHttpClient() }, stallMs = 200, appliesTo = { true }))
+            .build()
+
+        val body = client.newCall(Request.Builder().url("http://127.0.0.1:${server.address.port}/whole").build())
+            .execute().use { it.body.bytes() }
+
+        assertEquals(page.toList(), body.toList())
+        assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
+    }
+
+    @Test
+    fun `a page that stalls before its headers is fetched again and stops reading once the call is cancelled (ADR 0102)`() {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(StalledPageRescue(rescue = { OkHttpClient() }, stallMs = 200, appliesTo = { true }))
+            .build()
+        val call = client.newCall(Request.Builder().url("http://127.0.0.1:${server.address.port}/silent").build())
+        val source = call.execute().body.source()
+
+        assertEquals(long.copyOfRange(0, 64 * 1024).toList(), source.readByteArray(64 * 1024L).toList())
+        assertEquals(listOf<String?>(null, null), requests.toList())
+
+        call.cancel()
+        assertThrows(IOException::class.java) { source.readByteArray(long.size - 64 * 1024L) }
     }
 
     @Test
@@ -115,9 +166,11 @@ class StalledPageRescueTest {
         fetch("static.nhentai.net")
         assertEquals(listOf<String?>(null, null), requests.toList())
 
-        requests.clear()
-        assertEquals(page.toList(), fetch("i3.nhentai.net").getOrThrow().toList())
-        assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
+        listOf("i3.nhentai.net", "i.nhentai.net").forEach { host ->
+            requests.clear()
+            assertEquals(page.toList(), fetch(host).getOrThrow().toList())
+            assertEquals(listOf(null, "bytes=$STALLS_AFTER-"), requests.toList())
+        }
     }
 
     @Test
@@ -134,7 +187,7 @@ class StalledPageRescueTest {
         assertEquals(2, connections.toSet().size)
 
         call.cancel()
-        assertThrows(IOException::class.java) { source.readByteArray(long.size.toLong()) }
+        assertThrows(IOException::class.java) { source.readByteArray(long.size - 64 * 1024L) }
     }
 
     private companion object {
