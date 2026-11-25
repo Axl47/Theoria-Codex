@@ -26,6 +26,10 @@ button) must stay put. The Viewer has its own chrome rules and is out of scope.
   the header follows the finger 1:1. A scroll-down at the list's top goes to the list and pull-to-refresh
   (`preScroll`), so a list that fits on screen never hides its header. When the list stops scrolling, or a fling
   ends, the header settles toward the last direction, but never stays hidden while the list is at its top.
+  A list that only fits because the hidden header gave it room (it can scroll neither way while the header is
+  partly or fully hidden) is at its end, not its top (`ScrollChromeState.atTop`). Otherwise hiding the header
+  would make a short list, such as Library's Saved shelves, report its top, bring the header back and push its
+  last row below the screen every time it reached the end.
 - Lists bind to the header through `ScrollToTopOnTabReselect(destination, scrollable)`, which every tab list
   already calls: it scrolls to the top and reveals the header on reselect, reports the list's top
   (`ScrollChromeTopEffect`, which also catches programmatic scrolls), and reveals the header when the list
@@ -67,4 +71,6 @@ is why it was left out.
 - `app/src/androidTest/java/com/theoriacodex/app/journeys/HeaderHidesOnScrollJourneyTest.kt`: `theLibraryHeaderLeavesOnScrollDownAndReturnsOnScrollUpAndAfterATabSwitchWhileTabsStay_adr_0218`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `at the top a downward scroll goes to the list and pull to refresh, never the header (ADR 0218)`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `a focused header control keeps the header shown (ADR 0218)`
+- `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `a list that fits only once the header hides keeps it hidden at its end (ADR 0218)`
+- `feature-library/src/test/kotlin/com/theoriacodex/app/library/LibraryHeaderScrollTest.kt`: `a short section that fits once the header hides keeps its last row in view at the end (ADR 0218)`
 - Left to prose: that a list's viewport equals its visible area is a layout property, covered by the Library journey reaching its header and lists on a device rather than by a host test.

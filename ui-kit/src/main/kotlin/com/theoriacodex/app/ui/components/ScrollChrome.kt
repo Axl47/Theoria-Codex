@@ -51,7 +51,8 @@ internal class ScrollChromeState {
     private val focused = mutableStateMapOf<Any, Unit>()
     val hideablePx: Int get() = if (active && focused.isEmpty()) hideableBottoms.values.maxOrNull() ?: 0 else 0
     val shiftPx: Int get() = offsetPx.roundToInt().coerceIn(0, hideablePx)
-    var atTop: () -> Boolean = { false }
+    var listAtStart: () -> Boolean = { false }
+    var listAtEnd: () -> Boolean = { false }
     var root: LayoutCoordinates? = null
     private var hiding = false
     private var generation = 0
@@ -65,6 +66,8 @@ internal class ScrollChromeState {
         offsetPx = (before - deltaY).coerceIn(0f, range)
         return before - offsetPx
     }
+
+    fun atTop(): Boolean = listAtStart() && (offsetPx == 0f || !listAtEnd())
 
     fun preScroll(deltaY: Float): Float = if (deltaY < 0f && atTop()) 0f else consume(deltaY)
 
@@ -175,14 +178,16 @@ fun Modifier.hidesOnScroll(): Modifier {
 @Composable
 internal fun ScrollChromeTopEffect(chrome: ScrollChromeState, scrollable: ScrollableState) {
     DisposableEffect(chrome, scrollable) {
-        chrome.atTop = { !scrollable.canScrollBackward }
+        chrome.listAtStart = { !scrollable.canScrollBackward }
+        chrome.listAtEnd = { !scrollable.canScrollForward }
         onDispose {
-            chrome.atTop = { false }
+            chrome.listAtStart = { false }
+            chrome.listAtEnd = { false }
             chrome.show()
         }
     }
     LaunchedEffect(chrome, scrollable) {
-        launch { snapshotFlow { !scrollable.canScrollBackward }.collect { top -> if (top) chrome.animateTo(0f) } }
+        launch { snapshotFlow { chrome.atTop() }.collect { top -> if (top) chrome.animateTo(0f) } }
         snapshotFlow { scrollable.isScrollInProgress }.drop(1).collectLatest { scrolling ->
             if (!scrolling) {
                 withFrameNanos {}

@@ -27,7 +27,7 @@ class ScrollChromeStateTest {
         val chrome = state()
         chrome.consume(-20f)
         assertEquals(100f, chrome.settleTarget())
-        chrome.atTop = { true }
+        chrome.listAtStart = { true }
         assertEquals(0f, chrome.settleTarget())
     }
 
@@ -40,11 +40,22 @@ class ScrollChromeStateTest {
     }
 
     @Test fun `at the top a downward scroll goes to the list and pull to refresh, never the header (ADR 0218)`() {
-        val chrome = state().apply { atTop = { true } }
+        val chrome = state().apply { listAtStart = { true } }
         assertEquals(0f, chrome.preScroll(-30f))
         assertEquals(0f, chrome.offsetPx)
-        chrome.atTop = { false }
+        chrome.listAtStart = { false }
         assertEquals(-30f, chrome.preScroll(-30f))
+    }
+
+    @Test fun `a list that fits only once the header hides keeps it hidden at its end (ADR 0218)`() {
+        val chrome = state()
+        chrome.consume(-50f)
+        chrome.listAtStart = { true }
+        chrome.listAtEnd = { true }
+        assertEquals(-40f, chrome.preScroll(-40f))
+        assertEquals(100f, chrome.settleTarget())
+        chrome.show()
+        assertEquals(0f, chrome.preScroll(-40f))
     }
 
     @Test fun `a focused header control keeps the header shown (ADR 0218)`() {
