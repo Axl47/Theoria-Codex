@@ -36,6 +36,7 @@ internal fun BoxScope.ViewerFooterButton(
     inStripRow: Boolean = false,
     slot: Int = 0,
     emphasized: Boolean = false,
+    paused: Boolean = false,
     onClick: () -> Unit,
 ) {
     val inRow = inStripRow && chromeVisible
@@ -49,7 +50,7 @@ internal fun BoxScope.ViewerFooterButton(
             .padding(bottom = VIEWER_FOOTER_BUTTON_GAP)
             .offset { IntOffset(0, -(if (inRow) footer else glide).roundToPx()) },
     ) {
-        ViewerFooterIconButton(icon, contentDescription, testTag, emphasized, onClick)
+        ViewerFooterIconButton(icon, contentDescription, testTag, emphasized, paused, onClick)
     }
 }
 
@@ -67,7 +68,14 @@ private fun Modifier.viewerFooterSlot(alignment: Alignment, slot: Int): Modifier
 )
 
 @Composable
-private fun ViewerFooterIconButton(icon: ImageVector, contentDescription: String, testTag: String, emphasized: Boolean, onClick: () -> Unit) {
+private fun ViewerFooterIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    testTag: String,
+    emphasized: Boolean,
+    paused: Boolean,
+    onClick: () -> Unit,
+) {
     val accent = LocalViewerAccent.current
     IconButton(
         onClick = onClick,
@@ -75,7 +83,7 @@ private fun ViewerFooterIconButton(icon: ImageVector, contentDescription: String
             .then(if (emphasized) Modifier.border(1.5.dp, accent, CircleShape) else Modifier)
             .testTag(testTag),
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = if (emphasized) accent else Color.White)
+        ViewerPausedBadge(paused) { Icon(icon, contentDescription = contentDescription, tint = if (emphasized) accent else Color.White) }
     }
 }
 

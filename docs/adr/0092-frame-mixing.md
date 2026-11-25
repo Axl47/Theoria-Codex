@@ -19,3 +19,8 @@ Changing the one-third rule shifts every video's tags and requires recalibrating
 ## Applies to
 
 - `vision-kit/src/main/kotlin/com/theoriacodex/app/vision/FrameMix.kt`: `distinctPictures`, `combineScores`, `combineEmbeddings`
+
+## Guarded by
+
+- `vision-kit/src/test/kotlin/com/theoriacodex/app/vision/FrameMixTest.kt`: `near copies fold into the first and flat pictures drop (ADR 0092)`, `when every picture is flat the first stands for them all (ADR 0092)`, `a single picture keeps its own scores (ADR 0092)`, `each score is the mean of its top third of weighted pictures (ADR 0092)`, `the embedding is the weighted mean direction at unit length (ADR 0092)`, `a heavier picture pulls the embedding toward its direction (ADR 0092)`
+- Left to prose: that a tag must hold for about a third of a video, and that the calibrated thresholds keep their meaning, are judgements about the model's output, not checkable here.

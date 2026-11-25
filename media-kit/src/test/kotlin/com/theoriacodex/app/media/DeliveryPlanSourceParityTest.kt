@@ -15,7 +15,7 @@ class DeliveryPlanSourceParityTest {
     private val cardsLikeEveryoneElse = allSources.filterNot { it == SourceKey.PIXIV || it == SourceKey.RULE34XXX }
 
     @Test
-    fun `the Viewer plan for the same media is the same for every source (ADR 0074)`() {
+    fun `the Viewer plan for the same media is the same for every source (ADR 0074, 0105)`() {
         assertTrue(allSources.size > 2)
         allSources.forEach { source ->
             val withRenditions = post(source, ref("full.jpg").copy(progressiveUrls = listOf("https://example.test/sample.jpg")))
@@ -41,7 +41,7 @@ class DeliveryPlanSourceParityTest {
     }
 
     @Test
-    fun `the card plan for the same media is the same for every source but Pixiv and rule34xxx (ADR 0074)`() {
+    fun `the card plan for the same media is the same for every source but Pixiv and rule34xxx (ADR 0074, 0105)`() {
         assertTrue(cardsLikeEveryoneElse.size > 2)
         cardsLikeEveryoneElse.forEach { source ->
             val withRenditions = post(source, ref("full.jpg").copy(progressiveUrls = listOf("https://example.test/sample.jpg")))

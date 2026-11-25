@@ -1,6 +1,7 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.model.ImageRef
@@ -26,6 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
+@OptIn(VisionCommit::class)
 class PictureTaggerTest {
     @get:Rule
     val folder = TemporaryFolder()
@@ -54,7 +56,7 @@ class PictureTaggerTest {
     }
 
     @Test
-    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005)`() = runBlocking {
+    fun `while the model is absent the tagger answers Unavailable and knows nothing (ADR 0005, 0097)`() = runBlocking {
         val spec = VisualModelSpec.wdVitTaggerV3("https://models.test/")
         val store = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
         val tagger = PictureTagger(

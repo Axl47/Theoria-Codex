@@ -388,7 +388,7 @@ private fun BoxScope.ViewerFooterButtons(
 ) {
     val rules = ViewerFooterRules(frame, screen)
     if (rules.inStripRow) ViewerStripRowRotation(frame, rotationOffer, rules) else ViewerFloatingRotation(frame, rotationOffer, rules)
-    ViewerSlideshowControl(frame, rules.chromeVisible, suppressed = rules.slideshowSuppressed, rules.inStripRow, onAction)
+    ViewerSlideshowControl(frame, screen.dwellStartedAtMs, rules.chromeVisible, suppressed = rules.slideshowSuppressed, rules.inStripRow, onAction)
 }
 
 private class ViewerFooterRules(frame: ViewerFrame, screen: ViewerScreenState) {

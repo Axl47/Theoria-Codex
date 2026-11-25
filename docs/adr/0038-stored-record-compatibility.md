@@ -35,8 +35,8 @@ Adding a field means making it optional and omitted when unset. Removing the leg
 ## Guarded by
 
 - `core-data/src/test/kotlin/com/theoriacodex/data/storage/PostStorageRecordsTest.kt`: `versioned storage record round trips every supported Post field (ADR 0038)`, `pre-versioned storage record retains safe typed fallbacks (ADR 0038)`, `unknown explicit storage version fails closed (ADR 0038)`, `a gallery of unknown length keeps its flag, and other records stay as they were (ADR 0006, 0038)`, `nhentai and hitomi records saved before fallback urls keep their copies as fallbacks (ADR 0038)`, `an explicit fallback field is never reinterpreted (ADR 0038)`
-- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt`: `unsupported and malformed local Post payloads fail explicitly (ADR 0038)`
-- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomPayloadGoldenTest.kt`: `upserting an unchanged post keeps the Gson-written row (ADR 0038)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt`: `unsupported and malformed local Post payloads fail explicitly (ADR 0016, 0038)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomPayloadGoldenTest.kt`: `upserting an unchanged post keeps the Gson-written row (ADR 0016, 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/QueryStoreGoldenTest.kt`: `a search without a media filter is stored without a media key (ADR 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadGoldenTest.kt`: `a bare Query row infers its source metadata (ADR 0038)`, `a Gson-written For You row reads as Unified and keeps its tags by source (ADR 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadCodecTest.kt`: `a retired For You payload reads as Unified with tags for every source it searched (ADR 0038)`, `normalize gives the entry storing would keep, sources once and tags only for searched sources, and refuses what storing refuses (ADR 0038)`

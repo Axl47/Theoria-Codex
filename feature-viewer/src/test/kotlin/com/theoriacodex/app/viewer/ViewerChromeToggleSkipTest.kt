@@ -34,9 +34,17 @@ class ViewerChromeToggleSkipTest {
 
     @After fun stopTracing() = Composer.setTracer(null)
 
-    @Test fun `a chrome toggle leaves the pages and the overlay host alone (ADR 0166)`() {
+    @Test fun `a chrome toggle leaves the pages and the overlay host alone (ADR 0166)`() = assertSkips { reduce -> reduce(ViewerAction.ToggleChrome) }
+
+    @Test fun `a dwell restart in Play Next leaves the pages and the overlay host alone (ADR 0217)`() =
+        assertSkips(ViewerAction.SetPlaybackMode(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT)) { reduce ->
+            reduce(ViewerAction.RestartDwell(123_456L, interacting = true))
+            reduce(ViewerAction.ToggleChrome)
+        }
+
+    private fun assertSkips(vararg setup: ViewerAction, change: ((ViewerAction) -> Unit) -> Unit) {
         val launch = ViewerSession(listOf(testPost(sourcePostId = "still")), ViewerLaunchContext("q", 0, ViewerStreamSource.SEARCH, 0), sessionId = "toggle")
-        val state = mutableStateOf(reduceViewerState(ViewerUiState.Empty, launch.toReplaceViewerSessionAction()).state)
+        val state = mutableStateOf(setup.fold(reduceViewerState(ViewerUiState.Empty, launch.toReplaceViewerSessionAction()).state) { current, action -> reduceViewerState(current, action).state })
         fun reduce(action: ViewerAction) { state.value = reduceViewerState(state.value, action).state }
         Composer.setTracer(object : CompositionTracer {
             override fun isTraceInProgress(): Boolean = tracing
@@ -52,11 +60,11 @@ class ViewerChromeToggleSkipTest {
         compose.waitForIdle()
 
         tracing = true
-        compose.runOnIdle { reduce(ViewerAction.ToggleChrome) }
+        compose.runOnIdle { change(::reduce) }
         compose.waitForIdle()
         tracing = false
 
-        assertTrue("the toggle recomposed something", executed.any { it.endsWith(".ViewerLoadedScreen") })
+        assertTrue("the change recomposed something", executed.any { it.endsWith(".ViewerLoadedScreen") })
         val skipped = listOf("ViewerChromeOverlays", "ViewerContentSurface", "ViewerPostPagerSurface", "ViewerPostPage")
         assertEquals(emptyList<String>(), executed.filter { name -> skipped.any { name == "com.theoriacodex.app.viewer.$it" } }.distinct())
     }

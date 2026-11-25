@@ -9,7 +9,7 @@ import java.util.List;
 import kotlinx.coroutines.flow.Flow;
 
 @Dao
-public interface VisualSignatureDao {
+interface VisualSignatureDao {
     @Query("INSERT INTO post_visual_signatures (source, source_post_id, phash, phash_checked, indexed_at_epoch_ms) "
             + "SELECT :source, :sourcePostId, :phash, 1, :indexedAtEpochMs WHERE EXISTS "
             + "(SELECT 1 FROM posts WHERE source = :source AND source_post_id = :sourcePostId) "

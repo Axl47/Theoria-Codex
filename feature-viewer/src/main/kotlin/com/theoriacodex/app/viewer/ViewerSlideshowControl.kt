@@ -18,6 +18,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import com.theoriacodex.app.viewer.state.VIEWER_SLIDESHOW_IMAGE_MS
+import com.theoriacodex.app.viewer.state.autoAdvanceHeld
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.holdViewerSlideshowImage
 import com.theoriacodex.app.viewer.state.slideshowImageHold
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun BoxScope.ViewerSlideshowControl(
     frame: ViewerFrame,
+    dwellStartedAtMs: Long?,
     chromeVisible: Boolean,
     suppressed: Boolean,
     inStripRow: Boolean,
@@ -38,11 +40,11 @@ internal fun BoxScope.ViewerSlideshowControl(
     val currentState by rememberUpdatedState(state)
     val currentOnAction by rememberUpdatedState(onAction)
     val elapsed = remember { Animatable(0f) }
-    LaunchedEffect(hold) {
+    LaunchedEffect(hold, dwellStartedAtMs) {
         elapsed.snapTo(0f)
         if (hold == null) return@LaunchedEffect
         launch { elapsed.animateTo(1f, tween(VIEWER_SLIDESHOW_IMAGE_MS.toInt(), easing = LinearEasing)) }
-        holdViewerSlideshowImage(currentState) { currentOnAction(it) }
+        holdViewerSlideshowImage(currentState, dwellStartedAtMs) { currentOnAction(it) }
     }
     if (hold != null) {
         ViewerPassiveProgressBar({ (elapsed.value * VIEWER_SLIDESHOW_IMAGE_MS).toLong() }, VIEWER_SLIDESHOW_IMAGE_MS, Modifier.align(Alignment.BottomCenter))
@@ -50,6 +52,7 @@ internal fun BoxScope.ViewerSlideshowControl(
     ViewerFooterButton(
         frame.selection, chromeVisible, visible = chromeVisible && frame.offersSlideshow && !suppressed, alignment = Alignment.BottomEnd,
         icon = if (running) Icons.Default.Pause else Icons.Default.PlayArrow,
+        paused = running && state.autoAdvanceHeld,
         contentDescription = if (running) "Stop slideshow" else "Start slideshow", testTag = "viewer-slideshow", inStripRow = inStripRow,
         onClick = { onAction(ViewerAction.SetSlideshow(!running)) },
     )
