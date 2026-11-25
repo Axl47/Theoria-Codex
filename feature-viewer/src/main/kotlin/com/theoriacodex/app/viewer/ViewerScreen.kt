@@ -148,7 +148,7 @@ private fun ViewerLoadedScreen(
     LaunchedEffect(posts, navigation.currentIndex, videoPositions) { videoPositions.retainAround(posts.map { it.id }, navigation.currentIndex) }
     val viewerTransform = remember(session, uiState.currentMedia?.key, uiState.controls.slideshow) { mutableStateOf(ViewerTransformState()) }
     LaunchedEffect(uiState.controls.slideshow) { if (uiState.controls.slideshow) screen.verticalGalleries.values.forEach { it.resetZoom() } }
-    val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null)
+    val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null, screen.imageSession)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
     ViewerTrailReplay(trail, selection.post, screen.trailForks)
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)

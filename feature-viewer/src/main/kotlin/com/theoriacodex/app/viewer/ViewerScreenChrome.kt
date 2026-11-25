@@ -346,9 +346,9 @@ private fun ViewerBottomStack(
     val stripIndex = navigation.originalPosts.indexOfFirst { it.id == frame.posts.getOrNull(postPagerState.currentPage)?.id }
         .takeIf { it >= 0 } ?: navigation.stripAnchorIndex
     ViewerBottomChrome(
-        timelinePresent = selection.isAnimated,
+        timelinePresent = selection.reservesTimeline,
         fadesWhileScrubbing = fadesWhileScrubbing,
-        lift = LocalViewerTimelineInset.current + if (selection.isAnimated) viewerTimelineFooterHeight() else 0.dp,
+        lift = LocalViewerTimelineInset.current + if (selection.reservesTimeline) viewerTimelineFooterHeight() else 0.dp,
         pageBar = {
             if (selection.overviewItems.size > 1) {
                 key(selection.post.id) {

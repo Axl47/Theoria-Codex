@@ -170,6 +170,7 @@
 - Missing extensions no longer says "Language off" for every installed extension that is on. It names the language that is off and turns it on, says when the extension couldn't load, or says the installed version doesn't offer that series' source.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
+- In galleries tagged animated, the Viewer no longer leaves an empty band above the bottom bar on pages that are still images, and shows their page scrubber again.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
 - A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Asura Scans pages no longer risk showing scrambled when they load again after the app has dropped them from memory.
