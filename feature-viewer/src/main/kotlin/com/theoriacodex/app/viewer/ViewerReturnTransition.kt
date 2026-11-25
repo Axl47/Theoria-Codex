@@ -34,6 +34,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import kotlinx.coroutines.flow.filterNotNull
@@ -59,6 +63,21 @@ fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolea
             )
         }, label = "Viewer media transition lifetime",
     ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
+}
+
+@Composable
+fun ViewerReturnOriginLifetime() {
+    val transition = LocalViewerReturnTransition.current ?: return
+    viewModel<ViewerReturnOriginOwner>(
+        factory = viewModelFactory { initializer { ViewerReturnOriginOwner(transition, transition.origin) } },
+    )
+}
+
+private class ViewerReturnOriginOwner(
+    private val transition: ViewerReturnTransition,
+    private val origin: ViewerReturnOrigin?,
+) : ViewModel() {
+    override fun onCleared() = transition.release(origin)
 }
 
 @Composable
@@ -162,8 +181,11 @@ internal fun rememberViewerReturnProgress(): State<Float> {
     LaunchedEffect(request) {
         if (request == null) {
             if (transition?.openingBounds != null) {
-                progress.animateTo(0f, tween(VIEWER_RETURN_DURATION_MS))
-                transition.finishOpening()
+                try {
+                    progress.animateTo(0f, tween(VIEWER_RETURN_DURATION_MS))
+                } finally {
+                    transition.finishOpening()
+                }
             }
             return@LaunchedEffect
         }

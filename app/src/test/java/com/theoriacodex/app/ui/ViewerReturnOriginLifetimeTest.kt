@@ -1,4 +1,4 @@
-package com.theoriacodex.app.ui.trails
+package com.theoriacodex.app.ui
 
 import android.app.Application
 import androidx.activity.ComponentActivity
@@ -11,11 +11,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.ui.AppRoute
-import com.theoriacodex.app.ui.TheoriaScreenHost
-import com.theoriacodex.app.ui.opaqueScreen
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
+import com.theoriacodex.app.viewer.ViewerReturnOriginLifetime
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
 import org.junit.Assert.assertFalse
@@ -84,8 +82,8 @@ class ViewerReturnOriginLifetimeTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides viewerReturn) {
                 TheoriaScreenHost(navigation, AppRoute.Home) {
                     opaqueScreen(AppRoute.Home) { Box(Modifier.fillMaxSize()) }
-                    composable(AppRoute.Viewer) { entry ->
-                        rememberViewerLevel(navigation, entry, null)
+                    composable(AppRoute.Viewer) {
+                        ViewerReturnOriginLifetime()
                         ViewerReturnLifetime(this) { navigation.currentDestination?.route != AppRoute.Viewer }
                         Box(Modifier.fillMaxSize())
                     }

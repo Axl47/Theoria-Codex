@@ -51,6 +51,7 @@ import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.ViewerScreenHost
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
+import com.theoriacodex.app.viewer.ViewerPostRetention
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerTrail
 import com.theoriacodex.app.ui.trails.ViewerLevel
@@ -127,13 +128,10 @@ internal data class ViewerRouteLiveSourceState(
 
 @Composable
 private fun RetainViewerPosts(viewerReturn: ViewerReturnTransition?, pages: List<ViewerPageState>, retains: Boolean) {
+    val owner = remember { ViewerPostRetention() }
     val postIds = remember(pages) { pages.mapTo(mutableSetOf()) { it.post.id } }
-    SideEffect { if (retains) viewerReturn?.retainPosts(postIds) }
-    val latestPostIds = rememberUpdatedState(postIds)
-    val latestRetains = rememberUpdatedState(retains)
-    DisposableEffect(viewerReturn) {
-        onDispose { if (latestRetains.value) viewerReturn?.releasePosts(latestPostIds.value) }
-    }
+    SideEffect { if (retains) viewerReturn?.retainPosts(owner, postIds) else viewerReturn?.releasePosts(owner) }
+    DisposableEffect(viewerReturn, owner) { onDispose { viewerReturn?.releasePosts(owner) } }
 }
 
 internal data class ViewerDownloadRequest(

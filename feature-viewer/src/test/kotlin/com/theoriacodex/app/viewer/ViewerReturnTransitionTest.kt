@@ -60,8 +60,9 @@ class ViewerReturnTransitionTest {
         val transition = ViewerReturnTransition()
         val post = com.theoriacodex.app.testing.testPost(sourcePostId = "return")
         var visible: List<Post> = emptyList()
+        val viewer = ViewerPostRetention()
         transition.openedFrom("origin", post = postId)
-        transition.retainPosts(setOf(post.id))
+        transition.retainPosts(viewer, setOf(post.id))
         compose.setContent {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
                 val retained = retainPostsUntilViewerCloses(emptySet())
@@ -80,23 +81,31 @@ class ViewerReturnTransitionTest {
         }
         compose.runOnIdle {
             assertEquals(listOf(post), visible)
-            transition.clear()
+            transition.releasePosts(viewer)
         }
         compose.runOnIdle { assertTrue(visible.isEmpty()) }
     }
 
     @Test fun `a Viewer that leaves releases only the posts it retained (ADR 0220)`() {
         val transition = ViewerReturnTransition()
-        val leaving = setOf(postId)
-        transition.retainPosts(leaving)
+        val leaving = ViewerPostRetention()
+        val newer = ViewerPostRetention()
+        val other = PostId(SourceKey.GELBOORU, "newer")
+        transition.retainPosts(leaving, setOf(postId))
+        transition.retainPosts(newer, setOf(postId, other))
+        transition.retainPosts(leaving, setOf(postId))
         transition.releasePosts(leaving)
-        assertTrue(transition.retainedPostIds.isEmpty())
+        assertEquals(setOf(postId, other), transition.retainedPostIds)
 
-        val newer = setOf(postId)
-        transition.retainPosts(leaving)
-        transition.retainPosts(newer)
-        transition.releasePosts(leaving)
-        assertEquals(newer, transition.retainedPostIds)
+        transition.releasePosts(newer)
+        assertTrue(transition.retainedPostIds.isEmpty())
+    }
+
+    @Test fun `a tap outside any return grid records no card to close into (ADR 0220)`() {
+        val transition = ViewerReturnTransition()
+        transition.openedFrom(gridId = null, post = postId)
+        transition.begin(postId)
+        assertEquals(null, transition.request)
     }
 
     @Test fun `media counts as settling from the start of a close until it lands`() {

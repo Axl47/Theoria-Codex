@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -60,16 +59,23 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
 
 class ViewerReturnOrigin internal constructor()
 
-class ViewerReturnTransition {
-    var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet(), referentialEqualityPolicy())
-        private set
+class ViewerPostRetention
 
-    fun retainPosts(postIds: Set<PostId>) {
-        retainedPostIds = postIds
+class ViewerReturnTransition {
+    var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
+        private set
+    private val retentions = mutableMapOf<ViewerPostRetention, Set<PostId>>()
+
+    fun retainPosts(owner: ViewerPostRetention, postIds: Set<PostId>) {
+        if (retentions.put(owner, postIds) != postIds) publishRetained()
     }
 
-    fun releasePosts(postIds: Set<PostId>) {
-        if (retainedPostIds === postIds) retainedPostIds = emptySet()
+    fun releasePosts(owner: ViewerPostRetention) {
+        if (retentions.remove(owner) != null) publishRetained()
+    }
+
+    private fun publishRetained() {
+        retainedPostIds = retentions.values.flatMapTo(mutableSetOf()) { it }
     }
 
     var origin: ViewerReturnOrigin? = null
@@ -103,6 +109,7 @@ class ViewerReturnTransition {
         post: PostId,
     ) {
         clear()
+        if (gridId == null) return
         origin = ViewerReturnOrigin()
         unclaimedPost = post
         originGridId = gridId
@@ -169,7 +176,6 @@ class ViewerReturnTransition {
         origin = null
         unclaimedPost = null
         mediaSettling = false
-        retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()
         targetCorners = ViewerReturnCorners()
         mediaCorners.clear()
