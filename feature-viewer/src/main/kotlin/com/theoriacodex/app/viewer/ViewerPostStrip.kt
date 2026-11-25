@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -186,7 +187,6 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
     private var fromWidths by mutableStateOf(emptyMap<Int, Float>())
     var progress by mutableFloatStateOf(1f)
     var following = false
-    var centring: Triple<Int, Float, Float>? = null
 
     fun width(index: Int, cell: Float): Float = lerp(fromWidths[index] ?: cell, if (index == selected) selectedWidth else cell, progress)
 
@@ -202,30 +202,28 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
 
 @Composable
 private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float, center: Float, lastIndex: Int) {
+    val last by rememberUpdatedState(lastIndex)
     LaunchedEffect(list) {
         list.interactionSource.interactions.collect { if (it is DragInteraction.Start) motion.following = false }
     }
-    LaunchedEffect(list, index, width, center, lastIndex) {
-        val target = Triple(index, width, center)
-        val appended = motion.centring == target
-        motion.centring = target
-        if (!appended) motion.following = true
+    LaunchedEffect(list, index, width, center) {
+        motion.following = true
+        val offset = ((width - cell) / 2 - center).roundToInt()
         if (motion.isAt(index, width) && motion.progress == 1f) {
-            val offset = ((width - cell) / 2 - center).roundToInt()
-            when {
-                !appended -> list.scrollToItem(index, offset)
-                motion.following && !list.isScrollInProgress -> list.animateScrollToItem(index, offset)
+            list.scrollToItem(index, offset)
+        } else {
+            val startingError = list.distanceFromCenter(index, cell + center * 2)
+            if (!motion.isAt(index, width)) motion.moveTo(index, width, cell)
+            val from = motion.progress
+            animate(from, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
+                motion.progress = value
+                if (!list.isScrollInProgress) {
+                    list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value) / (1f - from)).roundToInt())
+                }
             }
-            return@LaunchedEffect
         }
-        val startingError = list.distanceFromCenter(index, cell + center * 2)
-        if (!motion.isAt(index, width)) motion.moveTo(index, width, cell)
-        val from = motion.progress
-        animate(from, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
-            motion.progress = value
-            if (!list.isScrollInProgress) {
-                list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value) / (1f - from)).roundToInt())
-            }
+        snapshotFlow { last }.drop(1).collect {
+            if (motion.following && !list.isScrollInProgress) list.animateScrollToItem(index, offset)
         }
     }
 }
