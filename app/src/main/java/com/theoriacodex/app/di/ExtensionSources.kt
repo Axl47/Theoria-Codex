@@ -19,8 +19,10 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesSource
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
@@ -61,5 +63,10 @@ class SeriesDependencies(
     suspend fun switchSource(from: SeriesId, source: SeriesSource, to: Series) =
         repository.switchSource(from, source, to, downloads::deleteSeries)
 }
+
+val SeriesDependencies?.extensionAlertsOrNone: StateFlow<ExtensionAlerts>
+    get() = this?.extensionAlerts ?: NoExtensionAlerts
+
+private val NoExtensionAlerts = MutableStateFlow(ExtensionAlerts()).asStateFlow()
 
 private const val ALERTS_KEPT_MS = 5_000L

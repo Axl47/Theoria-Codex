@@ -13,15 +13,16 @@ Following.
 
 ## Decision
 
-- Series' top-right button is a Settings gear that opens the same Settings route as Library's gear. Its badge counts
-  what needs attention in Extensions: followed series whose extension is missing, plus repo extensions with an update.
+- Series' top-right button is a Settings gear that opens the same Settings route as Library's gear. Both gears are the
+  same `SettingsButton` and carry the same badge, which counts what needs attention in Extensions: followed series
+  whose extension is missing, plus repo extensions with an update.
   TalkBack hears each count as a line rather than the badge number.
 - Extensions is the first row of Settings, above the recommendation profile, in a group of its own. When either count
   is above zero, the row lists each one that applies on its own line and carries the combined badge; otherwise it is a
   bare label.
-- One flow (`observeExtensionAlerts`) produces both counts, and the series container shares it, so Series and Settings
-  always agree. Updates come from the repo listing the Extensions page reads (`ExtensionRepos.available`), which
-  fetches each repo's index at most once per process. The counts are taken again whenever the installed extensions
+- One flow (`observeExtensionAlerts`) produces both counts, and the series container shares it, so Series, Library and
+  Settings always agree. Updates come from the repo listing the Extensions page reads (`ExtensionRepos.available`),
+  which fetches each repo's index at most once per process. The counts are taken again whenever the installed extensions
   change and whenever the listing does (`ExtensionRepos.changes`: a repo added, restored or removed, or the indexes
   read again). Reads of one repo's index run one at a time, so a slow first read can't overwrite a refresh that
   started after it, and Series, Settings and the Extensions page agree. A failed read of the sources or the listing
@@ -37,7 +38,9 @@ something else (failed checks, broken sources) belongs in `ExtensionAlerts`, not
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/series/ExtensionAlerts.kt`: `ExtensionAlerts`, `missingExtensionsLine`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/MissingExtensions.kt`: `observeExtensionAlerts`
-- `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabScreen.kt`: `SettingsButton`
+- `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/components/SettingsButton.kt`: `SettingsButton`
+- `feature-library/src/main/kotlin/com/theoriacodex/app/library/LibraryHeader.kt`: `LibraryHeader`
+- `app/src/main/java/com/theoriacodex/app/ui/LibraryDestination.kt`: `LibraryDestination`
 - `feature-settings/src/main/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroup.kt`: `ExtensionsGroup`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionCatalog.kt`: `ExtensionCatalog.changes`
 - `app/src/main/java/com/theoriacodex/app/di/ExtensionSources.kt`: `SeriesDependencies.extensionAlerts`
@@ -47,6 +50,7 @@ something else (failed checks, broken sources) belongs in `ExtensionAlerts`, not
 
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/MissingExtensionsTest.kt`: `extension alerts add series missing their extension to extensions with an update, recount when extensions change, and keep the last count when a read fails (ADR 0221)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `the Series settings button opens Settings and badges extension alerts (ADR 0221)`
+- `feature-library/src/test/kotlin/com/theoriacodex/app/library/LibraryHeaderTest.kt`: `the Library settings button badges extension alerts like Series (ADR 0221)`
 - `feature-settings/src/test/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroupTest.kt`: `extensions sit above everything else and list each alert on its own line (ADR 0221)`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCatalogTest.kt`: `adding, restoring or removing a repo and re-reading the indexes each signal that the listing changed (ADR 0221)`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCatalogTest.kt`: `a refresh that overlaps a slower first read of the same repo keeps the refreshed index (ADR 0221)`
