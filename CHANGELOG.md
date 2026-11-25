@@ -4,7 +4,7 @@
 
 ### Added
 
-- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
+- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. At the end of a short list the header stays away, so the last row stays in view. Series keeps its search and Extensions buttons, and the bottom bar stays.
 - A saved search's Rename dialog has Edit search, which opens it in Search to change its tags, sources, filters or sort. Update saves the change under the same name and place, and its new-post count starts over. Closing Search's sheet without tapping Update leaves the saved search as it was.
 - The menu in Search's sheet has Filter and sort, which opens the filters over the sheet without closing it.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
@@ -92,6 +92,7 @@
 
 ### Changed
 
+- Importing a Codex moved from its own button in Library into Create Codex: tap +, then Import.
 - The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.
 - The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
