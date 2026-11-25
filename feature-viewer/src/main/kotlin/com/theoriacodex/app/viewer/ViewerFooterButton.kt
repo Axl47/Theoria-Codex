@@ -4,12 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
@@ -80,10 +78,10 @@ private fun ViewerFooterIconButton(
     IconButton(
         onClick = onClick,
         modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape)
-            .then(if (emphasized) Modifier.border(1.5.dp, accent, CircleShape) else Modifier)
+            .then(if (emphasized) Modifier.viewerAccentBorder(1.5.dp, accent, CircleShape) else Modifier)
             .testTag(testTag),
     ) {
-        ViewerPausedBadge(paused) { Icon(icon, contentDescription = contentDescription, tint = if (emphasized) accent else Color.White) }
+        ViewerPausedBadge(paused) { ViewerAccentIcon(icon, contentDescription, accented = emphasized) }
     }
 }
 

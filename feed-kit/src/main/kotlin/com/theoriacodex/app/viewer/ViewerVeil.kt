@@ -7,19 +7,51 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorProducer
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.theoriacodex.app.ui.theme.TextOverMediaShadow
+import kotlin.math.ceil
+import kotlin.math.min
 
-val LocalViewerAccent = compositionLocalOf { Color.White }
+private val ViewerWhite = ColorProducer { Color.White }
+
+val LocalViewerAccent = staticCompositionLocalOf { ViewerWhite }
+
+@Composable
+fun ViewerAccentIcon(icon: ImageVector, contentDescription: String?, accented: Boolean, modifier: Modifier = Modifier) {
+    Icon(rememberVectorPainter(icon), if (accented) LocalViewerAccent.current else ViewerWhite, contentDescription, modifier)
+}
+
+fun Modifier.viewerAccentBorder(width: Dp, accent: ColorProducer, shape: Shape): Modifier = drawWithCache {
+    val stroke = Stroke(min(ceil(width.toPx()), ceil(size.minDimension / 2f)))
+    val half = stroke.width / 2f
+    val corner = (shape.createOutline(size, layoutDirection, this) as? Outline.Rounded)?.roundRect?.topLeftCornerRadius ?: CornerRadius.Zero
+    val inner = CornerRadius((corner.x - half).coerceAtLeast(0f), (corner.y - half).coerceAtLeast(0f))
+    val inset = Size(size.width - stroke.width, size.height - stroke.width)
+    onDrawWithContent {
+        drawContent()
+        drawRoundRect(accent(), Offset(half, half), inset, inner, style = stroke)
+    }
+}
 
 object ViewerVeil {
     val Capsule = Color.Black.copy(alpha = 0.62f)

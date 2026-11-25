@@ -167,7 +167,7 @@ private fun ViewerLoadedScreen(
         loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged.takeIf { trail.replay == null }, config,
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
-    val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
+    val viewerAccent = rememberViewerAccent(selection.post, navigation.currentIndex, posts, postPagerState, enabled = !opening && !returning)
     val timelineInset = viewerTimelineInset(chromeVisible, frame.watching)
     val bottomRowHeight = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
     val subtitleBottomLift = viewerFooterHeight(selection, chromeVisible, bottomRowHeight, timelineInset)

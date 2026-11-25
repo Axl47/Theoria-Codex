@@ -344,14 +344,14 @@ internal fun ViewerEpisodeControls(
 @Composable
 private fun ViewerEpisodeRotateButton(offer: ViewerRotationOffer, onRotate: () -> Unit) {
     IconButton(onClick = onRotate, modifier = Modifier.testTag(VIEWER_ROTATE_TAG)) {
-        Icon(Icons.Default.ScreenRotation, contentDescription = offer.rotateDescription, tint = if (offer.fits) LocalViewerAccent.current else Color.White)
+        ViewerAccentIcon(Icons.Default.ScreenRotation, offer.rotateDescription, accented = offer.fits)
     }
 }
 
 @Composable
 private fun ViewerEpisodeRotationLockButton(offer: ViewerRotationOffer, onToggle: () -> Unit) {
     IconButton(onClick = onToggle, modifier = Modifier.testTag(VIEWER_ROTATION_LOCK_TAG)) {
-        Icon(offer.lockIcon, contentDescription = offer.lockDescription, tint = if (offer.lock != null) LocalViewerAccent.current else Color.White)
+        ViewerAccentIcon(offer.lockIcon, offer.lockDescription, accented = offer.lock != null)
     }
 }
 

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateContentSize
@@ -26,7 +27,6 @@ import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorProducer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -158,18 +159,17 @@ internal fun ViewerSaveButton(
 }
 
 @Composable
-private fun RowScope.ViewerSaveLabel(text: String, color: Color = Color.Unspecified) {
-    Text(
-        text, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f, fill = false).widthIn(max = 128.dp),
+private fun RowScope.ViewerSaveLabel(text: String, color: ColorProducer? = null) {
+    BasicText(
+        text, Modifier.weight(1f, fill = false).widthIn(max = 128.dp), MaterialTheme.typography.labelLarge.copy(color = LocalContentColor.current),
+        overflow = TextOverflow.Ellipsis, maxLines = 1, color = color,
     )
 }
 
 @Composable
 private fun RowScope.ViewerSavedInLabel(savedIn: SaveSuggestion, next: SaveSuggestion?) {
-    val accent = LocalViewerAccent.current
-    Icon(Icons.Default.Check, contentDescription = null, tint = accent, modifier = Modifier.size(28.dp).padding(2.dp))
-    ViewerSaveLabel(savedIn.name, accent)
+    ViewerAccentIcon(Icons.Default.Check, contentDescription = null, accented = true, modifier = Modifier.size(28.dp).padding(2.dp))
+    ViewerSaveLabel(savedIn.name, LocalViewerAccent.current)
     if (next == null) return
     Box {
         CodexCoverImage(next.cover, null, Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))) {
@@ -274,7 +274,7 @@ private fun ViewerSaveLeading(state: ViewerSaveButtonState) {
         is ViewerSaveButtonState.Suggest -> CodexCoverImage(state.target.cover, null, Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))) {
             Icon(Icons.Outlined.Collections, contentDescription = null, modifier = Modifier.padding(4.dp))
         }
-        is ViewerSaveButtonState.Saved -> Icon(Icons.Default.Check, contentDescription = null, tint = LocalViewerAccent.current, modifier = Modifier.size(28.dp).padding(2.dp))
+        is ViewerSaveButtonState.Saved -> ViewerAccentIcon(Icons.Default.Check, contentDescription = null, accented = true, modifier = Modifier.size(28.dp).padding(2.dp))
         is ViewerSaveButtonState.NoTarget -> Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(28.dp).padding(2.dp))
         ViewerSaveButtonState.Loading -> Icon(Icons.Outlined.BookmarkBorder, contentDescription = null, modifier = Modifier.size(28.dp).padding(2.dp))
     }

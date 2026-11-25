@@ -344,13 +344,13 @@ fun ViewerTimelineTrack(
         val trailingStart = (x + gap).coerceAtMost(size.width)
         drawPill(ViewerVeil.InactiveTrack, trailingStart, center.y, size.width, thickness)
         viewerBufferedTrackEnd(bufferedFraction?.invoke(), trailingStart, size.width)?.let { bufferedEnd ->
-            drawPill(accent.copy(alpha = VIEWER_TIMELINE_BUFFERED_ALPHA), trailingStart, center.y, bufferedEnd, thickness)
+            drawPill(accent().copy(alpha = VIEWER_TIMELINE_BUFFERED_ALPHA), trailingStart, center.y, bufferedEnd, thickness)
         }
-        drawPill(accent, 0f, center.y, (x - gap).coerceAtLeast(0f), thickness)
+        drawPill(accent(), 0f, center.y, (x - gap).coerceAtLeast(0f), thickness)
         if (showHandle) {
             val handleWidth = lerp(12.dp.toPx(), 4.dp.toPx(), emphasis)
             val handleHeight = lerp(12.dp.toPx(), 28.dp.toPx(), emphasis)
-            drawPill(accent, x - handleWidth / 2f, center.y, x + handleWidth / 2f, handleHeight)
+            drawPill(accent(), x - handleWidth / 2f, center.y, x + handleWidth / 2f, handleHeight)
         }
     }
 }
@@ -393,7 +393,7 @@ fun ViewerPassiveProgressBar(positionMs: () -> Long, durationMs: Long, modifier:
     Canvas(modifier.fillMaxWidth().height(2.dp)) {
         val progress = (positionMs().toDouble() / durationMs).coerceIn(0.0, 1.0).toFloat()
         drawRect(ViewerVeil.InactiveTrack)
-        drawRect(accent, size = Size(size.width * progress, size.height))
+        drawRect(accent(), size = Size(size.width * progress, size.height))
     }
 }
 
