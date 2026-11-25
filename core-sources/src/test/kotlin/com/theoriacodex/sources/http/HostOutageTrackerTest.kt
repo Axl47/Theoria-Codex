@@ -1,6 +1,9 @@
 package com.theoriacodex.sources.http
 
 import com.sun.net.httpserver.HttpServer
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.sources.common.sourceNetworkFailure
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.UnknownHostException
@@ -174,6 +177,14 @@ class HostOutageTrackerTest {
         } finally {
             server.stop(0)
         }
+    }
+
+    @Test fun `a source call to a rate-limited host fails as rate limited, not unreachable`() {
+        val failure = runCatching {
+            sourceNetworkFailure("NHentai", HostUnavailableException("nhentai.net", HostOutageKind.RATE_LIMITED))
+        }.exceptionOrNull()
+        assertEquals(SourceFailureReason.RATE_LIMITED, (failure as SourceAdapterException).reason)
+        assertEquals("Too many requests. Try again later.", failure.message)
     }
 
     @Test fun `server errors are still retried`() = runBlocking {

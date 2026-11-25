@@ -1,6 +1,7 @@
 package com.theoriacodex.sources.common
 
 import com.google.gson.Gson
+import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
@@ -79,9 +80,10 @@ internal fun parseHtmlFragment(html: String): Document {
 }
 
 internal fun sourceNetworkFailure(siteLabel: String, error: IOException): Nothing {
+    val unavailable = error as? HostUnavailableException
     throw SourceAdapterException(
-        reason = SourceFailureReason.NETWORK,
-        message = (error as? HostUnavailableException)?.message ?: "$siteLabel request failed",
+        reason = if (unavailable?.kind == HostOutageKind.RATE_LIMITED) SourceFailureReason.RATE_LIMITED else SourceFailureReason.NETWORK,
+        message = unavailable?.message ?: "$siteLabel request failed",
         cause = error,
     )
 }

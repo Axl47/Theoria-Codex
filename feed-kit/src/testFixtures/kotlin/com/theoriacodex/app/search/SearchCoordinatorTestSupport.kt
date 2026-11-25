@@ -135,13 +135,16 @@ class RecordingTagStore : TagSuggestionStore {
     override fun getTrending(source: SourceKey, limit: Int): List<TagSuggestion> =
         trending[source].orEmpty().take(limit)
 
-    override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>, refreshedAtEpochMs: Long?) {
+    override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) {
         trending[source] = suggestions
-        refreshedAtEpochMs?.let { trendingRefreshes[source] = it }
         put(source, suggestions)
     }
 
     override fun trendingRefreshedAt(source: SourceKey): Long? = trendingRefreshes[source]
+
+    override fun markTrendingRefreshed(source: SourceKey, atEpochMs: Long) {
+        trendingRefreshes[source] = atEpochMs
+    }
 
     override fun getFaceted(
         source: SourceKey,

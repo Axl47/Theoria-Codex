@@ -16,7 +16,7 @@ interface VisualSignatureRepository {
 
     suspend fun putVision(entries: List<PictureVision>)
 
-    suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post>
+    suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int = 0): List<Post>
 
     suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int = 0): List<Post>
 

@@ -90,7 +90,7 @@ class LibraryPictureBackfillTest {
             library.filterNot { it.id in records || (failedAt[it.id] ?: Long.MIN_VALUE) > now - PICTURE_HASH_RETRY_MS }
                 .drop(skip).take(limit).also { listed += it.size }
         override suspend fun putVision(entries: List<PictureVision>) = Unit
-        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) = Unit
         override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) = Unit

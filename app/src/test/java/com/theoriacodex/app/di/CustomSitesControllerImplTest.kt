@@ -254,6 +254,20 @@ class CustomSitesControllerImplTest {
     }
 
     @Test
+    fun `testing a rate-limited built-in site keeps the limit and sends nothing`() = runTest {
+        val controller = graph().controller
+        var searches = 0
+        builtInSearch = { searches++; true }
+        outages.recordResponse("https://nhentai.net/api/v2/search", 429, emptyMap())
+
+        assertEquals(BuiltInTestResult.RATE_LIMITED, controller.testBuiltIn(SourceKey.NHENTAI))
+        assertEquals(0, searches)
+        assertTrue(outages.isRateLimited("https://nhentai.net/"))
+        assertTrue(controller.checkVerification(SourceKey.NHENTAI, "WebView/2"))
+        assertTrue(clearanceChecks.isEmpty())
+    }
+
+    @Test
     fun `checking a verification probes with the browser agent and changes nothing`() = runTest {
         val graph = graph()
         val stored = SiteHeaders(userAgent = "Old/1", referer = "https://ref.example/")

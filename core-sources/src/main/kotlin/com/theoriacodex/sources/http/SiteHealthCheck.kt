@@ -24,7 +24,11 @@ class SiteHealthCheck internal constructor(
             null -> HostOutageKind.CHALLENGE.takeIf { countChallenges && response.toTextResponse().isVerificationChallenge() }
             else -> kind
         }
-        if (down != null) tracker.record(url, down) else tracker.clear(hostOf(url))
+        when (down) {
+            null -> tracker.clear(hostOf(url))
+            HostOutageKind.RATE_LIMITED -> tracker.recordResponse(url, response.statusCode, response.headers)
+            else -> tracker.record(url, down)
+        }
     }
 
     suspend fun clearsChallenge(url: String, headers: Map<String, String>): Boolean = sourceCall {

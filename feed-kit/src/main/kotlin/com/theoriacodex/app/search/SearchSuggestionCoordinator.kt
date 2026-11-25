@@ -33,7 +33,6 @@ class SearchSuggestionCoordinator internal constructor(
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
     private val searchCounts: () -> Map<SearchedTagKey, Long> = { emptyMap() },
 ) {
-    private val lastTrendingRefreshAtBySource = java.util.concurrent.ConcurrentHashMap<SourceKey, Long>()
     private val autocompleteRefreshLock = Any()
     private val lastAutocompleteRefreshAtByKey =
         LinkedHashMap<AutocompleteFetchKey, Long>(32, 0.75f, true)
@@ -348,16 +347,14 @@ class SearchSuggestionCoordinator internal constructor(
         force: Boolean,
         cached: List<TagSuggestion>,
     ): Boolean = force || cached.isEmpty() ||
-        (lastTrendingRefreshAtBySource[source] ?: tagSuggestionStore.trendingRefreshedAt(source))
-            ?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
+        tagSuggestionStore.trendingRefreshedAt(source)?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
 
     private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
+        tagSuggestionStore.markTrendingRefreshed(source, clock())
         val fetched = runCatchingPreservingCancellation {
             registry.adapterFor(source)?.trendingTags(limit).orEmpty()
         }.getOrDefault(emptyList())
-        val refreshedAt = clock()
-        lastTrendingRefreshAtBySource[source] = refreshedAt
-        if (fetched.isNotEmpty()) tagSuggestionStore.replaceTrending(source, fetched, refreshedAt)
+        if (fetched.isNotEmpty()) tagSuggestionStore.replaceTrending(source, fetched)
         return fetched
     }
 }

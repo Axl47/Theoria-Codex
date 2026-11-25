@@ -154,7 +154,7 @@
 
 - Going to Recents and back no longer repeats the check for new posts from followed creators and saved searches each time; each one is checked at most every three hours, even when you leave the app before the check finishes.
 - Reopening the app after Android closed it in the background no longer downloads trending tags again; they refresh at most every 12 hours.
-- When a site answers "too many requests", the app stops sending it requests for at least 10 minutes instead of retrying, so a short limit is less likely to turn into a block for hours. Searches on that site say "Too many requests. Try again later." until then, and Settings › Sites shows the same when you test it.
+- When a site answers "too many requests", searches, trending tags, new-post checks and background picture work stop asking it for at least 10 minutes instead of retrying, so a short limit is less likely to turn into a block for hours. Searches on that site say "Too many requests. Try again later." until then, and testing it in Settings › Sites says the same without sending anything.
 - Library pictures whose preview fails to load are tried again after a day, not every time the phone charges, and pictures are not fetched from a site that is limiting requests.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.

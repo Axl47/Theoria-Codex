@@ -65,8 +65,8 @@ public interface VisualSignatureDao {
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
-            + "ORDER BY posts.rowid DESC LIMIT :limit")
-    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit);
+            + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
+    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit, int skip);
 
     @Query("SELECT posts.* FROM posts JOIN post_visual_signatures AS signature "
             + "ON signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
@@ -100,7 +100,7 @@ public interface VisualSignatureDao {
             + "frame_attempts = 0")
     void clearVision();
 
-    @Query("DELETE FROM post_visual_signatures WHERE phash_checked = 0")
+    @Query("DELETE FROM post_visual_signatures WHERE phash_checked = 0 AND phash_failed_at_epoch_ms IS NULL")
     void deleteUnhashedRows();
 
     final class HashRow {

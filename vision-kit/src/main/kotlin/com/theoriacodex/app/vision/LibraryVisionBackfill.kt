@@ -18,7 +18,7 @@ class LibraryVisionBackfill(
         val unreachable = HashSet<PostId>()
         while (tagger.ready.value) {
             if (hot()) return true
-            val listed = signatures.libraryPostsWithoutVision(tagger.modelId, unreachable.size + BATCH).filterNot { it.id in unreachable }
+            val listed = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, skip = unreachable.size).filterNot { it.id in unreachable }
             val (batch, heldOff) = listed.partition(reachable)
             heldOff.mapTo(unreachable) { it.id }
             if (listed.isEmpty()) return unreachable.isNotEmpty()

@@ -481,6 +481,10 @@ class SearchCoordinatorTest {
         assertEquals(listOf("sky"), launch().map(TagSuggestion::text))
         assertEquals(1, nhentai.trendingCalls)
         now = TRENDING_REFRESH_INTERVAL_MS
+        nhentai.autocomplete = emptyList()
+        assertEquals(listOf("sky"), launch().map(TagSuggestion::text))
+        assertEquals(2, nhentai.trendingCalls)
+        now += TRENDING_REFRESH_INTERVAL_MS - 1
         launch()
         assertEquals(2, nhentai.trendingCalls)
     }

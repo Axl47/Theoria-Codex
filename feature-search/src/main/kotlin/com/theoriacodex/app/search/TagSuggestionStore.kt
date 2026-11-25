@@ -151,11 +151,19 @@ class FileBackedTagSuggestionStore(
 
     override fun trendingRefreshedAt(source: SourceKey): Long? = synchronized(lock) { trendingRefreshes[source] }
 
-    override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>, refreshedAtEpochMs: Long?) {
+    override fun markTrendingRefreshed(source: SourceKey, atEpochMs: Long) {
+        synchronized(lock) {
+            if (closing || closed) return
+            trendingRefreshes[source] = atEpochMs
+            mutationVersion += 1L
+            schedulePersistenceLocked()
+        }
+    }
+
+    override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) {
         if (suggestions.isEmpty()) return
         synchronized(lock) {
             check(!closing && !closed) { "Tag suggestion store is closing or closed" }
-            refreshedAtEpochMs?.let { trendingRefreshes[source] = it }
             val retained = inMemory[source].orEmpty().mapNotNull { suggestion ->
                 val remainingOrigins = suggestion.origins - TagSuggestionOrigin.TRENDING
                 suggestion.copy(origins = remainingOrigins).takeIf { remainingOrigins.isNotEmpty() }

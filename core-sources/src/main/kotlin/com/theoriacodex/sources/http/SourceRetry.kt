@@ -40,9 +40,9 @@ private suspend fun retrying(
     extraOutage: (SourceByteResponse) -> HostOutageKind?,
     block: suspend () -> SourceByteResponse,
 ): SourceByteResponse {
-    outages?.ensureAvailable(requestUrl)
     var attempt = 0
     while (true) {
+        outages?.ensureAvailable(requestUrl)
         try {
             val response = block()
             val delayMs = policy.delayBeforeRetry(response, attempt)

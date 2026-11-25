@@ -70,7 +70,9 @@ class HostOutageTracker(
     fun recordResponse(url: String, statusCode: Int, headers: Map<String, List<String>>): HostOutageKind? =
         outageKindOf(statusCode, headers)?.also { kind ->
             val retryAfterMs = headers.header("Retry-After")?.trim()?.toLongOrNull()?.times(1_000L)
-            val holdMs = if (kind == HostOutageKind.RATE_LIMITED) (retryAfterMs ?: 0L).coerceIn(outageMs, MAX_RATE_LIMIT_MS) else outageMs
+            val holdMs = if (kind == HostOutageKind.RATE_LIMITED) {
+                maxOf(outageMs, retryAfterMs ?: 0L).coerceAtMost(maxOf(outageMs, MAX_RATE_LIMIT_MS))
+            } else outageMs
             record(url, kind, holdMs = holdMs)
         }
 

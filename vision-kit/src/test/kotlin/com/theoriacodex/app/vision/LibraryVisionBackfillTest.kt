@@ -68,8 +68,8 @@ class LibraryVisionBackfillTest {
             }
             changes.value += 1
         }
-        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
-            posts.filter { post -> stored.none { it.postId == post.id } }.take(limit)
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> =
+            posts.filter { post -> stored.none { it.postId == post.id } }.drop(skip).take(limit)
         override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
             posts.filter { it.id in signaturesAwaitingFrames() }.drop(skip).take(limit)
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {

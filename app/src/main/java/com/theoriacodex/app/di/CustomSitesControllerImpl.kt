@@ -180,6 +180,7 @@ internal class CustomSitesControllerImpl(
 
 
     override suspend fun testBuiltIn(source: SourceKey): BuiltInTestResult {
+        if (outages.isRateLimited(source.presentation().referer)) return BuiltInTestResult.RATE_LIMITED
         outages.clearSource(source)
         val searched = runCatchingPreservingCancellation { withTimeoutOrNull(BUILT_IN_TEST_TIMEOUT_MS) { runBuiltInSearch(source) } }
         val result = when (sourceIssues(outages.outages.value, listOf(source), clock())[source]) {
@@ -205,7 +206,7 @@ internal class CustomSitesControllerImpl(
     override suspend fun checkVerification(source: SourceKey, userAgent: String): Boolean {
         if (!source.isCustom) {
             val outageHosts = outages.outages.value.keys.filter(source::ownsHost).map { "https://$it/" }
-            return (listOf(source.presentation().referer) + outageHosts).all { clearsChallenge(it, userAgent) }
+            return (listOf(source.presentation().referer) + outageHosts).filterNot(outages::isRateLimited).all { clearsChallenge(it, userAgent) }
         }
         val profile = requireNotNull(find(source.id)) { "Verification needs a stored site" }
         val result = prober.probe(

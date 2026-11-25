@@ -31,9 +31,9 @@ class SavedSearchNewPostsChecker(
     private suspend fun claim(id: String, saved: Set<String>, nowEpochMs: Long): Boolean {
         var claimed = false
         store.updateSavedSearchNewPosts { state ->
-            claimed = newPostsCheckDue(listOf(state.attemptedAtEpochMs[id]), nowEpochMs)
+            claimed = newPostsCheckDue(listOf(state.attempts[id]), nowEpochMs)
             if (!claimed) state
-            else state.copy(attemptedAtEpochMs = state.attemptedAtEpochMs.filterKeys { it in saved } + (id to nowEpochMs))
+            else state.copy(attempts = state.attempts.filterKeys { it in saved } + (id to nowEpochMs))
         }
         return claimed
     }

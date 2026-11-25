@@ -71,8 +71,8 @@ class RoomVisualSignatureRepository(
         }
     }
 
-    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
-        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit).decoded() }
+    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> =
+        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit, skip).decoded() }
 
     override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
         withContext(Dispatchers.IO) { dao.libraryPostsAwaitingFrames(modelId, MAX_FRAME_ATTEMPTS, limit, skip).decoded() }

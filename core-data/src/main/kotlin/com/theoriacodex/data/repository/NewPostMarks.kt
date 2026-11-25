@@ -29,7 +29,7 @@ fun PostId.markKey(): String = "${source.id}:$sourcePostId"
 
 @Serializable
 data class SavedSearchNewPosts(
-    @SerialName("attempts") val attemptedAtEpochMs: Map<String, Long> = emptyMap(),
+    @SerialName("attempts") val attempts: Map<String, Long> = emptyMap(),
     @SerialName("marks") val marks: Map<String, NewPostMarks> = emptyMap(),
 )
 
