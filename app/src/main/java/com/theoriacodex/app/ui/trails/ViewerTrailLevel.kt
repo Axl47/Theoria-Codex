@@ -22,6 +22,7 @@ import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.viewer.CrumbTag
 import com.theoriacodex.app.viewer.ViewerCrumb
+import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.removal
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -32,27 +33,28 @@ internal class ViewerLevel(
     val isFork: Boolean,
     val crumbs: List<ViewerCrumb>,
     val feed: TrailFeed?,
-    val coveredByFork: () -> Boolean,
     val popTo: (Int) -> Unit,
     val nameRoot: (ViewerLaunchContext, Query?) -> Unit,
     val remove: (Int) -> Unit = {},
     val replay: CrumbTag? = null,
     val restart: (CrumbTag) -> Unit = {},
 ) {
-    fun clearsReturnOnDispose(): Boolean = !isFork && !coveredByFork()
-
     companion object {
-        val Root = ViewerLevel(false, emptyList(), null, { false }, {}, { _, _ -> })
+        val Root = ViewerLevel(false, emptyList(), null, {}, { _, _ -> })
     }
 }
 
-internal class ViewerTrailEntryViewModel(val claimed: TrailLevel?) : ViewModel() {
+internal class ViewerTrailEntryViewModel(val claimed: TrailLevel?, private val onLeftBackStack: () -> Unit) : ViewModel() {
     override fun onCleared() {
         claimed?.feed?.close()
+        onLeftBackStack()
     }
 }
 
 internal fun NavBackStackEntry.isTrailLevel(): Boolean = savedStateHandle.get<String>(TRAIL_KEY) != null
+
+private fun SavedStateHandle.isForkLevel(): Boolean =
+    get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty().isNotEmpty() || get<String>(TRAIL_KEY) != null
 
 internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): String =
     query?.includeTags?.joinToString(" ") { it.replace('_', ' ') }?.takeIf { it.isNotBlank() } ?: when (context.streamSource) {
@@ -67,13 +69,22 @@ internal fun viewerRootLabel(context: ViewerLaunchContext, query: Query?): Strin
     }
 
 @Composable
-internal fun rememberViewerLevel(navController: NavHostController, entry: NavBackStackEntry, pendingSessionId: String?): ViewerLevel {
+internal fun rememberViewerLevel(
+    navController: NavHostController,
+    entry: NavBackStackEntry,
+    pendingSessionId: String?,
+    viewerReturn: ViewerReturnTransition?,
+): ViewerLevel {
     val handoff = rememberTrailHandoff()
+    val saved = entry.savedStateHandle
     val owner = viewModel<ViewerTrailEntryViewModel>(
         viewModelStoreOwner = entry,
-        factory = viewModelFactory { initializer { ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) } },
+        factory = viewModelFactory {
+            initializer {
+                ViewerTrailEntryViewModel(handoff.claim(pendingSessionId)) { if (!saved.isForkLevel()) viewerReturn?.clear() }
+            }
+        },
     )
-    val saved = entry.savedStateHandle
     owner.claimed?.let { claimed ->
         if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = claimed.label
         if (saved.get<String>(TRAIL_KEY) == null) saved[TRAIL_KEY] = claimed.trailKey
@@ -90,10 +101,9 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
         } + saved.crumb(label ?: UNNAMED_LEVEL)
         val popTo: (Int) -> Unit = { crumb -> repeat((ancestors.size - crumb).coerceAtLeast(0)) { navController.popBackStack() } }
         ViewerLevel(
-            isFork = ancestors.isNotEmpty() || entry.isTrailLevel(),
+            isFork = saved.isForkLevel(),
             crumbs = crumbs,
             feed = owner.claimed?.feed,
-            coveredByFork = { navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY)?.contains(entry.id) == true },
             popTo = popTo,
             nameRoot = { context, query ->
                 if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = viewerRootLabel(context, query)

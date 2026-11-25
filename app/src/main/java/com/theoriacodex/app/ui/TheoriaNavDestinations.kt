@@ -282,7 +282,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
 @Composable
 private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val routes = shell.routes
-    val level = rememberViewerLevel(shell.navController, entry, shell.viewerSessions.session.value?.sessionId)
+    val level = rememberViewerLevel(shell.navController, entry, shell.viewerSessions.session.value?.sessionId, shell.viewerReturn)
     val tagActions = remember(shell) { viewerTagSearchActions(shell) }
     val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell, tagActions).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }

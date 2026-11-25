@@ -155,7 +155,6 @@ internal fun ViewerRoute(
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val latestLevel = rememberUpdatedState(level)
-    DisposableEffect(viewerReturn) { onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() } }
     val latestDependencies = rememberUpdatedState(dependencies)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
     val latestScreenCallbacks = rememberUpdatedState(screenCallbacks)
