@@ -121,7 +121,7 @@ class JourneyAppContainer(
     private val siteProfiles = InMemorySiteProfileRepository()
     private val siteKeys = InMemorySiteCredentialsStore()
     private val auth = PixivAuthApi(httpClient)
-    private val tags = FileBackedTagSuggestionStore(storageDirectory.resolve("tags.json"))
+    private val tags = FileBackedTagSuggestionStore(storageDirectory.resolve("tags.json"), writeBehind = writeBehind)
     private val updateState = FileBackedUpdateStateStore(storageDirectory.resolve("updates.json"))
     private val feed = object : UpdateFeedClient {
         override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = Result.success(null)

@@ -4,6 +4,7 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.advanceTimeBy
@@ -56,6 +57,24 @@ class RelatedPostsRouteControllerTest {
         runCurrent()
 
         assertEquals(RelatedPostsUiState.Idle, state)
+    }
+
+    @Test
+    fun `a dependency's cancellation fails the shelf instead of leaving it loading (ADR 0002)`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        var state: RelatedPostsUiState = RelatedPostsUiState.Idle
+        val controller = controller(
+            seed = seed,
+            state = { state },
+            updateState = { state = it },
+            loader = CancelledDependencyRelatedLoader,
+            timeoutMs = 100L,
+        )
+
+        controller.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
+        runCurrent()
+
+        assertEquals("upstream call cancelled", (state as RelatedPostsUiState.Failed).message)
     }
 
     @Test
@@ -155,6 +174,11 @@ class RelatedPostsRouteControllerTest {
 private object SuspendingRelatedLoader : RelatedPostsLoading {
     override fun supports(source: SourceKey): Boolean = true
     override suspend fun load(seed: PostId): List<Post> = awaitCancellation()
+}
+
+private object CancelledDependencyRelatedLoader : RelatedPostsLoading {
+    override fun supports(source: SourceKey): Boolean = true
+    override suspend fun load(seed: PostId): List<Post> = throw CancellationException("upstream call cancelled")
 }
 
 private class SequencedRelatedLoader(

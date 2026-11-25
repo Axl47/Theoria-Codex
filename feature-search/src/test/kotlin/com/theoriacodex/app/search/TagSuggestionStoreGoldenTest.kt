@@ -59,7 +59,7 @@ class TagSuggestionStoreGoldenTest {
         val file = tempFolder.newFolder().resolve("tag_suggestions.json")
         file.writeText(golden(golden))
         val recoveries = FileStoreRecoveryRegistry()
-        val store = FileBackedTagSuggestionStore(file, persistenceDebounceMs = 0L, recoveryRegistry = recoveries)
+        val store = FileBackedTagSuggestionStore(file, recoveryRegistry = recoveries)
         try {
             store.awaitLoaded()
             block(store)

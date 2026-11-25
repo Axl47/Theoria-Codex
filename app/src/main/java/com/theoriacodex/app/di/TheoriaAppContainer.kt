@@ -272,6 +272,7 @@ internal class DefaultTheoriaAppContainer(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),
         recoveryRegistry = fileStoreRecoveryRegistry,
+        writeBehind = writeBehind,
     )
     private val siteHealthCheck = SiteHealthCheck(hostOutages, httpClients.sources)
     private val builtInAgents = SharedPreferencesBuiltInAgentStore(appContext)

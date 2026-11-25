@@ -242,7 +242,7 @@ class InstalledJsonCompatibilityDeviceTest {
         file.writeText(
             """{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""",
         )
-        val store = FileBackedTagSuggestionStore(storeFile = file, persistenceDebounceMs = 0L)
+        val store = FileBackedTagSuggestionStore(storeFile = file)
         try {
             store.awaitLoaded()
             assertEquals("legacy", store.get(SourceKey.GELBOORU, 1).single().text)

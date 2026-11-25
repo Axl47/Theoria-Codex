@@ -29,9 +29,17 @@ data class StoredSeriesEntry(
     val position: Long = 0,
     val length: Long? = null,
     val lastReadAtEpochMs: Long? = null,
-    val pageOffset: Float? = null,
+    val pageFraction: PageFraction? = null,
 ) {
     val hasProgress: Boolean get() = read || position > 0
+
+    val pageOffset: Float? get() = pageFraction?.takeIf { it.page == position && position > 0 }?.fraction
+}
+
+data class PageFraction(val page: Long, val fraction: Float) {
+    companion object {
+        fun of(page: Long, fraction: Float?): PageFraction? = fraction?.takeIf { it.isFinite() }?.let { PageFraction(page, it.coerceIn(0f, 1f)) }
+    }
 }
 
 data class FollowedSeries(
@@ -94,8 +102,8 @@ interface SeriesRepository {
 fun StoredSeriesEntry.withProgress(position: Long, length: Long, kind: SeriesKind, pageOffset: Float? = null): StoredSeriesEntry = when (kind) {
     SeriesKind.MANGA -> {
         val reached = position.coerceIn(1, length.coerceAtLeast(1))
-        val offset = pageOffset?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: this.pageOffset.takeIf { reached == this.position }
-        copy(position = reached, length = length, read = read || reached >= length, pageOffset = offset)
+        val fraction = PageFraction.of(reached, pageOffset?.takeIf { it.isFinite() } ?: this.pageOffset.takeIf { reached == this.position })
+        copy(position = reached, length = length, read = read || reached >= length, pageFraction = fraction)
     }
     SeriesKind.ANIME -> if (length <= 0) this else {
         val reached = position.coerceIn(0, length)

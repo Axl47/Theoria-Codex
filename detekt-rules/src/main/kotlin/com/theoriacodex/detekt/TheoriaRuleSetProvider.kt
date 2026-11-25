@@ -7,5 +7,14 @@ import dev.detekt.api.RuleSetProvider
 class TheoriaRuleSetProvider : RuleSetProvider {
     override val ruleSetId = RuleSetId("theoria")
 
-    override fun instance(): RuleSet = RuleSet(ruleSetId, listOf(::CancellationCatchRule, ::StoredJsonUsesDurableJsonRule, ::DefaultedCoroutineScopeRule))
+    override fun instance(): RuleSet = RuleSet(
+        ruleSetId,
+        listOf(
+            ::CancellationCatchRule,
+            ::StoredJsonUsesDurableJsonRule,
+            ::DefaultedCoroutineScopeRule,
+            ::OffMainNoteRule,
+            ::PlatformFreeImportRule,
+        ),
+    )
 }

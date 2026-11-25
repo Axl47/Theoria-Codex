@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.DurableJson
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -22,7 +23,7 @@ class TagSuggestionStoreSemanticsTest {
     @Test
     fun `close writes pending changes and rejects later mutations`() = runTest {
         val storeFile = storeFile()
-        val store = FileBackedTagSuggestionStore(storeFile, persistenceDebounceMs = 60_000L)
+        val store = FileBackedTagSuggestionStore(storeFile, writeBehind = WriteBehind(backgroundScope, timed = false))
         store.put(SourceKey.GELBOORU, listOf(TagSuggestion("closed_in", "seen", null)))
 
         store.close()
@@ -35,7 +36,9 @@ class TagSuggestionStoreSemanticsTest {
     @Test
     fun `flush writes only when something changed since the last write`() = runTest {
         var writes = 0
-        val store = FileBackedTagSuggestionStore(storeFile(), persistenceDebounceMs = 60_000L, onWriteCompleted = { writes++ })
+        val store = FileBackedTagSuggestionStore(
+            storeFile(), writeBehind = WriteBehind(backgroundScope, timed = false), onWriteCompleted = { writes++ },
+        )
         store.flush()
         assertEquals(0, writes)
         store.put(SourceKey.GELBOORU, listOf(TagSuggestion("a", "seen", null)))
@@ -326,11 +329,10 @@ class TagSuggestionStoreSemanticsTest {
     @Test
     fun `invalid configuration is rejected`() = runTest {
         val file = storeFile()
-        listOf<() -> Any>({ FileBackedTagSuggestionStore(file, maxEntriesPerSource = 0) }, { FileBackedTagSuggestionStore(file, maxTotalUtf8Bytes = 10) },
-            { FileBackedTagSuggestionStore(file, persistenceDebounceMs = -1L) }).forEach { create ->
+        listOf<() -> Any>({ FileBackedTagSuggestionStore(file, maxEntriesPerSource = 0) }, { FileBackedTagSuggestionStore(file, maxTotalUtf8Bytes = 10) }).forEach { create ->
             assertTrue(runCatching { create() }.exceptionOrNull() is IllegalArgumentException)
         }
-        FileBackedTagSuggestionStore(file, maxEntriesPerSource = 1, maxTotalUtf8Bytes = 256, persistenceDebounceMs = 0L).close()
+        FileBackedTagSuggestionStore(file, maxEntriesPerSource = 1, maxTotalUtf8Bytes = 256).close()
     }
 
     private fun longTags(count: Int) = (0 until count).map { TagSuggestion("tag_${it}_" + "x".repeat(80), "tag", it + 1) }

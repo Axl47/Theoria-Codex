@@ -144,6 +144,33 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
         }
 
     @Test
+    fun `a dependency's cancellation fails the search instead of leaving it loading (ADR 0002)`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(
+                adapter = ViewModelSearchAdapter(),
+                executionService = { coordinator ->
+                    object : SearchExecutionService by coordinator {
+                        override suspend fun executeInitial(
+                            query: Query,
+                            sourceScope: SearchSourceScope,
+                            sources: SearchSources,
+                            onPartial: (suspend (SearchExecutionResult.Success) -> Unit)?,
+                        ): SearchExecutionResult = throw kotlinx.coroutines.CancellationException("upstream call cancelled")
+                    }
+                },
+            )
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("cancelled")))
+
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+
+            assertFalse(viewModel.state.value.loading)
+            assertEquals("upstream call cancelled", viewModel.state.value.content.error?.message)
+        }
+
+    @Test
     fun `new search cancels delayed work and stale completion cannot replace current state`() =
         runTest(mainDispatcherRule.dispatcher) {
             val adapter = ViewModelSearchAdapter()

@@ -1,5 +1,6 @@
 package com.theoriacodex.data.storage
 
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import java.io.IOException
 import java.util.concurrent.Executors
 import kotlin.time.Duration.Companion.seconds
@@ -36,7 +37,7 @@ class StateCellTest {
     }
 
     @Test
-    fun `flushAll writes every cell it wrapped on its queue even when one fails (ADR 0215)`() = runTest {
+    fun `flushAll writes every cell it wrapped on its queue even when one fails, and reports the failure (ADR 0215)`() = runTest {
         val executor = Executors.newSingleThreadExecutor { task -> Thread(task, QUEUE_THREAD) }
         try {
             val queue = executor.asCoroutineDispatcher()
@@ -51,9 +52,13 @@ class StateCellTest {
             failing.update { "new" }
             statistics.update { "new statistics" }
 
+            val reported = mutableListOf<Pair<String, String?>>()
+            Diagnostics.install { area, _, error -> reported += area to error?.message }
             val failure = runCatching { writeBehind.flushAll() }.exceptionOrNull()
+            Diagnostics.install { _, _, _ -> }
 
             assertEquals("disk full", failure?.message)
+            assertEquals(listOf("storage" to "disk full"), reported)
             assertEquals(setOf("new position", "new statistics"), writes.toSet())
             assertEquals(setOf(QUEUE_THREAD), threads)
         } finally {

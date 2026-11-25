@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.NoChaptersToMoveToException
+import com.theoriacodex.data.repository.PageFraction
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -167,7 +168,7 @@ class RoomSeriesRepository(
                 .map(SeriesEntryEntity::toStored)
                 .mapNotNull { current ->
                     val target = byAddress[current.entry.address] ?: return@mapNotNull null
-                    val next = current.copy(read = target.read, position = target.position, length = target.length, pageOffset = target.pageOffset)
+                    val next = current.copy(read = target.read, position = target.position, length = target.length, pageFraction = target.pageFraction)
                     next.takeIf { it != current }?.toEntity(id)
                 }
             if (restored.isNotEmpty()) dao.upsertEntries(restored)
@@ -220,7 +221,7 @@ private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it 
 
 private fun StoredSeriesEntry.withReadState(targets: Set<String>?, read: Boolean): StoredSeriesEntry? {
     if (targets != null && entry.address !in targets) return null
-    val next = if (read) copy(read = true) else copy(read = false, position = 0, pageOffset = null)
+    val next = if (read) copy(read = true) else copy(read = false, position = 0)
     return next.takeIf { it != this }
 }
 
@@ -296,7 +297,7 @@ internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     position = lastPage,
     length = pageCount,
     lastReadAtEpochMs = lastReadAtEpochMs,
-    pageOffset = pageOffset,
+    pageFraction = PageFraction.of(lastPage, pageOffset),
 )
 
 internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(

@@ -96,10 +96,31 @@ class RoomSeriesRepositoryTest {
         repository.setAllRead(id, read = false)
         assertNull(offset())
         repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
-        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null)
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null, null)
         assertEquals(0.3f, offset())
-        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 5L, 9L, null, null)
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 5L, 9L, null, null, null)
         assertNull(offset())
+    }
+
+    @Test
+    fun `a restored chapter brings its place inside the page when it is as far or further (ADR 0192)`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        suspend fun offset() = repository.entries(id).single().pageOffset
+
+        repository.recordProgress(id, "/c/1", position = 2, length = 9)
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null, 0.3f)
+        assertEquals(0.3f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null, 0.2f)
+        assertEquals("The farther offset on the same page wins", 0.3f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null, null)
+        assertEquals("A backup without an offset keeps the device's", 0.3f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null, 0.8f)
+        assertEquals("The farther offset on the same page wins", 0.8f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 1L, 9L, null, null, 0.9f)
+        assertEquals("An earlier page leaves it alone", 0.8f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 6L, 9L, null, null, 0.5f)
+        assertEquals(6L, repository.entries(id).single().position)
+        assertEquals(0.5f, offset())
     }
 
     @Test

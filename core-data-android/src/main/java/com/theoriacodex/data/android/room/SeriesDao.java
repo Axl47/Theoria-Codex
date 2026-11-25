@@ -80,12 +80,13 @@ public interface SeriesDao {
             + "THEN COALESCE(:pageCount, CASE WHEN page_count >= :lastPage THEN page_count END) "
             + "ELSE COALESCE(page_count, CASE WHEN :pageCount >= last_page THEN :pageCount END) END, "
             + "last_read_at_epoch_ms = MAX(COALESCE(last_read_at_epoch_ms, :lastReadAt), COALESCE(:lastReadAt, last_read_at_epoch_ms)), "
-            + "page_offset = CASE WHEN :lastPage > last_page THEN NULL ELSE page_offset END, "
+            + "page_offset = CASE WHEN :lastPage > last_page THEN :pageOffset "
+            + "WHEN :lastPage = last_page THEN MAX(COALESCE(page_offset, :pageOffset), COALESCE(:pageOffset, page_offset)) ELSE page_offset END, "
             + "memo = COALESCE(memo, :memo) "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(
             String source, String seriesAddress, String address, boolean read, long lastPage, Long pageCount, Long lastReadAt,
-            String memo);
+            String memo, Float pageOffset);
 
     @Query("DELETE FROM series WHERE source = :source AND address = :address")
     void deleteSeries(String source, String address);

@@ -36,6 +36,7 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.coroutines.runCatchingUnlessCallerCancelled
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -524,27 +525,27 @@ class SearchViewModel(
         }
         val request = SearchRequest(++nextRequestId, kind, query, sourceScope, executionKey)
         reduce(SearchStateChange.BeginRequest(request))
-        launchRequest(request, failureMessage = "Search failed") {
-            try {
-                if (paintCachedFirstPage) {
-                    val posts = executionService.cachedFirstPage(request.executionKey, sourcesFor(request.sourceScope).enabled)
-                    reduce(SearchStateChange.ShowCachedFirstPage(request.id, posts))
-                }
-                executeRootRequest(request, acceptance)
-            } catch (_: TimeoutCancellationException) {
-                reduce(SearchStateChange.RequestFailed(request.id, ROOT_REQUEST_TIMEOUT_MESSAGE))
+        launchRequest(request, failureMessage = "Search failed", timeoutMessage = ROOT_REQUEST_TIMEOUT_MESSAGE) {
+            if (paintCachedFirstPage) {
+                val posts = executionService.cachedFirstPage(request.executionKey, sourcesFor(request.sourceScope).enabled)
+                reduce(SearchStateChange.ShowCachedFirstPage(request.id, posts))
             }
+            executeRootRequest(request, acceptance)
         }
     }
 
-    private fun launchRequest(request: SearchRequest, failureMessage: String, block: suspend CoroutineScope.() -> Unit) {
+    private fun launchRequest(
+        request: SearchRequest,
+        failureMessage: String,
+        timeoutMessage: String = failureMessage,
+        block: suspend CoroutineScope.() -> Unit,
+    ) {
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
-                block()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                reduce(SearchStateChange.RequestFailed(request.id, error.message ?: failureMessage))
+                runCatchingUnlessCallerCancelled { block() }.onFailure { error ->
+                    val message = if (error is TimeoutCancellationException) timeoutMessage else error.message ?: failureMessage
+                    reduce(SearchStateChange.RequestFailed(request.id, message))
+                }
             } finally {
                 if (!isActive) reduce(SearchStateChange.RequestCancelled(request.id))
             }

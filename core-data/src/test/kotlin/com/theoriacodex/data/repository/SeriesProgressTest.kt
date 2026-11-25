@@ -34,6 +34,22 @@ class SeriesProgressTest {
     }
 
     @Test
+    fun `an offset comes back only with the page it was measured on (ADR 0192)`() {
+        val inside = entry("c1", order = 0).withProgress(position = 3, length = 9, SeriesKind.MANGA, pageOffset = 0.4f)
+        assertEquals(0.4f, inside.resumePageOffset())
+
+        val moved = inside.copy(position = 5)
+        assertNull("Moving the page by hand leaves no stale offset", moved.pageOffset)
+        assertNull("A page moved by hand does not revive its old offset", moved.withProgress(position = 3, length = 9, SeriesKind.MANGA).pageOffset)
+        assertNull(moved.copy(read = false, position = 0).pageOffset)
+        assertEquals("An unmeasurable offset keeps the stored one", 0.4f, inside.withProgress(position = 3, length = 9, SeriesKind.MANGA, pageOffset = Float.NaN).pageOffset)
+
+        val back = inside.withProgress(position = 4, length = 9, SeriesKind.MANGA).withProgress(position = 3, length = 9, SeriesKind.MANGA)
+        assertNull("Returning to a page does not revive its old offset", back.pageOffset)
+        assertNull(inside.copy(read = true).resumePageOffset())
+    }
+
+    @Test
     fun `an episode is watched from 85 percent of its length, stays watched, and resumes where it was left short of its last 2 minutes (ADR 0028)`() {
         val length = 1_200_000L
         val midway = entry("e1", order = 0).withProgress(position = 1_019_999, length = length, SeriesKind.ANIME)
