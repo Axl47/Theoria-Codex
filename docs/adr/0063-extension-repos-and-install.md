@@ -17,6 +17,7 @@ Extension APKs run with the app's permissions and can read its data. Repo indexe
 - An index body over `MAX_INDEX_BYTES` (8 MiB) is refused, by declared length and by reading at most that many bytes, including after gzip expansion.
 - A repo is kept with the key its `repo.json` names; when a backup knew a key and the repo now names another, nothing it offers is listed until the user adds it again.
 - Adding the same repo twice, or a second address of it, lists its packages once. Another repo with the same signing key and name is kept.
+- Each index entry's source ids (legacy `sources[].id`, protobuf `Source` field 1) become `RepoExtension.sources`, as source keys of the entry's kind. A followed series whose source isn't loaded is traced to the extension that provides it (`missingExtensions`). Where several repos list the source, the copy the device runs wins, then an update, then an installable copy, then one signed with another key. Series rows keep only their source key, so a source no repo lists is shown by series title.
 - Repo index fixtures are protobuf: built from `repos/store.txt` and `repos/anime.txt` with `protoc --encode=Store store.proto < store.txt | gzip -9` (`--encode=AnimeStore` for anime).
 
 ## Consequences
@@ -31,6 +32,7 @@ Adding a source of APKs means passing the same key and package checks. Revisit t
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionPackages.kt`: `ExtensionPackage`, `ExtensionPackages`, `standing`, `signer`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionCatalog.kt`: `MAX_INDEX_BYTES`, `ExtensionCatalog`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/RepoIndex.kt`: index reading
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/MissingExtensions.kt`: `missingExtensions`
 
 ## Guarded by
 
@@ -39,4 +41,5 @@ Adding a source of APKs means passing the same key and package checks. Revisit t
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionPackagesTest.kt`: `a private copy stands in for a package of its name, unless the other app updated it past the copy (ADR 0063)`, `only a package signed by exactly one certificate has a signer (ADR 0063)`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionRegistryTest.kt`: `another extension put under a folder file's name with the same key is not the one asked about or turned on (ADR 0062, 0063)`, `a file replaced in place loads anew and its old code is no longer offered (ADR 0062, 0063)`
 - `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/RepoReaderTest.kt`: `a legacy repo is read from its folder, its index address or its repo address alike (ADR 0063)`, `a legacy repo naming a newer index is read from that index, as Keiyoushi's is (ADR 0063)`, `a legacy repo naming a newer index that cannot be read fails instead of reading the stub list (ADR 0063)`, `an anime store is read from its own address, with its torrent flag where a manga store has sources (ADR 0063)`, `a manga store whose extensions list no sources is still read as manga (ADR 0063)`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/MissingExtensionsTest.kt`: `each missing series goes to the extension that provides its source, or to the unlisted group (ADR 0063)`
 - Left to prose: only `ExtensionCatalog` writing the folder has no precise check (the folder travels as a `File`, so a text rule would both miss and misfire); `ATOMIC_MOVE` inside `NonCancellable` has no guard, since the move's atomicity is the file system's; leftover copies being removed once per process and `MAX_APK_BYTES` stopping a download that declares no length are not exercised; `QUERY_ALL_PACKAGES` is a manifest permission; the key model is the trust design.

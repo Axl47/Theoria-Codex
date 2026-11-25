@@ -1,6 +1,8 @@
 package com.theoriacodex.extensionhost
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesKind
+import com.theoriacodex.domain.series.extensionSourceKey
 import java.io.ByteArrayInputStream
 import java.util.zip.GZIPInputStream
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -25,7 +27,10 @@ data class IndexedExtension(
     val kind: SeriesKind,
     val torrent: Boolean = false,
     val iconUrl: String? = null,
+    val sources: List<SourceKey> = emptyList(),
 )
+
+private fun SeriesKind.sourceKeys(ids: List<Long?>): List<SourceKey> = ids.filterNotNull().filter { it > 0 }.distinct().map(::extensionSourceKey)
 
 @OptIn(ExperimentalSerializationApi::class)
 internal object RepoReader {
@@ -101,6 +106,7 @@ private class LegacyExtension(
 ) {
     fun indexed(folder: String): IndexedExtension {
         val anime = name.startsWith(ANIYOMI_LABEL)
+        val kind = if (anime) SeriesKind.ANIME else SeriesKind.MANGA
         return IndexedExtension(
             name = name.removePrefix(ANIYOMI_LABEL).removePrefix(MihonKind.labelPrefix),
             packageName = pkg,
@@ -109,15 +115,16 @@ private class LegacyExtension(
             versionCode = code,
             versionName = version,
             languages = sources.orEmpty().map(LegacySource::lang).ifEmpty { listOf(lang) }.distinct(),
-            kind = if (anime) SeriesKind.ANIME else SeriesKind.MANGA,
+            kind = kind,
             torrent = torrent == 1,
             iconUrl = httpsOnly("$folder/icon/$pkg.png"),
+            sources = kind.sourceKeys(sources.orEmpty().map { it.id.toLongOrNull() }),
         )
     }
 }
 
 @Serializable
-private class LegacySource(val lang: String = "")
+private class LegacySource(val lang: String = "", val id: String = "")
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -151,7 +158,7 @@ private class MangaEntry(
 ) : ProtoEntry {
     override fun indexed() = IndexedExtension(
         name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.MANGA,
-        iconUrl = resources.icon,
+        iconUrl = resources.icon, sources = SeriesKind.MANGA.sourceKeys(sources.map(ProtoSource::id)),
     )
 }
 
@@ -169,7 +176,7 @@ private class AnimeEntry(
 ) : ProtoEntry {
     override fun indexed() = IndexedExtension(
         name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.ANIME,
-        torrent = torrent == 1, iconUrl = resources.icon,
+        torrent = torrent == 1, iconUrl = resources.icon, sources = SeriesKind.ANIME.sourceKeys(sources.map(ProtoSource::id)),
     )
 }
 
@@ -181,4 +188,4 @@ private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "", @ProtoNumb
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-private class ProtoSource(@ProtoNumber(3) val language: String = "")
+private class ProtoSource(@ProtoNumber(1) val id: Long = 0, @ProtoNumber(3) val language: String = "")

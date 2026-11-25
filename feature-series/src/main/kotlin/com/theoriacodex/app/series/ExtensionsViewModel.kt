@@ -35,8 +35,12 @@ data class ExtensionsState(
     val updates: List<RepoExtension> get() = listing?.extensions.orEmpty().filter { it.status == RepoExtension.Status.UPDATE }
 }
 
-class ExtensionsViewModel(private val extensions: SeriesExtensions, private val repos: ExtensionRepos) : ViewModel() {
-    private val mutableState = MutableStateFlow(ExtensionsState())
+class ExtensionsViewModel(
+    private val extensions: SeriesExtensions,
+    private val repos: ExtensionRepos,
+    val entryPage: ExtensionsSubpage? = null,
+) : ViewModel() {
+    private val mutableState = MutableStateFlow(ExtensionsState(subpage = entryPage))
     val state: StateFlow<ExtensionsState> = mutableState
 
     init {
@@ -51,6 +55,10 @@ class ExtensionsViewModel(private val extensions: SeriesExtensions, private val 
 
     fun refresh() {
         viewModelScope.launch { show(extensions.installed()) }
+    }
+
+    fun reloadListing(refresh: Boolean = false) {
+        viewModelScope.launch { showListing(refresh) }
     }
 
     fun ask(extension: InstalledExtension?) = mutableState.update { it.copy(asking = extension) }

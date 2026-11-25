@@ -118,7 +118,7 @@ data class SeriesTabContent(
     val sources: List<SeriesSource>?,
     val browse: SeriesSourceListing?,
     val search: List<SeriesSourceListing>?,
-    val missingExtensions: Int = 0,
+    val missingExtensions: List<Series> = emptyList(),
 ) {
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
@@ -143,8 +143,8 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         search = search?.filter { filter.admits(it.key) },
         missingExtensions = sources?.let { on ->
             val keys = on.mapTo(HashSet()) { it.key }
-            all.count { it.series.id.source !in keys }
-        } ?: 0,
+            all.map { it.series }.filter { it.id.source !in keys }
+        }.orEmpty(),
     )
 }
 
@@ -456,6 +456,10 @@ class SeriesTabViewModel(
         saved.remove<String>(SAVED_SEARCH)
         if (state.value.dedicated != null) closeDedicated()
         mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
+    }
+
+    fun unfollow(id: SeriesId) {
+        viewModelScope.launch { repository.setFollowed(id, false) }
     }
 
     fun open(series: Series, opened: (SeriesId) -> Unit) {

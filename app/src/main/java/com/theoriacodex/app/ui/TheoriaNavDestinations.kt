@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.series.ExtensionsDestination
+import com.theoriacodex.app.series.extensionsArguments
 import com.theoriacodex.app.series.seriesArguments
 import com.theoriacodex.app.series.SeriesPageDestination
 import kotlinx.coroutines.flow.emptyFlow
@@ -118,7 +119,7 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     }
     composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
     composable(AppRoute.Series, arguments = seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
-    composable(AppRoute.Extensions) { ExtensionsDestination(shell) }
+    composable(AppRoute.Extensions, arguments = extensionsArguments) { entry -> ExtensionsDestination(shell, entry) }
     composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 

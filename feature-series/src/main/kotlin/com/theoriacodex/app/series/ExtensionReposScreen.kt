@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -175,7 +176,7 @@ private fun LazyListScope.browseRowItems(
             )
         }
         else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
-            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall) { ExtensionIcon(extension.iconUrl) } }
+            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, repoExtensionSummary(extension, showKind), onInstall) { ExtensionIcon(extension.iconUrl) } }
         }
     }
 }
@@ -275,31 +276,37 @@ internal fun UpdatesGroup(state: ExtensionsState, viewModel: ExtensionsViewModel
     SettingsGroup("Updates", action) {
         updates.forEachIndexed { index, extension ->
             if (index > 0) SettingsRowDivider()
-            RepoExtensionRow(extension, state, bothKinds = false, onInstall = viewModel::install) { ExtensionIcon(installedIcons[extension.packageName]) }
+            RepoExtensionRow(extension, state, repoExtensionSummary(extension, bothKinds = false), viewModel::install) { ExtensionIcon(installedIcons[extension.packageName]) }
         }
     }
 }
 
 @Composable
-private fun RepoExtensionRow(
+internal fun RepoExtensionRow(
     extension: RepoExtension,
     state: ExtensionsState,
-    bothKinds: Boolean,
+    summary: String,
     onInstall: (RepoExtension) -> Unit,
+    onClick: (() -> Unit)? = null,
+    after: @Composable () -> Unit = {},
     icon: @Composable () -> Unit,
 ) {
     val failure = state.failures[extension.packageName]
     SettingsRow(
         leading = icon,
         title = extension.name,
-        summary = failure ?: repoExtensionSummary(extension, bothKinds),
+        summary = failure ?: summary,
         summaryIsError = failure != null,
+        onClick = onClick,
         trailing = {
-            when {
-                extension.packageName in state.installing -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                extension.status == RepoExtension.Status.AVAILABLE -> TextButton(onClick = { onInstall(extension) }) { Text("Install") }
-                extension.status == RepoExtension.Status.UPDATE -> TextButton(onClick = { onInstall(extension) }) { Text("Update") }
-                else -> Unit
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                when {
+                    extension.packageName in state.installing -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                    extension.status == RepoExtension.Status.AVAILABLE -> TextButton(onClick = { onInstall(extension) }) { Text("Install") }
+                    extension.status == RepoExtension.Status.UPDATE -> TextButton(onClick = { onInstall(extension) }) { Text("Update") }
+                    else -> Unit
+                }
+                after()
             }
         },
     )
@@ -307,10 +314,11 @@ private fun RepoExtensionRow(
 
 internal fun repoExtensionSummary(extension: RepoExtension, bothKinds: Boolean): String {
     val languages = extension.languages.singleOrNull()?.let(::languageName) ?: "${extension.languages.size} languages"
-    val status = when (extension.status) {
-        RepoExtension.Status.INSTALLED -> "Installed"
-        RepoExtension.Status.OTHER_KEY -> "Installed copy is signed with another key"
-        else -> null
-    }
-    return listOfNotNull(extension.kind.label.takeIf { bothKinds }, languages, extension.versionName, status).joinToString(" · ")
+    return listOfNotNull(extension.kind.label.takeIf { bothKinds }, languages, extension.versionName, repoExtensionStatus(extension)).joinToString(" · ")
+}
+
+internal fun repoExtensionStatus(extension: RepoExtension): String? = when (extension.status) {
+    RepoExtension.Status.INSTALLED -> "Installed"
+    RepoExtension.Status.OTHER_KEY -> "Installed copy is signed with another key"
+    else -> null
 }

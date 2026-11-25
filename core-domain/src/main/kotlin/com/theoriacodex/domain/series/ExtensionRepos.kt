@@ -1,5 +1,7 @@
 package com.theoriacodex.domain.series
 
+import com.theoriacodex.domain.model.SourceKey
+
 data class ExtensionRepo(
     val url: String,
     val name: String,
@@ -24,6 +26,7 @@ data class RepoExtension(
     val kind: SeriesKind,
     val status: Status,
     val iconUrl: String? = null,
+    val sources: List<SourceKey> = emptyList(),
 ) {
     enum class Status {
         AVAILABLE,

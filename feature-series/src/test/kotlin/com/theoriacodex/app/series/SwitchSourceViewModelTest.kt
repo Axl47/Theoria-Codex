@@ -141,6 +141,23 @@ class SwitchSourceViewModelTest {
     }
 
     @Test
+    fun aSeriesWhoseOwnSourceIsNotLoadedStillSwitchesToALoadedOne() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val other = Finding("custom_mihon_2", listOf("Hero"))
+        var moved: Pair<SourceKey, SeriesId>? = null
+        val viewModel = SwitchSourceViewModel(from, { listOf(other) }, store = {}) { source, to -> moved = source.key to to.id; true }
+        advanceUntilIdle()
+        viewModel.open("Hero")
+        advanceUntilIdle()
+        val match = (viewModel.state.value.sheet!!.results.single().listing as SwitchListing.Found).matches.single()
+
+        viewModel.switchTo(match) {}
+        advanceUntilIdle()
+
+        assertEquals(other.key to match.series.id, moved)
+    }
+
+    @Test
     fun aSwitchUnderWayHoldsTheSheetAndOneThatMovedNothingOnlyClosesIt() = runTest {
         val other = Finding("custom_mihon_2", listOf("Hero"))
         val outcome = CompletableDeferred<Boolean>()
