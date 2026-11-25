@@ -6,13 +6,14 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoVariant
+import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PostMediaTest {
     @Test
-    fun `motion reads the lightest video rendition with the source's headers, or the local copy`() {
+    fun `motion reads the lightest video rendition with the source's headers, or the local copy (ADR 0105)`() {
         val video = ref("file.mp4", "video/mp4").copy(
             videoVariants = listOf(
                 VideoVariant("https://example.test/1080.mp4", height = 1080, original = true),
@@ -25,16 +26,22 @@ class PostMediaTest {
         val motion = postMotion(videoPost) as PostMotion.Video
         assertEquals("https://example.test/480.mp4", motion.location)
         assertEquals("https://gelbooru.com/", motion.headers["Referer"])
+        assertEquals("Mozilla/5.0", motion.headers["User-Agent"])
+        val customSite = requireNotNull(SourceKey.parse("custom_booru_example"))
+        val customMotion = postMotion(post(customSite, ref("full.jpg", "image/jpeg")).copy(media = listOf(video))) as PostMotion.Video
+        assertEquals("https://example.test/480.mp4", customMotion.location)
         val saved = videoPost.copy(media = listOf(video.copy(localPath = "/data/offline/file.mp4")))
         assertEquals("/data/offline/file.mp4", (postMotion(saved) as PostMotion.Video).location)
     }
 
     @Test
-    fun `a Pixiv animation plays from its archive, while stills and animated images keep their still`() {
+    fun `a Pixiv animation plays from its archive, while stills and animated images keep their still (ADR 0105)`() {
         val ugoira = post(SourceKey.PIXIV, ref("ugoira.jpg", PIXIV_UGOIRA_MIME))
         assertEquals(PostMotion.Ugoira(ugoira.id), postMotion(ugoira))
         assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.gif", "image/gif"))))
         assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.webp", "image/webp").copy(isAnimated = true))))
+        assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.png", "image/apng").copy(isAnimated = true))))
+        assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.avif", "image/avif").copy(isAnimated = true))))
         assertNull(postMotion(post(SourceKey.DANBOORU, ref("full.jpg", "image/jpeg"))))
     }
 
@@ -60,7 +67,7 @@ class PostMediaTest {
     }
 
     @Test
-    fun `pixiv preview uses saved aspect preserving progressive image`() {
+    fun `pixiv preview uses saved aspect preserving progressive image (ADR 0105)`() {
         val full = ref("original.jpg", "image/jpeg").copy(
             progressiveUrls = listOf(
                 "https://example.test/medium.jpg",
@@ -143,7 +150,7 @@ class PostMediaTest {
     }
 
     @Test
-    fun `gelbooru preview upgrades to its sample but leaves the original to the Viewer`() {
+    fun `gelbooru preview upgrades to its sample but leaves the original to the Viewer (ADR 0105)`() {
         val full = ref("full.jpg", "image/jpeg").copy(
             progressiveUrls = listOf("https://example.test/sample.jpg"),
         )
@@ -175,30 +182,29 @@ class PostMediaTest {
         )
         assertEquals(
             listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.QUALITY_UPGRADE),
-            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 1_100)).candidates.map { it.activation },
+            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 1_280)).candidates.map { it.activation },
         )
         assertEquals(
             listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
-            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 4_000)).candidates.map { it.activation },
+            previewMediaDeliveryPlan(withoutSample.copy(width = 800, height = 1_281)).candidates.map { it.activation },
         )
     }
 
     @Test
-    fun `any source with a lighter rendition steps up to the original in the Viewer and on cards`() {
+    fun `every source treats a first page's original as a card fallback and steps a small original up (ADR 0105)`() {
         val customSite = requireNotNull(SourceKey.parse("custom_booru_example"))
         listOf(SourceKey.DANBOORU, SourceKey.RULE34PAHEAL, customSite).forEach { source ->
-            val full = ref("full.jpg", "image/jpeg").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
-            val post = post(source, full)
-
-            val viewer = viewerMediaDeliveryPlan(post, full)
+            val page = ref("page.jpg", "image/jpeg").copy(progressiveUrls = listOf("https://example.test/page-sample.jpg"))
+            val paged = post(source, ref("full.jpg", "image/jpeg")).copy(media = listOf(page))
             assertEquals(
-                listOf("https://example.test/sample.jpg", "https://example.test/full.jpg"),
-                viewer.candidates.take(2).map { it.location },
+                MediaDeliveryActivation.FAILURE_FALLBACK,
+                previewMediaDeliveryPlan(paged).candidates.first { it.location.endsWith("page.jpg") }.activation,
             )
-            assertEquals(MediaDeliveryActivation.QUALITY_UPGRADE, viewer.candidates[1].activation)
+
+            val small = post(source, ref("full.jpg", "image/jpeg")).copy(width = 800, height = 1_280)
             assertEquals(
-                MediaDeliveryActivation.QUALITY_UPGRADE,
-                previewMediaDeliveryPlan(post).candidates.first { it.location.endsWith("sample.jpg") }.activation,
+                listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.QUALITY_UPGRADE),
+                previewMediaDeliveryPlan(small).candidates.map { it.activation },
             )
         }
     }
@@ -222,7 +228,7 @@ class PostMediaTest {
     }
 
     @Test
-    fun `rule34xxx keeps cards on the preview and shows the sample first in the Viewer`() {
+    fun `rule34xxx keeps cards on the preview and shows the sample first in the Viewer (ADR 0105)`() {
         val full = ref("full.jpg", "image/jpeg").copy(
             progressiveUrls = listOf("https://example.test/sample.jpg"),
         )
@@ -241,25 +247,28 @@ class PostMediaTest {
     }
 
     @Test
-    fun `remote gif paints its poster first and never upgrades to a static sample`() {
-        val gif = ref("file.gif", "image/gif").copy(progressiveUrls = listOf("https://example.test/sample.jpg"))
+    fun `remote gif paints its poster first and never upgrades to a static sample (ADR 0105)`() {
+        listOf("sample.jpg", "sample.jpeg", "sample.png").forEach { sample ->
+            val gif = ref("file.gif", "image/gif").copy(progressiveUrls = listOf("https://example.test/$sample"))
 
-        val plan = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, gif))
+            val plan = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, gif))
 
-        assertEquals(
-            listOf("https://example.test/preview.jpg", "https://example.test/file.gif"),
-            plan.candidates.map { it.location },
-        )
-        assertEquals(
-            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.ANIMATION_UPGRADE),
-            plan.candidates.map { it.activation },
-        )
-        assertEquals(listOf(1), plan.upgradeIndicesAfter(0))
-        assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+            assertEquals(
+                sample,
+                listOf("https://example.test/preview.jpg", "https://example.test/file.gif"),
+                plan.candidates.map { it.location },
+            )
+            assertEquals(
+                listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.ANIMATION_UPGRADE),
+                plan.candidates.map { it.activation },
+            )
+            assertEquals(listOf(1), plan.upgradeIndicesAfter(0))
+            assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(1))
+        }
     }
 
     @Test
-    fun `animated mirrors are alternatives for a single upgrade`() {
+    fun `animated mirrors are alternatives for a single upgrade (ADR 0105)`() {
         val animated = ref("a.webp", "image/webp").copy(
             isAnimated = true,
             fallbackUrls = listOf("https://example.test/a.webp", "https://mirror.test/a.webp"),
@@ -287,6 +296,45 @@ class PostMediaTest {
 
         assertEquals("/saved/file.gif", plan.primary?.location)
         assertEquals(emptyList<Int>(), plan.upgradeIndicesAfter(0))
+    }
+
+    @Test
+    fun `media requests carry the source's own agent (ADR 0105)`() {
+        val danbooru = previewMediaDeliveryPlan(post(SourceKey.DANBOORU, ref("full.jpg", "image/jpeg")))
+        val gelbooru = previewMediaDeliveryPlan(post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")))
+
+        assertEquals(setOf(THEORIA_SOURCE_USER_AGENT), danbooru.candidates.mapTo(mutableSetOf()) { it.requestHeaders["User-Agent"] })
+        assertEquals(setOf("Mozilla/5.0"), gelbooru.candidates.mapTo(mutableSetOf()) { it.requestHeaders["User-Agent"] })
+        assertEquals(
+            "Mozilla/5.0",
+            postPreviewImageCandidate(post(SourceKey.GELBOORU, ref("full.jpg", "image/jpeg")))?.requestHeaders?.get("User-Agent"),
+        )
+        assertEquals(
+            THEORIA_SOURCE_USER_AGENT,
+            postDownloadMediaCandidate(post(SourceKey.DANBOORU, ref("full.jpg", "image/jpeg")))?.requestHeaders?.get("User-Agent"),
+        )
+    }
+
+    @Test
+    fun `a page shows its renditions lightest first, then its url, tries copies only on failure and never shows its thumbnail (ADR 0006)`() {
+        val page = ref("original.jpg", "image/jpeg").copy(
+            progressiveUrls = listOf("https://example.test/small.jpg", "https://example.test/medium.jpg"),
+            fallbackUrls = listOf("https://mirror.test/original.jpg"),
+            thumbnailUrl = "https://example.test/thumb.jpg",
+        )
+        val gallery = post(SourceKey.HITOMI, page).copy(media = listOf(ref("cover.jpg", "image/jpeg"), page))
+
+        val plan = viewerMediaDeliveryPlan(gallery, page)
+
+        assertEquals(
+            listOf(
+                "https://example.test/small.jpg" to MediaDeliveryActivation.PRIMARY,
+                "https://example.test/medium.jpg" to MediaDeliveryActivation.QUALITY_UPGRADE,
+                "https://example.test/original.jpg" to MediaDeliveryActivation.QUALITY_UPGRADE,
+                "https://mirror.test/original.jpg" to MediaDeliveryActivation.FAILURE_FALLBACK,
+            ),
+            plan.candidates.map { it.location to it.activation },
+        )
     }
 
     @Test
