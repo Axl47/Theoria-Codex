@@ -97,8 +97,18 @@ class HostOutageTracker(
     fun record(url: String, kind: HostOutageKind, refused: RefusedRequest? = null, holdMs: Long = outageMs) {
         val host = hostKey(url) ?: return
         workingHosts.update { it - host }
-        state.update { it + (host to HostOutage(kind, clock() + holdMs, refused)) }
+        val now = clock()
+        state.update { recorded ->
+            val limit = recorded[host]?.takeIf { it.isActiveRateLimit(now) }
+            when {
+                limit == null -> recorded + (host to HostOutage(kind, now + holdMs, refused))
+                kind == HostOutageKind.RATE_LIMITED -> recorded + (host to limit.copy(untilEpochMs = maxOf(limit.untilEpochMs, now + holdMs)))
+                else -> recorded
+            }
+        }
     }
+
+    private fun HostOutage.isActiveRateLimit(now: Long) = kind == HostOutageKind.RATE_LIMITED && untilEpochMs > now
 
     fun recordChallenge(url: String, refused: RefusedRequest) {
         val host = hostKey(url) ?: return
@@ -133,7 +143,11 @@ class HostOutageTracker(
 
     fun clear(host: String) {
         val key = normalizeHost(host)
-        state.update { if (key in it) it - key else it }
+        val now = clock()
+        state.update { recorded ->
+            val outage = recorded[key]
+            if (outage == null || outage.isActiveRateLimit(now)) recorded else recorded - key
+        }
     }
 
     companion object {

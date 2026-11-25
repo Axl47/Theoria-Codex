@@ -19,12 +19,13 @@ class LibraryVisionBackfill(
         while (tagger.ready.value) {
             if (hot()) return true
             val listed = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, skip = unreachable.size).filterNot { it.id in unreachable }
-            val (batch, heldOff) = listed.partition(reachable)
-            heldOff.mapTo(unreachable) { it.id }
             if (listed.isEmpty()) return unreachable.isNotEmpty()
-            if (batch.isEmpty()) continue
             val started = TimeSource.Monotonic.markNow()
-            val results = batch.associateWith { post -> tagger.analyze(post, remember = false) }
+            val results = LinkedHashMap<Post, PictureResult>()
+            for (post in listed) {
+                if (reachable(post)) results[post] = tagger.analyze(post, remember = false) else unreachable += post.id
+            }
+            if (results.isEmpty()) continue
             if (PictureResult.Unavailable in results.values) return tagger.ready.value
             unreachable += results.filterValues { it == PictureResult.Unreachable }.keys.map { it.id }
             if (!tagger.store(results)) return false

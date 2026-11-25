@@ -80,6 +80,7 @@ internal class ForYouLanesLoader(
         }.flatten()
 
     private suspend fun trendingTags(source: SourceKey): List<String> {
+        store.awaitLoaded()
         val cached = store.getTrending(source = source, limit = TRENDING_LIMIT).filter(TagSuggestion::isRecommendationTagSuggestion)
         if (cached.isNotEmpty()) return cached.map { it.text }
         store.markTrendingRefreshed(source, clock())

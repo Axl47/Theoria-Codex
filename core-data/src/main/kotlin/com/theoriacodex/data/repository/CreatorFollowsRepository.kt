@@ -68,13 +68,12 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
     suspend fun seenPostIds(creator: CreatorProfile): Set<String>? =
         observe().first().firstOrNull { it.creator.followKey() == creator.followKey() }?.seenPostIds?.toSet()
 
-    suspend fun claimChecks(membershipIds: Set<String>, at: Long, due: (FollowedCreator) -> Boolean): List<FollowedCreator> {
-        var claimed = emptyList<FollowedCreator>()
+    suspend fun claimCheck(membershipId: String, at: Long, due: (FollowedCreator) -> Boolean): FollowedCreator? {
+        var claimed: FollowedCreator? = null
         settings.updateSettings { current ->
-            claimed = current.followedCreators.filter { it.membershipId in membershipIds && due(it) }
-            val ids = claimed.mapTo(mutableSetOf()) { it.membershipId }
-            if (ids.isEmpty()) current
-            else current.copy(followedCreators = current.followedCreators.map { if (it.membershipId in ids) it.copy(attemptedAtEpochMs = at) else it })
+            claimed = current.followedCreators.firstOrNull { it.membershipId == membershipId && due(it) }
+            if (claimed == null) current
+            else current.copy(followedCreators = current.followedCreators.map { if (it.membershipId == membershipId) it.copy(attemptedAtEpochMs = at) else it })
         }
         return claimed
     }

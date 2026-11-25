@@ -151,6 +151,33 @@ class CreatorFollowsViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
+    @Test fun `follows a cancelled automatic check never started stay due for the next foreground`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val settings = InMemorySettingsRepository()
+            val repository = CreatorFollowsRepository(settings)
+            (1..3).forEach { repository.follow(CreatorProfile(SourceKey.PIXIV, "Artist $it", "$it", uploadsQuery = "user:$it"), emptyList()) }
+            val asked = mutableListOf<String?>()
+            val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
+                override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> {
+                    asked += creator.profileId
+                    delay(30_000)
+                    return Page(emptyList(), null)
+                }
+            }
+            val owner = CreatorFollowsViewModel(settings, TestRegistry(listOf(adapter)))
+            store.put("follows", owner)
+            owner.refreshIfStale(0L)
+            runCurrent()
+            owner.cancelAutomaticRefresh()
+            runCurrent()
+            owner.refreshIfStale(60 * 60 * 1000L)
+            runCurrent()
+            assertEquals(listOf("1", "2", "3"), asked)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
     @Test fun `app-open checks wait out the interval even after a failure`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()

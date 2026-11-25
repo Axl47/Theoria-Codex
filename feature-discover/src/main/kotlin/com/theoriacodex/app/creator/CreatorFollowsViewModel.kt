@@ -101,9 +101,10 @@ class CreatorFollowsViewModel(
             try {
                 val due = { follow: FollowedCreator -> !automatic || follow.checkDue(at) }
                 repository.observe().first().filter(due).chunked(WRITE_BATCH_SIZE).forEach { batch ->
-                    val claimed = repository.claimChecks(batch.mapTo(mutableSetOf()) { it.membershipId }, at, due)
-                    val results = claimed.mapConcurrent(concurrency = 2) { follow -> follow.membershipId to checkCreator(follow) }
-                    repository.recordChecks(results.toMap(), at)
+                    val results = batch.mapConcurrent(concurrency = 2) { listed ->
+                        repository.claimCheck(listed.membershipId, at, due)?.let { follow -> follow.membershipId to checkCreator(follow) }
+                    }
+                    repository.recordChecks(results.filterNotNull().toMap(), at)
                 }
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) { messageChannel.send("Could not load followed creators") }

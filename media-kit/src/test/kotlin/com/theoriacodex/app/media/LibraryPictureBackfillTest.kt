@@ -9,6 +9,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.vision.PredictedTag
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
@@ -70,6 +71,22 @@ class LibraryPictureBackfillTest {
 
         assertEquals(List(100) { "offline-$it" }, asked)
         assertEquals(listOf(32, 32, 32, 4, 0), library.listed)
+    }
+
+    @Test fun `no preview load starts once its host is holding requests off`() = runTest {
+        val library = FakeSignatures(List(20) { post("p$it") })
+        var limited = false
+        var loadedWhileLimited = 0
+        LibraryPictureBackfill(library, { !limited }) {
+            if (limited) loadedWhileLimited++
+            limited = true
+            delay(10)
+            PictureHashResult.Hashed(1)
+        }.drain()
+
+        assertEquals(0, loadedWhileLimited)
+        assertTrue(library.records.size < 20)
+        assertTrue(library.failedAt.isEmpty())
     }
 
     private class FakeSignatures(private val library: List<Post>) : VisualSignatureRepository {

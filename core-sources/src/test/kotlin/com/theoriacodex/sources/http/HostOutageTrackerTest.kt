@@ -157,6 +157,39 @@ class HostOutageTrackerTest {
         assertFalse(tracker.isRateLimited("https://nhentai.net/"))
     }
 
+    @Test fun `only time lifts a rate limit, clears and passes and other outages leave it, and a later limit keeps the longer hold`() {
+        tracker.recordResponse("https://nhentai.net/", 429, mapOf("Retry-After" to listOf("1800")))
+        tracker.clear("nhentai.net")
+        tracker.pass("nhentai.net")
+        tracker.record("https://nhentai.net/", HostOutageKind.MAINTENANCE)
+        tracker.recordChallenge("https://nhentai.net/", RefusedRequest("https://nhentai.net/", "agent"))
+        tracker.recordResponse("https://nhentai.net/", 429, emptyMap())
+        assertEquals(HostOutage(HostOutageKind.RATE_LIMITED, 1_000L + 1_800_000L), tracker.outages.value["nhentai.net"])
+        now += 1_800_000L
+        tracker.clear("nhentai.net")
+        assertTrue(tracker.outages.value.isEmpty())
+    }
+
+    @Test fun `a 429 whose body never arrives still fails at once without a retry`() = runBlocking {
+        val hits = AtomicInteger()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { exchange ->
+                hits.incrementAndGet()
+                exchange.sendResponseHeaders(429, 1_000L)
+                exchange.close()
+            }
+            start()
+        }
+        val client = DefaultSourceHttpClient(maxRetries = 2, retryBaseDelayMs = 1L, outages = HostOutageTracker())
+        try {
+            val failure = runCatching { client.get("http://127.0.0.1:${server.address.port}/api/v2/search") }.exceptionOrNull()
+            assertEquals(HostOutageKind.RATE_LIMITED, (failure as HostUnavailableException).kind)
+            assertEquals(1, hits.get())
+        } finally {
+            server.stop(0)
+        }
+    }
+
     @Test fun `a 429 fails at once without a retry and the next request never reaches the host`() = runBlocking {
         val hits = AtomicInteger()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
