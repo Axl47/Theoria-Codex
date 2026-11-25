@@ -39,11 +39,12 @@ fun ExtensionsScreen(viewModel: ExtensionsViewModel, onBack: () -> Unit) {
         viewModel.refresh()
         onPauseOrDispose {}
     }
-    BackHandler(enabled = open != null || state.subpage != null) { if (open != null) viewModel.open(null) else viewModel.openSubpage(null) }
+    val closeSubpage = { if (state.subpage == viewModel.entryPage) onBack() else viewModel.openSubpage(null) }
+    BackHandler(enabled = open != null || state.subpage != null) { if (open != null) viewModel.open(null) else closeSubpage() }
     when {
         open != null -> ExtensionPage(open, state.settings.orEmpty(), viewModel, onBack = { viewModel.open(null) })
-        state.subpage == ExtensionsSubpage.REPOS -> ReposPage(state, viewModel, onBack = { viewModel.openSubpage(null) })
-        state.subpage == ExtensionsSubpage.BROWSE -> BrowsePage(state, viewModel, onBack = { viewModel.openSubpage(null) })
+        state.subpage == ExtensionsSubpage.REPOS -> ReposPage(state, viewModel, onBack = closeSubpage)
+        state.subpage == ExtensionsSubpage.BROWSE -> BrowsePage(state, viewModel, onBack = closeSubpage)
         else -> ExtensionsList(state, viewModel, onBack = onBack)
     }
     state.asking?.let { extension -> TurnOnDialog(extension, onDismiss = { viewModel.ask(null) }) { viewModel.setOn(extension, true) } }

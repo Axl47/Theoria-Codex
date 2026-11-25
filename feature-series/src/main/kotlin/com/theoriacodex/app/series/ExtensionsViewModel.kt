@@ -38,9 +38,9 @@ data class ExtensionsState(
 class ExtensionsViewModel(
     private val extensions: SeriesExtensions,
     private val repos: ExtensionRepos,
-    subpage: ExtensionsSubpage? = null,
+    val entryPage: ExtensionsSubpage? = null,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(ExtensionsState(subpage = subpage))
+    private val mutableState = MutableStateFlow(ExtensionsState(subpage = entryPage))
     val state: StateFlow<ExtensionsState> = mutableState
 
     init {

@@ -8,6 +8,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.IntSize
@@ -34,6 +35,7 @@ import com.theoriacodex.domain.series.SeriesKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -65,6 +67,18 @@ class ExtensionsScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("No extensions installed").assertExists()
         compose.onNodeWithText("Add repo").assertDoesNotExist()
+    }
+
+    @Test fun `the repo page opened directly goes back to where it was opened from`() {
+        var left = false
+        val vm = ExtensionsViewModel(Device(), FakeRepos(), entryPage = ExtensionsSubpage.REPOS)
+        compose.setContent {
+            TheoriaNightTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ExtensionsScreen(vm, onBack = { left = true }) } }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Back").performClick()
+        assertTrue(left)
+        assertEquals(ExtensionsSubpage.REPOS, vm.state.value.subpage)
     }
 
     @Test fun `each store row leads with its repo icon, or a same-size placeholder when the repo has none`() {
