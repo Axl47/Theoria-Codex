@@ -4,6 +4,9 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -51,7 +54,9 @@ internal class ScrollChromeState {
     private val focused = mutableStateMapOf<Any, Unit>()
     val hideablePx: Int get() = if (active && focused.isEmpty()) hideableBottoms.values.maxOrNull() ?: 0 else 0
     val shiftPx: Int get() = offsetPx.roundToInt().coerceIn(0, hideablePx)
-    var atTop: () -> Boolean = { false }
+    var listAtStart: () -> Boolean = { false }
+    var listAtEnd: () -> Boolean = { false }
+    var listEndGap: () -> Int = { 0 }
     var root: LayoutCoordinates? = null
     private var hiding = false
     private var generation = 0
@@ -65,6 +70,8 @@ internal class ScrollChromeState {
         offsetPx = (before - deltaY).coerceIn(0f, range)
         return before - offsetPx
     }
+
+    fun atTop(): Boolean = listAtStart() && (!listAtEnd() || listEndGap() >= offsetPx)
 
     fun preScroll(deltaY: Float): Float = if (deltaY < 0f && atTop()) 0f else consume(deltaY)
 
@@ -175,14 +182,18 @@ fun Modifier.hidesOnScroll(): Modifier {
 @Composable
 internal fun ScrollChromeTopEffect(chrome: ScrollChromeState, scrollable: ScrollableState) {
     DisposableEffect(chrome, scrollable) {
-        chrome.atTop = { !scrollable.canScrollBackward }
+        chrome.listAtStart = { !scrollable.canScrollBackward }
+        chrome.listAtEnd = { !scrollable.canScrollForward }
+        chrome.listEndGap = { scrollable.endGapPx() }
         onDispose {
-            chrome.atTop = { false }
+            chrome.listAtStart = { false }
+            chrome.listAtEnd = { false }
+            chrome.listEndGap = { 0 }
             chrome.show()
         }
     }
     LaunchedEffect(chrome, scrollable) {
-        launch { snapshotFlow { !scrollable.canScrollBackward }.collect { top -> if (top) chrome.animateTo(0f) } }
+        launch { snapshotFlow { chrome.atTop() }.collect { top -> if (top) chrome.animateTo(0f) } }
         snapshotFlow { scrollable.isScrollInProgress }.drop(1).collectLatest { scrolling ->
             if (!scrolling) {
                 withFrameNanos {}
@@ -190,4 +201,17 @@ internal fun ScrollChromeTopEffect(chrome: ScrollChromeState, scrollable: Scroll
             }
         }
     }
+}
+
+private fun ScrollableState.endGapPx(): Int = when (this) {
+    is LazyListState -> layoutInfo.run {
+        viewportEndOffset - afterContentPadding - (visibleItemsInfo.maxOfOrNull { it.offset + it.size } ?: viewportStartOffset)
+    }
+    is LazyGridState -> layoutInfo.run {
+        viewportEndOffset - afterContentPadding - (visibleItemsInfo.maxOfOrNull { it.offset.y + it.size.height } ?: viewportStartOffset)
+    }
+    is LazyStaggeredGridState -> layoutInfo.run {
+        viewportEndOffset - afterContentPadding - (visibleItemsInfo.maxOfOrNull { it.offset.y + it.size.height } ?: viewportStartOffset)
+    }
+    else -> 0
 }

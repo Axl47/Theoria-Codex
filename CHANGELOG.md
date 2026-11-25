@@ -4,7 +4,7 @@
 
 ### Added
 
-- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
+- Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. At the end of a short list the header stays away, so the last row stays in view. Series keeps its search and Extensions buttons, and the bottom bar stays.
 - A saved search's Rename dialog has Edit search, which opens it in Search to change its tags, sources, filters or sort. Update saves the change under the same name and place, and its new-post count starts over. Closing Search's sheet without tapping Update leaves the saved search as it was.
 - The menu in Search's sheet has Filter and sort, which opens the filters over the sheet without closing it.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
@@ -14,7 +14,7 @@
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and lists series no repo offers in a card per site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
 - Pulling down on Series' Following grid shows what letting go does, "Check for new chapters" (episodes if you only follow anime, updates if you follow both), and the pill fills once you've pulled far enough. While the check runs, it shows how many series are checked out of how many, and stays in view as you scroll or switch tabs. When it finishes, it says how many new chapters or episodes it found, then goes away.
-- When Series couldn't check some series, its row now sits on a card. Tap it to see which series failed, grouped by extension and then by reason (Couldn't reach site, Timed out, Blocked, Rate limited, Source error), with Retry for each group. ✕ hides the row until a later check fails again.
+- When Series couldn't check some series, its row now sits on a card. Tap it to see which series failed, grouped by extension and then by reason (Couldn't reach site, Timed out, Blocked, Rate limited, Source error), with Retry for each group. ✕ hides the row until a later check fails again. Each failed series offers Switch source in its menu. If a check fails while you are scrolled down, "N series couldn't be checked" appears with Show, which scrolls up to the card.
 - For You has a Refresh button in its top bar that deals a fresh Mix.
 - When no sources are enabled, For You offers Manage sources, which opens Settings › Sites.
 - Restore backup also takes backups from Mihon, TachiyomiJ2K and Anikku. Their followed manga and anime appear in Series, with the chapters you read, the episodes you watched, where you stopped in each, and each manga's reading mode. Nothing you already have is removed, and importing the same backup twice adds nothing more. The extension repos the backup lists are added too, without contacting them. The preview names the extensions still missing, so you only need to install them, and a series opens once its extension is on here. The next background check for new chapters notifies you of chapters and episodes the backup didn't have yet, unless you already refreshed that series.
@@ -171,7 +171,7 @@
 
 ### Fixed
 
-- Dragging a For You card diagonally shows the side hint (Skip or Like) and the Codex or hide targets together, instead of flickering between them. The one letting go would pick is highlighted, and the other dims.
+- Dragging a For You card diagonally shows the side hint (Skip or Like) and the Codex or hide targets together, instead of flickering between them. The one letting go would pick is highlighted, and the other dims. The Codex your finger is on fills with the same accent as Like and Skip.
 - Leaving a chapter or an episode closes the reader or player all at once. The dark background no longer disappears first while the pages or video stay on screen a moment longer.
 - Swiping back from a series page, Settings, Extensions or another full screen slides it away, as the back arrow does. It no longer fades with its text drawn over the screen behind it.
 - Closing a gallery you read in vertical mode fades its pages out along with the dark background. They no longer stay on screen after the background is gone.

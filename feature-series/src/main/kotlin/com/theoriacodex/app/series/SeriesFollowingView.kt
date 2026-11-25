@@ -51,6 +51,7 @@ internal fun FollowingBody(
     checking: CheckProgress?,
     found: List<SeriesUpdate>,
     failedCheck: FollowedCheck?,
+    checkRun: Int,
     grid: LazyGridState,
     onRefresh: () -> Unit,
     onRetryFailed: (Set<SeriesId>) -> Unit,
@@ -62,11 +63,14 @@ internal fun FollowingBody(
     onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
+    failureTools: CheckFailureTools = CheckFailureTools(),
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
+    var switching by remember { mutableStateOf<Series?>(null) }
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     ScrollToTopOnSortChange(content.library.sort.takeIf { content.following != null }, grid)
+    OffScreenFailuresNotice(checkRun, failed, grid, failureTools.snackbar)
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
             FollowingControls(
@@ -87,7 +91,7 @@ internal fun FollowingBody(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (failed != null) {
-                    fullWidth("following-check-failed") {
+                    fullWidth(CHECK_FAILED_KEY) {
                         CheckFailedCard(failed.message, onOpen = { failuresOpen = true }, onRetry = onRefresh, onDismiss = onDismissFailures)
                     }
                 }
@@ -96,8 +100,16 @@ internal fun FollowingBody(
         }
     }
     LaunchedEffect(failed == null) { if (failed == null) failuresOpen = false }
-    if (failuresOpen && failed != null) {
-        FollowedFailuresSheet(failed, content, onUnfollow, onOpenSeries, onRetry = { ids ->
+    val from = switching
+    val switchSource = failureTools.switchSource
+    if (from != null && switchSource != null) {
+        SwitchingSource(from, switchSource, onOpenSeries = { id ->
+            failuresOpen = false
+            failureTools.onOpenSeries(id)
+        }) { switching = null }
+    } else if (failuresOpen && failed != null) {
+        val switchable: (Series) -> Boolean = { series -> switchSource != null && content.sources.orEmpty().switchTargets(series.id).isNotEmpty() }
+        FollowedFailuresSheet(failed, content, FailedTitleActions(onUnfollow, onOpenSeries, switchable) { switching = it }, onRetry = { ids ->
             failuresOpen = false
             onRetryFailed(ids)
         }) { failuresOpen = false }

@@ -104,6 +104,7 @@ data class SeriesTabState(
     val checking: CheckProgress? = null,
     val found: List<SeriesUpdate> = emptyList(),
     val failedCheck: FollowedCheck? = null,
+    val checkRun: Int = 0,
     val kind: SeriesKind? = null,
     val view: SeriesView? = null,
     val library: LibraryOptions = LibraryOptions(),
@@ -268,7 +269,7 @@ class SeriesTabViewModel(
             } finally {
                 mutableState.update { state ->
                     val failed = check?.let { done -> state.failedCheck?.retried(only.orEmpty(), done) ?: done } ?: state.failedCheck
-                    state.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 })
+                    state.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 }, checkRun = state.checkRun + if (check?.failures.isNullOrEmpty()) 0 else 1)
                 }
             }
             if (check.updates.isNotEmpty()) {
