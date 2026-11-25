@@ -7,7 +7,7 @@ Sites behind browser challenges only answer requests that carry the in-app brows
 
 ## Decision
 - `checkVerification` tests requests with the browser's user agent and changes nothing: a built-in site's home page and any of its hosts in an outage must answer without a challenge; a stored site is probed with its keys and headers. `completeVerification` then makes the site send those cookies and user agent, lifts its outage, flushes cookies and makes no request.
-- `testBuiltIn` runs a real search, retrying even during an outage, and discards the posts.
+- `testBuiltIn` runs a real search, retrying even during an outage, and discards the posts. A source whose site is rate limited is the exception: it reports `RATE_LIMITED` without clearing the limit or searching, because each request lengthens a provider's limit.
 - `retest` refreshes the verified time on a same-family success; a different family is reported, never switched to.
 - `setSetupHost` lets cookies reach a host only while the Add form sets it up; saved and verified built-in sites always get them.
 - `remove` deletes the profile, credentials and Unified/For You opt-in but never library data.
