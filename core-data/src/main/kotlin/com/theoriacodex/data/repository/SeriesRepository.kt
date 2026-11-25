@@ -102,7 +102,7 @@ interface SeriesRepository {
 fun StoredSeriesEntry.withProgress(position: Long, length: Long, kind: SeriesKind, pageOffset: Float? = null): StoredSeriesEntry = when (kind) {
     SeriesKind.MANGA -> {
         val reached = position.coerceIn(1, length.coerceAtLeast(1))
-        val fraction = PageFraction.of(reached, pageOffset ?: this.pageOffset.takeIf { reached == this.position })
+        val fraction = PageFraction.of(reached, pageOffset?.takeIf { it.isFinite() } ?: this.pageOffset.takeIf { reached == this.position })
         copy(position = reached, length = length, read = read || reached >= length, pageFraction = fraction)
     }
     SeriesKind.ANIME -> if (length <= 0) this else {

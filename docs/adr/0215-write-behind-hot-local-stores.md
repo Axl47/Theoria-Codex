@@ -59,6 +59,7 @@ A process crash (not a normal swipe-away) can lose the last delay window of page
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsWriteBehindTest.kt`: `a backup with recents saves pending positions and statistics first (ADR 0215)`
 - `feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreTest.kt`: `burst mutations coalesce into one write-behind atomic write (ADR 0215)`
 - `feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreTest.kt`: `the app's stop flush saves pending tag suggestions (ADR 0215)`
+- `feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreTest.kt`: `a change made inside an unconfined coroutine is queued before the stop flush another thread starts (ADR 0215)`
 - `feature-search/src/test/kotlin/com/theoriacodex/app/search/TagSuggestionStoreTest.kt`: `a failed tag suggestion save surfaces from the stop flush and is kept for the next one (ADR 0215)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/ThrottleLatestTest.kt`: `the first value passes at once and a burst settles on its newest value once per period (ADR 0215)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/recommend/ThrottleLatestTest.kt`: `tag affinity reads a burst of views once per period with the newest counts (ADR 0215)`

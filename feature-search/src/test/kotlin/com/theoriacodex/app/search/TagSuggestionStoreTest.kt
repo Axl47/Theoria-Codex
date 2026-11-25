@@ -10,6 +10,10 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlin.concurrent.thread
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -386,6 +390,25 @@ class TagSuggestionStoreTest {
         val reopened = FileBackedTagSuggestionStore(storeFile)
         reopened.awaitLoaded()
         assertEquals(listOf("kept"), reopened.get(SourceKey.GELBOORU, 10).map(TagSuggestion::text))
+        store.close()
+        reopened.close()
+    }
+
+    @Test
+    fun `a change made inside an unconfined coroutine is queued before the stop flush another thread starts (ADR 0215)`() = runTest {
+        val storeFile = tempDir("tag-store-unconfined").resolve("tag_suggestions.json")
+        val writeBehind = WriteBehind(backgroundScope, timed = false)
+        val store = FileBackedTagSuggestionStore(storeFile, writeBehind = writeBehind)
+        store.awaitLoaded()
+
+        launch(Dispatchers.Unconfined) {
+            store.put(SourceKey.GELBOORU, listOf(TagSuggestion("queued", type = "seen", count = null)))
+            thread { runBlocking { writeBehind.flushAll() } }.join()
+        }.join()
+
+        val reopened = FileBackedTagSuggestionStore(storeFile)
+        reopened.awaitLoaded()
+        assertEquals(listOf("queued"), reopened.get(SourceKey.GELBOORU, 10).map(TagSuggestion::text))
         store.close()
         reopened.close()
     }

@@ -20,6 +20,7 @@ import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -332,7 +333,7 @@ class FileBackedTagSuggestionStore(
     }
 
     private fun markChanged() {
-        scope.launch(Dispatchers.Unconfined) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             runCatchingPreservingCancellation { saves.changed() }.onFailure { failure ->
                 Diagnostics.report(WRITE_BEHIND_DIAGNOSTICS_AREA, "Tag suggestions could not be saved", failure)
             }

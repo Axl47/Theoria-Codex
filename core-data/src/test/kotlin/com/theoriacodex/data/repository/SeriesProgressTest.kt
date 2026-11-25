@@ -42,6 +42,7 @@ class SeriesProgressTest {
         assertNull("Moving the page by hand leaves no stale offset", moved.pageOffset)
         assertNull("A page moved by hand does not revive its old offset", moved.withProgress(position = 3, length = 9, SeriesKind.MANGA).pageOffset)
         assertNull(moved.copy(read = false, position = 0).pageOffset)
+        assertEquals("An unmeasurable offset keeps the stored one", 0.4f, inside.withProgress(position = 3, length = 9, SeriesKind.MANGA, pageOffset = Float.NaN).pageOffset)
 
         val back = inside.withProgress(position = 4, length = 9, SeriesKind.MANGA).withProgress(position = 3, length = 9, SeriesKind.MANGA)
         assertNull("Returning to a page does not revive its old offset", back.pageOffset)

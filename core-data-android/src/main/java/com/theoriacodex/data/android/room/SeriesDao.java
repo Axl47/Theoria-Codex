@@ -81,7 +81,7 @@ public interface SeriesDao {
             + "ELSE COALESCE(page_count, CASE WHEN :pageCount >= last_page THEN :pageCount END) END, "
             + "last_read_at_epoch_ms = MAX(COALESCE(last_read_at_epoch_ms, :lastReadAt), COALESCE(:lastReadAt, last_read_at_epoch_ms)), "
             + "page_offset = CASE WHEN :lastPage > last_page THEN :pageOffset "
-            + "WHEN :lastPage = last_page THEN COALESCE(page_offset, :pageOffset) ELSE page_offset END, "
+            + "WHEN :lastPage = last_page THEN MAX(COALESCE(page_offset, :pageOffset), COALESCE(:pageOffset, page_offset)) ELSE page_offset END, "
             + "memo = COALESCE(memo, :memo) "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(
