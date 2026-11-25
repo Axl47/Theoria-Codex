@@ -84,16 +84,12 @@ internal class ExtensionSourceHost : ExtensionSites {
         images = ExtensionImages(imageKey) { key -> runBlocking { source(key) } }
         installedFolder = lazy { File(application.noBackupFilesDir, INSTALLED_DIRECTORY) }
         packages = ExtensionPackages(application, KINDS, installedFolder::value) { if (BuildConfig.DEBUG) application.getExternalFilesDir(DIRECTORY) else null }
-        val loader = ExtensionLoader(application, packages)
-        val hostInstalled = lazy {
-            ExtensionHost.install(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browsers, outages())
+        val loader = lazy {
+            ExtensionLoader.installingHost(application, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, AndroidBrowserCookieStore, browsers, outages()) { packages.read(it) }
         }
         registry = ExtensionRegistry(
             packages = packages::list,
-            load = { extension, services ->
-                hostInstalled.value
-                loader.load(extension, services)
-            },
+            load = { extension, services -> loader.value.load(extension, services) },
             choices = choiceStore,
             images = images,
             settings = { hook -> SourceSettings(application, hook) },

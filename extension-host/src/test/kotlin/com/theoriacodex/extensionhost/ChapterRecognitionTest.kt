@@ -14,7 +14,7 @@ class ChapterRecognitionTest {
     }
 
     @Test
-    fun `decimals and suffixes stay with their chapter`() {
+    fun `decimals and suffixes stay with their chapter (ADR 0064)`() {
         assertEquals(10.5f, ChapterRecognition.parseChapterNumber("Series", "Ch. 10.5"))
         assertEquals(4.99f, ChapterRecognition.parseChapterNumber("Series", "Chapter 4 extra"))
         assertEquals(12.97f, ChapterRecognition.parseChapterNumber("Series", "Chapter 12 special"))
@@ -22,14 +22,15 @@ class ChapterRecognitionTest {
     }
 
     @Test
-    fun `digits in the series title are not the chapter's`() {
+    fun `digits in the series title are not the chapter's (ADR 0064)`() {
         assertEquals(12f, ChapterRecognition.parseChapterNumber("Kaiju No. 8", "Kaiju No. 8 Chapter 12"))
         assertEquals(567f, ChapterRecognition.parseChapterNumber("Bleach", "Bleach 567: Down With Snowwhite"))
     }
 
     @Test
-    fun `a series titled with a number leaves chapter numbers whole`() {
+    fun `a series titled with a number leaves chapter numbers whole (ADR 0064)`() {
         assertEquals(186f, ChapterRecognition.parseChapterNumber("86", "Chapter 186"))
+        assertEquals(860f, ChapterRecognition.parseChapterNumber("86", "Chapter 860"))
         assertEquals(86f, ChapterRecognition.parseChapterNumber("86", "Chapter 86"))
         assertEquals(12f, ChapterRecognition.parseChapterNumber("86", "86 Chapter 12"))
     }
