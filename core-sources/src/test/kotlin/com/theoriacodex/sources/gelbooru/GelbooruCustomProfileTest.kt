@@ -16,7 +16,7 @@ import org.junit.Test
 
 class GelbooruCustomProfileTest {
     @Test
-    fun `a custom profile reads safebooru shaped posts and autocomplete`() = runTest {
+    fun `a custom profile reads safebooru shaped posts and autocomplete (ADR 0042)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAFEBOORU_POSTS)
         }
@@ -65,7 +65,7 @@ class GelbooruCustomProfileTest {
     }
 
     @Test
-    fun `a custom profile loads a generated sample before the original and skips one the fork disowns`() = runTest {
+    fun `a custom profile loads a generated sample before the original and skips one the fork disowns (ADR 0042)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLED_POSTS)
         }

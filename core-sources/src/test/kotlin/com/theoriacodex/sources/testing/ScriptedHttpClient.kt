@@ -15,8 +15,9 @@ class ScriptedHttpClient : SourceHttpClient {
         statusCode: Int = 200,
         requiredHeaders: Map<String, String> = emptyMap(),
         failure: Throwable? = null,
+        responseHeaders: Map<String, List<String>> = emptyMap(),
     ) {
-        pending += ExpectedGet(url, query, requiredHeaders, SourceHttpResponse(statusCode, body), failure)
+        pending += ExpectedGet(url, query, requiredHeaders, SourceHttpResponse(statusCode, body, responseHeaders), failure)
     }
 
     override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {

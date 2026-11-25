@@ -244,33 +244,30 @@ internal class NhentaiSearchSourceAdapterTest : NhentaiSourceAdapterTestFixture(
     }
 
     @Test
-    fun `search maps blocked html response to network failure`() = runTest {
-        val httpClient = FakeHttpClient().apply {
-            nextGetResponse = SourceHttpResponse(
-                statusCode = 200,
-                body = "<html><body>blocked</body></html>",
-            )
+    fun `search maps blocked html response to network failure (ADR 0044)`() = runTest {
+        for (page in listOf("<html><body>blocked</body></html>", "<!DOCTYPE html><html><title>Just a moment...</title></html>")) {
+            val httpClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = page) }
+            val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+            val failure = runCatching { adapter.search(multiTagQuery(), pageToken = null) }.exceptionOrNull()
+
+            require(failure is SourceAdapterException) { "$page: $failure" }
+            assertEquals(page, SourceFailureReason.NETWORK, failure.reason)
+            assertTrue(page, failure.message?.contains("non-JSON", ignoreCase = true) == true)
         }
-        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
-
-        val failure = runCatching { adapter.search(multiTagQuery(), pageToken = null) }.exceptionOrNull()
-
-        require(failure is SourceAdapterException)
-        assertEquals(SourceFailureReason.NETWORK, failure.reason)
-        assertTrue(failure.message?.contains("non-JSON", ignoreCase = true) == true)
     }
 
     @Test
-    fun `non-challenge forbidden response keeps nhentai unknown failure semantics`() = runTest {
-        val httpClient = FakeHttpClient().apply {
-            nextGetResponse = SourceHttpResponse(statusCode = 403, body = "forbidden")
+    fun `non-challenge forbidden response keeps nhentai unknown failure semantics (ADR 0044)`() = runTest {
+        for (status in listOf(401, 403)) {
+            val httpClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = status, body = "forbidden") }
+            val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+            val failure = runCatching { adapter.search(multiTagQuery(), pageToken = null) }.exceptionOrNull()
+
+            require(failure is SourceAdapterException) { "$status: $failure" }
+            assertEquals("$status", SourceFailureReason.UNKNOWN, failure.reason)
         }
-        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
-
-        val failure = runCatching { adapter.search(multiTagQuery(), pageToken = null) }.exceptionOrNull()
-
-        require(failure is SourceAdapterException)
-        assertEquals(SourceFailureReason.UNKNOWN, failure.reason)
     }
 
     @Test
