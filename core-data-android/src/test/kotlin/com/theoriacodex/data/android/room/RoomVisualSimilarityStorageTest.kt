@@ -109,7 +109,7 @@ class RoomVisualSimilarityStorageTest {
         val codex = library.ensureCodex("saved", "Saved")
         library.addItems(codex.codexId, listOf(post("seen"), post("unreadable"), post("new")))
 
-        signatures.putVision(listOf(vision("seen", "m1", tags = emptyList()), vision("unreadable", "m1", embedding = null, tags = null), vision("never-stored", "m1")))
+        signatures.putVision(listOf(vision("seen", "m1", tags = emptyList(), frames = VisionFrames.WANTED), vision("unreadable", "m1", embedding = null, tags = null), vision("never-stored", "m1")))
 
         assertEquals(setOf(id("seen"), id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
         assertTrue(signatures.observePictureHashes().first().isEmpty())
@@ -134,17 +134,17 @@ class RoomVisualSimilarityStorageTest {
 
         assertEquals(setOf(id("clip"), id("flaky"), id("gone")), awaiting())
         assertEquals(2, signatures.libraryPostsAwaitingFrames("m1", limit = 10, skip = 1).size)
-        assertEquals(VisionProgress(analysed = 1, awaitingFrames = 3, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 4, awaitingFrames = 3, total = 4), signatures.observeVisionProgress("m1").first())
         assertTrue(signatures.libraryPostsAwaitingFrames("m2", limit = 10).isEmpty())
         signatures.putVision(listOf(vision("clip", "m1", frames = VisionFrames.READ)))
         signatures.failFrames(id("gone"), "m1", permanently = true)
         repeat(MAX_FRAME_ATTEMPTS - 1) { signatures.failFrames(id("flaky"), "m1", permanently = false) }
         assertEquals(setOf(id("flaky")), awaiting())
-        assertEquals(VisionProgress(analysed = 3, awaitingFrames = 1, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 4, awaitingFrames = 1, total = 4), signatures.observeVisionProgress("m1").first())
         signatures.failFrames(id("flaky"), "m1", permanently = false)
         assertTrue(awaiting().isEmpty())
 
-        assertEquals(VisionProgress(analysed = 4, awaitingFrames = 0, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 4, awaitingFrames = 0, total = 4), signatures.observeVisionProgress("m1").first())
         signatures.clearVision()
         assertTrue(awaiting().isEmpty())
     }
@@ -179,11 +179,11 @@ class RoomVisualSimilarityStorageTest {
         library.toggleLikeAndSyncSystemCodex("p", "likes-p", "Likes", post("c"), emptyList())
         signatures.putVision(listOf(vision("a", "m1", tags = listOf(tag("x", 0.4f))), vision("c", "m1", embedding = null, tags = null)))
 
-        assertEquals(VisionProgress(analysed = 2, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m1").first())
-        assertEquals(VisionProgress(analysed = 0, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m2").first())
+        assertEquals(VisionProgress(tagged = 2, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 0, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m2").first())
         signatures.putVision(listOf(vision("a", "m2", embedding = byteArrayOf(9), tags = listOf(tag("y", 0.6f)))))
 
-        assertEquals(VisionProgress(analysed = 1, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m2").first())
+        assertEquals(VisionProgress(tagged = 1, awaitingFrames = 0, total = 3), signatures.observeVisionProgress("m2").first())
         assertTrue(signatures.predictedTags("m1").keys == setOf<PostId>())
         assertEquals(mapOf(id("a") to listOf(tag("y", 0.6f))), signatures.predictedTags("m2"))
         assertArrayEquals(byteArrayOf(9), database.openHelper.readableDatabase.query("SELECT embedding FROM post_visual_signatures WHERE source_post_id = 'a'").use { it.moveToFirst(); it.getBlob(0) })
@@ -201,7 +201,7 @@ class RoomVisualSimilarityStorageTest {
 
         assertEquals(mapOf(id("hashed") to 3L), signatures.observePictureHashes().first())
         assertTrue(signatures.predictedTags("m1").isEmpty())
-        assertEquals(VisionProgress(analysed = 0, awaitingFrames = 0, total = 2), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(tagged = 0, awaitingFrames = 0, total = 2), signatures.observeVisionProgress("m1").first())
         assertEquals(listOf(id("visionOnly")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
         database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM post_visual_signatures").use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
     }

@@ -71,7 +71,7 @@ public interface VisualSignatureDao {
             + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
     List<PostEntity> libraryPostsAwaitingFrames(String modelId, int maxAttempts, int limit, int skip);
 
-    @Query("SELECT COALESCE(SUM(NOT (signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts)), 0) AS analysed, "
+    @Query("SELECT COUNT(*) AS tagged, "
             + "COALESCE(SUM(signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts), 0) AS awaitingFrames, "
             + "(SELECT COUNT(*) FROM posts WHERE EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
@@ -126,12 +126,12 @@ public interface VisualSignatureDao {
     }
 
     final class ProgressRow {
-        public final int analysed;
+        public final int tagged;
         public final int awaitingFrames;
         public final int total;
 
-        public ProgressRow(int analysed, int awaitingFrames, int total) {
-            this.analysed = analysed;
+        public ProgressRow(int tagged, int awaitingFrames, int total) {
+            this.tagged = tagged;
             this.awaitingFrames = awaitingFrames;
             this.total = total;
         }

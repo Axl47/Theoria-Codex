@@ -102,22 +102,22 @@ private class VisionPhases(
     private suspend fun idle(): String {
         delay(IDLE_WAIT_MS)
         val progress = pictures.progress.first()
-        check(progress.analysed == 0 && progress.total >= FIXTURES) { "on battery: $progress" }
-        return "analysed=${progress.analysed} total=${progress.total}"
+        check(progress.tagged == 0 && progress.total >= FIXTURES) { "on battery: $progress" }
+        return "tagged=${progress.tagged} total=${progress.total}"
     }
 
     private suspend fun stills(): String {
-        pictures.progress.first { it.analysed >= FIXTURES }
+        pictures.progress.first { it.finished >= FIXTURES }
         val index = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
         val progress = pictures.progress.first()
-        check(progress.analysed == FIXTURES) { "videos counted before their frames: $progress" }
+        check(progress.finished == FIXTURES) { "videos counted before their frames: $progress" }
         val monochrome = normalizeMatchToken("monochrome")
         check(videos.none { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }) { "a video was read from frames" }
-        return "analysed=${progress.analysed}/${progress.total} videosFromStills=${videos.size}"
+        return "finished=${progress.finished}/${progress.total} videosFromStills=${videos.size}"
     }
 
     private suspend fun check(): String {
-        val progress = pictures.progress.first { it.analysed >= FIXTURES + videos.size }
+        val progress = pictures.progress.first { it.finished >= FIXTURES + videos.size }
         val monochrome = normalizeMatchToken("monochrome")
         val stored = withTimeoutOrNull(IDLE_WAIT_MS) {
             pictures.tagger.library.first { index -> videos.all { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) } }
@@ -131,7 +131,7 @@ private class VisionPhases(
             "monochrome on ${drawings.size} of $FIXTURES"
         }
         val tagged = drawings.size
-        return "analysed=${progress.analysed}/${progress.total} tagged=$tagged videosFromFrames=$framed ${forYou()} ${hidden()}"
+        return "finished=${progress.finished}/${progress.total} tagged=$tagged videosFromFrames=$framed ${forYou()} ${hidden()}"
     }
 
     private suspend fun sample(): String = buildList {
@@ -181,9 +181,9 @@ private class VisionPhases(
         check(!pictures.model.modelFile.exists() && !pictures.model.vocabularyFile.exists())
         checkNotNull(withTimeoutOrNull(IDLE_WAIT_MS) { pictures.tagger.library.first { it == PredictedTagIndex.Empty } }) { "index kept" }
         val progress = pictures.progress.first()
-        check(progress.analysed == 0) { "after delete: $progress" }
+        check(progress.tagged == 0) { "after delete: $progress" }
         checkNotNull(container.data.codexRepository.deleteCodexForUndo(codexId()))
-        return "analysed=${progress.analysed}"
+        return "tagged=${progress.tagged}"
     }
 
     private suspend fun codexId(): String =

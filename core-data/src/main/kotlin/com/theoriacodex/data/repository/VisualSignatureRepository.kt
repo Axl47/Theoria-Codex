@@ -52,6 +52,6 @@ enum class VisionFrames { NONE, WANTED, READ }
 
 const val MAX_FRAME_ATTEMPTS = 3
 
-data class VisionProgress(val analysed: Int, val awaitingFrames: Int, val total: Int) {
-    val tagged: Int get() = analysed + awaitingFrames
+data class VisionProgress(val tagged: Int, val awaitingFrames: Int, val total: Int) {
+    val finished: Int get() = tagged - awaitingFrames
 }

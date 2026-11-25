@@ -72,10 +72,12 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
                         Button(onClick = model::download) { Text("Try again") }
                     }
                     ModelState.Ready -> {
-                        libraryProgress(progress)?.let { library ->
-                            Text(library.count)
-                            library.pending?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        libraryProgress(progress)?.let { summary ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(summary.count)
+                                summary.pending?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                         OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete") }
