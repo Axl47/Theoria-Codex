@@ -168,7 +168,7 @@ class ExtensionCatalog(
                 installed.versionCode < entry.versionCode -> RepoExtension.Status.UPDATE
                 else -> RepoExtension.Status.INSTALLED
             }
-            RepoExtension(repo.url, entry.packageName, entry.name, entry.languages, entry.versionName, entry.kind, status)
+            RepoExtension(repo.url, entry.packageName, entry.name, entry.languages, entry.versionName, entry.kind, status, entry.iconUrl)
         }
 
     private suspend fun get(url: String): ByteArray = client.newCall(request(url)).awaitSuccess().use { response ->

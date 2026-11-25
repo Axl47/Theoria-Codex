@@ -24,6 +24,7 @@ data class IndexedExtension(
     val languages: List<String>,
     val kind: SeriesKind,
     val torrent: Boolean = false,
+    val iconUrl: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -79,6 +80,8 @@ internal object RepoReader {
 
 private const val ANIYOMI_LABEL = "Aniyomi: "
 
+private fun httpsOnly(url: String): String? = url.takeIf { it.startsWith("https://") }
+
 @Serializable
 private class LegacyRepo(@SerialName("index_v2") val indexV2: String? = null, val meta: Meta) {
     @Serializable
@@ -108,6 +111,7 @@ private class LegacyExtension(
             languages = sources.orEmpty().map(LegacySource::lang).ifEmpty { listOf(lang) }.distinct(),
             kind = if (anime) SeriesKind.ANIME else SeriesKind.MANGA,
             torrent = torrent == 1,
+            iconUrl = httpsOnly("$folder/icon/$pkg.png"),
         )
     }
 }
@@ -147,6 +151,7 @@ private class MangaEntry(
 ) : ProtoEntry {
     override fun indexed() = IndexedExtension(
         name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.MANGA,
+        iconUrl = resources.icon,
     )
 }
 
@@ -164,13 +169,15 @@ private class AnimeEntry(
 ) : ProtoEntry {
     override fun indexed() = IndexedExtension(
         name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.ANIME,
-        torrent = torrent == 1,
+        torrent = torrent == 1, iconUrl = resources.icon,
     )
 }
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "")
+private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "", @ProtoNumber(2) val iconUrl: String = "") {
+    val icon: String? get() = httpsOnly(iconUrl)
+}
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
