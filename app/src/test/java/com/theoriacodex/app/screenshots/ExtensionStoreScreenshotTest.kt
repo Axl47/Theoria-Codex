@@ -33,6 +33,7 @@ import com.theoriacodex.domain.series.SeriesExtensions
 import com.theoriacodex.domain.series.SeriesKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,6 +46,8 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ExtensionStoreScreenshotTest {
     @get:Rule val compose = createComposeRule()
+
+    @After fun resetImages() = Coil.reset()
 
     @Test fun `extension store`() {
         installSolidColorIcons()

@@ -174,7 +174,7 @@ private class AnimeEntry(
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "", @ProtoNumber(2) val iconUrl: String = "") {
-    val icon: String? get() = iconUrl.ifBlank { null }
+    val icon: String? get() = iconUrl.takeIf { it.startsWith("https://") }
 }
 
 @OptIn(ExperimentalSerializationApi::class)

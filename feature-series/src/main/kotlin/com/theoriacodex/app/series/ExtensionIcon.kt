@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -23,8 +22,7 @@ internal const val EXTENSION_ICON_TAG = "extension-icon"
 @Composable
 internal fun ExtensionIcon(url: String?) {
     val context = LocalContext.current
-    val sizePx = with(LocalDensity.current) { ICON_SIZE.roundToPx() }
-    val request = remember(context, url, sizePx) { url?.let { ImageRequest.Builder(context).data(it).size(sizePx).allowHardware(false).build() } }
+    val request = remember(context, url) { url?.let { ImageRequest.Builder(context).data(it).allowHardware(false).build() } }
     Box(
         Modifier
             .size(ICON_SIZE)

@@ -33,6 +33,7 @@ import com.theoriacodex.domain.series.SeriesKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +44,8 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, qualifiers = "w411dp-h914dp-xxhdpi")
 class ExtensionsScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @After fun resetImages() = Coil.reset()
 
     @Test fun `the empty page offers Add repo until a repo exists, which then leads to Get extensions`() {
         val repos = FakeRepos()
