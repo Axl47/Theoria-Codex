@@ -54,7 +54,7 @@ class TagForkChipTest {
     }
 
     @Test
-    fun `holding a forking chip lists its trail moves first (ADR 0217)`() {
+    fun `holding a forking chip offers its trail moves (ADR 0217)`() {
         val moved = mutableListOf<String>()
         val extras = PostTagSheetExtras(
             tagsInitiallyCollapsed = false,

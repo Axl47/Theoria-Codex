@@ -52,6 +52,16 @@ class ViewerTrailTest {
     }
 
     @Test
+    fun `a step matches its tag as the source spells it, past a first crumb with the same tag (ADR 0217)`() {
+        val hitomi = { value: String -> CrumbTag(value, SourceKey.HITOMI) }
+        val path = ViewerTrail(
+            listOf(ViewerCrumb("Full Color", tag = hitomi("Full Color")), ViewerCrumb("Full Color", tag = hitomi("Full Color"))), null, {},
+        )
+
+        assertEquals(listOf("Remove from trail", "Start a new trail"), path.tagActions(hitomi("full_color")) {}.map { it.label })
+    }
+
+    @Test
     fun `removing a middle step goes back before it and re-runs the later steps in order (ADR 0217)`() {
         val path = listOf(ViewerCrumb("landscape"), tag("night_sky"), tag("aurora"), tag("snow"))
 
