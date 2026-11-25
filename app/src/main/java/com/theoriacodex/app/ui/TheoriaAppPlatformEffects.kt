@@ -36,7 +36,7 @@ internal fun TheoriaAppPlatformEffects(
     DisposableEffect(hostActivity) {
         onDispose { hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
     }
-    ReleaseViewerHoldWhenTurned(hostActivity, viewerActive, viewerRotation, orientationLock)
+    ReleaseViewerHoldWhenTurned(hostActivity, viewerActive, viewerRotation)
 
     DisposableEffect(hostActivity, viewerActive, orientation) {
         val window = hostActivity?.window
@@ -67,10 +67,10 @@ internal fun viewerScreenOrientation(pinned: ViewerOrientation?, screen: ViewerO
 }
 
 @Composable
-private fun ReleaseViewerHoldWhenTurned(activity: Activity?, viewerActive: Boolean, rotation: ViewerRotationState?, lock: ViewerOrientation?) {
+private fun ReleaseViewerHoldWhenTurned(activity: Activity?, viewerActive: Boolean, rotation: ViewerRotationState?) {
     val held = rotation?.held
-    DisposableEffect(activity, viewerActive, rotation, held, lock) {
-        if (activity == null || rotation == null || held == null || lock != null || !viewerActive) return@DisposableEffect onDispose {}
+    DisposableEffect(activity, viewerActive, rotation, held) {
+        if (activity == null || rotation == null || held == null || !viewerActive) return@DisposableEffect onDispose {}
         val listener = object : OrientationEventListener(activity) {
             override fun onOrientationChanged(degrees: Int) {
                 val physical = viewerPhysicalOrientation(degrees)

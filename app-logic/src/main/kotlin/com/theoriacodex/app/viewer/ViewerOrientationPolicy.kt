@@ -16,8 +16,7 @@ fun viewerFillOrientation(width: Int?, height: Int?): ViewerOrientation? {
     }
 }
 
-fun viewerOffersRotation(fill: ViewerOrientation?, screen: ViewerOrientation, lock: ViewerOrientation?): Boolean =
-    lock == null && fill != null && fill != screen
+fun viewerFitsOtherWay(fill: ViewerOrientation?, screen: ViewerOrientation): Boolean = fill != null && fill != screen
 
 fun viewerPhysicalOrientation(degrees: Int): ViewerOrientation? {
     if (degrees < 0) return null

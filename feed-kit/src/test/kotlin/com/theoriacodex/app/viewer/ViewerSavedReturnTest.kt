@@ -79,7 +79,7 @@ class ViewerSavedReturnTest {
                 }
             }
         }
-        compose.runOnIdle { transition.openedFrom(origin, shelfId = shelves[shelfIndex]) }
+        compose.runOnIdle { transition.openedFrom(origin, shelfId = shelves[shelfIndex], post = posts[0].id) }
         feed.closeViewerOnto(compose, transition, posts[postIndex].id)
         compose.runOnIdle {
             val target = requireNotNull(transition.targetBounds) { "Saved should resolve a real card, not use the fallback" }
@@ -131,7 +131,7 @@ class ViewerSavedReturnTest {
         }
         compose.runOnIdle { column.dispatchRawDelta(with(compose.density) { 230.dp.toPx() }) }
         compose.runOnIdle {
-            transition.openedFrom(origin, shelfId = shelves[1])
+            transition.openedFrom(origin, shelfId = shelves[1], post = posts[0].id)
             transition.begin(posts[0].id)
         }
         compose.waitForIdle()

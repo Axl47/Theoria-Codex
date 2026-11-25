@@ -8,8 +8,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import com.theoriacodex.app.ui.components.feedDurations
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -71,8 +69,6 @@ import com.theoriacodex.app.ui.routes.virtualCodexUi
 import com.theoriacodex.app.ui.trails.forLevel
 import com.theoriacodex.app.ui.trails.isTrailLevel
 import com.theoriacodex.app.ui.trails.rememberViewerLevel
-import com.theoriacodex.app.ui.trails.viewerForkFadeIn
-import com.theoriacodex.app.ui.trails.viewerForkFadeOut
 import com.theoriacodex.app.viewer.ViewerCoveredLifecycle
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
@@ -90,7 +86,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScope: SharedTransitionScope) {
-    composable(AppRoute.Home) {
+    opaqueScreen(AppRoute.Home) {
         CompositionLocalProvider(LocalCodexMorph provides remember { CodexMorphScope(sharedScope, this) }) {
             HomePager(shell)
         }
@@ -101,26 +97,18 @@ internal fun NavGraphBuilder.theoriaDestinations(shell: TheoriaShell, sharedScop
     ) { entry ->
         CodexDetailEntry(shell, entry, sharedScope, this)
     }
-    composable(AppRoute.CreatorProfile) { CreatorDestination(shell) }
-    composable(
-        AppRoute.Viewer,
-        enterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else EnterTransition.None },
-        exitTransition = { if (targetState.destination.route == AppRoute.Viewer) viewerForkFadeOut() else null },
-        popEnterTransition = { if (initialState.destination.route == AppRoute.Viewer) viewerForkFadeIn() else null },
-        popExitTransition = {
-            if (targetState.destination.route == AppRoute.Viewer || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
-        },
-    ) { entry ->
+    opaqueScreen(AppRoute.CreatorProfile) { CreatorDestination(shell) }
+    composable(AppRoute.Viewer) { entry ->
         val top by shell.navController.currentBackStackEntryAsState()
         ViewerReturnLifetime(this) { shell.navController.currentDestination?.route != AppRoute.Viewer && !entry.isTrailLevel() }
         ViewerCoveredLifecycle(covered = top.let { it != null && it.id != entry.id && it.destination.route == AppRoute.Viewer }) {
             ViewerDestination(shell, entry)
         }
     }
-    composable(AppRoute.Settings) { SettingsScreenDestination(shell) }
-    composable(AppRoute.Series, arguments = seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
-    composable(AppRoute.Extensions, arguments = extensionsArguments) { entry -> ExtensionsDestination(shell, entry) }
-    composable(AppRoute.Triage, arguments = triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
+    opaqueScreen(AppRoute.Settings) { SettingsScreenDestination(shell) }
+    opaqueScreen(AppRoute.Series, seriesArguments) { entry -> SeriesPageDestination(shell, entry) }
+    opaqueScreen(AppRoute.Extensions, extensionsArguments) { entry -> ExtensionsDestination(shell, entry) }
+    opaqueScreen(AppRoute.Triage, triageArguments) { entry -> TriageDestination(shell, entry.triageRequest()) }
 }
 
 @Composable
@@ -204,7 +192,7 @@ private fun CodexDetailContent(
     val virtualUi = virtualCodexUi(
         state, fabRestoreState, { shell.feedFabRestoreRegistry.update(fabContext, it) },
         { shell.navController.popBackStack() }, { shell.overlays.showFollowedCreators = true },
-        shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
+        { shell.overlays.showSavedSearchManagement = true }, shell.savedSearchActions,
     )
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     CodexDetailScreen(

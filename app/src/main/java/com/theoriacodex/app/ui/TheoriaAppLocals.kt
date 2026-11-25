@@ -30,7 +30,6 @@ import com.theoriacodex.app.ui.navigation.LocalTriageOpener
 import com.theoriacodex.app.ui.trails.rememberTrailOpener
 import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
-import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.series.SeriesCovers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -40,7 +39,6 @@ import kotlinx.coroutines.flow.map
 internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable () -> Unit) {
     val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
     val watchPresentation = rememberPostWatchPresentation(shell.data.readingPositions, shell.data.recentsRepository)
-    val viewerReturnTransition = remember { ViewerReturnTransition() }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     CompositionLocalProvider(
         LocalTrailOpener provides rememberTrailOpener(shell),
@@ -49,7 +47,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
         LocalTagAffinityInputs provides shell.features.tagAffinity.latest,
-        LocalViewerReturnTransition provides viewerReturnTransition,
+        LocalViewerReturnTransition provides shell.viewerReturn,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalLiftController provides rememberLiftSession(),
         LocalLiftUgoiraClient provides shell.sources.pixivUgoiraClient,

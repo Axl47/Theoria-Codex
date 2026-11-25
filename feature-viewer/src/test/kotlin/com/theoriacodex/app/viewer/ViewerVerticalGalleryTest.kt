@@ -3,7 +3,12 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toPixelMap
+import org.robolectric.annotation.GraphicsMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performSemanticsAction
@@ -66,20 +71,43 @@ class ViewerVerticalGalleryTest {
     @Before fun failImageLoads() { installFailingLoader() }
     @After fun resetCoil() = Coil.reset()
 
-    private fun show(modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL)) {
+    private fun show(
+        modes: Map<PostId, GalleryReadingMode> = mapOf(gallery.id to GalleryReadingMode.VERTICAL),
+        returning: ViewerReturnTransition? = null,
+    ) {
         compose.setContent {
-            MaterialTheme {
-                ViewerScreen(
-                    uiState = state.value,
-                    host = ViewerScreenHost(onAction = { action ->
-                        actions += action
-                        state.value = reduceViewerState(state.value, action).state
-                    }),
-                    config = ViewerScreenConfig(galleryReadingModes = modes),
-                )
+            CompositionLocalProvider(LocalViewerReturnTransition provides returning) {
+                MaterialTheme {
+                    ViewerScreen(
+                        uiState = state.value,
+                        host = ViewerScreenHost(onAction = { action ->
+                            actions += action
+                            state.value = reduceViewerState(state.value, action).state
+                        }),
+                        config = ViewerScreenConfig(galleryReadingModes = modes),
+                    )
+                }
             }
         }
         compose.waitForIdle()
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a vertical gallery closing into its card is gone once the backdrop is (ADR 0220)`() {
+        val returning = ViewerReturnTransition()
+        returning.openedFrom("grid", post = gallery.id)
+        returning.begin(gallery.id)
+        returning.recordBounds("grid", gallery.id, Rect(0f, 0f, 40f, 50f))
+        returning.positioned("grid", gallery.id)
+        show(returning = returning)
+        val page = compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode().boundsInRoot
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        val left = page.left.toInt().coerceAtLeast(0)
+        val top = page.top.toInt().coerceAtLeast(0)
+        val right = page.right.toInt().coerceAtMost(pixels.width) - 1
+        val bottom = page.bottom.toInt().coerceAtMost(pixels.height) - 1
+        val drawn = (left..right step 4).flatMap { x -> (top..bottom step 4).map { y -> pixels[x, y] } }.distinct()
+        assertEquals("The pages are still drawn after the return landed: $drawn", 1, drawn.size)
     }
 
     @Test fun `scrolling a vertical gallery selects the page in view`() {

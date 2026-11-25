@@ -142,6 +142,7 @@ fun SearchResultCard(
                     mediaGeometry.boundsInWindow(),
                     shelfId = viewerReturnShelf,
                     corners = mediaGeometry.corners(cardShape, layoutDirection, cardDensity),
+                    post = post.id,
                 )
                 onClick()
             }
