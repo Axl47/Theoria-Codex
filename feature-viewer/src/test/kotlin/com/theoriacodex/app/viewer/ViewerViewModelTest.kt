@@ -15,8 +15,8 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.GalleryReadingMode
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CompletableDeferred
@@ -155,6 +155,25 @@ class ViewerViewModelTest {
         runCurrent()
         showCurrent()
         runCurrent()
+        assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())
+    }
+
+    @Test
+    fun `a series chapter whose pages never arrive frees its neighbours after the series wait (ADR 0170)`() = runTest {
+        val started = mutableListOf<PostId>()
+        fun chapter(id: String) = post(id, SourceKey.HITOMI, emptyList()).copy(full = null, galleryLengthUnknown = true)
+        val chapters = listOf(chapter("one"), chapter("two"), chapter("three"))
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            if (id == chapters[1].id) awaitCancellation()
+            post(id.sourcePostId, id.source)
+        }, scopeOverride = this)
+        owner.replaceSession(session("stalled", chapters, startIndex = 1).copy(series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL)))
+        runCurrent()
+
+        advanceTimeBy(VIEWER_SERIES_READY_WAIT_MS + 1)
+        runCurrent()
+
         assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())
     }
 

@@ -43,3 +43,4 @@ Changing the page's request builder changes what prefetch warms. Raising the mem
 ## Guarded by
 
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelTest.kt`: `a series chapter's neighbours wait for its own pages, not its cover (ADR 0170)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelTest.kt`: `a series chapter whose pages never arrive frees its neighbours after the series wait (ADR 0170)`
