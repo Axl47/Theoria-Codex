@@ -144,7 +144,9 @@ class ViewerViewModelTest {
         }, scopeOverride = this)
         owner.replaceSession(session("chapters", chapters, startIndex = 1).copy(series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL)))
         runCurrent()
-        fun showCurrent() = owner.onAction(ViewerAction.MediaReady(requireNotNull(owner.state.value.session), requireNotNull(owner.state.value.currentMedia).key, 0L))
+        val session = requireNotNull(owner.state.value.session)
+        val cover = requireNotNull(owner.state.value.currentMedia)
+        fun showCurrent() = requireNotNull(owner.state.value.currentMedia).let { owner.onAction(ViewerAction.MediaReady(session, it.key, it.loadGeneration)) }
 
         showCurrent()
         advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS * 4)
@@ -153,25 +155,32 @@ class ViewerViewModelTest {
 
         release.complete(Unit)
         runCurrent()
+        owner.onAction(ViewerAction.MediaReady(session, cover.key, cover.loadGeneration))
+        runCurrent()
+        assertEquals("a late cover callback counted as page one", listOf(chapters[1].id), started)
+
         showCurrent()
         runCurrent()
         assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())
     }
 
     @Test
-    fun `a series chapter whose pages never arrive frees its neighbours after the series wait (ADR 0170)`() = runTest {
+    fun `a series chapter whose first page never shows frees its neighbours after the chapter wait (ADR 0170)`() = runTest {
         val started = mutableListOf<PostId>()
         fun chapter(id: String) = post(id, SourceKey.HITOMI, emptyList()).copy(full = null, galleryLengthUnknown = true)
         val chapters = listOf(chapter("one"), chapter("two"), chapter("three"))
         val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
             started += id
-            if (id == chapters[1].id) awaitCancellation()
             post(id.sourcePostId, id.source)
         }, scopeOverride = this)
         owner.replaceSession(session("stalled", chapters, startIndex = 1).copy(series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL)))
         runCurrent()
 
-        advanceTimeBy(VIEWER_SERIES_READY_WAIT_MS + 1)
+        advanceTimeBy(VIEWER_CHAPTER_READY_WAIT_MS - 1)
+        runCurrent()
+        assertEquals(listOf(chapters[1].id), started)
+
+        advanceTimeBy(1)
         runCurrent()
 
         assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())

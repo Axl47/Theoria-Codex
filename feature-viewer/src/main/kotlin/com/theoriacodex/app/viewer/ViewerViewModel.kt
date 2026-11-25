@@ -577,10 +577,10 @@ internal const val VIEWER_RESOLUTION_TIMEOUT_MS = 15_000L
 internal const val VIEWER_SERIES_RESOLUTION_TIMEOUT_MS = 60_000L
 internal const val VIEWER_PREFETCH_MAX_CONCURRENCY = 2
 internal const val VIEWER_PREFETCH_READY_WAIT_MS = 1_500L
-internal const val VIEWER_SERIES_READY_WAIT_MS = 30_000L
+internal const val VIEWER_CHAPTER_READY_WAIT_MS = 30_000L
 
 internal fun firstMediaWaitMs(series: ViewerSeries?): Long =
-    if (series is ViewerSeries.Reading) VIEWER_SERIES_READY_WAIT_MS else VIEWER_PREFETCH_READY_WAIT_MS
+    if (series is ViewerSeries.Reading) VIEWER_CHAPTER_READY_WAIT_MS else VIEWER_PREFETCH_READY_WAIT_MS
 
 internal object ViewerSavedStateKeys {
     const val QUERY_HASH = "viewer_query_hash"
