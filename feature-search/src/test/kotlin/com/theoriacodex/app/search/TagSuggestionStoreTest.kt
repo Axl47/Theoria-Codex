@@ -2,12 +2,18 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.WRITE_BEHIND_DELAY
+import com.theoriacodex.data.storage.WriteBehind
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlin.concurrent.thread
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -355,12 +361,12 @@ class TagSuggestionStoreTest {
     }
 
     @Test
-    fun `burst mutations coalesce into one debounced atomic write`() = runTest {
+    fun `burst mutations coalesce into one write-behind atomic write (ADR 0215)`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         var writeCount = 0
         val store = FileBackedTagSuggestionStore(
             storeFile = tempDir("tag-store-debounce-test").resolve("tag_suggestions.json"),
-            persistenceDebounceMs = 500L,
+            writeBehind = WriteBehind(backgroundScope, newQueue = { dispatcher }),
             workDispatcher = dispatcher,
             fileStore = AtomicJsonFileStore(ioDispatcher = dispatcher),
             onWriteCompleted = { writeCount += 1 },
@@ -376,7 +382,7 @@ class TagSuggestionStoreTest {
         runCurrent()
         assertEquals(0, writeCount)
 
-        advanceTimeBy(499L)
+        advanceTimeBy(WRITE_BEHIND_DELAY.inWholeMilliseconds - 1)
         runCurrent()
         assertEquals(0, writeCount)
         advanceTimeBy(1L)
@@ -384,6 +390,63 @@ class TagSuggestionStoreTest {
 
         assertEquals(1, writeCount)
         store.close()
+    }
+
+    @Test
+    fun `the app's stop flush saves pending tag suggestions (ADR 0215)`() = runTest {
+        val storeFile = tempDir("tag-store-stop-flush").resolve("tag_suggestions.json")
+        val writeBehind = WriteBehind(backgroundScope, timed = false)
+        val store = FileBackedTagSuggestionStore(storeFile, writeBehind = writeBehind)
+        store.awaitLoaded()
+        store.put(SourceKey.GELBOORU, listOf(TagSuggestion("kept", type = "seen", count = null)))
+
+        writeBehind.flushAll()
+
+        val reopened = FileBackedTagSuggestionStore(storeFile)
+        reopened.awaitLoaded()
+        assertEquals(listOf("kept"), reopened.get(SourceKey.GELBOORU, 10).map(TagSuggestion::text))
+        store.close()
+        reopened.close()
+    }
+
+    @Test
+    fun `a change made inside an unconfined coroutine is queued before the stop flush another thread starts (ADR 0215)`() = runTest {
+        val storeFile = tempDir("tag-store-unconfined").resolve("tag_suggestions.json")
+        val writeBehind = WriteBehind(backgroundScope, timed = false)
+        val store = FileBackedTagSuggestionStore(storeFile, writeBehind = writeBehind)
+        store.awaitLoaded()
+
+        launch(Dispatchers.Unconfined) {
+            store.put(SourceKey.GELBOORU, listOf(TagSuggestion("queued", type = "seen", count = null)))
+            thread { runBlocking { writeBehind.flushAll() } }.join()
+        }.join()
+
+        val reopened = FileBackedTagSuggestionStore(storeFile)
+        reopened.awaitLoaded()
+        assertEquals(listOf("queued"), reopened.get(SourceKey.GELBOORU, 10).map(TagSuggestion::text))
+        store.close()
+        reopened.close()
+    }
+
+    @Test
+    fun `a failed tag suggestion save surfaces from the stop flush and is kept for the next one (ADR 0215)`() = runTest {
+        val storeFile = tempDir("tag-store-failed-save").resolve("tag_suggestions.json")
+        val writeBehind = WriteBehind(backgroundScope, timed = false)
+        val store = FileBackedTagSuggestionStore(storeFile, writeBehind = writeBehind)
+        store.awaitLoaded()
+        storeFile.mkdirs()
+        storeFile.resolve("occupied").writeText("x")
+        store.put(SourceKey.GELBOORU, listOf(TagSuggestion("retried", type = "seen", count = null)))
+
+        assertTrue(runCatching { writeBehind.flushAll() }.isFailure)
+        storeFile.deleteRecursively()
+        writeBehind.flushAll()
+
+        val reopened = FileBackedTagSuggestionStore(storeFile)
+        reopened.awaitLoaded()
+        assertEquals(listOf("retried"), reopened.get(SourceKey.GELBOORU, 10).map(TagSuggestion::text))
+        store.close()
+        reopened.close()
     }
 
     @Test
@@ -436,7 +499,7 @@ class TagSuggestionStoreTest {
         var writeCount = 0
         val store = FileBackedTagSuggestionStore(
             storeFile = storeFile,
-            persistenceDebounceMs = 60_000L,
+            writeBehind = WriteBehind(backgroundScope, timed = false),
             onWriteCompleted = { writeCount += 1 },
         )
         store.put(

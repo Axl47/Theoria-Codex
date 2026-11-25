@@ -9,6 +9,7 @@ import com.theoriacodex.app.viewer.decodeViewerPostId
 import com.theoriacodex.app.viewer.encodeViewerPostId
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.PageFraction
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
 import com.theoriacodex.data.repository.StoredSeriesEntry
@@ -75,9 +76,9 @@ class SeriesReaderTest {
     @Test
     fun `a session reopens each unread chapter where the reader was inside its page (ADR 0192)`() = runTest {
         val entries = listOf(
-            StoredSeriesEntry(SeriesEntry("/c3", "Ch. 3"), sourceOrder = 0, firstSeenAtEpochMs = 0, position = 2, length = 9, pageOffset = 0.25f),
-            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, position = 7, length = 18, pageOffset = 0.6f),
-            StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, position = 20, length = 20, pageOffset = 0.9f),
+            StoredSeriesEntry(SeriesEntry("/c3", "Ch. 3"), sourceOrder = 0, firstSeenAtEpochMs = 0, position = 2, length = 9, pageFraction = PageFraction(2, 0.25f)),
+            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, position = 7, length = 18, pageFraction = PageFraction(7, 0.6f)),
+            StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, position = 20, length = 20, pageFraction = PageFraction(20, 0.9f)),
         )
         val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }))
 

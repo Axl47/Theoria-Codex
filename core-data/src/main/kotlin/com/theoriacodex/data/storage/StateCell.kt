@@ -1,6 +1,7 @@
 package com.theoriacodex.data.storage
 
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import kotlin.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.seconds
@@ -73,14 +74,25 @@ class WriteBehind(
         val failures = coroutineScope {
             cells.map { cell -> async { runCatchingPreservingCancellation { cell.flush() }.exceptionOrNull() } }.awaitAll()
         }
-        failures.firstNotNullOfOrNull { it }?.let { throw it }
+        val failed = failures.filterNotNull()
+        failed.forEach { failure -> Diagnostics.report(WRITE_BEHIND_DIAGNOSTICS_AREA, "A pending write could not be saved", failure) }
+        failed.firstOrNull()?.let { throw it }
     }
 }
 
-internal val WRITE_BEHIND_DELAY = 2.seconds
+val WRITE_BEHIND_DELAY = 2.seconds
+
+const val WRITE_BEHIND_DIAGNOSTICS_AREA = "storage"
 
 internal fun <T : Any> StateCell<T>.writeBehind(writeBehind: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY): StateCell<T> =
     writeBehind?.wrap(this, delay) ?: this
+
+class WriteBehindSaves internal constructor(private val revisions: StateCell<Long>) {
+    suspend fun changed() = revisions.update { it + 1 }
+}
+
+fun writeBehindSaves(writeBehind: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY, save: suspend () -> Unit): WriteBehindSaves =
+    WriteBehindSaves(FileStateCell(0L) { save() }.writeBehind(writeBehind, delay))
 
 private class WriteBehindStateCell<T : Any>(
     private val durable: StateCell<T>,

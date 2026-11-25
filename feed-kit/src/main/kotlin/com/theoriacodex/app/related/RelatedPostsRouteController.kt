@@ -1,5 +1,6 @@
 package com.theoriacodex.app.related
 
+import com.theoriacodex.domain.coroutines.runCatchingUnlessCallerCancelled
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CancellationException
@@ -95,7 +96,7 @@ class RelatedPostsRouteController(
         )
         updateState(loading)
         job = scope.launch {
-            try {
+            runCatchingUnlessCallerCancelled {
                 val incoming = withTimeout(requestTimeoutMs) { loader.load(seed.id) }
                 updateState(
                     currentState().complete(
@@ -104,12 +105,9 @@ class RelatedPostsRouteController(
                         canonicalPostIds = canonicalPosts().mapTo(mutableSetOf(), Post::id),
                     )
                 )
-            } catch (_: TimeoutCancellationException) {
-                updateState(currentState().fail(loading.request, "Related posts timed out. Try again."))
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                updateState(currentState().fail(loading.request, error.message.orEmpty()))
+            }.onFailure { error ->
+                val message = if (error is TimeoutCancellationException) "Related posts timed out. Try again." else error.message.orEmpty()
+                updateState(currentState().fail(loading.request, message))
             }
         }
     }

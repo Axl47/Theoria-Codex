@@ -72,7 +72,7 @@ class CoroutineResultsTest {
     }
 
     @Test
-    fun `caller-only variant rethrows when the caller itself is cancelled`() = runTest {
+    fun `caller-only variant rethrows when the caller itself is cancelled (ADR 0002)`() = runTest {
         var result: Result<Unit>? = null
         val caller = launch { result = runCatchingUnlessCallerCancelled { awaitCancellation() } }
         runCurrent()
@@ -93,7 +93,7 @@ class CoroutineResultsTest {
     }
 
     @Test
-    fun `caller-only variant turns a cancelled dependency into a failure`() = runTest {
+    fun `caller-only variant turns a cancelled dependency into a failure (ADR 0002)`() = runTest {
         val dependency = CompletableDeferred<String>()
         dependency.cancel(CancellationException("dependency stopped"))
 

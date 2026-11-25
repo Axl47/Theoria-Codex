@@ -114,7 +114,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         saveOfflineCopy(File(directory, "offline"))
         writeDataStores(dataStores, shippedDataStores)
         tagsFile.writeText("""{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""")
-        val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
+        val tags = FileBackedTagSuggestionStore(tagsFile)
         try {
             tags.awaitLoaded()
             val legacyTags = tags.get(SourceKey.GELBOORU, 10)
@@ -138,7 +138,7 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty()) { "legacy media was ${legacyPost.media}" }
         verifyOfflineCopy(File(directory, "offline"))
         verifyDataStores(dataStores, shippedDataStores)
-        val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
+        val tags = FileBackedTagSuggestionStore(tagsFile)
         try {
             tags.awaitLoaded()
             val freshTags = tags.get(SourceKey.GELBOORU, 10)
