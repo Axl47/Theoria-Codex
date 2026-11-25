@@ -14,10 +14,15 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.vision.PictureLook
 import com.theoriacodex.domain.vision.PredictedTag
 import java.security.MessageDigest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -54,16 +59,25 @@ class LibraryVisionBackfillTest {
     @After
     fun tearDown() = scope.cancel()
 
-    private class Library(val posts: List<Post>) : VisualSignatureRepository {
+    private class Library(initial: List<Post>) : VisualSignatureRepository {
+        val posts = initial.toMutableList()
         val stored = mutableListOf<PictureVision>()
+        private val total = MutableStateFlow(posts.size)
+        var writeGate: CompletableDeferred<Unit>? = null
+        val writing = CompletableDeferred<Unit>()
         private val attempts = HashMap<PostId, Int>()
         private val changes = MutableStateFlow(0)
         var tagReads = 0
+        var unwantWrites = 0
         private var awaitingReads = 0
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
         override suspend fun putHashes(hashes: Map<PostId, Long?>) = Unit
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) {
+            writeGate?.let { gate ->
+                writing.complete(Unit)
+                gate.await()
+            }
             for (entry in entries) {
                 val at = stored.indexOfFirst { it.postId == entry.postId }
                 if (at >= 0) stored[at] = entry else stored += entry
@@ -81,6 +95,7 @@ class LibraryVisionBackfillTest {
             attempts[postId] = (attempts[postId] ?: 0) + if (permanently) MAX_FRAME_ATTEMPTS else 1
         }
         override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) {
+            unwantWrites += 1
             stored.replaceAll { if (it.postId in postIds) it.copy(frames = VisionFrames.NONE) else it }
         }
         override fun observeVisionChanges(): Flow<Unit> = changes.map { }
@@ -89,10 +104,15 @@ class LibraryVisionBackfillTest {
             return stored.mapNotNull { vision -> vision.tags?.let { vision.postId to it } }.toMap()
         }
         override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
-        override fun observeLibraryTotal(): Flow<Int> = flowOf(posts.size)
+        override fun observeLibraryTotal(): Flow<Int> = total
         override suspend fun clearVision() = stored.clear()
 
         fun vision(id: String) = stored.single { it.postId.sourcePostId == id }
+
+        fun keep(post: Post) {
+            posts += post
+            total.value = posts.size
+        }
 
         fun signaturesAwaitingFrames(): List<PostId> =
             stored.filter { it.frames == VisionFrames.WANTED && (attempts[it.postId] ?: 0) < MAX_FRAME_ATTEMPTS }.map { it.postId }
@@ -107,12 +127,12 @@ class LibraryVisionBackfillTest {
 
     private fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun readyStore(): VisualModelStore {
+    private fun readyStore(onDeleted: suspend () -> Unit = {}): VisualModelStore {
         val folders = VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
         folders.modelFile.parentFile!!.mkdirs()
         folders.modelFile.writeBytes(model)
         folders.vocabularyFile.writeBytes(words)
-        return VisualModelStore(spec, folder.root, OkHttpClient(), scope) { }
+        return VisualModelStore(spec, folder.root, OkHttpClient(), scope, onDeleted)
     }
 
     private fun post(id: String) = Post(
@@ -155,14 +175,17 @@ class LibraryVisionBackfillTest {
 
     @Test
     fun `while the app runs, analyses awaiting frames whose post does not play stop waiting (ADR 0094, 0097)`() = runBlocking {
-        val library = Library(listOf(post("video"), post("picture")))
-        library.putVision(listOf("video", "picture").map { PictureVision(post(it).id, spec.id, null, emptyList(), VisionFrames.WANTED) })
-        val tagger = PictureTagger(readyStore(), library, Pictures(plays = { it.id.sourcePostId == "video" }), scope)
+        val videos = List(300) { post("video-$it") }
+        val library = Library(videos + post("picture-a") + post("picture-b"))
+        library.putVision(library.posts.map { PictureVision(it.id, spec.id, null, emptyList(), VisionFrames.WANTED) })
+        val tagger = PictureTagger(readyStore(), library, Pictures(plays = { it.id.sourcePostId.startsWith("video") }), scope)
 
         val running = scope.launch { backfill(tagger, library).writeThrough() }
+        assertTrue("the write-through stopped instead of waiting for saves", running.isActive)
         running.cancel()
 
-        assertEquals(listOf(post("video").id), library.signaturesAwaitingFrames())
+        assertEquals(videos.map(Post::id), library.signaturesAwaitingFrames())
+        assertEquals(1, library.unwantWrites)
     }
 
     @Test
@@ -255,6 +278,16 @@ class LibraryVisionBackfillTest {
 
         repeat(MAX_FRAME_ATTEMPTS - 1) { backfill.drainFrames() }
         assertEquals(listOf("b", "c", "d").map { post(it).id }, library.signaturesAwaitingFrames())
+
+        val mixed = Library(listOf("u1", "ok", "u2", "u3").map(::post))
+        val mixedPictures = Pictures(
+            still = { Pattern.TOP.bitmap() },
+            plays = { true },
+            frames = { if (it.id.sourcePostId == "ok") PostFrames.Read(listOf(Pattern.LEFT.bitmap())) else PostFrames.Unreachable },
+        )
+        val mixedBackfill = backfill(PictureTagger(readyStore(), mixed, mixedPictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) }), mixed)
+        mixedBackfill.drain()
+        assertFalse(mixedBackfill.drainFrames())
     }
 
     @Test
@@ -288,6 +321,7 @@ class LibraryVisionBackfillTest {
         withTimeout(10_000) { tagger.library.first { it[video.id] != null } }
 
         assertEquals(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)), tagger.known(video.id))
+        assertEquals(PictureLook.Seen(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL))), tagger.look(video))
     }
 
     @Test
@@ -331,46 +365,83 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `a device running warm stops the picture pass before it analyses anything and asks for another run (ADR 0094)`() = runBlocking {
+    fun `a device running warm stops the picture pass before its next batch and asks for another run (ADR 0094)`() = runBlocking {
         val library = Library(listOf(post("a")))
         val tagger = PictureTagger(readyStore(), library, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+        val many = Library(List(9) { post("p$it") })
+        val warming = PictureTagger(readyStore(), many, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
 
         assertTrue(LibraryVisionBackfill(tagger, library, hot = { true }).drain())
+        assertTrue(LibraryVisionBackfill(warming, many, hot = { many.stored.isNotEmpty() }).drain())
 
         assertEquals(emptyList<PictureVision>(), library.stored)
+        assertEquals(8, many.stored.size)
     }
 
     @Test
     fun `stopping the frame upgrade keeps the posts already upgraded and loses only the one under way (ADR 0094)`() = runBlocking {
         val library = Library(listOf(post("first"), post("second")))
-        var warm = false
+        val reading = CompletableDeferred<Unit>()
         val pictures = Pictures(
             still = { Pattern.TOP.bitmap() },
             plays = { true },
-            frames = { warm = true; PostFrames.Read(listOf(Pattern.LEFT.bitmap())) },
+            frames = {
+                if (it.id.sourcePostId == "first") PostFrames.Read(listOf(Pattern.LEFT.bitmap())) else {
+                    reading.complete(Unit)
+                    awaitCancellation()
+                }
+            },
         )
         val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
-        val backfill = LibraryVisionBackfill(tagger, library, hot = { warm })
+        val backfill = backfill(tagger, library)
         backfill.drain()
+        val running = scope.launch { backfill.drainFrames() }
+        withTimeout(5_000) { reading.await() }
 
-        assertTrue(backfill.drainFrames())
+        running.cancelAndJoin()
 
         assertEquals(listOf(VisionFrames.READ, VisionFrames.WANTED), listOf("first", "second").map { library.vision(it).frames })
+        assertEquals(listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)), library.vision("second").tags)
+        assertEquals(listOf(post("second").id), library.signaturesAwaitingFrames())
     }
 
     @Test
     fun `a picture the session already analysed is stored once its post is kept, without reading it again (ADR 0094)`() = runBlocking {
-        val library = Library(listOf(post("liked")))
+        val library = Library(listOf(post("unseen")))
         var stills = 0
         val pictures = Pictures(still = { stills++; Pattern.TOP.bitmap() })
         val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
         tagger.analyze(post("liked"))
 
         val running = scope.launch { backfill(tagger, library).writeThrough() }
+        assertEquals(emptyList<PictureVision>(), library.stored)
+        library.keep(post("liked"))
+        assertTrue("the write-through stopped instead of waiting for saves", running.isActive)
         running.cancel()
 
         assertEquals(listOf(post("liked").id), library.stored.map(PictureVision::postId))
         assertEquals(1, stills)
+    }
+
+    @Test
+    fun `a delete that lands during a write waits for it, then forgets what it wrote (ADR 0097)`() = runBlocking {
+        lateinit var tagger: PictureTagger
+        val library = Library(listOf(post("a")))
+        val store = readyStore { tagger.forget() }
+        tagger = PictureTagger(store, library, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+        val result = tagger.analyze(post("a"), remember = false)
+        library.writeGate = CompletableDeferred()
+        val writing = scope.async { tagger.store(mapOf(post("a") to result)) }
+        withTimeout(5_000) { library.writing.await() }
+
+        val deleting = scope.launch { store.delete() }
+        withTimeout(5_000) { store.states.first { it == ModelState.Absent } }
+        delay(200)
+        library.writeGate!!.complete(Unit)
+        writing.await()
+        withTimeout(5_000) { deleting.join() }
+
+        assertEquals(emptyList<PictureVision>(), library.stored)
     }
 
     @Test
@@ -393,20 +464,36 @@ class LibraryVisionBackfillTest {
         assertFalse(tagger.store(mapOf(post("a") to analysed)))
         assertFalse(tagger.storeFrames(post("a").id, analysed))
         assertEquals(emptyList<PictureVision>(), library.stored)
+
+        val reinstalled = readyStore()
+        val deletingAgain = object : PictureModel {
+            override fun analyze(picture: Bitmap): PictureAnalysis {
+                runBlocking { reinstalled.delete() }
+                error("the model went while it read the picture")
+            }
+
+            override fun close() = Unit
+        }
+        val indexing = PictureTagger(reinstalled, library, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> deletingAgain })
+        assertFalse(backfill(indexing, library).drain())
     }
 
     @Test
     fun `only a session look at a still is remembered, not library indexing, a failed load or a frame read (ADR 0097)`() = runBlocking {
         val library = Library(listOf(post("still"), post("video")))
         val pictures = Pictures(
-            still = { Pattern.TOP.bitmap() },
+            still = { if (it.id.sourcePostId == "offline") null else Pattern.TOP.bitmap() },
             plays = { it.id.sourcePostId == "video" },
             frames = { PostFrames.Read(listOf(Pattern.LEFT.bitmap())) },
         )
         val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
 
-        tagger.analyze(post("still"), remember = false)
+        assertFalse(backfill(tagger, library).drain())
+        assertEquals(2, library.stored.size)
         assertNull(tagger.remembered(post("still").id))
+        assertNull(tagger.remembered(post("video").id))
+        assertEquals(PictureResult.Unreachable, tagger.analyze(post("offline")))
+        assertNull(tagger.remembered(post("offline").id))
         tagger.analyzeFrames(post("video"))
         assertNull(tagger.remembered(post("video").id))
         assertTrue(tagger.analyze(post("still")) is PictureResult.Analysed)
@@ -435,16 +522,21 @@ class LibraryVisionBackfillTest {
 
     @Test
     fun `deleting the model forgets what it predicted, stored or remembered (ADR 0097)`() = runBlocking {
+        lateinit var tagger: PictureTagger
         val library = Library(listOf(post("kept"), post("seen")))
-        val tagger = PictureTagger(readyStore(), library, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+        val store = readyStore { tagger.forget() }
+        val pictures = Pictures(hasStill = { it.id.sourcePostId != "blank" }, still = { Pattern.TOP.bitmap() })
+        tagger = PictureTagger(store, library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
         tagger.store(mapOf(post("kept") to tagger.analyze(post("kept"), remember = false)))
         tagger.analyze(post("seen"))
+        tagger.analyze(post("blank"))
         assertEquals(listOf(post("kept").id), library.stored.map(PictureVision::postId))
+        assertEquals(PictureResult.Unanalysable, tagger.remembered(post("blank").id))
 
-        tagger.forget()
+        store.delete()
 
         assertEquals(emptyList<PictureVision>(), library.stored)
-        assertNull(tagger.remembered(post("seen").id))
+        assertEquals(listOf(null, null), listOf("seen", "blank").map { tagger.remembered(post(it).id) })
     }
 
     @Test
@@ -460,7 +552,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `a malformed vocabulary leaves the store Ready and the picture unread (ADR 0101)`() = runBlocking {
+    fun `a malformed vocabulary leaves the store Ready and the picture Unavailable for a later try (ADR 0097, 0101)`() = runBlocking {
         val garbage = "garbage".toByteArray()
         val malformed = spec.copy(vocabulary = ModelFile("tags.csv", garbage.size.toLong(), sha(garbage)))
         val placed = VisualModelStore(malformed, folder.root, OkHttpClient(), scope) { }
@@ -470,9 +562,8 @@ class LibraryVisionBackfillTest {
         val store = VisualModelStore(malformed, folder.root, OkHttpClient(), scope) { }
         val tagger = PictureTagger(store, Library(listOf(post("a"))), Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
 
-        val result = tagger.analyze(post("a"), remember = false)
-
-        assertTrue(result.toString(), result == PictureResult.Unavailable || result == PictureResult.Unanalysable)
+        assertEquals(PictureResult.Unavailable, tagger.analyze(post("a")))
+        assertNull(tagger.remembered(post("a").id))
         assertEquals(ModelState.Ready, store.states.value)
     }
 

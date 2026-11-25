@@ -51,6 +51,7 @@ class FrameMixTest {
 
         assertEquals(listOf(1, 2, 1), distinct.map(WeightedPicture::weight))
         assertEquals(listOf(top, left), distinct.take(2).map(WeightedPicture::bitmap))
+        assertEquals(listOf(2, 1), distinctPictures(listOf(top, left, Pattern.TOP.bitmap())).map(WeightedPicture::weight))
     }
 
     @Test

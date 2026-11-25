@@ -71,6 +71,7 @@ class TagVocabularyTest {
 
         assertThrows(IllegalStateException::class.java) { vocabulary(header + "1,solo,7,10") }
         assertThrows(IllegalArgumentException::class.java) { vocabulary(header + "1,solo,0") }
+        assertThrows(IllegalArgumentException::class.java) { vocabulary(header + "1,solo,0,10\n2,short,0") }
         assertThrows(IllegalArgumentException::class.java) { vocabulary(header + "1,solo,general,10") }
         assertThrows(IllegalArgumentException::class.java) { vocabulary(header) }
     }
@@ -78,5 +79,6 @@ class TagVocabularyTest {
     @Test
     fun `scores must match the vocabulary's size (ADR 0101)`() {
         assertThrows(IllegalArgumentException::class.java) { vocabulary().predictions(FloatArray(7)) }
+        assertThrows(IllegalArgumentException::class.java) { vocabulary().let { it.predictions(FloatArray(it.size + 1)) } }
     }
 }

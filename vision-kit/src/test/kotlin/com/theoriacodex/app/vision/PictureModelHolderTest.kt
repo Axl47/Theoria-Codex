@@ -2,7 +2,14 @@ package com.theoriacodex.app.vision
 
 import android.graphics.Bitmap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -96,6 +103,30 @@ class PictureModelHolderTest {
 
         holder.use { }
         assertEquals(2, counting.opens.get())
+    }
+
+    @Test
+    fun `release waits for the picture under way before closing the model (ADR 0096)`() = runBlocking {
+        val counting = Counting()
+        val holderScope = CoroutineScope(Job() + Dispatchers.Default)
+        val holder = PictureModelHolder(holderScope, idleMs = IDLE, open = counting::open)
+        val started = CompletableDeferred<Unit>()
+        val closedDuringUse = AtomicInteger(-1)
+        val running = launch(Dispatchers.Default) {
+            holder.use {
+                started.complete(Unit)
+                Thread.sleep(200)
+                closedDuringUse.set(counting.closes.get())
+            }
+        }
+        withTimeout(5_000) { started.await() }
+
+        holder.release()
+        running.join()
+        holderScope.cancel()
+
+        assertEquals(0, closedDuringUse.get())
+        assertEquals(1, counting.closes.get())
     }
 
     @Test

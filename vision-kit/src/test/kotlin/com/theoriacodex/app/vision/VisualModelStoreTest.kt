@@ -2,19 +2,21 @@ package com.theoriacodex.app.vision
 
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import okhttp3.Call
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -53,15 +55,6 @@ class VisualModelStoreTest {
     fun tearDown() = scope.cancel()
 
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-
-    private fun client(serve: (name: String) -> Response.Builder): OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor(
-            Interceptor { chain ->
-                serve(chain.request().url.pathSegments.last())
-                    .request(chain.request()).protocol(Protocol.HTTP_1_1).build()
-            },
-        )
-        .build()
 
     private fun ok(bytes: ByteArray) = Response.Builder().code(200).message("OK").body(bytes.toResponseBody())
 
@@ -102,12 +95,16 @@ class VisualModelStoreTest {
 
     @Test
     fun `a download that fails on its second file leaves neither file behind (ADR 0101)`() {
-        val store = storeOver(client { name -> if (name == spec.model.name) ok(modelBytes) else ok("tag_id".toByteArray()) })
+        val tampered = vocabularyBytes.copyOf().also { it[3] = (it[3] + 1).toByte() }
+        val failures = listOf(ok(tampered) to true, Response.Builder().code(500).message("Server Error").body(ByteArray(0).toResponseBody()) to false)
+        for ((second, mismatch) in failures) {
+            val store = storeOver(client { name -> if (name == spec.model.name) ok(modelBytes) else second })
 
-        store.download()
+            store.download()
 
-        assertEquals(ModelState.Failed(mismatch = true), store.awaitSettled())
-        assertFalse(store.modelFile.parentFile!!.exists())
+            assertEquals(ModelState.Failed(mismatch = mismatch), store.awaitSettled())
+            assertFalse(store.modelFile.parentFile!!.exists())
+        }
     }
 
     @Test
@@ -163,6 +160,7 @@ class VisualModelStoreTest {
         val first = storeOver(serving())
         first.modelFile.parentFile!!.mkdirs()
         first.modelFile.writeBytes(modelBytes)
+        File(first.modelFile.parentFile, "tags.csv.part").writeBytes(vocabularyBytes.copyOf(4))
 
         assertEquals(ModelState.Absent, storeOver(serving()).states.value)
         assertFalse(first.modelFile.parentFile!!.exists())
@@ -204,33 +202,49 @@ class VisualModelStoreTest {
     @Test
     fun `delete during a download stops it and nothing is left or restored (ADR 0101)`() = runBlocking {
         val reading = CountDownLatch(1)
-        val slowModel = object : InputStream() {
-            private val chunk = ByteArray(1024)
-            override fun read(): Int = error("unused")
-            override fun read(b: ByteArray, off: Int, len: Int): Int {
-                reading.countDown()
-                Thread.sleep(5)
-                val n = minOf(len, chunk.size)
-                System.arraycopy(chunk, 0, b, off, n)
-                return n
-            }
-        }
         val slowSpec = spec.copy(model = spec.model.copy(bytes = 50_000_000L))
         val client = client { name ->
-            val body = if (name == slowSpec.model.name) slowModel.source().buffer().asResponseBody("application/octet-stream".toMediaType())
-            else ByteArrayInputStream(vocabularyBytes).source().buffer().asResponseBody()
-            Response.Builder().code(200).message("OK").body(body)
+            Response.Builder().code(200).message("OK").body(
+                if (name == slowSpec.model.name) StallingStream(reading).source().buffer().asResponseBody("application/octet-stream".toMediaType())
+                else ByteArrayInputStream(vocabularyBytes).source().buffer().asResponseBody(),
+            )
         }
         val store = VisualModelStore(slowSpec, folder.root, client, scope) { deleted.incrementAndGet() }
         store.download()
-        withTimeout(10_000) { store.states.first { it is ModelState.Downloading } }
         assertTrue(reading.await(10, TimeUnit.SECONDS))
+        assertEquals(listOf("model.tflite.part"), store.modelFile.parentFile!!.leftovers())
 
-        store.delete()
-        delay(200)
+        withTimeout(5_000) { store.delete() }
 
         assertEquals(ModelState.Absent, store.states.value)
         assertFalse(store.modelFile.parentFile!!.exists())
         assertEquals(1, deleted.get())
+    }
+
+    private fun client(serve: (name: String) -> Response.Builder): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(
+            Interceptor { chain ->
+                calls.set(chain.call())
+                serve(chain.request().url.pathSegments.last())
+                    .request(chain.request()).protocol(Protocol.HTTP_1_1).build()
+            },
+        )
+        .build()
+
+    private val calls = AtomicReference<Call>()
+
+    private inner class StallingStream(private val reading: CountDownLatch) : InputStream() {
+        override fun read(): Int = error("unused")
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            reading.countDown()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(STALL_SECONDS)
+            while (calls.get()?.isCanceled() != true && System.nanoTime() < deadline) Thread.sleep(1)
+            throw IOException("Canceled")
+        }
+    }
+
+    private companion object {
+        const val STALL_SECONDS = 20L
     }
 }

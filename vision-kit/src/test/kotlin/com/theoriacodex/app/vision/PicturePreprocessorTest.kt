@@ -26,13 +26,16 @@ class PicturePreprocessorTest {
     }
 
     @Test
-    fun `a wide picture is centred on a white square (ADR 0096)`() {
+    fun `a wide or tall picture is centred on a white square (ADR 0096)`() {
         val wide = Bitmap.createBitmap(448, 224, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLACK) }
+        val tall = Bitmap.createBitmap(224, 448, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLACK) }
 
         val input = PicturePreprocessor().input(wide)
+        val upright = PicturePreprocessor().input(tall)
 
         assertEquals(3 * 448 * 448, input.size)
         assertEquals(listOf(1f, -1f, 1f), listOf(56, 224, 392).map { row -> input[row * 448 + 224] })
+        assertEquals(listOf(1f, -1f, 1f), listOf(56, 224, 392).map { column -> upright[224 * 448 + column] })
     }
 
     @Test
