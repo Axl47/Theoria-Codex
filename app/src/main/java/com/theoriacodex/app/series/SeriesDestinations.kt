@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.theoriacodex.app.di.SeriesDependencies
 import com.theoriacodex.app.ui.AppRoute
 import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.app.ui.TheoriaShell
@@ -71,6 +72,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             series.extensions.revision,
             createSavedStateHandle(),
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
+            download = { id, choice -> series.downloads.download(id, choice) },
         ) { only, onProgress -> series.checkFollowed(only = only, onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
     }
     val tabShown = LocalTabShown.current
@@ -91,6 +93,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         onOpenExtensions = shell::openExtensions,
         oldSearchBar = settings?.oldSearchBar == true,
+        switchSource = remember(series) { series.switchSourceFor() },
     )
 }
 
@@ -102,15 +105,15 @@ internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val missing = remember(series) {
         MissingExtensionsActions(
             missing = { MissingSeriesViewModel(series.repository, series.sources, series.extensions.revision) },
-            switchSource = { id ->
-                SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
-                    series.switchSource(id, source, to)
-                }
-            },
+            switchSource = series.switchSourceFor(),
             onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         )
     }
     ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() }, missing = missing)
+}
+
+private fun SeriesDependencies.switchSourceFor(): (SeriesId) -> SwitchSourceViewModel = { id ->
+    SwitchSourceViewModel(id, sources, extensions.revision, store = { repository.store(it) }) { source, to -> switchSource(id, source, to) }
 }
 
 internal fun TheoriaShell.openExtensions(page: ExtensionsSubpage? = null) {

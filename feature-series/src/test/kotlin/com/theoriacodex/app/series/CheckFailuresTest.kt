@@ -68,7 +68,7 @@ class CheckFailuresTest {
                 FollowingBody(
                     content = content, checking = null, found = emptyList(), failedCheck = failed, grid = rememberLazyGridState(),
                     onRefresh = {}, onRetryFailed = { retried += it }, onDismissFailures = { failed = null }, onUnfollow = {},
-                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
+                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD,
                 )
             }
         }

@@ -71,7 +71,7 @@ class SwitchSourceViewModel(
         viewModelScope.launch {
             sourcesChanged.collectLatest {
                 sources = loadSources()
-                mutableState.update { state -> state.copy(others = sources.filter { it.key != from.source && it.kind == from.source.seriesKind }) }
+                mutableState.update { state -> state.copy(others = sources.switchTargets(from)) }
             }
         }
     }

@@ -78,7 +78,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.data.repository.DownloadChoice
-import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.domain.series.Series
 
 @Composable
@@ -258,7 +257,7 @@ private fun SeriesDownloadMenu(
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Outlined.Download, contentDescription = "Download")
+            Icon(Icons.Outlined.Download, contentDescription = DOWNLOAD)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             fun choose(action: () -> Unit) {
@@ -296,35 +295,15 @@ private fun SeriesOverflowMenu(
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+            Icon(Icons.Default.MoreVert, contentDescription = MORE_OPTIONS)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             fun choose(action: () -> Unit) {
                 open = false
                 action()
             }
-            val words = state.kind.words
-            DropdownMenuItem(
-                text = { Text("Mark all as ${words.done}") },
-                enabled = state.entries.any { !it.read },
-                onClick = { choose { onMarkAllRead(true) } },
-            )
-            DropdownMenuItem(
-                text = { Text("Mark all as ${words.notDone}") },
-                enabled = state.entries.any { it.read || it.position > 0 },
-                onClick = { choose { onMarkAllRead(false) } },
-            )
-            DropdownMenuItem(
-                text = { Text("Refresh") },
-                enabled = !state.sourceMissing && !state.refreshing,
-                onClick = { choose(onRefresh) },
-            )
-            if (canSwitchSource) {
-                DropdownMenuItem(
-                    text = { Text(SWITCH_SOURCE) },
-                    onClick = { choose(onSwitchSource) },
-                )
-            }
+            val handlers = SeriesActionHandlers(onMarkAllRead, onRefresh, onSwitchSource)
+            SeriesActionItems(state.actions(canSwitchSource)) { action -> choose { handlers.run(action) } }
         }
     }
 }
@@ -470,12 +449,6 @@ internal fun CoverLightboxDialog(series: Series, onDismiss: () -> Unit) {
         }
     }
 }
-
-private val DOWNLOAD_CHOICES = listOf(
-    DownloadChoice.NEXT_UNREAD to "Next ${SeriesDownloads.NEXT_UNREAD_COUNT} unread",
-    DownloadChoice.ALL_UNREAD to "All unread",
-    DownloadChoice.ALL to "All",
-)
 
 private fun ChapterSort.label(words: EntryWords): String = when (this) {
     ChapterSort.SOURCE_ORDER -> "Source order"

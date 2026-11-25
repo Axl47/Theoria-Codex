@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +35,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.undo.LocalUndoSlot
+import com.theoriacodex.app.ui.undo.UndoAnchor
+import com.theoriacodex.app.ui.undo.UndoOffer
+import com.theoriacodex.data.repository.DownloadChoice
+import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
@@ -57,9 +64,11 @@ internal fun FollowingBody(
     onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
+    hold: SeriesHold,
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
+    var switching by remember { mutableStateOf<Series?>(null) }
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
@@ -79,7 +88,7 @@ internal fun FollowingBody(
                         CheckFailedCard(failed.message, onOpen = { failuresOpen = true }, onRetry = onRefresh, onDismiss = onDismissFailures)
                     }
                 }
-                followingCards(content, onShowAll, onSearchAll, onBrowse, onOpenSeries)
+                followingCards(content, onShowAll, onSearchAll, onBrowse, onOpenSeries, hold) { switching = it }
             }
         }
     }
@@ -89,6 +98,11 @@ internal fun FollowingBody(
             failuresOpen = false
             onRetryFailed(ids)
         }) { failuresOpen = false }
+    }
+    val from = switching
+    val createSwitch = hold.switchSource
+    if (from != null && createSwitch != null) {
+        SwitchSourceFor(from, createSwitch, hold.onOpenSeries) { switching = null }
     }
     if (optionsOpen) {
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
@@ -101,6 +115,8 @@ private fun LazyGridScope.followingCards(
     onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
+    hold: SeriesHold,
+    onSwitchSource: (Series) -> Unit,
 ) {
     val following = content.following
     when {
@@ -110,8 +126,61 @@ private fun LazyGridScope.followingCards(
         !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
         following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
         else -> items(following, key = { it.series.id.toString() }) { item ->
-            SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
+            HeldSeriesCard(item, content.marked, hold, onOpen = { onOpenSeries(item.series) }, onSwitchSource = { onSwitchSource(item.series) })
         }
+    }
+}
+
+internal class SeriesHold(
+    val actions: (FollowedSeries) -> SeriesActions,
+    val canDownload: (FollowedSeries) -> Boolean,
+    val onMarkAllRead: (SeriesId, Boolean) -> Unit,
+    val onRefresh: (SeriesId) -> Unit,
+    val onDownload: (SeriesId, DownloadChoice) -> Unit,
+    val onOpenSeries: (SeriesId) -> Unit,
+    val switchSource: ((SeriesId) -> SwitchSourceViewModel)?,
+)
+
+@Composable
+internal fun rememberSeriesHold(
+    state: SeriesTabState,
+    viewModel: SeriesTabViewModel,
+    onOpenSeries: (SeriesId) -> Unit,
+    switchSource: ((SeriesId) -> SwitchSourceViewModel)?,
+): SeriesHold {
+    val undo = LocalUndoSlot.current
+    return SeriesHold(
+        actions = { item ->
+            val actions = item.actions(state.sources, checking = state.checking != null)
+            actions.copy(canSwitchSource = actions.canSwitchSource && switchSource != null)
+        },
+        canDownload = viewModel::canDownload,
+        onMarkAllRead = { id, read ->
+            viewModel.markAllRead(id, read) { done ->
+                undo.offer(undo.scope, UndoOffer(done.label, UndoAnchor.App) { viewModel.undoBulkRead(id, done) })
+            }
+        },
+        onRefresh = { id -> viewModel.retry(setOf(id)) },
+        onDownload = viewModel::download,
+        onOpenSeries = onOpenSeries,
+        switchSource = switchSource,
+    )
+}
+
+@Composable
+private fun HeldSeriesCard(item: FollowedSeries, marked: Boolean, hold: SeriesHold, onOpen: () -> Unit, onSwitchSource: () -> Unit) {
+    var held by remember { mutableStateOf(false) }
+    val id = item.series.id
+    Box {
+        SeriesCard(item.series, onOpen, unread = item.unreadCount, marked = marked, onLongClick = { held = true })
+        SeriesHoldMenu(
+            expanded = held,
+            actions = hold.actions(item),
+            canDownload = hold.canDownload(item),
+            onChoose = SeriesActionHandlers({ hold.onMarkAllRead(id, it) }, { hold.onRefresh(id) }, onSwitchSource)::run,
+            onDownload = { hold.onDownload(id, it) },
+            onDismiss = { held = false },
+        )
     }
 }
 

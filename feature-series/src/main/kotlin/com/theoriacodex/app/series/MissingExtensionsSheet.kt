@@ -90,21 +90,10 @@ internal fun MissingExtensionsOverlay(
             request = request,
         )
     } else {
-        val switchSource = viewModel(key = "$SWITCH_SOURCE_KEY${from.id}") { actions.switchSource(from.id) }
-        LaunchedEffect(switchSource) {
-            switchSource.state.first { it.others.isNotEmpty() }
-            switchSource.open(from.title)
-            switchSource.state.first { it.sheet == null }
-            switching = null
-        }
-        SwitchSourceSheet(
-            switchSource,
-            onOpenSeries = { id ->
-                request.onDismiss()
-                actions.onOpenSeries(id)
-            },
-            onSwitched = {},
-        )
+        SwitchSourceFor(from, actions.switchSource, onOpenSeries = { id ->
+            request.onDismiss()
+            actions.onOpenSeries(id)
+        }) { switching = null }
     }
 }
 
@@ -229,4 +218,3 @@ internal const val TURN_ON = "Turn on"
 internal const val OFF = "Off"
 internal const val COULDNT_LOAD = "Couldn't load"
 internal const val NOT_IN_THIS_VERSION = "Not in this version"
-private const val SWITCH_SOURCE_KEY = "missing-extensions-switch-"

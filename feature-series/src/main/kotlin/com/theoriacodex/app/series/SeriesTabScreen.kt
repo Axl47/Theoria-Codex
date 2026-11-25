@@ -85,6 +85,7 @@ fun SeriesTabScreen(
     onOpenExtensions: () -> Unit,
     modifier: Modifier = Modifier,
     oldSearchBar: Boolean = false,
+    switchSource: ((SeriesId) -> SwitchSourceViewModel)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
@@ -120,6 +121,7 @@ fun SeriesTabScreen(
             oldSearchBar = oldSearchBar,
             onOpenSeries = open,
             onOpenExtensions = onOpenExtensions,
+            hold = rememberSeriesHold(state, viewModel, onOpenSeries, switchSource),
             modifier = modifier,
         )
     }
@@ -144,6 +146,7 @@ private fun SeriesTabHomeContent(
     oldSearchBar: Boolean,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    hold: SeriesHold,
     modifier: Modifier,
 ) {
     var searchBarDismissed by rememberSaveable { mutableStateOf(false) }
@@ -185,7 +188,7 @@ private fun SeriesTabHomeContent(
             ScrollToTopOnTabReselect(TopLevelDestination.Series, scrollable) { searchBarDismissed = false }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
-                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions)
+                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, hold)
             }
         }
     }
@@ -247,6 +250,7 @@ private fun SeriesTabViewBody(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    hold: SeriesHold,
 ) {
     val search = content.search
     when {
@@ -266,6 +270,7 @@ private fun SeriesTabViewBody(
             onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
+            hold = hold,
         )
         search != null -> GlobalSearchBody(
             sourcesLoaded = state.sources != null,
