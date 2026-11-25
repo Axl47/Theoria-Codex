@@ -60,7 +60,7 @@ class ViewerReturnTransitionTest {
         val transition = ViewerReturnTransition()
         val post = com.theoriacodex.app.testing.testPost(sourcePostId = "return")
         var visible: List<Post> = emptyList()
-        transition.openedFrom("origin")
+        transition.openedFrom("origin", post = postId)
         transition.retainPosts(setOf(post.id))
         compose.setContent {
             CompositionLocalProvider(LocalViewerReturnTransition provides transition) {
@@ -87,7 +87,7 @@ class ViewerReturnTransitionTest {
 
     @Test fun `media counts as settling from the start of a close until it lands`() {
         val transition = ViewerReturnTransition()
-        transition.openedFrom("origin")
+        transition.openedFrom("origin", post = postId)
         assertTrue(!transition.mediaSettling)
         transition.begin(postId)
         assertTrue(transition.mediaSettling)
@@ -101,7 +101,7 @@ class ViewerReturnTransitionTest {
     @Test fun `only the originating grid and current post can supply a positioned target`() {
         val transition = ViewerReturnTransition()
         val target = Rect(10f, 200f, 210f, 500f)
-        transition.openedFrom("origin")
+        transition.openedFrom("origin", post = postId)
         transition.begin(postId)
         transition.recordBounds("other", postId, target)
         transition.positioned("other", postId)
@@ -182,7 +182,7 @@ class ViewerReturnTransitionTest {
         assertEquals(CornerRadius(12f), caption.roundRect(bounds, 1f).topRightCornerRadius)
         assertEquals(CornerRadius.Zero, caption.roundRect(bounds, 1f).bottomRightCornerRadius)
         val transition = ViewerReturnTransition()
-        transition.openedFrom("feed", bounds, corners = fullCard)
+        transition.openedFrom("feed", bounds, corners = fullCard, post = postId)
         assertEquals(fullCard, transition.openingCorners)
         transition.begin(postId)
         transition.recordBounds("feed", postId, bounds, corners = caption)
@@ -263,7 +263,7 @@ class ViewerReturnTransitionTest {
         compose.waitForIdle()
         val targetId = posts[target].id
         val before = compose.runOnIdle {
-            transition.openedFrom(origin)
+            transition.openedFrom(origin, post = postId)
             cardBounds.remove(targetId)?.takeIf { it.overlaps(viewport) }
         }
         feed.closeViewerOnto(compose, transition, targetId)
@@ -295,7 +295,7 @@ class ViewerReturnTransitionTest {
         compose.mainClock.autoAdvance = false
         val origin = Rect(20f, 200f, 220f, 500f)
         compose.runOnIdle {
-            returning.openedFrom("feed", origin)
+            returning.openedFrom("feed", origin, post = postId)
             navigation.navigate("viewer")
         }
         compose.mainClock.advanceTimeBy(96)
@@ -315,7 +315,7 @@ class ViewerReturnTransitionTest {
         }
         compose.onNodeWithTag("source feed").assertDoesNotExist()
         compose.runOnIdle {
-            returning.openedFrom("feed")
+            returning.openedFrom("feed", post = postId)
             returning.begin(postId)
             returning.recordBounds("feed", postId, Rect(0f, 200f, 200f, 500f))
             returning.positioned("feed", postId)
@@ -330,20 +330,25 @@ class ViewerReturnTransitionTest {
         compose.onNodeWithTag("returning media").assertDoesNotExist()
     }
 
-    @Test fun `a card tap that opened no Viewer leaves no origin for the next launch (ADR 0218)`() {
-        val unclaimed = ViewerReturnTransition()
-        unclaimed.openedFrom("grid", Rect(0f, 0f, 40f, 50f))
-        unclaimed.dropUnclaimedOrigin()
-        unclaimed.begin(postId)
-        assertNull(unclaimed.openingBounds)
-        assertNull(unclaimed.request)
+    @Test fun `a card origin belongs only to the launch of the card that was tapped (ADR 0218)`() {
+        val other = PostId(SourceKey.GELBOORU, "other")
+        val abandoned = ViewerReturnTransition()
+        abandoned.openedFrom("grid", Rect(0f, 0f, 40f, 50f), post = postId)
+        abandoned.launching(listOf(other), fork = false)
+        abandoned.begin(other)
+        assertNull(abandoned.openingBounds)
+        assertNull(abandoned.request)
 
-        val claimed = ViewerReturnTransition()
-        claimed.openedFrom("grid", Rect(0f, 0f, 40f, 50f))
-        claimed.claimOrigin()
-        claimed.dropUnclaimedOrigin()
-        claimed.begin(postId)
-        assertEquals("grid", claimed.request?.gridId)
+        val launched = ViewerReturnTransition()
+        launched.openedFrom("grid", Rect(0f, 0f, 40f, 50f), post = postId)
+        launched.launching(listOf(other, postId), fork = false)
+        launched.launching(listOf(other), fork = true)
+        launched.begin(postId)
+        assertEquals("grid", launched.request?.gridId)
+
+        launched.launching(listOf(postId), fork = false)
+        launched.begin(postId)
+        assertNull(launched.request)
     }
 
     @Test fun `a Viewer opened without a card leaves in one frame when it closes (ADR 0218)`() {
@@ -413,7 +418,7 @@ class ViewerReturnTransitionTest {
             }
         }
         compose.runOnIdle {
-            transition.openedFrom(origin, shelfId = ViewerReturnShelfId.Related(seed.id))
+            transition.openedFrom(origin, shelfId = ViewerReturnShelfId.Related(seed.id), post = postId)
             transition.begin(target.id)
         }
         compose.waitForIdle()
@@ -430,7 +435,7 @@ class ViewerReturnTransitionTest {
         val transition = ViewerReturnTransition()
         val shelf = ViewerReturnShelfId.Related(post("seed").id)
         val bounds = Rect(20f, 100f, 220f, 400f)
-        transition.openedFrom("feed", shelfId = shelf)
+        transition.openedFrom("feed", shelfId = shelf, post = postId)
         transition.begin(postId)
         transition.recordBounds("feed", postId, bounds)
         transition.positioned("feed", postId)

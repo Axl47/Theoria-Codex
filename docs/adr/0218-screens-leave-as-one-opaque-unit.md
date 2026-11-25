@@ -20,13 +20,17 @@ text over it.
 
 ## Decision
 
-A card tap records a pending origin with `openedFrom`. The root Viewer route claims it when it composes, and the
-shell drops an origin nobody claimed as soon as the destination changes to anything but the Viewer, so a tap that
-opened no Viewer (a Codex in edit mode, a launch that failed) never lends its card to the next launch.
-`ViewerReturnTransition.begin` starts a return only while an origin is recorded, and `ViewerReturnLifetime` holds the
-Viewer's exit only while a return is running. A Viewer opened from no card therefore leaves in one frame, the same
-way it opens. A vertical gallery applies `viewerReturnMedia` like a paged page, so it opens out of its card and lands
-back in it together with the backdrop.
+A card tap records its origin with `openedFrom`, naming the tapped post. Every Viewer launch goes through
+`TheoriaShell.launchViewer`, which hands the origin to `ViewerReturnTransition.launching`: a trail fork opened over an
+active Viewer keeps its root's origin, and any other launch keeps it only when its posts include the tapped post,
+clearing it otherwise. A tap that opened no Viewer (a Codex in edit mode, a launch that failed) therefore never lends
+its card to the next launch, whatever screen that launch starts from. `ViewerReturnTransition.begin` starts a return
+only while an origin is recorded, and `ViewerReturnLifetime` holds the Viewer's exit only while a return is running.
+A Viewer opened from no card therefore leaves in one frame, the same way it opens.
+
+A vertical gallery fades with the backdrop instead of following `viewerReturnMedia`. That modifier crops the middle
+of whatever it is applied to, which for a scrolling list is a seam between pages rather than the selected one, so
+the card would show the wrong picture.
 
 `TheoriaScreenHost` owns the only transition table, the Viewer's included, and passes the pop transitions as the
 predictive ones too, because navigation-compose never asks a `composable` for its gesture transitions. The back
@@ -46,12 +50,12 @@ closes in one frame rather than into its card.
 
 ## Applies to
 
-- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnTransition.openedFrom`, `ViewerReturnTransition.claimOrigin`, `ViewerReturnTransition.dropUnclaimedOrigin`, `ViewerReturnTransition.begin`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnTransition.openedFrom`, `ViewerReturnTransition.launching`, `ViewerReturnTransition.begin`
+- `app/src/main/java/com/theoriacodex/app/ui/TheoriaViewerLaunch.kt`: `launchViewer`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransition.kt`: `ViewerReturnLifetime`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGallery.kt`: `ViewerVerticalGallery`
 - `app/src/main/java/com/theoriacodex/app/ui/AppNavigation.kt`: `TheoriaScreenHost`, `opaqueScreen`
-- `app/src/main/java/com/theoriacodex/app/ui/TheoriaAppLocals.kt`: `ShellCompositionLocals`
-- `app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt`: `ViewerRoute`
+- `app/src/main/java/com/theoriacodex/app/ui/TheoriaShell.kt`: `TheoriaShell.viewerReturn`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaNavDestinations.kt`: `theoriaDestinations`
 
 ## Guarded by
@@ -60,7 +64,7 @@ closes in one frame rather than into its card.
 - `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `leaving a screen with the back gesture never blends it with the screen underneath (ADR 0218)`
 - `app/src/test/java/com/theoriacodex/app/ui/ScreenExitFramesTest.kt`: `a back gesture out of the Viewer leaves it in place instead of sliding it like a screen (ADR 0218)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer opened without a card leaves in one frame when it closes (ADR 0218)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a card tap that opened no Viewer leaves no origin for the next launch (ADR 0218)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card moves into the card with the backdrop (ADR 0218)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a card origin belongs only to the launch of the card that was tapped (ADR 0218)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card is gone once the backdrop is (ADR 0218)`
 - Left to prose: that every new full-screen destination uses `opaqueScreen`; a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.
-- Left to prose: that the shell drops unclaimed origins on a destination change; the listener lives in shell composition, which no host test builds.
+- Left to prose: that every Viewer launch passes through `launchViewer`; a new `navigate(AppRoute.Viewer)` elsewhere would skip `launching`.

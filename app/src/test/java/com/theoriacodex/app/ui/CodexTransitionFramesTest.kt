@@ -12,7 +12,6 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.junit.Assert.assertEquals
@@ -35,13 +34,9 @@ class CodexTransitionFramesTest {
         compose.setContent {
             navigation = rememberNavController()
             Box(Modifier.fillMaxSize().background(Color.Blue).testTag("root")) {
-                NavHost(
-                    navigation, startDestination = "library",
-                    enterTransition = { codexEnterTransition() }, exitTransition = { codexUnderneathExit() },
-                    popEnterTransition = { codexUnderneathEnter() }, popExitTransition = { codexExitTransition() },
-                ) {
-                    composable("library") { Box(Modifier.fillMaxSize().background(Color.Red)) }
-                    composable("codex") { Box(Modifier.fillMaxSize().background(Color.Green)) }
+                TheoriaScreenHost(navigation, AppRoute.Home) {
+                    opaqueScreen(AppRoute.Home) { Box(Modifier.fillMaxSize().background(Color.Red)) }
+                    composable(AppRoute.CodexDetail) { Box(Modifier.fillMaxSize().background(Color.Green)) }
                 }
             }
         }
@@ -55,7 +50,7 @@ class CodexTransitionFramesTest {
                 assertEquals("$label frame $frame shows the backdrop: $pixel", 0f, pixel.blue, 0.02f)
             }
         }
-        assertNoBackdropThrough({ navigation.navigate("codex") }, "Opening")
+        assertNoBackdropThrough({ navigation.navigate(AppRoute.codexDetail("codex")) }, "Opening")
         val opened = compose.onNodeWithTag("root").captureToImage().toPixelMap()[200, 400]
         assertTrue("The Codex should have opened: $opened", opened.green > 0.9f)
         assertNoBackdropThrough({ navigation.popBackStack() }, "Closing")

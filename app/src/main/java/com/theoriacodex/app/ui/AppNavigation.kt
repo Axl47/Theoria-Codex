@@ -95,17 +95,17 @@ internal fun tabSwipeEnabled(settledPage: Int, forYouGrid: Boolean): Boolean =
 
 private val screenSlide = tween<IntOffset>(TheoriaMotion.SCREEN_MS)
 
-internal fun pushEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { it }
-internal fun pushExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { -it }
-internal fun popEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { -it }
-internal fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { it }
+private fun pushEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { it }
+private fun pushExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { -it }
+private fun popEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { -it }
+private fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { it }
 
 private val screenFade = tween<Float>(TheoriaMotion.SCREEN_MS)
 
-internal fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
-internal fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
-internal fun codexUnderneathExit(): ExitTransition = ExitTransition.None
-internal fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
+private fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
+private fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
+private fun codexUnderneathExit(): ExitTransition = ExitTransition.None
+private fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
 
 private typealias ScreenTransitionScope = AnimatedContentTransitionScope<NavBackStackEntry>
 

@@ -57,8 +57,6 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
         if (titleFooter) CornerRadius.Zero else rounded.bottomLeftCornerRadius)
 }
 
-private enum class ViewerReturnOrigin { None, Pending, Claimed }
-
 class ViewerReturnTransition {
     var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
         private set
@@ -67,7 +65,8 @@ class ViewerReturnTransition {
         retainedPostIds = postIds
     }
 
-    private var origin = ViewerReturnOrigin.None
+    private var hasOrigin = false
+    private var unclaimedPost: PostId? = null
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
@@ -88,21 +87,26 @@ class ViewerReturnTransition {
     private var rowPositioned = false
     private val mediaBounds = mutableMapOf<PostId, Rect>()
 
-    fun openedFrom(gridId: String?, bounds: Rect? = null, shelfId: ViewerReturnShelfId? = null, corners: ViewerReturnCorners = ViewerReturnCorners()) {
+    fun openedFrom(
+        gridId: String?,
+        bounds: Rect? = null,
+        shelfId: ViewerReturnShelfId? = null,
+        corners: ViewerReturnCorners = ViewerReturnCorners(),
+        post: PostId,
+    ) {
         clear()
-        origin = ViewerReturnOrigin.Pending
+        hasOrigin = true
+        unclaimedPost = post
         originGridId = gridId
         originShelfId = shelfId
         openingBounds = bounds?.takeUnless { it.isEmpty }
         openingCorners = corners
     }
 
-    fun claimOrigin() {
-        if (origin == ViewerReturnOrigin.Pending) origin = ViewerReturnOrigin.Claimed
-    }
-
-    fun dropUnclaimedOrigin() {
-        if (origin == ViewerReturnOrigin.Pending) clear()
+    fun launching(postIds: Collection<PostId>, fork: Boolean) {
+        if (fork) return
+        val tapped = unclaimedPost
+        if (tapped != null && tapped in postIds) unclaimedPost = null else clear()
     }
 
     fun finishOpening() {
@@ -110,7 +114,7 @@ class ViewerReturnTransition {
     }
 
     fun begin(postId: PostId) {
-        if (origin == ViewerReturnOrigin.None) return
+        if (!hasOrigin) return
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
         mediaSettling = true
@@ -150,7 +154,8 @@ class ViewerReturnTransition {
     }
 
     fun clear() {
-        origin = ViewerReturnOrigin.None
+        hasOrigin = false
+        unclaimedPost = null
         mediaSettling = false
         retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()

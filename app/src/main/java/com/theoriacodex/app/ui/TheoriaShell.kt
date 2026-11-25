@@ -90,6 +90,7 @@ import com.theoriacodex.app.series.SeriesReader
 import com.theoriacodex.app.ui.routes.ViewerRouteWorkflow
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
 import com.theoriacodex.app.update.ReleaseChangelogEntry
+import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.data.repository.CodexSortMode
@@ -328,6 +329,7 @@ internal class TheoriaShell(
     val updates = container.updates
     val workflows = container.workflows
     val navController get() = navigation.navController
+    val viewerReturn = ViewerReturnTransition()
 
     fun flushPendingWrites() {
         container.applicationScope.launch {

@@ -3,8 +3,6 @@ package com.theoriacodex.app.ui
 import com.theoriacodex.app.codex.LocalNewCodexOpener
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
-import androidx.navigation.NavController
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,7 +30,6 @@ import com.theoriacodex.app.ui.navigation.LocalTriageOpener
 import com.theoriacodex.app.ui.trails.rememberTrailOpener
 import com.theoriacodex.app.ui.routes.browsingMetadataOwner
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
-import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.series.SeriesCovers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -42,14 +39,6 @@ import kotlinx.coroutines.flow.map
 internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable () -> Unit) {
     val saveRelevanceLoader = rememberCodexSaveRelevanceLoader(shell)
     val watchPresentation = rememberPostWatchPresentation(shell.data.readingPositions, shell.data.recentsRepository)
-    val viewerReturnTransition = remember { ViewerReturnTransition() }
-    DisposableEffect(shell.navController, viewerReturnTransition) {
-        val dropUnclaimed = NavController.OnDestinationChangedListener { _, destination, _ ->
-            if (destination.route != AppRoute.Viewer) viewerReturnTransition.dropUnclaimedOrigin()
-        }
-        shell.navController.addOnDestinationChangedListener(dropUnclaimed)
-        onDispose { shell.navController.removeOnDestinationChangedListener(dropUnclaimed) }
-    }
     val relatedPostsSupport = remember(shell) { shell.features.relatedPosts::supports }
     CompositionLocalProvider(
         LocalTrailOpener provides rememberTrailOpener(shell),
@@ -58,7 +47,7 @@ internal fun ShellCompositionLocals(shell: TheoriaShell, content: @Composable ()
         LocalCodexSaveRelevanceLoader provides saveRelevanceLoader,
         LocalQuickSave provides rememberQuickSave(shell, saveRelevanceLoader),
         LocalTagAffinityInputs provides shell.features.tagAffinity.latest,
-        LocalViewerReturnTransition provides viewerReturnTransition,
+        LocalViewerReturnTransition provides shell.viewerReturn,
         LocalPostMenuActions provides rememberPostMenuActions(shell),
         LocalLiftController provides rememberLiftSession(),
         LocalLiftUgoiraClient provides shell.sources.pixivUgoiraClient,

@@ -6,7 +6,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toPixelMap
+import org.robolectric.annotation.GraphicsMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performSemanticsAction
@@ -90,16 +92,22 @@ class ViewerVerticalGalleryTest {
         compose.waitForIdle()
     }
 
-    @Test fun `a vertical gallery closing into its card moves into the card with the backdrop (ADR 0218)`() {
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a vertical gallery closing into its card is gone once the backdrop is (ADR 0218)`() {
         val returning = ViewerReturnTransition()
-        returning.openedFrom("grid")
+        returning.openedFrom("grid", post = gallery.id)
         returning.begin(gallery.id)
         returning.recordBounds("grid", gallery.id, Rect(0f, 0f, 40f, 50f))
         returning.positioned("grid", gallery.id)
         show(returning = returning)
-        val root = compose.onRoot().fetchSemanticsNode().size.width
-        val landed = compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode().layoutInfo.coordinates.boundsInRoot()
-        assertTrue("The pages stayed full width: $landed in $root", landed.width < root / 2)
+        val page = compose.onNodeWithContentDescription("Page 1").fetchSemanticsNode().boundsInRoot
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        val left = page.left.toInt().coerceAtLeast(0)
+        val top = page.top.toInt().coerceAtLeast(0)
+        val right = page.right.toInt().coerceAtMost(pixels.width) - 1
+        val bottom = page.bottom.toInt().coerceAtMost(pixels.height) - 1
+        val drawn = (left..right step 4).flatMap { x -> (top..bottom step 4).map { y -> pixels[x, y] } }.distinct()
+        assertEquals("The pages are still drawn after the return landed: $drawn", 1, drawn.size)
     }
 
     @Test fun `scrolling a vertical gallery selects the page in view`() {
