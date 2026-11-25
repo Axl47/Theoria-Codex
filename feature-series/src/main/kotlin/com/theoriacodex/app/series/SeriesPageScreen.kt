@@ -356,7 +356,7 @@ private fun LazyListScope.chapterList(
             download = download,
             canToggleDownload = canDownloadEntry,
             onClick = { onOpenEntry(address) },
-            onToggleRead = { viewModel.setEntryRead(address, !entry.read) },
+            onSetRead = { read -> viewModel.setEntryRead(address, read) },
             onMarkPreviousRead = { onMarkPreviousRead(address) },
             onToggleDownload = { viewModel.toggleDownload(address) },
         )

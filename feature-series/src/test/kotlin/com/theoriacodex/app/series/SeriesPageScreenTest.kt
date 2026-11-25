@@ -203,6 +203,36 @@ class SeriesPageScreenTest {
     }
 
     @Test
+    fun aChapterInProgressOffersMarkAsUnread() {
+        val entry = StoredSeriesEntry(SeriesEntry("/c/1", "Chapter 1"), sourceOrder = 0, firstSeenAtEpochMs = 1L, position = 3, length = 12)
+        val chosen = mutableListOf<Boolean>()
+        compose.setContent {
+            MaterialTheme {
+                EntryRow(
+                    entry = entry,
+                    kind = SeriesKind.MANGA,
+                    enabled = true,
+                    hasPreviousUnread = false,
+                    download = null,
+                    canToggleDownload = false,
+                    onClick = {},
+                    onSetRead = { chosen += it },
+                    onMarkPreviousRead = {},
+                    onToggleDownload = {},
+                )
+            }
+        }
+
+        compose.onNodeWithText("Chapter 1").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Mark as read").assertIsDisplayed()
+        compose.onNodeWithText("Mark as unread").performClick()
+        compose.waitForIdle()
+
+        assertEquals(listOf(false), chosen)
+    }
+
+    @Test
     fun entryDetailIncludesTranslatorGroupAlongsideDateAndProgress() {
         val entry = StoredSeriesEntry(
             entry = SeriesEntry("/c/1", "Chapter 1", translatorGroup = "Driftwood", uploadedAtEpochMs = 1_700_000_000_000L),
