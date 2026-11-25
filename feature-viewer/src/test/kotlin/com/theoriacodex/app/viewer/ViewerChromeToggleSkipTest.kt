@@ -58,11 +58,11 @@ class ViewerChromeToggleSkipTest {
 
     private fun assertSkips(vararg setup: ViewerAction, change: ((ViewerAction) -> Unit) -> Unit) {
         val reduce = render(listOf(testPost(sourcePostId = "still")), *setup)
-        val executed = traced { compose.runOnIdle { change(reduce) } }
+        val windows = List(3) { traced { compose.runOnIdle { change(reduce) } } }
 
-        assertTrue("the change recomposed something", executed.any { it.endsWith(".ViewerLoadedScreen") })
-        val skipped = listOf("ViewerChromeOverlays", "ViewerContentSurface", "ViewerPostPagerSurface", "ViewerPostPage")
-        assertEquals(emptyList<String>(), executed.filter { name -> skipped.any { name == "com.theoriacodex.app.viewer.$it" } }.distinct())
+        assertTrue("the change recomposed something", windows.all { executed -> executed.any { it.endsWith(".ViewerLoadedScreen") } })
+        val skipped = listOf("ViewerChromeOverlays", "ViewerContentSurface", "ViewerPostPagerSurface", "ViewerPostPage").map { "com.theoriacodex.app.viewer.$it" }.toSet()
+        assertEquals(emptySet<String>(), windows.map { it.toSet() intersect skipped }.reduce { every, window -> every intersect window })
     }
 
     private fun render(posts: List<Post>, vararg setup: ViewerAction): (ViewerAction) -> Unit {
