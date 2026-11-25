@@ -70,11 +70,11 @@ class DataStoreFormatTest {
             viewerLaunchContext = ViewerLaunchContextRecord("q", 4, "CODEX", 21, "CODEX"),
             librarySection = "SAVED",
             savedSearchNewPosts = SavedSearchNewPosts(mapOf("saved" to 5L), mapOf("saved" to NewPostMarks(listOf("PIXIV:1"), listOf("PIXIV:2", "PIXIV:1"), 4L))),
-            switchSourceSkipped = listOf("custom_mihon_7"),
         )
         val full = UiRestoreDataStoreFile(state = state)
         assertStoredFormat(
             golden("ui-restore-full.json") to full,
+            golden("ui-restore-switch-source.json") to UiRestoreDataStoreFile(state = UiRestoreStoreRecord(switchSourceSkipped = listOf("custom_mihon_7"))),
             retiredKeys = setOf("state.feedFabRestoreStates{}.searchAnimationByScope{}.animatedOnly"),
         )
     }
