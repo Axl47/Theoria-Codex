@@ -109,11 +109,11 @@ class MissingExtensionsBackDeviceTest {
             up()
         }
 
-        listOf("0 of 2 series checked", "1 of 2 series checked", "2 of 2 series checked", "3 new chapters").forEach { shown ->
+        listOf("0 of 2 series checked", "1 of 2 series checked", "2 of 2 series checked", "Refreshed 2 series · 3 new chapters").forEach { shown ->
             compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(shown).fetchSemanticsNodes().isNotEmpty() }
             step.trySend(Unit)
         }
-        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText("3 new chapters").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText("Refreshed 2 series · 3 new chapters").fetchSemanticsNodes().isEmpty() }
     }
 
     private fun nodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> =
