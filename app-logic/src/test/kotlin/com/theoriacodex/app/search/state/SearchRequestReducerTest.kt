@@ -4,6 +4,7 @@ import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchExecutionResult
 import com.theoriacodex.app.search.SearchPageResult
+import com.theoriacodex.app.search.admits
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -23,7 +24,7 @@ import org.junit.Test
 
 class SearchRequestReducerTest {
     @Test
-    fun `begin loading clears old error while retaining visible content`() {
+    fun `begin loading clears old error while retaining visible content (ADR 0082)`() {
         val existing = post("existing")
         val state = SearchUiState(
             content = SearchContentUiState(
@@ -40,10 +41,11 @@ class SearchRequestReducerTest {
         assertEquals(10L, reduced.execution.activeRequestId)
         assertEquals(submitted, reduced.execution.submittedQuery)
         assertTrue(reduced.loading)
+        assertTrue(reduced.retainsResultsWhileRefreshing)
     }
 
     @Test
-    fun `a new search drops what the old results continued from and a page request keeps it`() {
+    fun `a new search drops what the old results continued from and a page request keeps it (ADR 0082)`() {
         val shown = root(1L, query("shown"))
         val state = showing(shown.query, listOf(post("one"))).let {
             it.copy(execution = it.execution.copy(continuation = continuation(shown, more = true), pageRetrySource = SourceKey.PIXIV))
@@ -98,7 +100,7 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `each mode remembers its last search and Multi-Search does not`() {
+    fun `each mode remembers its last search and Multi-Search does not (ADR 0079)`() {
         val pixiv = root(1L, emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)))
         val mixed = root(2L, query("mixed")).copy(
             sourceScope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
@@ -115,17 +117,24 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `an answer for another search cancels its request and shows nothing`() {
+    fun `an answer for another search cancels its request and shows nothing (ADR 0080)`() {
         val request = root(3L, query("asked"))
         val loading = showing(query("shown"), listOf(post("kept"))).reduce(SearchStateChange.BeginRequest(request))
         val other = success(root(3L, query("other")), listOf(post("wrong")))
 
         val reduced = loading.reduce(SearchStateChange.RootResult(3L, other))
+        val foreignFailure = SearchExecutionResult.Failure(
+            root(3L, query("other")).executionKey, query("other"), request.sourceScope, emptyList(), "refused",
+        )
+        val failed = loading.reduce(SearchStateChange.RootResult(3L, foreignFailure))
 
         assertEquals(loading.content, reduced.content)
         assertEquals(loading.query, reduced.query)
         assertNull(reduced.execution.activeRequestId)
         assertEquals(3L, reduced.execution.lastCancelledRequestId)
+        assertEquals(loading.content, failed.content)
+        assertEquals(loading.query, failed.query)
+        assertEquals(3L, failed.execution.lastCancelledRequestId)
     }
 
     @Test
@@ -151,18 +160,48 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `a search that never answers becomes the applied search so Retry repeats it`() {
-        val request = root(5L, query("timed out"))
-        val loading = showing(query("shown"), listOf(post("old"))).reduce(SearchStateChange.BeginRequest(request))
+    fun `a search that never answers becomes the applied search so Retry repeats it (ADR 0082)`() {
+        val status = SourceRunStatus(SourceKey.PIXIV, SourceRunState.FAILED, errorMessage = "offline")
+        listOf(SearchRequestKind.REPLACE, SearchRequestKind.RETRY).forEach { kind ->
+            val request = root(5L, query("timed out"), kind)
+            val loading = showing(query("shown"), listOf(post("old"))).reduce(SearchStateChange.BeginRequest(request))
+            val answered = SearchExecutionResult.Failure(
+                request.executionKey, request.query, request.sourceScope, listOf(status), "offline",
+            )
 
-        val failed = loading.reduce(SearchStateChange.RequestFailed(5L, "Search timed out"))
+            val threw = loading.reduce(SearchStateChange.RequestFailed(5L, "Search timed out"))
+            val refused = loading.reduce(SearchStateChange.RootResult(5L, answered))
+
+            listOf(threw, refused).forEach { failed ->
+                assertEquals(kind.name, request.query, failed.query.applied)
+                assertEquals(kind.name, request.executionKey, failed.query.appliedQueryHash)
+                assertEquals(kind.name, request.query, failed.query.appliedByMode[modeKey(request.query.mode)])
+                assertTrue(failed.content.results.isEmpty())
+                assertTrue(failed.content.hasExecutedSearch)
+            }
+            assertEquals("Search timed out", threw.content.error?.message)
+        }
+    }
+
+    @Test
+    fun `a temporary search that never answers becomes the applied search without replacing the mode's last one (ADR 0082)`() {
+        val earlier = query("earlier")
+        val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+        val request = SearchRequest(6L, SearchRequestKind.REPLACE, query("temporary"), scope)
+        val loading = SearchUiState(
+            query = SearchQueryUiState(
+                draft = request.query,
+                applied = earlier,
+                appliedByMode = mapOf(modeKey(earlier.mode) to earlier),
+            ),
+        ).reduce(SearchStateChange.BeginRequest(request))
+
+        val failed = loading.reduce(SearchStateChange.RequestFailed(6L, "Search timed out"))
 
         assertEquals(request.query, failed.query.applied)
+        assertEquals(scope, failed.query.appliedSourceScope)
         assertEquals(request.executionKey, failed.query.appliedQueryHash)
-        assertEquals(request.query, failed.query.appliedByMode[modeKey(request.query.mode)])
-        assertTrue(failed.content.results.isEmpty())
-        assertTrue(failed.content.hasExecutedSearch)
-        assertEquals("Search timed out", failed.content.error?.message)
+        assertEquals(mapOf(modeKey(earlier.mode) to earlier), failed.query.appliedByMode)
     }
 
     @Test
@@ -183,7 +222,19 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `early results show while the request keeps running`() {
+    fun `an answer is admitted only with the running request's id and key (ADR 0080)`() {
+        val request = root(4L, query("running"))
+        val loading = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
+
+        assertTrue(loading.admits(4L, request.executionKey))
+        assertFalse(loading.admits(4L, root(4L, query("other")).executionKey))
+        assertFalse(loading.admits(5L, request.executionKey))
+        assertFalse(SearchUiState().admits(4L, request.executionKey))
+        assertFalse(loading.reduce(SearchStateChange.RequestCancelled(4L)).admits(4L, request.executionKey))
+    }
+
+    @Test
+    fun `early results show while the request keeps running (ADR 0080)`() {
         val request = root(6L, query("early"))
         val loading = SearchUiState(query = SearchQueryUiState(draft = request.query))
             .reduce(SearchStateChange.BeginRequest(request))
@@ -202,7 +253,7 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `a cached first page holds back early results and is not yet the mode's search`() {
+    fun `a cached first page holds back early results and is not yet the mode's search (ADR 0080, 0082)`() {
         val request = root(7L, query("resumed"), SearchRequestKind.RETRY)
         val loading = SearchUiState(query = SearchQueryUiState(draft = request.query, applied = request.query))
             .reduce(SearchStateChange.BeginRequest(request))
@@ -211,7 +262,11 @@ class SearchRequestReducerTest {
         val painted = loading.reduce(SearchStateChange.ShowCachedFirstPage(7L, cached))
         val early = painted.reduce(SearchStateChange.PartialResult(7L, success(request, listOf(post("early")))))
 
+        val scrolledEarly = painted.reduce(SearchStateChange.CachedFirstPageScrolled)
+            .let { it.reduce(SearchStateChange.PartialResult(7L, success(request, listOf(post("early"))))) }
+
         assertSame(loading, loading.reduce(SearchStateChange.ShowCachedFirstPage(7L, emptyList())))
+        assertEquals(cached, scrolledEarly.content.results)
         assertEquals(cached, painted.content.results)
         assertEquals(request.executionKey, painted.query.appliedQueryHash)
         assertTrue(painted.execution.showingPartialResults)
@@ -220,32 +275,62 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `a scrolled cached page keeps its posts in place when the fresh ones arrive`() {
+    fun `a cached first page shown before the answer leaves the mode's last search in place (ADR 0082)`() {
+        listOf(QueryMode.Unified, QueryMode.Source(SourceKey.PIXIV)).forEach { mode ->
+            val earlier = query("earlier", mode)
+            val request = root(8L, query("resumed", mode), SearchRequestKind.RETRY)
+            val loading = SearchUiState(
+                query = SearchQueryUiState(
+                    draft = request.query,
+                    applied = earlier,
+                    appliedByMode = mapOf(modeKey(earlier.mode) to earlier),
+                ),
+            ).reduce(SearchStateChange.BeginRequest(request))
+            val kept = mapOf(modeKey(earlier.mode) to earlier)
+
+            val painted = loading.reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(post("cached"))))
+            val scrolled = painted.reduce(SearchStateChange.CachedFirstPageScrolled)
+            val cancelled = painted.reduce(SearchStateChange.RequestCancelled(8L))
+
+            assertEquals(mode.toString(), request.query, painted.query.applied)
+            assertEquals(mode.toString(), kept, painted.query.appliedByMode)
+            assertEquals(mode.toString(), kept, scrolled.query.appliedByMode)
+            assertEquals(mode.toString(), kept, cancelled.query.appliedByMode)
+        }
+    }
+
+    @Test
+    fun `a scrolled cached page keeps its posts in place when the fresh ones arrive (ADR 0082)`() {
         val request = root(8L, query("resumed"), SearchRequestKind.RETRY)
         val first = post("first")
         val second = post("second").copy(pictureHash = PICTURE)
+        val third = post("third").copy(pictureHash = PICTURE xor 0b1_1111_1111_0000_0000)
         val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
-            .reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(first, second)))
+            .reduce(SearchStateChange.ShowCachedFirstPage(8L, listOf(first, second, third)))
         val newest = post("newest")
         val updated = first.copy(title = "Updated", pictureHash = PICTURE xor 0b111)
         val repost = post("repost").copy(pictureHash = PICTURE xor 0b1100_0000)
-        val fresh = success(request, listOf(newest, updated, second.copy(pictureHash = null), repost))
+        val retaken = third.copy(
+            preview = ImageRef(url = "https://example.test/third-new.jpg", localPath = null, mime = "image/jpeg"),
+            pictureHash = null,
+        )
+        val fresh = success(request, listOf(newest, updated, second.copy(pictureHash = null), retaken, repost))
 
         val atTop = painted.reduce(SearchStateChange.RootResult(8L, fresh))
         val scrolled = painted.reduce(SearchStateChange.CachedFirstPageScrolled)
             .reduce(SearchStateChange.RootResult(8L, fresh))
 
         assertEquals(fresh.posts, atTop.content.results)
-        assertEquals(listOf(updated, second, newest), scrolled.content.results)
+        assertEquals(listOf(updated, second, retaken, newest), scrolled.content.results)
         assertSame(atTop, atTop.reduce(SearchStateChange.CachedFirstPageScrolled))
         val more = page(81L, scrolled)
         val paged = scrolled.reduce(SearchStateChange.BeginRequest(more))
             .reduce(SearchStateChange.PageResult(81L, nextPage(more, emptyList())))
-        assertEquals(listOf(updated, second, newest), paged.content.results)
+        assertEquals(listOf(updated, second, retaken, newest), paged.content.results)
     }
 
     @Test
-    fun `after early results an untouched draft follows whichever query the request ends on`() {
+    fun `after early results an untouched draft follows whichever query the request ends on (ADR 0082)`() {
         val request = root(9L, query("asked"))
         val normalized = query("normalized")
         val early = listOf(post("early"))
@@ -271,18 +356,26 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `a refresh that fails leaves the cached first page on screen`() {
+    fun `a refresh that fails leaves the cached first page on screen (ADR 0082)`() {
         val request = root(10L, query("resumed"), SearchRequestKind.RETRY)
         val cached = listOf(post("cached"))
         val painted = SearchUiState().reduce(SearchStateChange.BeginRequest(request))
             .reduce(SearchStateChange.ShowCachedFirstPage(10L, cached))
 
         val failed = painted.reduce(SearchStateChange.RequestFailed(10L, "offline"))
+        val answeredFailure = painted.reduce(
+            SearchStateChange.RootResult(
+                10L, SearchExecutionResult.Failure(request.executionKey, request.query, request.sourceScope, emptyList(), "refused"),
+            ),
+        )
 
         assertEquals(cached, failed.content.results)
         assertEquals("offline", failed.content.error?.message)
         assertFalse(failed.content.canLoadMore)
         assertNull(failed.execution.activeRequestId)
+        assertEquals(cached, answeredFailure.content.results)
+        assertEquals("refused", answeredFailure.content.error?.message)
+        assertNull(answeredFailure.execution.activeRequestId)
     }
 
     @Test
@@ -361,7 +454,7 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `page failure merges provider status and leaves the search and its retry in place`() {
+    fun `page failure merges provider status and leaves the search and its retry in place (ADR 0082)`() {
         val pixiv = SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)
         val exhausted = SourceRunStatus(SourceKey.GELBOORU, SourceRunState.EXCLUDED, errorMessage = "exhausted")
         val shown = root(1L, query("paged"))
@@ -390,7 +483,7 @@ class SearchRequestReducerTest {
     }
 
     @Test
-    fun `a page for a search no longer on screen is cancelled`() {
+    fun `a page for a search no longer on screen is cancelled (ADR 0082)`() {
         val initial = showing(query("paged"), listOf(post("first")))
         val request = page(25L, initial)
         val replaced = initial.reduce(SearchStateChange.BeginRequest(request))
@@ -398,8 +491,14 @@ class SearchRequestReducerTest {
 
         val reduced = replaced.reduce(SearchStateChange.PageResult(25L, nextPage(request, listOf(post("late")))))
 
+        val failed = replaced.reduce(
+            SearchStateChange.PageResult(25L, SearchPageResult.Failure(request.executionKey, emptyList(), "offline")),
+        )
+
         assertEquals(replaced.content, reduced.content)
         assertEquals(25L, reduced.execution.lastCancelledRequestId)
+        assertEquals(replaced.content, failed.content)
+        assertEquals(25L, failed.execution.lastCancelledRequestId)
     }
 
     @Test
@@ -460,8 +559,8 @@ class SearchRequestReducerTest {
         more: Boolean = false,
     ) = SearchPageResult.Success(request.executionKey, posts, statuses, continuation(request, more))
 
-    private fun query(tag: String): Query =
-        emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm(tag)))
+    private fun query(tag: String, mode: QueryMode = QueryMode.Unified): Query =
+        emptySearchQuery(mode).withIncludeTermsAsRequired(listOf(SearchTerm(tag)))
 
     private fun post(id: String): Post = Post(
         id = PostId(SourceKey.PIXIV, id),

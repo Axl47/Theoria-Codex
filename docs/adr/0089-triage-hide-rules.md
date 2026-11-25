@@ -16,3 +16,7 @@ New sources need a vocabulary decision before their hidden tags cross-match.
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/triage/TriageRules.kt`: `hiddenBy`, `needsPictureCheck`, `WELL_TAGGED`, `hideCandidates`, `swipeDirection`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/triage/TriageRulesTest.kt`: `a provider tag meets the hidden tags written in its vocabulary (ADR 0089)`, `a predicted tag hides a sparsely tagged post when confident enough, through any booru source's hidden tags (ADR 0089)`, `a sparse Hitomi post's predicted tag meets the hidden tags of every booru source (ADR 0089)`, `a post its provider tagged well is left to its own tags, whatever its picture shows (ADR 0089)`, `hide candidates start with the tags the Likes carry least, in the post's order among equals (ADR 0089)`, `among equals a content tag beats artist, character, series, group, type, language, meta and rating tags (ADR 0089)`, `among equals text on the image comes after content, even where the source gives no tag types (ADR 0089)`, `a universal tag is never offered, however little it is liked (ADR 0089)`, `a drag commits in the direction of its axis once it passes the distance (ADR 0089)`, `a short slow drag springs back (ADR 0089)`, `a fling commits a short drag (ADR 0089)`, `a fling against the pull cancels it (ADR 0089)`, `a diagonal drag follows the axis it travelled further on (ADR 0089)`, `a fast flick picks its axis by speed as well as travel (ADR 0089)`

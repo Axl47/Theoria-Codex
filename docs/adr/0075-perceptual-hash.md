@@ -16,3 +16,7 @@ Hashes are only comparable between values this app computed. Changing the grey c
 
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/media/PerceptualHash.kt`: `PerceptualHash`, `ofLuma`, `ofArgb`, `MIN_LUMA_SPREAD`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/media/PerceptualHashTest.kt`: `matches imagehash phash on fixed grey arrays (ADR 0075)`, `a solid or nearly solid picture has no hash (ADR 0006, 0075)`, `coloured pixels keep the hash stored for them, from 601 grey weights and box averaging (ADR 0075)`
