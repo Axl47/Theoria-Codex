@@ -212,18 +212,22 @@ private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, i
         if (motion.isAt(index, width) && motion.progress == 1f) {
             list.scrollToItem(index, offset)
         } else {
-            val startingError = list.distanceFromCenter(index, cell + center * 2)
-            if (!motion.isAt(index, width)) motion.moveTo(index, width, cell)
-            val from = motion.progress
-            animate(from, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
-                motion.progress = value
-                if (!list.isScrollInProgress) {
-                    list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value) / (1f - from)).roundToInt())
-                }
-            }
+            list.glideTo(motion, index, width, cell, center)
         }
         snapshotFlow { last }.drop(1).collect {
             if (motion.following && !list.isScrollInProgress) list.animateScrollToItem(index, offset)
+        }
+    }
+}
+
+private suspend fun LazyListState.glideTo(motion: ViewerStripMotion, index: Int, width: Float, cell: Float, center: Float) {
+    val startingError = distanceFromCenter(index, cell + center * 2)
+    if (!motion.isAt(index, width)) motion.moveTo(index, width, cell)
+    val from = motion.progress
+    animate(from, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
+        motion.progress = value
+        if (!isScrollInProgress) {
+            requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value) / (1f - from)).roundToInt())
         }
     }
 }
