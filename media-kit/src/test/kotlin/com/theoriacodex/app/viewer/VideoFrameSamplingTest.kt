@@ -82,6 +82,8 @@ class VideoFrameSamplingTest {
         assertTrue(frameSample(frames, UnreadableMedia("damaged")) is FrameSample.Frames)
         assertEquals(FrameSample.Unreachable, frameSample(frames, status(503)))
         assertEquals(FrameSample.Refused, frameSample(frames, status(404)))
+        listOf(400, 499).forEach { code -> assertEquals("$code", FrameSample.Refused, frameSample(emptyList(), status(code))) }
+        assertEquals(FrameSample.Unreachable, frameSample(emptyList(), status(500)))
     }
 
     @Test

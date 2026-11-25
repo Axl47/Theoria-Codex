@@ -56,6 +56,33 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
+    fun `a frame held longer is returned once for each stretch it fills (ADR 0107)`() = runTest {
+        val archive = temporaryFolder.newFile("held.zip")
+        val specs = listOf(UgoiraFrameSpec("0.png", 3_000)) + List(3) { UgoiraFrameSpec("${it + 1}.png", 1_000) }
+        ZipOutputStream(FileOutputStream(archive)).use { zip ->
+            specs.forEach { spec ->
+                zip.putNextEntry(ZipEntry(spec.fileName))
+                Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, zip)
+                zip.closeEntry()
+            }
+        }
+
+        assertEquals(6, sampleUgoiraFrames(archive, specs, count = 6, sizePx = 4).size)
+    }
+
+    @Test
+    fun `a sidecar that cannot be written leaves the archive without timing or a temporary file (ADR 0112)`() {
+        val folder = temporaryFolder.newFolder()
+        val archive = java.io.File(folder, "blocked.zip").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        ugoiraMetadataFile(archive).apply { mkdirs(); resolve("occupied").writeText("x") }
+
+        writeUgoiraFrameMetadata(archive, listOf(UgoiraFrameSpec("frame.jpg", 50)))
+
+        assertNull(readUgoiraFrameMetadata(archive))
+        assertEquals(setOf("blocked.zip", "blocked.zip.json"), folder.list().orEmpty().toSet())
+    }
+
+    @Test
     fun `a frame without delay still counts one millisecond of playing time (ADR 0107)`() {
         val instant = List(3) { UgoiraFrameSpec("$it.png", 0) } + UgoiraFrameSpec("3.png", 1)
         assertEquals(listOf(0, 1, 2, 3), ugoiraSampleIndices(instant, count = 4))
