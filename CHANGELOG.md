@@ -14,7 +14,7 @@
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and lists series no repo offers in a card per site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
 - Switch source searches only the sources you check under Sources, and remembers your choice for next time. Each extension's languages fold under it, and its box checks or unchecks them all. Sources you install later start checked.
-- Pulling down on Series' Following grid shows what letting go does, "Check for new chapters" (episodes if you only follow anime, updates if you follow both), and the pill fills once you've pulled far enough. While the check runs, it shows how many series are checked out of how many, and stays in view as you scroll or switch tabs. When it finishes, it says how many new chapters or episodes it found, then goes away.
+- Pulling down on Series' Following grid shows what letting go does, "Check for new chapters" (episodes if you only follow anime, updates if you follow both), and the pill fills once you've pulled far enough. While the check runs, it shows how many series are checked out of how many, and stays in view as you scroll or switch tabs. When it finishes, it says how many series it refreshed, such as "Refreshed 12 series · 3 new chapters", then goes away. Series that couldn't be checked aren't counted, and if none could be, the pill just goes away and the failure card reports it.
 - When Series couldn't check some series, its row now sits on a card. Tap it to see which series failed, grouped by extension and then by reason (Couldn't reach site, Timed out, Blocked, Rate limited, Source error), with Retry for each group. ✕ hides the row until a later check fails again. Each failed series offers Switch source in its menu. If a check fails while you are scrolled down, "N series couldn't be checked" appears with Show, which scrolls up to the card.
 - Holding a series in Series' Following grid opens the same menu as its page's ⋮ button (Mark all as read or unread, Refresh, Switch source), plus Download for manga, which offers the page's Next 5 unread, All unread or All.
 - For You has a Refresh button in its top bar that deals a fresh Mix.
@@ -175,6 +175,7 @@
 
 ### Fixed
 
+- The Sort & filter title no longer moves when Reset appears.
 - In For You's deck, dragging a post up far enough to save it now highlights the Codex it will go to, instead of saving to one you couldn't see. Sliding onto another Codex moves the highlight there. Dragging down far enough highlights the tag it will hide the same way.
 - With Next in queue paused or held, a video that repeats starts over at once. It no longer shows a loading spinner for a second at every loop.
 - Zooming into a video or animation in the Viewer keeps its thin progress bar at the bottom edge of what you see, instead of leaving it across the middle of the zoomed picture.

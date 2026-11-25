@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.CheckProgress
+import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.series.seriesKind
 
@@ -48,14 +49,21 @@ internal sealed interface RefreshPill {
         val label: String get() = if (progress.total == 0) "Checking" else "${progress.done} of ${progress.total} series checked"
     }
 
-    data class Found(val label: String) : RefreshPill
+    data class Done(val label: String) : RefreshPill
 }
 
-internal fun refreshPill(checking: CheckProgress?, found: List<SeriesUpdate>, pull: Float, words: EntryWords?): RefreshPill? = when {
+internal fun refreshPill(checking: CheckProgress?, finished: FollowedCheck?, pull: Float, words: EntryWords?): RefreshPill? = when {
     checking != null -> RefreshPill.Checking(checking)
     pull > 0f -> RefreshPill.Pulling(words?.let { "Check for new ${it.many}" } ?: "Check for updates", pull)
-    found.isNotEmpty() -> RefreshPill.Found(foundLabel(found))
+    finished != null && finished.refreshed > 0 -> RefreshPill.Done(doneLabel(finished))
     else -> null
+}
+
+internal val FollowedCheck.refreshed: Int get() = checked - failed
+
+private fun doneLabel(finished: FollowedCheck): String {
+    val refreshed = "Refreshed ${finished.refreshed} series"
+    return if (finished.updates.isEmpty()) refreshed else "$refreshed · ${foundLabel(finished.updates)}"
 }
 
 private fun foundLabel(found: List<SeriesUpdate>): String =
@@ -66,7 +74,7 @@ private fun foundLabel(found: List<SeriesUpdate>): String =
 @Composable
 internal fun FollowingRefreshBox(
     checking: CheckProgress?,
-    found: List<SeriesUpdate>,
+    finished: FollowedCheck?,
     words: EntryWords?,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
@@ -84,21 +92,21 @@ internal fun FollowingRefreshBox(
             val fraction = pullState.distanceFraction
             if (released && checking == null && fraction == 0f) released = false
             val pull = if (released || pullState.isAnimating) 0f else fraction
-            RefreshPillView(refreshPill(checking, found, pull, words), Modifier.align(Alignment.TopCenter))
+            RefreshPillView(refreshPill(checking, finished, pull, words), Modifier.align(Alignment.TopCenter))
         },
     ) { content() }
 }
 
 @Composable
 internal fun RefreshPillView(pill: RefreshPill?, modifier: Modifier = Modifier) {
-    val pinned = pill is RefreshPill.Checking || pill is RefreshPill.Found
+    val pinned = pill is RefreshPill.Checking || pill is RefreshPill.Done
     var lastPinned by remember { mutableStateOf(pill) }
     if (pinned) lastPinned = pill
     Box(modifier.padding(top = 8.dp)) {
         AnimatedVisibility(visible = pinned, enter = fadeIn(), exit = fadeOut()) {
             when (val shown = lastPinned) {
                 is RefreshPill.Checking -> CheckingPill(shown)
-                is RefreshPill.Found -> FoundPill(shown)
+                is RefreshPill.Done -> DonePill(shown)
                 else -> Unit
             }
         }
@@ -155,7 +163,7 @@ private fun CheckingPill(pill: RefreshPill.Checking) {
 }
 
 @Composable
-private fun FoundPill(pill: RefreshPill.Found) {
+private fun DonePill(pill: RefreshPill.Done) {
     Surface(shape = PILL, color = MaterialTheme.colorScheme.surfaceVariant, shadowElevation = 4.dp) {
         Text(
             pill.label,

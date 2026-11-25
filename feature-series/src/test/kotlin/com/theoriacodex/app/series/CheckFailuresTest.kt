@@ -78,7 +78,7 @@ class CheckFailuresTest {
         compose.setContent {
             MaterialTheme {
                 FollowingBody(
-                    content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = 0, grid = rememberLazyGridState(),
+                    content = content, checking = null, finished = null, failedCheck = failed, checkRun = 0, grid = rememberLazyGridState(),
                     onRefresh = {}, onRetryFailed = { retried += it }, onDismissFailures = { failed = null }, onUnfollow = {},
                     onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD,
                 )
@@ -104,7 +104,7 @@ class CheckFailuresTest {
         compose.setContent {
             MaterialTheme {
                 FollowingBody(
-                    content = content, checking = null, found = emptyList(), failedCheck = FollowedCheck(emptyList(), checked = 2, failures = listOf(stuck)), checkRun = 0,
+                    content = content, checking = null, finished = null, failedCheck = FollowedCheck(emptyList(), checked = 2, failures = listOf(stuck)), checkRun = 0,
                     grid = rememberLazyGridState(), onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
                     onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD, failureTools = tools,
                 )
@@ -134,7 +134,7 @@ class CheckFailuresTest {
             MaterialTheme {
                 Box {
                     FollowingBody(
-                        content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = runs, grid = grid,
+                        content = content, checking = null, finished = null, failedCheck = failed, checkRun = runs, grid = grid,
                         onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
                         onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
                         hold = NO_HOLD, failureTools = CheckFailureTools(snackbar = snackbar),
