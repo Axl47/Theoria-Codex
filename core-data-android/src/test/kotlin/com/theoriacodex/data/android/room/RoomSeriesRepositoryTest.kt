@@ -67,6 +67,31 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
+    fun `a chapter keeps how far into its page the reader was until another page is reached (ADR 0192)`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        suspend fun offset() = repository.entries(id).single().pageOffset
+
+        repository.recordProgress(id, "/c/1", position = 3, length = 9, pageOffset = 0.4f)
+        assertEquals(0.4f, offset())
+        repository.recordProgress(id, "/c/1", position = 3, length = 9)
+        assertEquals(0.4f, offset())
+        repository.recordProgress(id, "/c/1", position = 4, length = 9)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 4, length = 9, pageOffset = 7f)
+        assertEquals(1f, offset())
+        repository.setEntriesRead(id, listOf("/c/1"), read = false)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
+        repository.setAllRead(id, read = false)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null)
+        assertEquals(0.3f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 5L, 9L, null, null)
+        assertNull(offset())
+    }
+
+    @Test
     fun `progress marks the entry opened last, and an entry read at its last page`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
 
