@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithText
 import com.theoriacodex.app.ui.components.CollectTarget
 import com.theoriacodex.app.ui.components.CollectTargetVisual
 import com.theoriacodex.app.ui.components.CollectTargetsState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,5 +57,15 @@ class TriageDragOverlaysTest {
         compose.onNodeWithText("Keep").assertExists()
         dragTo(Offset(-60f, 0f))
         compose.onNodeWithText("Remove").assertExists()
+    }
+
+    @Test fun `a diagonal drag shows the side and bottom hints together and arms the dominant one`() {
+        showOverlays(removes = false)
+        dragTo(Offset(-110f, 60f))
+        compose.onNodeWithText("Skip").assertExists()
+        compose.onNodeWithText("long hair").assertExists()
+        val hints = edgeHints(drag.offset, SwipeThresholds(commitPx = 100f, flingPx = 100f, cuePx = 10f))
+        assertEquals(SwipeDirection.Left, hints.armed)
+        assertTrue(hints.vertical in 0f..1f && hints.vertical > 0f)
     }
 }

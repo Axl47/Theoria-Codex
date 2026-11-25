@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
@@ -247,27 +248,38 @@ internal fun TriageDragOverlays(
 ) {
     Box(Modifier.fillMaxSize()) {
         val offset = drag.offset
-        val pointer = drag.pointer
-        val vertical = abs(offset.y) > abs(offset.x)
-        val progress = (max(abs(offset.x), abs(offset.y)) / thresholds.commitPx).coerceIn(0f, 1f)
-        when {
-            !vertical -> {
-                val (icon, label) = when {
-                    offset.x > 0f && removes -> Icons.Filled.Check to "Keep"
-                    offset.x > 0f -> Icons.Filled.Favorite to "Like"
-                    removes -> Icons.Outlined.RemoveCircleOutline to "Remove"
-                    else -> Icons.Filled.Close to "Skip"
-                }
-                TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, progress)
+        val hints = edgeHints(offset, thresholds)
+        val armedSideways = hints.armed == SwipeDirection.Left || hints.armed == SwipeDirection.Right
+        if (hints.sideways > 0f) {
+            val (icon, label) = when {
+                offset.x > 0f && removes -> Icons.Filled.Check to "Keep"
+                offset.x > 0f -> Icons.Filled.Favorite to "Like"
+                removes -> Icons.Outlined.RemoveCircleOutline to "Remove"
+                else -> Icons.Filled.Close to "Skip"
             }
-            offset.y < -thresholds.cuePx && targets.save.isEmpty() ->
-                TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, progress)
-            offset.y < -thresholds.cuePx ->
-                CollectTargets(targets.save, pointer, CollectTargetsLayout.EdgeRow(atTop = true), state = saveState)
-            offset.y > thresholds.cuePx ->
-                CollectTargets(targets.hide, pointer, CollectTargetsLayout.EdgeRow(atTop = false), state = hideState)
+            TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, hints.sideways, armedSideways)
+        }
+        if (hints.vertical > 0f) {
+            val pointer = drag.pointer.takeUnless { armedSideways }
+            val fade = Modifier.alpha(hints.vertical)
+            when {
+                offset.y < 0f && targets.save.isEmpty() ->
+                    TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
+                offset.y < 0f ->
+                    CollectTargets(targets.save, pointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState)
+                else ->
+                    CollectTargets(targets.hide, pointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState)
+            }
         }
     }
+}
+
+internal class EdgeHints(val sideways: Float, val vertical: Float, val armed: SwipeDirection?)
+
+internal fun edgeHints(offset: Offset, thresholds: SwipeThresholds): EdgeHints {
+    fun progress(distance: Float) = ((abs(distance) - thresholds.cuePx) / (thresholds.commitPx - thresholds.cuePx)).coerceIn(0f, 1f)
+    val armed = swipeDirection(offset.x, offset.y, 0f, 0f, thresholds.commitPx, thresholds.flingPx)
+    return EdgeHints(progress(offset.x), progress(offset.y), armed)
 }
 
 internal const val TRIAGE_DECK_TAG = "triage-deck"
