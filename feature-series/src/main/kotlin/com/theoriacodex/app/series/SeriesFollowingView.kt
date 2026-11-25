@@ -89,9 +89,9 @@ private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedChec
     if (failedCheck != null && content.followsAny) {
         fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
     }
-    if (content.missingExtensions > 0) {
+    if (content.missingExtensions.isNotEmpty()) {
         fullWidth("following-missing-extensions") {
-            FailureRow(onOpenExtensions, message = missingExtensionsLine(content.missingExtensions), actionLabel = EXTENSIONS_TITLE)
+            FailureRow(onOpenExtensions, message = missingExtensionsLine(content.missingExtensions.size), actionLabel = EXTENSIONS_TITLE)
         }
     }
 }
