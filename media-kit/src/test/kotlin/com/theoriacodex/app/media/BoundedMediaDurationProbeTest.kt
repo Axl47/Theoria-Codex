@@ -37,7 +37,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `metadata past the media data is read directly from its box offset`() = runTest {
+    fun `metadata past the media data is read directly from its box offset (ADR 0104)`() = runTest {
         val media = mp4WithTailDuration(durationMs = 8_000)
         val http = FakeHttpClient(media)
         val result = probe(http).probe(post("tail"))
@@ -53,7 +53,17 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `metadata in the first bytes needs only the small window`() = runTest {
+    fun `metadata behind two boxes is reached one box at a time (ADR 0104)`() = runTest {
+        val media = box("ftyp", byteArrayOf()) + box("mdat", ByteArray(160)) + box("free", ByteArray(160)) +
+            box("moov", box("mvhd", movieHeader(6_000)))
+        val http = FakeHttpClient(media)
+
+        assertEquals(MediaDurationState.Known(6_000L, MediaDurationProvenance.CONTAINER_PROBE), probe(http).probe(post("deep")))
+        assertEquals(listOf(0L, 176L, 344L), http.requests.map { it.range.startInclusive })
+    }
+
+    @Test
+    fun `metadata in the first bytes needs only the small window (ADR 0104)`() = runTest {
         val http = FakeHttpClient(mp4File(durationMs = 5_000) + ByteArray(4_096))
         val probe = BoundedMediaDurationProbe(
             http, clock = { 100L }, byteWindowLimit = 1_024, initialWindowBytes = 64,
@@ -67,7 +77,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `metadata the small window cannot reach falls back to the full window`() = runTest {
+    fun `metadata the small window cannot reach falls back to the full window (ADR 0104)`() = runTest {
         val moov = box("moov", box("free", ByteArray(200)) + box("mvhd", movieHeader(7_000)))
         val http = FakeHttpClient(box("ftyp", byteArrayOf()) + moov + ByteArray(4_096))
         val probe = BoundedMediaDurationProbe(
@@ -105,7 +115,7 @@ class BoundedMediaDurationProbeTest {
     }
 
     @Test
-    fun `gelbooru answering 404 reads as throttling while other sources stay a transport failure`() = runTest {
+    fun `gelbooru answering 404 reads as throttling while other sources stay a transport failure (ADR 0104)`() = runTest {
         val notFound = StatusHttpClient(404)
 
         assertEquals(
@@ -115,6 +125,18 @@ class BoundedMediaDurationProbeTest {
         assertEquals(
             MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
             probe(notFound).probe(post("gone", SourceKey.HITOMI)),
+        )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
+            probe(StatusHttpClient(403)).probe(post("refused", SourceKey.GELBOORU)),
+        )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.TRANSPORT_FAILURE),
+            probe(StatusHttpClient(410)).probe(post("removed", SourceKey.GELBOORU)),
+        )
+        assertEquals(
+            MediaDurationState.RetryableFailure(110L, MediaDurationFailureReason.RATE_LIMITED),
+            probe(FakeHttpClient(mp4WithTailDuration(durationMs = 8_000), laterStatus = 404)).probe(post("busy later", SourceKey.GELBOORU)),
         )
     }
 
@@ -163,6 +185,7 @@ class BoundedMediaDurationProbeTest {
         private val media: ByteArray,
         private val ignoreRange: Boolean = false,
         private val omitContentRange: Boolean = false,
+        private val laterStatus: Int? = null,
     ) : SourceHttpClient {
         val requests = mutableListOf<Request>()
 
@@ -174,6 +197,7 @@ class BoundedMediaDurationProbeTest {
             maxBodyBytes: Int,
         ): SourceByteResponse {
             requests += Request(requireNotNull(range), maxBodyBytes, headers)
+            if (laterStatus != null && requests.size > 1) return SourceByteResponse(laterStatus, "not found".toByteArray(), emptyMap())
             if (ignoreRange) {
                 return SourceByteResponse(
                     statusCode = 200,

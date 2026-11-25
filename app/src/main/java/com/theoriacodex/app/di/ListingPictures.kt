@@ -11,8 +11,9 @@ class ListingPictures(
     scope: CoroutineScope,
     private val mirrors: FileMirrorIndex,
     private val budgetMs: Long = PreviewPictureHasher.LISTING_BUDGET_MS,
+    limited: (url: String) -> Boolean = { false },
 ) {
-    val hasher = PreviewPictureHasher(context, scope)
+    val hasher = PreviewPictureHasher(context, scope, limited)
 
     suspend fun annotate(posts: List<Post>): List<Post> = hasher.annotate(posts, budgetMs).also(mirrors::learn)
 }

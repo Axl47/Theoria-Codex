@@ -1,6 +1,7 @@
 package com.theoriacodex.app.network
 
 import com.sun.net.httpserver.HttpServer
+import com.theoriacodex.sources.http.HostOutageTracker
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
@@ -24,6 +25,8 @@ class AppHttpClientsTest {
             if (exchange.requestURI.path == "/moved.jpg" && authorization != null) {
                 exchange.responseHeaders.add("Location", "/elsewhere.jpg")
                 exchange.sendResponseHeaders(302, -1)
+            } else if (exchange.requestURI.path == "/limited.jpg") {
+                exchange.sendResponseHeaders(429, -1)
             } else {
                 exchange.sendResponseHeaders(if (refuseWithoutKey && authorization == null) 403 else 200, -1)
             }
@@ -41,14 +44,28 @@ class AppHttpClientsTest {
     }
 
     @Test
-    fun `media sends a verified site's browser agent while provider requests keep their own`() {
+    fun `media sends a verified site's browser agent while provider requests keep their own (ADR 0102)`() {
         val clients = AppHttpClients(CookieJar.NO_COOKIES, verifiedUserAgent = { url -> "browser".takeIf { "verified" in url } })
 
-        listOf(clients.images, clients.downloads, clients.video).forEach { get(it, "verified.jpg") }
-        get(clients.images, "other.jpg")
+        listOf(clients.images, clients.downloads, clients.video).forEach { client ->
+            get(client, "verified.jpg")
+            get(client, "other.jpg")
+        }
         get(clients.sources, "verified.json")
 
-        assertEquals(listOf("browser", "browser", "browser", "catalog", "catalog"), agents.toList())
+        assertEquals(listOf("browser", "catalog", "browser", "catalog", "browser", "catalog", "catalog"), agents.toList())
+    }
+
+    @Test
+    fun `a picture host that answers 429 is marked rate limited for background work, and pictures the user opens still load (ADR 0102)`() {
+        val outages = HostOutageTracker()
+        val clients = AppHttpClients(CookieJar.NO_COOKIES, outages = outages)
+
+        assertEquals(200, status(clients.images, "fine.jpg"))
+        assertEquals(false, outages.isRateLimited("http://127.0.0.1/"))
+        assertEquals(429, status(clients.images, "limited.jpg"))
+        assertEquals(true, outages.isRateLimited("http://127.0.0.1/"))
+        assertEquals(200, status(clients.images, "fine.jpg"))
     }
 
     @Test

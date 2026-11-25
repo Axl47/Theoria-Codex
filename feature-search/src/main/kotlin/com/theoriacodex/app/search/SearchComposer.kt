@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.theoriacodex.app.recents.SavedSearchName
 import com.theoriacodex.app.recents.SavedSearchNameDialog
 import androidx.compose.material.icons.filled.BookmarkAdd
 import com.theoriacodex.app.ui.components.NameEntryDialog
@@ -90,7 +91,7 @@ private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
 
 private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
 
-private val SAVED_TAG_MAX_WIDTH = 240.dp
+private val SAVED_CHIP_MAX_WIDTH = 240.dp
 
 @Composable
 internal fun SearchComposer(
@@ -641,7 +642,7 @@ private fun SavedSearchChips(savedSearches: ComposerSavedSearches) {
             FilterChip(
                 selected = savedSearches.isCurrent(entry),
                 onClick = { savedSearches.onOpen(entry) },
-                label = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                label = { SavedSearchName(entry, Modifier.widthIn(max = SAVED_CHIP_MAX_WIDTH)) },
                 leadingIcon = { Icon(Icons.Default.Bookmark, null, Modifier.size(16.dp)) },
             )
         }
@@ -666,7 +667,7 @@ private fun SavedTagChips(savedTags: ComposerSavedTags, draft: Query, targetInde
                     onTap = { tag.tapActions(draft, targetIndex).forEach(onAction) },
                     leadingIcon = Icons.Default.Star,
                     reserveCountSlot = false,
-                    modifier = Modifier.widthIn(max = SAVED_TAG_MAX_WIDTH),
+                    modifier = Modifier.widthIn(max = SAVED_CHIP_MAX_WIDTH),
                     onLongPress = { menuFor = tag },
                     longPressLabel = "Edit ${tag.label}",
                 )

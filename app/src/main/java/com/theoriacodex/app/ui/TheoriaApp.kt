@@ -159,6 +159,7 @@ private fun TheoriaAppShellContent(
                 shell.features.search::fetchSearchTermCounts,
                 shell.routes.postTagSearchActions, savedTags,
                 shell.features.search::tagVideoCount, shell.features.search::fetchTagVideoCounts,
+                shell.features.search.suggestions::sourceTagSuggestions,
             ) {
                 TheoriaNightTheme {
                     ShellOverlaySheets(shell)

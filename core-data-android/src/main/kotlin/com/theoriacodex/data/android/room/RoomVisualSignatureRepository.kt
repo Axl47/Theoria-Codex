@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.PredictedTagCodec
 import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
+import com.theoriacodex.data.repository.PREVIEW_RETRY_MS
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.data.repository.VisualSignatureRepository
@@ -41,8 +42,18 @@ class RoomVisualSignatureRepository(
         }
     }
 
+    override suspend fun failPreviews(postIds: Collection<PostId>) {
+        if (postIds.isEmpty()) return
+        val now = clock()
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                postIds.forEach { postId -> dao.failPreview(postId.source.id, postId.sourcePostId, now) }
+            }
+        }
+    }
+
     override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = withContext(Dispatchers.IO) {
-        dao.libraryPostsWithoutSignature(limit, skip).decoded()
+        dao.libraryPostsWithoutSignature(limit, skip, clock() - PREVIEW_RETRY_MS).decoded()
     }
 
     override suspend fun putVision(entries: List<PictureVision>) {
@@ -60,8 +71,8 @@ class RoomVisualSignatureRepository(
         }
     }
 
-    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
-        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit).decoded() }
+    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> =
+        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit, skip, clock() - PREVIEW_RETRY_MS).decoded() }
 
     override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
         withContext(Dispatchers.IO) { dao.libraryPostsAwaitingFrames(modelId, MAX_FRAME_ATTEMPTS, limit, skip).decoded() }
@@ -94,7 +105,7 @@ class RoomVisualSignatureRepository(
     }
 
     override fun observeVisionProgress(modelId: String): Flow<VisionProgress> =
-        dao.observeVisionProgress(modelId, MAX_FRAME_ATTEMPTS).map { VisionProgress(it.analysed, it.total) }.distinctUntilChanged()
+        dao.observeVisionProgress(modelId, MAX_FRAME_ATTEMPTS).map { VisionProgress(it.tagged, it.awaitingFrames, it.total) }.distinctUntilChanged()
 
     override fun observeLibraryTotal(): Flow<Int> =
         database.invalidationTracker.createFlow(*LIBRARY).map { dao.libraryTotal() }.distinctUntilChanged().flowOn(Dispatchers.IO)

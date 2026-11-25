@@ -38,16 +38,17 @@ class PictureTaggerTest {
     private object EmptySignatures : VisualSignatureRepository {
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
         override suspend fun putHashes(hashes: Map<PostId, Long?>) = Unit
+        override suspend fun failPreviews(postIds: Collection<PostId>) = Unit
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) = Unit
-        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> = emptyList()
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) = Unit
         override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) = Unit
         override fun observeVisionChanges(): Flow<Unit> = flowOf(Unit)
         override suspend fun predictedTags(modelId: String): Map<PostId, List<PredictedTag>> =
             mapOf(PostId(SourceKey.DANBOORU, "stored") to listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL)))
-        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0, 0))
         override fun observeLibraryTotal(): Flow<Int> = flowOf(0)
         override suspend fun clearVision() = Unit
     }

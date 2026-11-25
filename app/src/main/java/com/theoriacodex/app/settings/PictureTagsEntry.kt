@@ -52,7 +52,7 @@ internal fun rememberPictureTagsEntry(pictures: AppPictures, scope: CoroutineSco
 internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgress>, scope: CoroutineScope, onBack: () -> Unit) {
     val context = LocalContext.current
     val state by model.states.collectAsStateWithLifecycle()
-    val progress by library.collectAsStateWithLifecycle(VisionProgress(0, 0))
+    val progress by library.collectAsStateWithLifecycle(VisionProgress(0, 0, 0))
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val size = Formatter.formatShortFileSize(context, model.totalBytes)
     SettingsPageColumn {
@@ -72,7 +72,14 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
                         Button(onClick = model::download) { Text("Try again") }
                     }
                     ModelState.Ready -> {
-                        libraryProgress(progress)?.let { Text(it) }
+                        libraryProgress(progress)?.let { summary ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(summary.count)
+                                summary.pending?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
                         OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete") }
                     }
                 }
@@ -99,10 +106,19 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
     }
 }
 
-private fun libraryProgress(progress: VisionProgress): String? {
+internal data class LibraryProgress(val count: String, val pending: String?)
+
+internal fun libraryProgress(progress: VisionProgress): LibraryProgress? {
     if (progress.total == 0) return null
-    val done = "${progress.analysed} of ${progress.total} Library posts tagged"
-    return if (progress.analysed < progress.total) "$done. The rest are tagged while charging on Wi-Fi, videos once the phone sits unused." else done
+    val count = progress.awaitingFrames
+    val videos = if (count == 1) "1 video finishes from its frames" else "$count videos finish from their frames"
+    val pending = when {
+        progress.tagged < progress.total && count > 0 -> "The rest are tagged while charging on Wi-Fi, and $videos once the phone is also idle"
+        progress.tagged < progress.total -> "The rest are tagged while charging on Wi-Fi"
+        count > 0 -> "$videos while charging and idle on Wi-Fi"
+        else -> null
+    }
+    return LibraryProgress("${progress.tagged} of ${progress.total} Library posts tagged", pending)
 }
 
 private fun percent(bytes: Long, total: Long): Long = if (total <= 0) 0 else bytes * 100 / total

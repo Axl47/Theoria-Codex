@@ -38,7 +38,7 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
         val query = Query(QueryMode.Source(SourceKey.PIXIV), listOf("landscape"), emptyList(), SortMode.NEWEST, null, null)
         val saved = io { container.data.savedSearches.save("Landscapes", RecentSearchEntry(query, "landscapes", 1)) }
         launch()
-        waitFor("the launch new-posts check finishes", timeoutMillis = 15_000) { io { newPosts().attemptedAtEpochMs != null } }
+        waitFor("the launch new-posts check finishes", timeoutMillis = 15_000) { io { saved.id in newPosts().marks } }
         library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))
         waitFor("Searches shows the first page's newest post") { inCollection() && shows(uploads[19].id) }

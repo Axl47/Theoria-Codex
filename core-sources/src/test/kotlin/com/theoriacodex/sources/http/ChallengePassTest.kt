@@ -43,7 +43,7 @@ class ChallengePassTest {
 
     private fun client(page: (Request) -> Request = { it }) = OkHttpClient.Builder()
         .addInterceptor(
-            ChallengePass(browsers, isChallenged = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains, page = page),
+            ChallengePass(browsers, heldOff = { HostOutageTracker.hostKey(it) in challengedHosts }, mayPass = passableHosts::contains, page = page),
         )
         .addInterceptor { chain ->
             val request = chain.request().newBuilder().apply { cookies.cookieHeader("")?.let { header("Cookie", it) } }.build()
@@ -62,6 +62,23 @@ class ChallengePassTest {
         assertEquals(listOf(403, 403, 503), List(3) { call("https://site.test/").use { it.code } })
         assertEquals(emptyList<Request>(), passes)
         assertEquals("valid", cookies.values["cf_clearance"])
+    }
+
+    @Test
+    fun `a site rate limited while its challenge was being passed is not sent again`() {
+        browser = object : ChallengeBrowser {
+            override fun mayWait() = true
+
+            override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
+                challengedHosts += "site.test"
+                cookies.values["cf_clearance"] = "new"
+                return passed()
+            }
+        }
+        answers += { _, request -> challenge(request) }
+
+        assertEquals(403, call("https://site.test/list").use { it.code })
+        assertEquals(1, sent.size)
     }
 
     @Test

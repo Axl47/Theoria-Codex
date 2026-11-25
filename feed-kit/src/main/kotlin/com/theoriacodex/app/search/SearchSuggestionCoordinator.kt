@@ -33,7 +33,6 @@ class SearchSuggestionCoordinator internal constructor(
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
     private val searchCounts: () -> Map<SearchedTagKey, Long> = { emptyMap() },
 ) {
-    private val lastTrendingRefreshAtBySource = java.util.concurrent.ConcurrentHashMap<SourceKey, Long>()
     private val autocompleteRefreshLock = Any()
     private val lastAutocompleteRefreshAtByKey =
         LinkedHashMap<AutocompleteFetchKey, Long>(32, 0.75f, true)
@@ -147,9 +146,7 @@ class SearchSuggestionCoordinator internal constructor(
         input = input,
         selectedScope = request.scope,
         autocomplete = rankUnifiedTagSuggestions(
-            sources.map { source ->
-                source to (fetched[source].orEmpty() + cachedUnifiedSuggestionsForSource(source, request.prefix))
-            },
+            sources.map { source -> source to portableCandidates(source, request.prefix, fetched[source].orEmpty()) },
             request.prefix,
             AUTOCOMPLETE_RESULT_LIMIT,
         ),
@@ -203,6 +200,15 @@ class SearchSuggestionCoordinator internal constructor(
         } }.awaitAll()
         result
     }
+
+    suspend fun sourceTagSuggestions(source: SourceKey, input: String): List<TagSuggestion> {
+        val prefix = input.trim().takeIf(String::isNotEmpty) ?: return emptyList()
+        val candidates = portableCandidates(source, prefix, fetchUnifiedSuggestionsForSource(source, prefix))
+        return rankUnifiedTagSuggestions(listOf(source to candidates), prefix, AUTOCOMPLETE_RESULT_LIMIT)
+    }
+
+    private fun portableCandidates(source: SourceKey, prefix: String, fetched: List<TagSuggestion>): List<TagSuggestion> =
+        fetched + cachedUnifiedSuggestionsForSource(source, prefix)
 
     private fun cachedUnifiedSuggestionsForSource(source: SourceKey, prefix: String): List<TagSuggestion> {
         val adapter = registry.adapterFor(source)
@@ -348,13 +354,13 @@ class SearchSuggestionCoordinator internal constructor(
         force: Boolean,
         cached: List<TagSuggestion>,
     ): Boolean = force || cached.isEmpty() ||
-        lastTrendingRefreshAtBySource[source]?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
+        tagSuggestionStore.trendingRefreshedAt(source)?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
 
     private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
+        tagSuggestionStore.markTrendingRefreshed(source, clock())
         val fetched = runCatchingPreservingCancellation {
             registry.adapterFor(source)?.trendingTags(limit).orEmpty()
         }.getOrDefault(emptyList())
-        lastTrendingRefreshAtBySource[source] = clock()
         if (fetched.isNotEmpty()) tagSuggestionStore.replaceTrending(source, fetched)
         return fetched
     }

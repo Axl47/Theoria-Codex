@@ -13,6 +13,7 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.extensions.ExtensionSourceHost
+import com.theoriacodex.app.series.addExtensionIcons
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.diagnostics.DiagnosticLogStore
@@ -74,7 +75,8 @@ class TheoriaApplication :
         siteCookieBridge::isAllowed,
         siteCookieBridge::mediaAuthorizationFor,
         extensionHost.mediaInterceptor,
-        ChallengePass(challengeBrowsers, { hostOutages.isChallenged(it) }, siteCookieBridge::keepsCookies, Request::siteRoot),
+        ChallengePass(challengeBrowsers, { hostOutages.holdsOffChallengePass(it) }, siteCookieBridge::keepsCookies, Request::siteRoot),
+        hostOutages,
     )
 
     override val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
@@ -155,6 +157,7 @@ class TheoriaApplication :
             .components {
                 add(AnimatedWebPDecoder.Factory())
                 add(ImageDecoderDecoder.Factory())
+                addExtensionIcons()
             }
             .diskCache(diskCache)
             .respectCacheHeaders(false)
