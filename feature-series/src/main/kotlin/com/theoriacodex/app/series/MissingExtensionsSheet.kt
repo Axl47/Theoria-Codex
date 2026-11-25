@@ -38,6 +38,7 @@ import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesKind
@@ -92,6 +93,8 @@ internal fun MissingExtensionsOverlay(
     }
 }
 
+private class TitleActions(val canSwitch: (Series) -> Boolean, val onSwitch: (Series) -> Unit, val onUnfollow: (SeriesId) -> Unit)
+
 @Composable
 private fun MissingExtensionsSheet(
     missing: List<Series>,
@@ -103,10 +106,7 @@ private fun MissingExtensionsSheet(
     onDismiss: () -> Unit,
 ) {
     val state by extensions.state.collectAsStateWithLifecycle()
-    var expanded by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    val title: @Composable (Series, Boolean) -> Unit = { series, nested ->
-        MissingTitleRow(series, nested, canSwitch(series), onSwitch = { onSwitch(series) }, onUnfollow = { onUnfollow(series.id) })
-    }
+    val actions = TitleActions(canSwitch, onSwitch, onUnfollow)
     ExpandedBottomSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             SheetHeader(MISSING_EXTENSIONS_TITLE, closeDescription = "Close", onDismiss = onDismiss) {
@@ -118,30 +118,12 @@ private fun MissingExtensionsSheet(
             if (listing.problems.isNotEmpty()) {
                 FailureRow({ extensions.reloadListing(refresh = true) }, message = unreadReposLine(listing.problems.size))
             }
-            if (groups.offered.isNotEmpty()) {
-                SettingsGroup(IN_YOUR_REPOS) {
-                    groups.offered.forEachIndexed { index, provider ->
-                        if (index > 0) SettingsRowDivider()
-                        val key = "${provider.extension.repo}/${provider.extension.packageName}"
-                        val open = key in expanded
-                        RepoExtensionRow(
-                            provider.extension,
-                            state,
-                            summary = listOfNotNull("${provider.series.size} series", repoExtensionStatus(provider.extension))
-                                .joinToString(" · "),
-                            onInstall = extensions::install,
-                            onClick = { expanded = if (open) expanded - key else expanded + key },
-                            after = { Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
-                        ) { ExtensionIcon(provider.extension.iconUrl) }
-                        if (open) provider.series.forEach { title(it, true) }
-                    }
-                }
-            }
+            if (groups.offered.isNotEmpty()) OfferedGroup(groups.offered, state, extensions::install, actions)
             if (groups.unlisted.isNotEmpty()) {
                 SettingsGroup(if (listing.problems.isEmpty()) NOT_IN_YOUR_REPOS else NOT_FOUND) {
                     groups.unlisted.forEachIndexed { index, series ->
                         if (index > 0) SettingsRowDivider()
-                        title(series, false)
+                        MissingTitleRow(series, nested = false, actions)
                     }
                 }
             }
@@ -150,7 +132,29 @@ private fun MissingExtensionsSheet(
 }
 
 @Composable
-private fun MissingTitleRow(series: Series, nested: Boolean, canSwitch: Boolean, onSwitch: () -> Unit, onUnfollow: () -> Unit) {
+private fun OfferedGroup(providers: List<MissingProvider>, state: ExtensionsState, onInstall: (RepoExtension) -> Unit, actions: TitleActions) {
+    var expanded by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    SettingsGroup(IN_YOUR_REPOS) {
+        providers.forEachIndexed { index, provider ->
+            if (index > 0) SettingsRowDivider()
+            val extension = provider.extension
+            val key = "${extension.repo}/${extension.packageName}"
+            val open = key in expanded
+            RepoExtensionRow(
+                extension,
+                state,
+                summary = listOfNotNull("${provider.series.size} series", repoExtensionStatus(extension)).joinToString(" · "),
+                onInstall = onInstall,
+                onClick = { expanded = if (open) expanded - key else expanded + key },
+                after = { Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
+            ) { ExtensionIcon(extension.iconUrl) }
+            if (open) provider.series.forEach { MissingTitleRow(it, nested = true, actions) }
+        }
+    }
+}
+
+@Composable
+private fun MissingTitleRow(series: Series, nested: Boolean, actions: TitleActions) {
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = if (nested) 64.dp else 12.dp, end = 4.dp),
@@ -160,15 +164,15 @@ private fun MissingTitleRow(series: Series, nested: Boolean, canSwitch: Boolean,
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (canSwitch) {
+                if (actions.canSwitch(series)) {
                     DropdownMenuItem(text = { Text(SWITCH_SOURCE) }, onClick = {
                         menu = false
-                        onSwitch()
+                        actions.onSwitch(series)
                     })
                 }
                 DropdownMenuItem(text = { Text(UNFOLLOW) }, onClick = {
                     menu = false
-                    onUnfollow()
+                    actions.onUnfollow(series.id)
                 })
             }
         }
