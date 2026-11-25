@@ -122,10 +122,19 @@ fun rememberSortedCodexPosts(
     durationStates: MediaDurationStates,
 ): List<Post>? {
     val durations = rememberCodexPostDurations(posts, sort, durationStates, codexId)
-    return posts?.let {
-        rememberComputedOffMain(posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = CodexSortFrames.at("codex-sort:$codexId")) {
-            usage?.let { sortCodexPosts(posts, sort, it, durations) }
-        }
+    return rememberSortedCodexPosts(codexId, posts, sort, usage, durations)
+}
+
+@Composable
+fun rememberSortedCodexPosts(
+    codexId: String,
+    posts: List<Post>?,
+    sort: CodexSortMode,
+    usage: Map<String, CodexUsage>?,
+    durations: Map<PostId, Long>,
+): List<Post>? = posts?.let {
+    rememberComputedOffMain(posts, sort, usage, durations, section = FeedTraceSections.SORT, retainKey = CodexSortFrames.at("codex-sort:$codexId")) {
+        usage?.let { sortCodexPosts(posts, sort, it, durations) }
     }
 }
 

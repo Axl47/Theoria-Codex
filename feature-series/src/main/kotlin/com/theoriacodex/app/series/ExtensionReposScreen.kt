@@ -173,7 +173,7 @@ private fun LazyListScope.browseRowItems(
             )
         }
         else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
-            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall) }
+            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall, withIcon = true) }
         }
     }
 }
@@ -278,9 +278,16 @@ internal fun UpdatesGroup(state: ExtensionsState, viewModel: ExtensionsViewModel
 }
 
 @Composable
-private fun RepoExtensionRow(extension: RepoExtension, state: ExtensionsState, bothKinds: Boolean, onInstall: (RepoExtension) -> Unit) {
+private fun RepoExtensionRow(
+    extension: RepoExtension,
+    state: ExtensionsState,
+    bothKinds: Boolean,
+    onInstall: (RepoExtension) -> Unit,
+    withIcon: Boolean = false,
+) {
     val failure = state.failures[extension.packageName]
     SettingsRow(
+        leading = if (withIcon) ({ ExtensionIcon(extension.iconUrl) }) else null,
         title = extension.name,
         summary = failure ?: repoExtensionSummary(extension, bothKinds),
         summaryIsError = failure != null,

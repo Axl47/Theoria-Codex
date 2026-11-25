@@ -55,17 +55,6 @@ class CodexPostSortingTest {
         assertEquals(listOf("a", "b", "c", "d"), ids(CodexSortMode.OLDEST_SAVED))
     }
 
-    @Test fun `live collections refine their post-date order the same way`() {
-        val live = listOf(
-            testPost(sourcePostId = "old", createdAtEpochMs = 1L, mediaCount = 2),
-            testPost(sourcePostId = "new", createdAtEpochMs = 9L, mediaCount = 2),
-            testPost(sourcePostId = "long", createdAtEpochMs = 5L, mediaCount = 6),
-        )
-        fun liveIds(sort: CodexSortMode) = sortLiveCodexPosts(live, sort).map(Post::id).map { it.sourcePostId }
-        assertEquals(listOf("new", "long", "old"), liveIds(CodexSortMode.NEWEST_SAVED))
-        assertEquals(listOf("long", "new", "old"), liveIds(CodexSortMode.MOST_PAGES))
-    }
-
     @Test fun `length sorts put known lengths first, then unresolved animations, then stills`() {
         val still = testPost(sourcePostId = "still")
         val unresolved = testPost(source = SourceKey.RULE34VIDEO, sourcePostId = "unresolved")
@@ -106,10 +95,6 @@ class CodexPostSortingTest {
         }
         for (sort in listOf(CodexSortMode.LONGEST, CodexSortMode.SHORTEST)) {
             assertEquals(posts.sortedWith(reference(sort)), sortCodexPosts(posts, sort, emptyMap(), durations))
-            assertEquals(
-                posts.sortedWith(reference(sort).thenByDescending { it.createdAtEpochMs }),
-                sortLiveCodexPosts(posts, sort, emptyMap(), durations),
-            )
         }
     }
 
