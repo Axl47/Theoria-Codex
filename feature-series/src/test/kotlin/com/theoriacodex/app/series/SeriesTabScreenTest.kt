@@ -130,6 +130,7 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("2 series").assertIsDisplayed()
         compose.onNodeWithText(unreadReposLine(1)).assertIsDisplayed()
+        compose.onNodeWithText(NOT_FOUND).assertIsDisplayed()
         repos.problems = emptyMap()
         compose.onNodeWithText("Retry").performClick()
         compose.waitForIdle()

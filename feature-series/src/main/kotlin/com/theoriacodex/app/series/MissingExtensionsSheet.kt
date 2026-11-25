@@ -61,8 +61,10 @@ internal fun MissingExtensionsOverlay(
     val resolved = content.sources != null && content.following != null && missing.isEmpty()
     LaunchedEffect(resolved) { if (resolved) onDismiss() }
     val extensions = viewModel(key = MISSING_EXTENSIONS_KEY) { actions.extensions() }
+    var resumed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(extensions) {
-        if (extensions.state.value.listing != null) extensions.reloadListing()
+        if (resumed || extensions.state.value.listing != null) extensions.reloadListing()
+        resumed = true
         onPauseOrDispose {}
     }
     var switching by remember { mutableStateOf<Series?>(null) }
@@ -136,7 +138,7 @@ private fun MissingExtensionsSheet(
                 }
             }
             if (groups.unlisted.isNotEmpty()) {
-                SettingsGroup(NOT_IN_YOUR_REPOS) {
+                SettingsGroup(if (listing.problems.isEmpty()) NOT_IN_YOUR_REPOS else NOT_FOUND) {
                     groups.unlisted.forEachIndexed { index, series ->
                         if (index > 0) SettingsRowDivider()
                         title(series, false)
@@ -179,6 +181,7 @@ internal const val MISSING_EXTENSIONS_TITLE = "Missing extensions"
 internal const val IN_YOUR_REPOS = "In your repos"
 internal const val NOT_IN_YOUR_REPOS = "Not in your repos"
 internal const val REPOS = "Repos"
+internal const val NOT_FOUND = "Not found"
 internal const val UNFOLLOW = "Unfollow"
 internal const val SHOW_MISSING = "Show"
 private const val MISSING_EXTENSIONS_KEY = "missing-extensions"
