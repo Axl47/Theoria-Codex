@@ -48,6 +48,19 @@ class AppJobTest {
     }
 
     @Test
+    fun `both Library picture passes wait for a charger, a battery that is not low and an unmetered network, and the frame pass also for an idle device (ADR 0094)`() = runTest {
+        LibraryJob.PICTURES.schedule(context)
+        LibraryJob.FRAMES.schedule(context)
+
+        val pictures = scheduler.getPendingJob(AppJob.LIBRARY_PICTURES.id)!!
+        val frames = scheduler.getPendingJob(AppJob.LIBRARY_FRAMES.id)!!
+        for (job in listOf(pictures, frames)) {
+            assertEquals(listOf(true, true, JobInfo.NETWORK_TYPE_UNMETERED), listOf(job.isRequireCharging, job.isRequireBatteryNotLow, job.networkType))
+        }
+        assertEquals(false to true, pictures.isRequireDeviceIdle to frames.isRequireDeviceIdle)
+    }
+
+    @Test
     fun `user downloads the system refuses to start as user-initiated still download in an ordinary job`() = runTest {
         val refusing = RefusingUserInitiated(scheduler)
         val settings = CacheSettings(downloadsOverMetered = true, downloadsOverRoaming = false)

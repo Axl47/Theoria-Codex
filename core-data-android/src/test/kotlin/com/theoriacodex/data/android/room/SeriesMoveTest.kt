@@ -118,12 +118,18 @@ class SeriesMoveTest {
     }
 
     @Test
-    fun `progress on chapters the old source no longer lists also refuses a series without chapters (ADR 0028)`() = runTest {
+    fun `progress on chapters the old source no longer lists also refuses a series without chapters (ADR 0015, 0028)`() = runTest {
         readOld()
         repository.store(old, listOf(SeriesEntry("/o4", "Chapter 4", 4f)))
 
         assertTrue(runCatching { repository.switchSource(old.id, source, new) }.exceptionOrNull() is NoChaptersToMoveToException)
         assertTrue(repository.series(old.id)!!.followed)
+
+        val partway = Series(SeriesId(old.id.source, "/partway"), "Series")
+        repository.store(partway, listOf(SeriesEntry("/p1", "Chapter 1", 1f)))
+        repository.recordProgress(partway.id, "/p1", 2, 10)
+        repository.store(partway, listOf(SeriesEntry("/p2", "Chapter 2", 2f)))
+        assertTrue(runCatching { repository.switchSource(partway.id, source, new) }.exceptionOrNull() is NoChaptersToMoveToException)
     }
 
     @Test

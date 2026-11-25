@@ -78,7 +78,7 @@ class RoomProfileBackupStoreTest {
         assertTrue(backups.snapshot(false).searches.isEmpty())
     }
 
-    @Test fun `series restore with their progress and add to a stored series without taking from it`() = runTest {
+    @Test fun `series restore with their progress and add to a stored series without taking from it (ADR 0014)`() = runTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
         series.store(
@@ -87,6 +87,7 @@ class RoomProfileBackupStoreTest {
         )
         series.setFollowed(id, true)
         series.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        series.setDownloadNewChapters(id, true)
         series.recordProgress(id, "/chapter/1", position = 18, length = 18)
         series.recordProgress(id, "/chapter/2", position = 3, length = 20)
         series.store(Series(SeriesId(id.source, "/title/2"), "Glanced at"))
@@ -104,22 +105,72 @@ class RoomProfileBackupStoreTest {
 
         restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series SET memo = NULL")
         restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET memo = '{\"id\":\"device\"}' WHERE address = '/chapter/1'")
+        restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_read_at_epoch_ms = 10 WHERE address = '/chapter/1'")
         restored.setFollowed(id, false)
+        restored.setDownloadNewChapters(id, false)
         restored.setReadingMode(id, GalleryReadingMode.RIGHT_TO_LEFT)
         restored.recordProgress(id, "/chapter/2", position = 20, length = 20)
         RoomProfileBackupStore(restoredDatabase).merge(snapshot)
         val kept = restored.series(id)!!
-        assertTrue(kept.followed)
+        assertTrue(kept.followed && kept.downloadNewChapters)
         assertEquals(30L, kept.followedAtEpochMs)
+        assertEquals(30L, restored.entries(id).single { it.entry.address == "/chapter/1" }.lastReadAtEpochMs)
         assertEquals(restoredAt, restored.entries(id).single { it.entry.address == "/chapter/2" }.lastReadAtEpochMs)
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
         assertEquals("""{"slug":"t1"}""", kept.series.memo)
         assertEquals("""{"id":"device"}""", restored.entries(id).single { it.entry.address == "/chapter/1" }.entry.memo)
+        restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series SET memo = '{\"slug\":\"device\"}'")
+        RoomProfileBackupStore(restoredDatabase).merge(snapshot)
+        assertEquals("""{"slug":"device"}""", restored.series(id)!!.series.memo)
         restoredDatabase.close()
     }
 
-    @Test fun `an unfollowed series with chapters marked read from its page, never opened, makes the round trip`() = runTest {
+    @Test fun `a series kept only for its reading mode or an opened chapter is in the backup (ADR 0014)`() = runTest {
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        fun id(address: String) = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), address)
+        val (mode, opened, glanced) = listOf("/mode", "/opened", "/glanced").map(::id)
+        for (each in listOf(mode, opened, glanced)) series.store(Series(each, each.address), listOf(SeriesEntry("/chapter/1", "Ch.1")))
+        series.setReadingMode(mode, GalleryReadingMode.VERTICAL)
+        series.recordProgress(opened, "/chapter/1", position = 0, length = null)
+
+        assertEquals(listOf(mode, opened), backups.snapshot(includeRecents = false).series.map { it.series.series.id })
+    }
+
+    @Test fun `a snapshot holding a like, a Codex item or an automatic tag from an unknown source fails instead of dropping it (ADR 0016)`() = runTest {
+        val db = database.openHelper.writableDatabase
+        db.execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+        db.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('retired_source','1','{}')")
+        val rows = mapOf(
+            "liked_posts" to "INSERT INTO liked_posts VALUES('profile-main','retired_source','1',1,'[]')",
+            "codex_items" to "INSERT INTO codex_items VALUES('saved','retired_source','1',1)",
+            "codex_automatic_tags" to "INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display,group_index) VALUES('saved','retired_source','sky','sky',0)",
+        )
+        for ((table, insert) in rows) {
+            db.execSQL(insert)
+            val failure = runCatching { backups.snapshot(true) }.exceptionOrNull()
+            db.execSQL("DELETE FROM $table WHERE source = 'retired_source'")
+
+            assertTrue("$table: $failure", failure is IllegalArgumentException)
+        }
+    }
+
+    @Test fun `restoring a backup never unfollows a series or turns off its new-chapter downloads (ADR 0014)`() = runTest {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val series = RoomSeriesRepository(database, clock = { 30L })
+        series.store(Series(id, "Title"), listOf(SeriesEntry("/chapter/1", "Ch.1")))
+        series.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        val snapshot = backups.snapshot(includeRecents = false)
+        series.setFollowed(id, true)
+        series.setDownloadNewChapters(id, true)
+
+        backups.merge(snapshot)
+
+        val kept = series.series(id)!!
+        assertEquals(Triple(true, true, 30L), Triple(kept.followed, kept.downloadNewChapters, kept.followedAtEpochMs))
+    }
+
+    @Test fun `an unfollowed series with chapters marked read from its page, never opened, makes the round trip (ADR 0014)`() = runTest {
         val series = RoomSeriesRepository(database, clock = { 30L })
         fun id(address: String) = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), address)
         val chapters = listOf(SeriesEntry("/chapter/2", "Ch.2"), SeriesEntry("/chapter/1", "Ch.1"))
@@ -134,6 +185,7 @@ class RoomProfileBackupStoreTest {
         series.recordProgress(partway, "/chapter/1", position = 5, length = 18)
         series.setEntriesRead(partway, listOf("/chapter/1"), false)
         for (each in listOf(single, partway)) assertNull(series.series(each)?.lastOpenedEntry)
+        series.storeEntries(partway, listOf(SeriesEntry("/chapter/1", "Ch.1")))
 
         val snapshot = backups.snapshot(includeRecents = false)
         assertEquals(listOf(bulk, dropped, partway, single), snapshot.series.map { it.series.series.id })
@@ -149,10 +201,13 @@ class RoomProfileBackupStoreTest {
             database.seriesDao().allEntries(dropped.source.id, dropped.address).map { it.address to it.read }.toSet(),
         )
         assertTrue(dao.allEntries(dropped.source.id, dropped.address).single { it.address == "/chapter/1" }.read)
+        fun SeriesDao.progress(id: SeriesId) = allEntries(id.source.id, id.address).map { listOf(it.address, it.read, it.lastPage, it.sourceOrder) }.toSet()
+        assertEquals(database.seriesDao().progress(partway), dao.progress(partway))
+        assertTrue(dao.progress(partway).contains(listOf("/chapter/2", false, 3L, NOT_LISTED)))
         restoredDatabase.close()
     }
 
-    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks (ADR 0025)`() = runTest {
+    @Test fun `a restore onto a series the device already opened merges progress and lists nothing the device lacks (ADR 0014, 0025)`() = runTest {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
         val series = RoomSeriesRepository(database, clock = { 30L })
         val title = Series(id, "Title", language = "en")
@@ -220,7 +275,7 @@ class RoomProfileBackupStoreTest {
         assertEquals(listOf(chapter2), device.storeEntries(id, listOf(chapter2, chapter1)))
     }
 
-    @Test fun `replaying an import keeps existing media and history while repairing Likes membership`() = runTest {
+    @Test fun `replaying an import keeps existing media and history while repairing Likes membership (ADR 0014)`() = runTest {
         val post = post("42")
         content.ensureCodex("old", "Existing")
         content.addItem("old", post)
@@ -246,7 +301,7 @@ class RoomProfileBackupStoreTest {
         assertEquals(20L, recents.observeSearches().first().single().searchedAtEpochMs)
     }
 
-    @Test fun `deleting a Codex for Undo restores its place rules and otherwise orphaned posts`() = runTest {
+    @Test fun `deleting a Codex for Undo restores its place rules and otherwise orphaned posts (ADR 0016)`() = runTest {
         content.ensureCodex("a", "First")
         content.ensureCodex("b", "Second")
         content.setAutomaticTag("a", CodexAutomaticTag(SourceKey.PIXIV, "cat"), true)

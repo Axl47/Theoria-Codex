@@ -37,7 +37,7 @@ class RoomReadIsolationTest {
         context.deleteDatabase(DATABASE_NAME)
     }
 
-    @Test fun `single reads complete while an unrelated write transaction is open`(): Unit = runBlocking {
+    @Test fun `single reads complete while an unrelated write transaction is open (ADR 0013)`(): Unit = runBlocking {
         val likes = RoomCodexLikesRepository(database)
         val durations = RoomMediaDurationRepository(database)
         val post = post("1")
