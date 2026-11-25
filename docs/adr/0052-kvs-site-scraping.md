@@ -19,3 +19,9 @@ Each new KVS site must declare which latest source works. A site whose RSS is fi
 
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/KvsVideoSourceAdapter.kt`: `KvsLatest`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/Rule34KvsParser.kt`: `kvsThumbnailUrl`
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34GenSourceAdapterTest.kt`: `no tags reads the listing page and finds thumbnails behind lazy-load placeholders (ADR 0052)`, `a card's address comes from data-original, then data-rd-src, then src, skipping inline placeholders (ADR 0052)`
+- `core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/KvsVideoSourceAdapter.kt`: `enum class KvsVideoSite(val source: SourceKey, val baseUrl: String, val cardSelector: String, val imgPreviewFallback: Boolean, val paging: KvsPaging, val latest: KvsLatest)`
+- Left to prose: which latest source works for a new KVS site is checked live. The `KvsVideoSite` pin stops `latest` gaining a default, but it covers the whole constructor, so it also fires when an unrelated field is added; telling which parameter is optional needs kotlin-reflect, which the module does not have.

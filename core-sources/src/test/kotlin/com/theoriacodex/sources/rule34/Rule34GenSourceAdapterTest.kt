@@ -29,7 +29,7 @@ class Rule34GenSourceAdapterTest {
     }
 
     @Test
-    fun `no tags reads the listing page and finds thumbnails behind lazy-load placeholders`() = runTest {
+    fun `no tags reads the listing page and finds thumbnails behind lazy-load placeholders (ADR 0052)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34GEN_LAZY_LISTING_HTML)
         }
@@ -40,6 +40,26 @@ class Rule34GenSourceAdapterTest {
         assertEquals("https://rule34gen.com/latest-updates/", httpClient.lastGet?.url)
         assertEquals(
             listOf("https://rule34gen.com/thumbs/eager.jpg", "https://rule34gen.com/thumbs/lazy.jpg"),
+            page.items.map { it.preview.url },
+        )
+    }
+
+    @Test
+    fun `a card's address comes from data-original, then data-rd-src, then src, skipping inline placeholders (ADR 0052)`() = runTest {
+        val thumbs = "https://rule34gen.com/thumbs"
+        fun card(id: Int, attributes: String) =
+            """<div class="item thumb"><a class="th" href="https://rule34gen.com/video/$id/v/"><img class="thumb" $attributes /></a></div>"""
+        val listing = listOf(
+            card(1, """data-original="$thumbs/o.jpg" data-rd-src="$thumbs/rd.jpg" src="$thumbs/src.jpg""""),
+            card(2, """data-rd-src="$thumbs/rd.jpg" src="$thumbs/src.jpg""""),
+            card(3, """data-original="data:image/gif;base64,R0lGOD" src="$thumbs/src.jpg""""),
+        ).joinToString("", "<html><body>", "</body></html>")
+        val httpClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = listing) }
+
+        val page = KvsVideoSourceAdapter(KvsVideoSite.RULE34GEN, httpClient = httpClient).search(sampleQuery(tags = emptyList()), pageToken = null)
+
+        assertEquals(
+            listOf("$thumbs/o.jpg", "$thumbs/rd.jpg", "$thumbs/src.jpg"),
             page.items.map { it.preview.url },
         )
     }
