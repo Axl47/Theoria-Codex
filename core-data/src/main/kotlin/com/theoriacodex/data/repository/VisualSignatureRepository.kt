@@ -6,7 +6,7 @@ import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.Flow
 
 @RequiresOptIn(
-    message = "Only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)",
+    message = "Writes vision results; the caller must hold the lock that orders writes against a model delete (docs/adr/0097-picture-tagger-session-and-commits.md)",
     level = RequiresOptIn.Level.ERROR,
 )
 @Retention(AnnotationRetention.BINARY)
