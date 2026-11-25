@@ -20,7 +20,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.data.repository.EntryProgressRestore
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.performTouchInput
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.SeriesUpdate
+import kotlinx.coroutines.channels.Channel
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -73,6 +78,39 @@ class MissingExtensionsBackDeviceTest {
         assertEquals(listOf("1 series needs its extension"), heard())
         val shown = nodes(automation.rootInActiveWindow)
         assertEquals(0, shown.count { it.text?.contains("needs its extension") == true })
+    }
+
+    @Test
+    fun pullingTheFollowingGridNamesTheCheckThenCountsSeriesAsTheyFinish() {
+        val step = Channel<Unit>(Channel.UNLIMITED)
+        val found = SeriesUpdate(Followed.first, listOf(SeriesEntry("/c/1", "1"), SeriesEntry("/c/2", "2"), SeriesEntry("/c/3", "3")))
+        val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { onProgress ->
+            (0..2).forEach { done ->
+                onProgress(CheckProgress(done, 2))
+                step.receive()
+            }
+            FollowedCheck(listOf(found), checked = 2, failed = 0)
+        }
+        compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(TITLE).fetchSemanticsNodes().isNotEmpty() }
+
+        val card = compose.onNodeWithText(TITLE)
+        card.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, height * 0.15f))
+            moveBy(Offset(0f, height * 0.15f))
+        }
+        compose.onNodeWithText("Check for new chapters").assertExists()
+        card.performTouchInput {
+            repeat(PULL_STEPS) { moveBy(Offset(0f, height * 0.3f)) }
+            up()
+        }
+
+        listOf("0 of 2 series checked", "1 of 2 series checked", "2 of 2 series checked", "3 new chapters").forEach { shown ->
+            compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(shown).fetchSemanticsNodes().isNotEmpty() }
+            step.trySend(Unit)
+        }
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText("3 new chapters").fetchSemanticsNodes().isEmpty() }
     }
 
     private fun nodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> =
@@ -134,6 +172,7 @@ private const val MISSING = "Missing extensions"
 private const val TITLE = "Kaiju"
 private const val SOURCE_NAME = "Ink Harbor"
 private const val TIMEOUT_MS = 10_000L
+private const val PULL_STEPS = 4
 private const val GESTURE_PROGRESS = 0.5f
 
 private object Loaded : SeriesSource {
@@ -150,7 +189,8 @@ private object Loaded : SeriesSource {
 }
 
 private object Followed : SeriesRepository {
-    private val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(2), "/kaiju"), TITLE), unreadCount = 0)))
+    val first = Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(2), "/kaiju"), TITLE)
+    private val followed = MutableStateFlow(listOf(FollowedSeries(first, unreadCount = 0)))
     override fun observeFollowed(): Flow<List<FollowedSeries>> = followed
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()
     override fun observeEntries(id: SeriesId): Flow<List<StoredSeriesEntry>> = emptyFlow()
