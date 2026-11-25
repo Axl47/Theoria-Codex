@@ -147,6 +147,7 @@ private fun ViewerLoadedScreen(
     LaunchedEffect(uiState.controls.slideshow) { if (uiState.controls.slideshow) screen.verticalGalleries.values.forEach { it.resetZoom() } }
     val selection = rememberViewerSelection(uiState, navigation.pages[navigation.currentIndex], config.pixivUgoiraClient != null)
     WarmViewerPageThumbnails(selection.post.id, selection.overviewItems, selection.mediaIndex)
+    ViewerTrailReplay(trail, selection.post, screen.trailForks)
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)
     val holdScrub = remember { ViewerHoldScrub() }
     val touchExplorationEnabled = rememberViewerTouchExploration()
@@ -160,7 +161,7 @@ private fun ViewerLoadedScreen(
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,
-        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
+        loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged.takeIf { trail.replay == null }, config,
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)

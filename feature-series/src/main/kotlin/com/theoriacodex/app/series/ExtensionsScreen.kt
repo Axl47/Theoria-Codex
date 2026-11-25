@@ -105,6 +105,7 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
         summary = extensionSummary(extension),
         summaryIsError = extension.problem != null,
         onClick = if (extension.hasPage) ({ onOpen(extension.id) }) else null,
+        leading = { ExtensionIcon(extension.icon) },
         trailing = {
             val enabled = extension.signer != null
             Box(

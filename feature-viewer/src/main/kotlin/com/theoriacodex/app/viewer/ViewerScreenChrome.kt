@@ -95,8 +95,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     LaunchedEffect(selection.post.id) { screen.trailForks.follow(selection.post.id) }
     val swipingToAnotherPost = swipe.loadTarget?.let { it.postIndex != navigation.currentIndex } == true
     LaunchedEffect(swipingToAnotherPost) { if (swipingToAnotherPost) screen.trailForks.leave() }
-    val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
-    val fadesWhileScrubbing = Modifier.graphicsLayer { alpha = scrubFade }
+    val fadesWhileScrubbing = rememberViewerScrubFade(screen)
     val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture, config.orientationLock, host.onOrientationLockChanged)
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
@@ -387,13 +386,13 @@ private fun BoxScope.ViewerFooterButtons(
     rotationOffer: ViewerRotationOffer?,
     onAction: (ViewerAction) -> Unit,
 ) {
-    val rules = ViewerFooterRules(frame, screen.timelineInteractionActive)
+    val rules = ViewerFooterRules(frame, screen)
     if (rules.inStripRow) ViewerStripRowRotation(frame, rotationOffer, rules) else ViewerFloatingRotation(frame, rotationOffer, rules)
     ViewerSlideshowControl(frame, rules.chromeVisible, suppressed = rules.slideshowSuppressed, rules.inStripRow, onAction)
 }
 
-private class ViewerFooterRules(frame: ViewerFrame, timelineInteractionActive: Boolean) {
-    private val bottomOwned = frame.mediaOverviewVisible || timelineInteractionActive
+private class ViewerFooterRules(frame: ViewerFrame, screen: ViewerScreenState) {
+    private val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive || screen.chromeShownForScrub
     val inStripRow = frame.isLandscape && !frame.watching
     val chromeVisible = frame.chromeVisible && (!inStripRow || frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS)
     val bottomRow = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
@@ -424,3 +423,9 @@ internal const val VIEWER_LOCK_OVERLAY_TAG = "viewer-lock-overlay"
 
 private fun Modifier.viewerStripRowPadding(landscape: Boolean): Modifier =
     if (landscape) padding(start = VIEWER_STRIP_ROW_BUTTON_SLOT, end = VIEWER_STRIP_ROW_BUTTON_SLOT + VIEWER_STRIP_ROW_BUTTON_WIDTH) else this
+
+@Composable
+internal fun rememberViewerScrubFade(screen: ViewerScreenState): Modifier {
+    val scrubFade by animateFloatAsState(if (screen.timelineInteractionActive) 0f else 1f, tween(TheoriaMotion.SHORT_MS), label = "Viewer scrub fade")
+    return Modifier.graphicsLayer { alpha = if (screen.chromeShownForScrub) 0f else scrubFade }
+}
