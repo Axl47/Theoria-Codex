@@ -22,6 +22,7 @@ import com.theoriacodex.app.ui.motion.TheoriaMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @Stable
 internal class TriageDrag {
@@ -30,22 +31,18 @@ internal class TriageDrag {
     var offset by mutableStateOf(Offset.Zero)
         private set
 
-    var pointer by mutableStateOf<Offset?>(null)
+    var rowPointer by mutableStateOf<Offset?>(null)
         private set
 
     val moving by derivedStateOf { offset != Offset.Zero }
 
-    fun start(at: Offset) {
-        pointer = at
-    }
-
     fun dragBy(delta: Offset, to: Offset) {
         offset += delta
-        pointer = to
+        if (abs(offset.y) > abs(offset.x)) rowPointer = to
     }
 
     fun lift() {
-        pointer = null
+        rowPointer = null
     }
 
     fun releaseIn(scope: CoroutineScope, release: suspend TriageDrag.() -> Unit) {
@@ -97,10 +94,7 @@ internal fun Modifier.triageSwipe(
 ): Modifier = pointerInput(drag) {
     val tracker = VelocityTracker()
     detectDragGestures(
-        onDragStart = { start ->
-            tracker.resetTracking()
-            drag.start(windowOrigin() + start)
-        },
+        onDragStart = { tracker.resetTracking() },
         onDrag = { change, amount ->
             tracker.addPosition(change.uptimeMillis, change.position)
             drag.dragBy(amount, windowOrigin() + change.position)

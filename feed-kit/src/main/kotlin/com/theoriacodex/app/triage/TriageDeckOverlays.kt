@@ -29,11 +29,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun BoxScope.TriageEdgeCue(icon: ImageVector, label: String, alignment: Alignment, progress: Float) {
+internal fun BoxScope.TriageEdgeCue(icon: ImageVector, label: String, alignment: Alignment, progress: Float, armed: Boolean) {
     if (progress <= 0f) return
+    val colors = MaterialTheme.colorScheme
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (armed) colors.primaryContainer else colors.surfaceContainerHigh,
+        contentColor = if (armed) colors.onPrimaryContainer else colors.onSurface,
         shadowElevation = 6.dp,
         modifier = Modifier
             .align(alignment)
