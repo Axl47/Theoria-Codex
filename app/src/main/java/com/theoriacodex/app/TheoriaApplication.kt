@@ -13,6 +13,7 @@ import com.theoriacodex.app.customsites.SiteCookieBridge
 import com.theoriacodex.app.customsites.SiteCookieBridgeOwner
 import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.extensions.ExtensionSourceHost
+import com.theoriacodex.app.series.addExtensionIcons
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.diagnostics.DiagnosticLogStore
@@ -155,6 +156,7 @@ class TheoriaApplication :
             .components {
                 add(AnimatedWebPDecoder.Factory())
                 add(ImageDecoderDecoder.Factory())
+                addExtensionIcons()
             }
             .diskCache(diskCache)
             .respectCacheHeaders(false)

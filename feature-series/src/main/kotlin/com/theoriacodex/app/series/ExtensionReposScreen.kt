@@ -47,6 +47,8 @@ import com.theoriacodex.app.ui.components.SettingsRow
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.components.focusOnOpen
+import com.theoriacodex.domain.series.ApkIcon
+import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.languageName
@@ -173,7 +175,7 @@ private fun LazyListScope.browseRowItems(
             )
         }
         else -> items(rows, key = { "${it.repo}/${it.packageName}" }) { extension ->
-            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall, withIcon = true) }
+            Card(Modifier.fillMaxWidth()) { RepoExtensionRow(extension, state, showKind, onInstall) { ExtensionIcon(extension.iconUrl) } }
         }
     }
 }
@@ -269,10 +271,11 @@ internal fun UpdatesGroup(state: ExtensionsState, viewModel: ExtensionsViewModel
     val updates = state.updates
     if (updates.isEmpty()) return
     val action: (@Composable () -> Unit)? = if (updates.size > 1) ({ TextButton(onClick = viewModel::updateAll) { Text("Update all") } }) else null
+    val installedIcons = state.extensions.orEmpty().mapNotNull(InstalledExtension::icon).associateBy(ApkIcon::packageName)
     SettingsGroup("Updates", action) {
         updates.forEachIndexed { index, extension ->
             if (index > 0) SettingsRowDivider()
-            RepoExtensionRow(extension, state, bothKinds = false, onInstall = viewModel::install)
+            RepoExtensionRow(extension, state, bothKinds = false, onInstall = viewModel::install) { ExtensionIcon(installedIcons[extension.packageName]) }
         }
     }
 }
@@ -283,11 +286,11 @@ private fun RepoExtensionRow(
     state: ExtensionsState,
     bothKinds: Boolean,
     onInstall: (RepoExtension) -> Unit,
-    withIcon: Boolean = false,
+    icon: @Composable () -> Unit,
 ) {
     val failure = state.failures[extension.packageName]
     SettingsRow(
-        leading = if (withIcon) ({ ExtensionIcon(extension.iconUrl) }) else null,
+        leading = icon,
         title = extension.name,
         summary = failure ?: repoExtensionSummary(extension, bothKinds),
         summaryIsError = failure != null,

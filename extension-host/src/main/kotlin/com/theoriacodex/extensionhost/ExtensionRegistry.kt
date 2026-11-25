@@ -3,6 +3,7 @@ package com.theoriacodex.extensionhost
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ApkIcon
 import com.theoriacodex.domain.series.ExtensionChoiceStore
 import com.theoriacodex.domain.series.ExtensionChoices
 import com.theoriacodex.domain.series.ExtensionLanguage
@@ -217,6 +218,7 @@ class ExtensionRegistry(
                 problem = extension.unsupported ?: NOT_SIGNED.takeIf { extension.signer == null },
                 kind = extension.kind.seriesKind,
                 removable = extension.origin == ExtensionOrigin.PRIVATE,
+                icon = ApkIcon(extension.packageName, extension.versionCode, extension.apk.path),
             )
             if (!trusted || extension.unsupported != null) return@map listing
             val code = loaded[extension] ?: if (everything || extension.identity in wanted) {
