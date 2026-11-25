@@ -34,14 +34,18 @@ sealed interface PictureHashResult {
 
 class PreviewPictureHasher(
     private val scope: CoroutineScope,
-    private val load: suspend (PostMediaCandidate) -> PictureHashResult,
+    private val limited: (url: String) -> Boolean = { false },
+    concurrentLoads: Int = CONCURRENT_LOADS,
+    private val load: suspend (PostMediaCandidate, cachedOnly: Boolean) -> PictureHashResult,
 ) {
+    private val permits = Semaphore(concurrentLoads)
     private val known = object : LinkedHashMap<String, PictureHashResult>(REMEMBERED, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PictureHashResult>) = size > REMEMBERED
     }
     private val flights = ConcurrentHashMap<String, Deferred<PictureHashResult>>()
 
-    constructor(context: Context, scope: CoroutineScope) : this(scope, loadWithImageLoader(context.applicationContext))
+    constructor(context: Context, scope: CoroutineScope, limited: (url: String) -> Boolean) :
+        this(scope, limited, load = loadWithImageLoader(context.applicationContext))
 
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun annotate(posts: List<Post>, budgetMs: Long = LISTING_BUDGET_MS): List<Post> {
@@ -70,7 +74,9 @@ class PreviewPictureHasher(
         return flights.computeIfAbsent(key) {
             scope.async(start = CoroutineStart.LAZY) {
                 try {
-                    val result = runCatchingPreservingCancellation { load(candidate) }.getOrDefault(PictureHashResult.Unavailable)
+                    val result = runCatchingPreservingCancellation {
+                        permits.withPermit { load(candidate, limited(candidate.url)) }
+                    }.getOrDefault(PictureHashResult.Unavailable)
                     if (result != PictureHashResult.Unavailable) synchronized(known) { known[key] = result }
                     result
                 } finally {
@@ -87,15 +93,10 @@ class PreviewPictureHasher(
         internal const val DECODE_PX = 96
         private const val CONCURRENT_LOADS = 16
 
-        private fun loadWithImageLoader(context: Context): suspend (PostMediaCandidate) -> PictureHashResult {
-            val permits = Semaphore(CONCURRENT_LOADS)
-            return { candidate ->
-                permits.withPermit {
-                    val bitmap = loadPreviewStill(context, candidate, DECODE_PX)
-                    if (bitmap == null) PictureHashResult.Unavailable else {
-                        pictureHashOf(bitmap)?.let(PictureHashResult::Hashed) ?: PictureHashResult.Unhashable
-                    }
-                }
+        private fun loadWithImageLoader(context: Context): suspend (PostMediaCandidate, Boolean) -> PictureHashResult = { candidate, cachedOnly ->
+            val bitmap = loadStill(context, candidate.url, candidate.source, DECODE_PX, cachedOnly)
+            if (bitmap == null) PictureHashResult.Unavailable else {
+                pictureHashOf(bitmap)?.let(PictureHashResult::Hashed) ?: PictureHashResult.Unhashable
             }
         }
     }

@@ -68,6 +68,16 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
     suspend fun seenPostIds(creator: CreatorProfile): Set<String>? =
         observe().first().firstOrNull { it.creator.followKey() == creator.followKey() }?.seenPostIds?.toSet()
 
+    suspend fun claimCheck(membershipId: String, at: Long, due: (FollowedCreator) -> Boolean): FollowedCreator? {
+        var claimed: FollowedCreator? = null
+        settings.updateSettings { current ->
+            claimed = current.followedCreators.firstOrNull { it.membershipId == membershipId && due(it) }
+            if (claimed == null) current
+            else current.copy(followedCreators = current.followedCreators.map { if (it.membershipId == membershipId) it.copy(attemptedAtEpochMs = at) else it })
+        }
+        return claimed
+    }
+
     suspend fun recordChecks(results: Map<String, List<Post>?>, at: Long) {
         if (results.isEmpty()) return
         settings.updateSettings { current -> current.copy(followedCreators = current.followedCreators.map { follow ->

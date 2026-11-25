@@ -58,19 +58,19 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
                 cookies.hasNewClearance(url, refused) -> true
                 failed[host]?.let { it - asked > 0 } == true -> false
                 !stillNeeded() || isShown(challenged.url.host) -> false
-                else -> passSilently(page, url, refused, call).also { if (!it) failed[host] = System.nanoTime() }
+                else -> passSilently(page, url, refused, call, stillNeeded).also { if (!it) failed[host] = System.nanoTime() }
             }
         } finally {
             lock.unlock()
         }
     }
 
-    private fun passSilently(page: Request, url: String, refused: String?, call: Call): Boolean {
+    private fun passSilently(page: Request, url: String, refused: String?, call: Call, stillNeeded: () -> Boolean): Boolean {
         while (!browsers.tryAcquire(POLL_MS, TimeUnit.MILLISECONDS)) call.throwIfCanceled()
         try {
             call.throwIfCanceled()
             if (cookies.hasNewClearance(url, refused)) return true
-            if (isShown(page.url.host)) return false
+            if (isShown(page.url.host) || !stillNeeded()) return false
             runCatching { cookies.expire(url, CLEARANCE_COOKIE) }
             val passed = browser.pass(page, passed = { cookies.hasNewClearance(url, refused) }, cancelled = call::isCanceled)
             if (!passed) call.throwIfCanceled()
@@ -93,7 +93,7 @@ class ChallengeBrowsers(private val cookies: BrowserCookieStore, private val bro
 
 class ChallengePass(
     private val browsers: ChallengeBrowsers,
-    private val isChallenged: (url: String) -> Boolean,
+    private val heldOff: (url: String) -> Boolean,
     private val mayPass: (host: String) -> Boolean = { true },
     private val page: (challenged: Request) -> Request = { it },
 ) : Interceptor {
@@ -104,11 +104,11 @@ class ChallengePass(
         val challenged = response.challengedRequest
         val url = challenged.url.toString()
         val host = HostOutageTracker.normalizeHost(challenged.url.host)
-        if (!mayPass(host) || browsers.isShown(host) || isChallenged(url) || !browsers.mayWait()) return response
+        if (!mayPass(host) || browsers.isShown(host) || heldOff(url) || !browsers.mayWait()) return response
         val refusal = response.newBuilder().body(response.peekBody(CHALLENGE_BODY_LIMIT)).build()
         response.close()
-        val earned = browsers.earn(challenged, page(challenged), chain.call()) { !isChallenged(url) }
-        return if (earned) chain.proceed(request) else refusal
+        val earned = browsers.earn(challenged, page(challenged), chain.call()) { !heldOff(url) }
+        return if (earned && !heldOff(url)) chain.proceed(request) else refusal
     }
 
     private companion object {

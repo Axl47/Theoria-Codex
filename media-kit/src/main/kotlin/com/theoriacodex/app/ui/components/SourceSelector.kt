@@ -226,6 +226,7 @@ private fun HostOutageKind.shortLabel(): String = when (this) {
     HostOutageKind.MAINTENANCE -> "down"
     HostOutageKind.CHALLENGE -> "needs browser verification"
     HostOutageKind.UNRESOLVED -> "can't be found"
+    HostOutageKind.RATE_LIMITED -> "too many requests"
 }
 
 private val SourcePresentationGroup.folderIcon: ImageVector?

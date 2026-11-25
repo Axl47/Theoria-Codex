@@ -23,6 +23,7 @@ import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.media.PostDownloads
 import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.media.pictureHashAt
+import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.series.ChapterPictures
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
@@ -112,6 +113,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.series.SourceAvailability
 import com.theoriacodex.domain.source.SiteProfile
@@ -327,7 +329,7 @@ internal class DefaultTheoriaAppContainer(
     )
     private val sourceReadiness = SourceReadiness(accountStore::refreshAvailability) { customSourceRuntime.awaitFirstBuild() }
     private val fileMirrors = FileMirrorIndex()
-    private val listingPictures = ListingPictures(appContext, durableStoreScope, fileMirrors)
+    private val listingPictures = ListingPictures(appContext, durableStoreScope, fileMirrors, limited = hostOutages::isRateLimited)
     private val sourceRegistry = CompositeSourceAdapterRegistry(
         potentialBuiltIns = allPotentialSourceRegistry,
         availableBuiltIns = accountStore.availableSources,
@@ -353,9 +355,13 @@ internal class DefaultTheoriaAppContainer(
     private val profileWriteGuard = ProfileLibraryWriteGuard()
     private val contentRepository = RoomCodexLikesRepository(contentDatabase, writeGuard = profileWriteGuard)
     private val visualSignatures = RoomVisualSignatureRepository(contentDatabase)
+    private val previewReachable: (Post) -> Boolean = { post ->
+        postPreviewImageCandidate(post)?.let { !hostOutages.isRateLimited(it.url) } ?: true
+    }
     override val pictures = appPictures(
-        appContext, httpClients.shared, visualSignatures, LibraryPictureBackfill(visualSignatures, listingPictures.hasher::hash),
-        pixivUgoiraClient, offlineStore::find, { id -> sourceRegistry.adapterFor(id.source)?.resolvePost(id) }, durableStoreScope,
+        appContext, httpClients.shared, visualSignatures, LibraryPictureBackfill(visualSignatures, previewReachable, listingPictures.hasher::hash),
+        pixivUgoiraClient, offlineStore::find, { id -> sourceRegistry.adapterFor(id.source)?.resolvePost(id) }, previewReachable,
+        durableStoreScope,
     )
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository

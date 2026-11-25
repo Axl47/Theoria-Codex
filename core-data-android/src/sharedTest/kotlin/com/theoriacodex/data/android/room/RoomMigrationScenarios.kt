@@ -33,6 +33,7 @@ object RoomMigrationScenarios {
         21 to ::translationCacheGoes,
         22 to ::checkTimeReturnsEmpty,
         23 to ::pageOffsetsArriveEmpty,
+        24 to ::previewFailuresArriveEmpty,
     )
 
     fun proofTablesGo(helper: MigrationTestHelper) {
@@ -196,6 +197,10 @@ object RoomMigrationScenarios {
         insert("series", series("/show", followed = 1, null, opened = "/show/1", checked = null, download = 0, share = 0, followedAt = 9, memo = null) + ("source" to ANIME))
         insert("series_entries", entry("/show", "/show/1", order = 0, firstSeen = 12, read = 0, page = 90_000, pages = 1_440_000, readAt = 95, memo = null) + ("source" to ANIME))
     }) { table, row -> if (table == "series_entries") row + ("page_offset" to null) else row }
+
+    fun previewFailuresArriveEmpty(helper: MigrationTestHelper) = step(helper, 24, listOf("post_visual_signatures"), { seedSignatures() }) { _, row ->
+        row + ("preview_failed_at_epoch_ms" to null)
+    }
 
     private fun step(
         helper: MigrationTestHelper,

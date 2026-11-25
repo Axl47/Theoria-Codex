@@ -102,6 +102,8 @@ class RoomUpgradeJourneyTest {
 
     @Test fun `chapters read before in-page offsets resume at the top of their page (ADR 0192)`() = RoomMigrationScenarios.pageOffsetsArriveEmpty(helper)
 
+    @Test fun `a stored picture signature keeps its hash and starts with no failed load`() = RoomMigrationScenarios.previewFailuresArriveEmpty(helper)
+
     @Test fun `registered migrations step one version at a time from 10 to the version a new library is created at, each with a scenario (ADR 0012)`() {
         val created = createdVersion(ApplicationProvider.getApplicationContext<Context>())
         val steps = TheoriaRoomDatabase.MIGRATIONS.map { it.startVersion to it.endVersion }

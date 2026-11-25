@@ -3,6 +3,7 @@ package com.theoriacodex.sources.hitomi
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.networkFailure
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -230,11 +231,7 @@ internal class HitomiNozomiReader(
                 cause = error,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "Hitomi Nozomi request failed ($url)",
-                cause = error,
-            )
+            networkFailure("Hitomi Nozomi request failed ($url)", error)
         }
     }
 

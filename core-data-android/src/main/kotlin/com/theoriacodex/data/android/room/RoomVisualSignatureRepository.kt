@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.PredictedTagCodec
+import com.theoriacodex.data.repository.PREVIEW_RETRY_MS
 import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
@@ -42,8 +43,18 @@ class RoomVisualSignatureRepository(
         }
     }
 
+    override suspend fun failPreviews(postIds: Collection<PostId>) {
+        if (postIds.isEmpty()) return
+        val now = clock()
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                postIds.forEach { postId -> dao.failPreview(postId.source.id, postId.sourcePostId, now) }
+            }
+        }
+    }
+
     override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = withContext(Dispatchers.IO) {
-        dao.libraryPostsWithoutSignature(limit, skip).decoded()
+        dao.libraryPostsWithoutSignature(limit, skip, clock() - PREVIEW_RETRY_MS).decoded()
     }
 
     @VisionCommit
@@ -62,8 +73,8 @@ class RoomVisualSignatureRepository(
         }
     }
 
-    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
-        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit).decoded() }
+    override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> =
+        withContext(Dispatchers.IO) { dao.libraryPostsWithoutVision(modelId, limit, skip, clock() - PREVIEW_RETRY_MS).decoded() }
 
     override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
         withContext(Dispatchers.IO) { dao.libraryPostsAwaitingFrames(modelId, MAX_FRAME_ATTEMPTS, limit, skip).decoded() }
