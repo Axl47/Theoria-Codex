@@ -11,23 +11,40 @@ import org.junit.Test
 class ViewerSaveButtonModelTest {
     private val art = post("art")
     private fun suggestion(id: String) = SaveSuggestion(id, "Codex $id", emptyList())
-    private fun suggestions(vararg ids: String, inAny: Boolean = false, postId: String = "art") =
-        ViewerPostSuggestions(post(postId).id, SaveSuggestions(ids.map(::suggestion), inAny))
+    private fun suggestions(vararg ids: String, savedIn: String? = null, postId: String = "art") =
+        ViewerPostSuggestions(post(postId).id, SaveSuggestions(ids.map(::suggestion), savedIn?.let(::suggestion)))
     private fun record(inserted: Int = 1, at: Long = 1_000L, postId: String = "art") =
         QuickSaveRecord(post(postId), "a", "Codex a", inserted, at)
 
     @Test
     fun `suggests the top Codex, then confirms the save with Undo, then moves to the next suggestion`() {
         val before = viewerSaveButtonState(art.id, suggestions("a", "b"), lastSave = null, nowEpochMs = 0L)
-        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a"), inAnyCodex = false), before)
+        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a")), before)
         assertEquals(ViewerSaveCommand.QuickSave("a"), before.tapCommand())
 
         val saved = viewerSaveButtonState(art.id, suggestions("a", "b"), record(), nowEpochMs = 2_000L)
         assertEquals(ViewerSaveButtonState.Saved(record()), saved)
         assertEquals(ViewerSaveCommand.Undo(record()), saved.tapCommand())
 
-        val later = viewerSaveButtonState(art.id, suggestions("b", inAny = true), record(), nowEpochMs = 1_000L + VIEWER_SAVED_UNDO_MS)
-        assertEquals(ViewerSaveButtonState.Suggest(suggestion("b"), inAnyCodex = true), later)
+        val later = viewerSaveButtonState(art.id, suggestions("b", savedIn = "a"), record(), nowEpochMs = 1_000L + VIEWER_SAVED_UNDO_MS)
+        assertEquals(ViewerSaveButtonState.Suggest(suggestion("b"), savedIn = suggestion("a")), later)
+    }
+
+    @Test
+    fun `once saved the button names the Codex holding the post and keeps the next suggestion apart as the tap target (ADR 0175)`() {
+        val saved = viewerSaveButtonState(art.id, suggestions("b", "c", savedIn = "a"), null, 0L)
+        assertEquals(suggestion("a"), saved.savedIn())
+        assertEquals(suggestion("b"), saved.next())
+        assertEquals(ViewerSaveCommand.QuickSave("b"), saved.tapCommand())
+
+        val unsaved = viewerSaveButtonState(art.id, suggestions("b"), null, 0L)
+        assertEquals(null, unsaved.savedIn())
+        assertEquals(null, unsaved.next())
+
+        val everywhere = viewerSaveButtonState(art.id, suggestions(savedIn = "a"), null, 0L)
+        assertEquals(suggestion("a"), everywhere.savedIn())
+        assertEquals(null, everywhere.next())
+        assertEquals(ViewerSaveCommand.OpenPicker, everywhere.tapCommand())
     }
 
     @Test
@@ -38,7 +55,7 @@ class ViewerSaveButtonModelTest {
     @Test
     fun `another post's save is not confirmed here`() {
         val state = viewerSaveButtonState(art.id, suggestions("a"), record(postId = "other"), nowEpochMs = 1_500L)
-        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a"), inAnyCodex = false), state)
+        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a")), state)
     }
 
     @Test
@@ -49,9 +66,9 @@ class ViewerSaveButtonModelTest {
     @Test
     fun `with no Codex at all a tap names a new one, and with none to suggest or none loaded it opens the picker`() {
         val noCodices = viewerSaveButtonState(art.id, ViewerPostSuggestions(art.id, SaveSuggestions.Empty), null, 0L)
-        assertEquals(ViewerSaveButtonState.NoTarget(inAnyCodex = false), noCodices)
+        assertEquals(ViewerSaveButtonState.NoTarget(savedIn = null), noCodices)
         assertEquals(ViewerSaveCommand.NewCodex, noCodices.tapCommand())
-        val inEveryCodex = viewerSaveButtonState(art.id, ViewerPostSuggestions(art.id, SaveSuggestions(emptyList(), inAnyCodex = true)), null, 0L)
+        val inEveryCodex = viewerSaveButtonState(art.id, ViewerPostSuggestions(art.id, SaveSuggestions(emptyList(), suggestion("a"))), null, 0L)
         assertEquals(ViewerSaveCommand.OpenPicker, inEveryCodex.tapCommand())
         assertEquals(ViewerSaveCommand.OpenPicker, viewerSaveButtonState(art.id, null, null, 0L).tapCommand())
     }
@@ -69,15 +86,15 @@ class ViewerSaveButtonModelTest {
 
     @Test
     fun `the previous post's suggestions stay on show but neither save nor fan out`() {
-        val stale = viewerSaveButtonState(art.id, suggestions("a", "b", inAny = true, postId = "before"), null, 0L)
+        val stale = viewerSaveButtonState(art.id, suggestions("a", "b", savedIn = "c", postId = "before"), null, 0L)
 
-        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a"), inAnyCodex = false, ready = false), stale)
+        assertEquals(ViewerSaveButtonState.Suggest(suggestion("a"), ready = false), stale)
         assertEquals(ViewerSaveCommand.OpenPicker, stale.tapCommand())
         assertEquals(
             listOf(SaveTarget.New, SaveTarget.More),
             viewerSaveFanTargets(art.id, suggestions("a", "b", postId = "before")).map { it.payload },
         )
-        val staleEveryCodex = ViewerPostSuggestions(post("before").id, SaveSuggestions(emptyList(), inAnyCodex = true))
+        val staleEveryCodex = ViewerPostSuggestions(post("before").id, SaveSuggestions(emptyList(), suggestion("c")))
         assertEquals(ViewerSaveButtonState.Loading, viewerSaveButtonState(art.id, staleEveryCodex, null, 0L))
     }
 }

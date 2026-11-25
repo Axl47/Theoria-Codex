@@ -1,12 +1,16 @@
 package com.theoriacodex.extensionhost
 
+import android.app.Application
 import android.content.Context
+import com.theoriacodex.sources.http.BrowserCookieStore
+import com.theoriacodex.sources.http.ChallengeBrowsers
+import com.theoriacodex.sources.http.HostOutageTracker
 import dalvik.system.DelegateLastClassLoader
 import java.io.File
 
 class ExtensionRejectedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-class ExtensionLoader(private val context: Context, private val packages: ExtensionPackages) {
+class ExtensionLoader private constructor(private val context: Context, private val read: (File) -> ExtensionPackage?) {
     private val copies by lazy {
         File(context.codeCacheDir, "mihon-extensions").apply {
             deleteRecursively()
@@ -17,15 +21,17 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
     fun load(extension: ExtensionPackage, host: HostServices): List<HostedSource> {
         extension.unsupported?.let { throw ExtensionRejectedException("${extension.packageName}: $it") }
         val code = if (extension.origin == ExtensionOrigin.PACKAGE) extension.apk else privateReadOnlyCopy(extension)
-        val classLoader = DelegateLastClassLoader(code.path, context.classLoader)
-        return extension.sourceClasses.flatMap { className -> createSources(classLoader, className, extension, host) }
+        return sources(DelegateLastClassLoader(code.path, context.classLoader), extension, host)
     }
+
+    internal fun sources(classLoader: ClassLoader, extension: ExtensionPackage, host: HostServices): List<HostedSource> =
+        extension.sourceClasses.flatMap { className -> createSources(classLoader, className, extension, host) }
 
     private fun privateReadOnlyCopy(extension: ExtensionPackage): File {
         val target = File.createTempFile(extension.apk.nameWithoutExtension, ".apk", copies)
         extension.apk.copyTo(target, overwrite = true)
         check(target.setReadOnly()) { "Could not lock ${target.name}" }
-        val copy = packages.read(target)
+        val copy = read(target)
         val same = copy != null && copy.packageName == extension.packageName && copy.signer == extension.signer &&
             copy.versionCode == extension.versionCode && copy.size == extension.size
         if (extension.signer == null || !same) {
@@ -44,5 +50,20 @@ class ExtensionLoader(private val context: Context, private val packages: Extens
         throw error
     } catch (error: Throwable) {
         throw ExtensionRejectedException("$className in ${extension.packageName} could not be created: $error", error)
+    }
+
+    companion object {
+        fun installingHost(
+            application: Application,
+            versionName: String,
+            versionCode: Int,
+            cookies: BrowserCookieStore,
+            browsers: ChallengeBrowsers,
+            outages: HostOutageTracker,
+            read: (File) -> ExtensionPackage?,
+        ): ExtensionLoader {
+            ExtensionHost.install(application, versionName, versionCode, cookies, browsers, outages)
+            return ExtensionLoader(application, read)
+        }
     }
 }
