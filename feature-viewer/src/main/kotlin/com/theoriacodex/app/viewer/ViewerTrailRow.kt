@@ -138,7 +138,7 @@ private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrai
     if (menuOpen) HoldChrome(forks)
     Box {
         TrailChip(
-            if (failed) "No posts" else chip.label,
+            if (failed) "No other posts" else chip.label,
             chip.icon,
             container = ViewerVeil.Capsule,
             content = Color.White,

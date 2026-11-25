@@ -162,6 +162,7 @@
 
 ### Fixed
 
+- A trail step that would hold only the post you're on, which happens quickly on Hitomi where each post is a whole gallery, now says "No other posts" instead of opening a step with nothing new.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
