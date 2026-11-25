@@ -15,6 +15,7 @@ import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.findActivity
 import com.theoriacodex.app.ui.launchViewer
 import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.TrailOutcome
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.ui.routes.BrowsingMetadata
 import com.theoriacodex.app.ui.routes.browsingMetadataOwner
@@ -72,7 +73,7 @@ private suspend fun TheoriaShell.openTrail(
     request: TrailRequest,
     handoff: TrailHandoffViewModel,
     marks: () -> BrowsingMetadata?,
-): Boolean {
+): TrailOutcome {
     val origin = navController.currentBackStackEntry
     val replay = origin?.savedStateHandle?.trailReplayAfter(request).orEmpty()
     val opened = openLevel(request, handoff, marks, origin, replay)
@@ -86,15 +87,16 @@ private suspend fun TheoriaShell.openLevel(
     marks: () -> BrowsingMetadata?,
     origin: NavBackStackEntry?,
     replay: List<CrumbTag>,
-): Boolean {
+): TrailOutcome {
     val parent = routes.viewer.current?.session?.value?.searchVisibilityFilters
         ?.takeIf { origin?.destination?.route == AppRoute.Viewer } ?: SearchVisibilityFilters()
-    val spec = trailSpec(request, shellTrailSources(), parent) ?: return false
+    val spec = trailSpec(request, shellTrailSources(), parent) ?: return TrailOutcome.Failed
     val filters = trailVisibilityFilters(parent, spec.query)
     val feed = TrailFeed("trail:${UUID.randomUUID()}", spec.pager, features.relatedPosts)
     var opened = false
     try {
-        val posts = feed.start({ post -> post.id in data.fileMirrors.copiesOf(request.from) }) { results -> results.visibleUnder(filters, marks()) }
+        val posts = feed.start({ post -> data.fileMirrors.isCopy(post, request.from) }) { results -> results.visibleUnder(filters, marks()) }
+            ?: return TrailOutcome.Failed
         val session = if (posts.isEmpty()) null else viewerRouteWorkflow.prepareResumableSession(
             ViewerSession(
                 posts = posts,
@@ -113,7 +115,7 @@ private suspend fun TheoriaShell.openLevel(
     } finally {
         if (!opened) feed.close()
     }
-    return opened
+    return if (opened) TrailOutcome.Opened else TrailOutcome.Empty
 }
 
 private fun TrailRequest.crumbTag(): CrumbTag? = (this as? TrailRequest.Tag)?.let { CrumbTag(it.tag, it.source) }

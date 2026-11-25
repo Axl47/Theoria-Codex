@@ -16,11 +16,13 @@ sealed interface TrailRequest {
     data class Similar(override val from: Post) : TrailRequest
 }
 
+enum class TrailOutcome { Opened, Empty, Failed }
+
 fun interface TrailOpener {
-    suspend fun openTrail(request: TrailRequest): Boolean
+    suspend fun openTrail(request: TrailRequest): TrailOutcome
 
     companion object {
-        val None = TrailOpener { false }
+        val None = TrailOpener { TrailOutcome.Failed }
     }
 }
 

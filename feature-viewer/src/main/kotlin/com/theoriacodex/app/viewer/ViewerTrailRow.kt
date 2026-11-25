@@ -155,7 +155,7 @@ private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrai
     if (menuOpen) HoldChrome(forks)
     Box {
         TrailChip(
-            if (failed) "No other posts" else chip.label,
+            if (failed) failedLabel(forks.failedEmpty) else chip.label,
             chip.icon,
             container = ViewerVeil.Capsule,
             content = Color.White,
@@ -169,6 +169,8 @@ private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrai
         TagActionMenu(menuOpen, listOfNotNull(save)) { menuOpen = false }
     }
 }
+
+private fun failedLabel(empty: Boolean): String = if (empty) "No other posts" else "Couldn't load"
 
 @Composable
 private fun HoldChrome(forks: ViewerTrailForks) {
