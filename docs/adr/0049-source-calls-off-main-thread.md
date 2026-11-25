@@ -32,3 +32,9 @@ New adapters get main-thread safety by following one shape. A new entry point th
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/SourceMainSafetyContractTest.kt`: `SourceMainSafetyContractTest`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt`: hydration bookkeeping lock
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiPaginationSourceAdapterTest.kt`, `nhentai/NhentaiCreatorSourceAdapterTest.kt`, `nhentai/NhentaiSuggestionSourceAdapterTest.kt`, `pixiv/PixivRequestPacingTest.kt`, `rule34/Rule34GroupedSearchMetadataTest.kt`: `callContext = EmptyCoroutineContext`
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/SourceEntryPointCompletenessTest.kt`: `every boundary function runs its whole body through sourceCall (ADR 0049)`, `production code never chooses the dispatcher (ADR 0049)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/SourceMainSafetyContractTest.kt`: `every registry adapter searches off the calling thread (ADR 0049)`, `an unconfined caller started on the calling thread still searches elsewhere (ADR 0049)`
+- Left to prose: how tests pick `EmptyCoroutineContext` and a stand-in main thread is test-authoring guidance; the parse-helper check covers each registry adapter's search path, not every parse in every lookup; a new boundary class is scanned only once `BOUNDARY_CLASSES` names it.

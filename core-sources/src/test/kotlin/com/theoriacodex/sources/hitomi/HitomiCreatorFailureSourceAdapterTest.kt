@@ -18,6 +18,7 @@ import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpResponse
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -216,7 +217,7 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `protocol failures from public search and autocomplete are typed as parse errors`() = runTest {
+    fun `protocol failures from public search and autocomplete are typed as parse errors (ADR 0043)`() = runTest {
         val all = HitomiNozomi.urlFor(HitomiNozomiRequest())
         val autocomplete = HitomiProtocol.autocompleteUrl("global", "bad")
         val http = RoutingHitomiHttpClient().apply {
@@ -273,7 +274,7 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `oversized range ignoring Nozomi response becomes a typed source error`() = runTest {
+    fun `oversized range ignoring Nozomi response becomes a typed source error (ADR 0043)`() = runTest {
         val all = HitomiNozomi.urlFor(HitomiNozomiRequest())
         val http = RoutingHitomiHttpClient().apply {
             binaryFailures[all] = SourceHttpBodyTooLargeException(64)
@@ -289,7 +290,7 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `oversized gallery and autocomplete bodies become typed source errors`() = runTest {
+    fun `oversized gallery and autocomplete bodies become typed source errors (ADR 0043)`() = runTest {
         val http = RoutingHitomiHttpClient().apply {
             textFailures[HitomiProtocol.galleryUrl(55)] = SourceHttpBodyTooLargeException(64)
             textFailures[HitomiProtocol.autocompleteUrl("global", "girl")] = SourceHttpBodyTooLargeException(64)
@@ -300,7 +301,16 @@ internal class HitomiCreatorFailureSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
-    fun `a media recovery whose configuration refresh fails becomes a typed source error`() = runTest {
+    fun `a provider call turns IO failures into network errors and lets unexpected exceptions through (ADR 0043)`() = runTest {
+        val network = runCatching { hitomiCall<Unit>("post") { throw IOException("reset") } }.exceptionOrNull()
+        val unexpected = IllegalStateException("bug")
+
+        assertEquals(SourceFailureReason.NETWORK, (network as? SourceAdapterException)?.reason)
+        assertTrue(unexpected === runCatching { hitomiCall<Unit>("post") { throw unexpected } }.exceptionOrNull())
+    }
+
+    @Test
+    fun `a media recovery whose configuration refresh fails becomes a typed source error (ADR 0043)`() = runTest {
         val http = RoutingHitomiHttpClient().apply {
             textRoutes[HitomiMediaUrlResolver.GG_CONFIGURATION_URL] = fixture("gg-shape.js")
             galleryBodies[4_042_375] = fixture("gallery-4042375.js")

@@ -60,7 +60,7 @@ class RoomPayloadGoldenTest {
         assertEquals(listOf("a&b", "c=d", "<x>", "it's", "q>r"), liked.tags)
     }
 
-    @Test fun `upserting an unchanged post keeps the Gson-written row`() {
+    @Test fun `upserting an unchanged post keeps the Gson-written row (ADR 0038)`() {
         val dao = database.codexLikesDao()
         val golden = golden("post-payload-full.json")
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden))

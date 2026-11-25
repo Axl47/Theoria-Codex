@@ -155,6 +155,29 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
+    fun `a custom thumbnail card loads the small rendition, not the uploaded original (ADR 0048)`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {"results": [{
+                      "id": "KH2f7fca2MCgZ8",
+                      "file": {"id": "08ce55ca-b105-4d53-9fd8-56da7de98cf6", "name": "video.mp4", "mime": "video/mp4"},
+                      "customThumbnail": {"id": "4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8", "name": "original.JPEG", "mime": "image/jpeg"}
+                    }]}
+                """.trimIndent(),
+            )
+        }
+
+        val post = IwaraSourceAdapter(httpClient = httpClient).search(sampleQuery(sort = SortMode.TOP), pageToken = null).items.single()
+
+        assertEquals(
+            "https://i.iwara.tv/image/thumbnail/4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8/4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8.jpeg",
+            post.preview.url,
+        )
+    }
+
+    @Test
     fun `search excludes embed only posts without native iwara media`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(

@@ -7,7 +7,7 @@ import org.junit.Test
 
 class FeedPageDemandTest {
     @Test
-    fun `restoration loads pages past the automatic budget until the anchor is present`() {
+    fun `restoration loads pages past the automatic budget until the anchor is present (ADR 0069)`() {
         val demand = FeedPageDemand()
         val restoring = hiddenPage.copy(hasLocalFilters = false, visibleCount = 20,
             canonicalCount = 20, requiredCanonicalIndex = 110)
@@ -20,7 +20,7 @@ class FeedPageDemandTest {
     }
 
     @Test
-    fun `restoration page failure pauses demand and exhaustion stops it`() {
+    fun `restoration page failure pauses demand and exhaustion stops it (ADR 0069)`() {
         val restoring = hiddenPage.copy(hasLocalFilters = false, visibleCount = 20,
             canonicalCount = 20, requiredCanonicalIndex = 22)
         val demand = FeedPageDemand()
@@ -31,7 +31,7 @@ class FeedPageDemandTest {
     }
 
     @Test
-    fun `hidden first pages drain only three pages before an explicit continue`() {
+    fun `hidden first pages drain only three pages before an explicit continue (ADR 0069)`() {
         val demand = FeedPageDemand()
         for (generation in 1L..3L) {
             assertTrue(demand.update(hiddenPage.copy(completedGeneration = generation)).loadNextPage)
@@ -47,18 +47,20 @@ class FeedPageDemandTest {
     }
 
     @Test
-    fun `repeated viewport callbacks cannot submit duplicate page requests`() {
+    fun `repeated viewport callbacks cannot submit duplicate page requests (ADR 0069)`() {
         val demand = FeedPageDemand()
         assertTrue(demand.update(hiddenPage).loadNextPage)
         repeat(10) {
             assertEquals(FeedPageDemandResult(), demand.update(hiddenPage.copy(atVisibleEnd = it % 2 == 0)))
         }
+        assertEquals(FeedPageDemandResult(), demand.update(hiddenPage.copy(scrolling = true)))
+        assertEquals(FeedPageDemandResult(), demand.update(hiddenPage.copy(canonicalCount = 120)))
         assertFalse(demand.update(hiddenPage.copy(paging = true, completedGeneration = 2L)).loadNextPage)
         assertTrue(demand.update(hiddenPage.copy(completedGeneration = 2L)).loadNextPage)
     }
 
     @Test
-    fun `empty provider pages use settled generations even with no observed loading frame`() {
+    fun `empty provider pages use settled generations even with no observed loading frame (ADR 0069)`() {
         val demand = FeedPageDemand()
         val empty = hiddenPage.copy(canonicalCount = 0, hasLocalFilters = false)
         assertTrue(demand.update(empty).loadNextPage)
@@ -89,12 +91,18 @@ class FeedPageDemandTest {
     }
 
     @Test
-    fun `pending duration resolution and active loading consume no budget`() {
+    fun `pending duration resolution and active loading consume no budget (ADR 0069)`() {
         val demand = FeedPageDemand(automaticPageLimit = 1)
         assertFalse(demand.update(hiddenPage.copy(ready = false)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(refreshing = true)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(paging = true)).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(durationsBlockPaging = true)).loadNextPage)
+        assertFalse(
+            demand.update(hiddenPage.copy(durationsBlockPaging = true, canonicalCount = 20, requiredCanonicalIndex = 110)).loadNextPage,
+        )
+        val restoring = hiddenPage.copy(canonicalCount = 20, requiredCanonicalIndex = 110)
+        assertFalse(demand.update(restoring.copy(refreshing = true)).loadNextPage)
+        assertFalse(demand.update(restoring.copy(paging = true)).loadNextPage)
         assertTrue(demand.update(hiddenPage).loadNextPage)
         assertFalse(demand.update(hiddenPage.copy(completedGeneration = 2L, durationsBlockPaging = true)).showContinue)
         assertTrue(demand.update(hiddenPage.copy(completedGeneration = 2L)).showContinue)
@@ -128,7 +136,7 @@ class FeedPageDemandTest {
     }
 
     @Test
-    fun `new scroll demand resets budget while layout only changes do not`() {
+    fun `new scroll demand resets budget while layout only changes do not (ADR 0069)`() {
         val demand = FeedPageDemand(automaticPageLimit = 1)
         val tail = hiddenPage.copy(visibleCount = 100, hasLocalFilters = false, lastVisibleCanonicalIndex = 80)
         assertTrue(demand.update(tail).loadNextPage)

@@ -12,7 +12,7 @@ import org.junit.rules.TemporaryFolder
 class StatisticsThumbnailsTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `promotion copies once survives other list demotion and removes final demotion`() = runTest {
+    @Test fun `promotion copies once survives other list demotion and removes final demotion (ADR 0037)`() = runTest {
         val directory = temporary.newFolder()
         val store = StatisticsThumbnailStore(directory)
         val posts = (1..6).associate { "post:$it" to CodexPostStatistics(opens = it.toLong()) } +
@@ -35,7 +35,7 @@ class StatisticsThumbnailsTest {
         assertTrue(directory.listFiles()!!.isEmpty())
     }
 
-    @Test fun `failed fetch discards partial file and later open can retry`() = runTest {
+    @Test fun `failed fetch discards partial file and later open can retry (ADR 0037)`() = runTest {
         val directory = temporary.newFolder()
         val store = StatisticsThumbnailStore(directory)
         val failed = store.reconcile(setOf("post"), mapOf("post" to { file ->

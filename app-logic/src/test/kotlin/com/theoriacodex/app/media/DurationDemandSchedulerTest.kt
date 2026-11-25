@@ -113,7 +113,7 @@ class DurationDemandSchedulerTest {
     }
 
     @Test
-    fun `active scrolling pauses everything except an active filter`() {
+    fun `active scrolling pauses everything except an active filter (ADR 0068)`() {
         val scheduler = DurationDemandScheduler()
         scheduler.submit(demand("background", "background", DurationDemandPriority.BACKGROUND_IDLE))
         assertNull(

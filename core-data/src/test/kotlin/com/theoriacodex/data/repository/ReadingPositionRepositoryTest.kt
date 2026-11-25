@@ -45,7 +45,7 @@ class ReadingPositionRepositoryTest {
     }
 
     @Test
-    fun `bounded merge is idempotent preserves newer local positions and unrelated entries`() = runTest {
+    fun `bounded merge is idempotent preserves newer local positions and unrelated entries (ADR 0025)`() = runTest {
         val repository = FileBackedReadingPositionRepository(temporary.newFolder(), entryLimit = 3)
         repository.record(position("local", 4, 400))
         repository.record(position("old", 1, 10))
@@ -70,7 +70,7 @@ class ReadingPositionRepositoryTest {
     }
 
     @Test
-    fun `malformed entries do not discard valid positions`() = runTest {
+    fun `malformed entries do not discard valid positions (ADR 0021, 0033)`() = runTest {
         val directory = temporary.newFolder()
         directory.resolve(READING_POSITIONS_FILE_NAME).writeText("""
             {"schemaVersion":1,"positions":[
@@ -86,7 +86,7 @@ class ReadingPositionRepositoryTest {
     }
 
     @Test
-    fun `one swipe reported twice writes once and keeps the first timestamp`() = runTest {
+    fun `one swipe reported twice writes once and keeps the first timestamp (ADR 0021)`() = runTest {
         val directory = temporary.newFolder()
         val file = directory.resolve(READING_POSITIONS_FILE_NAME)
         val repository = FileBackedReadingPositionRepository(directory)
@@ -130,17 +130,18 @@ class ReadingPositionRepositoryTest {
     }
 
     @Test
-    fun `a missing schema reads as version 1 and a newer schema fails without touching the file`() = runTest {
+    fun `a missing schema reads as version 1 and any other schema fails without touching the file (ADR 0021)`() = runTest {
         val directory = temporary.newFolder()
         val file = directory.resolve(READING_POSITIONS_FILE_NAME)
         file.writeText("""{"positions":[{"source":"PIXIV","postId":"a","section":"WATCHED","mediaNumber":2,"lastViewedAt":1}]}""")
         assertEquals(listOf(position("a", 2, 1)), FileBackedReadingPositionRepository(directory).snapshot())
 
-        listOf("""{"schemaVersion":2,"positions":[]}""", """{"schemaVersion":2,"positions":{}}""").forEach { newer ->
-            file.writeText(newer)
-            assertTrue(runCatching { FileBackedReadingPositionRepository(directory).snapshot() }.isFailure)
-            assertEquals(newer, file.readText())
-        }
+        listOf(0, 2).flatMap { version -> listOf("""{"schemaVersion":$version,"positions":[]}""", """{"schemaVersion":$version,"positions":{}}""") }
+            .forEach { other ->
+                file.writeText(other)
+                assertTrue(runCatching { FileBackedReadingPositionRepository(directory).snapshot() }.isFailure)
+                assertEquals(other, file.readText())
+            }
     }
 
     @Test
