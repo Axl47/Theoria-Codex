@@ -31,8 +31,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlin.math.floor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
@@ -176,10 +174,9 @@ internal class ViewerAccentState(private val pager: State<PagerState>, private v
         animate(progress, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ -> progress = value }
     }
 
-    suspend fun sampleNeighbours(neighbours: List<Post>, sampler: ViewerAccentSampler) = coroutineScope {
-        neighbours.filter { samples[it.id] == null }.forEach { neighbour ->
-            launch { sampler.sample(neighbour, cachedOnly = true)?.let { reveal(neighbour.id, it) } }
-        }
+    suspend fun sampleNeighbour(neighbour: Post, sampler: ViewerAccentSampler) {
+        if (samples[neighbour.id] != null) return
+        sampler.sample(neighbour, cachedOnly = true)?.let { reveal(neighbour.id, it) }
     }
 
     private suspend fun reveal(id: PostId, color: Color) {
@@ -218,8 +215,11 @@ internal fun rememberViewerAccent(
     }
     val before = posts.getOrNull(index - 1)
     val after = posts.getOrNull(index + 1)
-    LaunchedEffect(before?.id, after?.id, enabled) {
-        if (enabled) accent.sampleNeighbours(listOfNotNull(before, after), sampler)
+    LaunchedEffect(before?.id, enabled) {
+        if (enabled && before != null) accent.sampleNeighbour(before, sampler)
+    }
+    LaunchedEffect(after?.id, enabled) {
+        if (enabled && after != null) accent.sampleNeighbour(after, sampler)
     }
     return accent
 }
