@@ -189,7 +189,12 @@ internal class FakeSeriesExtensions(var listed: List<InstalledExtension>) : Seri
 
     override suspend fun installed() = listed
 
-    override suspend fun setOn(id: String, signer: String, on: Boolean) = listed
+    val switched = mutableListOf<Triple<String, String, Boolean>>()
+
+    override suspend fun setOn(id: String, signer: String, on: Boolean): List<InstalledExtension> {
+        switched += Triple(id, signer, on)
+        return listed
+    }
 
     override suspend fun setLanguage(id: String, language: String, on: Boolean) = listed
 

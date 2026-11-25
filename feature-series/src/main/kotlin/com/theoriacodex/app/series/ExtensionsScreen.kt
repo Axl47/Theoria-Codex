@@ -40,9 +40,10 @@ fun ExtensionsScreen(viewModel: ExtensionsViewModel, onBack: () -> Unit) {
         onPauseOrDispose {}
     }
     val closeSubpage = { if (state.subpage == viewModel.entryPage) onBack() else viewModel.openSubpage(null) }
-    BackHandler(enabled = open != null || state.subpage != null) { if (open != null) viewModel.open(null) else closeSubpage() }
+    val closeExtension = { if (state.openId == viewModel.entryExtension) onBack() else viewModel.open(null) }
+    BackHandler(enabled = open != null || state.subpage != null) { if (open != null) closeExtension() else closeSubpage() }
     when {
-        open != null -> ExtensionPage(open, state.settings.orEmpty(), viewModel, onBack = { viewModel.open(null) })
+        open != null -> ExtensionPage(open, state.settings.orEmpty(), viewModel, onBack = closeExtension)
         state.subpage == ExtensionsSubpage.REPOS -> ReposPage(state, viewModel, onBack = closeSubpage)
         state.subpage == ExtensionsSubpage.BROWSE -> BrowsePage(state, viewModel, onBack = closeSubpage)
         else -> ExtensionsList(state, viewModel, onBack = onBack)
@@ -122,11 +123,11 @@ private fun ExtensionRow(extension: InstalledExtension, onOpen: (String) -> Unit
 }
 
 @Composable
-private fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun TurnOnDialog(extension: InstalledExtension, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     ConfirmDialog(
         title = "Turn on ${extension.name}?",
         text = "Its code runs inside this app and can read this app's data.\n\nSigned by ${extension.signer}",
-        confirmLabel = "Turn on",
+        confirmLabel = TURN_ON,
         onConfirm = onConfirm,
         onDismiss = onDismiss,
     )

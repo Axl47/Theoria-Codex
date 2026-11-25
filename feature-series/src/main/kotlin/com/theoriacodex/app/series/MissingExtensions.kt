@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.Series
 
@@ -16,6 +17,12 @@ internal fun missingExtensions(missing: List<Series>, listing: List<RepoExtensio
         .map { (_, series) -> MissingProvider(providers.getValue(series.first().id.source), series) }
         .sortedWith(compareByDescending<MissingProvider> { it.series.size }.thenBy { it.extension.name.lowercase() })
     return MissingExtensions(offered, unlisted.sortedBy { it.title.lowercase() })
+}
+
+internal fun installedCopy(extension: RepoExtension, installed: List<InstalledExtension>?): InstalledExtension? {
+    if (extension.status != RepoExtension.Status.INSTALLED) return null
+    val copies = installed.orEmpty().filter { it.icon?.packageName == extension.packageName }
+    return copies.firstOrNull { it.on } ?: copies.firstOrNull { it.signer != null }
 }
 
 private val PROVIDER_PREFERENCE = listOf(

@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.IntSize
@@ -26,6 +27,7 @@ import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSourceSettings
+import com.theoriacodex.domain.series.ExtensionLanguage
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoExtension
@@ -79,6 +81,19 @@ class ExtensionsScreenTest {
         compose.onNodeWithContentDescription("Back").performClick()
         assertTrue(left)
         assertEquals(ExtensionsSubpage.REPOS, vm.state.value.subpage)
+    }
+
+    @Test fun `an extension's page opened directly goes back to where it was opened from`() {
+        var left = false
+        val dex = InstalledExtension("a", "Ink Dex", "1.0", signer = "key", on = true, languages = listOf(ExtensionLanguage("en", false)))
+        val vm = ExtensionsViewModel(Device(listOf(dex)), FakeRepos(), entryExtension = "a")
+        compose.setContent {
+            TheoriaNightTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ExtensionsScreen(vm, onBack = { left = true }) } }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Languages").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
+        assertTrue(left)
     }
 
     @Test fun `each store row leads with its repo icon, or a same-size placeholder when the repo has none`() {

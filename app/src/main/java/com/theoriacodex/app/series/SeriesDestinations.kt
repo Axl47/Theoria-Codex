@@ -25,13 +25,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-internal val extensionsArguments = listOf(
-    navArgument("page") {
+internal val extensionsArguments = listOf("page", "extension").map { name ->
+    navArgument(name) {
         type = NavType.StringType
         nullable = true
         defaultValue = null
-    },
-)
+    }
+}
 
 internal val seriesArguments = listOf(
     navArgument("source") { type = NavType.StringType },
@@ -101,6 +101,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
                     }
                 },
                 onOpenRepos = { shell.openExtensions(ExtensionsSubpage.REPOS) },
+                onOpenExtension = { id -> shell.navController.navigate(AppRoute.extension(id)) { launchSingleTop = true } },
             )
         },
         oldSearchBar = settings?.oldSearchBar == true,
@@ -111,7 +112,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
 internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val series = shell.container.series ?: return
     val page = entry.arguments?.getString("page")?.let { name -> ExtensionsSubpage.entries.firstOrNull { it.name == name } }
-    val viewModel = viewModel { ExtensionsViewModel(series.extensions, series.repos, page) }
+    val viewModel = viewModel { ExtensionsViewModel(series.extensions, series.repos, page, entry.arguments?.getString("extension")) }
     ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() })
 }
 
