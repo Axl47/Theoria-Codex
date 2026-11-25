@@ -1,5 +1,6 @@
 package com.theoriacodex.app.diagnostics
 
+import java.io.File
 import java.io.IOException
 import java.io.PrintWriter
 import java.util.concurrent.CountDownLatch
@@ -137,6 +138,22 @@ class DiagnosticLogStoreTest {
 
         assertEquals(listOf(crash to true), handedOver)
         assertTrue("crash on the main thread" in store.readCrashes().single())
+    }
+
+    @Test
+    fun `a crash is written when another thread creates the folder first (ADR 0103)`() {
+        val path = folder.root.resolve("diagnostics").path
+        val createdByTheWriter = object : File(path) {
+            override fun mkdirs(): Boolean {
+                super.mkdirs()
+                return false
+            }
+        }
+        val store = DiagnosticLogStore(createdByTheWriter, now = { 1_000L })
+
+        store.writeCrash(Thread.currentThread(), IllegalStateException("crash while the log starts"))
+
+        assertTrue("crash while the log starts" in store.readCrashes().single())
     }
 
     @Test
