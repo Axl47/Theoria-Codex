@@ -34,9 +34,11 @@ internal object AppRoute {
     const val CodexDetail = "codex/detail/{codexId}"
     const val Settings = "settings-screen"
 
-    const val Extensions = "extensions?page={page}"
+    const val Extensions = "extensions?page={page}&extension={extension}"
 
     fun extensions(page: ExtensionsSubpage? = null): String = "extensions" + page?.let { "?page=${it.name}" }.orEmpty()
+
+    fun extension(id: String): String = "extensions?extension=${Uri.encode(id)}"
 
     const val Series = "series?source={source}&address={address}&entry={entry}"
 

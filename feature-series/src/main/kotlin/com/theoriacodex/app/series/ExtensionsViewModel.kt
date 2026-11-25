@@ -39,11 +39,13 @@ class ExtensionsViewModel(
     private val extensions: SeriesExtensions,
     private val repos: ExtensionRepos,
     val entryPage: ExtensionsSubpage? = null,
+    val entryExtension: String? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ExtensionsState(subpage = entryPage))
     val state: StateFlow<ExtensionsState> = mutableState
 
     init {
+        open(entryExtension)
         viewModelScope.launch {
             extensions.revision.collect {
                 show(extensions.installed())

@@ -94,7 +94,7 @@ class ExtensionStoreScreenshotTest {
 
     @Test fun `missing extensions`() {
         installSolidColorIcons()
-        val followed = listOf(1L to "Paper Lantern", 2L to "Quiet Harbor", 3L to "Salt Road", 9L to "Tin Orchard").map { (id, title) ->
+        val followed = listOf(1L to "Paper Lantern", 2L to "Quiet Harbor", 3L to "Salt Road", 4L to "Moss Lane", 9L to "Tin Orchard").map { (id, title) ->
             FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title), unreadCount = 0)
         }
         val repository = object : SeriesRepository by StoredOnly(StoredSeries(followed.first().series), emptyList()) {
@@ -107,12 +107,14 @@ class ExtensionStoreScreenshotTest {
                 listOf(
                     RepoExtension(REPO, "fixture.aurora", "Aurora", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.AVAILABLE, "$REPO/icon/aurora.png", listOf(1L, 2L).map(SeriesKind.MANGA::extensionSourceKey)),
                     RepoExtension(REPO, "fixture.birch", "Birch", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.OTHER_KEY, "$REPO/icon/birch.png", listOf(SeriesKind.MANGA.extensionSourceKey(3))),
+                    RepoExtension(REPO, "fixture.cedar", "Cedar", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.INSTALLED, "$REPO/icon/cedar.png", listOf(SeriesKind.MANGA.extensionSourceKey(4))),
                 ),
             )
         }
-        val extensions = ExtensionsViewModel(Device(), repos)
+        val cedar = InstalledExtension("/apk/cedar", "Cedar", "1.0", signer = "fixture-key", on = false, icon = ApkIcon("fixture.cedar", 1, "/apk/cedar"))
+        val extensions = ExtensionsViewModel(Device(listOf(cedar)), repos)
         val tab = SeriesTabViewModel(repository, { emptyList() }) { FollowedCheck(emptyList(), checked = 0, failed = 0) }
-        val actions = MissingExtensionsActions({ extensions }, { error("unused") }, onOpenRepos = {})
+        val actions = MissingExtensionsActions({ extensions }, { error("unused") }, onOpenRepos = {}, onOpenExtension = {})
         compose.setContent {
             TheoriaNightTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -122,7 +124,7 @@ class ExtensionStoreScreenshotTest {
         }
         compose.waitUntilSettled { tab.content.value.missingExtensions.isNotEmpty() }
         compose.onNodeWithText("Show").performClick()
-        compose.waitUntilSettled { extensions.state.value.listing != null }
+        compose.waitUntilSettled { extensions.state.value.listing != null && extensions.state.value.extensions != null }
         compose.onNodeWithText("Aurora").performClick()
         compose.waitForIdle()
         captureScreenRoboImage("missing_extensions.png")

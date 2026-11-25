@@ -38,6 +38,7 @@ import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SheetHeader
+import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.Series
@@ -49,6 +50,7 @@ class MissingExtensionsActions(
     val extensions: () -> ExtensionsViewModel,
     val switchSource: (SeriesId) -> SwitchSourceViewModel,
     val onOpenRepos: () -> Unit,
+    val onOpenExtension: (String) -> Unit,
 )
 
 @Composable
@@ -80,6 +82,7 @@ internal fun MissingExtensionsOverlay(
             onSwitch = { switching = it },
             onUnfollow = onUnfollow,
             onOpenRepos = actions.onOpenRepos,
+            onOpenExtension = actions.onOpenExtension,
             onDismiss = onDismiss,
         )
     } else {
@@ -104,28 +107,38 @@ private fun MissingExtensionsSheet(
     onSwitch: (Series) -> Unit,
     onUnfollow: (SeriesId) -> Unit,
     onOpenRepos: () -> Unit,
+    onOpenExtension: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val state by extensions.state.collectAsStateWithLifecycle()
     val actions = TitleActions(canSwitch, onSwitch, onUnfollow)
+    val provider = ProviderActions(extensions::install, extensions::ask, onOpenExtension)
     ExpandedBottomSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             SheetHeader(MISSING_EXTENSIONS_TITLE, closeDescription = "Close", onDismiss = onDismiss) {
                 TextButton(onClick = onOpenRepos) { Text(REPOS) }
             }
             val listing = state.listing
-            if (listing == null) LoadingState() else MissingGroups(missing, listing, state, extensions, actions)
+            if (listing == null) LoadingState() else MissingGroups(missing, listing, state, extensions, provider, actions)
         }
     }
+    state.asking?.let { extension -> TurnOnDialog(extension, onDismiss = { extensions.ask(null) }) { extensions.setOn(extension, true) } }
 }
 
 @Composable
-private fun MissingGroups(missing: List<Series>, listing: RepoListing, state: ExtensionsState, extensions: ExtensionsViewModel, actions: TitleActions) {
+private fun MissingGroups(
+    missing: List<Series>,
+    listing: RepoListing,
+    state: ExtensionsState,
+    extensions: ExtensionsViewModel,
+    provider: ProviderActions,
+    actions: TitleActions,
+) {
     val groups = missingExtensions(missing, listing.extensions)
     if (listing.problems.isNotEmpty()) {
         FailureRow({ extensions.reloadListing(refresh = true) }, message = unreadReposLine(listing.problems.size))
     }
-    if (groups.offered.isNotEmpty()) OfferedGroup(groups.offered, state, extensions::install, actions)
+    if (groups.offered.isNotEmpty()) OfferedGroup(groups.offered, state, provider, actions)
     if (groups.unlisted.isNotEmpty()) UnlistedGroup(groups.unlisted, if (listing.problems.isEmpty()) NOT_IN_YOUR_REPOS else NOT_FOUND, actions)
 }
 
@@ -140,27 +153,42 @@ private fun UnlistedGroup(unlisted: List<Series>, title: String, actions: TitleA
 }
 
 @Composable
-private fun OfferedGroup(providers: List<MissingProvider>, state: ExtensionsState, onInstall: (RepoExtension) -> Unit, actions: TitleActions) {
+private fun OfferedGroup(providers: List<MissingProvider>, state: ExtensionsState, handlers: ProviderActions, actions: TitleActions) {
     var expanded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     SettingsGroup(IN_YOUR_REPOS) {
         providers.forEachIndexed { index, provider ->
             if (index > 0) SettingsRowDivider()
             val key = "${provider.extension.repo}/${provider.extension.packageName}"
-            ProviderRow(provider, state, open = key in expanded, onToggle = { expanded = if (key in expanded) expanded - key else expanded + key }, onInstall, actions)
+            ProviderRow(provider, state, open = key in expanded, onToggle = { expanded = if (key in expanded) expanded - key else expanded + key }, handlers, actions)
         }
     }
 }
 
+private class ProviderActions(val onInstall: (RepoExtension) -> Unit, val onTurnOn: (InstalledExtension) -> Unit, val onOpenExtension: (String) -> Unit)
+
 @Composable
-private fun ProviderRow(provider: MissingProvider, state: ExtensionsState, open: Boolean, onToggle: () -> Unit, onInstall: (RepoExtension) -> Unit, actions: TitleActions) {
+private fun ProviderRow(provider: MissingProvider, state: ExtensionsState, open: Boolean, onToggle: () -> Unit, handlers: ProviderActions, actions: TitleActions) {
     val extension = provider.extension
+    val copy = installedCopy(extension, state.extensions)
+    val status = when {
+        copy == null -> repoExtensionStatus(extension)
+        copy.on -> LANGUAGE_OFF
+        else -> OFF
+    }
     RepoExtensionRow(
         extension,
         state,
-        summary = listOfNotNull("${provider.series.size} series", repoExtensionStatus(extension)).joinToString(" · "),
-        onInstall = onInstall,
+        summary = listOfNotNull("${provider.series.size} series", status).joinToString(" · "),
+        onInstall = handlers.onInstall,
         onClick = onToggle,
-        after = { Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
+        after = {
+            when {
+                copy == null -> Unit
+                copy.on -> TextButton(onClick = { handlers.onOpenExtension(copy.id) }) { Text(OPEN) }
+                else -> TextButton(onClick = { handlers.onTurnOn(copy) }) { Text(TURN_ON) }
+            }
+            Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+        },
     ) { ExtensionIcon(extension.iconUrl) }
     if (open) provider.series.forEach { MissingTitleRow(it, nested = true, actions) }
 }
@@ -199,6 +227,10 @@ internal const val NOT_IN_YOUR_REPOS = "Not in your repos"
 internal const val REPOS = "Repos"
 internal const val NOT_FOUND = "Not found"
 internal const val UNFOLLOW = "Unfollow"
+internal const val TURN_ON = "Turn on"
+internal const val OPEN = "Open"
+internal const val OFF = "Off"
+internal const val LANGUAGE_OFF = "Language off"
 internal const val SHOW_MISSING = "Show"
 private const val MISSING_EXTENSIONS_KEY = "missing-extensions"
 private const val SWITCH_SOURCE_KEY = "missing-extensions-switch-"
