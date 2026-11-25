@@ -60,7 +60,6 @@
 0167-viewer-episode-playback.md
 0169-viewer-gif-frame-rendering.md
 0171-viewer-level-controls.md
-0172-viewer-page-strip-and-scrubber.md
 0173-viewer-reading-modes-and-navigation.md
 0176-viewer-scrub-preview-player.md
 0177-viewer-episode-resume-positions.md
