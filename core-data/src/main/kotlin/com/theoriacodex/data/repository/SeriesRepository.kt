@@ -49,6 +49,7 @@ data class FollowedSeries(
     val lastReadAtEpochMs: Long? = null,
     val lastUpdatedAtEpochMs: Long? = null,
     val started: Boolean = false,
+    val entryCount: Int = 0,
 )
 
 data class EntryProgressRestore(

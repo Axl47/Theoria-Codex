@@ -61,7 +61,7 @@ internal fun TachiyomiImport.preview(sources: SourceAvailability, newRepos: List
     return BackupPreview.Series(
         importPreview(),
         newRepos = newRepos.map(ExtensionRepo::name),
-        turnOn = off.mapNotNull(sources.off::get).distinct(),
+        turnOn = off.mapNotNull(sources.off::get).map { it.copy(extensionId = null) }.distinct(),
         missingSources = missing.mapNotNull(sourceNames::get).distinct(),
         unnamedMissingSources = missing.count { it !in sourceNames },
     )

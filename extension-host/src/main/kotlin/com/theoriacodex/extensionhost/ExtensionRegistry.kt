@@ -87,7 +87,7 @@ class ExtensionRegistry(
         offer?.sources.orEmpty()
     }
 
-    suspend fun availability(): SourceAvailability = locked {
+    override suspend fun availability(): SourceAvailability = locked {
         loadEverything()
         val choices = choices.choices()
         val on = offer?.sources.orEmpty().mapTo(HashSet()) { it.key }
@@ -96,7 +96,7 @@ class ExtensionRegistry(
             if (extension.unsupported != null || extension.signer == null) continue
             if (choices.trusts(extension.identity, extension.signer)) {
                 loaded[extension]?.sources.orEmpty().filter { it.key !in on }
-                    .forEach { off.putIfAbsent(it.key, SourceOff(extension.label, it.language)) }
+                    .forEach { off.putIfAbsent(it.key, SourceOff(extension.label, it.language, extension.id)) }
             } else {
                 choices.owners.filterValues { it == extension.identity }.keys.mapNotNull(SourceKey::parse).filter { it !in on }
                     .forEach { off.putIfAbsent(it, SourceOff(extension.label)) }
