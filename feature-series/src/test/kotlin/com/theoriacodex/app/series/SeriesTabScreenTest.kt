@@ -176,7 +176,9 @@ class SeriesTabScreenTest {
         }
         compose.waitForIdle()
 
-        compose.onNodeWithText("Last watched").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Descending"))
+        compose.onNodeWithContentDescription("Last watched")
+            .assert(hasText("Watched"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Descending"))
     }
 
     @Test

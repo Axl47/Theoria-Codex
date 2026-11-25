@@ -30,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -221,11 +222,12 @@ private fun FollowingControls(
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (content.offersFilter) KindFilter(content.filter, onChooseKind)
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            val name = sort.key.label(content.words)
             SortLabel(
                 sort.key.shortLabel(content.words),
                 sort.direction,
                 onReverse,
-                description = sort.key.label(content.words),
+                modifier = Modifier.semantics { contentDescription = name },
                 contentPadding = PaddingValues(start = 8.dp),
             )
         }

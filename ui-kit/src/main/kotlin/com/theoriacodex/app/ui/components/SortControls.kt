@@ -27,13 +27,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.text
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,7 +59,6 @@ fun SortLabel(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     actionLabel: String = REVERSE_ORDER,
-    description: String = label,
     contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
 ) {
     TextButton(
@@ -75,7 +71,7 @@ fun SortLabel(
     ) {
         Text(
             label,
-            Modifier.weight(1f, fill = false).clearAndSetSemantics { text = AnnotatedString(description) },
+            Modifier.weight(1f, fill = false),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
