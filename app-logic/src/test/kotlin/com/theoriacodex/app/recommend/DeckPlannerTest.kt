@@ -68,9 +68,9 @@ class DeckPlannerTest {
         val liked = id("a1")
         val injected = DeckSteering().inject(
             listOf(
-                DeckCard(post("s1"), DeckOrigin.Similar(liked, saved = false)),
+                DeckCard(post("s1"), DeckOrigin.Similar(liked)),
                 DeckCard(post("c1"), DeckOrigin.Creator(liked, "maker")),
-                DeckCard(post("s2"), DeckOrigin.Similar(id("other"), saved = false)),
+                DeckCard(post("s2"), DeckOrigin.Similar(id("other"))),
             ),
         )
 
@@ -102,7 +102,7 @@ class DeckPlannerTest {
     }
 
     @Test fun `an injected picture's copies are not dealt again from a lane (ADR 0070)`() {
-        val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(id("liked"), saved = false))))
+        val injected = DeckSteering().inject(listOf(DeckCard(post("s1"), DeckOrigin.Similar(id("liked")))))
 
         val batch = nextBatch(listOf(lane(a, "a1", "a2")), injected, { false }, size = 2) { post ->
             if (post.id == id("s1")) setOf(id("s1"), id("a1")) else setOf(post.id)

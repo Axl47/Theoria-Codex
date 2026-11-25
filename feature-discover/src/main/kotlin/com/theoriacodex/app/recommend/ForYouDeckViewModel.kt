@@ -92,7 +92,7 @@ class ForYouDeckViewModel(
     private var dealtBefore = false
     private var lastKept: Pair<String, List<Post>>? = null
     private val deckWrites = Channel<KeptDeck>(Channel.CONFLATED)
-    private val heldAsks = LinkedHashMap<PostId, Pair<Post, Boolean>>()
+    private val heldAsks = LinkedHashMap<PostId, Post>()
 
     private val session = UUID.randomUUID().toString().take(8)
 
@@ -243,7 +243,7 @@ class ForYouDeckViewModel(
             refill(built)
             opening = false
             if (built.wanted) makeUp(built)
-            heldAsks.values.forEach { (post, saved) -> askForMore(built, post, saved) }
+            heldAsks.values.forEach { post -> askForMore(built, post) }
             heldAsks.clear()
             vet(built)
         }
@@ -566,7 +566,7 @@ class ForYouDeckViewModel(
                     mix.steering = mix.steering.after(signal, origin)
                     publish()
                 }
-                if (signal == ForYouVerdictKind.LIKED || signal == ForYouVerdictKind.SAVED) askForMore(mix, post, saved = signal == ForYouVerdictKind.SAVED)
+                if (signal == ForYouVerdictKind.LIKED || signal == ForYouVerdictKind.SAVED) askForMore(mix, post)
             }
             is TriageDecisionEvent.Reverted -> {
                 asking.remove(post.id)?.cancel()
@@ -582,21 +582,20 @@ class ForYouDeckViewModel(
         val post = event.decision.post
         when (event) {
             is TriageDecisionEvent.Decided -> when (event.decision.verdictKind()) {
-                ForYouVerdictKind.LIKED -> heldAsks[post.id] = post to false
-                ForYouVerdictKind.SAVED -> heldAsks[post.id] = post to true
+                ForYouVerdictKind.LIKED, ForYouVerdictKind.SAVED -> heldAsks[post.id] = post
                 else -> Unit
             }
             is TriageDecisionEvent.Reverted -> heldAsks.remove(post.id)
         }
     }
 
-    private fun askForMore(mix: ForYouMix, post: Post, saved: Boolean) {
+    private fun askForMore(mix: ForYouMix, post: Post) {
         val animatedOnly = inputs?.animatedOnly == true
         val creator = creatorProfileActions(post, creatorSources).firstNotNullOfOrNull { it.profile }
         val job = workScope.launch(start = CoroutineStart.LAZY) {
             val similar = wiring.trails(TrailRequest.Similar(post), animatedOnly)
             val (spec, origin) = when {
-                similar != null -> similar to DeckOrigin.Similar(post.id, saved)
+                similar != null -> similar to DeckOrigin.Similar(post.id)
                 creator != null -> wiring.trails(TrailRequest.Creator(creator, post), animatedOnly) to DeckOrigin.Creator(post.id, creator.displayName)
                 else -> null to null
             }

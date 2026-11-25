@@ -7,7 +7,7 @@ import com.theoriacodex.domain.model.PostId
 sealed interface DeckOrigin {
     data class Lane(val laneId: String, val label: String) : DeckOrigin
 
-    data class Similar(val of: PostId, val saved: Boolean) : DeckOrigin
+    data class Similar(val of: PostId) : DeckOrigin
 
     data class Creator(val of: PostId, val name: String) : DeckOrigin
 }

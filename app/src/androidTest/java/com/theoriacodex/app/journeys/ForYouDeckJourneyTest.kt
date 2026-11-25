@@ -19,12 +19,14 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMBS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMB_TAG_PREFIX
+import com.theoriacodex.app.recommend.FOR_YOU_FORK_ROW_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_FORK_TAG_PREFIX
 import com.theoriacodex.app.recommend.FOR_YOU_GRID_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_FILTERS_TAG
@@ -148,18 +150,18 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     fun aLikeBringsACardLikeItWithinTheNextSixCards() {
         openDeck()
         decide("Like")
-        val brought = (0 until 6).any { (origin() == "Like one you liked").also { found -> if (!found) decide("Skip") } }
+        val brought = (0 until 6).any { (origin() == "Similar").also { found -> if (!found) decide("Skip") } }
         assertTrue("No card like the liked one in the next six", brought)
-        saveScreenshot("deck-like-one-you-liked")
+        saveScreenshot("deck-similar-origin")
         assertEquals(1, io { container.data.likesRepository.observeLikedPostIds("profile-main").first() }.size)
     }
 
     @Test
-    fun aSaveBringsACardLikeItThatSaysItWasASave() {
+    fun aSaveBringsACardLikeIt() {
         io { container.content.ensureCodex(profileScopedCodexId("profile-main", "journey-saves"), "Journey saves") }
         openDeck()
         decide { it.startsWith("Save to ") }
-        val brought = (0 until 6).any { (origin() == "Like one you saved").also { found -> if (!found) decide("Skip") } }
+        val brought = (0 until 6).any { (origin() == "Similar").also { found -> if (!found) decide("Skip") } }
         assertTrue("No card like the saved one in the next six", brought)
     }
 
@@ -276,7 +278,8 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val fork = SemanticsMatcher("a tag fork") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("${FOR_YOU_FORK_TAG_PREFIX}tag:") == true
         }
-        waitFor("tag fork is offered") { compose.onAllNodes(fork).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the pill row is shown") { compose.onAllNodesWithTag(FOR_YOU_FORK_ROW_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).performScrollToNode(fork)
         val label = compose.onAllNodes(fork).onFirst().fetchSemanticsNode().text()
         activate(compose.onAllNodes(fork).onFirst())
         waitFor("crumb 1 is displayed after forking") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().isNotEmpty() }
