@@ -198,7 +198,7 @@ fun FeedFilterSheet(
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                onTriage?.let { triage -> TextButton(onClick = { onDismiss(); triage() }) { Text("Triage") } }
+                onTriage?.let { triage -> TextButton(onClick = { onDismiss(); triage() }) { Text("Swipe") } }
                 TextButton(onClick = onReset) { Text("Reset") }
             }
             content()

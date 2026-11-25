@@ -1,9 +1,10 @@
 package com.theoriacodex.app.triage
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun BoxScope.TriageEdgeCue(icon: ImageVector, alignment: Alignment, progress: Float) {
+internal fun BoxScope.TriageEdgeCue(icon: ImageVector, label: String, alignment: Alignment, progress: Float) {
     if (progress <= 0f) return
     Surface(
         shape = CircleShape,
@@ -37,11 +38,18 @@ internal fun BoxScope.TriageEdgeCue(icon: ImageVector, alignment: Alignment, pro
         modifier = Modifier
             .align(alignment)
             .padding(16.dp)
-            .size(56.dp)
+            .height(56.dp)
             .alpha(progress)
             .scale(CUE_MIN_SCALE + (1f - CUE_MIN_SCALE) * progress),
     ) {
-        Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null) }
+        Row(
+            Modifier.padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null)
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
