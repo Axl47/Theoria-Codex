@@ -105,7 +105,7 @@ internal fun ViewerMediaPage(
 ) {
     val key = ViewerMediaKey(post.id, mediaIndex)
     val kind = remember(post, media, pixivUgoiraClient != null) { viewerRendererMediaKind(post, media, pixivUgoiraClient != null) }
-    val animated = kind.animated
+    val animated = imageSession.isAnimated(kind, media)
     val interactions = remember(key) { ViewerMediaInteractions() }
     val holdScrub = LocalViewerHoldScrub.current?.takeIf { controls.isActive }
     DisposableEffect(holdScrub) { onDispose { holdScrub?.abandon() } }

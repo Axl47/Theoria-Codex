@@ -178,23 +178,29 @@ internal class ViewerSelection(
     val mediaIndex: Int,
     val canPlayUgoira: Boolean,
     val overviewItems: List<ViewerMediaOverviewItem>,
+    private val imageSession: ViewerImageSession = ViewerImageSession(),
 ) {
     val media: ImageRef? = mediaItems.getOrNull(mediaIndex)
     private val kind = media?.let { viewerRendererMediaKind(post, it, canPlayUgoira) }
     val isSeekable = kind?.seekable == true
     val canDownload = kind == ViewerMediaKind.UGOIRA || !media?.url.isNullOrBlank()
-    val isAnimated = kind?.animated == true
+    val reservesTimeline get() = kind != null && media != null && imageSession.isAnimated(kind, media)
     val overviewAvailable = viewerMediaOverviewAvailable(overviewItems)
 }
 
 @Composable
-internal fun rememberViewerSelection(uiState: ViewerUiState, page: ViewerPageState, canPlayUgoira: Boolean): ViewerSelection {
+internal fun rememberViewerSelection(
+    uiState: ViewerUiState,
+    page: ViewerPageState,
+    canPlayUgoira: Boolean,
+    imageSession: ViewerImageSession,
+): ViewerSelection {
     val post = page.post
     val mediaItems = remember(post) { page.media.map(ViewerMediaState::ref) }
     val mediaIndex = uiState.currentPage?.selectedMediaIndex?.coerceIn(0, mediaItems.lastIndex) ?: 0
     val overviewItems = remember(post) { viewerMediaOverviewItems(page) }
-    return remember(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems) {
-        ViewerSelection(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems)
+    return remember(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems, imageSession) {
+        ViewerSelection(post, mediaItems, mediaIndex, canPlayUgoira, overviewItems, imageSession)
     }
 }
 

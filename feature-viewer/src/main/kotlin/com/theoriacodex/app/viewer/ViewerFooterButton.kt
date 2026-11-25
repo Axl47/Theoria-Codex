@@ -99,7 +99,7 @@ internal fun viewerFooterHeight(
 
 @Composable
 internal fun viewerFooterBarHeight(selection: ViewerSelection): Dp = when {
-    selection.isAnimated -> viewerTimelineFooterHeight()
+    selection.reservesTimeline -> viewerTimelineFooterHeight()
     selection.overviewItems.size > 1 -> VIEWER_TIMELINE_TRACK_HEIGHT
     else -> 0.dp
 }

@@ -48,6 +48,7 @@ internal fun ViewerAnimatedWebPPlayer(
     onLoading: () -> Unit,
     onSuccess: () -> Unit,
     onError: (Throwable) -> Unit,
+    onStill: () -> Unit,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
 ) {
@@ -78,6 +79,7 @@ internal fun ViewerAnimatedWebPPlayer(
             onSuccess = {
                 state.drawable = it.result.drawable.unwrapWebPDrawable()
                 state.frameCount = state.drawable?.frameSeqDecoder?.frameCount ?: 0
+                if (state.drawable == null) onStill()
                 onSuccess()
             },
             onError = { onError(it.result.throwable) },
