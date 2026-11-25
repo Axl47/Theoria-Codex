@@ -37,7 +37,7 @@ class SaveTargetRankingTest {
         assertEquals("a", rankSaveTargets(listOf(a, b), profile, setOf("a"), excludedCodexIds = setOf("a")).savedIn?.codexId)
     }
 
-    @Test fun `saved in names the best-matching Codex that holds the post`() {
+    @Test fun `saved in names the best-matching Codex that holds the post (ADR 0078)`() {
         assertEquals("b", rankSaveTargets(listOf(a, b, c), profile, setOf("a", "b"), relevance = mapOf("b" to 0.6, "c" to 0.9)).savedIn?.codexId)
         assertEquals(null, rankSaveTargets(listOf(a, b), profile, emptySet()).savedIn)
     }

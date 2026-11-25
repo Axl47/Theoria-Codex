@@ -31,7 +31,7 @@ class ViewerSaveButtonModelTest {
     }
 
     @Test
-    fun `once saved the button names the Codex holding the post and keeps the next suggestion apart as the tap target`() {
+    fun `once saved the button names the Codex holding the post and keeps the next suggestion apart as the tap target (ADR 0175)`() {
         val saved = viewerSaveButtonState(art.id, suggestions("b", "c", savedIn = "a"), null, 0L)
         assertEquals(suggestion("a"), saved.savedIn())
         assertEquals(suggestion("b"), saved.next())
