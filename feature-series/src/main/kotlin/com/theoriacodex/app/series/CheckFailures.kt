@@ -49,10 +49,11 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import java.text.DateFormat
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 
 internal enum class CheckProblem(val label: String) {
     UNREACHABLE("Couldn't reach site"),
@@ -148,15 +149,12 @@ internal fun OffScreenFailuresNotice(checkRun: Int, failed: FollowedCheck?, grid
         if (atTopBeforeCard) return@LaunchedEffect grid.scrollToItem(0)
         withFrameNanos {}
         if (snackbar == null || grid.showsCheckFailed()) return@LaunchedEffect
-        val line = offScreenFailuresLine(shown.failed)
-        val result = coroutineScope {
-            launch {
-                snapshotFlow { latest == null || grid.showsCheckFailed() }.first { it }
-                snackbar.currentSnackbarData?.takeIf { it.visuals.message == line }?.dismiss()
-            }
-            snackbar.showSnackbar(line, actionLabel = "Show", duration = SnackbarDuration.Long).also { coroutineContext.cancelChildren() }
+        val show = coroutineScope {
+            val notice = async { snackbar.showSnackbar(offScreenFailuresLine(shown.failed), actionLabel = "Show", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed }
+            val gone = async { snapshotFlow { latest == null || grid.showsCheckFailed() }.first { it }.not() }
+            select { notice.onAwait { it }; gone.onAwait { it } }.also { coroutineContext.cancelChildren() }
         }
-        if (result == SnackbarResult.ActionPerformed && latest != null) grid.animateScrollToItem(0)
+        if (show) grid.animateScrollToItem(0)
     }
 }
 

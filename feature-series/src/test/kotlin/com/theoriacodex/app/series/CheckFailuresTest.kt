@@ -1,5 +1,9 @@
 package com.theoriacodex.app.series
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.SnackbarDuration
 import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.material3.SnackbarHostState
@@ -122,8 +126,10 @@ class CheckFailuresTest {
         var failed by mutableStateOf<FollowedCheck?>(null)
         var runs by mutableIntStateOf(0)
         lateinit var grid: LazyGridState
+        lateinit var scope: CoroutineScope
         compose.setContent {
             grid = rememberLazyGridState()
+            scope = rememberCoroutineScope()
             MaterialTheme {
                 Box {
                     FollowingBody(
@@ -155,6 +161,14 @@ class CheckFailuresTest {
         compose.runOnIdle(finish)
         compose.onNodeWithText(offScreenFailuresLine(1)).assertIsDisplayed()
         compose.runOnIdle { runBlocking { grid.scrollToItem(0) } }
+        compose.onAllNodesWithText(offScreenFailuresLine(1)).assertCountEquals(0)
+
+        val busy = scope.launch { snackbar.showSnackbar("Busy", duration = SnackbarDuration.Indefinite) }
+        compose.runOnIdle { runBlocking { grid.scrollToItem(30) } }
+        compose.runOnIdle(finish)
+        compose.onNodeWithText("Busy").assertIsDisplayed()
+        compose.runOnIdle { runBlocking { grid.scrollToItem(0) } }
+        compose.runOnIdle { busy.cancel() }
         compose.onAllNodesWithText(offScreenFailuresLine(1)).assertCountEquals(0)
     }
 }
