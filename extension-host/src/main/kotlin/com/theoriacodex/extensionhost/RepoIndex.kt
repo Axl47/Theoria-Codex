@@ -24,6 +24,7 @@ data class IndexedExtension(
     val languages: List<String>,
     val kind: SeriesKind,
     val torrent: Boolean = false,
+    val iconUrl: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -108,6 +109,7 @@ private class LegacyExtension(
             languages = sources.orEmpty().map(LegacySource::lang).ifEmpty { listOf(lang) }.distinct(),
             kind = if (anime) SeriesKind.ANIME else SeriesKind.MANGA,
             torrent = torrent == 1,
+            iconUrl = "$folder/icon/$pkg.png",
         )
     }
 }
@@ -147,6 +149,7 @@ private class MangaEntry(
 ) : ProtoEntry {
     override fun indexed() = IndexedExtension(
         name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.MANGA,
+        iconUrl = resources.icon,
     )
 }
 
@@ -164,13 +167,15 @@ private class AnimeEntry(
 ) : ProtoEntry {
     override fun indexed() = IndexedExtension(
         name, packageName, resources.apkUrl, extensionLib, versionCode, versionName, sources.map(ProtoSource::language).distinct(), SeriesKind.ANIME,
-        torrent = torrent == 1,
+        torrent = torrent == 1, iconUrl = resources.icon,
     )
 }
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "")
+private class ProtoResources(@ProtoNumber(1) val apkUrl: String = "", @ProtoNumber(2) val iconUrl: String = "") {
+    val icon: String? get() = iconUrl.ifBlank { null }
+}
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
