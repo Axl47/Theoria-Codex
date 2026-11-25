@@ -75,7 +75,7 @@ data class BuiltInSiteSummary(
     val needsVerification: Boolean,
 )
 
-enum class BuiltInTestResult { WORKING, NEEDS_BROWSER_CHECK, NEEDS_ACCOUNT, DOWN, UNREACHABLE, FAILED }
+enum class BuiltInTestResult { WORKING, NEEDS_BROWSER_CHECK, NEEDS_ACCOUNT, DOWN, RATE_LIMITED, UNREACHABLE, FAILED }
 
 enum class CustomSiteAvailability {
     AVAILABLE,
