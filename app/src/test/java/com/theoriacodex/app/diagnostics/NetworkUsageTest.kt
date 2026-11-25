@@ -83,7 +83,7 @@ class NetworkUsageTest {
     }
 
     @Test
-    fun `a download abandoned midway counts only what was read`() {
+    fun `a download abandoned midway counts only what was read (ADR 0103)`() {
         val request = Request.Builder().url("http://127.0.0.1:${server.address.port}/a.jpg").build()
         AppHttpClients(CookieJar.NO_COOKIES).images.newCall(request).execute().use { response ->
             response.body.source().readByteArray(PARTIAL_BYTES.toLong())

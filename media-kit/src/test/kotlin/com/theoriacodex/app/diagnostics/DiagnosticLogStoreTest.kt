@@ -139,6 +139,44 @@ class DiagnosticLogStoreTest {
         assertTrue("crash on the main thread" in store.readCrashes().single())
     }
 
+    @Test
+    fun `a crash that cannot be written still reaches the previous handler (ADR 0103)`() {
+        val directory = folder.root.resolve("diagnostics").apply { mkdirs() }
+        directory.resolve("crash-1000.txt").mkdirs()
+        val store = DiagnosticLogStore(directory, now = { 1_000L })
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        val handedOver = mutableListOf<Throwable>()
+        val crash = IllegalStateException("crash on the main thread")
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, error -> handedOver += error }
+            installCrashCapture(store)
+
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+
+        assertEquals(listOf<Throwable>(crash), handedOver)
+    }
+
+    @Test
+    fun `clear waits for events recorded before it and removes them (ADR 0103)`() {
+        val store = store()
+        val release = CountDownLatch(1)
+        store.record("area", "held", heldOnTheWriter(release) {})
+        store.record("area", "before clear", null)
+        val clearing = Thread.currentThread()
+        val releaser = Thread {
+            while (clearing.state != Thread.State.WAITING && clearing.state != Thread.State.TIMED_WAITING) Thread.onSpinWait()
+            release.countDown()
+        }.apply { start() }
+
+        store.clear()
+        releaser.join(10_000)
+
+        assertEquals("", store.readEvents())
+    }
+
     private fun heldOnTheWriter(release: CountDownLatch, onWriter: () -> Unit) = object : IllegalStateException("held") {
         override fun printStackTrace(s: PrintWriter) {
             onWriter()
