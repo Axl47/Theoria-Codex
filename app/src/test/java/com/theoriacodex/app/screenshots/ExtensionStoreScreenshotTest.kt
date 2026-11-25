@@ -106,6 +106,7 @@ class ExtensionStoreScreenshotTest {
             followed(5, "Dune Step", total = 8, unread = 2, read = 1_772_539_200_000L),
             followed(9, "Tin Orchard", cover = "https://cdn.asurascans.com/covers/9.webp"),
             followed(10, "Kelp Row", cover = "https://img.flamecomics.xyz/10.jpg"),
+            followed(11, "Fern Gate"),
         )
         val repository = object : SeriesRepository by StoredOnly(StoredSeries(followed.first().series), emptyList()) {
             override fun observeFollowed() = flowOf(followed)

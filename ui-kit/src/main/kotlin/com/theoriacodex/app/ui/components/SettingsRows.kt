@@ -85,19 +85,22 @@ fun SettingsGroup(
     action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (title != null) {
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                title,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            action?.let { Box(Modifier.claimingNoHeight()) { it() } }
-        }
-    }
+    if (title != null) SettingsGroupTitle(title, action)
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+@Composable
+fun SettingsGroupTitle(title: String, action: (@Composable () -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        action?.let { Box(Modifier.claimingNoHeight()) { it() } }
     }
 }
 
