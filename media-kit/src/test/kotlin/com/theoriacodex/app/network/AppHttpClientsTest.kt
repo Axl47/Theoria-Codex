@@ -101,13 +101,15 @@ class AppHttpClientsTest {
     @Test
     fun `every app client turns a blocked lookup into an ordinary failure (ADR 0051)`() {
         val clients = AppHttpClients(CookieJar.NO_COOKIES)
-        val getters = AppHttpClients::class.java.methods.filter { it.parameterCount == 0 && it.returnType == OkHttpClient::class.java }
+        val exposed = AppHttpClients::class.java.methods
+            .filter { it.parameterCount == 0 && it.returnType == OkHttpClient::class.java }
+            .associate { it.name to it.invoke(clients) as OkHttpClient }
 
-        assertTrue(getters.isNotEmpty())
-        for (getter in getters) {
-            val blocked = (getter.invoke(clients) as OkHttpClient).newBuilder().dns { throw SecurityException("blocked") }.build()
+        assertTrue(exposed.keys.toString(), exposed.values.any { it === clients.stalledPageRescue })
+        for ((name, client) in exposed) {
+            val blocked = client.newBuilder().dns { throw SecurityException("blocked") }.build()
             val failure = runCatching { blocked.newCall(Request.Builder().url("https://example.test/").build()).execute() }.exceptionOrNull()
-            assertTrue("${getter.name}: $failure", failure is IOException)
+            assertTrue("$name: $failure", failure is IOException)
         }
     }
 }

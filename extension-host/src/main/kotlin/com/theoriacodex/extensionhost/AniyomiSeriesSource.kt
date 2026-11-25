@@ -29,7 +29,7 @@ class AniyomiSeriesSource internal constructor(
     private val http = source as? AnimeHttpSource
     internal val streams = AniyomiStreams(source, host, calls, limits)
 
-    internal val sourceImages: SourceImages? = http?.let { SourceImages { _, url, _ -> it.imageCall(url.toString()).execute() } }
+    internal val sourceImages: SourceImages? = http?.let { SourceImages { _, url, _, caller -> it.imageCall(url.toString()).executeFor(caller) } }
     override val name: String get() = source.name
     override val language: String get() = source.lang
 

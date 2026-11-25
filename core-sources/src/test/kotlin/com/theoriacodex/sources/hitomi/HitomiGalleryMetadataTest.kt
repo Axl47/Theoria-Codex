@@ -19,7 +19,8 @@ class HitomiGalleryMetadataTest {
               "files": [
                 {"hash": "$HASH", "name": "1.webp", "hasavif": "1", "width": "800", "height": null},
                 {"hash": "$HASH", "name": "2.webp", "hasavif": 1, "width": 1600.0, "height": "tall"},
-                {"hash": "$HASH", "name": "3.webp", "hasavif": 0, "width": 0, "height": -5}
+                {"hash": "$HASH", "name": "3.webp", "hasavif": 0, "width": 0, "height": -5},
+                {"hash": "$HASH", "name": "4.webp", "hasavif": ""}
               ],
               "type": "  Manga ",
               "title": " ",
@@ -36,6 +37,7 @@ class HitomiGalleryMetadataTest {
                 ParsedHitomiFile(HASH, "1.webp", hasAvif = true, width = 800, height = null),
                 ParsedHitomiFile(HASH, "2.webp", hasAvif = true, width = 1600, height = null),
                 ParsedHitomiFile(HASH, "3.webp", hasAvif = false, width = null, height = null),
+                ParsedHitomiFile(HASH, "4.webp", hasAvif = false, width = null, height = null),
             ),
             gallery.files,
         )
@@ -97,6 +99,7 @@ class HitomiGalleryMetadataTest {
             gallery.taxonomy,
         )
         assertTrue(gallery.creators.isEmpty())
+        assertEquals(emptyList<PostTaxonomyTerm>(), parse("""{"files": [{"hash": "$HASH", "name": "1.jpg"}], "tags": null}""").taxonomy)
     }
 
     @Test

@@ -112,6 +112,9 @@ class GelbooruCommentsTest {
         assertEquals("10", first.nextPageToken)
         assertNull(first.total)
 
+        http.enqueueGet(api, viewQuery, body = gelbooruPostPage)
+        assertEquals(listOf("100", "101"), adapter.comments(gelbooruPost, pageToken = null).comments.map { it.id })
+
         http.enqueueGet(api, viewQuery + ("pid" to "10"), body = gelbooruPostPage.replace("""<a href="?page=post&amp;s=view&amp;id=77&amp;pid=10">2</a>""", ""))
         val second = adapter.comments(gelbooruPost, pageToken = first.nextPageToken)
         assertEquals("20", second.nextPageToken)
@@ -131,7 +134,7 @@ class GelbooruCommentsTest {
     }
 
     @Test
-    fun `Safebooru's column layout is read too`() {
+    fun `Safebooru's column layout is read too (ADR 0042, 0054)`() {
         val html = """
             <div id="comment-list">
               <div id="c57661"><div class="col1"><a href="index.php?page=account&amp;s=profile&amp;id=1">alice</a>
@@ -174,6 +177,7 @@ class GelbooruCommentsTest {
     fun `native comment anchors follow the site's markup (ADR 0008, 0042)`() {
         assertNull(gelbooru().nativeCommentAnchor("100"))
         assertEquals("c100", GelbooruSourceAdapter(safebooru, http).nativeCommentAnchor("100"))
+        assertEquals("c100", GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http).nativeCommentAnchor("100"))
     }
 
     @Test
@@ -206,12 +210,15 @@ class GelbooruCommentsTest {
         val adapter = GelbooruSourceAdapter(GelbooruSite.RULE34XXX, http, { credentials.userApiKey(SourceKey.RULE34XXX) })
         val rule34Post = commentTestPost(SourceKey.RULE34XXX, "77")
         val keyedDapi = dapiQuery + mapOf("user_id" to "1", "api_key" to "k")
+        http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, statusCode = 401)
         http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, body = "<?xml version=\"1.0\"?><error>Missing authentication.</error>")
         http.enqueueGet("https://api.rule34.xxx/index.php", keyedDapi, body = dapiXml)
 
+        val unauthorized = runCatching { adapter.comments(rule34Post, pageToken = null) }.exceptionOrNull()
         val refused = runCatching { adapter.comments(rule34Post, pageToken = null) }.exceptionOrNull()
         val page = adapter.comments(rule34Post, pageToken = null)
 
+        assertTrue("$unauthorized", unauthorized is SourceAdapterException)
         assertEquals(SourceFailureReason.AUTH_REQUIRED, (refused as SourceAdapterException).reason)
         assertEquals(listOf("5", "6"), page.comments.map { it.id })
         http.assertExhausted()

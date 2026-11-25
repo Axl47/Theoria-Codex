@@ -9,7 +9,7 @@ import org.junit.Test
 
 class CredentialPayloadRecordTest {
     @Test
-    fun `payloads without custom keys keep their previous bytes`() {
+    fun `payloads without custom keys keep their previous bytes (ADR 0034)`() {
         val json = encode(CredentialPayloadRecord(SourceCredentialSnapshot(gelbooruUserId = "1", gelbooruApiKey = "k")))
 
         assertFalse(json.contains("customSites"))

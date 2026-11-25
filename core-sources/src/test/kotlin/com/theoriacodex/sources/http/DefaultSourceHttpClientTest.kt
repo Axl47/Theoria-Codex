@@ -7,9 +7,11 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -107,11 +109,14 @@ class DefaultSourceHttpClientTest {
 
     @Test
     fun `the default source client turns a blocked lookup into an ordinary failure (ADR 0051)`() {
-        val blocked = defaultSourceOkHttpClient.newBuilder().dns { throw SecurityException("blocked") }.build()
+        listOf(SecurityException("blocked"), IllegalStateException("resolver broke")).forEach { lookupFailure ->
+            val blocked = defaultSourceOkHttpClient.newBuilder().dns { throw lookupFailure }.build()
 
-        val failure = runCatching { blocked.newCall(Request.Builder().url("https://example.test/").build()).execute() }.exceptionOrNull()
+            val failure = runCatching { blocked.newCall(Request.Builder().url("https://example.test/").build()).execute() }.exceptionOrNull()
 
-        assertTrue("$failure", failure is IOException)
+            assertTrue("$failure", failure is IOException)
+            assertTrue("$failure", generateSequence(failure) { it.cause }.any { it === lookupFailure })
+        }
     }
 
     @Test
@@ -168,10 +173,12 @@ class DefaultSourceHttpClientTest {
     @Test
     fun `cancellation disconnects an active post response read (ADR 0051)`() = runBlocking {
         val disconnected = CountDownLatch(1)
+        val handlerStarted = CountDownLatch(1)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/stalled-post") { exchange ->
                 exchange.requestBody.close()
                 exchange.sendResponseHeaders(200, 0L)
+                handlerStarted.countDown()
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
                 try {
                     while (System.nanoTime() < deadline) {
@@ -188,31 +195,32 @@ class DefaultSourceHttpClientTest {
             start()
         }
 
-        val (failure, disconnectedBeforeRelease) = try {
-            val failure = runCatching {
-                withTimeout(100L) {
-                    DefaultSourceHttpClient(readTimeoutMs = 10_000, maxRetries = 0)
-                        .postJson(url = "http://127.0.0.1:${server.address.port}/stalled-post", body = "{}")
-                }
-            }.exceptionOrNull()
-            failure to disconnected.await(2L, TimeUnit.SECONDS)
+        val call = launch(Dispatchers.IO) {
+            DefaultSourceHttpClient(readTimeoutMs = 10_000, maxRetries = 0)
+                .postJson(url = "http://127.0.0.1:${server.address.port}/stalled-post", body = "{}")
+        }
+        val disconnectedBeforeRelease = try {
+            assertTrue("the request never reached the server", handlerStarted.await(5L, TimeUnit.SECONDS))
+            call.cancel()
+            disconnected.await(2L, TimeUnit.SECONDS)
         } finally {
             server.stop(0)
         }
+        call.join()
 
-        assertTrue(failure is TimeoutCancellationException)
+        assertTrue(call.isCancelled)
         assertTrue("the call kept reading after its caller was cancelled", disconnectedBeforeRelease)
     }
 
     @Test
     fun `returns exact binary range response and headers (ADR 0051)`() = runTest {
-        var capturedRange: String? = null
-        var capturedEncoding: String? = null
+        val capturedRanges = mutableListOf<String?>()
+        val capturedEncodings = mutableListOf<String?>()
         val expectedBody = byteArrayOf(0, 1, 0xFF.toByte(), 2)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/range") { exchange ->
-                capturedRange = exchange.requestHeaders.getFirst("Range")
-                capturedEncoding = exchange.requestHeaders.getFirst("Accept-Encoding")
+                capturedRanges += exchange.requestHeaders.getFirst("Range")
+                capturedEncodings += exchange.requestHeaders.getFirst("Accept-Encoding")
                 exchange.responseHeaders.add("Content-Range", "bytes 4-7/12")
                 exchange.sendResponseHeaders(206, expectedBody.size.toLong())
                 exchange.responseBody.use { output ->
@@ -224,17 +232,16 @@ class DefaultSourceHttpClientTest {
         }
 
         val response = try {
-            DefaultSourceHttpClient(maxRetries = 0).getBytes(
-                url = "http://127.0.0.1:${server.address.port}/range",
-                range = SourceByteRange(startInclusive = 4, endInclusive = 7),
-                maxBodyBytes = expectedBody.size,
-            )
+            val client = DefaultSourceHttpClient(maxRetries = 0)
+            val url = "http://127.0.0.1:${server.address.port}/range"
+            client.getBytes(url = url, range = SourceByteRange(startInclusive = 0, endInclusive = 3), maxBodyBytes = expectedBody.size)
+            client.getBytes(url = url, range = SourceByteRange(startInclusive = 4, endInclusive = 7), maxBodyBytes = expectedBody.size)
         } finally {
             server.stop(0)
         }
 
-        assertEquals("bytes=4-7", capturedRange)
-        assertEquals("identity", capturedEncoding)
+        assertEquals(listOf<String?>("bytes=0-3", "bytes=4-7"), capturedRanges)
+        assertEquals(listOf<String?>("identity", "identity"), capturedEncodings)
         assertEquals(206, response.statusCode)
         assertArrayEquals(expectedBody, response.body)
         assertEquals(
@@ -465,14 +472,17 @@ class DefaultSourceHttpClientTest {
         val previous = System.setProperty("http.agent", "Platform/1.0")
         try {
             val client = DefaultSourceHttpClient(maxRetries = 0)
-            client.get("http://127.0.0.1:${server.address.port}/")
-            client.get("http://127.0.0.1:${server.address.port}/", headers = mapOf("user-agent" to "Source/2.0"))
+            val url = "http://127.0.0.1:${server.address.port}/"
+            client.get(url)
+            client.get(url, headers = mapOf("user-agent" to "Source/2.0"))
+            client.postForm(url, form = mapOf("a" to "1"))
+            client.postJson(url, body = "{}")
         } finally {
             if (previous == null) System.clearProperty("http.agent") else System.setProperty("http.agent", previous)
             server.stop(0)
         }
 
-        assertEquals(listOf<String?>("Platform/1.0", "Source/2.0"), seenAgents)
+        assertEquals(listOf<String?>("Platform/1.0", "Source/2.0", "Platform/1.0", "Platform/1.0"), seenAgents)
     }
 
     private fun redirect(exchange: HttpExchange, location: String) {
@@ -486,6 +496,7 @@ class DefaultSourceHttpClientTest {
         assertFalse(defaultShouldRetryStatus("https://api.iwara.tv/search?type=videos", 429))
         assertFalse(defaultShouldRetryStatus("https://filesq.iwara.tv/file/abc", 429))
         assertFalse(defaultShouldRetryStatus("https://mikoto.iwara.tv/view?file=video.mp4", 429))
+        assertFalse(defaultShouldRetryStatus("https://iwara.tv/videos", 429))
     }
 
     @Test
@@ -497,6 +508,8 @@ class DefaultSourceHttpClientTest {
     fun `server errors still retry by default policy (ADR 0051)`() {
         assertTrue(defaultShouldRetryStatus("https://api.iwara.tv/search?type=videos", 503))
         assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 500))
+        assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 504))
+        assertTrue(defaultShouldRetryStatus("https://rule34video.com/video/123", 599))
     }
 
     @Test

@@ -16,10 +16,9 @@ import com.theoriacodex.app.update.StartupUpdateOutcome
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.update.mergeReleaseHistory
 import com.theoriacodex.app.update.toReleaseHistoryEntry
+import com.theoriacodex.domain.coroutines.SoleJob
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
@@ -63,7 +62,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
 ) : ViewModel(), RouteStateOwner<AppShellUiState, AppShellAction, AppShellEffect> {
     private val workScope = scopeOverride ?: viewModelScope
     private var updateEnvironment: UpdateEnvironment? = null
-    private var updateJob: Job? = null
+    private val updateJob = SoleJob(workScope)
     private var startupStarted = false
     private val incomingUriWorkflow = IncomingUriWorkflow(savedStateHandle)
     private val mutableState = MutableStateFlow(
@@ -138,7 +137,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
     fun chooseUpdate(choice: StartupUpdateChoice) {
         val environment = updateEnvironment ?: return
         val remote = state.value.startup.choice ?: return
-        if (state.value.startup.actionLocked || updateJob?.isActive == true) return
+        if (state.value.startup.actionLocked || updateJob.isBusy) return
         event(StartupUpdateWorkflowEvent.InstallStarted)
         launchUpdate {
             when (choice) {
@@ -163,7 +162,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
         val environment = updateEnvironment ?: return
         val current = state.value.startup
         val remote = current.pendingInstall ?: return
-        if (state.value.appReady || updateJob?.isActive == true) return
+        if (state.value.appReady) return
         launchUpdate {
             if (current.awaitingUnknownSources) {
                 val outcome = environment.updater.retryPendingInstall(remote, ::updaterState)
@@ -178,7 +177,7 @@ internal class AppShellViewModel @JvmOverloads constructor(
     }
 
     fun continueCurrentVersion() {
-        if (updateJob?.isActive != true) launchUpdate { failUpdate("Update was not completed. Continuing with current app.") }
+        launchUpdate { failUpdate("Update was not completed. Continuing with current app.") }
     }
 
     fun dismissPostInstallChangelog() {
@@ -204,10 +203,9 @@ internal class AppShellViewModel @JvmOverloads constructor(
     }
 
     private fun launchUpdate(work: suspend () -> Unit) {
-        if (updateJob?.isActive == true) return
-        updateJob = workScope.launch(start = CoroutineStart.LAZY) {
+        updateJob.launchIfIdle {
             runCatchingPreservingCancellation { work() }.onFailure { failUpdate(it.message ?: "Could not update app") }
-        }.also { it.start() }
+        }
     }
 
     private suspend fun finishInstall(outcome: StartupUpdateOutcome) {

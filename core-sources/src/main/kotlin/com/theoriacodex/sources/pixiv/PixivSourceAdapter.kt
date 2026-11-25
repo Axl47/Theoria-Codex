@@ -294,12 +294,15 @@ class PixivSourceAdapter(
     }
 
     private suspend fun fetchUgoiraDurationMs(postId: String): Long? {
-        val response = ugoiraMetadataCache.get(postId) ?: authorizedGet(
+        val cached = ugoiraMetadataCache.get(postId)
+        val body = cached ?: authorizedGet(
             url = "$PIXIV_API_BASE/v1/ugoira/metadata",
             query = mapOf("illust_id" to postId),
             pacer = durationPacer,
-        ).also { body -> ugoiraMetadataCache.put(postId, body) }
-        return parsePixivUgoiraDurationMs(parseJsonObject(response, gson, "Pixiv"))
+        )
+        val durationMs = parsePixivUgoiraDurationMs(parseJsonObject(body, gson, "Pixiv"))
+        if (cached == null) ugoiraMetadataCache.put(postId, body)
+        return durationMs
     }
 
     private fun mapSort(sortMode: SortMode): String {

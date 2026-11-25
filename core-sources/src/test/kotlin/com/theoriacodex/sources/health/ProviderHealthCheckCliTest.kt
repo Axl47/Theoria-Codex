@@ -99,12 +99,20 @@ class ProviderHealthCheckCliTest {
                     latencyMs = 5L,
                     checkedAtEpochMs = 1L,
                 ),
+                ProviderHealthCheckResult(
+                    source = SourceKey.NHENTAI,
+                    checkName = "source-probe",
+                    status = ProviderHealthStatus.CANNOT_CHECK,
+                    latencyMs = 6L,
+                    message = "challenged at https://nhentai.net/g/123/",
+                    checkedAtEpochMs = 1L,
+                ),
             ),
             probeResults = listOf(step(SourceKey.HITOMI, ProviderHealthStatus.FAILED)),
         )
 
         assertEquals(
-            listOf("HITOMI: FAILED PARSE", "DANBOORU: OK NONE"),
+            listOf("HITOMI: FAILED PARSE", "DANBOORU: OK NONE", "NHENTAI: CANNOT_CHECK NONE"),
             publicSafeSummaryLines(report),
         )
     }

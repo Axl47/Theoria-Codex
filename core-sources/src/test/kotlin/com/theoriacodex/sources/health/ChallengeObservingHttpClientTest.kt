@@ -30,7 +30,7 @@ class ChallengeObservingHttpClientTest {
     }
 
     @Test
-    fun `counts only the challenges it passes through on every transport`() = runTest {
+    fun `counts only the challenges it passes through on every transport (ADR 0047)`() = runTest {
         val cleared = SourceHttpResponse(200, "{}")
         val challenge = SourceHttpResponse(403, "", mapOf("CF-Mitigated" to listOf("challenge")))
         val texts = ArrayDeque(listOf(cleared, challenge, challenge, challenge))

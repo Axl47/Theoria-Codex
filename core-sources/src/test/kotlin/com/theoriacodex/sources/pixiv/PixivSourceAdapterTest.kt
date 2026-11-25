@@ -125,6 +125,10 @@ class PixivSourceAdapterTest {
             assertEquals("$refusal", listOf("Bearer expired-access", "Bearer fresh-access"), refusedTwice.authorizations)
             assertEquals("$refusal", 1, refusedTwice.refreshes)
         }
+        val badRequest = search(400, 200)
+        assertTrue(badRequest.result.exceptionOrNull() is SourceAdapterException)
+        assertEquals(listOf("Bearer expired-access"), badRequest.authorizations)
+        assertEquals(0, badRequest.refreshes)
     }
 
     @Test

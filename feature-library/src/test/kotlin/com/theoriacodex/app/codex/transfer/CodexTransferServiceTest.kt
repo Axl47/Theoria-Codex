@@ -1,7 +1,7 @@
 package com.theoriacodex.app.codex.transfer
 
 import com.theoriacodex.app.testing.testPost
-import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
+import com.theoriacodex.data.repository.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode

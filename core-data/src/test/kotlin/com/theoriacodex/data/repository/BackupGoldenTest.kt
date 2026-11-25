@@ -40,7 +40,7 @@ class BackupGoldenTest {
         assertEquals(goldenBackup().copy(customSources = emptyList()), codec.decode(golden("backup-v1.json")))
     }
 
-    @Test fun `backups holding retired OCR and translation keys still import`() {
+    @Test fun `backups holding retired settings and statistics keys still import (ADR 0024)`() {
         listOf("backup-v1.json", "backup-v2.json").forEach { name ->
             val raw = golden(name).decodeToString()
             (RETIRED_SETTINGS + RETIRED_STATISTICS).forEach { key -> assertTrue("$name lacks $key", raw.contains("\"$key\"")) }
@@ -49,7 +49,7 @@ class BackupGoldenTest {
         }
     }
 
-    @Test fun `a backup written now is the document the Gson codec wrote`() {
+    @Test fun `a backup written now is the document the Gson codec wrote (ADR 0024, 0033)`() {
         val golden = golden("backup-v2.json")
         val written = DurableJson.parseToJsonElement(golden.decodeToString()).jsonObject
         val settings = written.getValue("settings").jsonObject - (RETIRED_SETTINGS + "lastSelectedTabRoute")
@@ -59,7 +59,7 @@ class BackupGoldenTest {
             DurableJson.parseToJsonElement(codec.encode(codec.decode(golden)).decodeToString()))
     }
 
-    @Test fun `malformed JSON fails as before while invalid fields keep their message`() {
+    @Test fun `malformed JSON fails as before while invalid fields keep their message (ADR 0024)`() {
         val v2 = golden("backup-v2.json").decodeToString()
         val wrongTypes = listOf("\"appOpenCount\":0" to "\"appOpenCount\":{}", "\"settings\":{" to "\"settings\":[],\"x\":{",
             "\"favoriteTagsByProfile\":{" to "\"favoriteTagsByProfile\":[],\"x\":{")
@@ -117,7 +117,7 @@ class BackupGoldenTest {
         checkNotNull(javaClass.classLoader.getResource("golden/backup/$name")) { "Missing golden $name" }.readBytes()
 }
 
-private val RETIRED_SETTINGS = setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages")
+private val RETIRED_SETTINGS = setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages", "scenarioPreset")
 private val RETIRED_STATISTICS = setOf("translatedPhraseCount", "translatedSourceCharacterCount")
 
 private class RecordingBackupStore : ProfileBackupStore {

@@ -29,11 +29,6 @@ extensions.configure<LibraryExtension> {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
-
-    // Shared test helper (the Codex likes transactions fake) that :app tests reuse.
-    testFixtures {
-        enable = true
-    }
 }
 
 dependencies {
@@ -56,11 +51,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
-
-    testFixturesImplementation(testFixtures(project(":core-data")))
-    // The Compose compiler plugin needs the runtime on the fixtures classpath.
-    testFixturesImplementation(platform(libs.androidx.compose.bom))
-    testFixturesImplementation(libs.androidx.compose.ui)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

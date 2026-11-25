@@ -74,10 +74,11 @@ class SearchViewModel(
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
     reconnections: Flow<Unit> = emptyFlow(),
     liveSearchDelays: LiveSearchDelays = LiveSearchDelays(),
+    relatedPostsLog: (String) -> Unit = {},
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect>, ViewerFeedOwner {
     private val mutableState = MutableStateFlow(initialSearchState(coordinator.availableSources))
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
-    private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this)
+    private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this, relatedPostsLog)
     private val relatedPosts = RelatedPostsRouteController(
         scope = viewModelScope,
         loader = relatedPostsLoader,

@@ -13,9 +13,15 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.CacheControl
 import okhttp3.Headers
@@ -130,7 +136,7 @@ class ExtensionImagesTest {
             language = "en",
             siteAddress = { null },
             settings = null,
-            images = SourceImages { _, url, _ -> cannedResponse(Request.Builder().url(url).build(), body = "anime $url") },
+            images = SourceImages { _, url, _, _ -> cannedResponse(Request.Builder().url(url).build(), body = "anime $url") },
         )
         images.publish(listOf(server, anime))
 
@@ -296,7 +302,7 @@ class ExtensionImagesTest {
         val callers = Executors.newFixedThreadPool(waiting)
         fun loadAll() = (0 until waiting).also { reader.arrived = CountDownLatch(waiting) }.map { index ->
             callers.submit<Result<String>> {
-                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1").use { it.body.string() } }
+                runCatching { pages.fetch("missing-$index", pageUrl, "$index//c/1", caller.newCall(Request.Builder().url(pageUrl).build())).use { it.body.string() } }
             }
         }.map { it.get(5, TimeUnit.SECONDS) }
 
@@ -312,6 +318,83 @@ class ExtensionImagesTest {
         assertTrue(failed.all { it.exceptionOrNull() != null })
         assertEquals((0 until waiting).map { "image https://img.test/p$it.jpg" }, loaded.map { it.getOrThrow() })
         assertEquals(2, reader.listings.get())
+    }
+
+    @Test
+    fun `a reader closed mid-load hands its source's rate limit back to the next page list (ADR 0059)`() {
+        val source = RateLimitedSource()
+        val hosted = mihon(source).also { images.publish(listOf(server, it)) }
+        val pages = hosted.images as MihonImages
+        val chapter = SChapter.create().apply { url = "/c/1" }
+        val calls = (0 until 4).map { index ->
+            val address = checkNotNull(pages.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.jpg")))
+            appClient(images).newCall(Request.Builder().url(address).build()).also { it.enqueue(ignoringReplies) }
+        }
+        try {
+            assertTrue(source.imageStarted.await(5, TimeUnit.SECONDS))
+            calls.forEach(Call::cancel)
+
+            val listed = runBlocking { withTimeout(2_000) { source.getPageList(chapter) } }
+
+            assertEquals(listOf("https://img.test/listed.jpg"), listed.map { it.imageUrl })
+        } finally {
+            source.released.countDown()
+        }
+    }
+
+    @Test
+    fun `a page the app no longer wants never reaches its source (ADR 0059)`() {
+        val reader = PagePerImageSource()
+        val hosted = mihon(reader).also { images.publish(listOf(server, it)) }
+        val pages = hosted.images as MihonImages
+        val chapter = SChapter.create().apply { url = "/c/1" }
+        val addresses = listOf(
+            checkNotNull(pages.pageAddress(chapter, Page(0, "${reader.baseUrl}/p/1"))),
+            checkNotNull(pages.pageAddress(chapter, Page(1, imageUrl = "https://img.test/2.jpg"))),
+            images.tag(hosted.series.key, "${reader.baseUrl}/p/9", "9//c/1"),
+        )
+
+        val app = appClient(images)
+        for (address in addresses) {
+            val gone = app.newCall(Request.Builder().url(address).build()).apply { cancel() }
+            assertFailsWith<IOException> { gone.execute() }
+        }
+        var loads = 0
+        val cold = ExtensionImages(key) { loads += 1 }
+        val coldCover = checkNotNull(cold.address(Series(SeriesId(server.key, "/s"), "Series", coverUrl = "https://covers.test/1.jpg")))
+        assertFailsWith<IOException> { appClient(cold).newCall(Request.Builder().url(coldCover).build()).apply { cancel() }.execute() }
+        assertEquals(0, loads)
+
+        assertEquals(emptyList<String>(), reader.listed)
+        assertEquals(emptyList<String>(), reader.asked)
+        assertEquals(0, reader.requests.get())
+    }
+
+    @Test
+    fun `a page cancelled while it loads keeps the image address its source named (ADR 0059)`() {
+        val reader = PagePerImageSource()
+        val pages = MihonImages(reader, MihonKind.sourceKey(reader.id), images)
+        val chapter = SChapter.create().apply { url = "/c/1" }
+        val address = checkNotNull(pages.pageAddress(chapter, Page(0, "${reader.baseUrl}/p/1")))
+        val url = address.toHttpUrl().newBuilder().fragment(null).build()
+        val data = address.toHttpUrl().fragment!!.substringAfter('/')
+        reader.hangImages = true
+        val loading = caller.newCall(Request.Builder().url(url).build())
+        val fetching = Executors.newSingleThreadExecutor()
+        try {
+            val fetch = fetching.submit<Result<Response>> { runCatching { pages.fetch(address, url, data, loading) } }
+            check(reader.imageStarted.await(5, TimeUnit.SECONDS))
+
+            loading.cancel()
+
+            assertTrue(fetch.get(5, TimeUnit.SECONDS).isFailure)
+        } finally {
+            loading.cancel()
+            fetching.shutdownNow()
+        }
+        reader.hangImages = false
+        pages.fetch(address, url, data, caller.newCall(Request.Builder().url(url).build())).close()
+        assertEquals(listOf("/p/1"), reader.asked)
     }
 
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
@@ -335,11 +418,25 @@ class ExtensionImagesTest {
         override val supportsLatest = false
         val asked = mutableListOf<String>()
         val listed = mutableListOf<String>()
+        val requests = AtomicInteger()
+        val imageStarted = CountDownLatch(1)
         var expired = false
 
+        @Volatile
+        var hangImages = false
+
         override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (hangImages && chain.request().url.host == "img.test") {
+                    imageStarted.countDown()
+                    while (!chain.call().isCanceled()) Thread.sleep(POLL_MS)
+                    throw IOException("Canceled")
+                }
+                chain.proceed(chain.request())
+            }
             .addInterceptor(
                 answering { request ->
+                    requests.incrementAndGet()
                     val image = request.url.host == "img.test"
                     if (image && expired) cannedResponse(request, body = "expired", code = 403) else cannedResponse(request, body = "image ${request.url}")
                 },
@@ -359,6 +456,39 @@ class ExtensionImagesTest {
             check(!path.endsWith("broken")) { "No image on this page" }
             return "https://img.test/${path.substringAfterLast('/')}-${page.index}.jpg"
         }
+    }
+
+    private class RateLimitedSource : HttpSource() {
+        override val id = 4L
+        override val name = "Rated"
+        override val lang = "en"
+        override val baseUrl = "https://rated.test"
+        override val supportsLatest = false
+        val imageStarted = CountDownLatch(1)
+        val released = CountDownLatch(1)
+        private val permit = Semaphore(1, true)
+
+        override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                while (!permit.tryAcquire(POLL_MS, TimeUnit.MILLISECONDS)) if (chain.call().isCanceled()) throw IOException("Canceled")
+                try {
+                    chain.proceed(chain.request())
+                } finally {
+                    permit.release()
+                }
+            }
+            .addInterceptor { chain ->
+                if (chain.request().url.host == "img.test") {
+                    imageStarted.countDown()
+                    while (!released.await(POLL_MS, TimeUnit.MILLISECONDS)) if (chain.call().isCanceled()) throw IOException("Canceled")
+                }
+                cannedResponse(chain.request(), body = "served ${chain.request().url}")
+            }
+            .build()
+
+        override fun headersBuilder() = Headers.Builder()
+
+        override fun pageListParse(response: Response): List<Page> = listOf(Page(0, imageUrl = "https://img.test/listed.jpg"))
     }
 
     private class GatedPagesSource : HttpSource() {
@@ -423,6 +553,15 @@ class ExtensionImagesTest {
             const val PAGE_HEADER = "X-Page"
         }
     }
+}
+
+private const val POLL_MS = 10L
+
+private val caller = OkHttpClient()
+
+private val ignoringReplies = object : Callback {
+    override fun onFailure(call: Call, e: IOException) = Unit
+    override fun onResponse(call: Call, response: Response) = response.close()
 }
 
 private suspend fun SeriesSource.entryPages(entry: SeriesEntry): List<ImageRef> = (media(entry) as EntryMedia.Pages).pages

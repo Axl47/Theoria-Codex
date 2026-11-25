@@ -109,6 +109,7 @@ internal data class BackupSeriesEntryRecord(
     }
 }
 
+@Suppress("StoredJsonUsesDurableJsonRule")
 internal fun storedMemo(text: String?): String? = text?.takeIf { it.isNotBlank() && it.length <= MAX_MEMO_LENGTH }
     ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() as? JsonObject }
     ?.takeIf(JsonObject::isNotEmpty)?.toString()

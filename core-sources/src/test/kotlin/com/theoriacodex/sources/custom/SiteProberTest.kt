@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.custom
 
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.source.ProbeFailure
 import com.theoriacodex.domain.source.ProtocolFamily
 import com.theoriacodex.domain.source.SiteAddress
@@ -7,6 +8,7 @@ import com.theoriacodex.domain.source.SiteAddressError
 import com.theoriacodex.domain.source.SiteAddressParse
 import com.theoriacodex.domain.source.SiteCredentials
 import com.theoriacodex.domain.source.SiteProbeResult
+import com.theoriacodex.domain.source.SiteProfile
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.io.IOException
@@ -118,6 +120,12 @@ class SiteProberTest {
             setOf("https://booru.example/", "https://booru.example/apple-touch-icon.png"),
             site.requests.filterNot { (_, query) -> query["api_key"] == GOOD_KEYS.apiKey }.mapTo(mutableSetOf()) { (url, _) -> url },
         )
+
+        val tried = mutableListOf<ProtocolFamily>()
+        val families = listOf(ProtocolFamily.DANBOORU, ProtocolFamily.GELBOORU_02).map { protocol -> family(protocol) { _, _ -> tried += protocol } }
+        SiteProber(SiteFamilyRegistry(families, emptyList()), withHomePage { SourceHttpResponse(404, "") })
+            .probe("booru.example", GOOD_KEYS, knownFamily = ProtocolFamily.GELBOORU_02)
+        assertEquals(listOf(ProtocolFamily.GELBOORU_02, ProtocolFamily.DANBOORU), tried)
     }
 
     @Test
@@ -194,8 +202,12 @@ class SiteProberTest {
         }
 
         SiteProber(SiteFamilyRegistry.default(), counting, maxRequests = 2).probe("booru.example")
-
         assertEquals(2, sent)
+
+        sent = 0
+        val greedy = family(ProtocolFamily.DANBOORU) { address, context -> repeat(20) { runCatching { context.get(address, "/$it") } } }
+        SiteProber(SiteFamilyRegistry(listOf(greedy), emptyList()), counting).probe("booru.example")
+        assertEquals("the default budget", 8, sent)
     }
 
     @Test
@@ -211,28 +223,38 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a failed home page leaves the host as label and the touch icon still answers (ADR 0040)`() = runTest {
+    fun `a failed home page leaves the host as label and the touch icon is used only when it answers 200 with an image (ADR 0040)`() = runTest {
         val site = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) TOUCH_ICON else throw IOException("home page down") }
 
         val result = SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example") as SiteProbeResult.Supported
         val page = SourceHttpResponse(200, "<html></html>", mapOf("Content-Type" to listOf("text/html")))
         val htmlAtIconPath = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) page else throw IOException("home page down") }
 
+        val missingIcon = SourceHttpResponse(404, "", mapOf("Content-Type" to listOf("image/png")))
+        val errorPages = withHomePage { url ->
+            if (url.endsWith("/apple-touch-icon.png")) missingIcon else SourceHttpResponse(500, "<title>Server Error</title>")
+        }
+        val errorResult = SiteProber(SiteFamilyRegistry.default(), errorPages).probe("booru.example") as SiteProbeResult.Supported
+
         assertEquals("booru.example", result.suggestedLabel)
         assertEquals("https://booru.example/apple-touch-icon.png", result.iconUrl)
         assertEquals(null, (SiteProber(SiteFamilyRegistry.default(), htmlAtIconPath).probe("booru.example") as SiteProbeResult.Supported).iconUrl)
+        assertEquals("booru.example", errorResult.suggestedLabel)
+        assertEquals(null, errorResult.iconUrl)
     }
 
     @Test
-    fun `the touch icon replaces a declared icon under 64 px and leaves one of 64 px (ADR 0040)`() = runTest {
-        suspend fun iconFor(size: Int): String? {
-            val page = """<title>Booru</title><link rel="icon" sizes="${size}x$size" href="/declared.png">"""
+    fun `the touch icon replaces a sizeless or under 64 px declared icon and leaves one of 64 px (ADR 0040)`() = runTest {
+        suspend fun iconFor(size: Int?): String? {
+            val sizes = size?.let { """ sizes="${it}x$it"""" }.orEmpty()
+            val page = """<title>Booru</title><link rel="icon"$sizes href="/declared.png">"""
             val site = withHomePage { url -> if (url.endsWith("/apple-touch-icon.png")) TOUCH_ICON else SourceHttpResponse(200, page) }
             return (SiteProber(SiteFamilyRegistry.default(), site).probe("booru.example") as SiteProbeResult.Supported).iconUrl
         }
 
         assertEquals("https://booru.example/apple-touch-icon.png", iconFor(63))
         assertEquals("https://booru.example/declared.png", iconFor(64))
+        assertEquals("a sizeless icon counts as 16 px", "https://booru.example/apple-touch-icon.png", iconFor(null))
     }
 
     @Test
@@ -312,6 +334,17 @@ class SiteProberTest {
                 url.endsWith("/posts.json") -> SourceHttpResponse(200, "[]")
                 else -> home(url)
             }
+    }
+
+    private fun family(protocol: ProtocolFamily, probing: suspend (SiteAddress, SiteRequestContext) -> Unit) = object : SiteFamily {
+        override val family = protocol
+
+        override suspend fun probe(address: SiteAddress, context: SiteRequestContext): FamilyProbe {
+            probing(address, context)
+            return FamilyProbe.NoMatch
+        }
+
+        override fun createAdapter(profile: SiteProfile, source: SourceKey, context: SiteRequestContext) = error("unused")
     }
 
     private object NoWrites : SourceHttpClient {

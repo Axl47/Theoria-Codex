@@ -3,7 +3,6 @@ package com.theoriacodex.sources.hitomi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HitomiByteBudgetCacheTest {
@@ -25,13 +24,14 @@ class HitomiByteBudgetCacheTest {
     }
 
     @Test
-    fun `oversize values are returned to the caller but never retained`() {
-        val cache = HitomiByteBudgetCache<String, IntArray>(maxBytes = 4L) { key, ids ->
+    fun `oversize values are returned to the caller but never retained (ADR 0043)`() {
+        val cache = HitomiByteBudgetCache<String, IntArray>(maxBytes = 8L) { key, ids ->
             key.hitomiUtf8ByteWeight() + ids.hitomiByteWeight()
         }
+        cache.put("a", intArrayOf(1))
 
-        assertFalse(cache.put("large", intArrayOf(1)))
+        assertFalse(cache.put("large", intArrayOf(1, 2)))
         assertNull(cache.get("large"))
-        assertTrue(cache.snapshot().keysInLruOrder.isEmpty())
+        assertEquals(listOf("a"), cache.snapshot().keysInLruOrder)
     }
 }

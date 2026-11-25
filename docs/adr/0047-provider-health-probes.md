@@ -26,7 +26,7 @@ A challenged provider shows as unknown rather than failing the run. New health o
 
 ## Guarded by
 
-- `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ChallengeObservingHttpClientTest.kt`: `maintenance pages and plain refusals are not browser challenges (ADR 0047)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ChallengeObservingHttpClientTest.kt`: `maintenance pages and plain refusals are not browser challenges (ADR 0047)`, `counts only the challenges it passes through on every transport (ADR 0047)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/health/HitomiProviderHealthProbeTest.kt`: `disabling media ranges skips both byte probes and keeps configuration and gallery steps (ADR 0047)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCliTest.kt`: `public safe summary lists only source status and reason enum (ADR 0047)`
 - `core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt`: `a problem during a browser challenge cannot be checked while a real failure stays failed (ADR 0047)`

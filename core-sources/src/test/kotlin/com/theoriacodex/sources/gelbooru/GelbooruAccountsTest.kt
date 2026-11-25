@@ -112,9 +112,11 @@ class GelbooruAccountsTest {
         http.enqueueGet(index, profile, body = "<a href='?tags=user:author_name'>Posts</a>", requiredHeaders = headers)
         http.enqueueGet(index, profile, body = "<p>No uploads</p>")
         http.enqueueGet(index, profile, statusCode = 403)
+        http.enqueueGet(index, profile, statusCode = 500)
 
         assertEquals("author_name", fetchGelbooruProfileOwner(http, "9", headers))
         assertNull(fetchGelbooruProfileOwner(http, "9", emptyMap()))
+        assertTrue(runCatching { fetchGelbooruProfileOwner(http, "9", emptyMap()) }.exceptionOrNull() is SourceAdapterException)
         assertTrue(runCatching { fetchGelbooruProfileOwner(http, "9", emptyMap()) }.exceptionOrNull() is SourceAdapterException)
         http.assertExhausted()
     }

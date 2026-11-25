@@ -21,3 +21,8 @@ Changing the tolerance affects stored settings round-trips.
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryPolicies.kt`: `normalizeSourceWeights` and its `fallbackWeight` handling
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryStoreRecords.kt`: `SOURCES_ADDED_BY_CATALOG_VERSION`
+
+## Guarded by
+
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/SourceWeightSettingsTest.kt`: `a newly opted-in custom source gets an even share instead of dominating (ADR 0029)`, `weights already normalized pass through bit for bit (ADR 0029)`, `several largest weights normalize to finite shares summing to one (ADR 0029)`, `a missing weight whose mean overflows falls back to even shares (ADR 0029)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `minimal pre-catalog settings gain every later source and retain legacy defaults (ADR 0029)`

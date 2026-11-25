@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.newDataStoreScope
 import com.theoriacodex.data.storage.closeDataStores
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
@@ -64,7 +65,7 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `searched tags seed once from manual recent searches without double counting`() = runTest {
+    fun `searched tags seed once from manual recent searches without double counting (ADR 0030)`() = runTest {
         val repository = InMemoryStatisticsRepository()
         repository.recordSearch(setOf(SourceKey.PIXIV), setOf(SearchTerm("animation")))
         fun entry(tags: List<String>, kind: RecentSearchKind, sources: List<SourceKey>) = RecentSearchEntry(
@@ -97,7 +98,7 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `searches count typed terms with their type and only what ran`() {
+    fun `searches count typed terms with their type and only what ran (ADR 0030)`() {
         val artist = SearchTerm(" Shindol ", SearchFacet.ARTIST, " Artist ")
         val sourceQuery = query(QueryMode.Source(SourceKey.NHENTAI), SearchTerm("sky"), artist)
         val counted = StatisticsPolicies.recordSearch(LifetimeStatistics(), setOf(SourceKey.NHENTAI), sourceQuery.searchedTerms())
@@ -110,7 +111,7 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `typed terms seed once from Recents after general tags were seeded`() {
+    fun `typed terms seed once from Recents after general tags were seeded (ADR 0030)`() {
         val artist = SearchTerm("shindol", SearchFacet.ARTIST, "artist")
         val alreadySeeded = LifetimeStatistics(searchesByTag = mapOf(searched(SourceKey.NHENTAI, "sky") to 3L), searchesByTagSeeded = true)
         val recents = listOf(
@@ -131,7 +132,7 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `typed counts keep their own list so older records and builds read general counts unchanged`() {
+    fun `typed counts keep their own list so older records and builds read general counts unchanged (ADR 0030)`() {
         val female = SearchedTagKey(SourceKey.HITOMI, SearchTerm("mika", SearchFacet.TAG, "female"))
         val statistics = LifetimeStatistics(
             searchesByTag = mapOf(searched(SourceKey.HITOMI, "sky") to 2L, female to 5L),
@@ -148,7 +149,17 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `restoring a backup keeps the larger count of each typed term and both seed flags`() {
+    fun `days and stores written before series time read it as zero (ADR 0030)`() {
+        val older = DurableJson.decodeFromString<StatisticsStoreRecord>(
+            """{"history":{"2026-01-02":{"totalForegroundMs":5}},"totalForegroundMs":5}""",
+        ).toDomain()
+
+        assertEquals(0L to 0L, older.readingMs to older.animeMs)
+        assertEquals(0L to 0L, older.history.values.single().let { it.readingMs to it.animeMs })
+    }
+
+    @Test
+    fun `restoring a backup keeps the larger count of each typed term and both seed flags (ADR 0030)`() {
         val artist = SearchedTagKey(SourceKey.NHENTAI, SearchTerm("shindol", SearchFacet.ARTIST, "artist"))
         val current = LifetimeStatistics(searchesByTag = mapOf(artist to 2L, searched(SourceKey.NHENTAI, "sky") to 4L))
         val backup = LifetimeStatistics(searchesByTag = mapOf(artist to 5L), searchesByTagSeeded = true, searchesByTypedTagSeeded = true)
@@ -217,7 +228,7 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `statistics additions saturate and negative deltas are ignored`() = runTest {
+    fun `statistics additions saturate and negative deltas are ignored (ADR 0030)`() = runTest {
         val repository = InMemoryStatisticsRepository(
             LifetimeStatistics(
                 appOpenCount = Long.MAX_VALUE,
@@ -254,7 +265,7 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `a history key that is not a date resets the store and keeps the original aside`() = runTest {
+    fun `a history key that is not a date resets the store and keeps the original aside (ADR 0030)`() = runTest {
         val directory = tempFolder.newFolder("statistics-bad-history-key")
         directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText(
             """{"schemaVersion":2,"statistics":{"appOpenCount":4,"history":{"not-a-day":{"appOpenCount":1}}}}"""
@@ -270,7 +281,20 @@ class StatisticsRepositoriesTest {
     }
 
     @Test
-    fun `newer statistics schema fails closed without replacing the file`() = runTest {
+    fun `a statistics file older than its oldest readable version resets and is kept aside (ADR 0032)`() = runTest {
+        val directory = tempFolder.newFolder("statistics-retired-schema")
+        directory.resolve(DATASTORE_STATISTICS_FILE_NAME).writeText("""{"schemaVersion":1,"statistics":{"appOpenCount":4}}""")
+        val scope = newDataStoreScope()
+        val recoveries = FileStoreRecoveryRegistry()
+        val repository = DataStoreStatisticsRepository(directory, scope, recoveryRegistry = recoveries)
+
+        assertEquals(0L, repository.observeStatistics().first().appOpenCount)
+        assertRecorded(recoveries, "Statistics", directory.setAsideCopiesOf(DATASTORE_STATISTICS_FILE_NAME).single())
+        scope.closeDataStores()
+    }
+
+    @Test
+    fun `newer statistics schema fails closed without replacing the file (ADR 0032)`() = runTest {
         val directory = tempFolder.newFolder("statistics-future-schema")
         val destination = directory.resolve(DATASTORE_STATISTICS_FILE_NAME)
         val future = """{"schemaVersion":99,"statistics":{}}"""

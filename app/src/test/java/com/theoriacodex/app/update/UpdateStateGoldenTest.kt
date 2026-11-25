@@ -5,7 +5,7 @@ import org.junit.Test
 
 class UpdateStateGoldenTest {
     @Test
-    fun `update state files older builds wrote decode the same`() {
+    fun `update state files older builds wrote decode the same (ADR 0034)`() {
         val markdown = "## Fixed\n- a=b & c<d> 'quoted' \"double\" é☃"
         val sections = listOf(
             ChangelogSection("Fixed", listOf("a=b & c<d>", "'quoted'")),
@@ -35,15 +35,24 @@ class UpdateStateGoldenTest {
             ),
             golden("sparse-legacy.json") to UpdateStateSnapshot(
                 lastSeenReleaseId = 701L,
-                ignoredReleaseId = 702L,
+                pendingInstallReleaseId = null,
                 pendingInstallVersionCode = 5,
+                ignoredReleaseId = 702L,
+                remindLaterReleaseId = null,
+                remindLaterUntilEpochMs = null,
                 pendingPostInstallChangelog = PendingPostInstallChangelog(
                     releaseId = 703L,
+                    fromVersionCode = null,
                     versionCode = 44,
                     tagName = "v1.0.0",
-                    changelogSections = listOf(ChangelogSection("Fixed")),
+                    commitShaShort = "",
+                    releaseName = null,
+                    changelogMarkdown = "",
+                    changelogSections = listOf(ChangelogSection("Fixed", emptyList())),
                 ),
+                lastInstalledChangelog = null,
             ),
+            retiredKeys = setOf("retiredField"),
         )
     }
 

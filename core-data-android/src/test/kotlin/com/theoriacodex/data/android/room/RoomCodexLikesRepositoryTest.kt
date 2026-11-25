@@ -385,7 +385,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `ordinary Likes clear removes only pre-clear liked memberships`() = runTest {
+    fun `ordinary Likes clear removes only pre-clear liked memberships (ADR 0018)`() = runTest {
         val repository = repository()
         val liked = post("liked")
         val manuallySaved = post("manual")
@@ -476,7 +476,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `unsupported and malformed local Post payloads fail explicitly`() = runTest {
+    fun `unsupported and malformed local Post payloads fail explicitly (ADR 0038)`() = runTest {
         val repository = repository()
         database.codexLikesDao().insertPost(
             PostEntity("PIXIV", "unsupported", """{"schemaVersion":99}""")
@@ -500,7 +500,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `database failure rolls back both like and system Codex`() = runTest {
+    fun `database failure rolls back both like and system Codex (ADR 0018)`() = runTest {
         val repository = repository()
         database.openHelper.writableDatabase.execSQL(
             """
@@ -528,7 +528,7 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
-    fun `likes and Codex items from a custom source round trip without a site profile`() = runTest {
+    fun `likes and Codex items from a custom source round trip without a site profile (ADR 0031)`() = runTest {
         val repository = repository()
         val custom = requireNotNull(SourceKey.parse("custom_safebooru_org"))
         val post = post("123", custom)

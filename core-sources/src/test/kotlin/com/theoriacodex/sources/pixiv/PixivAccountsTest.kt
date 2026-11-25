@@ -77,6 +77,7 @@ class PixivAccountsTest {
 
         assertEquals(mapOf("user_id" to "7", "restrict" to "public", "filter" to "for_android"), client.requests.first().second)
         assertEquals(next, first.nextPageToken)
+        assertEquals(next to emptyMap<String, String>(), client.requests[1])
         assertEquals(listOf("2"), second.items.map { it.id.sourcePostId })
         assertNull(second.nextPageToken)
     }

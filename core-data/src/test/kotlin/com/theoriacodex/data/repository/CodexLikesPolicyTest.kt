@@ -39,7 +39,7 @@ class CodexLikesPolicyTest {
     }
 
     @Test
-    fun `complete Codex order accepts only an exact permutation`() {
+    fun `complete Codex order accepts only an exact permutation (ADR 0018)`() {
         val current = listOf(codex("a", "A"), codex("b", "B"), codex("c", "C"))
 
         assertEquals(
@@ -118,7 +118,7 @@ class CodexLikesPolicyTest {
     }
 
     @Test
-    fun `automatic tags match any canonical tag only within the same source`() {
+    fun `automatic tags match any canonical tag only within the same source (ADR 0018)`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "1"),
             preview = ImageRef(null, null, null),
@@ -134,14 +134,14 @@ class CodexLikesPolicyTest {
 
         assertEquals(
             true,
-            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.PIXIV, "blue sky")),
             ),
         )
         assertEquals(
             false,
-            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.GELBOORU, "blue sky")),
             ),
@@ -149,7 +149,7 @@ class CodexLikesPolicyTest {
     }
 
     @Test
-    fun `automatic tag groups require every group while accepting alternatives (ADR 0006)`() {
+    fun `automatic tag groups require every group while accepting alternatives (ADR 0006, 0018)`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "grouped"),
             preview = ImageRef(null, null, null),
