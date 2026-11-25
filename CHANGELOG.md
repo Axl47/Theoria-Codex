@@ -152,6 +152,7 @@
 
 ### Fixed
 
+- Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
 - A spinner shows over a chapter until its pages arrive.
