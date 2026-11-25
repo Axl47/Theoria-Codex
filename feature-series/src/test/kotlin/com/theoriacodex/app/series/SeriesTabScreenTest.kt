@@ -72,7 +72,7 @@ class SeriesTabScreenTest {
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
         compose.setContent {
             MaterialTheme {
-                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions)
+                SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {})
             }
         }
         compose.waitForIdle()
@@ -99,7 +99,7 @@ class SeriesTabScreenTest {
     fun aSourcesListingFiltersStayClearOfTheCollapsedSearch() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Paper Lantern", "en", count = 40))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
         compose.runOnIdle { viewModel.openDedicatedSearch(sources.single().key) }
         compose.waitForIdle()
@@ -116,7 +116,7 @@ class SeriesTabScreenTest {
     fun scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218() {
         val followed = (1..40).map { FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/$it"), "Series $it"), unreadCount = 0) }
         val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
         val following = compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING))
         following.assertIsDisplayed()
@@ -133,126 +133,34 @@ class SeriesTabScreenTest {
     }
 
     @Test
-    fun missingExtensionsGroupTheSeriesByTheExtensionThatProvidesThemAndLeaveAsTheyResolve() {
-        fun followed(id: Long, title: String) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title), unreadCount = 0)
-        val repository = StubSeriesRepository(listOf(followed(1, "Loaded"), followed(2, "Kaiju"), followed(3, "Dandadan"), followed(9, "Blue Period")))
-        val repos = FakeExtensionRepos().apply {
-            offered = listOf(
-                RepoExtension("https://repo.example", "pkg.dex", "Ink Dex", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.AVAILABLE, sources = listOf(2L, 3L).map(SeriesKind.MANGA::extensionSourceKey)),
-            )
-            problems = mapOf("https://down.example" to "Not found")
-        }
-        val device = FakeSeriesExtensions(emptyList())
+    fun missingExtensionsShowAsACountOnTheExtensionsButtonInsteadOfARow() {
+        fun followed(id: Long) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), "Series $id"), unreadCount = 0)
+        val repository = StubSeriesRepository(listOf(followed(1), followed(2), followed(3)))
+        val revision = MutableStateFlow(0)
         var loaded = listOf("custom_mihon_1")
-        val viewModel = SeriesTabViewModel(repository, { loaded.map { FakeSeriesSource(it, "Ink Harbor", "en", count = 1) } }, device.revision) { NOTHING_CHECKED }
-        val actions = MissingExtensionsActions({ ExtensionsViewModel(device, repos) }, { error("unused") }, onOpenRepos = {}, onOpenExtension = {})
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = actions) } }
+        var opened = 0
+        val viewModel = SeriesTabViewModel(repository, { loaded.map { FakeSeriesSource(it, "Ink Harbor", "en", count = 1) } }, revision) { NOTHING_CHECKED }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = { opened++ }) } }
         compose.waitForIdle()
 
-        compose.onNodeWithText("3 series need their extension").assertIsDisplayed()
-        compose.onNodeWithText(SHOW_MISSING).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("2 series").assertIsDisplayed()
-        compose.onNodeWithText(unreadReposLine(1)).assertIsDisplayed()
-        compose.onNodeWithText(NOT_FOUND).assertIsDisplayed()
-        repos.problems = emptyMap()
-        compose.onNodeWithText("Retry").performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText(unreadReposLine(1)).assertDoesNotExist()
-        compose.onNodeWithText(NOT_IN_YOUR_REPOS).assertIsDisplayed()
-        compose.onAllNodesWithText("Blue Period").assertCountEquals(2)
-        compose.onAllNodesWithText("Kaiju").assertCountEquals(1)
-        compose.onNodeWithText("Ink Dex").performClick()
-        compose.onAllNodesWithText("Kaiju").assertCountEquals(2)
+        val button = compose.onNodeWithContentDescription(EXTENSIONS_TITLE)
+        button.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, missingExtensionsLine(2)))
+        compose.onNodeWithText(missingExtensionsLine(2)).assertDoesNotExist()
+        button.performClick()
+        assertEquals(1, opened)
 
-        compose.onAllNodesWithContentDescription("More options").onLast().performClick()
-        compose.onNodeWithText(UNFOLLOW).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText(NOT_IN_YOUR_REPOS).assertDoesNotExist()
-        compose.onAllNodesWithText("Blue Period").assertCountEquals(0)
-
-        compose.onNodeWithText("Install").performClick()
-        compose.waitForIdle()
-        assertEquals(listOf("pkg.dex"), repos.installed)
         loaded = listOf("custom_mihon_1", "custom_mihon_2", "custom_mihon_3")
-        device.revision.value++
+        revision.value++
         compose.waitForIdle()
-        compose.onNodeWithText(MISSING_EXTENSIONS_TITLE).assertDoesNotExist()
-        compose.onNodeWithText(SHOW_MISSING).assertDoesNotExist()
+        button.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         assertEquals("1 series needs its extension", missingExtensionsLine(1))
-    }
-
-    @Test
-    fun anInstalledExtensionThatIsOffTurnsOnThroughTheSignerQuestionAndALanguageOffOpensItsPage() {
-        fun followed(id: Long, title: String) = FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(id), "/$id"), title), unreadCount = 0)
-        fun offered(packageName: String, name: String, source: Long) =
-            RepoExtension("https://repo.example", packageName, name, listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.INSTALLED, sources = listOf(SeriesKind.MANGA.extensionSourceKey(source)))
-        fun installed(packageName: String, name: String, on: Boolean) =
-            InstalledExtension("/apk/$packageName", name, "1.0", signer = "key", on = on, icon = ApkIcon(packageName, 1, "/apk/$packageName"))
-        val repository = StubSeriesRepository(listOf(followed(1, "Loaded"), followed(2, "Kaiju"), followed(3, "Dandadan")))
-        val repos = FakeExtensionRepos().apply { offered = listOf(offered("pkg.dex", "Ink Dex", 2), offered("pkg.reel", "Moon Reel", 3)) }
-        val device = FakeSeriesExtensions(listOf(installed("pkg.dex", "Ink Dex", on = false), installed("pkg.reel", "Moon Reel", on = true)))
-        var loaded = listOf("custom_mihon_1")
-        val viewModel = SeriesTabViewModel(repository, { loaded.map { FakeSeriesSource(it, "Ink Harbor", "en", count = 1) } }, device.revision) { NOTHING_CHECKED }
-        val opened = mutableListOf<String>()
-        val actions = MissingExtensionsActions({ ExtensionsViewModel(device, repos) }, { error("unused") }, onOpenRepos = {}, onOpenExtension = { opened += it })
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = actions) } }
-        compose.waitForIdle()
-        compose.onNodeWithText(SHOW_MISSING).performClick()
-        compose.waitForIdle()
-
-        compose.onNodeWithText("1 series · $OFF").assertIsDisplayed()
-        compose.onNodeWithText("1 series · $LANGUAGE_OFF").assertIsDisplayed()
-        compose.onNodeWithText(OPEN).performClick()
-        assertEquals(listOf("/apk/pkg.reel"), opened)
-
-        compose.onNodeWithText(TURN_ON).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("Turn on Ink Dex?").assertIsDisplayed()
-        compose.onAllNodesWithText(TURN_ON).onLast().performClick()
-        compose.waitForIdle()
-        assertEquals(listOf(Triple("/apk/pkg.dex", "key", true)), device.switched)
-
-        device.listed = listOf(installed("pkg.dex", "Ink Dex", on = true), installed("pkg.reel", "Moon Reel", on = true))
-        loaded = listOf("custom_mihon_1", "custom_mihon_2")
-        device.revision.value++
-        compose.waitForIdle()
-        compose.onNodeWithText("Ink Dex").assertDoesNotExist()
-        compose.onNodeWithText("Moon Reel").assertIsDisplayed()
-    }
-
-    @Test
-    fun followingOpensFirstAndNarrowsByTitleAndFilter() {
-        val source = SourceKey.parseOrThrow("custom_mihon_1")
-        val followed = listOf(
-            FollowedSeries(Series(SeriesId(source, "/alpha"), "Alpha Saga"), unreadCount = 2, started = true),
-            FollowedSeries(Series(SeriesId(source, "/beta"), "Beta Tale"), unreadCount = 5),
-        )
-        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3)) }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
-        compose.waitForIdle()
-
-        compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING)).assertIsSelected()
-        compose.onNodeWithText("Alpha Saga").assertIsDisplayed()
-        compose.onNodeWithTag(SERIES_SEARCH_INPUT_TAG).performTextInput("beta")
-        compose.waitForIdle()
-        compose.onNodeWithText("Alpha Saga").assertDoesNotExist()
-        compose.onNodeWithText("Beta Tale").assertIsDisplayed()
-
-        compose.onNodeWithContentDescription("Clear").performClick()
-        compose.onNodeWithContentDescription(SORT_AND_FILTER).performClick()
-        compose.onNodeWithText("Not started").performClick()
-        compose.waitForIdle()
-        assertEquals(LibraryShow.NOT_STARTED, viewModel.content.value.library.show)
-        assertEquals(listOf("Beta Tale"), viewModel.content.value.following?.map { it.series.title })
-        compose.onNodeWithContentDescription(SORT_AND_FILTER).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Filtered"))
     }
 
     @Test
     fun browsePicksItsSourceAndListingFromOneHeader() {
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 3), FakeSeriesSource("custom_aniyomi_2", "Moon Reel", "en", count = 3))
         val viewModel = SeriesTabViewModel(EmptySeriesRepository, { sources }) { NOTHING_CHECKED }
-        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitForIdle()
 
         compose.onNodeWithTag(seriesViewTag(SeriesView.BROWSE)).assertIsSelected()
@@ -287,7 +195,7 @@ class SeriesTabScreenTest {
     }
 }
 
-private class FakeSeriesSource(
+internal class FakeSeriesSource(
     id: String,
     override val name: String,
     override val language: String,
@@ -313,9 +221,7 @@ private class FakeSeriesSource(
 
 private val EmptySeriesRepository = StubSeriesRepository()
 
-private val NoMissingActions = MissingExtensionsActions({ error("unused") }, { error("unused") }, onOpenRepos = {}, onOpenExtension = {})
-
-private class StubSeriesRepository(followed: List<FollowedSeries> = emptyList()) : SeriesRepository {
+internal class StubSeriesRepository(followed: List<FollowedSeries> = emptyList()) : SeriesRepository {
     private val followed = MutableStateFlow(followed)
     override fun observeFollowed(): Flow<List<FollowedSeries>> = followed
     override fun observeSeries(id: SeriesId): Flow<StoredSeries?> = emptyFlow()

@@ -43,47 +43,44 @@ import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.seriesKind
 import kotlinx.coroutines.flow.first
 
 class MissingExtensionsActions(
-    val extensions: () -> ExtensionsViewModel,
+    val missing: () -> MissingSeriesViewModel,
     val switchSource: (SeriesId) -> SwitchSourceViewModel,
-    val onOpenRepos: () -> Unit,
-    val onOpenExtension: (String) -> Unit,
+    val onOpenSeries: (SeriesId) -> Unit,
 )
+
+internal class MissingSheetRequest(val kind: SeriesKind, val onOpenRepos: () -> Unit, val onOpenExtension: (String) -> Unit, val onDismiss: () -> Unit)
 
 @Composable
 internal fun MissingExtensionsOverlay(
-    content: SeriesTabContent,
+    request: MissingSheetRequest,
+    missing: MissingSeriesViewModel,
+    extensions: ExtensionsViewModel,
     actions: MissingExtensionsActions,
-    onUnfollow: (SeriesId) -> Unit,
-    onOpenSeries: (SeriesId) -> Unit,
-    onDismiss: () -> Unit,
 ) {
-    val missing = content.missingExtensions
-    val resolved = content.sources != null && content.following != null && missing.isEmpty()
-    LaunchedEffect(resolved) { if (resolved) onDismiss() }
-    val extensions = viewModel(key = MISSING_EXTENSIONS_KEY) { actions.extensions() }
+    val state by missing.state.collectAsStateWithLifecycle()
+    val shown = state?.series.orEmpty().filter { it.id.source.seriesKind == request.kind }
+    val resolved = state != null && shown.isEmpty()
+    LaunchedEffect(resolved) { if (resolved) request.onDismiss() }
     var resumed by rememberSaveable { mutableStateOf(false) }
     LifecycleResumeEffect(extensions) {
-        if (resumed || extensions.state.value.listing != null) extensions.reloadListing()
+        if (resumed) extensions.reloadListing()
         resumed = true
         onPauseOrDispose {}
     }
     var switching by remember { mutableStateOf<Series?>(null) }
     val from = switching
     if (from == null) {
-        val kinds = content.sources.orEmpty().mapTo(HashSet()) { it.key.seriesKind }
+        val switchable = state?.switchable.orEmpty()
         MissingExtensionsSheet(
-            missing = missing,
+            missing = shown,
             extensions = extensions,
-            canSwitch = { it.id.source.seriesKind in kinds },
-            onSwitch = { switching = it },
-            onUnfollow = onUnfollow,
-            onOpenRepos = actions.onOpenRepos,
-            onOpenExtension = actions.onOpenExtension,
-            onDismiss = onDismiss,
+            titles = TitleActions({ it.id.source.seriesKind in switchable }, { switching = it }, missing::unfollow),
+            request = request,
         )
     } else {
         val switchSource = viewModel(key = "$SWITCH_SOURCE_KEY${from.id}") { actions.switchSource(from.id) }
@@ -93,36 +90,32 @@ internal fun MissingExtensionsOverlay(
             switchSource.state.first { it.sheet == null }
             switching = null
         }
-        SwitchSourceSheet(switchSource, onOpenSeries = onOpenSeries, onSwitched = {})
+        SwitchSourceSheet(
+            switchSource,
+            onOpenSeries = { id ->
+                request.onDismiss()
+                actions.onOpenSeries(id)
+            },
+            onSwitched = {},
+        )
     }
 }
 
 private class TitleActions(val canSwitch: (Series) -> Boolean, val onSwitch: (Series) -> Unit, val onUnfollow: (SeriesId) -> Unit)
 
 @Composable
-private fun MissingExtensionsSheet(
-    missing: List<Series>,
-    extensions: ExtensionsViewModel,
-    canSwitch: (Series) -> Boolean,
-    onSwitch: (Series) -> Unit,
-    onUnfollow: (SeriesId) -> Unit,
-    onOpenRepos: () -> Unit,
-    onOpenExtension: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
+private fun MissingExtensionsSheet(missing: List<Series>, extensions: ExtensionsViewModel, titles: TitleActions, request: MissingSheetRequest) {
     val state by extensions.state.collectAsStateWithLifecycle()
-    val actions = TitleActions(canSwitch, onSwitch, onUnfollow)
-    val provider = ProviderActions(extensions::install, extensions::ask, onOpenExtension)
-    ExpandedBottomSheet(onDismiss = onDismiss) {
+    val provider = ProviderActions(extensions::install, extensions::ask, request.onOpenExtension)
+    ExpandedBottomSheet(onDismiss = request.onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-            SheetHeader(MISSING_EXTENSIONS_TITLE, closeDescription = "Close", onDismiss = onDismiss) {
-                TextButton(onClick = onOpenRepos) { Text(REPOS) }
+            SheetHeader(MISSING_EXTENSIONS_TITLE, closeDescription = "Close", onDismiss = request.onDismiss) {
+                TextButton(onClick = request.onOpenRepos) { Text(REPOS) }
             }
             val listing = state.listing
-            if (listing == null) LoadingState() else MissingGroups(missing, listing, state, extensions, provider, actions)
+            if (listing == null) LoadingState() else MissingGroups(missing, listing, state, extensions, provider, titles)
         }
     }
-    state.asking?.let { extension -> TurnOnDialog(extension, onDismiss = { extensions.ask(null) }) { extensions.setOn(extension, true) } }
 }
 
 @Composable
@@ -231,6 +224,4 @@ internal const val TURN_ON = "Turn on"
 internal const val OPEN = "Open"
 internal const val OFF = "Off"
 internal const val LANGUAGE_OFF = "Language off"
-internal const val SHOW_MISSING = "Show"
-private const val MISSING_EXTENSIONS_KEY = "missing-extensions"
 private const val SWITCH_SOURCE_KEY = "missing-extensions-switch-"

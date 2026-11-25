@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +35,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +58,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,11 +82,9 @@ fun SeriesTabScreen(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (SeriesId) -> Unit,
     onOpenExtensions: () -> Unit,
-    missingExtensions: MissingExtensionsActions,
     modifier: Modifier = Modifier,
     oldSearchBar: Boolean = false,
 ) {
-    var missingOpen by rememberSaveable { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
     val open: (Series) -> Unit = { viewModel.open(it, onOpenSeries) }
@@ -115,12 +119,8 @@ fun SeriesTabScreen(
             oldSearchBar = oldSearchBar,
             onOpenSeries = open,
             onOpenExtensions = onOpenExtensions,
-            onShowMissing = { missingOpen = true },
             modifier = modifier,
         )
-    }
-    if (missingOpen) {
-        MissingExtensionsOverlay(content, missingExtensions, viewModel::unfollow, onOpenSeries, onDismiss = { missingOpen = false })
     }
 
     val sheet = state.filterSheet
@@ -143,14 +143,13 @@ private fun SeriesTabHomeContent(
     oldSearchBar: Boolean,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
-    onShowMissing: () -> Unit,
     modifier: Modifier,
 ) {
     var searchBarDismissed by rememberSaveable { mutableStateOf(false) }
     var focusRequest by remember { mutableIntStateOf(0) }
     val search = searchBinding(state, content, query, onQueryChange, viewModel) { searchBarDismissed = false }
     val extensionsButton: @Composable () -> Unit = {
-        IconButton(onClick = onOpenExtensions) { Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE) }
+        ExtensionsButton(content.missingExtensions.size, onOpenExtensions)
     }
     val scrollable = grids.shown(content.view, state.search != null)
 
@@ -192,7 +191,7 @@ private fun SeriesTabHomeContent(
             ScrollChromeTopEffect(scrollable)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
-                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, onShowMissing)
+                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions)
             }
         }
     }
@@ -254,7 +253,6 @@ private fun SeriesTabViewBody(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
-    onShowMissing: () -> Unit,
 ) {
     val search = content.search
     when {
@@ -270,7 +268,6 @@ private fun SeriesTabViewBody(
             onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
-            onShowMissing = onShowMissing,
         )
         search != null -> GlobalSearchBody(
             sourcesLoaded = state.sources != null,
@@ -523,3 +520,24 @@ private fun noExtensionsOn(kind: SeriesKind?): String =
     kind?.let { "No ${it.label.lowercase(Locale.getDefault())} extensions on" } ?: "No extensions on"
 
 internal fun seriesViewTag(view: SeriesView) = "series-view-${view.name.lowercase()}"
+
+@Composable
+private fun ExtensionsButton(missing: Int, onClick: () -> Unit) {
+    BadgedBox(
+        badge = {
+            if (missing > 0) {
+                Badge(Modifier.offset(x = -BADGE_INSET, y = BADGE_DROP)) {
+                    Text(if (missing > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else "$missing", Modifier.clearAndSetSemantics {})
+                }
+            }
+        },
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.semantics { if (missing > 0) stateDescription = missingExtensionsLine(missing) }) {
+            Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE)
+        }
+    }
+}
+
+private const val MAX_BADGE_COUNT = 99
+private val BADGE_INSET = 16.dp
+private val BADGE_DROP = 14.dp

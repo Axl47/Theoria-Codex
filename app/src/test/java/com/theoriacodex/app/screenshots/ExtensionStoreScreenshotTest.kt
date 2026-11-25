@@ -23,12 +23,10 @@ import com.theoriacodex.app.series.ExtensionsScreen
 import com.theoriacodex.app.series.ExtensionsSubpage
 import com.theoriacodex.app.series.ExtensionsViewModel
 import com.theoriacodex.app.series.MissingExtensionsActions
-import com.theoriacodex.app.series.SeriesTabScreen
-import com.theoriacodex.app.series.SeriesTabViewModel
+import com.theoriacodex.app.series.MissingSeriesViewModel
 import com.theoriacodex.app.series.StoredOnly
 import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
-import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.StoredSeries
@@ -113,18 +111,18 @@ class ExtensionStoreScreenshotTest {
         }
         val cedar = InstalledExtension("/apk/cedar", "Cedar", "1.0", signer = "fixture-key", on = false, icon = ApkIcon("fixture.cedar", 1, "/apk/cedar"))
         val extensions = ExtensionsViewModel(Device(listOf(cedar)), repos)
-        val tab = SeriesTabViewModel(repository, { emptyList() }) { FollowedCheck(emptyList(), checked = 0, failed = 0) }
-        val actions = MissingExtensionsActions({ extensions }, { error("unused") }, onOpenRepos = {}, onOpenExtension = {})
+        val missing = MissingSeriesViewModel(repository, { emptyList() }, flowOf(Unit))
+        val actions = MissingExtensionsActions({ missing }, { error("unused") }, onOpenSeries = {})
         compose.setContent {
             TheoriaNightTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = actions)
+                    ExtensionsScreen(extensions, onBack = {}, missing = actions)
                 }
             }
         }
-        compose.waitUntilSettled { tab.content.value.missingExtensions.isNotEmpty() }
-        compose.onNodeWithText("Show").performClick()
-        compose.waitUntilSettled { extensions.state.value.listing != null && extensions.state.value.extensions != null }
+        compose.waitUntilSettled { missing.state.value != null && extensions.state.value.extensions != null }
+        compose.onNodeWithText("Missing extensions").performClick()
+        compose.waitUntilSettled { extensions.state.value.listing != null }
         compose.onNodeWithText("Aurora").performClick()
         compose.waitForIdle()
         captureScreenRoboImage("missing_extensions.png")

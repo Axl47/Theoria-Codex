@@ -50,7 +50,6 @@ internal fun FollowingBody(
     onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
-    onShowMissing: () -> Unit,
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     val following = content.following
@@ -67,7 +66,7 @@ internal fun FollowingBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                followingNotices(content, failedCheck, onRefresh, onShowMissing)
+                followingNotices(content, failedCheck, onRefresh)
                 when {
                     following == null -> Unit
                     following.isEmpty() && content.followingQuery.isNotBlank() ->
@@ -86,14 +85,9 @@ internal fun FollowingBody(
     }
 }
 
-private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit, onShowMissing: () -> Unit) {
+private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit) {
     if (failedCheck != null && content.followsAny) {
         fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
-    }
-    if (content.missingExtensions.isNotEmpty()) {
-        fullWidth("following-missing-extensions") {
-            FailureRow(onShowMissing, message = missingExtensionsLine(content.missingExtensions.size), actionLabel = SHOW_MISSING)
-        }
     }
 }
 
