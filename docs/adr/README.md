@@ -45,7 +45,8 @@ Detekt rule. Each record lists its guards under `Guarded by`, after `Applies to`
   returns empty instead of throwing), write the test instead: it survives reformatting and unrelated parameters.
 - a policy rule: its tagged unit test in `scripts/tests/test_check_architecture.py`, which asserts the rule is
   registered and feeds it a violation.
-- `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour. Any
+- `Left to prose: <reason>` for promises no machine can check, such as feel or device-only behaviour, or for
+  promises a machine could check that are not yet guarded, saying where the guard would live. Any
   other line must name a backticked path and a guard.
 
 Before linking a guard, break the promise in the code and watch the guard fail. Prefer a host test where one can

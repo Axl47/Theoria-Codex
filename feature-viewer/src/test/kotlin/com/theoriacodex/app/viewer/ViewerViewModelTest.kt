@@ -14,7 +14,11 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.viewer.state.reduceViewerState
+import com.theoriacodex.app.viewer.state.createViewerUiState
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -128,6 +132,76 @@ class ViewerViewModelTest {
         assertEquals(ViewerResolutionStatus.RESOLVED, owner.state.value.currentPage?.resolution?.status)
         assertEquals(1, owner.state.value.currentPage?.media?.size)
         assertEquals(posts[2].id, started.last())
+    }
+
+    @Test
+    fun `a series chapter's neighbours wait for its own pages, not its cover (ADR 0170)`() = runTest {
+        val started = mutableListOf<PostId>()
+        val release = CompletableDeferred<Unit>()
+        fun chapter(id: String) = post(id, SourceKey.HITOMI, emptyList()).copy(full = null, galleryLengthUnknown = true)
+        val chapters = listOf(chapter("one"), chapter("two"), chapter("three"))
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            if (id == chapters[1].id) release.await()
+            post(id.sourcePostId, id.source)
+        }, scopeOverride = this)
+        owner.replaceSession(session("chapters", chapters, startIndex = 1).copy(series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL)))
+        runCurrent()
+        val session = requireNotNull(owner.state.value.session)
+        val cover = requireNotNull(owner.state.value.currentMedia)
+        fun showCurrent() = requireNotNull(owner.state.value.currentMedia).let { owner.onAction(ViewerAction.MediaReady(session, it.key, it.loadGeneration)) }
+
+        showCurrent()
+        advanceTimeBy(VIEWER_PREFETCH_READY_WAIT_MS * 4)
+        runCurrent()
+        assertEquals(listOf(chapters[1].id), started)
+
+        release.complete(Unit)
+        runCurrent()
+        owner.onAction(ViewerAction.MediaReady(session, cover.key, cover.loadGeneration))
+        runCurrent()
+        assertEquals("a late cover callback counted as page one", listOf(chapters[1].id), started)
+
+        showCurrent()
+        runCurrent()
+        assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())
+    }
+
+    @Test
+    fun `a series chapter whose first page never shows frees its neighbours after the chapter wait (ADR 0170)`() = runTest {
+        val started = mutableListOf<PostId>()
+        fun chapter(id: String) = post(id, SourceKey.HITOMI, emptyList()).copy(full = null, galleryLengthUnknown = true)
+        val chapters = listOf(chapter("one"), chapter("two"), chapter("three"))
+        val owner = testViewerOwner(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            post(id.sourcePostId, id.source)
+        }, scopeOverride = this)
+        owner.replaceSession(session("stalled", chapters, startIndex = 1).copy(series = ViewerSeries.Reading(GalleryReadingMode.VERTICAL)))
+        runCurrent()
+
+        advanceTimeBy(VIEWER_CHAPTER_READY_WAIT_MS - 1)
+        runCurrent()
+        assertEquals(listOf(chapters[1].id), started)
+
+        advanceTimeBy(1)
+        runCurrent()
+
+        assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())
+    }
+
+    @Test
+    fun `only a chapter's pages take a fresh load generation over its cover (ADR 0170)`() {
+        fun firstGeneration(series: ViewerSeries, resolved: Post): Long {
+            val placeholder = resolved.copy(media = emptyList(), full = null, galleryLengthUnknown = true)
+            val identity = ViewerSessionIdentity("generation")
+            val opened = createViewerUiState(identity, listOf(placeholder), requiresResolution = { true }, series = series)
+            assertEquals(0L, requireNotNull(opened.currentMedia).loadGeneration)
+            val state = reduceViewerState(opened, ViewerAction.ResolutionCompleted(identity, resolved)).state
+            return requireNotNull(state.currentMedia).loadGeneration
+        }
+
+        assertEquals(1L, firstGeneration(ViewerSeries.Reading(GalleryReadingMode.VERTICAL), post("chapter", SourceKey.HITOMI)))
+        assertEquals(0L, firstGeneration(ViewerSeries.Watching(), post("episode", SourceKey.HITOMI, listOf(video("episode.mp4")))))
     }
 
     @Test

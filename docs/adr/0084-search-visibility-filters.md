@@ -17,3 +17,8 @@ Filter behavior is identical across sources.
 ## Applies to
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchQueryOptions.kt`: `presetFor`, `customDateRange`, `dateRangeLabel`
 - `app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchVisibilityFilters.kt`: `SearchVisibilityFilters`, `PostMarkInputs`, `markInputs`, `matchesAnimatedFilter`, `matchesAnimatedDurationFilter`
+
+## Guarded by
+
+- `app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchDateRangeTest.kt`: `each preset round trips while it still ends now (ADR 0084)`, `a preset chosen days ago reads as custom (ADR 0084)`, `custom range covers its whole last day and labels in UTC (ADR 0084)`, `local date filter keeps posts in range and hides unknown dates (ADR 0084)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/search/SearchVisibilityFiltersTest.kt`: `a still post tagged as animated passes the animated filter and an untagged one does not (ADR 0084)`, `filterSearchResults excludes static posts from an active duration range (ADR 0084)`, `filterSearchResults hides animated posts whose length is unknown (ADR 0084)`, `filterSearchResults uses separate acquired metadata without rewriting posts (ADR 0084)`, `mark inputs drop marks whose hide toggle is off so new likes keep the same key (ADR 0084)`

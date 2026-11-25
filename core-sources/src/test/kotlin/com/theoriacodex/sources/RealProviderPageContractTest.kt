@@ -15,7 +15,7 @@ import org.junit.Test
 
 class RealProviderPageContractTest {
     @Test
-    fun `real provider pages deduplicate canonical identities after parsing without losing continuation or order`() = runTest {
+    fun `real provider pages deduplicate canonical identities after parsing without losing continuation or order (ADR 0045)`() = runTest {
         for (fixture in providerPageFixtures()) {
             val adapter = registry(fixture).adapterFor(fixture.source)!!
             val page = adapter.search(providerPageQuery(fixture.source), null)

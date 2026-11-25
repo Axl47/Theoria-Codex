@@ -61,7 +61,7 @@ class SourceMainSafetyContractTest {
     }
 
     @Test
-    fun `every registry adapter searches off the calling thread`() {
+    fun `every registry adapter searches off the calling thread (ADR 0049)`() {
         for (fixture in providerPageFixtures()) {
             val http = RecordingHttpClient(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fixture.body) })
             val registry = RealAdapterRegistry(RecordingCredentials(providerPageCredentials()), http, setOf(fixture.source))
@@ -107,7 +107,7 @@ class SourceMainSafetyContractTest {
     }
 
     @Test
-    fun `an unconfined caller started on the calling thread still searches elsewhere`() {
+    fun `an unconfined caller started on the calling thread still searches elsewhere (ADR 0049)`() {
         val fixture = providerPageFixtures().first { it.source == SourceKey.DANBOORU }
         val http = RecordingHttpClient(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fixture.body) })
         val adapter = requireNotNull(RealAdapterRegistry(providerPageCredentials(), http, setOf(fixture.source)).adapterFor(fixture.source))

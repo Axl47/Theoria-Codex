@@ -15,9 +15,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.ln
 
 class CodexSaveRelevanceTest {
-    @Test fun `small search specialist beats a large common-tag collection`() {
+    @Test fun `small search specialist beats a large common-tag collection (ADR 0078)`() {
         val relevance = CodexSaveRelevance(listOf(post("incoming", listOf("yellow", "common", "popular"))), query("yellow"))
         val specialized = collection(10, listOf("yellow"))
         val generic = collection(200, listOf("common", "popular"))
@@ -75,7 +76,7 @@ class CodexSaveRelevanceTest {
         assertEquals(0.0, relevance.score(listOf(post("tag", listOf("yellow", "cat")))), 0.000001)
     }
 
-    @Test fun `a rare shared tag outweighs many common ones, and one lucky match does not make a tiny Codex lead`() {
+    @Test fun `a rare shared tag outweighs many common ones, and one lucky match does not make a tiny Codex lead (ADR 0078)`() {
         val relevance = CodexSaveRelevance(listOf(post("incoming", listOf("miku", "1girl", "blush"))))
         val library = mapOf(
             "miku" to collection(6, listOf("miku", "1girl"), "miku"),
@@ -91,7 +92,17 @@ class CodexSaveRelevanceTest {
         assertTrue(relevance.score(library.getValue("generic")) > relevance.score(library.getValue("miku")))
     }
 
-    @Test fun `predicted tags match a Codex whose posts were tagged in another language or not at all`() {
+    @Test fun `a tag's weight is the log of the library's posts over the posts holding it, each plus one (ADR 0078)`() {
+        val relevance = CodexSaveRelevance(listOf(post("incoming", listOf("miku", "blush"))))
+        val library = collection(3, listOf("miku", "blush"), "m") + collection(6, listOf("blush"), "b") + post("none", emptyList())
+
+        val score = relevance.score(listOf(post("saved", listOf("miku"))), TagRarity.of(library))
+
+        val miku = ln(11.0 / 4)
+        assertEquals(miku / 4 / (miku + ln(11.0 / 10)), score, 1e-9)
+    }
+
+    @Test fun `predicted tags match a Codex whose posts were tagged in another language or not at all (ADR 0078)`() {
         val incoming = post("incoming", emptyList())
         val untaggedFoxes = collection(3, emptyList(), prefix = "fox")
         val untaggedCats = collection(3, emptyList(), prefix = "cat")
@@ -107,6 +118,17 @@ class CodexSaveRelevanceTest {
         assertTrue(relevance.score(untaggedFoxes, rarity) > 0.0)
         assertEquals(0.0, relevance.score(untaggedCats, rarity), 0.0)
         assertFalse(CodexSaveRelevance(listOf(incoming), predicted = PredictedTagIndex(mapOf(incoming.id to guess("fox_ears", 0.4f)))).hasSignals)
+    }
+
+    @Test fun `no tag relevance reaches the search-save tier, however well a Codex matches (ADR 0078)`() {
+        val incoming = listOf(post("incoming", listOf("yellow", "cat")))
+        val perfect = collection(1000, listOf("yellow", "cat"))
+
+        assertTrue(CodexSaveRelevance(incoming, query("yellow")).score(perfect) < SEARCH_SAVE_TIER)
+        assertTrue(CodexSaveRelevance(incoming).score(perfect) < SEARCH_SAVE_TIER)
+        val guess = listOf(PredictedTag("yellow", 0.9f, PredictedTag.Kind.GENERAL))
+        val predicted = PredictedTagIndex(byPost = (incoming + perfect).associate { it.id to guess })
+        assertTrue(CodexSaveRelevance(incoming, predicted = predicted).score(perfect) < SEARCH_SAVE_TIER)
     }
 
     private fun query(vararg tags: String) = emptySearchQuery().withIncludeTermsAsRequired(tags.map(::SearchTerm))

@@ -80,6 +80,7 @@ public interface SeriesDao {
             + "THEN COALESCE(:pageCount, CASE WHEN page_count >= :lastPage THEN page_count END) "
             + "ELSE COALESCE(page_count, CASE WHEN :pageCount >= last_page THEN :pageCount END) END, "
             + "last_read_at_epoch_ms = MAX(COALESCE(last_read_at_epoch_ms, :lastReadAt), COALESCE(:lastReadAt, last_read_at_epoch_ms)), "
+            + "page_offset = CASE WHEN :lastPage > last_page THEN NULL ELSE page_offset END, "
             + "memo = COALESCE(memo, :memo) "
             + "WHERE source = :source AND series_address = :seriesAddress AND address = :address")
     void mergeRestoredEntry(
@@ -92,7 +93,7 @@ public interface SeriesDao {
     @Query("UPDATE series_entries SET read = 1 WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
     void markAllRead(String source, String seriesAddress);
 
-    @Query("UPDATE series_entries SET read = 0, last_page = 0 WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
+    @Query("UPDATE series_entries SET read = 0, last_page = 0, page_offset = NULL WHERE source = :source AND series_address = :seriesAddress AND source_order >= 0")
     void markAllUnread(String source, String seriesAddress);
 
     @Query("UPDATE series SET last_opened_entry = NULL WHERE source = :source AND address = :address")

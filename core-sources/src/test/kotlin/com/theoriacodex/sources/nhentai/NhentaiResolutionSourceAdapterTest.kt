@@ -14,6 +14,7 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.ChallengingHost
 import com.theoriacodex.sources.testing.FakeHttpClient
 import java.util.ArrayDeque
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -25,7 +26,7 @@ import org.junit.Test
 
 internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixture() {
     @Test
-    fun `resolve post maps v2 gallery details with page paths`() = runTest {
+    fun `resolve post maps v2 gallery details with page paths (ADR 0048)`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -73,7 +74,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
     }
 
     @Test
-    fun `search falls back to mirrored web page when api is cloudflare blocked`() = runTest {
+    fun `search falls back to mirrored web page when api is cloudflare blocked (ADR 0044)`() = runTest {
         val httpClient = QueueHttpClient(
             SourceHttpResponse(
                 statusCode = 403,
@@ -115,7 +116,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
     }
 
     @Test
-    fun `a challenge the http client turned into an outage still falls back to the mirror`() = runBlocking {
+    fun `a challenge the http client turned into an outage still falls back to the mirror (ADR 0050)`() = runBlocking {
         ChallengingHost(
             mirrorPrefix = "https://r.jina.ai/",
             mirrorResponse = SourceHttpResponse(
@@ -136,7 +137,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
     }
 
     @Test
-    fun `resolve post falls back to mirrored reader page when api is cloudflare blocked`() = runTest {
+    fun `resolve post falls back to mirrored reader page when api is cloudflare blocked (ADR 0044)`() = runTest {
         val httpClient = blockedApiWithMirroredReader()
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
@@ -176,7 +177,7 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
         assertEquals(listOf("yomoda yomo"), post?.creatorProfiles?.map { it.profileId })
     }
 
-    private fun blockedApiWithMirroredReader() = QueueHttpClient(
+    private fun blockedApiWithMirroredReader(vararg metadata: SourceHttpResponse = arrayOf(mirrorTags)) = QueueHttpClient(
         SourceHttpResponse(
             statusCode = 403,
             body = "<html>Attention Required! Cloudflare</html>",
@@ -195,21 +196,58 @@ internal class NhentaiResolutionSourceAdapterTest : NhentaiSourceAdapterTestFixt
                 [![Image 2: Page 1](https://i2.nhentai.net/galleries/3821534/1.webp)](http://nhentai.net/g/634609/2/)
             """.trimIndent(),
         ),
-        SourceHttpResponse(
-            statusCode = 200,
-            body = """
-                <html>
-                  <body>
-                    <section id="tags">
-                      <a href="/tag/big-breasts/" class="tag"><span class="name">big breasts</span></a>
-                      <a href="/artist/yomoda-yomo/" class="tag"><span class="name">yomoda yomo</span></a>
-                      <a href="/language/english/" class="tag"><span class="name">english</span></a>
-                    </section>
-                  </body>
-                </html>
-            """.trimIndent(),
-        ),
+        *metadata,
     )
+
+    private val mirrorTags = SourceHttpResponse(
+        statusCode = 200,
+        body = """
+            <html>
+              <body>
+                <section id="tags">
+                  <a href="/tag/big-breasts/" class="tag"><span class="name">big breasts</span></a>
+                  <a href="/artist/yomoda-yomo/" class="tag"><span class="name">yomoda yomo</span></a>
+                  <a href="/language/english/" class="tag"><span class="name">english</span></a>
+                </section>
+              </body>
+            </html>
+        """.trimIndent(),
+    )
+
+    @Test
+    fun `tags come from the first metadata mirror that lists any (ADR 0044)`() = runTest {
+        for (firstMirror in listOf(SourceHttpResponse(200, "<html><body></body></html>"), SourceHttpResponse(503, ""))) {
+            val httpClient = blockedApiWithMirroredReader(firstMirror, mirrorTags)
+
+            val post = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
+                .resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
+
+            assertEquals(
+                listOf("https://nhentai.to/g/634609/", "https://nhentai.website/g/634609/"),
+                httpClient.requests.drop(2).map { it.url },
+            )
+            assertEquals("${firstMirror.statusCode}", listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)
+        }
+    }
+
+    @Test
+    fun `metadata mirror requests take turns on the adapter's pacer (ADR 0044)`() = runTest {
+        val queue = blockedApiWithMirroredReader(SourceHttpResponse(200, "<html><body></body></html>"), mirrorTags)
+        val requestedAt = mutableListOf<Long>()
+        val httpClient = object : com.theoriacodex.sources.http.SourceHttpClient by queue {
+            override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
+                requestedAt += testScheduler.currentTime
+                return queue.get(url, query, headers)
+            }
+        }
+
+        NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 10_000L, callContext = EmptyCoroutineContext)
+            .resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
+
+        val (api, _, firstMirror, secondMirror) = requestedAt
+        assertTrue("$requestedAt", firstMirror - api >= 9_000L)
+        assertTrue("$requestedAt", secondMirror - firstMirror >= 9_000L)
+    }
 
     @Test
     fun `exact tag lookup cancellation stops search instead of falling through`() = runTest {

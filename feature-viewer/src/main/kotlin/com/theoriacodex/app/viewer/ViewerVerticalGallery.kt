@@ -40,6 +40,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,12 +73,15 @@ import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.Post
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Stable
-internal class ViewerVerticalGalleryState(val list: LazyListState) {
+internal class ViewerVerticalGalleryState(val list: LazyListState, pendingPageFraction: ViewerPageFraction? = null) {
+    var pendingPageFraction by mutableStateOf(pendingPageFraction)
     var scale by mutableFloatStateOf(1f)
         private set
     var panX by mutableFloatStateOf(0f)
@@ -136,19 +141,16 @@ internal fun ViewerVerticalGallery(
     val post = pageState.post
     val pages = pageState.media
     val isCurrentPost = postPage == frame.navigation.currentIndex
-    val gallery = remember(post.id) {
-        screen.verticalGalleryPositions.getOrPut(post.id) {
-            ViewerVerticalGalleryState(LazyListState(pageState.selectedMediaIndex.coerceIn(0, maxOf(0, pages.lastIndex))))
-        }
-    }
+    val gallery = rememberVerticalGalleryState(pageState, frame.uiState.series, screen)
     val list = gallery.list
     DisposableEffect(post.id, gallery) {
         screen.verticalGalleries[post.id] = gallery
         onDispose { if (screen.verticalGalleries[post.id] === gallery) screen.verticalGalleries.remove(post.id) }
     }
-    val shapes = remember(post.id) { HashMap<Int, MutableFloatState>() }
+    val shapes = remember(post.id, pageState.hasPendingGalleryMedia()) { HashMap<Int, MutableFloatState>() }
     val latestShape = remember(post.id) { object { var value = viewerAspectRatio(post) ?: DEFAULT_PAGE_SHAPE } }
-    VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, screen, host)
+    val painted = { index: Int -> !shapes.getOrPut(index) { mutableFloatStateOf(Float.NaN) }.floatValue.isNaN() }
+    VerticalGalleryEffects(post, pageState, gallery, isCurrentPost, frame.uiState.series is ViewerSeries.Reading, painted, screen, host)
     val session = frame.uiState.session
     val selectedEvents = { key: ViewerMediaKey, generation: Long ->
         viewerRendererEvents(session, key, generation, host.onAction, onTimelineInteractionActiveChanged = {}, onDurationKnown = {})
@@ -191,6 +193,16 @@ internal fun ViewerVerticalGallery(
 }
 
 @Composable
+private fun rememberVerticalGalleryState(pageState: ViewerPageState, series: ViewerSeries?, screen: ViewerScreenState) = remember(pageState.post.id) {
+    screen.verticalGalleryPositions.getOrPut(pageState.post.id) {
+        ViewerVerticalGalleryState(
+            LazyListState(pageState.selectedMediaIndex.coerceIn(0, maxOf(0, pageState.media.lastIndex))),
+            (series as? ViewerSeries.Reading)?.pageFractions?.get(pageState.post.id),
+        )
+    }
+}
+
+@Composable
 private fun verticalGalleryActions(
     gallery: ViewerVerticalGalleryState,
     frame: ViewerFrame,
@@ -218,6 +230,8 @@ private fun VerticalGalleryEffects(
     pageState: ViewerPageState,
     gallery: ViewerVerticalGalleryState,
     isCurrentPost: Boolean,
+    reportsPageOffset: Boolean,
+    painted: (Int) -> Boolean,
     screen: ViewerScreenState,
     host: ViewerScreenHost,
 ) {
@@ -227,9 +241,8 @@ private fun VerticalGalleryEffects(
     val resuming = pageState.pendingMediaIndex != null
     var aligned by remember(list) { mutableStateOf(false) }
     VerticalGalleryScrollSelection(list, pageCount, selected, enabled = isCurrentPost && aligned, host)
-    LaunchedEffect(post, selected, isCurrentPost, aligned) {
-        if (isCurrentPost && aligned) host.onVisibleMediaChanged?.invoke(post, selected + 1)
-    }
+    VerticalGalleryPageReport(post, gallery, selected, isCurrentPost && aligned, reportsPageOffset, painted, host)
+    VerticalGalleryOffsetRestore(gallery, selected, isCurrentPost && aligned && !pageState.hasPendingGalleryMedia(), painted)
     LaunchedEffect(selected, pageCount, resuming) {
         if (resuming || selected !in 0 until pageCount) {
             aligned = false
@@ -239,6 +252,45 @@ private fun VerticalGalleryEffects(
         aligned = true
     }
     VerticalGalleryPendingJump(post, list, pageCount, resuming, screen)
+}
+
+@Composable
+private fun VerticalGalleryPageReport(
+    post: Post,
+    gallery: ViewerVerticalGalleryState,
+    selected: Int,
+    enabled: Boolean,
+    reportsPageOffset: Boolean,
+    painted: (Int) -> Boolean,
+    host: ViewerScreenHost,
+) {
+    val list = gallery.list
+    LaunchedEffect(post, selected, enabled, reportsPageOffset) {
+        val report = host.onVisibleMediaChanged?.takeIf { enabled } ?: return@LaunchedEffect
+        report(post, selected + 1, null)
+        if (!reportsPageOffset) return@LaunchedEffect
+        snapshotFlow { list.isScrollInProgress || gallery.pendingPageFraction != null }
+            .filter { busy -> !busy }
+            .collect { report(post, selected + 1, list.pageFraction(selected).takeUnless { it.isNaN() || !painted(selected) }) }
+    }
+}
+
+@Composable
+private fun VerticalGalleryOffsetRestore(gallery: ViewerVerticalGalleryState, selected: Int, ready: Boolean, painted: (Int) -> Boolean) {
+    val list = gallery.list
+    LaunchedEffect(gallery, ready, selected) {
+        val (target, fraction) = gallery.pendingPageFraction?.takeIf { ready } ?: return@LaunchedEffect
+        if (target != selected) {
+            gallery.pendingPageFraction = null
+            return@LaunchedEffect
+        }
+        fun position() = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
+        val start = position()
+        snapshotFlow { painted(target) || list.isScrollInProgress }.first { it }
+        repeat(LAYOUT_FRAMES) { withFrameNanos { } }
+        if (painted(target) && !list.isScrollInProgress && start == position()) list.scrollToPageFraction(target, fraction)
+        gallery.pendingPageFraction = null
+    }
 }
 
 @Composable
@@ -273,6 +325,18 @@ private fun LazyListState.focusedPage(pageCount: Int): Int {
     val line = selectionLine()
     val crossing = info.visibleItemsInfo.firstOrNull { it.offset <= line && it.offset + it.size > line }?.index
     return (crossing ?: firstVisibleItemIndex).coerceIn(0, pageCount - 1)
+}
+
+private fun LazyListState.pageFraction(index: Int): Float {
+    val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.takeIf { it.size > 0 } ?: return Float.NaN
+    val reached = ((selectionLine() - page.offset).toFloat() / page.size).coerceIn(0f, 1f)
+    return (reached * PAGE_OFFSET_STEPS).roundToInt() / PAGE_OFFSET_STEPS
+}
+
+private suspend fun LazyListState.scrollToPageFraction(index: Int, fraction: Float) {
+    scrollToItem(index)
+    val page = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    scrollToItem(index, (layoutInfo.viewportStartOffset + fraction * page.size - selectionLine()).roundToInt().coerceIn(0, page.size))
 }
 
 private fun LazyListState.selectionLine(): Int = with(layoutInfo) { viewportStartOffset + (viewportEndOffset - viewportStartOffset) / 3 }
@@ -446,6 +510,8 @@ private val VERTICAL_PAGE_CONTROLS = ViewerRendererControls(
 )
 
 private const val DEFAULT_PAGE_SHAPE = 0.7f
+private const val PAGE_OFFSET_STEPS = 1000f
+private const val LAYOUT_FRAMES = 2
 private const val MAX_ZOOM = 4f
 private const val DOUBLE_TAP_ZOOM = 2f
 

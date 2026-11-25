@@ -68,15 +68,7 @@ fun carryProgress(
             number?.let(byNumber::get).orEmpty() + listOfNotNull(backward.sameName(stored.entry)?.let { byAddress[it.address] })
         }
         when {
-            chapter.isNotEmpty() -> {
-                val further = maxOf(stored.position, own.maxOfOrNull { it.position } ?: 0)
-                val readAt = (own.mapNotNull { it.lastReadAtEpochMs } + listOfNotNull(stored.lastReadAtEpochMs)).maxOrNull()
-                stored.copy(
-                    read = stored.read || chapter.any { it.read },
-                    position = stored.length?.let { further.coerceAtMost(it) } ?: further,
-                    lastReadAtEpochMs = readAt,
-                )
-            }
+            chapter.isNotEmpty() -> stored.carrying(own, chapter)
             boundary != null && number != null && number < boundary -> stored.copy(read = true)
             else -> stored
         }
@@ -112,4 +104,18 @@ fun matchKey(text: String): String = text.lowercase().let { lower ->
     lower.filterIndexed { index, char ->
         char.isLetterOrDigit() || char == '.' && lower.getOrNull(index - 1)?.isDigit() == true && lower.getOrNull(index + 1)?.isDigit() == true
     }
+}
+
+private fun StoredSeriesEntry.carrying(own: List<StoredSeriesEntry>, chapter: List<StoredSeriesEntry>): StoredSeriesEntry {
+    val further = maxOf(position, own.maxOfOrNull { it.position } ?: 0)
+    val readAt = (own.mapNotNull { it.lastReadAtEpochMs } + listOfNotNull(lastReadAtEpochMs)).maxOrNull()
+    val reached = length?.let { further.coerceAtMost(it) } ?: further
+    val offsets = own.filter { it.position == further }.mapNotNull { it.pageOffset } + listOfNotNull(pageOffset.takeIf { further == position })
+    val offset = offsets.maxOrNull()
+    return copy(
+        read = read || chapter.any { it.read },
+        position = reached,
+        lastReadAtEpochMs = readAt,
+        pageOffset = offset.takeIf { reached == further },
+    )
 }

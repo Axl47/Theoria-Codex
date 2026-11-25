@@ -15,7 +15,7 @@ import org.junit.Test
 
 class PixivTagsAdapterTest {
     @Test
-    fun `autocomplete and trending preserve native tags with translated labels`() = runTest {
+    fun `autocomplete and trending preserve native tags with translated labels (ADR 0046)`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(
                 accessToken = "access",
@@ -90,7 +90,7 @@ class PixivTagsAdapterTest {
     }
 
     @Test
-    fun `search pairs each native tag with its English translation`() = runTest {
+    fun `search pairs each native tag with its English translation (ADR 0046)`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(
                 accessToken = "access",

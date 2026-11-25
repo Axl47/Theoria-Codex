@@ -28,7 +28,7 @@ import org.junit.Test
 
 class ProviderHealthCheckerTest {
     @Test
-    fun `a problem during a browser challenge cannot be checked while a real failure stays failed`() = runTest {
+    fun `a problem during a browser challenge cannot be checked while a real failure stays failed (ADR 0047)`() = runTest {
         val registry = FakeRegistry(
             mapOf(
                 SourceKey.AIBOORU to FakeAdapter(

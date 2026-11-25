@@ -167,7 +167,7 @@ class RoomSeriesRepository(
                 .map(SeriesEntryEntity::toStored)
                 .mapNotNull { current ->
                     val target = byAddress[current.entry.address] ?: return@mapNotNull null
-                    val next = current.copy(read = target.read, position = target.position, length = target.length)
+                    val next = current.copy(read = target.read, position = target.position, length = target.length, pageOffset = target.pageOffset)
                     next.takeIf { it != current }?.toEntity(id)
                 }
             if (restored.isNotEmpty()) dao.upsertEntries(restored)
@@ -180,13 +180,13 @@ class RoomSeriesRepository(
         }
     }
 
-    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?) {
+    override suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?, pageOffset: Float?) {
         database.withTransaction {
             val entry = dao.entry(id.source.id, id.address, entryAddress)?.toStored() ?: return@withTransaction
             val series = dao.series(id.source.id, id.address)?.toStored() ?: return@withTransaction
             val opened = series.lastOpenedEntry != entryAddress
             if (opened) dao.upsertSeries(series.copy(lastOpenedEntry = entryAddress).toEntity())
-            val progressed = if (length == null || length <= 0) entry else entry.withProgress(position, length, id.source.seriesKind)
+            val progressed = if (length == null || length <= 0) entry else entry.withProgress(position, length, id.source.seriesKind, pageOffset)
             if (opened || progressed != entry) dao.upsertEntries(listOf(progressed.copy(lastReadAtEpochMs = clock()).toEntity(id)))
         }
     }
@@ -220,7 +220,7 @@ private val SeriesEntry.release: Pair<Float, String?>? get() = number?.let { it 
 
 private fun StoredSeriesEntry.withReadState(targets: Set<String>?, read: Boolean): StoredSeriesEntry? {
     if (targets != null && entry.address !in targets) return null
-    val next = if (read) copy(read = true) else copy(read = false, position = 0)
+    val next = if (read) copy(read = true) else copy(read = false, position = 0, pageOffset = null)
     return next.takeIf { it != this }
 }
 
@@ -296,6 +296,7 @@ internal fun SeriesEntryEntity.toStored() = StoredSeriesEntry(
     position = lastPage,
     length = pageCount,
     lastReadAtEpochMs = lastReadAtEpochMs,
+    pageOffset = pageOffset,
 )
 
 internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
@@ -313,4 +314,5 @@ internal fun StoredSeriesEntry.toEntity(series: SeriesId) = SeriesEntryEntity(
     length,
     lastReadAtEpochMs,
     entry.memo,
+    pageOffset,
 )

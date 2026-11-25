@@ -23,6 +23,7 @@ data class RepoExtension(
     val versionName: String,
     val kind: SeriesKind,
     val status: Status,
+    val iconUrl: String? = null,
 ) {
     enum class Status {
         AVAILABLE,
