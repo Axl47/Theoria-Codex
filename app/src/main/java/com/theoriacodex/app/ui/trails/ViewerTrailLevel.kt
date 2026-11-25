@@ -83,10 +83,9 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
     val replay by saved.getStateFlow(TRAIL_REPLAY_KEY, ArrayList<String>()).collectAsStateWithLifecycle()
     return remember(entry, owner, label, replay) {
         val ancestors = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_LABELS_KEY).orEmpty()
-        val ancestorIds = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY).orEmpty()
-        val stack = navController.currentBackStack.value
+        val ancestorTags = saved.get<ArrayList<String>>(TRAIL_ANCESTOR_TAGS_KEY).orEmpty()
         val crumbs = ancestors.mapIndexed { index, ancestor ->
-            stack.firstOrNull { it.id == ancestorIds.getOrNull(index) }?.savedStateHandle?.crumb(ancestor) ?: ViewerCrumb(ancestor)
+            ViewerCrumb(ancestor, tag = ancestorTags.getOrNull(index)?.let(::decodeCrumbTag))
         } + saved.crumb(label ?: UNNAMED_LEVEL)
         val popTo: (Int) -> Unit = { crumb -> repeat((ancestors.size - crumb).coerceAtLeast(0)) { navController.popBackStack() } }
         ViewerLevel(
@@ -104,13 +103,13 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
                     navController.currentBackStackEntry?.savedStateHandle?.planTrailReplay(removal.replay)
                 }
             },
-            replay = replay.firstOrNull()?.let(::decodeReplayTag),
+            replay = replay.firstOrNull()?.let(::decodeCrumbTag),
         )
     }
 }
 
 internal fun SavedStateHandle.trailReplayAfter(request: TrailRequest): List<CrumbTag> {
-    val pending = get<ArrayList<String>>(TRAIL_REPLAY_KEY).orEmpty().mapNotNull(::decodeReplayTag)
+    val pending = get<ArrayList<String>>(TRAIL_REPLAY_KEY).orEmpty().mapNotNull(::decodeCrumbTag)
     val opened = (request as? TrailRequest.Tag)?.let { CrumbTag(it.tag, it.source) }
     if (pending.isNotEmpty() && opened == pending.first()) return pending.drop(1)
     clearTrailReplay()
@@ -122,29 +121,23 @@ internal fun SavedStateHandle.clearTrailReplay() {
 }
 
 internal fun SavedStateHandle.planTrailReplay(tags: List<CrumbTag>) {
-    if (tags.isNotEmpty()) this[TRAIL_REPLAY_KEY] = encodeReplay(tags)
+    if (tags.isNotEmpty()) this[TRAIL_REPLAY_KEY] = tags.mapTo(ArrayList(), ::encodeCrumbTag)
 }
 
-private fun encodeReplay(tags: List<CrumbTag>): ArrayList<String> = tags.mapTo(ArrayList()) { "${it.source.id}$REPLAY_SEPARATOR${it.value}" }
+private fun encodeCrumbTag(tag: CrumbTag): String = "${tag.source.id}$TAG_SEPARATOR${tag.value}"
 
-private fun decodeReplayTag(encoded: String): CrumbTag? {
-    val source = SourceKey.parse(encoded.substringBefore(REPLAY_SEPARATOR, "")) ?: return null
-    return CrumbTag(encoded.substringAfter(REPLAY_SEPARATOR), source)
+private fun decodeCrumbTag(encoded: String): CrumbTag? {
+    val source = SourceKey.parse(encoded.substringBefore(TAG_SEPARATOR, "")) ?: return null
+    return CrumbTag(encoded.substringAfter(TAG_SEPARATOR), source)
 }
 
 private fun SavedStateHandle.recordStep(level: TrailLevel) {
-    level.tag?.let { tag ->
-        this[TRAIL_TAG_KEY] = tag.value
-        this[TRAIL_TAG_SOURCE_KEY] = tag.source.id
-    }
-    this[TRAIL_REPLAY_KEY] = encodeReplay(level.replay)
+    level.tag?.let { this[TRAIL_TAG_KEY] = encodeCrumbTag(it) }
+    this[TRAIL_REPLAY_KEY] = level.replay.mapTo(ArrayList(), ::encodeCrumbTag)
 }
 
-private fun SavedStateHandle.crumb(label: String): ViewerCrumb {
-    val tag = get<String>(TRAIL_TAG_KEY)
-    val source = get<String>(TRAIL_TAG_SOURCE_KEY)?.let { SourceKey.parse(it) }
-    return ViewerCrumb(label, get<String>(TRAIL_KEY), if (tag != null && source != null) CrumbTag(tag, source) else null)
-}
+private fun SavedStateHandle.crumb(label: String): ViewerCrumb =
+    ViewerCrumb(label, get<String>(TRAIL_KEY), get<String>(TRAIL_TAG_KEY)?.let(::decodeCrumbTag))
 
 private fun SavedStateHandle.recordAncestors(previous: NavBackStackEntry?) {
     val parent = previous?.takeIf { it.destination.route == AppRoute.Viewer }
@@ -155,6 +148,9 @@ private fun SavedStateHandle.recordAncestors(previous: NavBackStackEntry?) {
     this[TRAIL_ANCESTOR_IDS_KEY] = ArrayList(
         parentState?.let { it.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY).orEmpty() + parent.id }.orEmpty(),
     )
+    this[TRAIL_ANCESTOR_TAGS_KEY] = ArrayList(
+        parentState?.let { it.get<ArrayList<String>>(TRAIL_ANCESTOR_TAGS_KEY).orEmpty() + it.get<String>(TRAIL_TAG_KEY).orEmpty() }.orEmpty(),
+    )
 }
 
 private const val TRAIL_LABEL_KEY = "viewer-trail-label"
@@ -162,9 +158,9 @@ private const val TRAIL_KEY = "viewer-trail-key"
 private const val TRAIL_ANCESTOR_LABELS_KEY = "viewer-trail-ancestor-labels"
 private const val TRAIL_ANCESTOR_IDS_KEY = "viewer-trail-ancestor-ids"
 private const val TRAIL_TAG_KEY = "viewer-trail-tag"
-private const val TRAIL_TAG_SOURCE_KEY = "viewer-trail-tag-source"
+private const val TRAIL_ANCESTOR_TAGS_KEY = "viewer-trail-ancestor-tags"
 private const val TRAIL_REPLAY_KEY = "viewer-trail-replay"
-private const val REPLAY_SEPARATOR = '\n'
+private const val TAG_SEPARATOR = '\n'
 private const val UNNAMED_LEVEL = "Viewer"
 
 internal fun ViewerRouteEffectCallbacks.forLevel(level: ViewerLevel, popLevel: () -> Unit): ViewerRouteEffectCallbacks = copy(
