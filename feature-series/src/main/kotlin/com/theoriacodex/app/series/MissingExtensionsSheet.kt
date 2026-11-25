@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SettingsGroup
@@ -51,7 +50,6 @@ import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.languageName
 import com.theoriacodex.domain.series.seriesKind
 import java.text.DateFormat
-import kotlinx.coroutines.flow.first
 
 class MissingExtensionsActions(
     val missing: () -> MissingSeriesViewModel,
@@ -93,21 +91,10 @@ internal fun MissingExtensionsOverlay(
             request = request,
         )
     } else {
-        val switchSource = viewModel(key = "$SWITCH_SOURCE_KEY${from.id}") { actions.switchSource(from.id) }
-        LaunchedEffect(switchSource) {
-            switchSource.state.first { it.others.isNotEmpty() }
-            switchSource.open(from.title)
-            switchSource.state.first { it.sheet == null }
-            switching = null
-        }
-        SwitchSourceSheet(
-            switchSource,
-            onOpenSeries = { id ->
-                request.onDismiss()
-                actions.onOpenSeries(id)
-            },
-            onSwitched = {},
-        )
+        SwitchingSource(from, actions.switchSource, onOpenSeries = { id ->
+            request.onDismiss()
+            actions.onOpenSeries(id)
+        }) { switching = null }
     }
 }
 
@@ -232,4 +219,3 @@ internal const val TURN_ON = "Turn on"
 internal const val OFF = "Off"
 internal const val COULDNT_LOAD = "Couldn't load"
 internal const val NOT_IN_THIS_VERSION = "Not in this version"
-private const val SWITCH_SOURCE_KEY = "missing-extensions-switch-"

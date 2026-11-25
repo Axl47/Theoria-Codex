@@ -26,16 +26,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.armedColors
 import kotlinx.coroutines.delay
 
 @Composable
 internal fun BoxScope.TriageEdgeCue(icon: ImageVector, label: String, alignment: Alignment, progress: Float, armed: Boolean) {
     if (progress <= 0f) return
-    val colors = MaterialTheme.colorScheme
+    val fill = armedColors(armed)
     Surface(
         shape = CircleShape,
-        color = if (armed) colors.primaryContainer else colors.surfaceContainerHigh,
-        contentColor = if (armed) colors.onPrimaryContainer else colors.onSurface,
+        color = fill.container,
+        contentColor = fill.content,
         shadowElevation = 6.dp,
         modifier = Modifier
             .align(alignment)
