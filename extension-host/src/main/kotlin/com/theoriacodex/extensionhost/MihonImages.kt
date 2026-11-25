@@ -6,7 +6,6 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
 import java.io.IOException
-import java.util.Base64
 import java.util.Collections
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,8 +29,7 @@ internal class MihonImages(
 
     fun pageAddress(chapter: SChapter, page: Page): String? {
         val address = if (page.imageUrl != null) {
-            val named = source.imageCall(page).request().url
-            images.tag(key, named.toString(), named.encodedFragment?.let { NAMED_FRAGMENT + Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray()) })
+            images.tag(key, source.imageCall(page).request().url.toString())
         } else {
             val names = page.url.takeIf(String::isNotBlank)?.let { it.toHttpUrlOrNull() ?: source.baseUrl.toHttpUrlOrNull()?.resolve(it) }
             names?.let { images.tag(key, it.toString(), "${page.index}/${chapter.url}") } ?: return null
@@ -41,10 +39,9 @@ internal class MihonImages(
     }
 
     override fun fetch(address: String, url: HttpUrl, data: String?, caller: Call): Response {
-        if (data == null || data.startsWith(NAMED_FRAGMENT)) {
+        if (data == null) {
             val page = pages[address]
-            val named = data?.let { url.newBuilder().encodedFragment(String(Base64.getUrlDecoder().decode(it.removePrefix(NAMED_FRAGMENT)))).build() } ?: url
-            return (if (page != null) source.imageCall(page) else source.imageCall(named.toString())).executeFor(caller)
+            return (if (page != null) source.imageCall(page) else source.imageCall(url.toString())).executeFor(caller)
         }
         val page = unresolvedPage(address, data, caller)
         val (call, named) = page.imageCall(caller)
@@ -81,6 +78,5 @@ internal class MihonImages(
 
     private companion object {
         const val MAX_PAGES = 8_192
-        const val NAMED_FRAGMENT = "#"
     }
 }

@@ -378,15 +378,21 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a page's image fragment reaches its source after the page is forgotten (ADR 0059)`() {
+    fun `an image's own fragment reaches its source through the tag (ADR 0059)`() {
         val source = FragmentSource()
+        val key = MihonKind.sourceKey(source.id)
         images.publish(listOf(server, mihon(source)))
-        val forgotten = MihonImages(source, MihonKind.sourceKey(source.id), images)
+        val forgotten = MihonImages(source, key, images)
         listOf("""{"tiles":[3,0,2,1],"tileCols":2,"n":"a%b#c/d"}""", "tile%20").forEachIndexed { index, tiles ->
-            val address = checkNotNull(forgotten.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.webp#$tiles")))
+            val own = "https://img.test/#$tiles".toHttpUrl().encodedFragment
+            val page = checkNotNull(forgotten.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.webp#$tiles")))
 
-            assertEquals("fragment ${"https://img.test/#$tiles".toHttpUrl().fragment}", fetch(address))
+            assertEquals("fragment $own", fetch(page))
+            assertEquals("fragment $own", fetch(images.cover(key, "https://img.test/cover$index.webp#$tiles")))
         }
+        val plain = images.cover(key, "https://img.test/plain.webp")
+        assertEquals(images.tag(key, "https://img.test/plain.webp#"), plain)
+        assertEquals("app https://img.test/plain.webp", fetch("$plain~e30"))
     }
 
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
@@ -491,7 +497,7 @@ class ExtensionImagesTest {
         override val supportsLatest = false
 
         override val client: OkHttpClient = OkHttpClient.Builder()
-            .addInterceptor(answering { request -> cannedResponse(request, body = "fragment ${request.url.fragment}") })
+            .addInterceptor(answering { request -> cannedResponse(request, body = "fragment ${request.url.encodedFragment}") })
             .build()
 
         override fun headersBuilder() = Headers.Builder()
