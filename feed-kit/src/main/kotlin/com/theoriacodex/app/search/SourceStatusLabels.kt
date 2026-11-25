@@ -25,6 +25,8 @@ private fun sourceFailureShortLabel(reason: SourceFailureReason?): String {
         SourceFailureReason.AUTH_REQUIRED -> "needs account setup"
         SourceFailureReason.AUTH_EXPIRED -> "needs sign-in refresh"
         SourceFailureReason.RATE_LIMITED -> "rate limited"
+        SourceFailureReason.BLOCKED -> "blocked"
+        SourceFailureReason.TIMED_OUT -> "timed out"
         SourceFailureReason.NETWORK -> "unreachable"
         SourceFailureReason.PARSE -> "changed response"
         SourceFailureReason.UNKNOWN, null -> "failed"

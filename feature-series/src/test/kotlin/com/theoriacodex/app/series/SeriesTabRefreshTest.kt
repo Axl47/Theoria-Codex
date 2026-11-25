@@ -1,6 +1,8 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.data.repository.CheckFailure
 import com.theoriacodex.data.repository.CheckProgress
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
@@ -23,7 +25,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-internal val NOTHING_CHECKED = FollowedCheck(emptyList(), checked = 0, failed = 0)
+internal fun failure(path: String, source: String = "custom_mihon_1", reason: SourceFailureReason = SourceFailureReason.NETWORK) =
+    CheckFailure(Series(SeriesId(SourceKey.parseOrThrow(source), path), path), reason)
+
+internal val NOTHING_CHECKED = FollowedCheck(emptyList(), checked = 0)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SeriesTabRefreshTest {
@@ -32,9 +37,9 @@ class SeriesTabRefreshTest {
     @Test
     fun aRefreshWhoseSourcesFailSaysSoUntilTheNextStarts() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val failed = FollowedCheck(emptyList(), checked = 2, failed = 2)
+        val failed = FollowedCheck(emptyList(), checked = 2, failures = List(2) { failure("/f$it") })
         var next = failed
-        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { next }
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { _, _ -> next }
         viewModel.refresh()
         advanceUntilIdle()
         assertEquals(failed, viewModel.state.value.failedCheck)
@@ -50,13 +55,13 @@ class SeriesTabRefreshTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val step = Channel<Unit>()
         val update = SeriesUpdate(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/a"), "A"), listOf(SeriesEntry("/c/2", "Chapter 2")))
-        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { onProgress ->
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { _, onProgress ->
             (0..2).forEach { done ->
                 step.receive()
                 onProgress(CheckProgress(done, 2))
             }
             step.receive()
-            FollowedCheck(listOf(update), checked = 2, failed = 0)
+            FollowedCheck(listOf(update), checked = 2)
         }
         viewModel.refresh()
         runCurrent()
@@ -75,9 +80,45 @@ class SeriesTabRefreshTest {
     }
 
     @Test
+    fun dismissingTheFailureHidesItUntilAnotherCheckFails_adr_0219() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val failed = FollowedCheck(emptyList(), checked = 3, failures = listOf(failure("/a")))
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { _, _ -> failed }
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        viewModel.dismissFailures()
+        assertNull(viewModel.state.value.failedCheck)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals(failed, viewModel.state.value.failedCheck)
+    }
+
+    @Test
+    fun retryingAGroupChecksOnlyItsSeriesAndKeepsTheOtherFailures_adr_0219() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val reachable = failure("/a")
+        val limited = failure("/b", reason = SourceFailureReason.RATE_LIMITED)
+        val asked = mutableListOf<Set<SeriesId>?>()
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { only, _ ->
+            asked += only
+            if (only == null) FollowedCheck(emptyList(), checked = 3, failures = listOf(reachable, limited)) else FollowedCheck(emptyList(), checked = 1)
+        }
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        viewModel.retry(setOf(limited.series.id))
+        advanceUntilIdle()
+
+        assertEquals(listOf(null, setOf(limited.series.id)), asked)
+        assertEquals(listOf(reachable), viewModel.state.value.failedCheck?.failures)
+    }
+
+    @Test
     fun theFailureSaysHowManySeriesFailedUnlessAllDid() {
-        val failed = FollowedCheck(emptyList(), checked = 2, failed = 2)
+        val failed = FollowedCheck(emptyList(), checked = 2, failures = List(2) { failure("/f$it") })
         assertEquals("Couldn't check for updates", failed.message)
-        assertEquals("Couldn't check 1 series", failed.copy(failed = 1).message)
+        assertEquals("Couldn't check 1 series", failed.copy(failures = failed.failures.take(1)).message)
     }
 }

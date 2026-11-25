@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -23,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,7 +35,9 @@ import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
+import java.text.DateFormat
 
 @Composable
 internal fun FollowingBody(
@@ -45,6 +47,9 @@ internal fun FollowingBody(
     failedCheck: FollowedCheck?,
     grid: LazyGridState,
     onRefresh: () -> Unit,
+    onRetryFailed: (Set<SeriesId>) -> Unit,
+    onDismissFailures: () -> Unit,
+    onUnfollow: (SeriesId) -> Unit,
     onChooseKind: (SeriesKind?) -> Unit,
     onChooseLibrary: (LibraryOptions) -> Unit,
     onShowAll: () -> Unit,
@@ -53,7 +58,9 @@ internal fun FollowingBody(
     onOpenSeries: (Series) -> Unit,
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
+    var failuresOpen by rememberSaveable { mutableStateOf(false) }
     val following = content.following
+    val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
             FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.padding(horizontal = 16.dp))
@@ -67,7 +74,11 @@ internal fun FollowingBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                followingNotices(content, failedCheck, onRefresh)
+                if (failed != null) {
+                    fullWidth("following-check-failed") {
+                        CheckFailedCard(failed.message, onOpen = { failuresOpen = true }, onRetry = onRefresh, onDismiss = onDismissFailures)
+                    }
+                }
                 when {
                     following == null -> Unit
                     following.isEmpty() && content.followingQuery.isNotBlank() ->
@@ -81,14 +92,20 @@ internal fun FollowingBody(
             }
         }
     }
+    if (failuresOpen && failed != null) {
+        val dates = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
+        CheckFailuresSheet(
+            sources = failed.bySource { key -> content.sources?.firstOrNull { it.key == key }?.name },
+            titles = TitleActions({ false }, {}, onUnfollow, onOpen = onOpenSeries) { series -> content.followed[series.id]?.let { readingSummary(it, dates) } },
+            onRetry = { ids ->
+                failuresOpen = false
+                onRetryFailed(ids)
+            },
+            onDismiss = { failuresOpen = false },
+        )
+    }
     if (optionsOpen) {
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
-    }
-}
-
-private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit) {
-    if (failedCheck != null && content.followsAny) {
-        fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
     }
 }
 

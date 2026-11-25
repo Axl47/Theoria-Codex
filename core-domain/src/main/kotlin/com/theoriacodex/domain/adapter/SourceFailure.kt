@@ -4,7 +4,9 @@ enum class SourceFailureReason {
     AUTH_REQUIRED,
     AUTH_EXPIRED,
     RATE_LIMITED,
+    BLOCKED,
     NETWORK,
+    TIMED_OUT,
     PARSE,
     UNKNOWN,
 }

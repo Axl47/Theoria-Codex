@@ -71,7 +71,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             series.extensions.revision,
             createSavedStateHandle(),
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
-        ) { onProgress -> series.checkFollowed(onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
+        ) { only, onProgress -> series.checkFollowed(only = only, onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
     }
     val pager = shell.navigation.pagerState
     LaunchedEffect(viewModel, pager) {
