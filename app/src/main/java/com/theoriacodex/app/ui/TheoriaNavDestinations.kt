@@ -468,8 +468,8 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
         shell.data.markViewedNewPost(post, session)
         shell.viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
     },
-    onVisibleMediaChanged = { post, viewedMediaNumber, session ->
-        shell.viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
+    onVisibleMediaChanged = { post, viewedMediaNumber, pageOffset, session ->
+        shell.viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session, pageOffset)
     },
     onPlaybackProgress = { post, progress, session -> shell.viewerRouteWorkflow.recordPlaybackProgress(post, progress, session) },
     onOpenUrl = { url -> openInBrowser(shell.appContext, url) },
