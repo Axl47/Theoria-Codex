@@ -47,12 +47,13 @@ private const val VIEWER_RETURN_TARGET_WAIT_MS = 300L
 
 @Composable
 fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolean) {
+    val returnTransition = LocalViewerReturnTransition.current
     scope.transition.animateFloat(
         transitionSpec = {
             tween(
                 when {
                     targetState != EnterExitState.PostExit -> VIEWER_RETURN_DURATION_MS
-                    holdsExit() -> VIEWER_RETURN_HOLD_MS
+                    holdsExit() && returnTransition?.request != null -> VIEWER_RETURN_HOLD_MS
                     else -> 0
                 },
             )

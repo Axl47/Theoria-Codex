@@ -179,7 +179,7 @@ private fun ViewerVerticalPostPage(
     ViewerVerticalGallery(
         postPage, pageState, frame, screen, controls, host,
         dismissDrag = dismissDrag.takeIf { postPage == frame.navigation.currentIndex },
-        readReturnProgress = readReturnProgress,
+        readReturnProgress = if (postPage == frame.navigation.currentIndex) readReturnProgress else restingReturnProgress,
         onOpenNext = nextPostOpener(postPage, frame, swipe, config).takeUnless { frame.reading && pageState.loadingGalleryMedia() },
     )
 }

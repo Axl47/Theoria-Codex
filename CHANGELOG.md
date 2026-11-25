@@ -167,6 +167,9 @@
 
 ### Fixed
 
+- Leaving a chapter or an episode closes the reader or player all at once. The dark background no longer disappears first while the pages or video stay on screen a moment longer.
+- Swiping back from a series page, Settings, Extensions or another full screen slides it away, as the back arrow does. It no longer fades with its text drawn over the screen behind it.
+- Closing a gallery you read in vertical mode fades its pages out along with the dark background. They no longer stay on screen after the background is gone.
 - A trail step that would hold only the post you're on, which happens quickly on Hitomi where each post is a whole gallery, now says "No other posts" instead of opening a step with nothing new.
 - A trail step whose site couldn't be reached now says "Couldn't load" instead of claiming there were no posts, and a creator page's tag chip stays usable after a failed load.
 - A gallery that is the only post in the Viewer's thumbnail strip spreads its pages across the whole strip instead of leaving empty space beside them.

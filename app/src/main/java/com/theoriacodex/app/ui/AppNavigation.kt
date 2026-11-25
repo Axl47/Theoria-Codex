@@ -2,6 +2,8 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.domain.series.SeriesId
 import android.net.Uri
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -12,14 +14,27 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
+import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import com.theoriacodex.app.library.LibrarySection
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
+import com.theoriacodex.app.ui.trails.isTrailLevel
+import com.theoriacodex.app.ui.trails.viewerForkFadeIn
+import com.theoriacodex.app.ui.trails.viewerForkFadeOut
 import com.theoriacodex.app.series.ExtensionsSubpage
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.viewer.ViewerSeries
@@ -78,17 +93,83 @@ internal fun tabSwipeEnabled(settledPage: Int, forYouGrid: Boolean): Boolean =
 
 private val screenSlide = tween<IntOffset>(TheoriaMotion.SCREEN_MS)
 
-internal fun pushEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { it }
-internal fun pushExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { -it }
-internal fun popEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { -it }
-internal fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { it }
+private fun pushEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { it }
+private fun pushExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { -it }
+private fun popEnterTransition(): EnterTransition = slideInHorizontally(screenSlide) { -it }
+private fun popExitTransition(): ExitTransition = slideOutHorizontally(screenSlide) { it }
 
 private val screenFade = tween<Float>(TheoriaMotion.SCREEN_MS)
 
-internal fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
-internal fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
-internal fun codexUnderneathExit(): ExitTransition = ExitTransition.None
-internal fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
+private fun codexEnterTransition(): EnterTransition = fadeIn(screenFade)
+private fun codexExitTransition(): ExitTransition = fadeOut(screenFade)
+private fun codexUnderneathExit(): ExitTransition = ExitTransition.None
+private fun codexUnderneathEnter(): EnterTransition = EnterTransition.None
+
+private typealias ScreenTransitionScope = AnimatedContentTransitionScope<NavBackStackEntry>
+
+private val ScreenTransitionScope.betweenViewers: Boolean
+    get() = initialState.destination.route == AppRoute.Viewer && targetState.destination.route == AppRoute.Viewer
+
+private fun ScreenTransitionScope.screenEnter(): EnterTransition = when {
+    betweenViewers -> viewerForkFadeIn()
+    targetState.destination.route == AppRoute.Viewer -> EnterTransition.None
+    targetState.destination.route == AppRoute.CodexDetail -> codexEnterTransition()
+    else -> pushEnterTransition()
+}
+
+private fun ScreenTransitionScope.screenExit(): ExitTransition = when {
+    betweenViewers -> viewerForkFadeOut()
+    targetState.destination.route == AppRoute.Viewer -> ExitTransition.None
+    targetState.destination.route == AppRoute.CodexDetail -> codexUnderneathExit()
+    else -> pushExitTransition()
+}
+
+private fun ScreenTransitionScope.screenPopEnter(): EnterTransition = when {
+    betweenViewers -> viewerForkFadeIn()
+    initialState.destination.route == AppRoute.Viewer -> EnterTransition.None
+    initialState.destination.route == AppRoute.CodexDetail -> codexUnderneathEnter()
+    else -> popEnterTransition()
+}
+
+private fun ScreenTransitionScope.screenPopExit(): ExitTransition = when {
+    initialState.destination.route == AppRoute.Viewer ->
+        if (betweenViewers || initialState.isTrailLevel()) viewerForkFadeOut() else ExitTransition.None
+    initialState.destination.route == AppRoute.CodexDetail -> codexExitTransition()
+    else -> popExitTransition()
+}
+
+@Composable
+internal fun TheoriaScreenHost(
+    navController: NavHostController,
+    startDestination: String,
+    modifier: Modifier = Modifier,
+    builder: NavGraphBuilder.() -> Unit,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = modifier,
+        enterTransition = { screenEnter() },
+        exitTransition = { screenExit() },
+        popEnterTransition = { screenPopEnter() },
+        popExitTransition = { screenPopExit() },
+        predictivePopEnterTransition = { screenPopEnter() },
+        predictivePopExitTransition = { screenPopExit() },
+        builder = builder,
+    )
+}
+
+internal fun NavGraphBuilder.opaqueScreen(
+    route: String,
+    arguments: List<NamedNavArgument> = emptyList(),
+    content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
+) {
+    composable(route, arguments) { entry ->
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), propagateMinConstraints = true) {
+            this@composable.content(entry)
+        }
+    }
+}
 
 @Composable
 internal fun RecordCodexEntryEffect(entry: NavBackStackEntry, codexId: String, statistics: StatisticsRepository) {
