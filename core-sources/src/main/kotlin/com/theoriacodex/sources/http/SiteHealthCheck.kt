@@ -14,6 +14,7 @@ class SiteHealthCheck internal constructor(
         this(tracker, httpTransport(okHttpClient, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, followRedirects = true))
 
     suspend fun check(url: String, headers: Map<String, String>, countChallenges: Boolean): Unit = sourceCall {
+        if (tracker.isSiteRateLimited(url)) return@sourceCall
         val response = runCatchingPreservingCancellation { fetch(url, headers) }.getOrElse { error ->
             if (error is IOException) tracker.recordFailure(url, error) else tracker.clear(hostOf(url))
             return@sourceCall
@@ -23,7 +24,11 @@ class SiteHealthCheck internal constructor(
             null -> HostOutageKind.CHALLENGE.takeIf { countChallenges && response.toTextResponse().isVerificationChallenge() }
             else -> kind
         }
-        if (down != null) tracker.record(url, down) else tracker.clear(hostOf(url))
+        when (down) {
+            null -> tracker.clear(hostOf(url))
+            HostOutageKind.RATE_LIMITED -> tracker.recordResponse(url, response.statusCode, response.headers)
+            else -> tracker.record(url, down)
+        }
     }
 
     suspend fun clearsChallenge(url: String, headers: Map<String, String>): Boolean = sourceCall {
@@ -31,7 +36,9 @@ class SiteHealthCheck internal constructor(
             if (error is IOException) throw error
             return@sourceCall true
         }
-        HostOutageTracker.outageKindOf(response.statusCode, response.headers) == null
+        val kind = HostOutageTracker.outageKindOf(response.statusCode, response.headers)
+        if (kind == HostOutageKind.RATE_LIMITED) tracker.recordResponse(url, response.statusCode, response.headers)
+        kind == null
     }
 
     private suspend fun fetch(url: String, headers: Map<String, String>): SourceByteResponse = transport(

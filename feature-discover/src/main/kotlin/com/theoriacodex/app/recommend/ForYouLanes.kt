@@ -27,6 +27,7 @@ internal class ForYouLanesLoader(
     private val tagAffinity: suspend (profileId: String) -> TagAffinityInputs,
     private val computation: CoroutineDispatcher,
     private val random: () -> Random?,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val counts = TagCountCoordinator(registry, store, { _, tag -> tag })
 
@@ -79,8 +80,10 @@ internal class ForYouLanesLoader(
         }.flatten()
 
     private suspend fun trendingTags(source: SourceKey): List<String> {
+        store.awaitLoaded()
         val cached = store.getTrending(source = source, limit = TRENDING_LIMIT).filter(TagSuggestion::isRecommendationTagSuggestion)
         if (cached.isNotEmpty()) return cached.map { it.text }
+        store.markTrendingRefreshed(source, clock())
         val fetched = runCatchingPreservingCancellation {
             withTimeoutOrNull(TRENDING_TIMEOUT_MS) { registry.adapterFor(source)?.trendingTags(limit = TRENDING_LIMIT).orEmpty() }.orEmpty()
         }.getOrDefault(emptyList())

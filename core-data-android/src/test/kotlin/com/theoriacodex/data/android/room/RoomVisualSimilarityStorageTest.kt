@@ -8,6 +8,7 @@ import com.theoriacodex.data.repository.ForYouVerdictKind
 import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
+import com.theoriacodex.data.repository.PREVIEW_RETRY_MS
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisionProgress
 import com.theoriacodex.domain.model.ImageRef
@@ -119,6 +120,27 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(1, signatures.libraryPostsWithoutVision("m2", limit = 1).size)
         signatures.putHashes(mapOf(id("seen") to 1L))
         assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
+    }
+
+    @Test fun `a preview that failed to load waits a day before it is listed for hashing or tagging again`() = runTest {
+        val library = RoomCodexLikesRepository(database)
+        var now = 1_000L
+        val signatures = RoomVisualSignatureRepository(database, clock = { now })
+        val codex = library.ensureCodex("saved", "Saved")
+        library.addItems(codex.codexId, listOf(post("offline"), post("new")))
+
+        signatures.failPreviews(listOf(id("offline")))
+        assertEquals(listOf(id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
+        assertEquals(listOf(id("new")), signatures.libraryPostsWithoutVision("m1", limit = 10).map(Post::id))
+        now += PREVIEW_RETRY_MS - 1
+        assertEquals(listOf(id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
+        now += 1L
+        assertEquals(setOf(id("offline"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
+        signatures.failPreviews(listOf(id("offline")))
+        signatures.putHashes(mapOf(id("offline") to 7L))
+        now += 10 * PREVIEW_RETRY_MS
+        assertEquals(listOf(id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
+        assertEquals(mapOf(id("offline") to 7L), signatures.observePictureHashes().first())
     }
 
     @Test fun `a still analysis awaiting frames is listed until its frames are read or its reads run out`() = runTest {

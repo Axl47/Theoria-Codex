@@ -103,8 +103,8 @@ class DataStoreRepositoryContractsTest(
 
         assertEquals("codex", repository.getLastTab())
         assertEquals("SAVED", repository.getLibrarySection())
-        repository.updateSavedSearchNewPosts { it.copy(attemptedAtEpochMs = 9L) }
-        assertEquals(9L, repository.observeSavedSearchNewPosts().first().attemptedAtEpochMs)
+        repository.updateSavedSearchNewPosts { it.copy(attempts = mapOf("a" to 9L)) }
+        assertEquals(mapOf("a" to 9L), repository.observeSavedSearchNewPosts().first().attempts)
         assertEquals(5, repository.getSearchScrollState("query")?.firstVisibleItemIndex)
         assertEquals(launch, repository.observeViewerLaunchContext().first())
     }

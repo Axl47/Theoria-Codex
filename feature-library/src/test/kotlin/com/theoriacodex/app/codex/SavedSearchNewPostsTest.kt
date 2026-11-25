@@ -73,7 +73,7 @@ class SavedSearchNewPostsTest {
         assertEquals(listOf(SortMode.NEWEST), checkedSorts)
     }
 
-    @Test fun `a check cancelled by leaving the app does not use up the interval`() = runTest {
+    @Test fun `a search cancelled by leaving the app is not sent again within the interval`() = runTest {
         val searches = listOf(entry("a", 1))
         hang = true
         val cancelled = launch { checker.checkIfStale(searches, 0L) }
@@ -82,8 +82,22 @@ class SavedSearchNewPostsTest {
         hang = false
         pages = mapOf("a" to listOf("1"))
         checker.checkIfStale(searches, hour)
+        assertEquals(listOf("a"), checked)
+        checker.checkIfStale(searches, 3 * hour)
         assertEquals(listOf("a", "a"), checked)
         assertEquals(mapOf("a" to 0), counts())
+    }
+
+    @Test fun `overlapping checks send each search once`() = runTest {
+        val searches = listOf(entry("a", 1), entry("b", 2))
+        hang = true
+        val first = launch { checker.checkIfStale(searches, 0L) }
+        val second = launch { checker.checkIfStale(searches, 0L) }
+        runCurrent()
+        assertEquals(setOf("a", "b"), checked.toSet())
+        assertEquals(2, checked.size)
+        first.cancelAndJoin()
+        second.cancelAndJoin()
     }
 
     private suspend fun savedSearchWithTwoNew(): SavedSearchEntry {
