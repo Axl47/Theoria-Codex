@@ -6,8 +6,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import com.theoriacodex.app.series.LibraryOptions
 import com.theoriacodex.app.series.LibraryShow
 import com.theoriacodex.app.series.LibrarySort
@@ -65,9 +68,27 @@ class SeriesFollowingScreenshotTest {
     @Test fun `series following anime fits its sort at 384dp`() =
         capture(LibraryOptions(), "series_following_384_anime.png", followed + anime, SeriesKind.ANIME)
 
+    @Test fun `sort and filter sheet with default options`() =
+        captureSheet(LibraryOptions(), "series_sort_filter_default.png")
+
+    @Test fun `sort and filter sheet keeps its title when reset is available`() =
+        captureSheet(LibraryOptions(show = LibraryShow.DOWNLOADED), "series_sort_filter_changed.png")
+
     private val anime = FollowedSeries(Series(SeriesId(SeriesKind.ANIME.extensionSourceKey(7), "/7"), "Kelp Row"), unreadCount = 9, followedAtEpochMs = 0, started = true)
 
     private fun capture(options: LibraryOptions, name: String, followed: List<FollowedSeries> = this.followed, kind: SeriesKind? = null) {
+        show(options, followed, kind)
+        compose.onRoot().captureRoboImage(name)
+    }
+
+    private fun captureSheet(options: LibraryOptions, name: String) {
+        show(options, followed, kind = null)
+        compose.onNodeWithContentDescription("Sort and filter").performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage(name)
+    }
+
+    private fun show(options: LibraryOptions, followed: List<FollowedSeries>, kind: SeriesKind?) {
         val repository = object : SeriesRepository by StoredOnly(StoredSeries(followed.first().series), emptyList()) {
             override fun observeFollowed() = flowOf(followed)
 
@@ -91,7 +112,6 @@ class SeriesFollowingScreenshotTest {
         }
         compose.waitUntilSettled { viewModel.content.value.following != null }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage(name)
     }
 
     private fun followed(id: Long, title: String, unread: Int, added: Long) =

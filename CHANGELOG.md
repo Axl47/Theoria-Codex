@@ -175,6 +175,7 @@
 
 ### Fixed
 
+- The Sort & filter title no longer moves when Reset appears.
 - In For You's deck, dragging a post up far enough to save it now highlights the Codex it will go to, instead of saving to one you couldn't see. Sliding onto another Codex moves the highlight there. Dragging down far enough highlights the tag it will hide the same way.
 - With Next in queue paused or held, a video that repeats starts over at once. It no longer shows a loading spinner for a second at every loop.
 - Zooming into a video or animation in the Viewer keeps its thin progress bar at the bottom edge of what you see, instead of leaving it across the middle of the zoomed picture.
