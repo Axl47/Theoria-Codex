@@ -24,3 +24,8 @@ Anything that stores tag results must go through `commits`. A new result type mu
 ## Applies to
 
 - `vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt`: `PictureTagger`, `analyze`, `analyzeFrames`, `store`, `storeFrames`, `playing`, `forget`, `SessionAnalyses`, `LIBRARY_SETTLE_MS`
+
+## Guarded by
+
+- `vision-kit/src/test/kotlin/com/theoriacodex/app/vision/LibraryVisionBackfillTest.kt`: `stored tags fill the index at start with no write, then are read again once the Library settles (ADR 0097)`, `what the Library stored for a post wins over this session's look at its still (ADR 0097)`, `a model that will not load asks for another run while it is installed, and none once it is gone (ADR 0097)`
+- Left to prose: `commits` ordering against a concurrent delete and `SessionAnalyses`' size are a race and a memory bound that no host test pins without scheduling the race by hand.

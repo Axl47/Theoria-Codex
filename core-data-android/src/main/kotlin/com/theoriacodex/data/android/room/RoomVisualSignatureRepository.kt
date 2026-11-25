@@ -94,7 +94,7 @@ class RoomVisualSignatureRepository(
     }
 
     override fun observeVisionProgress(modelId: String): Flow<VisionProgress> =
-        dao.observeVisionProgress(modelId, MAX_FRAME_ATTEMPTS).map { VisionProgress(it.analysed, it.total) }.distinctUntilChanged()
+        dao.observeVisionProgress(modelId, MAX_FRAME_ATTEMPTS).map { VisionProgress(it.analysed, it.awaitingFrames, it.total) }.distinctUntilChanged()
 
     override fun observeLibraryTotal(): Flow<Int> =
         database.invalidationTracker.createFlow(*LIBRARY).map { dao.libraryTotal() }.distinctUntilChanged().flowOn(Dispatchers.IO)

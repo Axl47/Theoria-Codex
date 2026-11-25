@@ -52,7 +52,7 @@ internal fun rememberPictureTagsEntry(pictures: AppPictures, scope: CoroutineSco
 internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgress>, scope: CoroutineScope, onBack: () -> Unit) {
     val context = LocalContext.current
     val state by model.states.collectAsStateWithLifecycle()
-    val progress by library.collectAsStateWithLifecycle(VisionProgress(0, 0))
+    val progress by library.collectAsStateWithLifecycle(VisionProgress(0, 0, 0))
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val size = Formatter.formatShortFileSize(context, model.totalBytes)
     SettingsPageColumn {
@@ -99,10 +99,15 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
     }
 }
 
-private fun libraryProgress(progress: VisionProgress): String? {
+internal fun libraryProgress(progress: VisionProgress): String? {
     if (progress.total == 0) return null
-    val done = "${progress.analysed} of ${progress.total} Library posts tagged"
-    return if (progress.analysed < progress.total) "$done. The rest are tagged while charging on Wi-Fi, videos once the phone sits unused." else done
+    val previews = when (val videos = progress.awaitingFrames) {
+        0 -> ""
+        1 -> ", 1 video from its preview only"
+        else -> ", $videos videos from their preview only"
+    }
+    val tagged = "${progress.tagged} of ${progress.total} Library posts tagged$previews"
+    return if (progress.analysed < progress.total) "$tagged. The rest finish while charging on Wi-Fi, videos once the phone sits unused." else tagged
 }
 
 private fun percent(bytes: Long, total: Long): Long = if (total <= 0) 0 else bytes * 100 / total

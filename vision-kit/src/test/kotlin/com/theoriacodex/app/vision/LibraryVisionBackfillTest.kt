@@ -27,6 +27,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -82,7 +83,7 @@ class LibraryVisionBackfillTest {
             tagReads += 1
             return stored.mapNotNull { vision -> vision.tags?.let { vision.postId to it } }.toMap()
         }
-        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0))
+        override fun observeVisionProgress(modelId: String): Flow<VisionProgress> = flowOf(VisionProgress(0, 0, 0))
         override fun observeLibraryTotal(): Flow<Int> = flowOf(posts.size)
         override suspend fun clearVision() = stored.clear()
 
@@ -116,11 +117,14 @@ class LibraryVisionBackfillTest {
     )
 
     @Test
-    fun `ADR 0097 stored tags are read once the Library settles, not once per write`() = runTest {
+    fun `stored tags fill the index at start with no write, then are read again once the Library settles (ADR 0097)`() = runTest {
         val library = Library(List(10) { post("p$it") })
-        PictureTagger(readyStore(), library, Pictures(), backgroundScope)
+        val solo = listOf(PredictedTag("solo", 0.9f, PredictedTag.Kind.GENERAL))
+        library.putVision(listOf(PictureVision(post("stored").id, spec.id, null, solo)))
+        val tagger = PictureTagger(readyStore(), library, Pictures(), backgroundScope)
         runCurrent()
         assertEquals(1, library.tagReads)
+        assertEquals(solo, withContext(Dispatchers.Default) { withTimeout(5_000) { tagger.library.first { it[post("stored").id] != null } } }[post("stored").id])
 
         repeat(10) { index ->
             library.putVision(listOf(PictureVision(post("p$index").id, spec.id, null, emptyList())))
@@ -134,7 +138,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `previews that fail to load are skipped, so the older Library is still indexed, and a later run tries them again`() = runBlocking {
+    fun `previews that fail to load are skipped, so the older Library is still indexed, and a later run tries them again (ADR 0094)`() = runBlocking {
         val dead = List(40) { post("dead-$it") }
         val older = List(3) { post("no-still-$it") }
         val library = Library(dead + older)
@@ -148,7 +152,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `while the app runs, analyses awaiting frames whose post does not play stop waiting`() = runBlocking {
+    fun `while the app runs, analyses awaiting frames whose post does not play stop waiting (ADR 0094)`() = runBlocking {
         val library = Library(listOf(post("video"), post("picture")))
         library.putVision(listOf("video", "picture").map { PictureVision(post(it).id, spec.id, null, emptyList(), VisionFrames.WANTED) })
         val tagger = PictureTagger(readyStore(), library, Pictures(plays = { it.id.sourcePostId == "video" }), scope)
@@ -160,7 +164,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `a model that will not load asks for another run while it is installed, and none once it is gone`() = runBlocking {
+    fun `a model that will not load asks for another run while it is installed, and none once it is gone (ADR 0097)`() = runBlocking {
         val library = Library(listOf(post("a")))
         val installed = readyStore()
         val picture = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
@@ -174,7 +178,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `a playing post is stored from its still first, then upgraded with its frames, each repeated scene once`() = runBlocking {
+    fun `a playing post is stored from its still first, then upgraded with its frames, each repeated scene once (ADR 0094)`() = runBlocking {
         val library = Library(listOf(post("video"), post("plain")))
         val analysed = mutableListOf<Pattern>()
         val pictures = Pictures(
@@ -200,7 +204,21 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `frames that cannot be read leave the still analysis standing, tried once a run and a few times at most`() = runBlocking {
+    fun `adding a post to a tagged Library analyses only that post (ADR 0094)`() = runBlocking {
+        val tagged = List(3) { post("tagged-$it") }
+        val library = Library(tagged + post("added"))
+        library.putVision(tagged.map { PictureVision(it.id, spec.id, null, emptyList(), VisionFrames.WANTED) })
+        val analysed = mutableListOf<Pattern>()
+        val tagger = PictureTagger(readyStore(), library, Pictures(still = { Pattern.TOP.bitmap() }), scope, openModel = { _, _ -> PatternModel(analysed) })
+
+        assertFalse(backfill(tagger, library).drain())
+
+        assertEquals(listOf(Pattern.TOP), analysed)
+        assertEquals(VisionFrames.WANTED, library.vision("tagged-0").frames)
+    }
+
+    @Test
+    fun `frames that cannot be read leave the still analysis standing, tried once a run and a few times at most (ADR 0094)`() = runBlocking {
         val library = Library(listOf(post("offline"), post("broken"), post("picture")))
         var framesRead = 0
         val pictures = Pictures(
@@ -228,7 +246,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `posts failing to be reached one after another stop the run and count once, and posts that stopped playing are set aside`() = runBlocking {
+    fun `posts failing to be reached one after another stop the run and count once, and posts that stopped playing are set aside (ADR 0094)`() = runBlocking {
         val library = Library(listOf("a", "b", "c", "d", "gif").map(::post))
         var read = 0
         var gifPlays = true
@@ -252,7 +270,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `a device running warm stops the frame upgrade and asks for another run`() = runBlocking {
+    fun `a device running warm stops the frame upgrade and asks for another run (ADR 0094)`() = runBlocking {
         val library = Library(listOf(post("video")))
         var warm = false
         val pictures = Pictures(still = { Pattern.TOP.bitmap() }, plays = { true }, frames = { error("a warm device reads no frames") })
@@ -266,7 +284,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `what the Library stored for a post wins over this session's look at its still`() = runBlocking {
+    fun `what the Library stored for a post wins over this session's look at its still (ADR 0097)`() = runBlocking {
         val library = Library(listOf(post("video")))
         val pictures = Pictures(
             still = { Pattern.LEFT.bitmap() },
