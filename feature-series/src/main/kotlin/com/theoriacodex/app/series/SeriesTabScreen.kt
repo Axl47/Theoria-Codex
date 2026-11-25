@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -87,6 +88,8 @@ fun SeriesTabScreen(
     modifier: Modifier = Modifier,
     extensionAlerts: ExtensionAlerts = ExtensionAlerts(),
     oldSearchBar: Boolean = false,
+    snackbar: SnackbarHostState? = null,
+    switchSource: ((SeriesId) -> SwitchSourceViewModel)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
@@ -123,6 +126,7 @@ fun SeriesTabScreen(
             onOpenSeries = open,
             onOpenExtensions = onOpenExtensions,
             settingsButton = { SettingsButton(extensionAlerts, onOpenSettings) },
+            failureTools = CheckFailureTools(snackbar, switchSource, onOpenSeries),
             modifier = modifier,
         )
     }
@@ -148,6 +152,7 @@ private fun SeriesTabHomeContent(
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
     settingsButton: @Composable () -> Unit,
+    failureTools: CheckFailureTools,
     modifier: Modifier,
 ) {
     var searchBarDismissed by rememberSaveable { mutableStateOf(false) }
@@ -186,7 +191,7 @@ private fun SeriesTabHomeContent(
             ScrollToTopOnTabReselect(TopLevelDestination.Series, scrollable) { searchBarDismissed = false }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
-                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions)
+                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, failureTools)
             }
         }
     }
@@ -248,6 +253,7 @@ private fun SeriesTabViewBody(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    failureTools: CheckFailureTools,
 ) {
     val search = content.search
     when {
@@ -256,6 +262,7 @@ private fun SeriesTabViewBody(
             checking = state.checking,
             found = state.found,
             failedCheck = state.failedCheck,
+            checkRun = state.checkRun,
             grid = grids.following,
             onRefresh = viewModel::refresh,
             onRetryFailed = viewModel::retry,
@@ -267,6 +274,7 @@ private fun SeriesTabViewBody(
             onSearchAll = viewModel::searchAllSources,
             onBrowse = { viewModel.chooseView(SeriesView.BROWSE) },
             onOpenSeries = onOpenSeries,
+            failureTools = failureTools,
         )
         search != null -> GlobalSearchBody(
             sourcesLoaded = state.sources != null,
