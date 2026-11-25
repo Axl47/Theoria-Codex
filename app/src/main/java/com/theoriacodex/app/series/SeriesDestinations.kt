@@ -72,6 +72,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             series.extensions.revision,
             createSavedStateHandle(),
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
+            download = { id, choice -> series.downloads.download(id, choice) },
         ) { only, onProgress -> series.checkFollowed(only = only, onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
     }
     val tabShown = LocalTabShown.current
