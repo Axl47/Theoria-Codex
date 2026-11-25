@@ -111,6 +111,7 @@ private class VisionPhases(
         val index = pictures.tagger.library.first { index -> videos.all { index[it.id] != null } }
         val progress = pictures.progress.first()
         check(progress.finished == FIXTURES) { "videos counted before their frames: $progress" }
+        check(progress.tagged == FIXTURES + videos.size) { "videos from stills not counted as tagged: $progress" }
         val monochrome = normalizeMatchToken("monochrome")
         check(videos.none { monochrome in index[it.id].orEmpty().tokens(PredictedTagUse.EVIDENCE) }) { "a video was read from frames" }
         return "finished=${progress.finished}/${progress.total} videosFromStills=${videos.size}"
