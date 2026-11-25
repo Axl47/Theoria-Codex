@@ -59,13 +59,22 @@ class TriageDragOverlaysTest {
         compose.onNodeWithText("Remove").assertExists()
     }
 
-    @Test fun `a diagonal drag shows the side and bottom hints together and arms the dominant one`() {
+    @Test fun `a diagonal drag keeps both hints visible and dims the one a release would not commit to`() {
         showOverlays(removes = false)
-        dragTo(Offset(-110f, 60f))
+        val thresholds = SwipeThresholds(commitPx = 100f, flingPx = 100f, cuePx = 10f)
+        dragTo(Offset(-110f, 105f))
         compose.onNodeWithText("Skip").assertExists()
         compose.onNodeWithText("long hair").assertExists()
-        val hints = edgeHints(drag.offset, SwipeThresholds(commitPx = 100f, flingPx = 100f, cuePx = 10f))
-        assertEquals(SwipeDirection.Left, hints.armed)
-        assertTrue(hints.vertical in 0f..1f && hints.vertical > 0f)
+        val sideways = edgeHints(drag.offset, thresholds)
+        assertEquals(SwipeDirection.Left, sideways.armed)
+        assertEquals(1f, sideways.sideways)
+        assertTrue(sideways.vertical in 0.1f..0.5f)
+        dragTo(Offset(-105f, 110f))
+        compose.onNodeWithText("Skip").assertExists()
+        compose.onNodeWithText("long hair").assertExists()
+        val down = edgeHints(drag.offset, thresholds)
+        assertEquals(SwipeDirection.Down, down.armed)
+        assertEquals(1f, down.vertical)
+        assertTrue(down.sideways in 0.1f..0.5f)
     }
 }

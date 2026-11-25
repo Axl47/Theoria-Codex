@@ -249,7 +249,6 @@ internal fun TriageDragOverlays(
     Box(Modifier.fillMaxSize()) {
         val offset = drag.offset
         val hints = edgeHints(offset, thresholds)
-        val armedSideways = hints.armed == SwipeDirection.Left || hints.armed == SwipeDirection.Right
         if (hints.sideways > 0f) {
             val (icon, label) = when {
                 offset.x > 0f && removes -> Icons.Filled.Check to "Keep"
@@ -257,10 +256,11 @@ internal fun TriageDragOverlays(
                 removes -> Icons.Outlined.RemoveCircleOutline to "Remove"
                 else -> Icons.Filled.Close to "Skip"
             }
-            TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, hints.sideways, armedSideways)
+            val armed = hints.armed == SwipeDirection.Left || hints.armed == SwipeDirection.Right
+            TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, hints.sideways, armed)
         }
         if (hints.vertical > 0f) {
-            val pointer = drag.pointer.takeUnless { armedSideways }
+            val pointer = drag.pointer
             val fade = Modifier.alpha(hints.vertical)
             when {
                 offset.y < 0f && targets.save.isEmpty() ->
@@ -277,9 +277,14 @@ internal fun TriageDragOverlays(
 internal class EdgeHints(val sideways: Float, val vertical: Float, val armed: SwipeDirection?)
 
 internal fun edgeHints(offset: Offset, thresholds: SwipeThresholds): EdgeHints {
-    fun progress(distance: Float) = ((abs(distance) - thresholds.cuePx) / (thresholds.commitPx - thresholds.cuePx)).coerceIn(0f, 1f)
     val armed = swipeDirection(offset.x, offset.y, 0f, 0f, thresholds.commitPx, thresholds.flingPx)
-    return EdgeHints(progress(offset.x), progress(offset.y), armed)
+    val armedSideways = armed == SwipeDirection.Left || armed == SwipeDirection.Right
+    fun progress(distance: Float, otherArmed: Boolean): Float {
+        val shown = (abs(distance) / thresholds.commitPx).coerceIn(0f, 1f)
+        return if (otherArmed) shown * UNARMED_DIM else shown
+    }
+    val vertical = if (abs(offset.y) > thresholds.cuePx) progress(offset.y, armedSideways) else 0f
+    return EdgeHints(progress(offset.x, armed != null && !armedSideways), vertical, armed)
 }
 
 internal const val TRIAGE_DECK_TAG = "triage-deck"
@@ -288,6 +293,7 @@ internal const val TRIAGE_CARD_FOOTER_TAG = "triage-card-footer"
 val TRIAGE_CARD_FOOTER_HEIGHT: Dp = 72.dp
 
 private const val COMMIT_FRACTION = 0.3f
+private const val UNARMED_DIM = 0.4f
 private val FLING_SPEED: Dp = 700.dp
 private val CUE_DISTANCE: Dp = 48.dp
 
