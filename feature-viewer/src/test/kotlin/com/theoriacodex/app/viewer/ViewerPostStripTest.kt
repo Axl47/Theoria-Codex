@@ -74,6 +74,21 @@ class ViewerPostStripTest {
     @Test fun `on the last post the strip rests against its trailing edge and will not drag past it (ADR 0172)`() =
         checkEdgeLock(selected = 19, edgePost = 19) { swipeLeft(durationMillis = 300) }
 
+    @Test fun `posts loaded after the last post bring it back to the centre (ADR 0172)`() {
+        val image = ImageRef(null, "/missing/strip.jpg", "image/jpeg")
+        var posts by mutableStateOf((0..7).map { testPost(sourcePostId = "strip-$it").copy(preview = image) })
+        compose.setContent {
+            MaterialTheme { ViewerPostStrip(posts, 7, {}, Modifier.width(320.dp).testTag("strip")) }
+        }
+        compose.waitForIdle()
+        val viewport = compose.onNodeWithTag("strip").fetchSemanticsNode().boundsInRoot
+        fun selected() = compose.onNodeWithContentDescription("Open post strip-7").fetchSemanticsNode().boundsInRoot
+        assertTrue("the last post rests at the trailing edge", selected().center.x > viewport.center.x + 1f)
+        compose.runOnIdle { posts = posts + (8..19).map { testPost(sourcePostId = "strip-$it").copy(preview = image) } }
+        compose.waitForIdle()
+        assertEquals(viewport.center.x, selected().center.x, 1.5f)
+    }
+
     @Test fun `only animated posts show the play icon`() {
         val video = testPost(sourcePostId = "video").copy(preview = ImageRef(null, "/missing/clip.mp4", "video/mp4"))
         val still = testPost(sourcePostId = "still").copy(preview = ImageRef(null, "/missing/still.jpg", "image/jpeg"))

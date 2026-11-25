@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -134,7 +135,7 @@ internal fun ViewerPostStrip(
         val selectedWidthPx = with(LocalDensity.current) { selectedWidth.toPx() }
         val centerPx = with(LocalDensity.current) { ((maxWidth - cell) / 2 - gap).toPx() }
         val motion = remember(list) { ViewerStripMotion(selectedIndex, selectedWidthPx) }
-        CenterSelectedPost(list, motion, selectedIndex, selectedWidthPx, cellPx, centerPx)
+        CenterSelectedPost(list, motion, selectedIndex, selectedWidthPx, cellPx, centerPx, posts.lastIndex)
         LazyRow(
             state = list,
             contentPadding = PaddingValues(start = gap, end = gap, top = STRIP_TOP_PADDING, bottom = STRIP_BOTTOM_PADDING),
@@ -198,18 +199,29 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
 }
 
 @Composable
-private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float, center: Float) {
+private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float, center: Float, lastIndex: Int) {
+    var following by remember(list) { mutableStateOf(false) }
+    val settledOffset by rememberUpdatedState(((width - cell) / 2 - center).roundToInt())
+    val selected by rememberUpdatedState(index)
+    LaunchedEffect(list) {
+        list.interactionSource.interactions.collect { if (it is DragInteraction.Start) following = false }
+    }
+    LaunchedEffect(list, lastIndex) {
+        if (following && motion.progress == 1f && !list.isScrollInProgress) list.animateScrollToItem(selected, settledOffset)
+    }
     LaunchedEffect(list, index, width, center) {
-        if (motion.isAt(index, width)) {
-            list.scrollToItem(index, ((width - cell) / 2 - center).roundToInt())
+        following = true
+        if (motion.isAt(index, width) && motion.progress == 1f) {
+            list.scrollToItem(index, settledOffset)
             return@LaunchedEffect
         }
         val startingError = list.distanceFromCenter(index, cell + center * 2)
-        motion.moveTo(index, width, cell)
-        animate(0f, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
+        if (!motion.isAt(index, width)) motion.moveTo(index, width, cell)
+        val from = motion.progress
+        animate(from, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
             motion.progress = value
             if (!list.isScrollInProgress) {
-                list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value)).roundToInt())
+                list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value) / (1f - from)).roundToInt())
             }
         }
     }
