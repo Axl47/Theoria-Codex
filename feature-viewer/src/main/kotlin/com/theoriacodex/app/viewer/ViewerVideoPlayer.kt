@@ -224,7 +224,7 @@ private fun ViewerVideoBinding(
     val latestOnRelease by rememberUpdatedState(onRelease)
     DisposableEffect(state, playback, state.bindings) {
         val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
-        val lease = pool.acquire(playback, loop = controls.loopPlayback)
+        val lease = pool.acquire(playback, loop = controls.repeatsAtEnd)
         val player = lease.player
         val started = start.applyTo(player)
         player.playbackParameters = PlaybackParameters(controls.playbackRate)
@@ -302,7 +302,9 @@ private fun viewerVideoListener(
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (state.player !== player) return
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) state.looped = true
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
+            state.looped = true
+            events().onPlaybackLooped()
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return
@@ -468,8 +470,8 @@ private fun ReportViewerPlaybackProgress(state: ViewerVideoState, report: ((View
 @Composable
 private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendererControls) {
     var handledRestart by remember(state) { mutableLongStateOf(controls.restartRequest) }
-    LaunchedEffect(state.player, controls.loopPlayback) {
-        state.player?.repeatMode = if (controls.loopPlayback) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    LaunchedEffect(state.player, controls.repeatsAtEnd) {
+        state.player?.repeatMode = if (controls.repeatsAtEnd) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
     LaunchedEffect(state.player, controls.playbackRate) {
         runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate) }
