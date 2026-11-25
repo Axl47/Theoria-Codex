@@ -18,6 +18,7 @@ Showing chrome over playing video must not cost one long frame. The footer fades
 - Layout of motion media: still images always fill the page; animated and video media sit under a 40 dp portrait top gap clear of the top bar unless the layout is edge to edge (landscape, picture-in-picture or reading a chapter). A post whose motion resolves only after opening (`Post.awaitsMotion`) keeps the gap while it shows its poster, so it does not shift when the stream arrives.
 - `rememberViewerTouchExploration` tracks accessibility-service changes while the Viewer is open without making playback depend on accessibility.
 - Accent: `viewerAccentFromPixels` samples the thumbnail at 48 px so small vivid details survive downscaling, buckets hues, weights vividness over area, discounts skin hues (10-50 degrees, saturation below 0.7, weight 0.15) because they would give nearly every character art the same peach, returns null (white accent) when fewer than 6% of pixels are colourful (monochrome art such as manga), then fixes saturation and lightness so the accent reads over dark scrims. Sampling waits for `enabled` so it never competes with the opening animation, and swiping past a post cancels its sample.
+- Accent blending: `LocalViewerAccent` is a `ColorProducer` that never changes (`ViewerAccentState`), and its readers call it only while drawing (`ViewerAccentIcon`, `viewerAccentBorder`, canvases, `BasicText`'s colour), so a swipe redraws the accent and recomposes nothing. It blends the tints of the two posts either side of the post pager's position, so it follows a swipe, a caught swipe, a cancelled one and the strip's or a chapter's animated page changes alike. Once a post settles, its neighbours are sampled from the image cache only (`cachedOnly`, no network), so a tint is known only for media already fetched, whatever the source; a neighbour still unknown shows the settled tint, and one arriving mid-swipe fades in over `SHORT_MS`. When a post becomes the selection the pager has already reached it (a swipe commits only where it lands), its known tint is taken as is; any other selection change, such as a slideshow step that jumps the pager, tweens from the colour on screen over `MEDIUM_MS`, as does a tint sampled after its post settled. A derived state keeps the readers from redrawing while the blended colour stays the same.
 
 ## Consequences
 
@@ -35,12 +36,14 @@ New chrome parts need a stage. The footer-height helper is the single source for
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPostPager.kt`: `ViewerPostPage`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerMediaPage.kt`: `viewerMediaTopGap`, `Post.awaitsMotion`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerAccessibility.kt`: `rememberViewerTouchExploration`
-- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerArtworkAccent.kt`: `viewerAccentFromPixels`, `rememberViewerAccent`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerArtworkAccent.kt`: `viewerAccentFromPixels`, `rememberViewerAccent`, `ViewerAccentState`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVeil.kt`: `LocalViewerAccent`, `ViewerAccentIcon`, `viewerAccentBorder`
 
 ## Guarded by
 
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerLandscapeControlsTest.kt`: `in landscape the slideshow button sits in the strip's row, beside the strip instead of over the media (ADR 0166)`, `in portrait the slideshow button stays above the strip (ADR 0166)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerChromeVisibilityTest.kt`: `hidden chrome leaves at once instead of fading out (ADR 0166)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerFrameTest.kt`: `a chrome toggle keeps the frame and controls while their readers follow it (ADR 0166)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerChromeToggleSkipTest.kt`: `a chrome toggle leaves the pages and the overlay host alone (ADR 0166)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerChromeToggleSkipTest.kt`: `a chrome toggle leaves the pages and the overlay host alone (ADR 0166)`, `a swipe between posts recomposes nothing after its first frame (ADR 0166)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerAccentBlendTest.kt`: `halfway through a swipe between known tints the accent is their blend (ADR 0166)`, `an unknown next tint keeps the accent until it arrives, then fades in (ADR 0166)`, `swiping changes the accent without recomposing its readers (ADR 0166)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerScrubChromeTest.kt`: `a drag-seek on hidden chrome never shows it, from its first frame (ADR 0166)`

@@ -120,11 +120,7 @@ private fun ViewerInfoAction(count: CommentCount?, onClick: () -> Unit) {
 @Composable
 private fun ViewerOverviewAction(toggle: ViewerOverviewToggle) {
     IconButton(onClick = toggle.onToggle) {
-        Icon(
-            imageVector = Icons.Default.Collections,
-            contentDescription = if (toggle.visible) "Close media overview" else "Open media overview",
-            tint = if (toggle.visible) LocalViewerAccent.current else Color.White,
-        )
+        ViewerAccentIcon(Icons.Default.Collections, if (toggle.visible) "Close media overview" else "Open media overview", accented = toggle.visible)
     }
 }
 

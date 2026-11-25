@@ -351,7 +351,7 @@ private fun ViewerEpisodeRotateButton(fits: Boolean, onRotate: () -> Unit) {
 @Composable
 private fun ViewerEpisodeRotationLockButton(offer: ViewerRotationOffer, onToggle: () -> Unit) {
     IconButton(onClick = onToggle, modifier = Modifier.testTag(VIEWER_ROTATION_LOCK_TAG)) {
-        Icon(offer.lockIcon, contentDescription = offer.lockDescription, tint = if (offer.lock != null) LocalViewerAccent.current else Color.White)
+        ViewerAccentIcon(offer.lockIcon, offer.lockDescription, accented = offer.lock != null)
     }
 }
 

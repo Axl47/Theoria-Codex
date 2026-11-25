@@ -86,6 +86,7 @@
 
 ### Changed
 
+- The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.
 - The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. When a post would fit better the other way, a rotate button shows for a few seconds; tap it to turn once, and the Viewer follows the phone again once you turn it to match.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
 - In landscape, the Viewer's rotate, lock and slideshow buttons sit in the thumbnail strip's row instead of floating over the picture.

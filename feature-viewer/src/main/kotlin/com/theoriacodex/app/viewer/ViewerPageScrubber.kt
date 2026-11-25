@@ -162,7 +162,7 @@ private fun ViewerPageTrack(page: Int, pageCount: Int, emphasized: Boolean, modi
         val thickness = lerp(4.dp.toPx(), 10.dp.toPx(), emphasis)
         repeat(pageCount) { index ->
             val left = index * (segment + gap)
-            drawPill(if (index <= page) accent else ViewerVeil.InactiveTrack, left, center.y, left + segment, thickness)
+            drawPill(if (index <= page) accent() else ViewerVeil.InactiveTrack, left, center.y, left + segment, thickness)
         }
     }
 }

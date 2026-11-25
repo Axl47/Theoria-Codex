@@ -7,13 +7,17 @@ import androidx.compose.runtime.CompositionTracer
 import androidx.compose.runtime.InternalComposeTracingApi
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Post
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -42,30 +46,50 @@ class ViewerChromeToggleSkipTest {
             reduce(ViewerAction.ToggleChrome)
         }
 
+    @Test fun `a swipe between posts recomposes nothing after its first frame (ADR 0166)`() {
+        render(listOf(testPost(sourcePostId = "first"), testPost(sourcePostId = "second")))
+        val entering = traced { compose.onRoot().performTouchInput { down(center); repeat(3) { moveBy(Offset(-width * 0.05f, 0f)) } } }
+        val moving = traced { compose.onRoot().performTouchInput { repeat(4) { moveBy(Offset(-width * 0.05f, 0f)) } } }
+        compose.onRoot().performTouchInput { up() }
+
+        assertTrue("the swipe never reached the next post", "com.theoriacodex.app.viewer.ViewerPostPage" in entering)
+        assertEquals(emptyList<String>(), moving.filter { it.startsWith("com.theoriacodex.") }.distinct())
+    }
+
     private fun assertSkips(vararg setup: ViewerAction, change: ((ViewerAction) -> Unit) -> Unit) {
-        val launch = ViewerSession(listOf(testPost(sourcePostId = "still")), ViewerLaunchContext("q", 0, ViewerStreamSource.SEARCH, 0), sessionId = "toggle")
+        val reduce = render(listOf(testPost(sourcePostId = "still")), *setup)
+        val executed = traced { compose.runOnIdle { change(reduce) } }
+
+        assertTrue("the change recomposed something", executed.any { it.endsWith(".ViewerLoadedScreen") })
+        val skipped = listOf("ViewerChromeOverlays", "ViewerContentSurface", "ViewerPostPagerSurface", "ViewerPostPage")
+        assertEquals(emptyList<String>(), executed.filter { name -> skipped.any { name == "com.theoriacodex.app.viewer.$it" } }.distinct())
+    }
+
+    private fun render(posts: List<Post>, vararg setup: ViewerAction): (ViewerAction) -> Unit {
+        val launch = ViewerSession(posts, ViewerLaunchContext("q", 0, ViewerStreamSource.SEARCH, 0), sessionId = "toggle")
         val state = mutableStateOf(setup.fold(reduceViewerState(ViewerUiState.Empty, launch.toReplaceViewerSessionAction()).state) { current, action -> reduceViewerState(current, action).state })
-        fun reduce(action: ViewerAction) { state.value = reduceViewerState(state.value, action).state }
+        val reduce: (ViewerAction) -> Unit = { action -> state.value = reduceViewerState(state.value, action).state }
         Composer.setTracer(object : CompositionTracer {
             override fun isTraceInProgress(): Boolean = tracing
             override fun traceEventStart(key: Int, dirty1: Int, dirty2: Int, info: String) { executed += info.substringBefore(" (") }
             override fun traceEventEnd() = Unit
         })
         compose.setContent {
-            val host = remember { ViewerScreenHost(onAction = ::reduce) }
+            val host = remember { ViewerScreenHost(onAction = reduce) }
             val config = remember { ViewerScreenConfig() }
             val contextActions = remember { ViewerContextActions() }
             MaterialTheme { ViewerScreen(uiState = state.value, host = host, config = config, contextActions = contextActions) }
         }
         compose.waitForIdle()
+        return reduce
+    }
 
+    private fun traced(change: () -> Unit): List<String> {
+        executed.clear()
         tracing = true
-        compose.runOnIdle { change(::reduce) }
+        change()
         compose.waitForIdle()
         tracing = false
-
-        assertTrue("the change recomposed something", executed.any { it.endsWith(".ViewerLoadedScreen") })
-        val skipped = listOf("ViewerChromeOverlays", "ViewerContentSurface", "ViewerPostPagerSurface", "ViewerPostPage")
-        assertEquals(emptyList<String>(), executed.filter { name -> skipped.any { name == "com.theoriacodex.app.viewer.$it" } }.distinct())
+        return executed.toList()
     }
 }

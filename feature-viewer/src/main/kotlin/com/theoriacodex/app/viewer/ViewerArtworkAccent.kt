@@ -1,24 +1,38 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorProducer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
+import coil.request.CachePolicy
 import coil.request.SuccessResult
 import com.theoriacodex.app.ui.motion.TheoriaMotion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlin.math.floor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
@@ -84,28 +98,129 @@ private fun accentFromHue(hue: Float): Int {
     return Color(r + floor, g + floor, b + floor).toArgb()
 }
 
-private suspend fun loadViewerAccent(context: Context, post: Post): Int? {
+private suspend fun loadViewerAccent(context: Context, post: Post, cachedOnly: Boolean): Color? {
     val location = post.preview.localPath ?: post.preview.url ?: return null
     val request = buildViewerImageRequest(context, location, post.id.source, staticAnimatedWebPFrame = true)
-        .newBuilder().size(ACCENT_SAMPLE_SIZE).allowHardware(false).build()
+        .newBuilder().size(ACCENT_SAMPLE_SIZE).allowHardware(false)
+        .networkCachePolicy(if (cachedOnly) CachePolicy.DISABLED else CachePolicy.ENABLED).build()
     val drawable = (context.imageLoader.execute(request) as? SuccessResult)?.drawable ?: return null
     return withContext(Dispatchers.Default) {
         val bitmap = drawable.toBitmap(ACCENT_SAMPLE_SIZE, ACCENT_SAMPLE_SIZE)
         val pixels = IntArray(ACCENT_SAMPLE_SIZE * ACCENT_SAMPLE_SIZE)
         bitmap.getPixels(pixels, 0, ACCENT_SAMPLE_SIZE, 0, 0, ACCENT_SAMPLE_SIZE, ACCENT_SAMPLE_SIZE)
-        viewerAccentFromPixels(pixels)
+        viewerAccentFromPixels(pixels)?.let(::Color) ?: Color.White
     }
 }
 
-@Composable
-internal fun rememberViewerAccent(post: Post, enabled: Boolean): Color {
-    val context = LocalContext.current
-    val samples = remember { HashMap<PostId, Color>() }
-    var target by remember { mutableStateOf(Color.White) }
-    LaunchedEffect(post.id, enabled) {
-        if (!enabled) return@LaunchedEffect
-        target = samples.getOrPut(post.id) { loadViewerAccent(context, post)?.let(::Color) ?: Color.White }
+internal fun interface ViewerAccentSampler {
+    suspend fun sample(post: Post, cachedOnly: Boolean): Color?
+}
+
+@Stable
+internal class ViewerAccentState(private val pager: State<PagerState>, private val posts: State<List<Post>>) : ColorProducer {
+    private val samples = mutableStateMapOf<PostId, Color>()
+    private val reveals = mutableStateMapOf<PostId, Float>()
+    private var settledId by mutableStateOf<PostId?>(null)
+    private var settledPager: PagerState? = null
+    private var settledFrom by mutableStateOf(Color.White)
+    private var settledTo by mutableStateOf(Color.White)
+    private var progress by mutableFloatStateOf(1f)
+    private val blended = derivedStateOf { blend() }
+
+    override fun invoke(): Color = blended.value
+
+    private fun settledColor(): Color = lerp(settledFrom, settledTo, progress)
+
+    private fun colorAt(page: Int, settled: Color): Color {
+        val id = posts.value.getOrNull(page)?.id ?: return settled
+        if (id == settledId) return settled
+        val sample = samples[id] ?: return settled
+        return reveals[id]?.let { lerp(settled, sample, it) } ?: sample
     }
-    val accent by animateColorAsState(target, tween(TheoriaMotion.MEDIUM_MS), label = "Viewer accent")
+
+    private fun blend(): Color {
+        val pager = pager.value
+        val settled = settledColor()
+        val position = pager.currentPage + pager.currentPageOffsetFraction
+        val lower = floor(position).toInt()
+        return lerp(colorAt(lower, settled), colorAt(lower + 1, settled), position - lower)
+    }
+
+    fun settle(id: PostId, index: Int) {
+        if (id == settledId) return
+        val pager = pager.value
+        val known = samples[id]
+        val reached = settledPager === pager && id !in reveals && abs(pager.currentPage + pager.currentPageOffsetFraction - index) < 1f
+        if (known != null && reached) {
+            settledFrom = known
+            settledTo = known
+        } else {
+            val shown = blend()
+            retarget(shown, known ?: shown)
+        }
+        settledId = id
+        settledPager = pager
+    }
+
+    private fun retarget(from: Color, to: Color) {
+        settledFrom = from
+        settledTo = to
+        progress = 0f
+    }
+
+    suspend fun load(post: Post, index: Int, sampler: ViewerAccentSampler) {
+        if (samples[post.id] == null) {
+            val color = sampler.sample(post, cachedOnly = false) ?: Color.White
+            samples[post.id] = color
+            if (settledId == post.id) retarget(settledColor(), color)
+        }
+        coroutineScope {
+            launch { animate(progress, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ -> progress = value } }
+            listOf(index - 1, index + 1).mapNotNull(posts.value::getOrNull).filter { samples[it.id] == null }.forEach { neighbour ->
+                launch { sampler.sample(neighbour, cachedOnly = true)?.let { reveal(neighbour.id, it) } }
+            }
+        }
+    }
+
+    private suspend fun reveal(id: PostId, color: Color) {
+        val moving = abs(pager.value.currentPageOffsetFraction) > REST_OFFSET
+        if (!moving) {
+            samples[id] = color
+            return
+        }
+        reveals[id] = 0f
+        samples[id] = color
+        try {
+            animate(0f, 1f, animationSpec = tween(TheoriaMotion.SHORT_MS)) { value, _ -> reveals[id] = value }
+        } finally {
+            reveals.remove(id)
+        }
+    }
+}
+
+private const val REST_OFFSET = 0.001f
+
+@Composable
+internal fun rememberViewerAccent(
+    post: Post,
+    index: Int,
+    posts: List<Post>,
+    pager: PagerState,
+    enabled: Boolean,
+    sampler: ViewerAccentSampler = rememberViewerAccentSampler(),
+): ViewerAccentState {
+    val pagerState = rememberUpdatedState(pager)
+    val postsState = rememberUpdatedState(posts)
+    val accent = remember { ViewerAccentState(pagerState, postsState) }
+    SideEffect { if (enabled) accent.settle(post.id, index) }
+    LaunchedEffect(post.id, enabled) {
+        if (enabled) accent.load(post, index, sampler)
+    }
     return accent
+}
+
+@Composable
+private fun rememberViewerAccentSampler(): ViewerAccentSampler {
+    val context = LocalContext.current
+    return remember(context) { ViewerAccentSampler { post, cachedOnly -> loadViewerAccent(context, post, cachedOnly) } }
 }
