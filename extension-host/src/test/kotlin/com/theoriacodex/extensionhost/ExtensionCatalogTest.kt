@@ -16,6 +16,8 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.Buffer
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,14 +46,18 @@ class ExtensionCatalogTest {
     private val system = mutableListOf<ExtensionPackage>()
     private var changes = 0
 
-    private val catalog = ExtensionCatalog(
-        choices = store,
-        client = OkHttpClient.Builder().addInterceptor { chain ->
+    private val catalog = catalog()
+
+    private fun catalog(
+        client: OkHttpClient = OkHttpClient.Builder().addInterceptor { chain ->
             val url = chain.request().url.toString()
             val body = site[url]
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
                 .body(Buffer().write(body ?: ByteArray(0)).asResponseBody("application/octet-stream".toMediaType(), contentLength = -1)).build()
         }.build(),
+    ) = ExtensionCatalog(
+        choices = store,
+        client = client,
         kinds = listOf(MihonKind, AniyomiKind),
         packages = {
             val private = folder.listFiles { file -> file.extension == "apk" }.orEmpty().mapNotNull { read(it, ExtensionOrigin.PRIVATE) }
@@ -82,7 +88,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key (ADR 0007)`() = runTest {
+    fun `a repo is added with the key it names, once per address, and refused when a backup knew another key (ADR 0007, 0063)`() = runTest {
         serve()
         assertEquals(emptyMap<String, String>(), catalog.add(listOf(NewExtensionRepo("$repoUrl/index.min.json"))))
         assertEquals(listOf(ExtensionRepo(repoUrl, "Anime", key)), catalog.repos())
@@ -94,9 +100,14 @@ class ExtensionCatalogTest {
 
         catalog.remove(repoUrl)
         catalog.remove("https://other.example/manga")
-        val refused = catalog.add(listOf(NewExtensionRepo(repoUrl, signingKey = otherKey), NewExtensionRepo("http://repo.example/anime"), NewExtensionRepo("https://gone.example")))
-        assertEquals(setOf(repoUrl, "http://repo.example/anime", "https://gone.example"), refused.keys)
+        site["https://nokey.example/anime/repo.json"] = """{"meta":{"name":"Keyless","website":"w","signingKeyFingerprint":"abc"}}""".encodeToByteArray()
+        site["https://nokey.example/anime/index.min.json"] = "[]".encodeToByteArray()
+        val refused = catalog.add(
+            listOf(NewExtensionRepo(repoUrl, signingKey = otherKey), NewExtensionRepo("http://repo.example/anime"), NewExtensionRepo("https://gone.example"), NewExtensionRepo("https://nokey.example/anime")),
+        )
+        assertEquals(setOf(repoUrl, "http://repo.example/anime", "https://gone.example", "https://nokey.example/anime"), refused.keys)
         assertEquals("Now signed with another key", refused[repoUrl])
+        assertEquals("Names no signing key", refused["https://nokey.example/anime"])
         assertEquals("Answered 404", refused["https://gone.example"])
         assertEquals(emptyList<ExtensionRepo>(), catalog.repos())
     }
@@ -141,7 +152,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `each extension the host runs is listed with how the device stands with it`() = runTest {
+    fun `each extension the host runs is listed with how the device stands with it (ADR 0063)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("current", 5, "14"), Triple("old", 7, "16"), Triple("foreign", 1, "16"), Triple("unsupported", 1, "15"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         system += listOf(extension("current", key, 5), extension("old", key, 6), extension("foreign", otherKey, 1))
@@ -164,23 +175,86 @@ class ExtensionCatalogTest {
         val changed = catalog.available(refresh = true)
         assertEquals(emptyList<Any>(), changed.extensions)
         assertTrue(changed.problems.getValue(repoUrl).startsWith("Now signed with another key"))
+        val restarted = catalog().available()
+        assertEquals(emptyList<Any>(), restarted.extensions)
+        assertTrue(restarted.problems.getValue(repoUrl).startsWith("Now signed with another key"))
     }
 
     @Test
-    fun `a repo whose index is too large, as fetched or once gunzipped, is refused without reading it all`() = runTest {
-        site["https://huge.example/repo.json"] = ByteArray(MAX_INDEX_BYTES.toInt() + 1) { ' '.code.toByte() }
-        assertEquals(mapOf("https://huge.example" to "Too large"), catalog.add(listOf(NewExtensionRepo("https://huge.example"))))
-
-        serve()
+    fun `torrent extensions and ones of an interface the host does not run are not offered (ADR 0063)`() = runTest {
+        serve(Triple("kept", 1, "16"), Triple("torrent", 1, "16"), Triple("unsupported", 1, "15"))
+        site["$repoUrl/index.min.json"] = site.getValue("$repoUrl/index.min.json").decodeToString()
+            .replace("\"pkg\":\"torrent\"", "\"pkg\":\"torrent\",\"torrent\":1")
+            .replace("]", """,{"name":"Tachiyomi: Manga at 16","pkg":"manga16","apk":"m.apk","lang":"en","code":1,"version":"16.1"},""" +
+                """{"name":"Aniyomi: Anime at 1.6","pkg":"anime16","apk":"a.apk","lang":"en","code":1,"version":"1.6.4"}]""")
+            .encodeToByteArray()
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
-        site["$repoUrl/index.min.json"] = ByteArrayOutputStream().also { out ->
-            GZIPOutputStream(out).use { it.write(ByteArray(MAX_INDEX_BYTES.toInt() + 1)) }
-        }.toByteArray()
-        assertEquals(mapOf(repoUrl to "Too large"), catalog.available(refresh = true).problems)
+
+        assertEquals(listOf("kept"), catalog.available().extensions.map { it.packageName })
     }
 
     @Test
-    fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007)`() = runTest {
+    fun `a repo whose index is over 8 MiB, as declared, as sent or once gunzipped, is refused without reading it all (ADR 0063)`() = runTest {
+        val limit = 8 * 1024 * 1024
+        var body = ByteArray(0)
+        var declared = -1L
+        var read = 0L
+        val sizing = catalog(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                read = 0
+                val counted = object : ForwardingSource(Buffer().write(body)) {
+                    override fun read(sink: Buffer, byteCount: Long): Long = super.read(sink, byteCount).also { if (it > 0) read += it }
+                }
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("")
+                    .body(counted.buffer().asResponseBody("application/json".toMediaType(), declared)).build()
+            }.build(),
+        )
+        suspend fun problem(sent: ByteArray, declaredLength: Long = -1): String? {
+            body = sent
+            declared = declaredLength
+            return sizing.add(listOf(NewExtensionRepo("https://huge.example")))["https://huge.example"]
+        }
+        fun gzipped(size: Int) = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(ByteArray(size) { ' '.code.toByte() }) } }.toByteArray()
+
+        assertTrue(problem(ByteArray(limit) { ' '.code.toByte() }) != "Too large")
+        assertEquals("Too large", problem(ByteArray(limit + 1) { ' '.code.toByte() }))
+        assertEquals("Too large", problem(ByteArray(3 * limit) { ' '.code.toByte() }))
+        assertTrue(read < 2L * limit)
+        assertEquals("Too large", problem("{}".encodeToByteArray(), declaredLength = limit + 1L))
+        assertEquals(0L, read)
+        assertTrue(problem(gzipped(limit)) != "Too large")
+        assertEquals("Too large", problem(gzipped(limit + 1)))
+    }
+
+    @Test
+    fun `an extension download declared over its size limit is refused before any of it is read (ADR 0063)`() = runTest {
+        serve(Triple("big", 2, "16"))
+        var declared = 0L
+        var read = 0L
+        val sized = catalog(
+            OkHttpClient.Builder().addInterceptor { chain ->
+                val url = chain.request().url.toString()
+                val apk = url == "$repoUrl/apk/big.apk"
+                val body = if (apk) "big|$key|2".encodeToByteArray() else site[url]
+                val counted = object : ForwardingSource(Buffer().write(body ?: ByteArray(0))) {
+                    override fun read(sink: Buffer, byteCount: Long): Long = super.read(sink, byteCount).also { if (apk && it > 0) read += it }
+                }
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if (body == null) 404 else 200).message("")
+                    .body(counted.buffer().asResponseBody("application/octet-stream".toMediaType(), if (apk) declared else -1)).build()
+            }.build(),
+        )
+        sized.add(listOf(NewExtensionRepo(repoUrl)))
+
+        declared = 64L * 1024 * 1024 + 1
+        assertEquals("Too large", sized.install(repoUrl, "big"))
+        assertEquals(0L, read)
+        assertEquals(emptyList<String>(), folder.list().orEmpty().toList())
+        declared = "big|$key|2".length.toLong()
+        assertNull(sized.install(repoUrl, "big"))
+    }
+
+    @Test
+    fun `an extension installed from a repo is kept privately and turned on, an update keeps the user's choice, and uninstalling turns it off (ADR 0007, 0063)`() = runTest {
         serve(Triple("new", 2, "16"), Triple("old", 7, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("new", key, 2)
@@ -198,6 +272,7 @@ class ExtensionCatalogTest {
         catalog.uninstall(File(folder, "new.apk").path)
         assertFalse(File(folder, "new.apk").exists())
         assertEquals(emptyMap<String, String>(), store.choices.trusted)
+        assertEquals(3, changes)
     }
 
     @Test
@@ -214,7 +289,7 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun `nothing is installed that is not the package the repo named, signed with its key, and no older than the copy on the device (ADR 0007)`() = runTest {
+    fun `nothing is installed that is not the package the repo named, signed with its key, and no older than the copy on the device (ADR 0007, 0063)`() = runTest {
         serve(Triple("swapped", 1, "16"), Triple("unsigned", 1, "16"), Triple("older", 3, "16"), Triple("foreign", 2, "16"))
         catalog.add(listOf(NewExtensionRepo(repoUrl)))
         apk("swapped", key, 1)

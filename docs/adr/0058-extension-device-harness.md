@@ -21,3 +21,7 @@ Harness results cannot establish behavior that depends on the app's browser cook
 - `extension-host/src/androidTest/kotlin/com/theoriacodex/extensionhost/Harness.kt`: `Harness`, `NoCookies`, `NoBrowser`
 - `extension-host/src/androidTest/kotlin/com/theoriacodex/extensionhost/AnimeHarnessTest.kt`: `AnimeHarnessTest`
 - `extension-host/src/androidTest/kotlin/com/theoriacodex/extensionhost/ExtensionHarnessTest.kt`: `ExtensionHarnessTest`
+
+## Guarded by
+
+- Left to prose: the harness is device-only androidTest code run by hand against a named APK; reporting text only and never playing, showing or saving media is a safety rule enforced by review and AGENTS.md (a denylist of media APIs would miss as much as it caught); the host is installed with the harness's own `NoCookies` and `NoBrowser`, and extension-host depends on neither the app nor media-kit, so the app's WebView store cannot be reached from it; skipping without `animeApk` or `extensionApk` and fetching covers both together and singly are how the harness is written, with nothing to assert outside a device run.

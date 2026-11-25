@@ -10,7 +10,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.SortMode
-import kotlinx.coroutines.flow.first
 
 class SavedSearchNewPostsChecker(
     private val store: UiRestoreRepository,
@@ -18,21 +17,29 @@ class SavedSearchNewPostsChecker(
 ) {
     suspend fun checkIfStale(entries: List<SavedSearchEntry>, nowEpochMs: Long) {
         val recent = entries.sortedByDescending { it.savedAtEpochMs }.take(MAX_CHECKED_SAVED_SEARCHES)
-        val attempted = store.observeSavedSearchNewPosts().first().attemptedAtEpochMs
-        if (recent.isEmpty() || !newPostsCheckDue(listOf(attempted), nowEpochMs)) return
         val saved = entries.mapTo(mutableSetOf()) { it.id }
         recent.mapConcurrent(concurrency = 2) { entry ->
+            if (!claim(entry.id, saved, nowEpochMs)) return@mapConcurrent
             val ids = firstPage(entry.newestFirst())?.map { it.id.markKey() } ?: return@mapConcurrent
             store.updateSavedSearchNewPosts { state ->
                 val kept = state.marks.filterKeys { it in saved }
                 state.copy(marks = kept + (entry.id to (kept[entry.id] ?: NewPostMarks()).checked(ids, nowEpochMs)))
             }
         }
-        store.updateSavedSearchNewPosts { it.copy(attemptedAtEpochMs = nowEpochMs) }
+    }
+
+    private suspend fun claim(id: String, saved: Set<String>, nowEpochMs: Long): Boolean {
+        var claimed = false
+        store.updateSavedSearchNewPosts { state ->
+            claimed = newPostsCheckDue(listOf(state.attempts[id]), nowEpochMs)
+            if (!claimed) state
+            else state.copy(attempts = state.attempts.filterKeys { it in saved } + (id to nowEpochMs))
+        }
+        return claimed
     }
 }
 
-private fun SavedSearchEntry.newestFirst() =
+internal fun SavedSearchEntry.newestFirst() =
     copy(search = search.copy(query = search.query.copy(sort = SortMode.NEWEST)))
 
 suspend fun UiRestoreRepository.markSavedSearchesSeen(ids: Set<String>? = null) {

@@ -123,10 +123,11 @@ class AppScreenshotTest {
     }
 
     @Test fun `viewer`() {
+        runBlocking(Dispatchers.IO) { graph.content.ensureCodex("fixture-sketches", "Sketches") }
         openSearchResults()
         compose.onNodeWithTag(searchCardTestTag(posts[0].id)).performClick()
         waitFor { compose.onNodeWithContentDescription("More actions").isDisplayed() }
-        waitFor { compose.onAllNodesWithContentDescription("Saved in every Codex. Choose Codex").fetchSemanticsNodes().isNotEmpty() }
+        waitFor { compose.onAllNodesWithContentDescription("Saved in Fixture Codex. Save to Sketches").fetchSemanticsNodes().isNotEmpty() }
         capture("viewer")
     }
 

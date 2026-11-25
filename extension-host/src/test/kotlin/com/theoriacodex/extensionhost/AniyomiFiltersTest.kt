@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class AniyomiFiltersTest {
@@ -15,7 +16,7 @@ class AniyomiFiltersTest {
     private val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
 
     @Test
-    fun `each of Aniyomi's filters becomes the app's, and a search sets the values chosen onto the source's own`() = runTest {
+    fun `each of Aniyomi's filters becomes the app's, and a search sets the values chosen onto the source's own (ADR 0064)`() = runTest {
         val defaults = listOf(
             SeriesFilter.Header("Options"),
             SeriesFilter.Separator,
@@ -33,7 +34,7 @@ class AniyomiFiltersTest {
             SeriesFilter.Text("Studio", "Made Up"),
             SeriesFilter.Check("Dubbed", true),
             SeriesFilter.Select("Status", listOf("Any", "Airing", "Finished"), 2),
-            SeriesFilter.Sort("Order", listOf("Title", "Aired"), null),
+            SeriesFilter.Sort("Order", listOf("Title", "Aired"), SeriesFilter.Sort.Selection(0, ascending = true)),
             SeriesFilter.Group("Genres", listOf(SeriesFilter.TriState("Action", Inclusion.INCLUDE), SeriesFilter.TriState("Drama", Inclusion.IGNORE))),
         )
         series.search("one", 1, chosen)
@@ -41,6 +42,17 @@ class AniyomiFiltersTest {
         val searched = checkNotNull(source.searchedWith)
         assertEquals(chosen, searched.nodes().toSeriesFilters())
         assertEquals(AnimeFilter.TriState.STATE_INCLUDE, (searched[6] as Genres).state.first().state)
+    }
+
+    @Test
+    fun `later pages of an anime search reuse the list its first page used (ADR 0064)`() = runTest {
+        val chosen = series.filters().map { if (it is SeriesFilter.Check) it.copy(checked = true) else it }
+
+        series.search("one", 1, chosen)
+        val first = source.searchedWith
+        series.search("one", 2, chosen.toList())
+
+        assertSame(first, source.searchedWith)
     }
 
     private class Studio : AnimeFilter.Text("Studio")

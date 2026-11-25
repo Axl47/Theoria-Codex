@@ -9,7 +9,6 @@ import org.junit.Test
 class LiftTargetsTest {
     private val suggestions = SaveSuggestions(
         targets = (1..4).map { SaveSuggestion("codex-$it", "Codex $it", emptyList()) },
-        inAnyCodex = false,
     )
 
     @Test
