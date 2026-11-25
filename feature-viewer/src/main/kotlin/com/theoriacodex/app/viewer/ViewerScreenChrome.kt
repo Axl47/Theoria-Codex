@@ -396,7 +396,7 @@ private class ViewerFooterRules(frame: ViewerFrame, screen: ViewerScreenState) {
     val inStripRow = frame.isLandscape && !frame.watching
     val chromeVisible = frame.chromeVisible && (!inStripRow || frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS)
     val bottomRow = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
-    val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (frame.watching && frame.chromeVisible)
+    val rotationSuppressed = bottomOwned || frame.locked || (frame.watching && frame.chromeVisible)
     val slideshowSuppressed = bottomOwned || frame.inPictureInPicture || frame.watching
     val lockSuppressed = bottomOwned || frame.locked || frame.watching
 }

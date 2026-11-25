@@ -344,7 +344,7 @@ internal fun ViewerEpisodeControls(
 @Composable
 private fun ViewerEpisodeRotateButton(offer: ViewerRotationOffer, onRotate: () -> Unit) {
     IconButton(onClick = onRotate, modifier = Modifier.testTag(VIEWER_ROTATE_TAG)) {
-        Icon(Icons.Default.ScreenRotation, contentDescription = offer.rotateDescription, tint = Color.White)
+        Icon(Icons.Default.ScreenRotation, contentDescription = offer.rotateDescription, tint = if (offer.fits) LocalViewerAccent.current else Color.White)
     }
 }
 
