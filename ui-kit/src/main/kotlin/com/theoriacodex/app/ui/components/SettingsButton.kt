@@ -23,5 +23,5 @@ fun SettingsButton(alerts: ExtensionAlerts, onClick: () -> Unit, modifier: Modif
 }
 
 const val SETTINGS_LABEL = "Settings"
-private val BADGE_INSET = 16.dp
-private val BADGE_DROP = 14.dp
+private val BADGE_INSET = 8.dp
+private val BADGE_DROP = 8.dp
