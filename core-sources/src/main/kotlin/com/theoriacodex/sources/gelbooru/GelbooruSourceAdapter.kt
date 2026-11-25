@@ -39,6 +39,7 @@ import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
 import com.theoriacodex.sources.common.httpsMediaUrl
 import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.parseGelbooruDateTimeMs
 import com.theoriacodex.sources.common.keysFor
 import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
@@ -351,7 +352,9 @@ private class GelbooruFamilyAdapter(
             canonicalTags = tags,
             rawTags = tags,
             authorName = creator?.displayName ?: raw.stringValue("author")?.trim()?.ifBlank { null },
-            createdAtEpochMs = (raw.longValue("created_at") ?: raw.longValue("change"))?.times(1000L),
+            createdAtEpochMs = raw.longValue("created_at")?.times(1000L)
+                ?: parseGelbooruDateTimeMs(raw.stringValue("created_at"))
+                ?: raw.longValue("change")?.times(1000L),
             durationMs = parseDurationMs(raw),
             creatorProfile = creator?.takeIf { site.creatorPosts },
             commentHint = raw.gelbooruCommentHint(),

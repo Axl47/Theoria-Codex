@@ -50,6 +50,14 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `a post is dated by its upload time, not its last edit`() = runTest {
+        val body = """{"post":[{"id":"1","file_url":"https://gelbooru.com/f.jpg","created_at":"Sun Nov 23 23:05:41 -0600 2025","change":1795000000}]}"""
+        val httpClient = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(statusCode = 200, body = body) }
+        val post = gelbooru(httpClient).search(sampleQuery(), pageToken = null).items.single()
+        assertEquals(java.time.OffsetDateTime.parse("2025-11-23T23:05:41-06:00").toInstant().toEpochMilli(), post.createdAtEpochMs)
+    }
+
+    @Test
     fun `search attaches credentials when configured`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             gelbooruCredentials = UserApiKey(userId = "user1", apiKey = "key1")

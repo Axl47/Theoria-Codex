@@ -15,11 +15,11 @@ internal data class ViewerPostSuggestions(val postId: PostId, val suggestions: S
 internal sealed interface ViewerSaveButtonState {
     data object Loading : ViewerSaveButtonState
 
-    data class Suggest(val target: SaveSuggestion, val inAnyCodex: Boolean, val ready: Boolean = true) : ViewerSaveButtonState
+    data class Suggest(val target: SaveSuggestion, val savedIn: SaveSuggestion? = null, val ready: Boolean = true) : ViewerSaveButtonState
 
     data class Saved(val record: QuickSaveRecord) : ViewerSaveButtonState
 
-    data class NoTarget(val inAnyCodex: Boolean) : ViewerSaveButtonState
+    data class NoTarget(val savedIn: SaveSuggestion?) : ViewerSaveButtonState
 }
 
 internal sealed interface ViewerSaveCommand {
@@ -44,15 +44,23 @@ internal fun viewerSaveButtonState(
     val suggestions = latest?.suggestions ?: return ViewerSaveButtonState.Loading
     val ready = latest.postId == postId
     val top = suggestions.targets.firstOrNull()
-        ?: return if (ready) ViewerSaveButtonState.NoTarget(suggestions.inAnyCodex) else ViewerSaveButtonState.Loading
-    return ViewerSaveButtonState.Suggest(top, inAnyCodex = ready && suggestions.inAnyCodex, ready = ready)
+        ?: return if (ready) ViewerSaveButtonState.NoTarget(suggestions.savedIn) else ViewerSaveButtonState.Loading
+    return ViewerSaveButtonState.Suggest(top, savedIn = suggestions.savedIn.takeIf { ready }, ready = ready)
 }
+
+internal fun ViewerSaveButtonState.savedIn(): SaveSuggestion? = when (this) {
+    is ViewerSaveButtonState.Suggest -> savedIn
+    is ViewerSaveButtonState.NoTarget -> savedIn
+    is ViewerSaveButtonState.Saved, ViewerSaveButtonState.Loading -> null
+}
+
+internal fun ViewerSaveButtonState.next(): SaveSuggestion? = (this as? ViewerSaveButtonState.Suggest)?.target?.takeIf { savedIn != null }
 
 internal fun ViewerSaveButtonState.tapCommand(): ViewerSaveCommand = when (this) {
     is ViewerSaveButtonState.Suggest -> if (ready) ViewerSaveCommand.QuickSave(target.codexId) else ViewerSaveCommand.OpenPicker
     is ViewerSaveButtonState.Saved -> if (record.undoable) ViewerSaveCommand.Undo(record) else ViewerSaveCommand.OpenPicker
     ViewerSaveButtonState.Loading -> ViewerSaveCommand.OpenPicker
-    is ViewerSaveButtonState.NoTarget -> if (inAnyCodex) ViewerSaveCommand.OpenPicker else ViewerSaveCommand.NewCodex
+    is ViewerSaveButtonState.NoTarget -> if (savedIn != null) ViewerSaveCommand.OpenPicker else ViewerSaveCommand.NewCodex
 }
 
 internal fun viewerSaveFanTargets(postId: PostId, latest: ViewerPostSuggestions?): List<CollectTarget<SaveTarget>> =

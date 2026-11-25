@@ -35,7 +35,7 @@ class SavedSearchesCodexViewModel(
     fun synchronize(selected: List<SavedSearchEntry>, settings: AppSettings, sources: Set<SourceKey>,
         sort: CodexSortMode = CodexSortMode.NEWEST_SAVED, usage: Map<String, CodexUsage> = emptyMap(),
         durations: Map<PostId, Long> = emptyMap()) {
-        feed.updateCoverSort(sort, usage, durations)
+        feed.updateSort(sort, usage, durations)
         loader.updateEnvironment(sources, settings.runtime.copy(
             enabledSources = settings.runtime.enabledSources.intersect(sources),
         ))
@@ -49,7 +49,7 @@ class SavedSearchesCodexViewModel(
 
     override fun refresh() = feed.reload(entries.map(::SavedSearchBranch))
     override fun loadMore() = feed.loadMore()
-    override fun retry() = feed.retry()
+    override fun retry() = feed.retry(entries.map(::SavedSearchBranch))
 
     companion object {
         fun factory(coordinator: SearchCoordinator, cache: CacheRepository, relatedPostsLoader: RelatedPostsLoading) =
