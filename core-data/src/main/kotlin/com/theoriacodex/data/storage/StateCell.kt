@@ -77,10 +77,17 @@ class WriteBehind(
     }
 }
 
-internal val WRITE_BEHIND_DELAY = 2.seconds
+val WRITE_BEHIND_DELAY = 2.seconds
 
 internal fun <T : Any> StateCell<T>.writeBehind(writeBehind: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY): StateCell<T> =
     writeBehind?.wrap(this, delay) ?: this
+
+class WriteBehindSaves internal constructor(private val revisions: StateCell<Long>) {
+    suspend fun changed() = revisions.update { it + 1 }
+}
+
+fun writeBehindSaves(writeBehind: WriteBehind?, delay: Duration = WRITE_BEHIND_DELAY, save: suspend () -> Unit): WriteBehindSaves =
+    WriteBehindSaves(FileStateCell(0L) { save() }.writeBehind(writeBehind, delay))
 
 private class WriteBehindStateCell<T : Any>(
     private val durable: StateCell<T>,

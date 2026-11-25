@@ -3,10 +3,12 @@ package com.theoriacodex.app.search
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.data.storage.FileStoreRecoveryRegistry
+import com.theoriacodex.data.storage.WriteBehind
+import com.theoriacodex.data.storage.writeBehindSaves
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.legacyTagType
@@ -18,12 +20,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,7 +36,7 @@ class FileBackedTagSuggestionStore(
     private val seedData: Map<SourceKey, List<TagSuggestion>> = emptyMap(),
     private val maxEntriesPerSource: Int = DEFAULT_MAX_ENTRIES_PER_SOURCE,
     private val maxTotalUtf8Bytes: Int = DEFAULT_MAX_TOTAL_UTF8_BYTES,
-    private val persistenceDebounceMs: Long = DEFAULT_PERSISTENCE_DEBOUNCE_MS,
+    writeBehind: WriteBehind? = null,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(),
     private val recoveryRegistry: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry(),
@@ -51,7 +51,12 @@ class FileBackedTagSuggestionStore(
     private var estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
     private var mutationVersion = 0L
     private var persistedVersion = 0L
-    private var debounceJob: Job? = null
+    private val saves = writeBehindSaves(writeBehind) {
+        withContext(workDispatcher) {
+            loadJob.await()
+            persistPending()
+        }
+    }
     private var closing = false
     private var closed = false
     private val loadJob: Deferred<Unit>
@@ -61,13 +66,12 @@ class FileBackedTagSuggestionStore(
         require(maxTotalUtf8Bytes >= SNAPSHOT_ESTIMATED_OVERHEAD_BYTES) {
             "maxTotalUtf8Bytes must fit an empty tag suggestion snapshot"
         }
-        require(persistenceDebounceMs >= 0L) { "persistenceDebounceMs must not be negative" }
         recoveryRegistry.registerStore("Search suggestions", storeFile)
         rebuildByteEstimateLocked()
         enforceTotalByteBudgetLocked()
         loadJob = scope.async {
             if (loadFromDisk()) {
-                markDirtyAndSchedulePersistence()
+                markDirty()
             }
         }
     }
@@ -166,8 +170,8 @@ class FileBackedTagSuggestionStore(
             )
             enforceTotalByteBudgetLocked()
             mutationVersion += 1L
-            schedulePersistenceLocked()
         }
+        markChanged()
     }
 
     override fun getFaceted(
@@ -228,8 +232,8 @@ class FileBackedTagSuggestionStore(
             replaceSourceLocked(source, merged.take(maxEntriesPerSource))
             enforceTotalByteBudgetLocked()
             mutationVersion += 1L
-            schedulePersistenceLocked()
         }
+        markChanged()
     }
 
     override suspend fun awaitLoaded() {
@@ -238,10 +242,6 @@ class FileBackedTagSuggestionStore(
 
     override suspend fun flush() {
         loadJob.await()
-        synchronized(lock) {
-            debounceJob?.cancel()
-            debounceJob = null
-        }
         while (true) {
             val hasPending = synchronized(lock) { persistedVersion < mutationVersion }
             if (!hasPending) return
@@ -261,8 +261,6 @@ class FileBackedTagSuggestionStore(
         } finally {
             synchronized(lock) {
                 closed = true
-                debounceJob?.cancel()
-                debounceJob = null
             }
             scope.cancel()
         }
@@ -323,24 +321,16 @@ class FileBackedTagSuggestionStore(
         return pruned
     }
 
-    private fun markDirtyAndSchedulePersistence() {
+    private fun markDirty() {
         synchronized(lock) {
             if (closed) return
             mutationVersion += 1L
-            schedulePersistenceLocked()
         }
+        markChanged()
     }
 
-    private fun schedulePersistenceLocked() {
-        debounceJob?.cancel()
-        debounceJob = scope.launch {
-            delay(persistenceDebounceMs)
-            loadJob.await()
-            runCatchingExceptionsPreservingCancellation {
-                persistPending()
-            }.onFailure {
-            }
-        }
+    private fun markChanged() {
+        scope.launch(Dispatchers.Unconfined) { runCatchingPreservingCancellation { saves.changed() } }
     }
 
     private suspend fun persistPending() {
@@ -683,7 +673,6 @@ private fun maxCount(first: Int?, second: Int?): Int? {
 
 private const val DEFAULT_MAX_ENTRIES_PER_SOURCE = 25_000
 private const val DEFAULT_MAX_TOTAL_UTF8_BYTES = 4 * 1024 * 1024
-private const val DEFAULT_PERSISTENCE_DEBOUNCE_MS = 500L
 private const val SNAPSHOT_ESTIMATED_OVERHEAD_BYTES = 256
 private const val SOURCE_ESTIMATED_OVERHEAD_BYTES = 256
 private const val ENTRY_ESTIMATED_FORMATTING_OVERHEAD_BYTES = 128
