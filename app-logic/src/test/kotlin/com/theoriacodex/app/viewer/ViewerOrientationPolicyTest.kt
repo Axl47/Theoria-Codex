@@ -21,11 +21,10 @@ class ViewerOrientationPolicyTest {
         assertNull(viewerFillOrientation(1000, 0))
     }
 
-    @Test fun `the chip is offered when media fits the other orientation, never while locked (ADR 0174)`() {
-        assertTrue(viewerOffersRotation(LANDSCAPE, PORTRAIT, lock = null))
-        assertFalse(viewerOffersRotation(LANDSCAPE, LANDSCAPE, lock = null))
-        assertFalse(viewerOffersRotation(null, PORTRAIT, lock = null))
-        assertFalse(viewerOffersRotation(LANDSCAPE, PORTRAIT, lock = PORTRAIT))
+    @Test fun `media fits the other way only when it is clearly shaped for the orientation the screen lacks (ADR 0174)`() {
+        assertTrue(viewerFitsOtherWay(LANDSCAPE, PORTRAIT))
+        assertFalse(viewerFitsOtherWay(LANDSCAPE, LANDSCAPE))
+        assertFalse(viewerFitsOtherWay(null, PORTRAIT))
     }
 
     @Test fun `the sensor reads portrait or landscape only near those angles`() {
