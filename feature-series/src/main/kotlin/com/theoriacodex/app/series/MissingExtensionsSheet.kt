@@ -3,7 +3,9 @@ package com.theoriacodex.app.series
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SettingsGroup
+import com.theoriacodex.app.ui.components.SettingsGroupTitle
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.domain.series.InstalledExtension
@@ -142,20 +145,20 @@ private fun MissingGroups(
 
 @Composable
 private fun UnlistedGroup(unlisted: List<Series>, title: String, actions: TitleActions) {
-    val sites = unlisted.groupBy { siteHint(it.coverUrl) }.entries.sortedWith(compareBy(nullsLast()) { it.key })
-    SettingsGroup(title) {
-        sites.forEachIndexed { index, (site, series) ->
-            if (index > 0) SettingsRowDivider()
-            if (site != null) {
-                Text(
-                    site,
-                    Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            series.forEach { FollowedTitleRow(it, nested = false, actions) }
-        }
+    val sites = unlisted.groupBy { siteHint(it.coverUrl) }
+    val named = sites.filterKeys { it != null }.toSortedMap(compareBy { it })
+    val unnamed = sites[null].orEmpty()
+    if (named.isEmpty()) {
+        SettingsGroup(title) { unnamed.forEach { FollowedTitleRow(it, nested = false, actions) } }
+        return
+    }
+    SettingsGroupTitle(title)
+    named.forEach { (site, series) ->
+        SettingsGroup(site) { series.forEach { FollowedTitleRow(it, nested = false, actions) } }
+    }
+    if (unnamed.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+        SettingsGroup(null) { unnamed.forEach { FollowedTitleRow(it, nested = false, actions) } }
     }
 }
 
