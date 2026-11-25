@@ -185,7 +185,7 @@ class RoomProfileBackupStoreTest {
         assertEquals(7, device.entries(id).single { it.entry.address == "/chapter/2" }.position)
 
         suspend fun progress() = device.entries(id).single { it.entry.address == "/chapter/2" }.let { it.position to it.length }
-        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L, null, null)
+        deviceDatabase.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 8L, 10L, null, null, null)
         RoomProfileBackupStore(deviceDatabase).merge(snapshot)
         assertEquals(8L to 10L, progress())
         deviceDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_page = 2, page_count = 10 WHERE address = '/chapter/2'")
@@ -196,13 +196,13 @@ class RoomProfileBackupStoreTest {
         fun reset(page: Long, count: Long?) = deviceDatabase.openHelper.writableDatabase
             .execSQL("UPDATE series_entries SET last_page = ?, page_count = ? WHERE address = '/chapter/2'", arrayOf(page, count))
         reset(5, 10)
-        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 20L, null, null, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 20L, null, null, null, null)
         assertEquals(20L to null, progress())
         reset(20, null)
-        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 5L, 10L, null, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 5L, 10L, null, null, null)
         assertEquals(20L to null, progress())
         reset(5, null)
-        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 4L, 10L, null, null)
+        dao.mergeRestoredEntry(id.source.id, id.address, "/chapter/2", false, 4L, 10L, null, null, null)
         assertEquals(5L to 10L, progress())
         deviceDatabase.close()
     }

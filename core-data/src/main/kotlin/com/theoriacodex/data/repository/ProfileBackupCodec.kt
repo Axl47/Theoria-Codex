@@ -16,10 +16,11 @@ import kotlinx.serialization.json.put
 
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
-private const val PROFILE_BACKUP_VERSION = 5
+private const val PROFILE_BACKUP_VERSION = 6
 
 private fun ProfileBackup.version(statistics: StatisticsStoreRecord?) = when {
-    statistics?.watchedTagFloors != null -> PROFILE_BACKUP_VERSION
+    library.series.any { series -> series.entries.any { it.pageOffset != null } } -> PROFILE_BACKUP_VERSION
+    statistics?.watchedTagFloors != null -> 5
     extensionRepos.isNotEmpty() -> 4
     library.series.isNotEmpty() -> 3
     else -> 2

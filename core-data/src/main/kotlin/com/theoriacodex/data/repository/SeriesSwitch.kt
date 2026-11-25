@@ -110,12 +110,11 @@ private fun StoredSeriesEntry.carrying(own: List<StoredSeriesEntry>, chapter: Li
     val further = maxOf(position, own.maxOfOrNull { it.position } ?: 0)
     val readAt = (own.mapNotNull { it.lastReadAtEpochMs } + listOfNotNull(lastReadAtEpochMs)).maxOrNull()
     val reached = length?.let { further.coerceAtMost(it) } ?: further
-    val offsets = own.filter { it.position == further }.mapNotNull { it.pageOffset } + listOfNotNull(pageOffset.takeIf { further == position })
-    val offset = offsets.maxOrNull()
+    val fraction = (own + this).filter { it.position == further }.mapNotNull { it.pageOffset }.maxOrNull()
     return copy(
         read = read || chapter.any { it.read },
         position = reached,
         lastReadAtEpochMs = readAt,
-        pageOffset = offset.takeIf { reached == further },
+        pageFraction = PageFraction.of(further, fraction),
     )
 }

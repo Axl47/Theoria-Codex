@@ -122,6 +122,21 @@ class ProfileBackupServiceTest {
         assertEquals(5, version(plain.copy(statistics = floors, library = plain.library.copy(series = series))))
     }
 
+    @Test fun `a chapter's place inside its page is backed up with its page and written as version 6 (ADR 0024, 0192)`() {
+        val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
+        val inside = StoredSeriesEntry(SeriesEntry("/chapter/2", "Ch.2"), sourceOrder = 0, firstSeenAtEpochMs = 6L, position = 3, length = 20, pageFraction = PageFraction(3, 0.4f))
+        val moved = StoredSeriesEntry(SeriesEntry("/chapter/1", "Ch.1"), sourceOrder = 1, firstSeenAtEpochMs = 4L, position = 5, length = 18, pageFraction = PageFraction(4, 0.7f))
+        val plain = backup()
+        fun withEntries(vararg entries: StoredSeriesEntry) = plain.copy(library = plain.library.copy(series = listOf(BackupSeries(StoredSeries(Series(id, "Title")), entries.toList()))))
+
+        val restored = codec.decode(codec.encode(withEntries(inside, moved))).library.series.single().entries
+
+        assertEquals(6, encodedTree(withEntries(inside))["version"]?.toString()?.toInt())
+        assertEquals(0.4f, restored.single { it.entry.address == "/chapter/2" }.pageOffset)
+        assertNull("An offset left on another page is not backed up", restored.single { it.entry.address == "/chapter/1" }.pageOffset)
+        assertEquals(3, encodedTree(withEntries(moved))["version"]?.toString()?.toInt())
+    }
+
     @Test fun `exporting writes the device's repos, previewing names the new ones, and restoring stores them`() = runTest {
         val held = listOf(ExtensionRepo("https://present.example/repo", "Present", "aa11"))
         val source = object : ExtensionRepos by RecordingRepos(refuse = "", added = "") {
@@ -519,7 +534,7 @@ class ProfileBackupServiceTest {
             byteArrayOf(0xc3.toByte(), 0x28),
             "{}".toByteArray(),
             "[".repeat(65).toByteArray(),
-            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":6").toByteArray(),
+            codec.encode(backup()).toString(Charsets.UTF_8).replace("\"version\":2", "\"version\":7").toByteArray(),
             codec.encode(backup()).toString(Charsets.UTF_8).replace("\"PIXIV\"", "\"UNKNOWN\"").toByteArray(),
         )
         invalid.forEach { assertTrue(runCatching { codec.decode(it) }.isFailure) }
