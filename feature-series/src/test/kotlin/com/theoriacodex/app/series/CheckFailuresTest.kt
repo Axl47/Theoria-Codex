@@ -1,9 +1,16 @@
 package com.theoriacodex.app.series
 
+import kotlinx.coroutines.runBlocking
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.layout.Box
 import android.app.Application
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
@@ -66,7 +73,7 @@ class CheckFailuresTest {
         compose.setContent {
             MaterialTheme {
                 FollowingBody(
-                    content = content, checking = null, found = emptyList(), failedCheck = failed, grid = rememberLazyGridState(),
+                    content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = 0, grid = rememberLazyGridState(),
                     onRefresh = {}, onRetryFailed = { retried += it }, onDismissFailures = { failed = null }, onUnfollow = {},
                     onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
                 )
@@ -81,5 +88,67 @@ class CheckFailuresTest {
 
         compose.onNodeWithContentDescription("Dismiss").performClick()
         compose.onAllNodesWithText("Couldn't check 2 series").assertCountEquals(0)
+    }
+
+    @Test
+    fun aFailedSeriesWithAnotherSourceOfItsKindOffersSwitchSource_adr_0220() {
+        val stuck = failure("/a")
+        val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1), FakeSeriesSource("custom_mihon_3", "Paper Lantern", "en", count = 1))
+        val content = SeriesTabState(sources = sources, libraryLoaded = true).content(listOf(FollowedSeries(stuck.series, unreadCount = 0)))
+        val tools = CheckFailureTools(switchSource = { id -> SwitchSourceViewModel(id, { sources }, store = {}) { _, _ -> false } })
+        compose.setContent {
+            MaterialTheme {
+                FollowingBody(
+                    content = content, checking = null, found = emptyList(), failedCheck = FollowedCheck(emptyList(), checked = 2, failures = listOf(stuck)), checkRun = 0,
+                    grid = rememberLazyGridState(), onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
+                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, failureTools = tools,
+                )
+            }
+        }
+
+        compose.onNodeWithText("Couldn't check 1 series").performClick()
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.onNodeWithText(SWITCH_SOURCE).performClick()
+        compose.waitUntil { compose.onAllNodesWithText("Paper Lantern", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithText(COULDNT_CHECK).assertCountEquals(0)
+    }
+
+    @Test
+    fun aCheckThatFinishesWithTheCardOffScreenOffersToScrollToIt_adr_0220() {
+        val stuck = failure("/a")
+        val followed = listOf(FollowedSeries(stuck.series, unreadCount = 0)) + (1..40).map { FollowedSeries(failure("/s$it").series, unreadCount = 0) }
+        val content = SeriesTabState(libraryLoaded = true).content(followed)
+        val snackbar = SnackbarHostState()
+        var failed by mutableStateOf<FollowedCheck?>(null)
+        var runs by mutableIntStateOf(0)
+        lateinit var grid: LazyGridState
+        compose.setContent {
+            grid = rememberLazyGridState()
+            MaterialTheme {
+                Box {
+                    FollowingBody(
+                        content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = runs, grid = grid,
+                        onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
+                        onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
+                        failureTools = CheckFailureTools(snackbar = snackbar),
+                    )
+                    SnackbarHost(snackbar)
+                }
+            }
+        }
+        val finish = {
+            failed = FollowedCheck(emptyList(), checked = 41, failures = listOf(stuck))
+            runs++
+        }
+
+        compose.runOnIdle(finish)
+        compose.onNodeWithText("Couldn't check 1 series").assertIsDisplayed()
+        compose.onAllNodesWithText(offScreenFailuresLine(1)).assertCountEquals(0)
+
+        compose.runOnIdle { runBlocking { grid.scrollToItem(30) } }
+        compose.runOnIdle(finish)
+        compose.onNodeWithText(offScreenFailuresLine(1)).assertIsDisplayed()
+        compose.onNodeWithText("Show").performClick()
+        compose.onNodeWithText("Couldn't check 1 series").assertIsDisplayed()
     }
 }
