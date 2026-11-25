@@ -56,7 +56,7 @@ class SeriesTabRefreshTest {
     }
 
     @Test
-    fun aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenWhatWasNew_adr_0219() = runTest {
+    fun aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenItsResult_adr_0219() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val step = Channel<Unit>()
         val update = SeriesUpdate(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/a"), "A"), listOf(SeriesEntry("/c/2", "Chapter 2")))
@@ -79,9 +79,9 @@ class SeriesTabRefreshTest {
         step.send(Unit)
         advanceTimeBy(1.seconds)
         assertNull(viewModel.state.value.checking)
-        assertEquals(listOf(update), viewModel.state.value.found)
+        assertEquals(FollowedCheck(listOf(update), checked = 2), viewModel.state.value.finished)
         advanceUntilIdle()
-        assertEquals(emptyList<SeriesUpdate>(), viewModel.state.value.found)
+        assertNull(viewModel.state.value.finished)
     }
 
     @Test

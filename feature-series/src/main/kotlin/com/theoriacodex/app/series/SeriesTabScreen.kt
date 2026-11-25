@@ -258,7 +258,7 @@ private fun SeriesTabViewBody(
         content.view == SeriesView.FOLLOWING -> FollowingBody(
             content = content,
             checking = state.checking,
-            found = state.found,
+            finished = state.finished,
             failedCheck = state.failedCheck,
             checkRun = state.checkRun,
             grid = grids.following,
