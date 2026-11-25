@@ -39,6 +39,7 @@ import com.theoriacodex.app.ui.components.SettingsGroup
 import com.theoriacodex.app.ui.components.SettingsRowDivider
 import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.domain.series.RepoExtension
+import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.seriesKind
@@ -113,20 +114,27 @@ private fun MissingExtensionsSheet(
                 TextButton(onClick = onOpenRepos) { Text(REPOS) }
             }
             val listing = state.listing
-            if (listing == null) return@Column LoadingState()
-            val groups = missingExtensions(missing, listing.extensions)
-            if (listing.problems.isNotEmpty()) {
-                FailureRow({ extensions.reloadListing(refresh = true) }, message = unreadReposLine(listing.problems.size))
-            }
-            if (groups.offered.isNotEmpty()) OfferedGroup(groups.offered, state, extensions::install, actions)
-            if (groups.unlisted.isNotEmpty()) {
-                SettingsGroup(if (listing.problems.isEmpty()) NOT_IN_YOUR_REPOS else NOT_FOUND) {
-                    groups.unlisted.forEachIndexed { index, series ->
-                        if (index > 0) SettingsRowDivider()
-                        MissingTitleRow(series, nested = false, actions)
-                    }
-                }
-            }
+            if (listing == null) LoadingState() else MissingGroups(missing, listing, state, extensions, actions)
+        }
+    }
+}
+
+@Composable
+private fun MissingGroups(missing: List<Series>, listing: RepoListing, state: ExtensionsState, extensions: ExtensionsViewModel, actions: TitleActions) {
+    val groups = missingExtensions(missing, listing.extensions)
+    if (listing.problems.isNotEmpty()) {
+        FailureRow({ extensions.reloadListing(refresh = true) }, message = unreadReposLine(listing.problems.size))
+    }
+    if (groups.offered.isNotEmpty()) OfferedGroup(groups.offered, state, extensions::install, actions)
+    if (groups.unlisted.isNotEmpty()) UnlistedGroup(groups.unlisted, if (listing.problems.isEmpty()) NOT_IN_YOUR_REPOS else NOT_FOUND, actions)
+}
+
+@Composable
+private fun UnlistedGroup(unlisted: List<Series>, title: String, actions: TitleActions) {
+    SettingsGroup(title) {
+        unlisted.forEachIndexed { index, series ->
+            if (index > 0) SettingsRowDivider()
+            MissingTitleRow(series, nested = false, actions)
         }
     }
 }
@@ -137,20 +145,24 @@ private fun OfferedGroup(providers: List<MissingProvider>, state: ExtensionsStat
     SettingsGroup(IN_YOUR_REPOS) {
         providers.forEachIndexed { index, provider ->
             if (index > 0) SettingsRowDivider()
-            val extension = provider.extension
-            val key = "${extension.repo}/${extension.packageName}"
-            val open = key in expanded
-            RepoExtensionRow(
-                extension,
-                state,
-                summary = listOfNotNull("${provider.series.size} series", repoExtensionStatus(extension)).joinToString(" · "),
-                onInstall = onInstall,
-                onClick = { expanded = if (open) expanded - key else expanded + key },
-                after = { Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
-            ) { ExtensionIcon(extension.iconUrl) }
-            if (open) provider.series.forEach { MissingTitleRow(it, nested = true, actions) }
+            val key = "${provider.extension.repo}/${provider.extension.packageName}"
+            ProviderRow(provider, state, open = key in expanded, onToggle = { expanded = if (key in expanded) expanded - key else expanded + key }, onInstall, actions)
         }
     }
+}
+
+@Composable
+private fun ProviderRow(provider: MissingProvider, state: ExtensionsState, open: Boolean, onToggle: () -> Unit, onInstall: (RepoExtension) -> Unit, actions: TitleActions) {
+    val extension = provider.extension
+    RepoExtensionRow(
+        extension,
+        state,
+        summary = listOfNotNull("${provider.series.size} series", repoExtensionStatus(extension)).joinToString(" · "),
+        onInstall = onInstall,
+        onClick = onToggle,
+        after = { Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
+    ) { ExtensionIcon(extension.iconUrl) }
+    if (open) provider.series.forEach { MissingTitleRow(it, nested = true, actions) }
 }
 
 @Composable
