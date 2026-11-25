@@ -216,3 +216,10 @@ internal fun rememberViewerTagFork(forks: ViewerTrailForks, post: Post, levelQue
         }
     }
 }
+
+@Composable
+internal fun rememberViewerTagTrailActions(trail: ViewerTrail, post: Post, fork: ((SearchTerm) -> Unit)?): (SearchTerm) -> List<TagChipAction> =
+    remember(trail, post.id.source, fork) {
+        if (fork == null) return@remember { emptyList() }
+        { term -> trail.tagActions(CrumbTag(term.value, post.id.source)) { fork(term) } }
+    }

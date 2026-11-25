@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
@@ -455,9 +456,18 @@ fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRender
 
 @Composable
 fun ViewerMediaPassiveProgress(positionMs: () -> Long, durationMs: Long, aspectRatio: Float?) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Box(Modifier.viewerFittedMedia(aspectRatio), contentAlignment = Alignment.BottomCenter) {
-            ViewerPassiveProgressBar(positionMs, durationMs)
+    val transform = LocalViewerContentTransform.current
+    val viewport = remember { mutableStateOf(Size.Zero) }
+    val frame = remember { mutableStateOf(Size.Zero) }
+    val followContent = if (transform == null) Modifier else Modifier.graphicsLayer {
+        val edge = viewerVisibleBottomEdge(frame.value, viewport.value, transform.value)
+        translationX = edge.translationX
+        translationY = edge.translationY
+        scaleX = edge.scaleX
+    }
+    Box(Modifier.fillMaxSize().onSizeChanged { viewport.value = it.toSize() }, contentAlignment = Alignment.Center) {
+        Box(Modifier.viewerFittedMedia(aspectRatio).onSizeChanged { frame.value = it.toSize() }, contentAlignment = Alignment.BottomCenter) {
+            ViewerPassiveProgressBar(positionMs, durationMs, followContent)
         }
     }
 }
