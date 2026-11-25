@@ -57,6 +57,10 @@ class ExtensionsViewModel(
         viewModelScope.launch { show(extensions.installed()) }
     }
 
+    fun reloadListing(refresh: Boolean = false) {
+        viewModelScope.launch { showListing(refresh) }
+    }
+
     fun ask(extension: InstalledExtension?) = mutableState.update { it.copy(asking = extension) }
 
     fun setOn(extension: InstalledExtension, on: Boolean) {

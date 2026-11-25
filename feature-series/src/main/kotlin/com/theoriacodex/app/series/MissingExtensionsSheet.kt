@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.ui.components.ExpandedBottomSheet
@@ -57,8 +58,13 @@ internal fun MissingExtensionsOverlay(
     onDismiss: () -> Unit,
 ) {
     val missing = content.missingExtensions
-    LaunchedEffect(missing.isEmpty()) { if (missing.isEmpty()) onDismiss() }
+    val resolved = content.sources != null && content.following != null && missing.isEmpty()
+    LaunchedEffect(resolved) { if (resolved) onDismiss() }
     val extensions = viewModel(key = MISSING_EXTENSIONS_KEY) { actions.extensions() }
+    LifecycleResumeEffect(extensions) {
+        if (extensions.state.value.listing != null) extensions.reloadListing()
+        onPauseOrDispose {}
+    }
     var switching by remember { mutableStateOf<Series?>(null) }
     val from = switching
     if (from == null) {
@@ -107,6 +113,9 @@ private fun MissingExtensionsSheet(
             val listing = state.listing
             if (listing == null) return@Column LoadingState()
             val groups = missingExtensions(missing, listing.extensions)
+            if (listing.problems.isNotEmpty()) {
+                FailureRow({ extensions.reloadListing(refresh = true) }, message = unreadReposLine(listing.problems.size))
+            }
             if (groups.offered.isNotEmpty()) {
                 SettingsGroup(IN_YOUR_REPOS) {
                     groups.offered.forEachIndexed { index, provider ->
@@ -163,6 +172,8 @@ private fun MissingTitleRow(series: Series, nested: Boolean, canSwitch: Boolean,
         }
     }
 }
+
+internal fun unreadReposLine(count: Int): String = if (count == 1) "Couldn't read 1 repo" else "Couldn't read $count repos"
 
 internal const val MISSING_EXTENSIONS_TITLE = "Missing extensions"
 internal const val IN_YOUR_REPOS = "In your repos"

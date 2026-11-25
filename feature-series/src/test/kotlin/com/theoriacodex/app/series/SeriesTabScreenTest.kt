@@ -116,6 +116,7 @@ class SeriesTabScreenTest {
             offered = listOf(
                 RepoExtension("https://repo.example", "pkg.dex", "Ink Dex", listOf("en"), "1.0", SeriesKind.MANGA, RepoExtension.Status.AVAILABLE, sources = listOf(2L, 3L).map(SeriesKind.MANGA::extensionSourceKey)),
             )
+            problems = mapOf("https://down.example" to "Not found")
         }
         val device = FakeSeriesExtensions(emptyList())
         var loaded = listOf("custom_mihon_1")
@@ -128,6 +129,11 @@ class SeriesTabScreenTest {
         compose.onNodeWithText(SHOW_MISSING).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("2 series").assertIsDisplayed()
+        compose.onNodeWithText(unreadReposLine(1)).assertIsDisplayed()
+        repos.problems = emptyMap()
+        compose.onNodeWithText("Retry").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(unreadReposLine(1)).assertDoesNotExist()
         compose.onNodeWithText(NOT_IN_YOUR_REPOS).assertIsDisplayed()
         compose.onAllNodesWithText("Blue Period").assertCountEquals(2)
         compose.onAllNodesWithText("Kaiju").assertCountEquals(1)

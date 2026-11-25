@@ -146,6 +146,7 @@ class ExtensionsViewModelTest {
 internal class FakeExtensionRepos : ExtensionRepos {
     var offered = emptyList<RepoExtension>()
     var refusing = emptyMap<String, String>()
+    var problems = emptyMap<String, String>()
     var refreshDelay = 0L
     var cached: List<RepoExtension>? = null
     val installed = mutableListOf<String>()
@@ -170,7 +171,7 @@ internal class FakeExtensionRepos : ExtensionRepos {
     override suspend fun available(refresh: Boolean): RepoListing {
         val now = cached?.takeUnless { refresh } ?: offered
         if (refresh) delay(refreshDelay)
-        return RepoListing(now)
+        return RepoListing(now, problems)
     }
 
     override suspend fun install(repo: String, packageName: String): String? {
