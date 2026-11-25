@@ -1,38 +1,41 @@
 package com.theoriacodex.app.ui
 
 import android.app.Activity
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.provider.Settings
+import android.view.OrientationEventListener
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.theoriacodex.app.viewer.ViewerOrientation
 import com.theoriacodex.app.viewer.ViewerRotationState
+import com.theoriacodex.app.viewer.viewerHoldEnds
+import com.theoriacodex.app.viewer.viewerPhysicalOrientation
+import com.theoriacodex.app.viewer.viewerPinnedOrientation
+import com.theoriacodex.domain.model.ViewerOrientation
 
 @Composable
 internal fun TheoriaAppPlatformEffects(
     hostActivity: Activity?,
     viewerActive: Boolean,
     viewerRotation: ViewerRotationState?,
+    orientationLock: ViewerOrientation?,
     orientation: Int,
 ) {
     DisposableEffect(viewerRotation, viewerActive) {
         onDispose { if (viewerActive) viewerRotation?.release() }
     }
 
-    val viewerHeldOrientation = viewerRotation?.held
-    DisposableEffect(hostActivity, viewerActive, viewerHeldOrientation) {
-        hostActivity?.requestedOrientation = when {
-            !viewerActive -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            viewerHeldOrientation == ViewerOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-            viewerHeldOrientation == ViewerOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
-            else -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-        }
+    val pinned = viewerPinnedOrientation(orientationLock, viewerRotation?.held)
+    DisposableEffect(hostActivity, viewerActive, pinned) {
+        hostActivity?.requestedOrientation = if (viewerActive) viewerScreenOrientation(pinned) else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         onDispose {
             hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
+    ReleaseViewerHoldWhenTurned(hostActivity, viewerActive, viewerRotation, orientationLock)
 
     DisposableEffect(hostActivity, viewerActive, orientation) {
         val window = hostActivity?.window
@@ -54,3 +57,28 @@ internal fun TheoriaAppPlatformEffects(
         }
     }
 }
+
+internal fun viewerScreenOrientation(pinned: ViewerOrientation?): Int = when (pinned) {
+    ViewerOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+    ViewerOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+    null -> ActivityInfo.SCREEN_ORIENTATION_USER
+}
+
+@Composable
+private fun ReleaseViewerHoldWhenTurned(activity: Activity?, viewerActive: Boolean, rotation: ViewerRotationState?, lock: ViewerOrientation?) {
+    val held = rotation?.held
+    DisposableEffect(activity, viewerActive, rotation, held, lock) {
+        if (activity == null || rotation == null || held == null || lock != null || !viewerActive) return@DisposableEffect onDispose {}
+        val listener = object : OrientationEventListener(activity) {
+            override fun onOrientationChanged(degrees: Int) {
+                val physical = viewerPhysicalOrientation(degrees)
+                if (physical == held && viewerHoldEnds(held, physical, systemAutoRotate(activity))) rotation.held = null
+            }
+        }
+        listener.enable()
+        onDispose { listener.disable() }
+    }
+}
+
+private fun systemAutoRotate(context: Context): Boolean =
+    Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1

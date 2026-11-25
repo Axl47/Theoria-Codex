@@ -33,7 +33,7 @@ class SearchOmniboxCommandsTest {
         val defaults = AppSettings()
         val settings = defaults.copy(
             oldSearchBar = true,
-            viewer = defaults.viewer.copy(instantSeek = true, autoRotateVideos = false, invertMultiImageScrollDirection = true),
+            viewer = defaults.viewer.copy(instantSeek = true, invertMultiImageScrollDirection = true),
             cache = defaults.cache.copy(downloadsOverMetered = false, downloadsOverRoaming = true),
         )
         val written = mutableListOf<SettingsAction>()
@@ -50,7 +50,6 @@ class SearchOmniboxCommandsTest {
 
         assertEquals("Instant Seek", (matchOmnibox(toggles, "instant").first() as OmniboxEntry.Toggle).title)
         assertEquals("Download while roaming", (matchOmnibox(toggles, "roaming").first() as OmniboxEntry.Toggle).title)
-        assertEquals("Auto-Rotate Videos", (matchOmnibox(toggles, "orientation").single() as OmniboxEntry.Toggle).title)
     }
 
     @Test fun `every setting definition is bound, and only toggles switch in place`() {

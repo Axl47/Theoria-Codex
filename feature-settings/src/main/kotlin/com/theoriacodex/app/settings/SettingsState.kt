@@ -96,6 +96,8 @@ sealed interface SettingsAction {
     }
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
+
+    data class SetViewerOrientationLock(val lock: com.theoriacodex.domain.model.ViewerOrientation?) : SettingsAction
     data object ClearThumbnailCache : SettingsAction
     data object ClearFullImageCache : SettingsAction
     data object OpenChangelog : SettingsAction

@@ -47,11 +47,13 @@ internal fun BoxScope.ViewerSlideshowControl(
     if (hold != null) {
         ViewerPassiveProgressBar({ (elapsed.value * VIEWER_SLIDESHOW_IMAGE_MS).toLong() }, VIEWER_SLIDESHOW_IMAGE_MS, Modifier.align(Alignment.BottomCenter))
     }
-    val offered = running || !state.controls.playback.available
     ViewerFooterButton(
-        frame.selection, chromeVisible, visible = chromeVisible && offered && !suppressed, alignment = Alignment.BottomEnd,
+        frame.selection, chromeVisible, visible = chromeVisible && frame.offersSlideshow && !suppressed, alignment = Alignment.BottomEnd,
         icon = if (running) Icons.Default.Pause else Icons.Default.PlayArrow,
         contentDescription = if (running) "Stop slideshow" else "Start slideshow", testTag = "viewer-slideshow", inStripRow = inStripRow,
         onClick = { onAction(ViewerAction.SetSlideshow(!running)) },
     )
 }
+
+internal val ViewerFrame.offersSlideshow: Boolean
+    get() = uiState.controls.slideshow || !uiState.controls.playback.available

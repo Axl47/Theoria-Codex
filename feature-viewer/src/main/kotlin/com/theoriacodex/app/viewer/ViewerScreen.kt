@@ -91,7 +91,6 @@ fun ViewerScreen(
     val saveContext = remember(saveToCodexQuery, saveFromForYou) { ViewerSaveContext(saveToCodexQuery, saveFromForYou) }
     CompositionLocalProvider(
         LocalViewerInstantSeek provides config.instantSeek,
-        LocalViewerAutoRotateVideos provides config.autoRotateVideos,
     ) {
         ViewerLoadedScreen(
             uiState, session, navigation, posts, returnProgress, returning, opening, dismissDrag, activity, quality, qualityHeight, pendingPostId,

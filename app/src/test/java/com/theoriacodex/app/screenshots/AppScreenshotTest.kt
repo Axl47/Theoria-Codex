@@ -139,6 +139,7 @@ class AppScreenshotTest {
         compose.onNodeWithTag(searchCardTestTag(posts[0].id)).performClick()
         waitFor { compose.onNodeWithContentDescription("More actions").isDisplayed() }
         waitFor { compose.onAllNodesWithTag("viewer-slideshow").fetchSemanticsNodes().isNotEmpty() }
+        waitFor { compose.onAllNodes(hasContentDescription("Saved in", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         capture("viewer_landscape")
     }
 

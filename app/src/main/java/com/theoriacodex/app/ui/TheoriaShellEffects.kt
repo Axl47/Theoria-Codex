@@ -2,6 +2,8 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.ui.routes.codexCollectionOwner
 import com.theoriacodex.app.library.LibrarySection
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.filterNotNull
 import com.theoriacodex.app.MainActivity
 import android.content.Intent
@@ -267,10 +269,14 @@ internal suspend fun PagerState.scrollToRoute(route: String) {
 internal fun ShellPlatformEffects(shell: TheoriaShell, currentRoute: String?) {
     val hostContext = LocalContext.current
     val hostActivity = remember(hostContext) { hostContext.findActivity() }
+    val orientationLock by remember(shell) {
+        shell.data.settingsRepository.observeSettings().map { it.viewer.orientationLock }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(null)
     TheoriaAppPlatformEffects(
         hostActivity = hostActivity,
         viewerActive = currentRoute == AppRoute.Viewer,
         viewerRotation = (hostActivity as? MainActivity)?.viewerRotation,
+        orientationLock = orientationLock,
         orientation = LocalConfiguration.current.orientation,
     )
     val lifecycleOwner = LocalLifecycleOwner.current

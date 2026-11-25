@@ -81,7 +81,9 @@
 
 ### Changed
 
-- In landscape, the Viewer's rotate and slideshow buttons sit in the thumbnail strip's row, rotate at the left end and slideshow at the right, instead of floating over the picture. Portrait is unchanged.
+- The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. When a post would fit better the other way, a rotate button shows for a few seconds; tap it to turn once, and the Viewer follows the phone again once you turn it to match.
+- The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
+- In landscape, the Viewer's rotate, lock and slideshow buttons sit in the thumbnail strip's row instead of floating over the picture.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
 - In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.

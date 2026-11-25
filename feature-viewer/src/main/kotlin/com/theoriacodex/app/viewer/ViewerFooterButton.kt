@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,6 +34,8 @@ internal fun BoxScope.ViewerFooterButton(
     testTag: String,
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
     inStripRow: Boolean = false,
+    slot: Int = 0,
+    emphasized: Boolean = false,
     onClick: () -> Unit,
 ) {
     val inRow = inStripRow && chromeVisible
@@ -46,11 +49,21 @@ internal fun BoxScope.ViewerFooterButton(
         visible,
         Modifier.align(alignment)
             .padding(horizontal = VIEWER_FOOTER_BUTTON_GAP)
+            .padding(
+                start = if (alignment == Alignment.BottomStart) VIEWER_FOOTER_BUTTON_TOUCH * slot else 0.dp,
+                end = if (alignment == Alignment.BottomEnd) VIEWER_FOOTER_BUTTON_TOUCH * slot else 0.dp,
+            )
             .padding(bottom = VIEWER_FOOTER_BUTTON_GAP)
             .offset { IntOffset(0, -(if (inRow) footer else glide).roundToPx()) },
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape).testTag(testTag)) {
-            Icon(icon, contentDescription = contentDescription, tint = Color.White)
+        val accent = LocalViewerAccent.current
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape)
+                .then(if (emphasized) Modifier.border(1.5.dp, accent, CircleShape) else Modifier)
+                .testTag(testTag),
+        ) {
+            Icon(icon, contentDescription = contentDescription, tint = if (emphasized) accent else Color.White)
         }
     }
 }
@@ -75,3 +88,4 @@ internal fun viewerFooterBarHeight(selection: ViewerSelection): Dp = when {
 private val VIEWER_FOOTER_BUTTON_GAP = 12.dp
 private val VIEWER_FOOTER_BUTTON_TOUCH = 48.dp
 internal val VIEWER_STRIP_ROW_BUTTON_SLOT = VIEWER_FOOTER_BUTTON_GAP + VIEWER_FOOTER_BUTTON_TOUCH
+internal val VIEWER_STRIP_ROW_BUTTON_WIDTH = VIEWER_FOOTER_BUTTON_TOUCH

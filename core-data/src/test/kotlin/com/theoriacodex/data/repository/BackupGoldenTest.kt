@@ -117,7 +117,7 @@ class BackupGoldenTest {
         checkNotNull(javaClass.classLoader.getResource("golden/backup/$name")) { "Missing golden $name" }.readBytes()
 }
 
-private val RETIRED_SETTINGS = setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages", "scenarioPreset")
+private val RETIRED_SETTINGS = setOf("viewerAutomaticTextTranslationEnabled", "viewerEnabledOcrLanguages", "scenarioPreset", "viewerAutoRotateVideos")
 private val RETIRED_STATISTICS = setOf("translatedPhraseCount", "translatedSourceCharacterCount")
 
 private class RecordingBackupStore : ProfileBackupStore {

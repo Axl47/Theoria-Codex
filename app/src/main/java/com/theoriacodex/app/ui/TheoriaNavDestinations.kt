@@ -329,7 +329,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
                     pixivUgoiraClient = shell.sources.pixivUgoiraClient,
                     invertMultiImageScrollDirection = state.browsing.settings.viewer.invertMultiImageScrollDirection,
                     instantSeek = state.browsing.settings.viewer.instantSeek,
-                    autoRotateVideos = state.browsing.settings.viewer.autoRotateVideos,
+                    orientationLock = state.browsing.settings.viewer.orientationLock,
                     commentOrder = state.browsing.settings.viewer.commentOrder,
                     likedPostIds = state.browsing.likedPostIds,
                     galleryReadingModes = state.browsing.galleryReadingModes,
@@ -455,6 +455,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onShowRelatedPosts = shell.viewerRouteWorkflow.relatedShelves::show,
     onRemoveFromCodex = shell.owners.codexCommands::removePost,
     onPlaybackModeSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerPlaybackMode(it)) },
+    onOrientationLockSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerOrientationLock(it)) },
     onVideoQualitySelected = { shell.owners.settings.onAction(SettingsAction.SetChoice(SettingChoices.DefaultVideoQuality, it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
     onGalleryReadingModeSelected = { postId, mode ->
