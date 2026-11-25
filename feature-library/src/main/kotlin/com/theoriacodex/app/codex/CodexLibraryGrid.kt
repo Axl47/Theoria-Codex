@@ -49,7 +49,7 @@ internal fun CodexGrid(
     if (presented.isEmpty()) return EmptyState("No Codices", Modifier.fillMaxSize())
     val manual = presentation.librarySort == CodexLibrarySort.MANUAL
     SideEffect { reorder.bind(presented, enabled = manual) }
-    ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
+    ScrollToTopOnTabReselect(TopLevelDestination.Library, gridState)
     val openActions = { key: String -> state.actionTarget = sorted.firstOrNull { it.codexId == key } }
     AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize()

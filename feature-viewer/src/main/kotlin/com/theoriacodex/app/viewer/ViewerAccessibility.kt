@@ -1,31 +1,11 @@
 package com.theoriacodex.app.viewer
 
-import android.view.accessibility.AccessibilityManager
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalAccessibilityManager
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
-
-@Composable
-internal fun rememberViewerTouchExploration(): Boolean {
-    val context = LocalContext.current
-    val manager = remember(context) { context.getSystemService(AccessibilityManager::class.java) }
-    var enabled by remember(manager) { mutableStateOf(manager?.isTouchExplorationEnabled == true) }
-    DisposableEffect(manager) {
-        val listener = AccessibilityManager.TouchExplorationStateChangeListener { enabled = it }
-        manager?.addTouchExplorationStateChangeListener(listener)
-        enabled = manager?.isTouchExplorationEnabled == true
-        onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
-    }
-    return enabled
-}
 
 @Composable
 internal fun ViewerChromeAutoHideEffect(

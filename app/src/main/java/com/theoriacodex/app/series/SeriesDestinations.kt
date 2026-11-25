@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.LocalTabShown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,7 +18,6 @@ import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.launchViewer
-import com.theoriacodex.app.ui.tabShown
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.SeriesId
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,10 +73,8 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
         ) { series.checkFollowed { notifySeriesUpdate(shell.appContext, it) } }
     }
-    val pager = shell.navigation.pagerState
-    LaunchedEffect(viewModel, pager) {
-        viewModel.followShown(snapshotFlow { tabShown(TopLevelDestination.Series, pager.targetPage, pager.settledPage) })
-    }
+    val tabShown = LocalTabShown.current
+    LaunchedEffect(viewModel, tabShown) { viewModel.followShown(snapshotFlow(tabShown)) }
     val genreRequests = LocalSeriesGenreSearch.current
     val pendingGenre by genreRequests.pending.collectAsStateWithLifecycle()
     LaunchedEffect(pendingGenre) {
