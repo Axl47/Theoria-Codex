@@ -17,7 +17,7 @@ class PixivUgoiraArchiveTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun `valid archive reports bounded compressed expanded and frame counts`() {
+    fun `valid archive reports bounded compressed expanded and frame counts (ADR 0112)`() {
         val archive = zip(
             "valid.zip",
             mapOf("0001.jpg" to byteArrayOf(1, 2, 3), "0002.jpg" to byteArrayOf(4, 5)),
@@ -34,7 +34,7 @@ class PixivUgoiraArchiveTest {
     }
 
     @Test
-    fun `archive rejects unsafe names metadata mismatch and duplicate frame specs`() {
+    fun `archive rejects unsafe names metadata mismatch and duplicate frame specs (ADR 0112)`() {
         val unsafe = zip("unsafe.zip", mapOf("../frame.jpg" to byteArrayOf(1)))
         val valid = zip("mismatch.zip", mapOf("frame.jpg" to byteArrayOf(1)))
 
@@ -53,12 +53,11 @@ class PixivUgoiraArchiveTest {
     }
 
     @Test
-    fun `archive rejects compressed frame-count and per-frame expansion limits`() {
+    fun `archive rejects compressed frame-count and per-frame expansion limits (ADR 0112)`() {
         val oversized = temporaryFolder.newFile("oversized.zip")
         RandomAccessFile(oversized, "rw").use { file ->
             file.setLength(UGOIRA_MAX_COMPRESSED_BYTES + 1L)
         }
-        val ordinary = zip("ordinary.zip", mapOf("frame.jpg" to byteArrayOf(1)))
         val expanded = temporaryFolder.newFile("expanded.zip")
         ZipOutputStream(FileOutputStream(expanded)).use { zip ->
             zip.putNextEntry(ZipEntry("frame.jpg"))
@@ -74,7 +73,7 @@ class PixivUgoiraArchiveTest {
         }
         assertThrows(IOException::class.java) {
             validateUgoiraArchive(
-                ordinary,
+                zip("many.zip", List(UGOIRA_MAX_FRAME_COUNT + 1) { index -> "$index.jpg" to byteArrayOf(1) }.toMap()),
                 List(UGOIRA_MAX_FRAME_COUNT + 1) { index -> UgoiraFrameSpec("$index.jpg", 50) },
             )
         }

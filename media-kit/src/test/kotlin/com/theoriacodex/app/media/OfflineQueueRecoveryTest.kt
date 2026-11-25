@@ -90,7 +90,7 @@ class OfflineQueueRecoveryTest {
         } finally { scope.cancel(); directory.deleteRecursively() }
     }
 
-    @Test fun `restored jobs wait for sources and a save made meanwhile keeps every owner queued`() = runTest {
+    @Test fun `restored jobs wait for sources and a save made meanwhile keeps every owner queued (ADR 0110)`() = runTest {
         val directory = Files.createTempDirectory("offline-source-gate").toFile()
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
         try {

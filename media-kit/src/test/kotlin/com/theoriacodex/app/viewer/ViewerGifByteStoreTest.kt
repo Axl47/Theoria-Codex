@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -41,6 +42,26 @@ class ViewerGifByteStoreTest {
         val reopened = ViewerGifByteStore(directory)
         assertArrayEquals(bytes, reopened.load("PIXIV:media") { error("must reuse cached bytes") })
         assertArrayEquals(bytes, File(requireNotNull(reopened.cachedLocation("PIXIV:media"))).readBytes())
+    }
+
+    @Test
+    fun `a fill is staged in a temporary file and a clear during it publishes nothing (ADR 0108)`() = runBlocking {
+        val directory = temporary.newFolder()
+        val store = ViewerGifByteStore(directory)
+        val filled = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val bytes = "GIF89a staged".toByteArray()
+        val warm = async { store.warm("PIXIV:staged") { file -> file.writeBytes(bytes); filled.complete(Unit); release.await() } }
+        filled.await()
+        assertEquals(listOf(true), directory.listFiles().orEmpty().map { it.name.endsWith(".tmp") })
+        assertNull(store.cachedLocation("PIXIV:staged"))
+
+        store.clear()
+        release.complete(Unit)
+
+        assertEquals(bytes.size.toLong(), warm.await())
+        assertNull(store.cachedLocation("PIXIV:staged"))
+        assertEquals(emptyList<String>(), directory.list().orEmpty().toList())
     }
 
     @Test

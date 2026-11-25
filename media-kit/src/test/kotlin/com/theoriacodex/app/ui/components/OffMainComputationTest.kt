@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.theoriacodex.app.testing.waitUntilWithoutIdling
@@ -78,19 +79,19 @@ class OffMainComputationTest {
     }
 
     @Test
-    fun `a replaced list is computed in the same composition`() {
+    fun `a replaced list is computed in the same composition (ADR 0106)`() {
         show()
-        compose.runOnIdle { list = listOf("q1", "q2", "q3") }
+        compose.runOnIdle { list = listOf("q1", "q2") }
         compose.waitForIdle()
 
-        val replaced = frames.filter { it.list == listOf("q1", "q2", "q3") }
+        val replaced = frames.filter { it.list == listOf("q1", "q2") }
         assertTrue(replaced.isNotEmpty())
-        assertTrue(replaced.all { it.value == listOf("q1a", "q2a", "q3a") })
+        assertTrue(replaced.all { it.value == listOf("q1a", "q2a") })
         assertTrue(computes.none { !it.onMain })
     }
 
     @Test
-    fun `an append with unchanged inputs extends only the appended items`() {
+    fun `an append with unchanged inputs extends only the appended items (ADR 0106)`() {
         show()
         compose.runOnIdle { list = list + listOf("p3", "p4") }
         compose.waitForIdle()
@@ -115,7 +116,7 @@ class OffMainComputationTest {
     }
 
     @Test
-    fun `a list replaced during an off-main recompute keeps its in-place result`() {
+    fun `a list replaced during an off-main recompute keeps its in-place result (ADR 0106)`() {
         gate = CountDownLatch(1)
         show()
         compose.runOnIdle { input = "b" }
@@ -132,7 +133,7 @@ class OffMainComputationTest {
     }
 
     @Test
-    fun `an input changed and changed back before the recompute lands publishes nothing stale`() {
+    fun `an input changed and changed back before the recompute lands publishes nothing stale (ADR 0106)`() {
         gate = CountDownLatch(1)
         show()
         compose.runOnIdle { input = "b" }
@@ -146,5 +147,42 @@ class OffMainComputationTest {
         assertTrue(frames.all { it.value == listOf("p1a", "p2a") })
         assertEquals(settled, frames.size)
         assertNotEquals(0, computes.count { it.input == "b" })
+    }
+
+    @Test
+    fun `a returning feed reuses its retained frame only for the same list and inputs (ADR 0106)`() {
+        var shown by mutableStateOf(true)
+        var shownList by mutableStateOf(listOf("p1", "p2"), referentialEqualityPolicy())
+        val frames = RetainedFrames<String, List<String>>()
+        compose.setContent {
+            if (shown) {
+                val list = shownList
+                val input = input
+                rememberComputedOffMain<String, List<String>>(list, input, retainKey = frames.at("feed"), extend = { previous ->
+                    list.appendedTo(previous.list)?.let { extend(previous.value, it, input) }
+                }) { compute(list, input) }
+            }
+        }
+        fun returnAfter(change: () -> Unit) {
+            shown = false
+            compose.waitForIdle()
+            change()
+            shown = true
+            compose.waitForIdle()
+        }
+
+        returnAfter {}
+        assertEquals(listOf(Call(listOf("p1", "p2"), "a", onMain = true)), computes.toList())
+
+        returnAfter { shownList = listOf("p1", "p2") }
+        returnAfter { input = "b" }
+        assertEquals(
+            listOf(
+                Call(listOf("p1", "p2"), "a", onMain = true),
+                Call(listOf("p1", "p2"), "a", onMain = true),
+                Call(listOf("p1", "p2"), "b", onMain = true),
+            ),
+            computes.toList(),
+        )
     }
 }
