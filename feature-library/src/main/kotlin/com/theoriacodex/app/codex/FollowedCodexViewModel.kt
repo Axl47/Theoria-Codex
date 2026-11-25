@@ -47,7 +47,7 @@ class FollowedCodexViewModel(
         usage: Map<String, CodexUsage> = emptyMap(),
         durations: Map<PostId, Long> = emptyMap(),
     ) {
-        feed.updateCoverSort(sort, usage, durations)
+        feed.updateSort(sort, usage, durations)
         val identity = selected.map { it.membershipId to it.creator }
         if (identity == follows.map { it.membershipId to it.creator } && available == availableSources) return
         follows = selected

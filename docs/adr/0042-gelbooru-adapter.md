@@ -24,6 +24,7 @@ New fork quirks should be added as site fields or latched detections, not adapte
 
 ## Applies to
 
+- `core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceDates.kt`: `parseGelbooruDateTimeMs`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSite.kt`: `GelbooruSite`, `GelbooruTagList`, `GelbooruOrGroup`, `RULE34XXX`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapter.kt`: `GelbooruSourceAdapter`, `commentsApiDisabled`, `tagListIgnoresJson`, `throwIfAuthFailure`, `resolvePosts`, `postsOrThrow`, `parseItems`, `parsePost`, `compileTags`
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruComments.kt`: `parseGelbooruCommentsXml`, `parseGelbooruCommentsHtml`, `gelbooruCommentHint`

@@ -216,8 +216,9 @@ class SavedSearchesCodexViewModelTest {
     @Test fun `reopening a feed loaded before a check found new posts reloads the newest first page, keeping old pages and showing the error if that fails (ADR 0152)`() = runTest {
         var uploads = listOf("old1", "old2", "old3", "old4")
         var offline = false
+        var dogRequests = 0
         val source = adapter(SourceKey.PIXIV) { query, token ->
-            if (query.includeTags.single() == "dogs") return@adapter Page(listOf(testPost(SourceKey.PIXIV, "dog")), null)
+            if (query.includeTags.single() == "dogs") return@adapter Page(listOf(testPost(SourceKey.PIXIV, "dog")), null).also { dogRequests++ }
             check(!offline) { "offline" }
             val page = token?.toInt() ?: 0
             Page(uploads.drop(page * 2).take(2).map { testPost(SourceKey.PIXIV, it) }, "${page + 1}".takeIf { (page + 1) * 2 < uploads.size })
@@ -245,14 +246,16 @@ class SavedSearchesCodexViewModelTest {
             assertTrue(owner.state.value.predates(found))
 
             offline = false
+            val dogsBeforeRetry = dogRequests
             owner.retry()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2", "dog"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(dogsBeforeRetry, dogRequests)
+            assertEquals(listOf("dog", "new1", "new2"), owner.state.value.posts.map { it.id.sourcePostId })
             assertTrue(owner.state.value.errors.isEmpty())
 
             owner.loadMore()
             advanceUntilIdle()
-            assertEquals(listOf("new1", "new2", "dog", "new3", "old1"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(listOf("dog", "new1", "new2", "new3", "old1"), owner.state.value.posts.map { it.id.sourcePostId })
         }
     }
 
@@ -270,7 +273,7 @@ class SavedSearchesCodexViewModelTest {
             advanceUntilIdle()
             val sorts = listOf(CodexSortMode.NEWEST_SAVED, CodexSortMode.BY_SOURCE)
             val shown = { sort: CodexSortMode ->
-                owner.state.value.run { sortLiveCodexPosts(posts, sort, batches = batches) }.map { it.id.sourcePostId }
+                sortCodexPosts(owner.state.value.posts, sort, emptyMap()).map { it.id.sourcePostId }
             }
             val firstScreens = sorts.map(shown)
 
@@ -278,6 +281,27 @@ class SavedSearchesCodexViewModelTest {
             advanceUntilIdle()
 
             assertEquals(firstScreens, sorts.map { sort -> shown(sort).take(3) })
+        }
+    }
+
+    @Test fun `a later page repeating a post another search already showed leaves the shown order alone (ADR 0152)`() = runTest {
+        val source = adapter(SourceKey.PIXIV) { query, token ->
+            when (query.includeTags.single()) {
+                "a" -> if (token == null) Page(listOf(testPost(SourceKey.PIXIV, "A")), "2") else Page(listOf(testPost(SourceKey.PIXIV, "C")), null)
+                else -> Page(listOf(testPost(SourceKey.PIXIV, "B"), testPost(SourceKey.PIXIV, "C")), null)
+            }
+        }
+        withOwner(listOf(source)) { owner ->
+            owner.synchronize(listOf(entry("a", "a"), entry("b", "b")), AppSettings(), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            val shown = { owner.state.value.posts.map { it.id.sourcePostId } }
+            val firstScreen = shown()
+
+            owner.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(listOf("A", "B", "C"), firstScreen)
+            assertEquals(firstScreen, shown())
         }
     }
 
@@ -294,7 +318,7 @@ class SavedSearchesCodexViewModelTest {
             owner.synchronize(listOf(saved), AppSettings(), setOf(SourceKey.GELBOORU))
             advanceUntilIdle()
             repeat(2) { owner.loadMore(); advanceUntilIdle() }
-            val shown = { owner.state.value.run { sortLiveCodexPosts(posts, CodexSortMode.NEWEST_SAVED, batches = batches) }.map { it.id.sourcePostId } }
+            val shown = { owner.state.value.posts.map { it.id.sourcePostId } }
             offline = true
             owner.refresh()
             advanceUntilIdle()
@@ -324,7 +348,7 @@ class SavedSearchesCodexViewModelTest {
             owner.refresh()
             advanceUntilIdle()
 
-            val shown = owner.state.value.run { sortLiveCodexPosts(posts, CodexSortMode.NEWEST_SAVED, batches = batches) }
+            val shown = owner.state.value.posts
             assertEquals(listOf("new1", "old1", "old2"), shown.map { it.id.sourcePostId })
         }
     }

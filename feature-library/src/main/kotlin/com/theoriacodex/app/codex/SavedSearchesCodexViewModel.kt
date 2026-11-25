@@ -35,7 +35,7 @@ class SavedSearchesCodexViewModel(
     fun synchronize(selected: List<SavedSearchEntry>, settings: AppSettings, sources: Set<SourceKey>,
         sort: CodexSortMode = CodexSortMode.NEWEST_SAVED, usage: Map<String, CodexUsage> = emptyMap(),
         durations: Map<PostId, Long> = emptyMap()) {
-        feed.updateCoverSort(sort, usage, durations)
+        feed.updateSort(sort, usage, durations)
         loader.updateEnvironment(sources, settings.runtime.copy(
             enabledSources = settings.runtime.enabledSources.intersect(sources),
         ))
