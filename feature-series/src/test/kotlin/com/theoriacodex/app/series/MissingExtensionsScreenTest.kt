@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.theoriacodex.data.repository.FollowedSeries
@@ -127,7 +128,7 @@ class MissingExtensionsScreenTest {
         compose.onNodeWithText("1 series").assertIsDisplayed()
         compose.onAllNodesWithText("Update").assertCountEquals(2)
         compose.onAllNodesWithText(TURN_ON).assertCountEquals(2)
-        compose.onAllNodesWithText(OPEN).assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Salt Port settings").assertCountEquals(1)
 
         compose.onAllNodesWithText(TURN_ON)[0].performClick()
         compose.waitForIdle()
@@ -140,7 +141,7 @@ class MissingExtensionsScreenTest {
         compose.waitForIdle()
         assertEquals(listOf(Triple("/apk/pkg.reel", "es", true)), device.languagesSet)
 
-        compose.onNodeWithText(OPEN).performClick()
+        compose.onNodeWithContentDescription("Salt Port settings").performClick()
         compose.waitForIdle()
         assertEquals("/apk/pkg.salt", extensions.state.value.openId)
     }

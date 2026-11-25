@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -46,8 +47,8 @@ import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.languageName
 import com.theoriacodex.domain.series.seriesKind
-import kotlinx.coroutines.flow.first
 import java.text.DateFormat
+import kotlinx.coroutines.flow.first
 
 class MissingExtensionsActions(
     val missing: () -> MissingSeriesViewModel,
@@ -210,7 +211,9 @@ private fun GapAction(copy: InstalledExtension, gap: InstalledGap?, handlers: Pr
     when (gap) {
         InstalledGap.Off -> TextButton(onClick = { handlers.onTurnOn(copy) }) { Text(TURN_ON) }
         is InstalledGap.LanguagesOff -> TextButton(onClick = { handlers.onTurnOnLanguages(copy, gap.languages) }) { Text(TURN_ON) }
-        InstalledGap.NotLoaded -> if (copy.hasPage) TextButton(onClick = { handlers.onOpenExtension(copy.id) }) { Text(OPEN) }
+        InstalledGap.NotLoaded -> if (copy.hasPage) {
+            IconButton(onClick = { handlers.onOpenExtension(copy.id) }) { Icon(Icons.Default.Settings, contentDescription = "${copy.name} settings") }
+        }
         InstalledGap.NotInVersion, null -> Unit
     }
 }
@@ -255,7 +258,6 @@ internal const val REPOS = "Repos"
 internal const val NOT_FOUND = "Not found"
 internal const val UNFOLLOW = "Unfollow"
 internal const val TURN_ON = "Turn on"
-internal const val OPEN = "Open"
 internal const val OFF = "Off"
 internal const val COULDNT_LOAD = "Couldn't load"
 internal const val NOT_IN_THIS_VERSION = "Not in this version"
