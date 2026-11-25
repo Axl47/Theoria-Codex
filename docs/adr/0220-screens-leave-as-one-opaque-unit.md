@@ -20,7 +20,8 @@ text over it.
 
 ## Decision
 
-A card tap records its origin with `openedFrom`, naming the tapped post. Every Viewer launch goes through
+A card tap inside a return grid records its origin with `openedFrom`, naming the tapped post; a tap outside any grid
+records none, since nothing would answer the return. Every Viewer launch goes through
 `TheoriaShell.launchViewer`, which hands the origin to `ViewerReturnTransition.launching`: a launch that leaves the
 root Viewer in place (a trail fork pushed over it, or a single-top launch that replaces only a fork) keeps the root's
 origin, and any other launch keeps it only when its posts include the tapped post, clearing it otherwise. A Codex in
@@ -28,6 +29,24 @@ edit mode gives its cards no return transition, since a tap there selects instea
 Viewer therefore never lends its card to the next launch, whatever screen that launch starts from. `ViewerReturnTransition.begin` starts a return
 only while an origin is recorded, and `ViewerReturnLifetime` holds the Viewer's exit only while a return is running.
 A Viewer opened from no card therefore leaves in one frame, the same way it opens.
+
+The origin belongs to the root Viewer's back stack entry, not to its composition: `ViewerReturnOriginLifetime`, which
+only a root Viewer composes, keeps the `ViewerReturnOrigin` current when the entry was created in an entry-scoped
+ViewModel and releases it when the entry leaves the back stack, which navigation does only after the closing hold ends. A release clears only that origin,
+so a card tapped during the hold keeps its own. A Viewer covered by a full screen, such as a creator profile or a
+series page, or by a trail fork, therefore still closes into its card when the user comes back to it, and a covered
+Viewer removed from the back stack without being shown again lets its card go. An opening cut short, as when a full
+screen covers the Viewer at once, still ends, but only for the origin it opened from (`finishOpening`).
+
+Feeds keep the Viewer's posts past their hide filters (`retainPosts`) only while the Viewer is composed: the route
+retains them in every composition under its own `ViewerPostRetention`, releases them when it leaves composition, at the
+end of the closing hold or when a full screen covers it, and retains them again when it comes back. Feeds see the
+union of every route's set, so a Viewer opened during the hold keeps its own. A Viewer opened with no card, or a screen covering a
+Viewer, therefore never shows posts its filters hide.
+
+A Triage or For You deck card is a return target of its own: `ViewerReturnCard` gives the top card a grid id and
+reports it positioned at once, since the card is already on screen. A Viewer closed on another post than the deck's
+top card falls back to the slide-down, as a grid does for a post it no longer holds.
 
 A vertical gallery fades with the backdrop instead of following `viewerReturnMedia`. That modifier crops the middle
 of whatever it is applied to, which for a scrolling list is a seam between pages rather than the selected one, so
@@ -46,18 +65,20 @@ A close from a series chapter or episode has no animation, matching its entry. G
 entry and a whole-Viewer exit, never the card return. A new full-screen destination should use `opaqueScreen`;
 one that must show what is beneath it would need its own transitions that never overlap another screen.
 
-A card-origin Viewer that leaves composition while a full screen covers it still clears its origin, so it later
-closes in one frame rather than into its card.
-
 ## Applies to
 
-- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnTransition.openedFrom`, `ViewerReturnTransition.launching`, `ViewerReturnTransition.begin`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnTransition.openedFrom`, `ViewerReturnTransition.launching`, `ViewerReturnTransition.begin`, `ViewerReturnTransition.release`, `ViewerReturnTransition.retainPosts`, `ViewerReturnTransition.releasePosts`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaViewerLaunch.kt`: `launchViewer`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransition.kt`: `ViewerReturnLifetime`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGallery.kt`: `ViewerVerticalGallery`
 - `app/src/main/java/com/theoriacodex/app/ui/AppNavigation.kt`: `TheoriaScreenHost`, `opaqueScreen`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShell.kt`: `TheoriaShell.viewerReturn`
 - `feature-library/src/main/kotlin/com/theoriacodex/app/codex/CodexDetailScreen.kt`: `CodexSelectablePostCard`
+- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransition.kt`: `ViewerReturnOriginLifetime`
+- `app/src/main/java/com/theoriacodex/app/ui/TheoriaNavDestinations.kt`: `ViewerDestination`
+- `app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt`: `RetainViewerPosts`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerReturnContract.kt`: `ViewerReturnCard`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/triage/TriageDeckArea.kt`: `TriageCards`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaNavDestinations.kt`: `theoriaDestinations`
 
 ## Guarded by
@@ -68,6 +89,15 @@ closes in one frame rather than into its card.
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer opened without a card leaves in one frame when it closes (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a card origin belongs only to the launch of the card that was tapped (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerVerticalGalleryTest.kt`: `a vertical gallery closing into its card is gone once the backdrop is (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer covered by a full screen still closes into its card (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `the card origin outlives the Viewer's closing hold and ends with it (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a covered Viewer removed from the back stack lets its card go (ADR 0220)`
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/triage/TriageCardsTest.kt`: `a Viewer opened from the top card closes into that card (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer that leaves releases only the posts it retained (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `an older Viewer's opening never ends a newer Viewer's (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a tap outside any return grid records no card to close into (ADR 0220)`
+- Left to prose: that `ViewerRoute` releases its retained posts when it leaves composition; no host test composes the route under a covering screen.
 - Left to prose: that every new full-screen destination uses `opaqueScreen`; a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.
 - Left to prose: that every Viewer launch passes through `launchViewer`; a new `navigate(AppRoute.Viewer)` elsewhere would skip `launching`.
 - Left to prose: that a Codex in edit mode records no origin; no host test composes the Codex detail grid, and the launch binding above still clears such an origin for any launch of another post.

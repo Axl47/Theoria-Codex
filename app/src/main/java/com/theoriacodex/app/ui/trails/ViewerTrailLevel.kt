@@ -32,17 +32,14 @@ internal class ViewerLevel(
     val isFork: Boolean,
     val crumbs: List<ViewerCrumb>,
     val feed: TrailFeed?,
-    val coveredByFork: () -> Boolean,
     val popTo: (Int) -> Unit,
     val nameRoot: (ViewerLaunchContext, Query?) -> Unit,
     val remove: (Int) -> Unit = {},
     val replay: CrumbTag? = null,
     val restart: (CrumbTag) -> Unit = {},
 ) {
-    fun clearsReturnOnDispose(): Boolean = !isFork && !coveredByFork()
-
     companion object {
-        val Root = ViewerLevel(false, emptyList(), null, { false }, {}, { _, _ -> })
+        val Root = ViewerLevel(false, emptyList(), null, {}, { _, _ -> })
     }
 }
 
@@ -93,7 +90,6 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
             isFork = ancestors.isNotEmpty() || entry.isTrailLevel(),
             crumbs = crumbs,
             feed = owner.claimed?.feed,
-            coveredByFork = { navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>(TRAIL_ANCESTOR_IDS_KEY)?.contains(entry.id) == true },
             popTo = popTo,
             nameRoot = { context, query ->
                 if (saved.get<String>(TRAIL_LABEL_KEY) == null) saved[TRAIL_LABEL_KEY] = viewerRootLabel(context, query)

@@ -33,6 +33,7 @@ import com.theoriacodex.app.testing.SteppedDispatcher
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.FeedTraceSections
 import com.theoriacodex.app.ui.components.LocalFeedComputationContext
+import com.theoriacodex.app.viewer.ViewerPostRetention
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -235,7 +236,8 @@ class SearchFeedFramesTest {
         feedShown = false
         transition.openedFrom("search", post = posts[2].id)
         liked = setOf(posts[2].id)
-        transition.retainPosts(setOf(posts[2].id))
+        val viewer = ViewerPostRetention()
+        transition.retainPosts(viewer, setOf(posts[2].id))
         assertEquals(Frame(null, filterPasses = 0), frame())
 
         feedShown = true
@@ -243,7 +245,7 @@ class SearchFeedFramesTest {
         assertEquals(Frame(ids(0..7), filterPasses = 1), frame())
         assertEquals(0, drain())
 
-        transition.clear()
+        transition.releasePosts(viewer)
         assertEquals(Frame(ids(0..7), filterPasses = 0), frame())
         assertEquals(1, drain())
         assertEquals(Frame(ids(0..7) - "v2", filterPasses = 0), frame())

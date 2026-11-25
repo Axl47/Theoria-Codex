@@ -31,6 +31,13 @@ enum class LibrarySort(val natural: SortDirection) {
         TITLE -> "Title"
     }
 
+    fun shortLabel(words: EntryWords): String = when (this) {
+        LAST_UPDATED -> "Updated"
+        RECENTLY_READ -> words.done.capitalized()
+        RECENTLY_ADDED -> "Added"
+        UNREAD, TITLE -> label(words)
+    }
+
     fun choice(): SortChoice<LibrarySort> = SortChoice(this, natural)
 }
 
