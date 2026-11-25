@@ -100,7 +100,7 @@ class CheckFailuresTest {
         val stuck = failure("/a")
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1), FakeSeriesSource("custom_mihon_3", "Paper Lantern", "en", count = 1))
         val content = SeriesTabState(sources = sources, libraryLoaded = true).content(listOf(FollowedSeries(stuck.series, unreadCount = 0)))
-        val tools = CheckFailureTools(switchSource = { id -> SwitchSourceViewModel(id, { sources }, store = {}) { _, _ -> false } })
+        val tools = CheckFailureTools(switchSource = { id -> SwitchSourceViewModel(id, { sources }, store = {}, choices = MemorySwitchSourceSkips()) { _, _ -> false } })
         compose.setContent {
             MaterialTheme {
                 FollowingBody(
