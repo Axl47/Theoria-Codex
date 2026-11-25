@@ -24,7 +24,7 @@ class SeriesTabStaleAnswerTest {
     fun aSlowFirstPageOvertakenByANewerQueryNeverShows() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering()
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         val slowSearch = source.hold("one")
         val slowDedicated = source.hold("three")
@@ -57,7 +57,7 @@ class SeriesTabStaleAnswerTest {
         val dropped = Answering("custom_mihon_8").apply { offered = { filters.await() } }
         var on = listOf(kept, dropped)
         val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(NothingStored, { on }, changed) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { on }, changed) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.openGenreSearch(dropped.key, "Fantasy")
         advanceUntilIdle()
@@ -76,7 +76,7 @@ class SeriesTabStaleAnswerTest {
     fun aPageStillLoadingWhenTheListingIsRefreshedNeverLands() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering(pages = 2)
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         val more = CompletableDeferred<Unit>()
         source.laterPagesWait = more
@@ -101,7 +101,7 @@ class SeriesTabStaleAnswerTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering()
         val slow = source.hold("popular")
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(SeriesListing.Loading, viewModel.state.value.browse?.listing)
 
@@ -123,7 +123,7 @@ class SeriesTabStaleAnswerTest {
         val first = Answering()
         var on = listOf(first)
         val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(NothingStored, { on }, changed) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { on }, changed) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(listOf("popular"), browsed(viewModel))
 

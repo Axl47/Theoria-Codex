@@ -119,8 +119,8 @@ private suspend fun SiteFamily.verifyWithAdapter(
     } catch (error: SourceAdapterException) {
         when (error.reason) {
             SourceFailureReason.AUTH_REQUIRED, SourceFailureReason.AUTH_EXPIRED -> FamilyProbe.NeedsCredentials
-            SourceFailureReason.NETWORK -> FamilyProbe.Failed((error.cause as? IOException)?.let(::probeFailureOf) ?: ProbeFailure.HTTP_ERROR)
-            SourceFailureReason.RATE_LIMITED -> FamilyProbe.Failed(ProbeFailure.HTTP_ERROR)
+            SourceFailureReason.NETWORK, SourceFailureReason.TIMED_OUT -> FamilyProbe.Failed((error.cause as? IOException)?.let(::probeFailureOf) ?: ProbeFailure.HTTP_ERROR)
+            SourceFailureReason.RATE_LIMITED, SourceFailureReason.BLOCKED -> FamilyProbe.Failed(ProbeFailure.HTTP_ERROR)
             SourceFailureReason.PARSE, SourceFailureReason.UNKNOWN -> FamilyProbe.NoMatch
         }
     }

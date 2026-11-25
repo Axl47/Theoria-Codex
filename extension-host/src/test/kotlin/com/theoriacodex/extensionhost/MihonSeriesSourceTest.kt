@@ -266,7 +266,7 @@ class MihonSeriesSourceTest {
     @Test
     fun `failures map to the reasons built-in sources report (ADR 0060)`() = runTest {
         assertEquals(SourceFailureReason.RATE_LIMITED, failureOf(HttpException(429)))
-        assertEquals(SourceFailureReason.NETWORK, failureOf(HttpException(403)))
+        assertEquals(SourceFailureReason.BLOCKED, failureOf(HttpException(403)))
         assertEquals(SourceFailureReason.NETWORK, failureOf(HttpException(500)))
         assertEquals(SourceFailureReason.NETWORK, failureOf(IOException("offline")))
         assertEquals(SourceFailureReason.UNKNOWN, failureOf(NoSuchMethodError("missing")))

@@ -4,7 +4,11 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import eu.kanade.tachiyomi.network.HttpException
+import com.theoriacodex.sources.http.HostOutageKind
+import com.theoriacodex.sources.http.HostUnavailableException
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -52,6 +56,22 @@ class ExtensionCallsTest {
             assertEquals(thrown.javaClass, assertFailsWith<SourceAdapterException> { calls.calling { throw thrown } }.cause?.javaClass)
             assertEquals(thrown.javaClass, assertFailsWith<IOException> { failingAsIo { throw thrown } }.cause?.javaClass)
         }
+    }
+
+    @Test
+    fun `a failure says whether the site was unreachable, slow, refusing or limiting (ADR 0220)`() {
+        val reasons = listOf(
+            HttpException(429) to SourceFailureReason.RATE_LIMITED,
+            HttpException(403) to SourceFailureReason.BLOCKED,
+            HostUnavailableException("site.test", HostOutageKind.CHALLENGE) to SourceFailureReason.BLOCKED,
+            HttpException(500) to SourceFailureReason.NETWORK,
+            SocketTimeoutException("slow") to SourceFailureReason.TIMED_OUT,
+            InterruptedIOException("timeout") to SourceFailureReason.TIMED_OUT,
+            IOException("offline") to SourceFailureReason.NETWORK,
+            IllegalStateException("bad html") to SourceFailureReason.PARSE,
+        )
+
+        assertEquals(reasons.map { it.second }, reasons.map { calls.failure(it.first).reason })
     }
 
     @Test
