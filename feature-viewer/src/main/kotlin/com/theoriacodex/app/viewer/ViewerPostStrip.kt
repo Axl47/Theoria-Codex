@@ -185,6 +185,8 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
     private var selectedWidth by mutableFloatStateOf(selectedWidth)
     private var fromWidths by mutableStateOf(emptyMap<Int, Float>())
     var progress by mutableFloatStateOf(1f)
+    var following = false
+    var centring: Triple<Int, Float, Float>? = null
 
     fun width(index: Int, cell: Float): Float = lerp(fromWidths[index] ?: cell, if (index == selected) selectedWidth else cell, progress)
 
@@ -200,19 +202,20 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
 
 @Composable
 private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float, center: Float, lastIndex: Int) {
-    var following by remember(list) { mutableStateOf(false) }
-    val settledOffset by rememberUpdatedState(((width - cell) / 2 - center).roundToInt())
-    val selected by rememberUpdatedState(index)
     LaunchedEffect(list) {
-        list.interactionSource.interactions.collect { if (it is DragInteraction.Start) following = false }
+        list.interactionSource.interactions.collect { if (it is DragInteraction.Start) motion.following = false }
     }
-    LaunchedEffect(list, lastIndex) {
-        if (following && motion.progress == 1f && !list.isScrollInProgress) list.animateScrollToItem(selected, settledOffset)
-    }
-    LaunchedEffect(list, index, width, center) {
-        following = true
+    LaunchedEffect(list, index, width, center, lastIndex) {
+        val target = Triple(index, width, center)
+        val appended = motion.centring == target
+        motion.centring = target
+        if (!appended) motion.following = true
         if (motion.isAt(index, width) && motion.progress == 1f) {
-            list.scrollToItem(index, settledOffset)
+            val offset = ((width - cell) / 2 - center).roundToInt()
+            when {
+                !appended -> list.scrollToItem(index, offset)
+                motion.following && !list.isScrollInProgress -> list.animateScrollToItem(index, offset)
+            }
             return@LaunchedEffect
         }
         val startingError = list.distanceFromCenter(index, cell + center * 2)
