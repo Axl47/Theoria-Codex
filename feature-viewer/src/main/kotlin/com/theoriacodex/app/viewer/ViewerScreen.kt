@@ -164,6 +164,7 @@ private fun ViewerLoadedScreen(
         loadingMoreFromSource, loadMoreFromStrip, onAction, host.onVisiblePostChanged, config,
     )
     SideEffect { screen.activeTracks.choice = uiState.controls.episode }
+    SideEffect { screen.dwellStartedAtMs = uiState.controls.dwell.startedAtMs }
     val viewerAccent = rememberViewerAccent(selection.post, enabled = !opening && !returning)
     val timelineInset = viewerTimelineInset(chromeVisible, frame.watching)
     val bottomRowHeight = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
@@ -176,7 +177,10 @@ private fun ViewerLoadedScreen(
         LocalViewerActiveTracks provides screen.activeTracks.takeIf { frame.watching },
         LocalViewerPlayingVideos provides screen.playingVideos,
     ) {
-        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { screen.touchSerial += 1 }) {
+        ViewerBackdrop(returnProgress, dismissDrag, viewerKeepsScreenOn(frame, screen), onTouch = { down ->
+            screen.touching = down
+            screen.touchSerial += 1
+        }) {
             ViewerContentSurface(
                 frame, postPagerState, viewerTransform, screen, controls, swipe, dismissDrag, levelControls,
                 readReturnProgress, flingVelocity, quality, qualityHeight, videoPositions, host, config, scope,
@@ -263,7 +267,7 @@ private fun ViewerBackdrop(
     returnProgress: State<Float>,
     dismissDrag: ViewerDismissDrag,
     keepScreenOn: Boolean,
-    onTouch: () -> Unit,
+    onTouch: (Boolean) -> Unit,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
@@ -273,11 +277,11 @@ private fun ViewerBackdrop(
             .pointerInput(onTouch) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    onTouch()
+                    onTouch(true)
                     do {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                     } while (event.changes.any { it.pressed })
-                    onTouch()
+                    onTouch(false)
                 }
             }
             .drawBehind {

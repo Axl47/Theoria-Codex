@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.theoriacodex.app.viewer.state.ViewerDwell
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerMediaState
@@ -33,6 +34,8 @@ internal class ViewerScreenState {
     val pendingMediaJumpByPost = mutableStateMapOf<PostId, Int>()
     var interactionSerial by mutableIntStateOf(0)
     var touchSerial by mutableIntStateOf(0)
+    var touching by mutableStateOf(false)
+    var dwellStartedAtMs by mutableStateOf<Long?>(null)
     val playingVideos = ViewerPlayingVideos()
     var timelineInteractionActive by mutableStateOf(false)
     var chromeShownForScrub = false
@@ -209,14 +212,16 @@ internal fun rememberViewerFrame(
     touchExplorationEnabled: Boolean,
     isLandscape: Boolean,
 ): ViewerFrame {
-    val requested = uiState.ignoringChromeVisibility()
+    val requested = uiState.ignoringTransientControls()
     return remember(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape) {
         ViewerFrame(requested, navigation, posts, selection, chromeVisible, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     }
 }
 
-private fun ViewerUiState.ignoringChromeVisibility(): ViewerUiState =
-    if (controls.chromeVisible) this else copy(controls = controls.copy(chromeVisible = true))
+private fun ViewerUiState.ignoringTransientControls(): ViewerUiState {
+    val dwell = ViewerDwell(held = controls.dwell.held)
+    return if (controls.chromeVisible && controls.dwell == dwell) this else copy(controls = controls.copy(chromeVisible = true, dwell = dwell))
+}
 
 internal class ViewerFrame(
     val uiState: ViewerUiState,

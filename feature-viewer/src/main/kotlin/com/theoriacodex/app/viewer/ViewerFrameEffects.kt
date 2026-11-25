@@ -37,7 +37,7 @@ import androidx.navigationevent.NavigationEventHandler
 import androidx.navigationevent.NavigationEventInfo
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
-import com.theoriacodex.app.viewer.state.ViewerPlaybackMode
+import com.theoriacodex.app.viewer.state.dwellApplies
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -168,12 +168,14 @@ internal fun viewerActivity(frame: ViewerFrame, screen: ViewerScreenState): () -
 
 @Composable
 private fun ViewerDwellEffect(frame: ViewerFrame, screen: ViewerScreenState, onAction: (ViewerAction) -> Unit) {
-    val controls = frame.uiState.controls
-    val autoAdvancing = controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow
+    val dwellApplies = frame.uiState.dwellApplies
     val activity by rememberUpdatedState(viewerActivity(frame, screen))
     val dispatch by rememberUpdatedState(onAction)
-    LaunchedEffect(autoAdvancing) {
-        if (autoAdvancing) snapshotFlow { activity() }.collect { dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis())) }
+    LaunchedEffect(dwellApplies) {
+        if (!dwellApplies) return@LaunchedEffect
+        snapshotFlow { activity() to screen.touching }.collect { (_, touching) ->
+            dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = touching))
+        }
     }
 }
 

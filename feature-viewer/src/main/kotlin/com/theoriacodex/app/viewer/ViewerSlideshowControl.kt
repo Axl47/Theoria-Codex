@@ -25,7 +25,7 @@ import com.theoriacodex.app.viewer.state.slideshowImageHold
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boolean, onAction: (ViewerAction) -> Unit) {
+internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, dwellStartedAtMs: Long?, suppressed: Boolean, onAction: (ViewerAction) -> Unit) {
     val state = frame.uiState
     val running = state.controls.slideshow
     val resumed = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
@@ -33,7 +33,7 @@ internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boo
     val currentState by rememberUpdatedState(state)
     val currentOnAction by rememberUpdatedState(onAction)
     val elapsed = remember { Animatable(0f) }
-    LaunchedEffect(hold) {
+    LaunchedEffect(hold, dwellStartedAtMs) {
         elapsed.snapTo(0f)
         if (hold == null) return@LaunchedEffect
         launch { elapsed.animateTo(1f, tween(VIEWER_SLIDESHOW_IMAGE_MS.toInt(), easing = LinearEasing)) }

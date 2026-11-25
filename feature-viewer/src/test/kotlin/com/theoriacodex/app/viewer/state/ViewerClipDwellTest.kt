@@ -13,7 +13,7 @@ class ViewerClipDwellTest {
     private val session = ViewerSessionIdentity(value = "dwell", queryHash = "query")
 
     @Test fun `a one second clip replays until five seconds and moves on at a loop's end (ADR 0217)`() {
-        var state = playNext().act(ViewerAction.RestartDwell(0L))
+        var state = playNext().act(ViewerAction.RestartDwell(0L, interacting = false))
         (1..4).forEach { second ->
             val restarts = state.controls.playback.restartRequest
             state = state.complete(second * 1_000L)
@@ -25,25 +25,35 @@ class ViewerClipDwellTest {
     }
 
     @Test fun `a six second clip moves on when it first ends (ADR 0217)`() {
-        val state = playNext().act(ViewerAction.RestartDwell(0L)).complete(6_000L)
+        val state = playNext().act(ViewerAction.RestartDwell(0L, interacting = false)).complete(6_000L)
         assertEquals(1, state.currentPageIndex)
     }
 
     @Test fun `touching restarts the dwell (ADR 0217)`() {
-        var state = playNext().act(ViewerAction.RestartDwell(0L)).complete(1_000L).complete(2_000L).complete(3_000L)
-        state = state.act(ViewerAction.RestartDwell(3_500L))
+        var state = playNext().act(ViewerAction.RestartDwell(0L, interacting = false)).complete(1_000L).complete(2_000L).complete(3_000L)
+        state = state.act(ViewerAction.RestartDwell(3_500L, interacting = false))
         (4..8).forEach { state = state.complete(it * 1_000L) }
         assertEquals(0, state.currentPageIndex)
         assertEquals(1, state.complete(9_000L).currentPageIndex)
     }
 
+    @Test fun `a clip never moves on while a finger is down, and letting go restarts the dwell (ADR 0217)`() {
+        var state = playNext().act(ViewerAction.RestartDwell(0L, interacting = true))
+        (1..20).forEach { state = state.complete(it * 1_000L) }
+        assertEquals(0, state.currentPageIndex)
+        state = state.act(ViewerAction.RestartDwell(20_500L, interacting = false))
+        (21..25).forEach { state = state.complete(it * 1_000L) }
+        assertEquals(0, state.currentPageIndex)
+        assertEquals(1, state.complete(26_000L).currentPageIndex)
+    }
+
     @Test fun `a post reached by swiping back never moves on, and a forward swipe re-arms (ADR 0217)`() {
-        var state = playNext().act(ViewerAction.SelectPage(1)).act(ViewerAction.SelectPage(0)).act(ViewerAction.RestartDwell(0L))
+        var state = playNext().act(ViewerAction.SelectPage(1)).act(ViewerAction.SelectPage(0)).act(ViewerAction.RestartDwell(0L, interacting = false))
         listOf(5_000L, 60_000L, 3_600_000L).forEach { state = state.complete(it) }
         assertEquals(0, state.currentPageIndex)
         assertTrue(state.autoAdvanceHeld)
 
-        state = state.act(ViewerAction.SelectPage(1)).act(ViewerAction.RestartDwell(4_000_000L))
+        state = state.act(ViewerAction.SelectPage(1)).act(ViewerAction.RestartDwell(4_000_000L, interacting = false))
         assertFalse(state.autoAdvanceHeld)
         assertEquals(2, state.complete(4_005_000L).currentPageIndex)
     }

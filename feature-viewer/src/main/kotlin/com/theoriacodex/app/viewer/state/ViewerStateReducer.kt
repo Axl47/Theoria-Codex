@@ -112,7 +112,8 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.SelectPage -> state.movedByUser(state.selectPage(action.pageIndex))
         is ViewerAction.SelectMedia -> state.movedByUser(state.selectMedia(action.mediaIndex))
         is ViewerAction.Navigate -> state.movedByUser(state.navigate(action.pageIndex, action.mediaIndex))
-        is ViewerAction.RestartDwell -> state.withControls(state.controls.copy(dwell = state.controls.dwell.copy(startedAtMs = action.atMs)))
+        is ViewerAction.RestartDwell ->
+            state.withControls(state.controls.copy(dwell = state.controls.dwell.copy(startedAtMs = action.atMs, interacting = action.interacting)))
         ViewerAction.ToggleChrome -> ViewerReduction(state.toggleChrome())
         is ViewerAction.SetChromeVisible ->
             ViewerReduction(if (action.visible == state.controls.chromeVisible) state else state.toggleChrome())
@@ -418,7 +419,7 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
         loopsPlayback) return ViewerReduction(this)
     if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) {
-        if (controls.dwell.held || !controls.dwell.elapsed(action.atMs)) return ViewerReduction(restartPlayback())
+        if (dwellApplies && (controls.dwell.held || !controls.dwell.elapsed(action.atMs))) return ViewerReduction(restartPlayback())
         advanceInQueue()?.let { return it }
     }
     return ViewerReduction(copy(controls = controls.copy(
@@ -428,7 +429,7 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
 }
 
 private fun ViewerUiState.movedByUser(moved: ViewerReduction): ViewerReduction {
-    val order = compareValuesBy(queuePosition(), moved.state.queuePosition(), { it.first }, { it.second })
+    val order = compareValuesBy(queuePosition(this), moved.state.queuePosition(this), { it.first }, { it.second })
     val held = when {
         order > 0 -> true
         order < 0 -> false
@@ -438,8 +439,11 @@ private fun ViewerUiState.movedByUser(moved: ViewerReduction): ViewerReduction {
     return moved.copy(state = state.copy(controls = state.controls.copy(dwell = state.controls.dwell.copy(held = held))))
 }
 
-private fun ViewerUiState.queuePosition(): Pair<Int, Int> =
-    com.theoriacodex.app.viewer.viewerPostNavigation(this).currentIndex to (currentPage?.selectedMediaIndex ?: 0)
+private fun ViewerUiState.queuePosition(order: ViewerUiState): Pair<Int, Int> {
+    val queue = com.theoriacodex.app.viewer.viewerPostNavigation(order).sourceIndices
+    val index = queue.indexOf(currentPageIndex).takeIf { it >= 0 } ?: com.theoriacodex.app.viewer.viewerPostNavigation(this).currentIndex
+    return index to (currentPage?.selectedMediaIndex ?: 0)
+}
 
 private fun ViewerUiState.advanceInQueue(): ViewerReduction? {
     val page = currentPage ?: return null
@@ -458,7 +462,9 @@ private fun ViewerUiState.setSlideshow(running: Boolean): ViewerUiState {
 }
 
 private fun ViewerUiState.advanceSlideshow(action: ViewerAction.SlideshowAdvance): ViewerReduction {
-    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key) return ViewerReduction(this)
+    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key || controls.dwell.held || controls.dwell.interacting) {
+        return ViewerReduction(this)
+    }
     return advanceInQueue() ?: ViewerReduction(setSlideshow(false))
 }
 
