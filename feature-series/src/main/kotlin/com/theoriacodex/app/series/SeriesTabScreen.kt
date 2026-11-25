@@ -1,5 +1,8 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
+import com.theoriacodex.app.ui.components.ScrollChromeBox
+import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
@@ -185,8 +188,13 @@ private fun SeriesTabHomeContent(
             )
         },
     ) {
-        SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
-        SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, onShowMissing)
+        ScrollChromeBox(Modifier.fillMaxSize()) {
+            ScrollChromeTopEffect(scrollable)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SeriesViewSwitch(content.view, besideCollapsedSearch = searchBarDismissed && !oldSearchBar, onChoose = viewModel::chooseView)
+                SeriesTabViewBody(state, content, grids, viewModel, onOpenSeries, onOpenExtensions, onShowMissing)
+            }
+        }
     }
 }
 
@@ -296,6 +304,7 @@ private fun SeriesViewSwitch(view: SeriesView, besideCollapsedSearch: Boolean, o
     val end by animateDpAsState(if (besideCollapsedSearch) COLLAPSED_SEARCH_CLEARANCE else 16.dp, label = "Series view switch end")
     SingleChoiceSegmentedButtonRow(
         Modifier
+            .hidesOnScroll()
             .fillMaxWidth()
             .heightIn(min = if (besideCollapsedSearch) SearchBarMinHeight else 0.dp)
             .padding(start = 16.dp, end = end)

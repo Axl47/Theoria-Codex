@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +51,7 @@ internal fun CodexGrid(
     val manual = presentation.librarySort == CodexLibrarySort.MANUAL
     SideEffect { reorder.bind(presented, enabled = manual) }
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
+    ScrollChromeTopEffect(gridState)
     val openActions = { key: String -> state.actionTarget = sorted.firstOrNull { it.codexId == key } }
     AdaptiveMediaGrid(
         modifier = Modifier.fillMaxSize()

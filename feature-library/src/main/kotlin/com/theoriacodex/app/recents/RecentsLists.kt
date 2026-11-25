@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recents
 
+import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
 import androidx.compose.foundation.layout.height
@@ -145,6 +146,7 @@ private fun WatchedGrid(
     }
     val gridState = rememberRetainedFeedGridState(gridKey)
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { gridState.animateScrollToItem(0) }
+    ScrollChromeTopEffect(gridState)
     DurationRouteEnvironmentEffect(gridState, cards.onEnvironmentChanged)
     val rows = remember(watchedPosts, now, related?.request) {
         recentsGridRows(watchedPosts, now).withRelatedShelf(related?.request, watchedPosts)
@@ -238,6 +240,7 @@ private fun SearchHistoryList(
         val days = remember(shown, now) { shown.groupBy { recentsDay(it.searchedAtEpochMs) } }
         val list = rememberLazyListState()
         ScrollToTopOnTabReselect(TopLevelDestination.Library) { list.animateScrollToItem(0) }
+        ScrollChromeTopEffect(list)
         LazyColumn(Modifier.fillMaxSize(), state = list) {
             days.forEach { (day, entries) ->
                 item(key = "day:$day") { RecentsDayHeading(recentsDayLabel(entries.first().searchedAtEpochMs, now)) }
@@ -280,6 +283,7 @@ private fun ActivityList(
     val timeline = remember(activity, now, related?.request) { recentsTimeline(activity, now).withRelatedShelf(related?.request) }
     val list = rememberLazyListState()
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { list.animateScrollToItem(0) }
+    ScrollChromeTopEffect(list)
     val shelfSeed = related?.request?.seed?.id
     ViewerReturnColumn(list, timeline, { request -> timeline.indexOfFirst { it.holdsReturn(request, shelfSeed) } }) {
     LazyColumn(modifier = Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {

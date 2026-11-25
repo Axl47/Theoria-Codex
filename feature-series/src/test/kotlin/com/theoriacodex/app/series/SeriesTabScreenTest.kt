@@ -1,5 +1,7 @@
 package com.theoriacodex.app.series
 
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.assertIsNotDisplayed
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -108,6 +110,26 @@ class SeriesTabScreenTest {
         val strip = compose.onNodeWithTag("collapsed-search-strip").fetchSemanticsNode().boundsInRoot
         val filter = compose.onNodeWithContentDescription(FILTER).fetchSemanticsNode().boundsInRoot
         assertTrue("$filter overlaps $strip", filter.right <= strip.left)
+    }
+
+    @Test
+    fun scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218() {
+        val followed = (1..40).map { FollowedSeries(Series(SeriesId(SeriesKind.MANGA.extensionSourceKey(1), "/$it"), "Series $it"), unreadCount = 0) }
+        val viewModel = SeriesTabViewModel(StubSeriesRepository(followed), { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }) { NOTHING_CHECKED }
+        compose.setContent { MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, missingExtensions = NoMissingActions) } }
+        compose.waitForIdle()
+        val following = compose.onNodeWithTag(seriesViewTag(SeriesView.FOLLOWING))
+        following.assertIsDisplayed()
+
+        compose.onRoot().performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        following.assertIsNotDisplayed()
+        compose.onNodeWithTag("collapsed-search-strip").assertIsDisplayed()
+        compose.onNodeWithContentDescription(EXTENSIONS_TITLE).assertIsDisplayed()
+
+        compose.onRoot().performTouchInput { swipeDown(startY = centerY, endY = centerY + 150f) }
+        compose.waitForIdle()
+        following.assertIsDisplayed()
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,6 +114,7 @@ private fun ForYouGrid(
     val currentCallbacks by rememberUpdatedState(callbacks)
     val gridState = rememberRetainedFeedGridState(retainKey)
     ScrollToTopOnTabReselect(TopLevelDestination.ForYou) { gridState.animateScrollToItem(0) }
+    ScrollChromeTopEffect(gridState)
     DurationRouteEnvironmentEffect(gridState, config.durations.onEnvironmentChanged)
     val view = rememberFeedView(retainKey, feed.posts, NO_FILTERS, config.durations, related.state)
     val demand = rememberFeedPageDemand(

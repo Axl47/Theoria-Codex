@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
 import com.theoriacodex.app.codex.savedCodexChildIcon
 import com.theoriacodex.app.codex.savedCodexCountSuffix
 import androidx.compose.foundation.layout.Arrangement
@@ -97,6 +98,7 @@ internal fun SavedCodexRoute(
     val children = remember(likesId, news) { savedCodexChildren(likesId).newFirst(news) }
     val shelfIds = remember(children) { children.map { ViewerReturnShelfId.Saved(it.codexId) } }
     ScrollToTopOnTabReselect(TopLevelDestination.Library) { scroll.animateScrollToItem(0) }
+    ScrollChromeTopEffect(scroll)
     Column(Modifier.fillMaxSize()) {
         header()
         ViewerReturnColumn(shelfIds, scroll) {
