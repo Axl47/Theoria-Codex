@@ -9,7 +9,7 @@ Several modules share request coalescing, failure logging and main-thread checks
 ## Decision
 
 - `runCatchingPreservingCancellation` is used at boundaries that may run suspend work so cancellation stays control flow; parsing and value conversion may use plain `runCatching`.
-- Where a timeout or a dependency's failure should become a message or a fallback, the call goes through `runCatchingUnlessCallerCancelled` rather than catching `TimeoutCancellationException` by hand: cancellation is rethrown only when the caller itself was cancelled, so a dependency that throws `CancellationException` while the caller is still running fails the request instead of leaving its screen loading, and `Error`s propagate.
+- Where a timeout or a dependency's failure should become a message or a fallback, the call goes through `runCatchingUnlessCallerCancelled` rather than catching `TimeoutCancellationException` by hand: cancellation is rethrown only when the caller itself was cancelled, so a dependency that throws `CancellationException` while the caller is still running fails the request instead of leaving its screen loading, and `Error`s propagate. Provider autocomplete is the exception: an adapter's `CancellationException` means the scope changed under it, and the search coordinator's callers rely on it arriving as cancellation, so autocomplete keeps catching only its own timeout.
 - `SharedFlights` shares only overlapping requests per key; a request started after another finished runs again, so callers needing a fresh answer do not use it. The request runs on the first caller's dispatcher but under its own job, and is cancelled only when every waiter has left.
 - `Diagnostics.report` never throws, so a broken log cannot become a second failure. Messages name what failed, never a query, title or other browsing content.
 - `DiagnosticRedaction` strips identifying text before storage or sharing. Addresses are redacted first (paths and queries hold post ids, tags and keys) but the host is kept to locate a failure. Extension source ids are as long as tokens but are exempt from opaque-value redaction because they name which source failed.
@@ -23,7 +23,6 @@ Diagnostics stay safe to share. Redaction patterns must be revisited when new id
 
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/coroutines/CoroutineResults.kt`: `runCatchingPreservingCancellation`, `runCatchingUnlessCallerCancelled`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/related/RelatedPostsRouteController.kt`: `RelatedPostsRouteController`
-- `feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchSuggestionCoordinator.kt`: `fetchProviderAutocomplete`
 - `feature-search/src/main/kotlin/com/theoriacodex/app/search/SearchViewModel.kt`: `launchRequest`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerScrubPreview.kt`: `ViewerScrubPreviews.follow`, `ViewerVideoScrubPreview`
 - `core-domain/src/main/kotlin/com/theoriacodex/domain/coroutines/SharedFlights.kt`: `SharedFlights`
