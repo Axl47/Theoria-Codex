@@ -148,15 +148,17 @@ internal fun OffScreenFailuresNotice(checkRun: Int, failed: FollowedCheck?, grid
         val shown = latest ?: return@LaunchedEffect
         if (atTopBeforeCard) return@LaunchedEffect grid.scrollToItem(0)
         withFrameNanos {}
-        if (snackbar == null || grid.showsCheckFailed()) return@LaunchedEffect
-        if (snackbar.offerShow(shown.failed) { latest == null || grid.showsCheckFailed() } && latest != null) grid.animateScrollToItem(0)
+        if (snackbar != null && !grid.showsCheckFailed()) grid.offerFailures(snackbar, shown.failed) { latest }
     }
 }
 
-private suspend fun SnackbarHostState.offerShow(count: Int, gone: () -> Boolean): Boolean = coroutineScope {
-    val notice = async { showSnackbar(offScreenFailuresLine(count), actionLabel = "Show", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed }
-    val ended = async { snapshotFlow(gone).first { it }.not() }
-    select { notice.onAwait { it }; ended.onAwait { it } }.also { coroutineContext.cancelChildren() }
+private suspend fun LazyGridState.offerFailures(snackbar: SnackbarHostState, count: Int, latest: () -> FollowedCheck?) {
+    val show = coroutineScope {
+        val notice = async { snackbar.showSnackbar(offScreenFailuresLine(count), actionLabel = "Show", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed }
+        val ended = async { snapshotFlow { latest() == null || showsCheckFailed() }.first { it }.not() }
+        select { notice.onAwait { it }; ended.onAwait { it } }.also { coroutineContext.cancelChildren() }
+    }
+    if (show && latest() != null) animateScrollToItem(0)
 }
 
 private fun LazyGridState.showsCheckFailed() = layoutInfo.visibleItemsInfo.any { it.key == CHECK_FAILED_KEY }
