@@ -152,7 +152,8 @@ class SeriesTabRefreshTest {
         val followed = Following(flowOf(listOf(manga, anime).map { FollowedSeries(it.series, unreadCount = 0) }))
         val viewModel = SeriesTabViewModel(followed, { emptyList() }) { only, _ ->
             asked += only
-            FollowedCheck(emptyList(), checked = 2, failures = listOf(manga, anime).filter { only == null || it.series.id in only })
+            val scoped = listOf(manga, anime).filter { only == null || it.series.id in only }
+            FollowedCheck(emptyList(), checked = scoped.size, failures = scoped)
         }
         backgroundScope.launch { viewModel.content.collect {} }
         advanceUntilIdle()
@@ -165,7 +166,7 @@ class SeriesTabRefreshTest {
         advanceUntilIdle()
 
         assertEquals(listOf(null, setOf(anime.series.id)), asked)
-        assertEquals(listOf(anime), viewModel.state.value.failedCheck?.failures)
+        assertEquals(FollowedCheck(emptyList(), checked = 1, failures = listOf(anime)), viewModel.state.value.failedCheck)
     }
 
     @Test
