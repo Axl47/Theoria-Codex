@@ -141,7 +141,7 @@ private fun LiftStage(session: LiftSession, lift: LiftedPost, settling: LiftPhas
     }
     val quickState = rememberCollectTargetsState<LiftAction>()
     val saveState = rememberCollectTargetsState<LiftAction>()
-    SideEffect { session.targetAt = { saveState.hovered?.payload ?: quickState.hovered?.payload } }
+    SideEffect { session.targetAt = { saveState.armed?.payload ?: quickState.armed?.payload } }
     val appear = remember { Animatable(0f) }
     val land = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, TheoriaMotion.settleFraction) }
