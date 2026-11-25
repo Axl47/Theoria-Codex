@@ -18,10 +18,12 @@ fun viewerVisibleBottomEdge(frame: Size, viewport: Size, transform: ViewerConten
     val halfWidth = frame.width * transform.zoom / 2f
     val left = maxOf(transform.panX - halfWidth, -viewport.width / 2f)
     val right = minOf(transform.panX + halfWidth, viewport.width / 2f)
-    val bottom = minOf(transform.panY + frame.height * transform.zoom / 2f, viewport.height / 2f)
+    val halfHeight = frame.height * transform.zoom / 2f
+    val bottom = minOf(transform.panY + halfHeight, viewport.height / 2f)
+    val onPage = transform.panY - halfHeight < bottom && bottom > -viewport.height / 2f
     return ViewerVisibleEdge(
         translationX = (left + right) / 2f,
         translationY = bottom - frame.height / 2f,
-        scaleX = if (frame.width > 0f) ((right - left) / frame.width).coerceAtLeast(0f) else 1f,
+        scaleX = if (!onPage) 0f else if (frame.width > 0f) ((right - left) / frame.width).coerceAtLeast(0f) else 1f,
     )
 }

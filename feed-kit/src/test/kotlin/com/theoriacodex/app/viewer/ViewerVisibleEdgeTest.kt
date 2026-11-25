@@ -34,4 +34,10 @@ class ViewerVisibleEdgeTest {
         val portrait = Size(540f, 2160f)
         assertEquals(ViewerVisibleEdge(135f, 0f, 1.5f), viewerVisibleBottomEdge(portrait, viewport, zoomed(1.5f, panX = 135f, panY = -540f)))
     }
+
+    @Test
+    fun `content panned off the page hides the bar`() {
+        assertEquals(0f, viewerVisibleBottomEdge(frame, viewport, zoomed(4f, panY = 2400f)).scaleX)
+        assertEquals(0f, viewerVisibleBottomEdge(frame, viewport, zoomed(4f, panY = -2400f)).scaleX)
+    }
 }
