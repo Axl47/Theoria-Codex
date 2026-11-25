@@ -48,13 +48,15 @@ class AppJobTest {
     }
 
     @Test
-    fun `the Library picture pass waits for a charger and the frame pass also for an idle device (ADR 0094)`() = runTest {
+    fun `both Library picture passes wait for a charger, a battery that is not low and an unmetered network, and the frame pass also for an idle device (ADR 0094)`() = runTest {
         LibraryJob.PICTURES.schedule(context)
         LibraryJob.FRAMES.schedule(context)
 
         val pictures = scheduler.getPendingJob(AppJob.LIBRARY_PICTURES.id)!!
         val frames = scheduler.getPendingJob(AppJob.LIBRARY_FRAMES.id)!!
-        for (job in listOf(pictures, frames)) assertEquals(true to true, job.isRequireCharging to job.isRequireBatteryNotLow)
+        for (job in listOf(pictures, frames)) {
+            assertEquals(listOf(true, true, JobInfo.NETWORK_TYPE_UNMETERED), listOf(job.isRequireCharging, job.isRequireBatteryNotLow, job.networkType))
+        }
         assertEquals(false to true, pictures.isRequireDeviceIdle to frames.isRequireDeviceIdle)
     }
 

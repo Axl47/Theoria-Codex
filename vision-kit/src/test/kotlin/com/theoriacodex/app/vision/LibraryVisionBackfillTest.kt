@@ -542,7 +542,7 @@ class LibraryVisionBackfillTest {
     @Test
     fun `the session remembers only its most recent results (ADR 0097)`() = runBlocking {
         val tagger = PictureTagger(readyStore(), Library(emptyList()), Pictures(hasStill = { false }), scope)
-        val posts = List(2_049) { post("p$it") }
+        val posts = List(SessionAnalyses.LIMIT + 1) { post("p$it") }
 
         posts.forEach { tagger.analyze(it) }
 
