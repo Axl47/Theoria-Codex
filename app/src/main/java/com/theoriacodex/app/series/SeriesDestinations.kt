@@ -94,6 +94,8 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         onOpenExtensions = shell::openExtensions,
         oldSearchBar = settings?.oldSearchBar == true,
+        snackbar = shell.snackbarHostState,
+        switchSource = shell.switchSources(series),
     )
 }
 
@@ -105,9 +107,7 @@ internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val missing = remember(series) {
         MissingExtensionsActions(
             missing = { MissingSeriesViewModel(series.repository, series.sources, series.extensions.revision) },
-            switchSource = { id ->
-                shell.switchSourceViewModel(series, id) { source, to -> series.switchSource(id, source, to) }
-            },
+            switchSource = shell.switchSources(series),
             onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         )
     }
@@ -116,6 +116,9 @@ internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry
 
 private fun TheoriaShell.switchSourceViewModel(series: SeriesDependencies, id: SeriesId, switch: suspend (SeriesSource, Series) -> Boolean) =
     SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }, choices = data.uiRestoreRepository, switch = switch)
+
+private fun TheoriaShell.switchSources(series: SeriesDependencies): (SeriesId) -> SwitchSourceViewModel =
+    { id -> switchSourceViewModel(series, id) { source, to -> series.switchSource(id, source, to) } }
 
 internal fun TheoriaShell.openExtensions(page: ExtensionsSubpage? = null) {
     navController.navigate(AppRoute.extensions(page)) { launchSingleTop = true }

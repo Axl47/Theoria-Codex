@@ -54,6 +54,8 @@ data class SwitchSourceSheet(
 
 data class SwitchSourceState(val others: List<SeriesSource> = emptyList(), val sheet: SwitchSourceSheet? = null)
 
+internal fun List<SeriesSource>.switchTargets(from: SeriesId): List<SeriesSource> = filter { it.key != from.source && it.kind == from.source.seriesKind }
+
 class SwitchSourceViewModel(
     private val from: SeriesId,
     private val loadSources: suspend () -> List<SeriesSource>,
@@ -85,7 +87,7 @@ class SwitchSourceViewModel(
             sourcesChanged.collectLatest {
                 sources = loadSources()
                 storedSkips = choices.observeSwitchSourceSkipped().first()
-                mutableState.update { state -> state.copy(others = sources.filter { it.key != from.source && it.kind == from.source.seriesKind }) }
+                mutableState.update { state -> state.copy(others = sources.switchTargets(from)) }
             }
         }
     }

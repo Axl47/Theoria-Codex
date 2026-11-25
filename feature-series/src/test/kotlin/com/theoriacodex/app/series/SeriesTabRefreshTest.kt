@@ -108,12 +108,14 @@ class SeriesTabRefreshTest {
         }
         viewModel.refresh()
         advanceUntilIdle()
+        assertEquals(1, viewModel.state.value.checkRun)
 
         viewModel.retry(setOf(limited.series.id))
         advanceUntilIdle()
 
         assertEquals(listOf(null, setOf(limited.series.id)), asked)
         assertEquals(listOf(reachable), viewModel.state.value.failedCheck?.failures)
+        assertEquals(1, viewModel.state.value.checkRun)
     }
 
     @Test
