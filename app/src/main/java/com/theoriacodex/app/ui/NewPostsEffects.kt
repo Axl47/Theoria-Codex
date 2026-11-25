@@ -46,7 +46,7 @@ internal fun NewPostsCheckEffect(shell: TheoriaShell) {
         withFrameNanos {}
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             val now = System.currentTimeMillis()
-            launch { searches.checkIfStale(shell.data.savedSearches.observeSavedSearches().first(), now) }
+            launch { searches.checkIfStale(now) }
             try {
                 follows.refreshIfStale(now)
                 awaitCancellation()

@@ -73,6 +73,8 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -100,14 +102,13 @@ fun SearchScreen(
     savedSearches: List<SavedSearchEntry> = emptyList(),
     onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
     onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
-    editingSavedSearch: SavedSearchEntry? = null,
     onUpdateSavedSearch: (SavedSearchEntry, RecentSearchEntry) -> Unit = { _, _ -> },
     onManageSavedSearches: () -> Unit = {},
     omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
     sourceMix: SearchSourceMix? = null,
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
-    val editLoaded = rememberSavedSearchEditLoaded(state, editingSavedSearch)
+    SavedSearchEditEndEffect(state.editingSavedSearchId, { chrome.composerOpen }) { onAction(SearchAction.EndSavedSearchEdit) }
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
@@ -150,7 +151,7 @@ fun SearchScreen(
             onUpdateSavedSearch(saved, search)
             chrome.closeComposer(onAction)
         }
-        val saved = composerSavedSearches(state, savedSearches, editingSavedSearch, editLoaded, onSaveSearch, update, onManageSavedSearches) {
+        val saved = composerSavedSearches(state, savedSearches, onSaveSearch, update, onManageSavedSearches) {
             chrome.closeComposer(onAction)
             onOpenSavedSearch(it)
         }
@@ -328,6 +329,7 @@ private fun SearchComposerDialog(
             onRename = onRenameFavoriteTag,
         ),
         omnibox = omnibox,
+        onOpenFilters = { chrome.showFilterSheet = true },
     )
 }
 
@@ -524,8 +526,6 @@ private fun activeSearchFilterCount(state: SearchUiState, feed: SearchFeed, fabR
 internal fun composerSavedSearches(
     state: SearchUiState,
     entries: List<SavedSearchEntry>,
-    editing: SavedSearchEntry?,
-    editLoaded: Boolean,
     onSave: (String, RecentSearchEntry) -> Unit,
     onUpdate: (SavedSearchEntry, RecentSearchEntry) -> Unit,
     onManage: () -> Unit,
@@ -533,13 +533,20 @@ internal fun composerSavedSearches(
 ): ComposerSavedSearches {
     val applied = appliedSearchEntry(state)
     val current = applied?.takeIf { it.query.includeTermGroups.isNotEmpty() }
+    val editing = state.editingSavedSearchId?.let { id -> entries.firstOrNull { it.id == id } }
+    val action = when {
+        editing != null -> savedSearchUpdate(state, entries, editing, applied, onUpdate)
+        current != null -> ComposerSavedSearchAction.Save(
+            suggestedName = recentSearchPresentation(current).title.take(MAX_SAVED_SEARCH_NAME_LENGTH),
+            onSave = { name -> onSave(name, current) },
+        )
+        else -> null
+    }
     return ComposerSavedSearches(
         entries = entries,
         currentQueryHash = current?.queryHash,
         onOpen = onOpen,
-        onSaveCurrent = current?.takeIf { editing == null }?.let { entry -> { name: String -> onSave(name, entry) } },
-        update = editing?.let { saved -> savedSearchUpdate(state, entries, saved, applied?.takeIf { editLoaded }, onUpdate) },
-        suggestedName = current?.let { recentSearchPresentation(it).title.take(MAX_SAVED_SEARCH_NAME_LENGTH) }.orEmpty(),
+        action = action,
         onManage = onManage,
     )
 }
@@ -562,12 +569,13 @@ private fun appliedSearchEntry(state: SearchUiState): RecentSearchEntry? {
 }
 
 @Composable
-private fun rememberSavedSearchEditLoaded(state: SearchUiState, editing: SavedSearchEntry?): Boolean {
-    var loaded by remember(editing?.id) { mutableStateOf(false) }
-    LaunchedEffect(editing?.id, state.query.applied, state.query.appliedSourceScope, state.query.appliedQueryHash) {
-        if (editing != null && appliedSearchEntry(state)?.replaysAs(editing.search) == true) loaded = true
+internal fun SavedSearchEditEndEffect(editingId: String?, composerOpen: () -> Boolean, onEnd: () -> Unit) {
+    val end by rememberUpdatedState(onEnd)
+    LaunchedEffect(editingId) {
+        if (editingId == null) return@LaunchedEffect
+        snapshotFlow(composerOpen).dropWhile { open -> !open }.first { open -> !open }
+        end()
     }
-    return loaded
 }
 
 private fun savedSearchUpdate(
@@ -576,12 +584,12 @@ private fun savedSearchUpdate(
     editing: SavedSearchEntry,
     applied: RecentSearchEntry?,
     onUpdate: (SavedSearchEntry, RecentSearchEntry) -> Unit,
-): ComposerSavedSearchUpdate {
+): ComposerSavedSearchAction.Update {
     val conflict = applied?.let { search -> entries.firstOrNull { it.id != editing.id && it.search.replaysAs(search) } }
     val ready = applied?.takeIf {
         conflict == null && !state.hasPendingChanges && !state.execution.liveSearchWaiting && !editing.search.replaysAs(it)
     }
-    return ComposerSavedSearchUpdate(editing.name, conflict?.name, ready?.let { search -> { onUpdate(editing, search) } })
+    return ComposerSavedSearchAction.Update(editing.name, conflict?.name, ready?.let { search -> { onUpdate(editing, search) } })
 }
 
 private fun savedTagSource(state: SearchUiState): SourceKey? =

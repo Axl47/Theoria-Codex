@@ -35,6 +35,14 @@ class SavedSearchEditJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("Update “Evening”").assertDoesNotExist()
         assertEquals(listOf("landscape"), io { container.data.savedSearches.observeSavedSearches().first().first().search.query.includeTags })
         editFromLibrary("Evening")
+        activate(compose.onNodeWithContentDescription("More search actions"))
+        activate(compose.onNodeWithText("Filter and sort"))
+        waitFor("the filter sheet opens over the composer") { compose.onAllNodesWithText("Sort").fetchSemanticsNodes().isNotEmpty() }
+        pressSystemBack()
+        waitFor("the filter sheet closes and the edit goes on") {
+            compose.onAllNodesWithText("Sort").fetchSemanticsNodes().isEmpty() &&
+                compose.onAllNodesWithText("Update “Evening”").fetchSemanticsNodes().isNotEmpty()
+        }
         addSearchTag("blue")
         waitFor("the edited search runs") {
             container.registry.requests.any { it.source == source && it.query.includeTags == listOf("landscape", "blue") }
@@ -46,7 +54,7 @@ class SavedSearchEditJourneyTest : AppJourneyFixture() {
         val saved = io { container.data.savedSearches.observeSavedSearches().first() }
         assertEquals(listOf("Evening", "Morning"), saved.map { it.name })
         assertEquals(evening.id, saved.first().id)
-        closeComposer()
+        waitFor("Update closes the composer") { compose.onAllNodesWithTag("Search composer").fetchSemanticsNodes().isEmpty() }
         container.registry.requests.clear()
         library(LibrarySection.Saved)
         activate(compose.onNodeWithText("Searches"))

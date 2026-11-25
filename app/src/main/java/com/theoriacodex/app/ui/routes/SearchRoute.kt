@@ -18,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -45,13 +44,11 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.SearchSourceMix
-import kotlinx.coroutines.flow.first
 
 internal data class SearchRouteConfig(
     val settings: AppSettings,
     val availableSources: Set<SourceKey>,
     val savedSearches: List<SavedSearchEntry> = emptyList(),
-    val editingSavedSearch: SavedSearchEntry? = null,
     val marks: FeedMarks,
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
@@ -69,7 +66,6 @@ internal data class SearchRouteCallbacks(
     val onResultsShown: suspend (Query, List<Post>) -> Unit = { _, _ -> },
     val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     val onUpdateSavedSearch: (SavedSearchEntry, RecentSearchEntry) -> Unit = { _, _ -> },
-    val onEndSavedSearchEdit: (SavedSearchEntry) -> Unit = {},
     val onManageSavedSearches: () -> Unit = {},
     val onAddFavoriteTag: (SourceKey, List<String>, String?) -> Unit,
     val onRemoveFavoriteTag: (SourceKey, List<String>) -> Unit,
@@ -122,21 +118,6 @@ private fun ReportShownResults(state: SearchUiState, onResultsShown: suspend (Qu
 }
 
 @Composable
-internal fun SavedSearchEditingEffect(
-    editing: SavedSearchEntry?,
-    composerOpen: MutableState<Boolean>,
-    onEnd: (SavedSearchEntry) -> Unit,
-) {
-    val end by rememberUpdatedState(onEnd)
-    LaunchedEffect(editing?.id) {
-        val entry = editing ?: return@LaunchedEffect
-        composerOpen.value = true
-        snapshotFlow { composerOpen.value }.first { open -> !open }
-        end(entry)
-    }
-}
-
-@Composable
 internal fun SearchRoute(
     coordinator: SearchCoordinator,
     relatedPostsLoader: RelatedPostsLoading,
@@ -165,7 +146,6 @@ internal fun SearchRoute(
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
     val composerOpen = rememberSaveable { mutableStateOf(false) }
-    SavedSearchEditingEffect(config.editingSavedSearch, composerOpen, callbacks.onEndSavedSearchEdit)
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -197,6 +177,7 @@ internal fun SearchRoute(
                 callbacks.onOpenViewer(effect)
             }
             is SearchEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
+            SearchEffect.OpenComposer -> composerOpen.value = true
         }
     }
 
@@ -242,7 +223,6 @@ private fun SearchRouteContent(
         savedSearches = config.savedSearches,
         onOpenSavedSearch = callbacks.onOpenSavedSearch,
         onSaveSearch = callbacks.onSaveSearch,
-        editingSavedSearch = config.editingSavedSearch,
         onUpdateSavedSearch = callbacks.onUpdateSavedSearch,
         onManageSavedSearches = callbacks.onManageSavedSearches,
         omnibox = config.omnibox,

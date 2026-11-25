@@ -168,9 +168,15 @@ class SearchViewModel(
 
             SearchAction.ClearAutocomplete -> clearSuggestionState()
 
-            SearchAction.UndoSearch -> stepHistory(back = true)
+            SearchAction.UndoSearch -> {
+                endSavedSearchEdit()
+                stepHistory(back = true)
+            }
 
-            SearchAction.RedoSearch -> stepHistory(back = false)
+            SearchAction.RedoSearch -> {
+                endSavedSearchEdit()
+                stepHistory(back = false)
+            }
 
             SearchAction.ApplyDraft -> {
                 if (mutableState.value.showsDraft) settlement.settle() else applyDraft()
@@ -184,6 +190,10 @@ class SearchViewModel(
             }
 
             is SearchAction.ApplyTagSearch -> runAfterRestoration { applyTagSearch(action) }
+
+            is SearchAction.EditSavedSearch -> runAfterRestoration { editSavedSearch(action) }
+
+            SearchAction.EndSavedSearchEdit -> endSavedSearchEdit()
 
             is SearchAction.RetrySource -> retrySource(action.source)
 
@@ -325,6 +335,7 @@ class SearchViewModel(
     }
 
     private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
+        endSavedSearchEdit()
         val reduction = SearchDraftReducer.prepareTagSearch(
             state = mutableState.value,
             includeTermGroups = action.includeTermGroups,
@@ -350,7 +361,21 @@ class SearchViewModel(
     }
 
     private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope) {
+        endSavedSearchEdit()
         if (restoreDraft(query, sourceScope)) runDraft()
+    }
+
+    private fun editSavedSearch(action: SearchAction.EditSavedSearch) {
+        endSavedSearchEdit()
+        if (!restoreDraft(action.query, action.sourceScope)) return
+        mutableState.value = mutableState.value.copy(editingSavedSearchId = action.id)
+        effectChannel.trySend(SearchEffect.OpenComposer)
+        runDraft()
+    }
+
+    private fun endSavedSearchEdit() {
+        val current = mutableState.value
+        if (current.editingSavedSearchId != null) mutableState.value = current.copy(editingSavedSearchId = null)
     }
 
     private fun restoreDraft(query: Query, sourceScope: SearchSourceScope): Boolean {
@@ -768,7 +793,9 @@ class SearchViewModel(
                 effectChannel.send(effect)
             }
 
-            is SearchEffect.ShowMessage -> effectChannel.trySend(effect)
+            is SearchEffect.ShowMessage,
+            SearchEffect.OpenComposer,
+            -> effectChannel.trySend(effect)
         }
     }
 

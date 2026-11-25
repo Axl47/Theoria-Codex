@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -92,7 +93,6 @@ private val COMPACT_QUERY_MAX_HEIGHT = 144.dp
 private const val COMPACT_QUERY_MAX_FRACTION = 0.4f
 
 private val SAVED_CHIP_MAX_WIDTH = 240.dp
-private val UPDATE_BUTTON_MAX_WIDTH = 200.dp
 
 @Composable
 internal fun SearchComposer(
@@ -108,12 +108,13 @@ internal fun SearchComposer(
     savedSearches: ComposerSavedSearches = ComposerSavedSearches(),
     savedTags: ComposerSavedTags = ComposerSavedTags(emptyList()),
     omnibox: List<OmniboxEntry> = emptyList(),
+    onOpenFilters: () -> Unit = {},
 ) {
     SearchComposerSheet(replacing = state.replacingResults, onDismiss = onDismiss) {
         SearchComposerContent(
             state, onAction, sourcePicker, onApply, onReset, onUndo,
             onManageSavedTags, onOpenSourceAccounts, onDismiss,
-            savedSearches, savedTags, omnibox,
+            savedSearches, savedTags, omnibox, onOpenFilters,
         )
     }
 }
@@ -132,6 +133,7 @@ private fun SearchComposerContent(
     savedSearches: ComposerSavedSearches,
     savedTags: ComposerSavedTags,
     omnibox: List<OmniboxEntry>,
+    onOpenFilters: () -> Unit,
 ) {
     val input = state.suggestions.input
     val draft = state.query.draft
@@ -193,7 +195,7 @@ private fun SearchComposerContent(
     ComposerEditorBody(
         state, target, targetIndex, terms, suggestions, liveSelection, inputRequester, snackbars,
         sourcePicker, savedSearches, savedTags, queryActions, onAction, onOpenSourceAccounts,
-        onUndo, onReset, onManageSavedTags, onDismiss,
+        onUndo, onReset, onManageSavedTags, onDismiss, onOpenFilters,
         onCommit = ::commitTyped,
         onSubmit = ::submitTyped,
         onToggleTarget = {
@@ -263,6 +265,7 @@ private fun ComposerEditorBody(
     onReset: () -> Unit,
     onManageSavedTags: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenFilters: () -> Unit,
     onCommit: () -> Unit,
     onSubmit: () -> Unit,
     onToggleTarget: () -> Unit,
@@ -276,7 +279,7 @@ private fun ComposerEditorBody(
         onManageSavedTags, queryActions, onOpenSourceAccounts, onAction, modifier,
     )
     Column(Modifier.fillMaxSize()) {
-        ComposerTopBar(state.canUndoSearch, state.canResetDraft, sourcePicker, onDismiss, onUndo, onReset)
+        ComposerTopBar(state.canUndoSearch, state.canResetDraft, sourcePicker, onDismiss, onUndo, onReset, onOpenFilters)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val compactMaxHeight = minOf(COMPACT_QUERY_MAX_HEIGHT, maxHeight * COMPACT_QUERY_MAX_FRACTION)
             Column(Modifier.fillMaxSize()) {
@@ -321,6 +324,7 @@ private fun ComposerTopBar(
     onDismiss: () -> Unit,
     onUndo: () -> Unit,
     onReset: () -> Unit,
+    onOpenFilters: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -342,6 +346,7 @@ private fun ComposerTopBar(
                         onClick()
                     },
                 )
+                item("Filter and sort", true, onOpenFilters)
                 item("Undo last search", canUndo, onUndo)
                 item("Reset", canReset, onReset)
             }
@@ -585,23 +590,15 @@ private fun ComposerSavedSection(
     onManageSavedTags: () -> Unit,
     onAction: (SearchAction) -> Unit,
 ) {
-    val showSearches = savedSearches.entries.isNotEmpty() || savedSearches.canSaveCurrent
+    val action = savedSearches.action
+    val showSearches = savedSearches.entries.isNotEmpty() || action != null
     if (showSearches) {
         var naming by remember { mutableStateOf(false) }
         SavedPartHeader("Saved searches") {
-            savedSearches.onSaveCurrent?.let {
+            if (action is ComposerSavedSearchAction.Save) {
                 TextButton(onClick = { naming = true }) {
                     Icon(Icons.Default.BookmarkAdd, null, Modifier.size(18.dp))
                     Text("Save", Modifier.padding(start = 4.dp))
-                }
-            }
-            savedSearches.update?.let { update ->
-                TextButton(
-                    onClick = { update.onUpdate?.invoke() },
-                    enabled = update.onUpdate != null,
-                    modifier = Modifier.widthIn(max = UPDATE_BUTTON_MAX_WIDTH),
-                ) {
-                    Text("Update “${update.name}”", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (savedSearches.entries.isNotEmpty()) {
@@ -611,21 +608,15 @@ private fun ComposerSavedSection(
                 ) { Text("Manage") }
             }
         }
-        savedSearches.update?.conflict?.let { name ->
-            Text(
-                "“$name” already saves this search.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+        if (action is ComposerSavedSearchAction.Update) SavedSearchUpdateRow(action)
         if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
-        if (naming) {
+        if (naming && action is ComposerSavedSearchAction.Save) {
             SavedSearchNameDialog(
-                initialName = savedSearches.suggestedName,
+                initialName = action.suggestedName,
                 renaming = false,
                 onDismiss = { naming = false },
                 onConfirm = { name ->
-                    savedSearches.onSaveCurrent?.invoke(name)
+                    action.onSave(name)
                     naming = false
                 },
             )
@@ -642,6 +633,24 @@ private fun ComposerSavedSection(
         }
     }
     SavedTagChips(savedTags, draft, targetIndex, onAction)
+}
+
+@Composable
+private fun SavedSearchUpdateRow(update: ComposerSavedSearchAction.Update) {
+    FilledTonalButton(
+        onClick = { update.onUpdate?.invoke() },
+        enabled = update.onUpdate != null,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("Update “${update.name}”", maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    update.conflict?.let { name ->
+        Text(
+            "“$name” already saves this search.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
 }
 
 @Composable

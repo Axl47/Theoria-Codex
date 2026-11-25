@@ -36,7 +36,7 @@ class SavedSearchesCodexFiltersTest {
         var removed: String? = null
         compose.setContent { MaterialTheme { Column {
             SavedSearchesCodexFilters(entries.value, state.value, { state.value = it },
-                { id, name -> renamed = id to name }, { removed = it }, {})
+                SavedSearchActions({ id, name -> renamed = id to name }, { removed = it }, {}))
         } } }
         compose.onNodeWithContentDescription("Include First").assertIsOn().performClick()
         compose.onNodeWithContentDescription("Include First").assertIsOff()
@@ -60,7 +60,7 @@ class SavedSearchesCodexFiltersTest {
         val renamed = mutableListOf<Pair<String, String>>()
         val edited = mutableListOf<SavedSearchEntry>()
         compose.setContent { MaterialTheme { Column {
-            SavedSearchesCodexFilters(entries, FeedFabRestoreState(), {}, { id, name -> renamed += id to name }, {}, { edited += it })
+            SavedSearchesCodexFilters(entries, FeedFabRestoreState(), {}, SavedSearchActions({ id, name -> renamed += id to name }, {}, { edited += it }))
         } } }
         compose.onNodeWithContentDescription("Rename Second").performClick()
         compose.onNodeWithText("Edit search").performClick()

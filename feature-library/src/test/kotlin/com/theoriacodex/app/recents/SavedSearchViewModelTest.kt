@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recents
 
 import androidx.lifecycle.ViewModelStore
+import com.theoriacodex.app.codex.resetSavedSearchNewPosts
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySavedSearchRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
@@ -200,7 +201,7 @@ class SavedSearchViewModelTest {
         assertEquals(original.query, repository.observeSavedSearches().first().single().search.query)
     }
 
-    private fun owner(source: SavedSearchRepository = repository) = SavedSearchViewModel(source, newPosts).also {
+    private fun owner(source: SavedSearchRepository = repository) = SavedSearchViewModel(source, newPosts::resetSavedSearchNewPosts).also {
         store.put("saved-searches", it)
     }
 

@@ -34,11 +34,15 @@ fun List<SavedSearchEntry>.savedFor(search: RecentSearchEntry): SavedSearchEntry
     return firstOrNull { it.search.queryHash == search.queryHash && RecentSearchPayloadCodec.encodeJson(it.search) == payload }
 }
 
-fun RecentSearchEntry.replaysAs(other: RecentSearchEntry): Boolean =
-    kind == other.kind && query.replayed() == other.query.replayed() &&
-        (kind != RecentSearchKind.MULTI_SEARCH || sources == other.sources)
+fun RecentSearchEntry.replaysAs(other: RecentSearchEntry): Boolean = replay() == other.replay()
 
-private fun Query.replayed(): Query = normalizedForMode(mode).query
+private data class SearchReplay(val kind: RecentSearchKind, val query: Query, val sources: List<SourceKey>)
+
+private fun RecentSearchEntry.replay() = SearchReplay(
+    kind = kind,
+    query = query.normalizedForMode(query.mode).query,
+    sources = if (kind == RecentSearchKind.MULTI_SEARCH) sources.distinct() else emptyList(),
+)
 
 interface SavedSearchRepository {
     fun observeSavedSearches(): Flow<List<SavedSearchEntry>>

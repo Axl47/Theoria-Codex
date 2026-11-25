@@ -25,19 +25,19 @@ class SavedSearchNewPostsTest {
     private val checked = mutableListOf<String>()
     private val checkedSorts = mutableListOf<SortMode>()
     private var hang = false
-    private var gate: CompletableDeferred<Unit>? = null
+    private val gates = mutableMapOf<String, CompletableDeferred<Unit>>()
     private var stored = listOf<SavedSearchEntry>()
     private val checker = SavedSearchNewPostsChecker(store, { stored }) { entry ->
         checked += entry.id
         checkedSorts += entry.search.query.sort
         if (hang) awaitCancellation()
-        gate?.await()
+        gates[entry.id]?.await()
         pages[entry.id]?.map { testPost(SourceKey.PIXIV, it) }
     }
 
     private suspend fun check(entries: List<SavedSearchEntry>, now: Long) {
         stored = entries
-        checker.checkIfStale(entries, now)
+        checker.checkIfStale(now)
     }
 
     private suspend fun counts() = store.observeSavedSearchNewPosts().first().marks.mapValues { it.value.newPostCount }
@@ -111,8 +111,7 @@ class SavedSearchNewPostsTest {
 
     @Test fun `editing a saved search starts its new posts over and drops a check of the old query still running (ADR 0218)`() = runTest {
         val saved = savedSearchWithTwoNew()
-        val oldQueryAnswer = CompletableDeferred<Unit>()
-        gate = oldQueryAnswer
+        val oldQueryAnswer = CompletableDeferred<Unit>().also { gates["a"] = it }
         pages = mapOf("a" to listOf("old2", "old1"))
         val running = launch { check(listOf(saved), 6 * hour) }
         runCurrent()
@@ -120,23 +119,29 @@ class SavedSearchNewPostsTest {
         oldQueryAnswer.complete(Unit)
         running.join()
         assertEquals(emptyMap<String, Int>(), counts())
-        gate = null
+        gates.clear()
         pages = mapOf("a" to listOf("9", "3"))
         check(listOf(saved), 6 * hour + 1)
         assertEquals(mapOf("a" to 0), counts())
     }
 
-    @Test fun `a check started before an edit drops what the old query found and leaves the edited search due (ADR 0218)`() = runTest {
-        val original = savedSearchWithTwoNew()
+    @Test fun `a search edited while it waits its turn drops what the old query found and stays due (ADR 0218)`() = runTest {
+        val original = entry("a", 1)
+        val busy = listOf(entry("b", 2), entry("c", 3))
+        val answers = busy.associate { it.id to CompletableDeferred<Unit>() }
+        gates.putAll(answers)
+        pages = mapOf("a" to listOf("old2", "old1"), "b" to listOf("1"), "c" to listOf("1"))
+        val running = launch { check(busy + original, 0L) }
+        runCurrent()
         val edited = original.copy(search = original.search.copy(queryHash = "edited"))
-        stored = listOf(edited)
+        stored = busy + edited
         store.resetSavedSearchNewPosts(original.id)
-        pages = mapOf("a" to listOf("old2", "old1"))
-        checker.checkIfStale(listOf(original), 6 * hour)
-        assertEquals(emptyMap<String, Int>(), counts())
+        answers.values.forEach { it.complete(Unit) }
+        running.join()
+        assertEquals(mapOf("b" to 0, "c" to 0), counts())
         pages = mapOf("a" to listOf("9", "3"))
-        check(listOf(edited), 6 * hour + 1)
-        assertEquals(mapOf("a" to 0), counts())
+        checker.checkIfStale(1L)
+        assertEquals(mapOf("a" to 0, "b" to 0, "c" to 0), counts())
     }
 
     private suspend fun savedSearchWithTwoNew(): SavedSearchEntry {

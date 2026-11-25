@@ -187,8 +187,7 @@ private fun ShellOverlaySheets(shell: TheoriaShell) {
         shell.feedFabRestoreRegistry.state(context)?.let { restore ->
             com.theoriacodex.app.codex.SavedSearchesManagementSheet(
                 shell.savedSearches, restore, { shell.feedFabRestoreRegistry.update(context, it) },
-                shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
-                onEdit = { overlays.showSavedSearchManagement = false; shell.editSavedSearch(it) },
+                shell.savedSearchActions,
                 onDismiss = { overlays.showSavedSearchManagement = false },
                 newCounts = news.marks.mapValues { it.value.newPostCount },
             )

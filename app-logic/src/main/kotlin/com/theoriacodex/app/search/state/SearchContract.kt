@@ -34,6 +34,7 @@ data class SearchUiState(
     val restoration: SearchRestorationUiState = SearchRestorationUiState.NotStarted,
     val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
     val history: SearchQueryHistory = SearchQueryHistory(),
+    val editingSavedSearchId: String? = null,
 ) {
     val canUndoSearch: Boolean get() = history.canStepBack(appliedHistoryEntry())
 
@@ -283,6 +284,12 @@ sealed interface SearchAction {
         val query: Query,
         val sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),
     ) : SearchAction
+    data class EditSavedSearch(
+        val id: String,
+        val query: Query,
+        val sourceScope: SearchSourceScope,
+    ) : SearchAction
+    data object EndSavedSearchEdit : SearchAction
     data class ApplyTagSearch(
         val includeTermGroups: List<SearchTermGroup>,
         val excludeTerms: List<SearchTerm> = emptyList(),
@@ -336,6 +343,8 @@ sealed interface SearchEffect {
     data class ShowMessage(
         val message: String,
     ) : SearchEffect
+
+    data object OpenComposer : SearchEffect
 }
 
 data class SearchReduction(
