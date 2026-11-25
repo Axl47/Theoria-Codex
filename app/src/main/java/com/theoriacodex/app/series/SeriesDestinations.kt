@@ -25,13 +25,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-internal val extensionsArguments = listOf("page", "extension").map { name ->
-    navArgument(name) {
+internal val extensionsArguments = listOf(
+    navArgument("page") {
         type = NavType.StringType
         nullable = true
         defaultValue = null
-    }
-}
+    },
+)
 
 internal val seriesArguments = listOf(
     navArgument("source") { type = NavType.StringType },
@@ -92,18 +92,6 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
         viewModel,
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         onOpenExtensions = shell::openExtensions,
-        missingExtensions = remember(series) {
-            MissingExtensionsActions(
-                extensions = { ExtensionsViewModel(series.extensions, series.repos) },
-                switchSource = { id ->
-                    SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
-                        series.switchSource(id, source, to)
-                    }
-                },
-                onOpenRepos = { shell.openExtensions(ExtensionsSubpage.REPOS) },
-                onOpenExtension = { id -> shell.navController.navigate(AppRoute.extension(id)) { launchSingleTop = true } },
-            )
-        },
         oldSearchBar = settings?.oldSearchBar == true,
     )
 }
@@ -112,8 +100,19 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
 internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val series = shell.container.series ?: return
     val page = entry.arguments?.getString("page")?.let { name -> ExtensionsSubpage.entries.firstOrNull { it.name == name } }
-    val viewModel = viewModel { ExtensionsViewModel(series.extensions, series.repos, page, entry.arguments?.getString("extension")) }
-    ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() })
+    val viewModel = viewModel { ExtensionsViewModel(series.extensions, series.repos, page) }
+    val missing = remember(series) {
+        MissingExtensionsActions(
+            missing = { MissingSeriesViewModel(series.repository, series.sources, series.extensions.revision) },
+            switchSource = { id ->
+                SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
+                    series.switchSource(id, source, to)
+                }
+            },
+            onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
+        )
+    }
+    ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() }, missing = missing)
 }
 
 internal fun TheoriaShell.openExtensions(page: ExtensionsSubpage? = null) {

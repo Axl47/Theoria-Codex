@@ -141,10 +141,7 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         sources = sources,
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
-        missingExtensions = sources?.let { on ->
-            val keys = on.mapTo(HashSet()) { it.key }
-            all.map { it.series }.filter { it.id.source !in keys }
-        }.orEmpty(),
+        missingExtensions = sources?.let { missingSeries(all.map { it.series }, it) }.orEmpty(),
     )
 }
 
@@ -456,10 +453,6 @@ class SeriesTabViewModel(
         saved.remove<String>(SAVED_SEARCH)
         if (state.value.dedicated != null) closeDedicated()
         mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
-    }
-
-    fun unfollow(id: SeriesId) {
-        viewModelScope.launch { repository.setFollowed(id, false) }
     }
 
     fun open(series: Series, opened: (SeriesId) -> Unit) {
