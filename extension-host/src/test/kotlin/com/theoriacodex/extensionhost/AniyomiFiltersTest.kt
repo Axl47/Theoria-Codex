@@ -34,7 +34,7 @@ class AniyomiFiltersTest {
             SeriesFilter.Text("Studio", "Made Up"),
             SeriesFilter.Check("Dubbed", true),
             SeriesFilter.Select("Status", listOf("Any", "Airing", "Finished"), 2),
-            SeriesFilter.Sort("Order", listOf("Title", "Aired"), null),
+            SeriesFilter.Sort("Order", listOf("Title", "Aired"), SeriesFilter.Sort.Selection(0, ascending = true)),
             SeriesFilter.Group("Genres", listOf(SeriesFilter.TriState("Action", Inclusion.INCLUDE), SeriesFilter.TriState("Drama", Inclusion.IGNORE))),
         )
         series.search("one", 1, chosen)
@@ -50,7 +50,7 @@ class AniyomiFiltersTest {
 
         series.search("one", 1, chosen)
         val first = source.searchedWith
-        series.search("one", 2, chosen)
+        series.search("one", 2, chosen.toList())
 
         assertSame(first, source.searchedWith)
     }

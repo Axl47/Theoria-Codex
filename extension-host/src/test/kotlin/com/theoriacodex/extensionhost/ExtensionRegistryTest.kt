@@ -35,6 +35,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -69,7 +70,7 @@ class ExtensionRegistryTest {
     private val fatalErrors = CopyOnWriteArrayList<Throwable>()
 
     private fun registry(settings: (SettingsHook) -> SourceSettings) = ExtensionRegistry(
-        packages = { listings += 1; onDevice },
+        packages = { listings += 1; onDevice.toList() },
         load = { extension, host -> loads += extension.apk.path; hosted(extension, host) },
         choices = store,
         images = images,
@@ -149,12 +150,13 @@ class ExtensionRegistryTest {
         store.beforeUpdate = { updating.complete(Unit); release.await() }
 
         val lookup = launch(Dispatchers.Default) { registry.source(MihonKind.sourceKey(2)) }
-        updating.await()
+        withTimeout(5_000) { updating.await() }
         lookup.cancel()
         release.complete(Unit)
         lookup.join()
 
         assertEquals("b", store.choices.owners["custom_mihon_2"])
+        assertEquals(listOf("custom_mihon_1", "custom_mihon_2"), registry.loadedSources().map { it.key.id })
         assertEquals("custom_mihon_2", registry.source(MihonKind.sourceKey(2))?.key?.id)
     }
 
@@ -290,6 +292,11 @@ class ExtensionRegistryTest {
         assertEquals(listOf("custom_mihon_1", "custom_mihon_2"), registry.sources().map { it.key.id })
         assertEquals(listOf("/a.apk", "/a.apk", "/b.apk"), loads)
         assertEquals(4, registry.revision.value)
+
+        val loaded = registry.sources()
+        onDevice = listOf(extension("a", signer = "key-1").copy(modified = 3), extension("b", signer = "key-1"))
+        registry.recheck()
+        assertTrue(registry.sources().first() !== loaded.first())
     }
 
     @Test
@@ -414,6 +421,10 @@ class ExtensionRegistryTest {
         assertEquals(listOf<Any?>("key-2", false), listOf(listed.signer, listed.on))
         assertTrue(store.choices.trusted.isEmpty())
         assertTrue(loads.isEmpty())
+
+        store.choices = ExtensionChoices(trusted = mapOf("a" to "key-1"))
+        assertEquals(listOf<Any?>("key-2", false), registry.setOn("/a.apk", "key-1", true).single().let { listOf(it.signer, it.on) })
+        assertEquals(mapOf("a" to "key-1"), store.choices.trusted)
     }
 
     @Test

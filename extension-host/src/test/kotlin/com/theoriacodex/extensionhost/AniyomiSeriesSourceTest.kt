@@ -157,9 +157,10 @@ class AniyomiSeriesSourceTest {
     }
 
     @Test
-    fun `by default a server list and one server fit inside the Viewer's 60 s episode wait (ADR 0055)`() {
+    fun `by default a server gets 6 s and the server list 50 s, which fit inside the Viewer's 60 s episode wait (ADR 0055)`() {
         val limits = AniyomiSeriesSource(ServerSource(), HostServices(ExtensionImages())).streams.limits
 
+        assertEquals(AniyomiStreams.Limits(serverMs = 6_000L, listMs = 50_000L), limits)
         assertTrue(limits.listMs + limits.serverMs <= VIEWER_EPISODE_WAIT_MS)
     }
 
@@ -220,7 +221,7 @@ class AniyomiSeriesSourceTest {
     @Test
     fun `anime details only add to what the listing said (ADR 0064)`() = runBlocking {
         val listing = anime("/a/1", "Show").apply { thumbnail_url = "https://c.test/1.jpg"; author = "Listed" }
-        val source = ServerSource(listing = listOf(listing), details = { SAnime.create().apply { thumbnail_url = " "; author = ""; description = "New" } })
+        val source = ServerSource(listing = listOf(listing), details = { SAnime.create().apply { title = " "; thumbnail_url = " "; author = ""; description = "New" } })
         val series = AniyomiSeriesSource(source, HostServices(ExtensionImages()))
 
         val opened = series.details(series.popular(1).series.single())

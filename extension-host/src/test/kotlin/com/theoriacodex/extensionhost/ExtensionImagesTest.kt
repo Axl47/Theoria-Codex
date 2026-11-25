@@ -142,6 +142,11 @@ class ExtensionImagesTest {
     fun `an untagged address passes down the chain unchanged (ADR 0059)`() {
         assertEquals("app https://other.test/a.jpg", fetch("https://other.test/a.jpg"))
         assertEquals("app https://other.test/a.jpg#theirs", fetch("https://other.test/a.jpg#theirs"))
+        val seen = mutableListOf<Request>()
+        val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { seen += it; cannedResponse(it, body = "") }).build()
+        val sent = Request.Builder().url("https://other.test/a.jpg#theirs").header("Referer", "https://site.test/").build()
+        client.newCall(sent).execute().close()
+        assertEquals(listOf(sent.url to sent.headers), seen.map { it.url to it.headers })
     }
 
     @Test

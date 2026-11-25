@@ -10,6 +10,7 @@ import com.theoriacodex.sources.http.HostOutageTracker
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.sourcePreferences
 import java.io.File
+import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.junit.Assert.assertArrayEquals
@@ -42,8 +43,13 @@ class ExtensionHostTest {
 
     @Test
     fun `extensions are handed the extension client, with Mihon's interceptors and timeouts, the browser's cookies for every host and its DNS (ADR 0056, 0057)`() {
+        val saved = mutableListOf<String>()
         val cookies = object : BrowserCookieStore by NoCookies {
             override fun cookieHeader(url: String) = "session=abc"
+
+            override fun setCookie(url: String, setCookie: String) {
+                saved += setCookie
+            }
         }
         ExtensionHost.install(app, "1.0", 1, cookies, ChallengeBrowsers(NoCookies, NoBrowser), HostOutageTracker())
 
@@ -53,6 +59,9 @@ class ExtensionHostTest {
         assertEquals(listOf(30_000, 30_000, 120_000), listOf(client.connectTimeoutMillis, client.readTimeoutMillis, client.callTimeoutMillis))
         assertEquals(listOf("session=abc"), client.cookieJar.loadForRequest("https://api.any-site.test/list".toHttpUrl()).map { "${it.name}=${it.value}" })
         assertTrue(client.dns is BrowserAddressDns)
+        val answered = "https://api.any-site.test/list".toHttpUrl()
+        client.cookieJar.saveFromResponse(answered, listOfNotNull(Cookie.parse(answered, "token=xyz; Path=/")))
+        assertTrue(saved.single().startsWith("token=xyz"))
     }
 
     @Test
@@ -64,6 +73,9 @@ class ExtensionHostTest {
         assertEquals(32, key.size)
         assertArrayEquals(key, file.takeIf(File::exists)?.readBytes())
         assertArrayEquals(key, ExtensionHost.imageKey(app))
+        file.writeBytes(ByteArray(33))
+        assertEquals(32, ExtensionHost.imageKey(app).size)
+        assertEquals(32, file.readBytes().size)
         file.writeBytes(ByteArray(5))
         val replaced = ExtensionHost.imageKey(app)
         assertEquals(32, replaced.size)

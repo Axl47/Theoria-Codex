@@ -64,6 +64,8 @@ class MihonFiltersTest {
         val searched = source.searchedWith.single()
         assertNotSame(source.made.first(), searched)
         assertEquals(chosen, searched.nodes().toSeriesFilters())
+        series.search("two", 1, chosen)
+        assertNotSame(searched, source.searchedWith.last())
     }
 
     @Test

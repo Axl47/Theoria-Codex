@@ -4,6 +4,7 @@ import com.theoriacodex.extensionhost.answering
 import com.theoriacodex.extensionhost.cannedResponse
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -129,10 +130,10 @@ class HttpSourceTest {
 
     @Test
     fun `the extension API classes offer no RxJava method (ADR 0056)`() {
-        val api = listOf(Source::class.java, HttpSource::class.java, AnimeSource::class.java, AnimeHttpSource::class.java)
+        val api = listOf(Source::class.java, HttpSource::class.java, AnimeSource::class.java, AnimeHttpSource::class.java, ParsedAnimeHttpSource::class.java)
 
         val rx = api.flatMap { type ->
-            type.methods.filter { method -> (method.parameterTypes + method.returnType).any { it.name.startsWith("rx.") || it.name.startsWith("io.reactivex.") } }
+            (type.methods + type.declaredMethods).filter { method -> (method.parameterTypes + method.returnType).any { it.name.startsWith("rx.") || it.name.startsWith("io.reactivex.") } }
                 .map { "${type.simpleName}.${it.name}" }
         }
 
