@@ -21,8 +21,9 @@ Following.
   bare label.
 - One flow (`observeExtensionAlerts`) produces both counts, and the series container shares it, so Series and Settings
   always agree. Updates come from the repo listing the Extensions page reads (`ExtensionRepos.available`), which
-  fetches each repo's index at most once per process; the counts are taken again whenever the installed extensions
-  change. No separate update check exists.
+  fetches each repo's index at most once per process. The counts are taken again whenever the installed extensions
+  change and whenever the listing does (`ExtensionRepos.changes`: a repo added, restored or removed, or the indexes
+  read again). No separate update check exists.
 
 ## Consequences
 
@@ -36,6 +37,7 @@ something else (failed checks, broken sources) belongs in `ExtensionAlerts`, not
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/MissingExtensions.kt`: `observeExtensionAlerts`
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabScreen.kt`: `SettingsButton`
 - `feature-settings/src/main/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroup.kt`: `ExtensionsGroup`
+- `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionCatalog.kt`: `ExtensionCatalog.changes`
 - `app/src/main/java/com/theoriacodex/app/di/ExtensionSources.kt`: `SeriesDependencies.extensionAlerts`
 - `app/src/main/java/com/theoriacodex/app/series/SeriesDestinations.kt`: `SeriesTabDestination`, `openSettings`
 
@@ -44,3 +46,4 @@ something else (failed checks, broken sources) belongs in `ExtensionAlerts`, not
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/MissingExtensionsTest.kt`: `extension alerts add series missing their extension to extensions with an update, and recount when extensions change (ADR 0221)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `the Series settings button opens Settings and badges extension alerts (ADR 0221)`
 - `feature-settings/src/test/kotlin/com/theoriacodex/app/settings/SeriesSettingsGroupTest.kt`: `extensions sit above everything else and list each alert on its own line (ADR 0221)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCatalogTest.kt`: `adding, restoring or removing a repo and re-reading the indexes each signal that the listing changed (ADR 0221)`

@@ -10,6 +10,8 @@ import java.io.File
 import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -110,6 +112,22 @@ class ExtensionCatalogTest {
         assertEquals("Names no signing key", refused["https://nokey.example/anime"])
         assertEquals("Answered 404", refused["https://gone.example"])
         assertEquals(emptyList<ExtensionRepo>(), catalog.repos())
+    }
+
+    @Test
+    fun `adding, restoring or removing a repo and re-reading the indexes each signal that the listing changed (ADR 0221)`() = runTest {
+        serve()
+        val signals = mutableListOf<Unit>()
+        val watching = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { catalog.changes.collect { signals += it } }
+
+        catalog.add(listOf(NewExtensionRepo(repoUrl)))
+        catalog.available(refresh = false)
+        assertEquals(1, signals.size)
+        catalog.available(refresh = true)
+        catalog.restore(emptyList())
+        catalog.remove(repoUrl)
+        assertEquals(4, signals.size)
+        watching.cancel()
     }
 
     @Test

@@ -21,6 +21,7 @@ import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,7 +41,7 @@ class SeriesDependencies(
 ) {
     private val checking = Mutex()
 
-    val extensionAlerts: StateFlow<ExtensionAlerts> = observeExtensionAlerts(repository, sources, repos, extensions.revision)
+    val extensionAlerts: StateFlow<ExtensionAlerts> = observeExtensionAlerts(repository, sources, repos, merge(extensions.revision, repos.changes))
         .stateIn(scope, SharingStarted.WhileSubscribed(ALERTS_KEPT_MS), ExtensionAlerts())
 
     suspend fun checkFollowed(

@@ -64,6 +64,7 @@ internal fun ExtensionsGroup(alerts: ExtensionAlerts, onOpen: () -> Unit) {
             } else {
                 null
             },
+            summaryMaxLines = Int.MAX_VALUE,
         )
     }
 }

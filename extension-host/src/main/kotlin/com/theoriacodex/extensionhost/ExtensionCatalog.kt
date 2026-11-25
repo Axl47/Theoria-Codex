@@ -27,6 +27,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
@@ -46,6 +49,10 @@ class ExtensionCatalog(
 
     private val installing = Mutex()
 
+    private val changed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    override val changes: Flow<Unit> = changed
+
     override suspend fun repos(): List<ExtensionRepo> = choices.choices().repos
 
     override suspend fun add(repos: List<NewExtensionRepo>): Map<String, String> = withContext(Dispatchers.IO) {
@@ -55,6 +62,7 @@ class ExtensionCatalog(
             if (repos().any { it.url == url }) continue
             runCatchingPreservingCancellation { addOne(url, new.signingKey) }.onFailure { problems[new.url] = describe(it) }
         }
+        changed.tryEmit(Unit)
         problems
     }
 
@@ -74,6 +82,7 @@ class ExtensionCatalog(
             val held = current.repos.mapTo(HashSet()) { it.url }
             current.copy(repos = current.repos + accepted.values.filter { it.url !in held })
         }
+        changed.tryEmit(Unit)
         return problems
     }
 
@@ -92,6 +101,7 @@ class ExtensionCatalog(
     override suspend fun remove(url: String) {
         choices.update { current -> current.copy(repos = current.repos.filterNot { it.url == url }) }
         indexes -= url
+        changed.tryEmit(Unit)
     }
 
     override suspend fun available(refresh: Boolean): RepoListing = withContext(Dispatchers.IO) {
@@ -102,6 +112,7 @@ class ExtensionCatalog(
         val onDevice = packages().filter { it.origin != ExtensionOrigin.FILE }.associateBy(ExtensionPackage::packageName)
         val extensions = read.flatMap { (repo, index) -> index.getOrNull()?.let { offered(repo, it, onDevice) }.orEmpty() }.distinctBy(RepoExtension::packageName)
         RepoListing(extensions, read.mapNotNull { (repo, index) -> index.exceptionOrNull()?.let { repo.url to describe(it) } }.toMap())
+            .also { if (refresh) changed.tryEmit(Unit) }
     }
 
     override suspend fun install(repo: String, packageName: String): String? = installing.withLock {
