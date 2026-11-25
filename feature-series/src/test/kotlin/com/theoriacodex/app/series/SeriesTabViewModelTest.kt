@@ -37,7 +37,7 @@ class SeriesTabViewModelTest {
     fun aSearchSentWhileExtensionsLoadRunsOnceTheyHave() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val sources = CompletableDeferred<List<SeriesSource>>()
-        val viewModel = SeriesTabViewModel(NothingStored, { sources.await() }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { sources.await() }) { _, _ -> NOTHING_CHECKED }
 
         viewModel.search("one punch")
         advanceUntilIdle()
@@ -52,7 +52,7 @@ class SeriesTabViewModelTest {
     @Test
     fun searchGroupsOfSourcesSharingANameNameTheirLanguage() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(Answering(), Answering("custom_mihon_8", language = "fr")) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(Answering(), Answering("custom_mihon_8", language = "fr")) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
 
         viewModel.search("one punch")
@@ -66,7 +66,7 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var offered = listOf<SeriesSource>(Answering())
         val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.search("one punch")
         advanceUntilIdle()
@@ -84,13 +84,13 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val offered = listOf<SeriesSource>(Answering(), Answering("custom_mihon_8"))
         val saved = SavedStateHandle()
-        val before = SeriesTabViewModel(NothingStored, { offered }, saved = saved) { NOTHING_CHECKED }
+        val before = SeriesTabViewModel(NothingStored, { offered }, saved = saved) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         before.browse(offered[1].key)
         before.search("one punch")
         advanceUntilIdle()
 
-        val after = SeriesTabViewModel(NothingStored, { offered }, saved = SavedStateHandle(saved.keys().associateWith { saved.get<String>(it) })) { NOTHING_CHECKED }
+        val after = SeriesTabViewModel(NothingStored, { offered }, saved = SavedStateHandle(saved.keys().associateWith { saved.get<String>(it) })) { _, _ -> NOTHING_CHECKED }
         assertEquals(emptyList<SeriesSourceListing>(), after.state.value.search)
         advanceUntilIdle()
 
@@ -105,7 +105,7 @@ class SeriesTabViewModelTest {
     fun moreAddsASourcesNextPageOfResults() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering(pages = 2)
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.search("one punch")
         advanceUntilIdle()
@@ -122,7 +122,7 @@ class SeriesTabViewModelTest {
     fun theSameSearchSubmittedAgainDropsAPageStillLoadingForTheFirst() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering(pages = 2)
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.search("one punch")
         advanceUntilIdle()
@@ -145,7 +145,7 @@ class SeriesTabViewModelTest {
     fun aFailedSourceSaysSoAndRetriesTheSameSearch() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering().apply { failure = SourceAdapterException(SourceFailureReason.NETWORK) }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.search("one punch")
         advanceUntilIdle()
@@ -164,7 +164,7 @@ class SeriesTabViewModelTest {
         val source = Answering(pages = 2)
         val defaults = listOf(SeriesFilter.Check("Completed", false), SeriesFilter.Check("Colored", false))
         source.offered = { defaults }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.openFilters()
         advanceUntilIdle()
@@ -200,7 +200,7 @@ class SeriesTabViewModelTest {
         val slow = CompletableDeferred<List<SeriesFilter>>()
         val answers = ArrayDeque(listOf(CompletableDeferred(defaults), slow))
         val source = Answering().apply { offered = { answers.removeFirst().await() } }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.openFilters()
         advanceUntilIdle()
@@ -224,7 +224,7 @@ class SeriesTabViewModelTest {
         val slow = CompletableDeferred<List<SeriesFilter>>()
         val answers = ArrayDeque(listOf(slow, CompletableDeferred(listOf(SeriesFilter.Check("Completed", false)))))
         val source = Answering().apply { offered = { answers.removeFirst().await() } }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.openFilters()
         advanceUntilIdle()
@@ -244,7 +244,7 @@ class SeriesTabViewModelTest {
     fun aPageAskedForUnderAnEarlierListingIsDropped() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering(pages = 2)
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         val more = CompletableDeferred<Unit>()
         source.laterPagesWait = more
@@ -263,7 +263,7 @@ class SeriesTabViewModelTest {
     fun aFailedBrowsedListingIsRetriedAsTheSameKindAndPage() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering(pages = 2)
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         source.failure = SourceAdapterException(SourceFailureReason.NETWORK)
         viewModel.choose(BrowseKind.Latest)
@@ -292,7 +292,7 @@ class SeriesTabViewModelTest {
     fun switchingSourceOrLeavingTheTabDropsTheFilters() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val offered = listOf(Answering(), Answering("custom_mihon_8"))
-        val viewModel = SeriesTabViewModel(NothingStored, { offered }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }) { _, _ -> NOTHING_CHECKED }
         val shown = MutableStateFlow(true)
         viewModel.followShown(shown)
         advanceUntilIdle()
@@ -319,7 +319,7 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var offered = listOf(Answering())
         val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.choose(BrowseKind.Latest)
         advanceUntilIdle()
@@ -336,7 +336,7 @@ class SeriesTabViewModelTest {
     fun filtersThatFailToLoadOfferNone() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = Answering().apply { offered = { error("no filters") } }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
 
         viewModel.openFilters()
@@ -353,7 +353,7 @@ class SeriesTabViewModelTest {
         val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0)))
         var offered = listOf<SeriesSource>(manga)
         val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(Following(followed), { offered }, changed) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(Following(followed), { offered }, changed) { _, _ -> NOTHING_CHECKED }
         val collecting = launch { viewModel.content.collect {} }
         advanceUntilIdle()
         assertFalse(viewModel.content.value.offersFilter)
@@ -385,7 +385,7 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val manga = Answering("custom_mihon_7")
         val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0)))
-        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(SeriesView.FOLLOWING to null, viewModel.state.value.view to viewModel.state.value.browse)
 
@@ -400,7 +400,7 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val manga = Answering("custom_mihon_7")
         val followed = MutableStateFlow(emptyList<FollowedSeries>())
-        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }) { _, _ -> NOTHING_CHECKED }
         val collecting = launch { viewModel.content.collect {} }
         advanceUntilIdle()
         assertEquals(SeriesView.BROWSE, viewModel.content.value.view)
@@ -409,11 +409,11 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
         assertEquals(SeriesView.BROWSE, viewModel.content.value.view)
 
-        val reopened = SeriesTabViewModel(Following(followed), { listOf(manga) }) { NOTHING_CHECKED }
+        val reopened = SeriesTabViewModel(Following(followed), { listOf(manga) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(SeriesView.FOLLOWING, reopened.state.value.view)
 
-        val restored = SeriesTabViewModel(Following(followed), { listOf(manga) }, saved = SavedStateHandle(mapOf("view" to "BROWSE", "search" to "moon"))) { NOTHING_CHECKED }
+        val restored = SeriesTabViewModel(Following(followed), { listOf(manga) }, saved = SavedStateHandle(mapOf("view" to "BROWSE", "search" to "moon"))) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(SeriesView.BROWSE to "moon", restored.state.value.view to restored.state.value.searchQuery)
         collecting.cancel()
@@ -422,7 +422,7 @@ class SeriesTabViewModelTest {
     @Test
     fun aTitleSearchThatFindsNothingFollowedGoesOnToEverySource() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.chooseView(SeriesView.FOLLOWING)
         viewModel.chooseKind(SeriesKind.MANGA)
@@ -444,7 +444,7 @@ class SeriesTabViewModelTest {
             override fun write(options: LibraryOptions) = Unit
         }
         val followed = MutableStateFlow(listOf(FollowedSeries(Series(SeriesId(manga.key, "/m"), "M"), unreadCount = 0)))
-        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }, library = slow) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(Following(followed), { listOf(manga) }, library = slow) { _, _ -> NOTHING_CHECKED }
         val collecting = launch { viewModel.content.collect {} }
         advanceUntilIdle()
         assertEquals(null, viewModel.content.value.following)
@@ -467,7 +467,7 @@ class SeriesTabViewModelTest {
             override suspend fun read() = options
             override fun write(options: LibraryOptions) { this.options = options }
         }
-        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }, library = kept) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }, library = kept) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         assertEquals(LibrarySort.TITLE, viewModel.state.value.library.sort)
 
@@ -487,7 +487,7 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val first = Answering("custom_mihon_7", pages = 2, language = "en")
         val second = Answering("custom_mihon_8", pages = 1, language = "es-419")
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(first, second) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(first, second) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
 
         viewModel.search("reincarnation")
@@ -521,7 +521,7 @@ class SeriesTabViewModelTest {
         val defaults = listOf(SeriesFilter.Check("Completed", false))
         val chosen = listOf(SeriesFilter.Check("Completed", true))
         val source = Answering().apply { offered = { defaults } }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.search("reincarnation")
         advanceUntilIdle()
@@ -557,7 +557,7 @@ class SeriesTabViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var offered = listOf(Answering("custom_mihon_7"), Answering("custom_mihon_8"))
         val changed = MutableStateFlow(0)
-        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { offered }, changed) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
         viewModel.search("reincarnation")
         advanceUntilIdle()
@@ -587,7 +587,7 @@ class SeriesTabViewModelTest {
                 )
             }
         }
-        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { NOTHING_CHECKED }
+        val viewModel = SeriesTabViewModel(NothingStored, { listOf(source) }) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
 
         viewModel.openGenreSearch(source.key, "fantasy")

@@ -117,7 +117,7 @@ data class SeriesTabContent(
     val view: SeriesView,
     val following: List<FollowedSeries>?,
     val followsAny: Boolean,
-    val followedIds: Set<SeriesId>,
+    val followed: Map<SeriesId, FollowedSeries>,
     val library: LibraryOptions,
     val followingQuery: String,
     val sources: List<SeriesSource>?,
@@ -125,6 +125,7 @@ data class SeriesTabContent(
     val search: List<SeriesSourceListing>?,
     val missingExtensions: List<Series> = emptyList(),
 ) {
+    val followedIds: Set<SeriesId> get() = followed.keys
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
     val words: EntryWords get() = (filter ?: kinds.singleOrNull() ?: SeriesKind.MANGA).words
@@ -141,7 +142,7 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         view = view ?: SeriesView.FOLLOWING,
         following = followed?.filter { filter.admits(it.series.id.source) }?.arranged(library, followingQuery),
         followsAny = all.isNotEmpty(),
-        followedIds = all.mapTo(HashSet()) { it.series.id },
+        followed = all.associateBy { it.series.id },
         library = library,
         followingQuery = followingQuery,
         sources = sources,
@@ -157,7 +158,7 @@ class SeriesTabViewModel(
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
     private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
-    private val checkFollowed: suspend (onProgress: (CheckProgress) -> Unit) -> FollowedCheck,
+    private val checkFollowed: suspend (only: Set<SeriesId>?, onProgress: (CheckProgress) -> Unit) -> FollowedCheck,
 ) : ViewModel() {
     private var foundShown: Job? = null
 
@@ -239,16 +240,31 @@ class SeriesTabViewModel(
         chooseView(SeriesView.BROWSE)
     }
 
-    fun refresh() {
+    fun refresh() = check(only = null)
+
+    fun retry(series: Set<SeriesId>) = check(only = series)
+
+    fun dismissFailures() {
+        mutableState.update { it.copy(failedCheck = null) }
+    }
+
+    fun unfollow(id: SeriesId) {
+        viewModelScope.launch { repository.setFollowed(id, false) }
+    }
+
+    private fun check(only: Set<SeriesId>?) {
         if (state.value.checking != null) return
         foundShown?.cancel()
-        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = null) }
+        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = it.failedCheck.takeIf { only != null }) }
         foundShown = viewModelScope.launch {
             var check: FollowedCheck? = null
             try {
-                check = checkFollowed { progress -> mutableState.update { it.copy(checking = progress) } }
+                check = checkFollowed(only) { progress -> mutableState.update { it.copy(checking = progress) } }
             } finally {
-                mutableState.update { it.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = check?.takeIf { it.failed > 0 }) }
+                mutableState.update { state ->
+                    val failed = check?.let { done -> state.failedCheck?.retried(only.orEmpty(), done) ?: done } ?: state.failedCheck
+                    state.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 })
+                }
             }
             if (check.updates.isNotEmpty()) {
                 delay(FOUND_SHOWN)
@@ -555,6 +571,9 @@ internal fun failureLine(error: Throwable): String = when (error) {
     is UnsupportedEntriesException -> error.message
     else -> sourceFailureDetail((error as? SourceAdapterException)?.reason)
 }
+
+private fun FollowedCheck.retried(series: Set<SeriesId>, retry: FollowedCheck): FollowedCheck =
+    copy(failures = failures.filter { it.series.id !in series } + retry.failures)
 
 private const val SAVED_SEARCH = "search"
 private val FOUND_SHOWN = 3.seconds

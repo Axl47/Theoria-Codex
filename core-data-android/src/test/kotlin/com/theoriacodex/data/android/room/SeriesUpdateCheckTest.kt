@@ -3,12 +3,16 @@ package com.theoriacodex.data.android.room
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.CheckFailure
 import com.theoriacodex.data.repository.CheckProgress
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesRepository
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.data.repository.checkFollowed
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.model.SourceKey
+import java.net.SocketTimeoutException
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntries
@@ -103,7 +107,7 @@ class SeriesUpdateCheckTest {
 
         source.chapters[series.id] = listOf(second, first)
         assertEquals(
-            FollowedCheck(listOf(SeriesUpdate(series, listOf(second))), checked = 2, failed = 1),
+            FollowedCheck(listOf(SeriesUpdate(series, listOf(second))), checked = 2, failures = listOf(CheckFailure(onFailing, SourceFailureReason.UNKNOWN))),
             repository.checkFollowed(sourcesOn(failing, source)),
         )
     }
@@ -121,6 +125,25 @@ class SeriesUpdateCheckTest {
         assertEquals(CheckProgress(0, 3), progress.first())
         assertEquals(CheckProgress(2, 2), progress.last())
         assertEquals(listOf(0, 1, 2), progress.map(CheckProgress::done).distinct())
+    }
+
+    @Test
+    fun `a failed series keeps why it failed, and a retry checks only the series it names (ADR 0220)`() = runTest {
+        val blocked = FakeSource("custom_mihon_2", fails = true, failure = SourceAdapterException(SourceFailureReason.BLOCKED))
+        val slow = FakeSource("custom_mihon_3", fails = true, failure = SocketTimeoutException("slow"))
+        val onBlocked = Series(SeriesId(blocked.key, "/series/b"), "Walled")
+        val onSlow = Series(SeriesId(slow.key, "/series/c"), "Slow")
+        listOf(series, onBlocked, onSlow).forEach { follow(it) }
+
+        val check = repository.checkFollowed(sourcesOn(source, blocked, slow))
+        assertEquals(
+            setOf(CheckFailure(onBlocked, SourceFailureReason.BLOCKED), CheckFailure(onSlow, SourceFailureReason.TIMED_OUT)),
+            check.failures.toSet(),
+        )
+
+        val retry = repository.checkFollowed(sourcesOn(source, blocked, slow), only = setOf(onSlow.id))
+        assertEquals(1, retry.checked)
+        assertEquals(listOf(CheckFailure(onSlow, SourceFailureReason.TIMED_OUT)), retry.failures)
     }
 
     @Test
@@ -226,7 +249,7 @@ class SeriesUpdateCheckTest {
     }
 }
 
-private class FakeSource(id: String, private val fails: Boolean = false) : SeriesSource {
+private class FakeSource(id: String, private val fails: Boolean = false, private val failure: Throwable = IllegalStateException("down")) : SeriesSource {
     val chapters = mutableMapOf<SeriesId, List<SeriesEntry>>()
 
     var stopsAt: SeriesId? = null
@@ -241,7 +264,7 @@ private class FakeSource(id: String, private val fails: Boolean = false) : Serie
     val handed = mutableListOf<List<SeriesEntry>>()
     var listingMemo: String? = null
     override suspend fun entries(series: Series, stored: List<SeriesEntry>) = when {
-        fails -> throw IllegalStateException("down")
+        fails -> throw failure
         series.id == stopsAt -> throw CancellationException("stopped")
         else -> SeriesEntries(chapters[series.id].orEmpty(), listingMemo).also { handed += stored }
     }

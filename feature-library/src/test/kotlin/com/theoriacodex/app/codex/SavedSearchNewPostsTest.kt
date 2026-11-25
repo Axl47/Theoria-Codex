@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
@@ -24,11 +25,19 @@ class SavedSearchNewPostsTest {
     private val checked = mutableListOf<String>()
     private val checkedSorts = mutableListOf<SortMode>()
     private var hang = false
-    private val checker = SavedSearchNewPostsChecker(store) { entry ->
+    private val gates = mutableMapOf<String, CompletableDeferred<Unit>>()
+    private var stored = listOf<SavedSearchEntry>()
+    private val checker = SavedSearchNewPostsChecker(store, { stored }) { entry ->
         checked += entry.id
         checkedSorts += entry.search.query.sort
         if (hang) awaitCancellation()
+        gates[entry.id]?.await()
         pages[entry.id]?.map { testPost(SourceKey.PIXIV, it) }
+    }
+
+    private suspend fun check(entries: List<SavedSearchEntry>, now: Long) {
+        stored = entries
+        checker.checkIfStale(now)
     }
 
     private suspend fun counts() = store.observeSavedSearchNewPosts().first().marks.mapValues { it.value.newPostCount }
@@ -36,10 +45,10 @@ class SavedSearchNewPostsTest {
     @Test fun `first check sets the baseline, later ones count, and opening clears them`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(searches, 0L)
+        check(searches, 0L)
         assertEquals(mapOf("a" to 0), counts())
         pages = mapOf("a" to listOf("2", "1"))
-        checker.checkIfStale(searches, 3 * hour)
+        check(searches, 3 * hour)
         assertEquals(mapOf("a" to 1), counts())
         store.markSavedSearchesSeen(setOf("a"))
         assertEquals(mapOf("a" to 0), counts())
@@ -48,9 +57,9 @@ class SavedSearchNewPostsTest {
     @Test fun `a feed clears only the posts it showed`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(searches, 0L)
+        check(searches, 0L)
         pages = mapOf("a" to listOf("2", "1"))
-        checker.checkIfStale(searches, 3 * hour)
+        check(searches, 3 * hour)
         store.markSavedSearchPostsSeen(setOf("PIXIV:9"))
         assertEquals(mapOf("a" to 1), counts())
         store.markSavedSearchPostsSeen(setOf("PIXIV:2"))
@@ -60,8 +69,8 @@ class SavedSearchNewPostsTest {
     @Test fun `checks wait out the interval after a failure and take the eight newest`() = runTest {
         val searches = (1..10).map { entry("s$it", it.toLong()) }
         pages = searches.associate { it.id to null }
-        checker.checkIfStale(searches, 0L)
-        checker.checkIfStale(searches, 2 * hour)
+        check(searches, 0L)
+        check(searches, 2 * hour)
         assertEquals((10 downTo 3).map { "s$it" }.toSet(), checked.toSet())
         assertEquals(8, checked.size)
         assertEquals(emptyMap<String, Int>(), counts())
@@ -69,21 +78,21 @@ class SavedSearchNewPostsTest {
 
     @Test fun `searches are checked newest first whatever sort they were saved with`() = runTest {
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(listOf(entry("a", 1, SortMode.RANDOM)), 0L)
+        check(listOf(entry("a", 1, SortMode.RANDOM)), 0L)
         assertEquals(listOf(SortMode.NEWEST), checkedSorts)
     }
 
     @Test fun `a search cancelled by leaving the app is not sent again within the interval`() = runTest {
         val searches = listOf(entry("a", 1))
         hang = true
-        val cancelled = launch { checker.checkIfStale(searches, 0L) }
+        val cancelled = launch { check(searches, 0L) }
         runCurrent()
         cancelled.cancelAndJoin()
         hang = false
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(searches, hour)
+        check(searches, hour)
         assertEquals(listOf("a"), checked)
-        checker.checkIfStale(searches, 3 * hour)
+        check(searches, 3 * hour)
         assertEquals(listOf("a", "a"), checked)
         assertEquals(mapOf("a" to 0), counts())
     }
@@ -91,8 +100,8 @@ class SavedSearchNewPostsTest {
     @Test fun `overlapping checks send each search once`() = runTest {
         val searches = listOf(entry("a", 1), entry("b", 2))
         hang = true
-        val first = launch { checker.checkIfStale(searches, 0L) }
-        val second = launch { checker.checkIfStale(searches, 0L) }
+        val first = launch { check(searches, 0L) }
+        val second = launch { check(searches, 0L) }
         runCurrent()
         assertEquals(setOf("a", "b"), checked.toSet())
         assertEquals(2, checked.size)
@@ -100,12 +109,47 @@ class SavedSearchNewPostsTest {
         second.cancelAndJoin()
     }
 
+    @Test fun `editing a saved search starts its new posts over and drops a check of the old query still running (ADR 0218)`() = runTest {
+        val saved = savedSearchWithTwoNew()
+        val oldQueryAnswer = CompletableDeferred<Unit>().also { gates["a"] = it }
+        pages = mapOf("a" to listOf("old2", "old1"))
+        val running = launch { check(listOf(saved), 6 * hour) }
+        runCurrent()
+        store.resetSavedSearchNewPosts(saved.id)
+        oldQueryAnswer.complete(Unit)
+        running.join()
+        assertEquals(emptyMap<String, Int>(), counts())
+        gates.clear()
+        pages = mapOf("a" to listOf("9", "3"))
+        check(listOf(saved), 6 * hour + 1)
+        assertEquals(mapOf("a" to 0), counts())
+    }
+
+    @Test fun `a search edited while it waits its turn drops what the old query found and stays due (ADR 0218)`() = runTest {
+        val original = entry("a", 1)
+        val busy = listOf(entry("b", 2), entry("c", 3))
+        val answers = busy.associate { it.id to CompletableDeferred<Unit>() }
+        gates.putAll(answers)
+        pages = mapOf("a" to listOf("old2", "old1"), "b" to listOf("1"), "c" to listOf("1"))
+        val running = launch { check(busy + original, 0L) }
+        runCurrent()
+        val edited = original.copy(search = original.search.copy(queryHash = "edited"))
+        stored = busy + edited
+        store.resetSavedSearchNewPosts(original.id)
+        answers.values.forEach { it.complete(Unit) }
+        running.join()
+        assertEquals(mapOf("b" to 0, "c" to 0), counts())
+        pages = mapOf("a" to listOf("9", "3"))
+        checker.checkIfStale(1L)
+        assertEquals(mapOf("a" to 0, "b" to 0, "c" to 0), counts())
+    }
+
     private suspend fun savedSearchWithTwoNew(): SavedSearchEntry {
         val saved = entry("a", 1)
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(listOf(saved), 0L)
+        check(listOf(saved), 0L)
         pages = mapOf("a" to listOf("3", "2", "1"))
-        checker.checkIfStale(listOf(saved), 3 * hour)
+        check(listOf(saved), 3 * hour)
         assertEquals(mapOf("a" to 2), counts())
         return saved
     }

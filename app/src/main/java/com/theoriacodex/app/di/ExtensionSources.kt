@@ -37,10 +37,11 @@ class SeriesDependencies(
 
     suspend fun checkFollowed(
         runEvery: Duration? = null,
+        only: Set<SeriesId>? = null,
         onProgress: (CheckProgress) -> Unit = {},
         onUpdate: suspend (SeriesUpdate) -> Unit = {},
     ): FollowedCheck = checking.withLock {
-        repository.checkFollowed(source, runEvery, onProgress = onProgress) { update ->
+        repository.checkFollowed(source, runEvery, only = only, onProgress = onProgress) { update ->
             downloads.downloadNew(update)
             onUpdate(update)
         }

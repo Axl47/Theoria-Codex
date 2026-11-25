@@ -5,6 +5,8 @@
 ### Added
 
 - Scrolling down in Series, Library and For You's grid slides the header away so the grid gets the screen; any scroll up brings it back. Series keeps its search and Extensions buttons, and the bottom bar stays.
+- A saved search's Rename dialog has Edit search, which opens it in Search to change its tags, sources, filters or sort. Update saves the change under the same name and place, and its new-post count starts over. Closing Search's sheet without tapping Update leaves the saved search as it was.
+- The menu in Search's sheet has Filter and sort, which opens the filters over the sheet without closing it.
 - New posts in Followed and Searches have an accent dot and outline until you open them or come back later.
 - A saved search saved with Popular, Top or Random shows that sort after its name, on its chip in Search and in its row.
 - The search box also finds the series you follow, with their cover, manga or anime, and source. Picking one opens its page, also offline.
@@ -12,6 +14,7 @@
 - Missing extensions shows how far you read each series, such as "12 of 40 chapters · read Mar 3, 2026", and groups series no repo offers under the site their cover comes from.
 - Switch source starts from the series' title in a search field you can edit, so a series another source titles differently (English or romaji, other punctuation) can still be found.
 - Pulling down on Series' Following grid shows what letting go does, "Check for new chapters" (episodes if you only follow anime, updates if you follow both), and the pill fills once you've pulled far enough. While the check runs, it shows how many series are checked out of how many, and stays in view as you scroll or switch tabs. When it finishes, it says how many new chapters or episodes it found, then goes away.
+- When Series couldn't check some series, its row now sits on a card. Tap it to see which series failed, grouped by extension and then by reason (Couldn't reach site, Timed out, Blocked, Rate limited, Source error), with Retry for each group. ✕ hides the row until a later check fails again.
 - For You has a Refresh button in its top bar that deals a fresh Mix.
 - When no sources are enabled, For You offers Manage sources, which opens Settings › Sites.
 - Restore backup also takes backups from Mihon, TachiyomiJ2K and Anikku. Their followed manga and anime appear in Series, with the chapters you read, the episodes you watched, where you stopped in each, and each manga's reading mode. Nothing you already have is removed, and importing the same backup twice adds nothing more. The extension repos the backup lists are added too, without contacting them. The preview names the extensions still missing, so you only need to install them, and a series opens once its extension is on here. The next background check for new chapters notifies you of chapters and episodes the backup didn't have yet, unless you already refreshed that series.
@@ -88,7 +91,7 @@
 
 ### Changed
 
-- The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. When a post would fit better the other way, a rotate button shows for a few seconds; tap it to turn once, and the Viewer follows the phone again once you turn it to match.
+- The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
 - In landscape, the Viewer's rotate, lock and slideshow buttons sit in the thumbnail strip's row instead of floating over the picture.
 - In Play Next and slideshows, every post stays on screen for at least five seconds. A shorter clip, GIF or Pixiv animation replays until then and moves on at the end of a play-through, and touching, zooming, seeking or showing the controls starts the five seconds again.
@@ -165,10 +168,14 @@
 
 ### Fixed
 
+- Leaving a chapter or an episode closes the reader or player all at once. The dark background no longer disappears first while the pages or video stay on screen a moment longer.
+- Swiping back from a series page, Settings, Extensions or another full screen slides it away, as the back arrow does. It no longer fades with its text drawn over the screen behind it.
+- Closing a gallery you read in vertical mode fades its pages out along with the dark background. They no longer stay on screen after the background is gone.
 - A trail step that would hold only the post you're on, which happens quickly on Hitomi where each post is a whole gallery, now says "No other posts" instead of opening a step with nothing new.
 - A trail step whose site couldn't be reached now says "Couldn't load" instead of claiming there were no posts, and a creator page's tag chip stays usable after a failed load.
 - A gallery that is the only post in the Viewer's thumbnail strip spreads its pages across the whole strip instead of leaving empty space beside them.
 - Missing extensions no longer says "Language off" for every installed extension that is on. It names the language that is off and turns it on, says when the extension couldn't load, or says the installed version doesn't offer that series' source.
+- Unlocking the Viewer's rotation keeps the orientation you chose with rotate before locking, instead of snapping back to portrait when system auto-rotate is off.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.

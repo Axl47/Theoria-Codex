@@ -63,7 +63,7 @@ class MissingExtensionsBackDeviceTest {
 
     @Test
     fun theSeriesTabExtensionsButtonTellsAccessibilityHowManySeriesNeedTheirExtension() {
-        val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { FollowedCheck(emptyList(), checked = 0, failed = 0) }
+        val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { _, _ -> FollowedCheck(emptyList(), checked = 0) }
         compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitUntil(TIMEOUT_MS) { tab.content.value.missingExtensions.isNotEmpty() }
         compose.waitForIdle()
@@ -84,12 +84,12 @@ class MissingExtensionsBackDeviceTest {
     fun pullingTheFollowingGridNamesTheCheckThenCountsSeriesAsTheyFinish() {
         val step = Channel<Unit>(Channel.UNLIMITED)
         val found = SeriesUpdate(Followed.first, listOf(SeriesEntry("/c/1", "1"), SeriesEntry("/c/2", "2"), SeriesEntry("/c/3", "3")))
-        val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { onProgress ->
+        val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { _, onProgress ->
             (0..2).forEach { done ->
                 onProgress(CheckProgress(done, 2))
                 step.receive()
             }
-            FollowedCheck(listOf(found), checked = 2, failed = 0)
+            FollowedCheck(listOf(found), checked = 2)
         }
         compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}) } }
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(TITLE).fetchSemanticsNodes().isNotEmpty() }

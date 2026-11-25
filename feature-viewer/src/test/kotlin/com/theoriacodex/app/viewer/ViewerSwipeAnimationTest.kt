@@ -169,7 +169,7 @@ class ViewerSwipeAnimationTest {
         val first = posts.first()
         val state = mutableStateOf(createViewerUiState(ViewerSessionIdentity("swipe"), if (related) posts.take(1) else posts, requiresResolution = { false }))
         val transition = ViewerReturnTransition().apply {
-            if (opening) openedFrom("feed", Rect(20f, 100f, 220f, 400f))
+            if (opening) openedFrom("feed", Rect(20f, 100f, 220f, 400f), post = first.id)
         }
         setSlideContent(state, transition, first, posts, related, inverted)
         compose.waitForIdle()
