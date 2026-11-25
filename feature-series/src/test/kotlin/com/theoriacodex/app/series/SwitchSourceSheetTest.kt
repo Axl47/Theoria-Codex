@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
 import com.theoriacodex.domain.series.Series
@@ -33,9 +34,9 @@ class SwitchSourceSheetTest {
     fun aSourceThatFailsIsWrittenAtTheSizeOfTheSheetsOtherSourceLines() {
         val viewModel = SwitchSourceViewModel(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/mine"), { listOf(Unreachable) }, store = {}) { _, _ -> false }
         compose.setContent { MaterialTheme { SwitchSourceSheet(viewModel, onOpenSeries = {}, onSwitched = {}) } }
-        compose.waitUntil { viewModel.state.value.others.isNotEmpty() }
+        compose.waitUntilSettled { viewModel.state.value.others.isNotEmpty() }
         viewModel.open("Kaiju")
-        compose.waitUntil { viewModel.state.value.sheet?.results?.singleOrNull()?.listing is SwitchListing.Failed }
+        compose.waitUntilSettled { viewModel.state.value.sheet?.results?.singleOrNull()?.listing is SwitchListing.Failed }
         compose.waitForIdle()
 
         val layouts = mutableListOf<TextLayoutResult>()
