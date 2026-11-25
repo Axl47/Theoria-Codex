@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -24,6 +23,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,7 +67,6 @@ private fun CodexListHeaderActions(
     state: CodexListUiState,
     actions: CodexListActions,
 ) {
-    CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
     CodexLibrarySortMenu(presentation.librarySort, actions.setLibrarySort)
     CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
 }
@@ -145,6 +145,12 @@ private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions
             onSave = { name ->
                 actions.createCodex(name)
                 state.showCreateDialog = false
+            },
+            extraAction = {
+                TextButton(onClick = {
+                    state.showCreateDialog = false
+                    actions.importCodex()
+                }) { Text("Import") }
             },
         )
     }

@@ -80,7 +80,7 @@ class CheckFailuresTest {
                 FollowingBody(
                     content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = 0, grid = rememberLazyGridState(),
                     onRefresh = {}, onRetryFailed = { retried += it }, onDismissFailures = { failed = null }, onUnfollow = {},
-                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
+                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD,
                 )
             }
         }
@@ -100,13 +100,13 @@ class CheckFailuresTest {
         val stuck = failure("/a")
         val sources = listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1), FakeSeriesSource("custom_mihon_3", "Paper Lantern", "en", count = 1))
         val content = SeriesTabState(sources = sources, libraryLoaded = true).content(listOf(FollowedSeries(stuck.series, unreadCount = 0)))
-        val tools = CheckFailureTools(switchSource = { id -> SwitchSourceViewModel(id, { sources }, store = {}) { _, _ -> false } })
+        val tools = CheckFailureTools(switchSource = { id -> SwitchSourceViewModel(id, { sources }, store = {}, choices = MemorySwitchSourceSkips()) { _, _ -> false } })
         compose.setContent {
             MaterialTheme {
                 FollowingBody(
                     content = content, checking = null, found = emptyList(), failedCheck = FollowedCheck(emptyList(), checked = 2, failures = listOf(stuck)), checkRun = 0,
                     grid = rememberLazyGridState(), onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
-                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, failureTools = tools,
+                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD, failureTools = tools,
                 )
             }
         }
@@ -137,7 +137,7 @@ class CheckFailuresTest {
                         content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = runs, grid = grid,
                         onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
                         onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
-                        failureTools = CheckFailureTools(snackbar = snackbar),
+                        hold = NO_HOLD, failureTools = CheckFailureTools(snackbar = snackbar),
                     )
                     SnackbarHost(snackbar)
                 }

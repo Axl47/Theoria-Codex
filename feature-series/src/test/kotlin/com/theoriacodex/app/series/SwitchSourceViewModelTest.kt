@@ -37,9 +37,100 @@ class SwitchSourceViewModelTest {
     @After
     fun resetMainDispatcher() = Dispatchers.resetMain()
 
-    private fun TestScope.viewModel(vararg others: SeriesSource, switch: suspend (SeriesSource, Series) -> Boolean = { _, _ -> true }): SwitchSourceViewModel {
+    private fun TestScope.viewModel(
+        vararg others: SeriesSource,
+        skips: MemorySwitchSourceSkips = MemorySwitchSourceSkips(),
+        switch: suspend (SeriesSource, Series) -> Boolean = { _, _ -> true },
+    ): SwitchSourceViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        return SwitchSourceViewModel(from, { listOf(current) + others }, store = {}, switch = switch)
+        return SwitchSourceViewModel(from, { listOf(current) + others }, store = {}, choices = skips, switch = switch)
+    }
+
+    @Test
+    fun onlyCheckedSourcesAreSearchedAndEachCheckSearchesOrDropsJustThatSource() = runTest {
+        val checked = Finding("custom_mihon_2", listOf("Hero"))
+        val unchecked = Finding("custom_mihon_3", listOf("Hero"))
+        val skips = MemorySwitchSourceSkips(setOf(unchecked.key))
+        val viewModel = viewModel(checked, unchecked, skips = skips)
+        advanceUntilIdle()
+
+        viewModel.open("Hero")
+        advanceUntilIdle()
+        assertEquals(listOf(checked.key), viewModel.state.value.sheet!!.results.map { it.key })
+        assertEquals(emptyList<String>(), unchecked.searched)
+
+        viewModel.toggle(listOf(unchecked.key))
+        advanceUntilIdle()
+        assertEquals(listOf(checked.key, unchecked.key), viewModel.state.value.sheet!!.results.map { it.key })
+        assertEquals("A check searches only the checked source", listOf("Hero"), checked.searched)
+        assertEquals(listOf("Hero"), unchecked.searched)
+
+        viewModel.toggle(listOf(checked.key))
+        advanceUntilIdle()
+        assertEquals(listOf(unchecked.key), viewModel.state.value.sheet!!.results.map { it.key })
+        assertEquals(setOf(checked.key), skips.skipped)
+    }
+
+    @Test
+    fun theNextSheetStartsFromTheLastChoiceAndASourceAddedSinceStartsChecked() = runTest {
+        val kept = Finding("custom_mihon_2", listOf("Hero"))
+        val dropped = Finding("custom_mihon_3", listOf("Hero"))
+        val skips = MemorySwitchSourceSkips(setOf(SourceKey.parseOrThrow("custom_aniyomi_9")))
+        val first = viewModel(kept, dropped, skips = skips)
+        advanceUntilIdle()
+        first.open("Hero")
+        advanceUntilIdle()
+        first.toggle(listOf(dropped.key))
+        advanceUntilIdle()
+        assertEquals("Choices for sources this sheet does not offer are kept", setOf(SourceKey.parseOrThrow("custom_aniyomi_9"), dropped.key), skips.skipped)
+
+        val added = Finding("custom_mihon_4", listOf("Hero"))
+        val next = viewModel(kept, dropped, added, skips = skips)
+        advanceUntilIdle()
+        next.open("Hero")
+        advanceUntilIdle()
+
+        assertEquals(listOf(kept.key, added.key), next.state.value.sheet!!.results.map { it.key })
+        assertEquals(listOf("Hero"), dropped.searched)
+    }
+
+    @Test
+    fun twoOpenSheetsKeepEachOthersChoices() = runTest {
+        val a = Finding("custom_mihon_2")
+        val b = Finding("custom_mihon_3")
+        val skips = MemorySwitchSourceSkips()
+        val first = viewModel(a, b, skips = skips)
+        val second = viewModel(a, b, skips = skips)
+        advanceUntilIdle()
+        first.open("Hero")
+        second.open("Hero")
+        advanceUntilIdle()
+
+        first.toggle(listOf(a.key))
+        advanceUntilIdle()
+        second.toggle(listOf(b.key))
+        advanceUntilIdle()
+
+        assertEquals(setOf(a.key, b.key), skips.skipped)
+    }
+
+    @Test
+    fun uncheckingASourceCancelsItsSearchAndNothingCheckedSearchesNothing() = runTest {
+        val slow = Finding("custom_mihon_2", listOf("Hero")).apply { wait = CompletableDeferred() }
+        val viewModel = viewModel(slow)
+        advanceUntilIdle()
+        viewModel.open("Hero")
+        advanceUntilIdle()
+
+        viewModel.toggle(listOf(slow.key))
+        advanceUntilIdle()
+        assertTrue(slow.cancelled)
+        assertEquals(emptyList<SwitchSourceResult>(), viewModel.state.value.sheet!!.results)
+
+        viewModel.searchAgain()
+        viewModel.retry(slow.key)
+        advanceUntilIdle()
+        assertEquals(listOf("Hero"), slow.searched)
     }
 
     @Test
@@ -145,7 +236,7 @@ class SwitchSourceViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val other = Finding("custom_mihon_2", listOf("Hero"))
         var moved: Pair<SourceKey, SeriesId>? = null
-        val viewModel = SwitchSourceViewModel(from, { listOf(other) }, store = {}) { source, to -> moved = source.key to to.id; true }
+        val viewModel = SwitchSourceViewModel(from, { listOf(other) }, store = {}, choices = MemorySwitchSourceSkips()) { source, to -> moved = source.key to to.id; true }
         advanceUntilIdle()
         viewModel.open("Hero")
         advanceUntilIdle()
@@ -200,7 +291,7 @@ class SwitchSourceViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val own = Finding("custom_aniyomi_1")
         val anime = Finding("custom_aniyomi_2", listOf("Hero"))
-        val viewModel = SwitchSourceViewModel(SeriesId(own.key, "/mine"), { listOf(own, Finding("custom_mihon_2", listOf("Hero")), anime) }, store = {}) { _, _ ->
+        val viewModel = SwitchSourceViewModel(SeriesId(own.key, "/mine"), { listOf(own, Finding("custom_mihon_2", listOf("Hero")), anime) }, store = {}, choices = MemorySwitchSourceSkips()) { _, _ ->
             throw NoChaptersToMoveToException()
         }
         advanceUntilIdle()

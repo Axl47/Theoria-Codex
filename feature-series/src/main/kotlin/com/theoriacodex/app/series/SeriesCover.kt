@@ -1,7 +1,7 @@
 package com.theoriacodex.app.series
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -87,6 +87,7 @@ internal fun SeriesCard(
     unread: Int = 0,
     followed: Boolean = false,
     marked: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val kind = series.id.source.seriesKind
     val anime = marked && kind == SeriesKind.ANIME
@@ -94,7 +95,7 @@ internal fun SeriesCard(
         modifier
             .aspectRatio(COVER_ASPECT)
             .clip(COVER_SHAPE)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = onLongClick?.let { MORE_OPTIONS }),
     ) {
         SeriesCover(series, Modifier.fillMaxSize())
         if (followed) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
