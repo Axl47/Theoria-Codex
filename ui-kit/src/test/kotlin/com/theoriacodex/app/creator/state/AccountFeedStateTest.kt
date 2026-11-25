@@ -18,7 +18,7 @@ class AccountFeedStateTest {
     private val bothFeeds = listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES)
 
     @Test
-    fun `an account opens on its first feed with the uploads key it always had`() {
+    fun `an account opens on its first feed with the uploads key it always had (ADR 0066)`() {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds))
         assertEquals(AccountFeed.UPLOADS, opened.state.selectedFeed)
         assertEquals(creatorQueryHash(account), opened.state.queryHash)
@@ -26,10 +26,16 @@ class AccountFeedStateTest {
         val load = opened.effect as CreatorEffect.LoadPage
         assertEquals(AccountFeed.UPLOADS, load.feed)
         assertEquals("creator:GELBOORU:user:Account:favorites", creatorQueryHash(account, AccountFeed.FAVORITES))
+
+        val favoritesFirst = CreatorUiState()
+            .reduce(CreatorAction.OpenCreator(account, listOf(AccountFeed.FAVORITES, AccountFeed.UPLOADS)))
+        assertEquals(AccountFeed.FAVORITES, favoritesFirst.state.selectedFeed)
+        assertEquals("creator:GELBOORU:user:Account:favorites", favoritesFirst.state.queryHash)
+        assertEquals(AccountFeed.FAVORITES, (favoritesFirst.effect as CreatorEffect.LoadPage).feed)
     }
 
     @Test
-    fun `switching tabs parks the list and restores it without a request`() {
+    fun `switching tabs parks the list and restores it without a request (ADR 0066)`() {
         val uploads = listOf(testPost(sourcePostId = "u1"))
         val onFavorites = loaded(uploads, "uploads-2").reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
         val favoritesLoad = onFavorites.effect as CreatorEffect.LoadPage
@@ -49,11 +55,12 @@ class AccountFeedStateTest {
     }
 
     @Test
-    fun `follow waits for the uploads list even after switching tabs mid-load`() {
+    fun `follow waits for the uploads list even after switching tabs mid-load (ADR 0066)`() {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds)).state
         assertTrue(opened.uploadsRefreshing)
         assertTrue(opened.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state.uploadsRefreshing)
         assertFalse(loaded(listOf(testPost(sourcePostId = "u1")), null).reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state.uploadsRefreshing)
+        assertTrue(CreatorUiState().reduce(CreatorAction.OpenCreator(account, listOf(AccountFeed.FAVORITES))).state.uploadsRefreshing)
     }
 
     @Test
@@ -76,7 +83,7 @@ class AccountFeedStateTest {
     }
 
     @Test
-    fun `a request outlived by a tab switch is ignored`() {
+    fun `a request outlived by a tab switch is ignored (ADR 0066)`() {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds))
         val uploadsRequest = (opened.effect as CreatorEffect.LoadPage).request
         val switched = opened.state.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state
@@ -84,10 +91,25 @@ class AccountFeedStateTest {
         assertEquals(switched, switched.reduce(CreatorAction.PageLoaded(uploadsRequest, Page(listOf(testPost()), null))).state)
         assertEquals(switched, switched.reduce(CreatorAction.RequestFailed(uploadsRequest, "late")).state)
         assertEquals(switched, switched.reduce(CreatorAction.RequestCancelled(uploadsRequest)).state)
+
+        val settled = opened.state.reduce(CreatorAction.RequestFailed(uploadsRequest, "failed")).state
+        assertEquals(settled, settled.reduce(CreatorAction.RequestCancelled(uploadsRequest)).state)
+
+        val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), "uploads-2").reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        val favoritesRequest = (onFavorites.effect as CreatorEffect.LoadPage).request
+        val favoritesShown = onFavorites.state
+            .reduce(CreatorAction.PageLoaded(favoritesRequest, Page(listOf(testPost(sourcePostId = "f1")), "fav-2"))).state
+        val paging = favoritesShown.reduce(CreatorAction.LoadNextPage)
+        val pageRequest = (paging.effect as CreatorEffect.LoadPage).request
+        val backOnUploads = paging.state.reduce(CreatorAction.SelectFeed(AccountFeed.UPLOADS)).state
+        assertEquals(
+            backOnUploads,
+            backOnUploads.reduce(CreatorAction.PageLoaded(pageRequest, Page(listOf(testPost(sourcePostId = "f2")), null))).state,
+        )
     }
 
     @Test
-    fun `a feed left mid-load reloads when selected again, a failed one keeps its error`() {
+    fun `a feed left mid-load reloads when selected again, a failed one keeps its error (ADR 0066)`() {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds)).state
         val away = opened.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
         val failedRequest = (away.effect as CreatorEffect.LoadPage).request
@@ -101,7 +123,19 @@ class AccountFeedStateTest {
     }
 
     @Test
-    fun `Favorites is hidden once the source reports none and unknown counts keep it`() {
+    fun `a feed that finished empty is not reloaded when selected again (ADR 0066)`() {
+        val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), null).reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        val request = (onFavorites.effect as CreatorEffect.LoadPage).request
+        val settledEmpty = onFavorites.state.reduce(CreatorAction.PageLoaded(request, Page(emptyList(), null))).state
+        val parked = settledEmpty.reduce(CreatorAction.SelectFeed(AccountFeed.UPLOADS)).state
+
+        val back = parked.reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
+        assertNull(back.effect)
+        assertEquals(CreatorEmptyReason.NO_RESULTS, back.state.emptyReason)
+    }
+
+    @Test
+    fun `Favorites is hidden once the source reports none and unknown counts keep it (ADR 0066)`() {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account, bothFeeds)).state
         assertEquals(bothFeeds, opened.tabs)
         assertEquals(bothFeeds, opened.reduce(CreatorAction.DetailsLoaded(account, AccountDetails(uploadCount = 3))).state.tabs)
@@ -112,7 +146,7 @@ class AccountFeedStateTest {
     }
 
     @Test
-    fun `details that hide the selected Favorites tab return to uploads`() {
+    fun `details that hide the selected Favorites tab return to uploads (ADR 0066)`() {
         val onFavorites = loaded(listOf(testPost(sourcePostId = "u1")), null)
             .reduce(CreatorAction.SelectFeed(AccountFeed.FAVORITES)).state
         val hidden = onFavorites.reduce(CreatorAction.DetailsLoaded(account, AccountDetails(favoriteCount = 0)))
@@ -130,7 +164,7 @@ class AccountFeedStateTest {
     }
 
     @Test
-    fun `Follow reads uploads while another feed is selected`() {
+    fun `Follow reads uploads while another feed is selected (ADR 0066)`() {
         val uploads = listOf(testPost(sourcePostId = "u1"))
         val state = loaded(uploads, null)
         assertEquals(uploads, state.uploads)
@@ -140,7 +174,7 @@ class AccountFeedStateTest {
     }
 
     @Test
-    fun `a creator that is not an account has no tabs and ignores feed selection`() {
+    fun `a creator that is not an account has no tabs and ignores feed selection (ADR 0066)`() {
         val opened = CreatorUiState().reduce(CreatorAction.OpenCreator(account)).state
         assertTrue(opened.feeds.isEmpty())
         assertTrue(opened.tabs.isEmpty())

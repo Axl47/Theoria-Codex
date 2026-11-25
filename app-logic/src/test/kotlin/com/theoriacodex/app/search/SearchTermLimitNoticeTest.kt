@@ -15,7 +15,7 @@ class SearchTermLimitNoticeTest {
     private val sources = listOf(SourceKey.GELBOORU, SourceKey.DANBOORU)
 
     @Test
-    fun `unified warns about a capped source while a single-source search is refused`() {
+    fun `unified warns about a capped source while a single-source search is refused (ADR 0079)`() {
         val tags = listOf("cat", "sky", "cloud")
 
         assertEquals(
@@ -29,7 +29,7 @@ class SearchTermLimitNoticeTest {
     }
 
     @Test
-    fun `queries within the budget and terms Unified never sends produce no notice`() {
+    fun `queries within the budget and terms Unified never sends produce no notice (ADR 0079, 0080)`() {
         assertEquals(emptyList<SearchTermLimitNotice>(),
             searchTermLimitNotices(query(QueryMode.Unified, listOf("cat", "sky")), sources, limits))
         val withSourceTerm = query(QueryMode.Unified, listOf("cat", "sky")).let {
@@ -39,7 +39,7 @@ class SearchTermLimitNoticeTest {
     }
 
     @Test
-    fun `a ranked sort lowers the budget and says so`() {
+    fun `a ranked sort lowers the budget and says so (ADR 0079)`() {
         val notice = searchTermLimitNotices(query(QueryMode.Unified, listOf("cat", "sky"), SortMode.TOP), sources, limits)
         assertEquals(listOf(SearchTermLimitNotice(SourceKey.DANBOORU, 1, blocksSearch = false, reducedBySort = true)), notice)
     }

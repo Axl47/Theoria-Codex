@@ -12,7 +12,7 @@ import org.junit.Test
 
 class RelatedPostsStateTest {
     @Test
-    fun `accumulated posts add new recommendations instead of replacing them`() {
+    fun `accumulated posts add new recommendations instead of replacing them (ADR 0077)`() {
         val first = post("first")
         val second = post("second")
         val loading = RelatedPostsUiState.Idle.begin(first, 0, 1)
@@ -27,14 +27,14 @@ class RelatedPostsStateTest {
     }
 
     @Test
-    fun `accumulated posts drop liked seeds and clear with the shelf`() {
+    fun `accumulated posts drop liked seeds and clear with the shelf (ADR 0077)`() {
         val shown = listOf(post("a"), post("seed"))
         assertEquals(listOf("a"), RelatedPostsUiState.Idle.begin(post("seed"), 0, 1).accumulatedPosts(shown).map { it.id.sourcePostId })
         assertEquals(emptyList<Post>(), RelatedPostsUiState.Idle.accumulatedPosts(shown))
     }
 
     @Test
-    fun `hide liked retains shelf seeds through loading results empty and failure until dismissal`() {
+    fun `hide liked retains shelf seeds through loading results empty and failure until dismissal (ADR 0077)`() {
         val seed = post("seed")
         val nextSeed = post("next")
         val otherLiked = post("other")
@@ -50,6 +50,10 @@ class RelatedPostsStateTest {
             nextLoading.complete(nextLoading.request, listOf(post("result")), emptySet()),
             nextLoading.complete(nextLoading.request, emptyList(), emptySet()),
             nextLoading.fail(nextLoading.request, "offline"),
+        )
+        assertEquals(
+            setOf(seed.id, nextSeed.id),
+            RelatedPostsUiState.Idle.begin(nextSeed, 1, 2, ancestorSeedPostIds = setOf(seed.id)).retainedLikedPostIds,
         )
         states.forEach { state ->
             val seeds = if (state.requestOrNull?.seed == nextSeed) listOf(seed, nextSeed) else listOf(seed)
@@ -127,7 +131,7 @@ class RelatedPostsStateTest {
     }
 
     @Test
-    fun `promotion inserts once and removes the promoted card from retained pages`() {
+    fun `promotion inserts once and removes the promoted card from retained pages (ADR 0077)`() {
         val seed = post("seed")
         val promoted = post("promoted")
         val sibling = post("sibling")
@@ -163,7 +167,7 @@ class RelatedPostsStateTest {
     }
 
     @Test
-    fun `a shelf follows its seed, then its chain, when the list reorders under it`() {
+    fun `a shelf follows its seed, then its chain, when the list reorders under it (ADR 0077)`() {
         val seed = post("seed")
         val chained = post("chained")
         val request = RelatedPostsUiState.Idle.begin(chained, 2, 1, ancestorSeedPostIds = setOf(seed.id)).request
@@ -171,7 +175,9 @@ class RelatedPostsStateTest {
 
         assertEquals(0, request.anchorIndexIn(ids(listOf("chained", "a", "seed"))))
         assertEquals(2, request.anchorIndexIn(ids(listOf("new", "a", "seed"))))
+        assertEquals(1, request.anchorIndexIn(ids(listOf("new", "seed", "a"))))
         assertEquals(1, request.anchorIndexIn(ids(listOf("a", "b"))))
+        assertEquals(2, request.anchorIndexIn(ids(listOf("a", "b", "c", "d"))))
         assertEquals(-1, request.anchorIndexIn(emptyList()))
     }
 

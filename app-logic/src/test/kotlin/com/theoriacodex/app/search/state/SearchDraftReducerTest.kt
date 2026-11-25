@@ -31,7 +31,7 @@ class SearchDraftReducerTest {
     private val scopes = listOf(FacetedSearchScope.All, tag, female, artist, character, series)
 
     @Test
-    fun `clearing the draft keeps the current mode and media`() {
+    fun `clearing the draft keeps the current mode and media (ADR 0079)`() {
         val applied = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("applied")))
         val edited = SearchDraftReducer.edit(
             state(applied).copy(
@@ -91,6 +91,53 @@ class SearchDraftReducerTest {
 
         assertEquals(restored, selected.query.draft)
         assertEquals(QueryMode.Unified, rejected.query.draft.mode)
+    }
+
+    @Test
+    fun `a source that leaves takes its terms from the draft and the applied search but not the typed input (ADR 0079)`() {
+        val pixiv = query(
+            QueryMode.Source(SourceKey.PIXIV),
+            listOf(SearchTerm("portable"), SearchTerm("artist", SearchFacet.ARTIST, "artist")),
+        )
+        val initial = state(pixiv).let {
+            it.copy(suggestions = it.suggestions.copy(input = "half typed", inputError = "Pick a suggested tag"))
+        }
+
+        val reconciled = SearchDraftReducer.reconcileEnvironment(
+            initial, listOf(SourceKey.GELBOORU), setOf(SourceKey.GELBOORU), emptyMap(), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(SearchSourceScope.GlobalUnified, reconciled.query.draftSourceScope)
+        assertEquals(SearchSourceScope.GlobalUnified, reconciled.query.appliedSourceScope)
+        assertEquals(listOf(SearchTerm("portable")), reconciled.query.draft.includeTerms)
+        assertEquals(listOf(SearchTerm("portable")), reconciled.query.applied.includeTerms)
+        assertEquals("half typed", reconciled.suggestions.input)
+        assertEquals("Pick a suggested tag", reconciled.suggestions.inputError)
+
+        val gelbooru = query(QueryMode.Source(SourceKey.GELBOORU), listOf(SearchTerm("kept")))
+        val split = initial.copy(
+            query = initial.query.copy(applied = gelbooru, appliedSourceScope = SearchSourceScope.Single(SourceKey.GELBOORU)),
+        )
+        val splitReconciled = SearchDraftReducer.reconcileEnvironment(
+            split, listOf(SourceKey.GELBOORU), setOf(SourceKey.GELBOORU), emptyMap(), emptyMap(), emptyMap(),
+        )
+
+        assertEquals(SearchSourceScope.GlobalUnified, splitReconciled.query.draftSourceScope)
+        assertEquals(SearchSourceScope.Single(SourceKey.GELBOORU), splitReconciled.query.appliedSourceScope)
+        assertEquals(gelbooru, splitReconciled.query.applied)
+    }
+
+    @Test
+    fun `a group added at once keeps only general tags, so it suits every source (ADR 0079)`() {
+        val artist = SearchTerm("someone", SearchFacet.ARTIST, "artist")
+
+        val sourceOwned = SearchTerm("scenery", SearchFacet.TAG, "meta")
+
+        val added = SearchDraftReducer.addIncludeGroup(state(), listOf(SearchTerm("cat"), sourceOwned, artist))
+        val rejected = SearchDraftReducer.addIncludeGroup(state(), listOf(artist, sourceOwned))
+
+        assertEquals(listOf(SearchTermGroup(listOf(SearchTerm("cat")))), added.state.query.draft.effectiveIncludeTermGroups)
+        assertFalse(rejected.accepted)
     }
 
     @Test
@@ -161,7 +208,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `only a typed tag from another source reports what the switch would drop`() {
+    fun `only a typed tag from another source reports what the switch would drop (ADR 0079)`() {
         val artist = SearchTerm("mika", SearchFacet.ARTIST)
         val hidden = SearchTerm("rin", SearchFacet.CHARACTER)
         val draft = query(QueryMode.Source(SourceKey.PIXIV), listOf(artist, SearchTerm("sea")))
@@ -179,7 +226,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `post tags join a group of their type, even on sources that validate typed input`() {
+    fun `post tags join a group of their type, even on sources that validate typed input (ADR 0079)`() {
         val draft = query(QueryMode.Source(SourceKey.GELBOORU), listOf(SearchTerm("sea"), SearchTerm("mika", SearchFacet.ARTIST)))
 
         val joined = SearchDraftReducer.addKnownIncludeAlternative(state(draft), SourceKey.GELBOORU, 0, SearchTerm("snow", SearchFacet.TAG, "tag"))
@@ -192,7 +239,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `include alternatives stay in one OR group and can become required`() {
+    fun `include alternatives stay in one OR group and can become required (ADR 0079)`() {
         val initial = state(query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("tag1"))))
         val grouped = SearchDraftReducer.addIncludeAlternative(initial, 0, SearchTerm("tag2"))
         val required = SearchDraftReducer.splitIncludeAlternative(grouped.state, 0, SearchTerm("tag2"))
@@ -231,7 +278,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `an autocomplete result with only a searched Gelbooru tag can commit its input`() {
+    fun `an autocomplete result with only a searched Gelbooru tag can commit its input (ADR 0079)`() {
         val result = SearchAutocompleteResult(
             input = "night_sky",
             selectedScope = FacetedSearchScope.All,
@@ -285,7 +332,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `typed pixiv translations commit the native tag they label`() {
+    fun `typed pixiv translations commit the native tag they label (ADR 0079)`() {
         val pixiv = state(query(QueryMode.Source(SourceKey.PIXIV))).copy(
             suggestions = SearchSuggestionsUiState(
                 autocomplete = listOf(TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku")),
@@ -363,7 +410,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `unified input blocks source taxonomy and historical restore removes it`() {
+    fun `unified input blocks source taxonomy and historical restore removes it (ADR 0079)`() {
         val scoped = SearchDraftReducer.commitInput(state(), "artist:najar")
         val historical = query(
             QueryMode.Unified,
@@ -371,15 +418,19 @@ class SearchDraftReducerTest {
         ).copy(excludeTerms = listOf(SearchTerm("series", SearchFacet.SERIES, "series")))
         val restored = SearchDraftReducer.restoreDraft(state(), historical)
 
+        val excludedScoped = SearchDraftReducer.addTerm(state(), SearchTerm("najar", SearchFacet.ARTIST, "artist"), excluded = true)
+
         assertFalse(scoped.accepted)
         assertTrue(scoped.state.validationMessage.orEmpty().contains("specific source"))
+        assertFalse(excludedScoped.accepted)
+        assertTrue(excludedScoped.state.query.draft.excludeTerms.isEmpty())
         assertEquals(listOf(SearchTerm("portable")), restored.state.query.draft.includeTerms)
         assertTrue(restored.state.query.draft.excludeTerms.isEmpty())
         assertTrue(restored.state.query.validationMessage.orEmpty().contains("removed"))
     }
 
     @Test
-    fun `post taxonomy changes source without losing portable filters and removal is exact`() {
+    fun `post taxonomy changes source without losing portable filters and removal is exact (ADR 0079)`() {
         val draft = query(QueryMode.Unified, listOf(SearchTerm("portable"), SearchTerm("same", SearchFacet.TAG, "tag")))
             .copy(excludeTerms = listOf(SearchTerm("blocked")), sort = SortMode.TOP)
         val added = SearchDraftReducer.addPostTerm(
@@ -402,7 +453,7 @@ class SearchDraftReducerTest {
     }
 
     @Test
-    fun `unavailable source-owned post term leaves draft unchanged while portable post tag stays unified`() {
+    fun `unavailable source-owned post term leaves draft unchanged while portable post tag stays unified (ADR 0079)`() {
         val initial = state(query(QueryMode.Unified, listOf(SearchTerm("portable"))), available = setOf(SourceKey.PIXIV))
         val rejected = SearchDraftReducer.addPostTerm(
             initial,

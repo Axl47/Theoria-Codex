@@ -6,18 +6,21 @@ import org.junit.Test
 
 class ViolationLedgerTest {
     @Test
-    fun `each site is reported once and every occurrence is counted`() {
+    fun `each site is reported once and every occurrence is counted (ADR 0073)`() {
         val ledger = ViolationLedger(siteLimit = 5)
 
         val outcomes = listOf("a", "b", "a", "a").map { site -> ledger.record("parse") { site } }
+        val otherKind = listOf("c", "c").map { site -> ledger.record("io") { site } }
 
         assertEquals(listOf(Outcome.REPORT, Outcome.REPORT, Outcome.COUNT_ONLY, Outcome.COUNT_ONLY), outcomes)
+        assertEquals(listOf(Outcome.REPORT, Outcome.COUNT_ONLY), otherKind)
         assertEquals(4L, ledger.count("parse"))
+        assertEquals(2L, ledger.count("io"))
         assertEquals(0L, ledger.count("other"))
     }
 
     @Test
-    fun `past the limit it notes the limit once, stops asking for sites and keeps counting`() {
+    fun `past the limit it notes the limit once, stops asking for sites and keeps counting (ADR 0073)`() {
         val ledger = ViolationLedger(siteLimit = 3)
         var sitesAsked = 0
         fun record(site: String) = ledger.record("parse") { sitesAsked++; site }
