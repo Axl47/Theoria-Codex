@@ -81,7 +81,7 @@ class SeriesTabRefreshTest {
     }
 
     @Test
-    fun dismissingTheFailureHidesItUntilAnotherCheckFails_adr_0219() = runTest {
+    fun dismissingTheFailureHidesItUntilAnotherCheckFails_adr_0220() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val failed = FollowedCheck(emptyList(), checked = 3, failures = listOf(failure("/a")))
         val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }) { _, _ -> failed }
@@ -97,7 +97,7 @@ class SeriesTabRefreshTest {
     }
 
     @Test
-    fun retryingAGroupChecksOnlyItsSeriesAndKeepsTheOtherFailures_adr_0219() = runTest {
+    fun retryingAGroupChecksOnlyItsSeriesAndKeepsTheOtherFailures_adr_0220() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val reachable = failure("/a")
         val limited = failure("/b", reason = SourceFailureReason.RATE_LIMITED)
@@ -117,7 +117,7 @@ class SeriesTabRefreshTest {
     }
 
     @Test
-    fun dismissingDuringAGroupRetryKeepsOnlyWhatTheRetryFound_adr_0219() = runTest {
+    fun dismissingDuringAGroupRetryKeepsOnlyWhatTheRetryFound_adr_0220() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val reachable = failure("/a")
         val limited = failure("/b", reason = SourceFailureReason.RATE_LIMITED)

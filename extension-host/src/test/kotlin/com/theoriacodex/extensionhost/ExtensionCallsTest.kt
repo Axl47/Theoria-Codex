@@ -59,7 +59,7 @@ class ExtensionCallsTest {
     }
 
     @Test
-    fun `a failure says whether the site was unreachable, slow, refusing or limiting (ADR 0219)`() {
+    fun `a failure says whether the site was unreachable, slow, refusing or limiting (ADR 0220)`() {
         val reasons = listOf(
             HttpException(429) to SourceFailureReason.RATE_LIMITED,
             HttpException(403) to SourceFailureReason.BLOCKED,

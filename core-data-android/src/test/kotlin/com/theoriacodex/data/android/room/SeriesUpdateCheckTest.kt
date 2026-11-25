@@ -128,7 +128,7 @@ class SeriesUpdateCheckTest {
     }
 
     @Test
-    fun `a failed series keeps why it failed, and a retry checks only the series it names (ADR 0219)`() = runTest {
+    fun `a failed series keeps why it failed, and a retry checks only the series it names (ADR 0220)`() = runTest {
         val blocked = FakeSource("custom_mihon_2", fails = true, failure = SourceAdapterException(SourceFailureReason.BLOCKED))
         val slow = FakeSource("custom_mihon_3", fails = true, failure = SocketTimeoutException("slow"))
         val onBlocked = Series(SeriesId(blocked.key, "/series/b"), "Walled")

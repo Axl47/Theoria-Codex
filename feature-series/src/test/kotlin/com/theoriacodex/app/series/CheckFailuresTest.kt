@@ -31,7 +31,7 @@ class CheckFailuresTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun failuresGroupBySourceThenReasonAndDropSeriesNoLongerFollowed_adr_0219() {
+    fun failuresGroupBySourceThenReasonAndDropSeriesNoLongerFollowed_adr_0220() {
         val unreachable = failure("/a")
         val parse = failure("/b", reason = SourceFailureReason.PARSE)
         val slow = failure("/c", reason = SourceFailureReason.TIMED_OUT)
@@ -57,7 +57,7 @@ class CheckFailuresTest {
     }
 
     @Test
-    fun theFailureCardOpensTheListRetriesAGroupAndDismisses_adr_0219() {
+    fun theFailureCardOpensTheListRetriesAGroupAndDismisses_adr_0220() {
         val reachable = failure("/a")
         val limited = failure("/b", reason = SourceFailureReason.RATE_LIMITED)
         val content = SeriesTabState(libraryLoaded = true).content(listOf(reachable, limited).map { FollowedSeries(it.series, unreadCount = 0) })

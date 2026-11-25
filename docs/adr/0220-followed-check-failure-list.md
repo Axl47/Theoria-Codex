@@ -1,4 +1,4 @@
-# 0219. A failed check lists its series by source and reason
+# 0220. A failed check lists its series by source and reason
 
 Status: Accepted
 
@@ -35,10 +35,10 @@ placed in `CheckProblem` because the mapping is an exhaustive `when`.
 
 ## Guarded by
 
-- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCallsTest.kt`: `a failure says whether the site was unreachable, slow, refusing or limiting (ADR 0219)`
-- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/SeriesUpdateCheckTest.kt`: `a failed series keeps why it failed, and a retry checks only the series it names (ADR 0219)`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `dismissingTheFailureHidesItUntilAnotherCheckFails_adr_0219`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `retryingAGroupChecksOnlyItsSeriesAndKeepsTheOtherFailures_adr_0219`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `dismissingDuringAGroupRetryKeepsOnlyWhatTheRetryFound_adr_0219`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `failuresGroupBySourceThenReasonAndDropSeriesNoLongerFollowed_adr_0219`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `theFailureCardOpensTheListRetriesAGroupAndDismisses_adr_0219`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionCallsTest.kt`: `a failure says whether the site was unreachable, slow, refusing or limiting (ADR 0220)`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/SeriesUpdateCheckTest.kt`: `a failed series keeps why it failed, and a retry checks only the series it names (ADR 0220)`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `dismissingTheFailureHidesItUntilAnotherCheckFails_adr_0220`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `retryingAGroupChecksOnlyItsSeriesAndKeepsTheOtherFailures_adr_0220`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `dismissingDuringAGroupRetryKeepsOnlyWhatTheRetryFound_adr_0220`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `failuresGroupBySourceThenReasonAndDropSeriesNoLongerFollowed_adr_0220`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/CheckFailuresTest.kt`: `theFailureCardOpensTheListRetriesAGroupAndDismisses_adr_0220`
