@@ -19,6 +19,7 @@ import org.junit.Test
 class ChallengePassTest {
     private val cookies = FakeCookies()
     private val passes = mutableListOf<Request>()
+    private val clearanceOnEntry = mutableListOf<String?>()
     private val sent: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
     private val challengedHosts = mutableSetOf<String>()
     private val passableHosts = mutableSetOf("site.test", "cdn.other.test")
@@ -30,6 +31,7 @@ class ChallengePassTest {
 
         override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
             passes += request
+            clearanceOnEntry += cookies.values["cf_clearance"]
             earned?.let { cookies.values["cf_clearance"] = it }
             return passed()
         }
@@ -80,19 +82,20 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a challenge is passed out of sight with the request's agent, then sent once more`() {
+    fun `a challenge is passed out of sight with the request's agent, then sent once more (ADR 0050)`() {
         cookies.values["cf_clearance"] = "old"
         answers += { _, request -> challenge(request) }
         answers += { _, request -> canned(request, body = "listing") }
 
         assertEquals("listing", call("https://site.test/list").body.string())
         assertEquals(listOf("agent/1"), passes.map { it.header("User-Agent") })
+        assertEquals(listOf<String?>(null), clearanceOnEntry)
         assertEquals("new", cookies.values["cf_clearance"])
         assertEquals(1, cookies.flushes)
     }
 
     @Test
-    fun `a request that can carry keys shows the hidden browser only its site's root and agent, then is sent whole`() {
+    fun `a request that can carry keys shows the hidden browser only its site's root and agent, then is sent whole (ADR 0050)`() {
         answers += { _, request -> challenge(request) }
         answers += { _, request -> canned(request) }
 
@@ -119,7 +122,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a clearance stored while the challenge was on its way is used, not deleted`() {
+    fun `a clearance stored while the challenge was on its way is used, not deleted (ADR 0050)`() {
         cookies.values["cf_clearance"] = "old"
         answers += { _, request ->
             cookies.values["cf_clearance"] = "fresh"
@@ -147,7 +150,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no pass for a host already waiting on the user's check, one not allowed, or a main-thread call`() {
+    fun `no pass for a host already waiting on the user's check, one not allowed, or a main-thread call (ADR 0050)`() {
         answers += { _, request -> challenge(request) }
         challengedHosts += "site.test"
         call("https://www.site.test/a").close()
@@ -162,12 +165,14 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no pass for a site whose check is on screen, keeping the clearance the visible browser earned`() {
+    fun `no pass for a site whose check is on screen, keeping the clearance the visible browser earned (ADR 0050)`() {
         cookies.values["cf_clearance"] = "visible"
         answers += { _, request -> challenge(request) }
+        passableHosts += "cdn.site.test"
         browsers.showCheck("https://www.site.test/")
 
         assertEquals(403, call("https://site.test/a").use { it.code })
+        assertEquals(403, call("https://cdn.site.test/a").use { it.code })
         assertEquals(emptyList<Request>(), passes)
         assertEquals("visible", cookies.values["cf_clearance"])
 
@@ -177,7 +182,7 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `a cancelled call never waits for a pass`() {
+    fun `a cancelled call never waits for a pass (ADR 0050)`() {
         cookies.values["cf_clearance"] = "old"
         answers += { chain, request ->
             chain.call().cancel()
@@ -191,11 +196,11 @@ class ChallengePassTest {
     }
 
     @Test
-    fun `no more than two hidden browsers run at once, however many hosts and clients challenge`() {
+    fun `no more than two hidden browsers run at once, however many hosts and clients challenge (ADR 0050)`() {
         val running = AtomicInteger()
         val most = AtomicInteger()
         val release = CountDownLatch(1)
-        val started = CountDownLatch(ChallengeBrowsers.MAX_BROWSERS)
+        val started = CountDownLatch(2)
         browser = object : ChallengeBrowser {
             override fun mayWait() = true
 
@@ -218,11 +223,11 @@ class ChallengePassTest {
         release.countDown()
         calls.forEach(Thread::join)
 
-        assertEquals(ChallengeBrowsers.MAX_BROWSERS, most.get())
+        assertEquals(2, most.get())
     }
 
     @Test
-    fun `a request that waited on a pass that failed shares the failure, with no browser of its own`() {
+    fun `a request that waited on a pass that failed shares the failure, with no browser of its own (ADR 0050)`() {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
         val browsersRun = AtomicInteger()
@@ -246,6 +251,45 @@ class ChallengePassTest {
         listOf(first, second).forEach(Thread::join)
 
         assertEquals(1, browsersRun.get())
+    }
+
+    @Test
+    fun `a pass cut short by cancellation leaves a waiting request its own pass (ADR 0050)`() {
+        val calls = java.util.Collections.synchronizedList(mutableListOf<okhttp3.Call>())
+        val started = CountDownLatch(1)
+        val browsersRun = AtomicInteger()
+        browser = object : ChallengeBrowser {
+            override fun mayWait() = true
+
+            override fun pass(request: Request, passed: () -> Boolean, cancelled: () -> Boolean): Boolean {
+                if (browsersRun.incrementAndGet() > 1) {
+                    cookies.values["cf_clearance"] = "new"
+                    return passed()
+                }
+                started.countDown()
+                Thread.sleep(500)
+                calls.first().cancel()
+                return false
+            }
+        }
+        answers += { chain, request ->
+            calls += chain.call()
+            challenge(request)
+        }
+        answers += { chain, request ->
+            calls += chain.call()
+            challenge(request)
+        }
+        answers += { _, request -> canned(request, body = "listing") }
+
+        val first = thread { runCatching { call("https://site.test/a").close() } }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        var waited: String? = null
+        val second = thread { waited = call("https://site.test/b").use { it.body.string() } }
+        listOf(first, second).forEach(Thread::join)
+
+        assertEquals(2, browsersRun.get())
+        assertEquals("listing", waited)
     }
 
     private fun call(url: String, client: OkHttpClient = this.client): Response =

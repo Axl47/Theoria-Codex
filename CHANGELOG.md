@@ -152,6 +152,11 @@
 
 ### Fixed
 
+- A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
+- Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
+- A spinner shows over a chapter until its pages arrive.
+- Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
+- A Pixiv animation whose details came back garbled once gets its length again on the next try. It used to stay without one until the app restarted.
 - Going to Recents and back no longer repeats the check for new posts from followed creators and saved searches each time; each one is checked at most every three hours, even when you leave the app before the check finishes.
 - Reopening the app after Android closed it in the background no longer downloads trending tags again; they refresh at most every 12 hours.
 - When a site answers "too many requests", searches, trending tags, new-post checks and background picture work stop asking it for at least 10 minutes instead of retrying, so a short limit is less likely to turn into a block for hours. Searches on that site say "Too many requests. Try again later." until then, and testing it in Settings › Sites says the same without sending anything.

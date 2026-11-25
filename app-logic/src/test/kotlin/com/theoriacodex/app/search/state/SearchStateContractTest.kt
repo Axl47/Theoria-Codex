@@ -26,7 +26,7 @@ import org.junit.Test
 
 class SearchStateContractTest {
     @Test
-    fun `restoring keeps the notice that stored source terms were removed`() {
+    fun `restoring keeps the notice that stored source terms were removed (ADR 0079)`() {
         val query = emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm("landscape")))
         val initialization = SearchInitialization(
             query = query,
@@ -174,7 +174,7 @@ class SearchStateContractTest {
     }
 
     @Test
-    fun `opening a result closes an open scroll request and a missing result leaves it open`() {
+    fun `opening a result closes an open scroll request and a missing result leaves it open (ADR 0081)`() {
         val shown = post("shown")
         val pending = SearchRestorationUiState.Restored(false, SearchScrollState(22, 17), 1L, resetToTop = true)
         val state = SearchUiState(restoration = pending)
@@ -273,6 +273,53 @@ class SearchStateContractTest {
             ),
             reapplied.restoration,
         )
+    }
+
+    @Test
+    fun `a keep-live request never replaces a pending move but an explicit move does (ADR 0081)`() {
+        val pending = SearchUiState(
+            restoration = SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = SearchScrollState(2, 8),
+                scrollRequestId = 1L,
+            ),
+        )
+
+        val keptLive = SearchStateReducer.reduce(
+            pending,
+            SearchStateChange.RouteEntryScrollRestorationRequested(SearchScrollState(7, 24), keepLiveGrid = true),
+        ).state
+        val moved = SearchStateReducer.reduce(
+            pending,
+            SearchStateChange.RouteEntryScrollRestorationRequested(SearchScrollState(7, 24)),
+        ).state
+
+        assertSame(pending, keptLive)
+        assertEquals(
+            SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = SearchScrollState(7, 24),
+                scrollRequestId = 2L,
+            ),
+            moved.restoration,
+        )
+    }
+
+    @Test
+    fun `a restored stored search counts as settled only when it had run (ADR 0081)`() {
+        fun initialization(executed: Boolean) = SearchInitialization(
+            query = query("stored"),
+            sourceScope = SearchSourceScope.GlobalUnified,
+            appliedByMode = emptyMap(),
+            availableSources = emptyList(),
+            hasExecutedSearch = executed,
+        )
+
+        val ran = SearchStateReducer.restore(initialization(true), "hash")
+        val neverRan = SearchStateReducer.restore(initialization(false), "")
+
+        assertEquals(SearchHistoryEntry(query("stored"), SearchSourceScope.GlobalUnified), ran.history.current)
+        assertNull(neverRan.history.current)
     }
 
     private fun query(tag: String): Query {

@@ -5,7 +5,7 @@ import org.junit.Test
 
 class PixivUgoiraDiskCacheGoldenTest {
     @Test
-    fun `the ugoira sidecar older builds wrote decodes the same`() {
+    fun `the ugoira sidecar older builds wrote decodes the same (ADR 0034)`() {
         assertStoredFormat(
             checkNotNull(javaClass.getResource("/golden/ugoira-cache/gson-written.json")).readText() to UgoiraCacheIndex(
                 version = 1,

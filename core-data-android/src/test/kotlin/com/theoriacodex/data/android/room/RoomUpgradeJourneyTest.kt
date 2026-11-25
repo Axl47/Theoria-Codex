@@ -151,6 +151,26 @@ class RoomUpgradeJourneyTest {
         }
     }
 
+    @Test fun `chapters read before in-page offsets resume at the top of their page (ADR 0192)`() {
+        val name = "series-page-offset.db"
+        helper.createDatabase(name, 23).use {
+            it.execSQL(
+                "INSERT INTO series (source, address, title, genres, language, followed, followed_at_epoch_ms, memo) " +
+                    "VALUES ('custom_mihon_7', '/a', 'A', '', 'en', 1, 40, '{}')",
+            )
+            it.execSQL(
+                "INSERT INTO series_entries (source, series_address, address, name, source_order, first_seen_at_epoch_ms, read, last_page, page_count) " +
+                    "VALUES ('custom_mihon_7', '/a', '/c/1', 'Chapter 1', 0, 1, 0, 5, 12)",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 24, true, TheoriaRoomDatabase.MIGRATION_23_24).use { database ->
+            database.query("SELECT last_page, page_count, read, page_offset FROM series_entries").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(listOf("5", "12", "0", null), (0..3).map(it::getString))
+            }
+        }
+    }
+
     @Test fun `a stored series starts with no check time, so the next background run checks it`() {
         val name = "series-check-time-back.db"
         helper.createDatabase(name, 22).use {
@@ -172,7 +192,7 @@ class RoomUpgradeJourneyTest {
         helper.createDatabase(name, 23).use {
             it.execSQL("INSERT INTO post_visual_signatures(source,source_post_id,phash,phash_checked,indexed_at_epoch_ms) VALUES('PIXIV','1',94,1,5)")
         }
-        helper.runMigrationsAndValidate(name, 24, true, TheoriaRoomDatabase.MIGRATION_23_24).use { database ->
+        helper.runMigrationsAndValidate(name, 25, true, TheoriaRoomDatabase.MIGRATION_23_24, TheoriaRoomDatabase.MIGRATION_24_25).use { database ->
             database.query("SELECT phash, phash_checked, preview_failed_at_epoch_ms FROM post_visual_signatures").use {
                 assertTrue(it.moveToFirst())
                 assertEquals(listOf("94", "1", null), (0..2).map(it::getString))

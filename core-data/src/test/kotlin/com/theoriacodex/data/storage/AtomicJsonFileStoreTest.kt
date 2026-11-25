@@ -89,7 +89,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `malformed, wrong-shaped, null, blank, and non-UTF-8 files are quarantined`() = runTest {
+    fun `malformed, wrong-shaped, null, blank, and non-UTF-8 files are quarantined (ADR 0032)`() = runTest {
         val store = AtomicJsonFileStore()
         val cases = mapOf(
             "{broken".toByteArray() to "contains malformed JSON",
@@ -115,7 +115,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `writes read back unescaped and other decoding failures propagate untouched`() = runTest {
+    fun `writes read back unescaped and other decoding failures propagate untouched (ADR 0032)`() = runTest {
         val store = AtomicJsonFileStore()
         val file = tempFolder.root.resolve("nested/kotlinx.json")
         store.write(file, Payload("a & b"), Payload.serializer())
@@ -134,7 +134,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `matching quarantine completes interrupted recovery idempotently`() = runTest {
+    fun `matching quarantine completes interrupted recovery idempotently (ADR 0032)`() = runTest {
         val file = tempFolder.root.resolve("state.json")
         val bytes = "{broken".toByteArray()
         file.writeBytes(bytes)
@@ -149,7 +149,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `different quarantine collision fails closed with live bytes untouched`() = runTest {
+    fun `different quarantine collision fails closed with live bytes untouched (ADR 0032)`() = runTest {
         val file = tempFolder.root.resolve("state.json")
         val bytes = "{broken".toByteArray()
         file.writeBytes(bytes)
@@ -284,7 +284,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `intent sync failure and oversized UTF8 cannot replace the previous committed record`() = runTest {
+    fun `intent sync failure and oversized UTF8 cannot replace the previous committed record (ADR 0032)`() = runTest {
         val file = tempFolder.root.resolve("intent.json")
         file.writeText("previous")
         var syncCalls = 0
@@ -306,7 +306,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `intent admission follows file sync replacement and directory sync including fallback`() = runTest {
+    fun `intent admission follows file sync replacement and directory sync including fallback (ADR 0032)`() = runTest {
         for (fallback in listOf(false, true)) {
             val events = mutableListOf<String>()
             val operations = object : RecordingAtomicFileOperations(
@@ -337,7 +337,7 @@ class AtomicJsonFileStoreTest {
     }
 
     @Test
-    fun `first intent also commits each newly created directory entry`() = runTest {
+    fun `first intent also commits each newly created directory entry (ADR 0032)`() = runTest {
         val synced = mutableListOf<File>()
         val operations = object : RecordingAtomicFileOperations() {
             override fun syncDirectory(directory: File) {

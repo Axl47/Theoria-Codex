@@ -210,7 +210,7 @@ class RoomRecentsRepositoryTest {
         assertSame(before, after.single { it.post.id.sourcePostId == "kept" }.post)
     }
 
-    @Test fun `restore preserves exact rows and keeps newer activity`() = runTest {
+    @Test fun `restore preserves exact rows and keeps newer activity (ADR 0025)`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         val shared = recentPost("restore-shared")
         val codex = recentPost("restore-codex")

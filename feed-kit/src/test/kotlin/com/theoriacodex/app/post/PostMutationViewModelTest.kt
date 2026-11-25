@@ -46,6 +46,20 @@ class PostMutationViewModelTest {
         assertTrue(owner.feedback.notices.value.isEmpty())
     }
 
+    @Test fun `a Like hands the store every tag the post teaches, in the post's order (ADR 0088)`() = runTest {
+        val settings = InMemorySettingsRepository()
+        val tags = (1..60).map { "tag_%02d".format((it * 37) % 60 + 1) }
+        val post = testPost(source = SourceKey.GELBOORU, canonicalTags = tags + tags[0])
+        val stored = mutableListOf<List<String>>()
+        val owner = PostMutationViewModel(settings, { _, _, given ->
+            stored += given
+            LikeToggleOutcome.LIKED
+        }, this, StandardTestDispatcher(testScheduler))
+        owner.like(settings.observeSettings().first().recommendationProfiles.first(), post)
+        advanceUntilIdle()
+        assertEquals(listOf(tags), stored)
+    }
+
     @Test fun `failed Like and favorite mutations retain feedback until acknowledged`() = runTest {
         val stored = InMemorySettingsRepository()
         val settings = object : SettingsRepository by stored {

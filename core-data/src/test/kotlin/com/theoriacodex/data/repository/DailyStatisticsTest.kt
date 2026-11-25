@@ -18,7 +18,7 @@ import org.junit.rules.TemporaryFolder
 class DailyStatisticsTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `midnight slices retain foreground Other and respect a DST day`() {
+    @Test fun `midnight slices retain foreground Other and respect a DST day (ADR 0030)`() {
         val zone = ZoneId.of("America/New_York")
         val start = LocalDate.of(2026, 3, 7).atTime(23, 59, 59).atZone(zone).toInstant()
         val slices = splitDailyUsage(start, zone, UsageDurationDelta(totalMs = 3_000L))
@@ -33,7 +33,7 @@ class DailyStatisticsTest {
         assertTrue(series.all { it.usage.readingMs == 0L && it.usage.watchingMs == 0L })
     }
 
-    @Test fun `history is bounded by calendar age and count without changing lifetime totals`() = runTest {
+    @Test fun `history is bounded by calendar age and count without changing lifetime totals (ADR 0030)`() = runTest {
         val directory = temporary.newFolder()
         val today = LocalDate.of(2026, 11, 2)
         val scope = newDataStoreScope()

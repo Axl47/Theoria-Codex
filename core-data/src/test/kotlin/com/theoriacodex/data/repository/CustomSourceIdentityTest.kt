@@ -31,7 +31,7 @@ class CustomSourceIdentityTest {
     )
 
     @Test
-    fun `post payloads and offline manifests keep a custom source`() {
+    fun `post payloads and offline manifests keep a custom source (ADR 0031)`() {
         val record = PostStorageCodec.encode(post)
 
         assertTrue(DurableJson.encodeToString(record).contains("\"source\":\"custom_safebooru_org\""))
@@ -84,7 +84,7 @@ class CustomSourceIdentityTest {
     }
 
     @Test
-    fun `a backup with custom rows and no site profile restores them`() {
+    fun `a backup with custom rows and no site profile restores them (ADR 0031)`() {
         val codex = Codex("legacy-codex", "Favorites", 1L, listOf(CodexAutomaticTag(custom, "cat_ears")))
         val backup = ProfileBackup(
             createdAtEpochMs = 10L,

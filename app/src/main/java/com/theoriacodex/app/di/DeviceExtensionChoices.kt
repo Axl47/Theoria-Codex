@@ -59,6 +59,7 @@ internal class DeviceExtensionChoices(private val file: File) : ExtensionChoiceS
     }
 
     companion object {
+        @Suppress("StoredJsonUsesDurableJsonRule")
         private val json = Json { ignoreUnknownKeys = true }
 
         fun on(context: Context) = DeviceExtensionChoices(File(context.noBackupFilesDir, "extension_choices.json"))

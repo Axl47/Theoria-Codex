@@ -9,23 +9,27 @@ import org.junit.Test
 class VideoQualityPolicyTest {
     private val media = ImageRef("original", null, "video/mp4", videoVariants = listOf(
         VideoVariant("original", original = true), VideoVariant("1080", 1080),
-        VideoVariant("720", 720), VideoVariant("360", 360),
+        VideoVariant("720", 720), VideoVariant("480", 480), VideoVariant("360", 360),
     ))
 
-    @Test fun `network defaults and explicit choices select renditions of one item`() {
+    @Test fun `network defaults and explicit choices select renditions of one item (ADR 0074)`() {
         assertEquals("original", media.withVideoQuality(VideoQuality.AUTO, false).url)
         assertEquals("720", media.withVideoQuality(VideoQuality.AUTO, true).url)
-        assertEquals("360", media.withVideoQuality(VideoQuality.DATA_SAVER, false).url)
+        assertEquals("480", media.withVideoQuality(VideoQuality.DATA_SAVER, false).url)
         assertEquals("original", media.withVideoQuality(VideoQuality.BEST, true).url)
         assertEquals("1080", media.withVideoQuality(VideoQuality.AUTO, true, 1080).url)
         assertEquals(media.videoVariants, media.withVideoQuality(VideoQuality.DATA_SAVER, true).videoVariants)
     }
 
-    @Test fun `feed cards use the smallest sensible stream only on metered networks`() {
-        assertEquals("360", media.feedPreviewLocation(metered = true))
+    @Test fun `feed cards use the smallest sensible stream only on metered networks (ADR 0074)`() {
+        assertEquals("480", media.feedPreviewLocation(metered = true))
         assertEquals("original", media.feedPreviewLocation(metered = false))
         assertEquals("/saved.mp4", media.copy(localPath = "/saved.mp4").feedPreviewLocation(metered = true))
-        assertEquals("plain", ImageRef("plain", null, "video/mp4").feedPreviewLocation(metered = true))
+        val defaultStream = media.copy(url = "default")
+        assertEquals("default", defaultStream.feedPreviewLocation(metered = false))
+        val plain = ImageRef("plain", null, "video/mp4")
+        assertEquals("plain", plain.feedPreviewLocation(metered = true))
+        assertEquals(plain, plain.withVideoQuality(VideoQuality.DATA_SAVER, true))
     }
 
     @Test fun `selection carries rendition mime and animation exports obey network choices`() {
@@ -38,7 +42,7 @@ class VideoQualityPolicyTest {
         assertEquals(false, blockedAnimationExport(settings.copy(downloadsOverMetered = true, downloadsOverRoaming = true), true, true))
     }
 
-    @Test fun `offline media and unavailable resolution retain usable media`() {
+    @Test fun `offline media and unavailable resolution retain usable media (ADR 0074)`() {
         val local = media.copy(localPath = "/offline/video.mp4")
         assertEquals(local, local.withVideoQuality(VideoQuality.DATA_SAVER, true))
         assertEquals(media, media.withVideoQuality(VideoQuality.AUTO, true, 2160))

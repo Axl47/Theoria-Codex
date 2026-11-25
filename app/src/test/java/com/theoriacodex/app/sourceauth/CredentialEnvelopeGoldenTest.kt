@@ -53,7 +53,7 @@ class CredentialEnvelopeGoldenTest {
         )
     }
 
-    @Test fun `envelope written by the Gson store reads every credential`() = runTest {
+    @Test fun `envelope written by the Gson store reads every credential (ADR 0034)`() = runTest {
         writeEnvelope(golden("envelope-gson-written.json"))
 
         val read = newStore().read()
@@ -78,37 +78,37 @@ class CredentialEnvelopeGoldenTest {
         )
     }
 
-    @Test fun `malformed envelope requires reconnect`() = runTest {
+    @Test fun `malformed envelope requires reconnect (ADR 0034)`() = runTest {
         writeEnvelope(golden("envelope-malformed.json"))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    @Test fun `wrong shape envelope requires reconnect`() = runTest {
+    @Test fun `wrong shape envelope requires reconnect (ADR 0034)`() = runTest {
         writeEnvelope(golden("envelope-wrong-shape.json"))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    @Test fun `malformed payload requires reconnect`() = runTest {
+    @Test fun `malformed payload requires reconnect (ADR 0034)`() = runTest {
         writeEnvelope(envelopeAround(golden("payload-malformed.json")))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    @Test fun `wrong shape payload requires reconnect`() = runTest {
+    @Test fun `wrong shape payload requires reconnect (ADR 0034)`() = runTest {
         writeEnvelope(envelopeAround(golden("payload-wrong-shape.json")))
 
         assertEquals(CredentialEnvelopeReadResult.ReconnectRequired, newStore().read())
     }
 
-    @Test fun `envelope from a newer build reports its version`() = runTest {
+    @Test fun `envelope from a newer build reports its version (ADR 0034)`() = runTest {
         writeEnvelope("""{"formatVersion":2,"keyVersion":1,"iv":{"shape":"unknown"}}""")
 
         assertEquals(CredentialEnvelopeReadResult.UnsupportedVersion(2), newStore().read())
     }
 
-    @Test fun `payload from a newer build reports its version`() = runTest {
+    @Test fun `payload from a newer build reports its version (ADR 0034)`() = runTest {
         writeEnvelope(envelopeAround("""{"schemaVersion":2,"gelbooruUserId":{"shape":"unknown"}}"""))
 
         assertEquals(CredentialEnvelopeReadResult.UnsupportedVersion(2), newStore().read())

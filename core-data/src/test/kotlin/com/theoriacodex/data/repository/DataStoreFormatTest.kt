@@ -41,7 +41,7 @@ class DataStoreFormatTest {
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
         )
         val full = SettingsDataStoreFile(settings = settings)
-        assertStoredFormat(golden("settings-full.json") to full)
+        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = setOf("settings.scenarioPreset"))
     }
 
     @Test
@@ -72,7 +72,10 @@ class DataStoreFormatTest {
             savedSearchNewPosts = SavedSearchNewPosts(mapOf("saved" to 5L), mapOf("saved" to NewPostMarks(listOf("PIXIV:1"), listOf("PIXIV:2", "PIXIV:1"), 4L))),
         )
         val full = UiRestoreDataStoreFile(state = state)
-        assertStoredFormat(golden("ui-restore-full.json") to full)
+        assertStoredFormat(
+            golden("ui-restore-full.json") to full,
+            retiredKeys = setOf("state.feedFabRestoreStates{}.searchAnimationByScope{}.animatedOnly"),
+        )
     }
 
     @Test

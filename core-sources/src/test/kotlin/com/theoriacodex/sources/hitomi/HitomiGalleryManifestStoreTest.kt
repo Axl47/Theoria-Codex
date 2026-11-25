@@ -25,7 +25,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class HitomiGalleryManifestStoreTest {
     @Test
-    fun `only the last departing consumer cancels a shared load`() = runTest {
+    fun `only the last departing consumer cancels a shared load (ADR 0043)`() = runTest {
         val store = store()
         var calls = 0
         var cancelled = false
@@ -47,7 +47,7 @@ class HitomiGalleryManifestStoreTest {
     }
 
     @Test
-    fun `a load deadline becomes a provider failure`() = runTest {
+    fun `a load deadline becomes a provider failure (ADR 0043)`() = runTest {
         val bounded = HitomiGalleryManifestStore(4_096L, 1_000L, { 0L }, loadTimeoutMs = 10L)
         val failure = runCatching { bounded.getOrLoad(2) { awaitCancellation() } }.exceptionOrNull()
         assertTrue(failure is com.theoriacodex.domain.adapter.SourceAdapterException)
@@ -99,7 +99,7 @@ class HitomiGalleryManifestStoreTest {
     }
 
     @Test
-    fun `missing and failed manifests never poison the cache`() = runTest {
+    fun `missing and failed manifests never poison the cache (ADR 0043)`() = runTest {
         var missingCalls = 0
         val store = store()
 
@@ -119,7 +119,7 @@ class HitomiGalleryManifestStoreTest {
     }
 
     @Test
-    fun `byte budget rejects a manifest larger than the entire cache`() = runTest {
+    fun `byte budget rejects a manifest larger than the entire cache (ADR 0043)`() = runTest {
         var calls = 0
         val store = HitomiGalleryManifestStore(
             maxBytes = 256L,

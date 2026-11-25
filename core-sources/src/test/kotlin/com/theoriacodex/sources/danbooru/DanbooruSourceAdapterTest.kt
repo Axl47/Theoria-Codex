@@ -3,11 +3,14 @@ package com.theoriacodex.sources.danbooru
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.credentials.UserApiKey
+import com.theoriacodex.domain.query.withMediaTerms
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.http.THEORIA_SOURCE_USER_AGENT
 import com.theoriacodex.sources.testing.FakeHttpClient
@@ -27,20 +30,22 @@ class DanbooruSourceAdapterTest {
     }
 
     @Test
-    fun `score search spends a term on its order metatag and keeps numbered pages`() = runTest {
-        val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fullPage()) }
+    fun `score search spends a term on its order metatag and keeps numbered pages (ADR 0041, 0051, 0054)`() = runTest {
+        for (sort in listOf(SortMode.TOP, SortMode.POPULAR)) {
+            val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fullPage()) }
 
-        val page = danbooru(http).search(query(SortMode.TOP), pageToken = "1")
+            val page = danbooru(http).search(query(sort), pageToken = "1")
 
-        assertEquals(40, page.items.size)
-        assertEquals("2", page.nextPageToken)
-        assertEquals("https://danbooru.donmai.us/posts.json", http.lastGet?.url)
-        assertEquals("landscape -comic order:score", http.lastGet?.query?.get("tags"))
-        assertEquals(THEORIA_SOURCE_USER_AGENT, http.lastGet?.headers?.get("User-Agent"))
+            assertEquals("$sort", 40, page.items.size)
+            assertEquals("$sort", "2", page.nextPageToken)
+            assertEquals("https://danbooru.donmai.us/posts.json", http.lastGet?.url)
+            assertEquals("landscape -comic order:score", http.lastGet?.query?.get("tags"))
+            assertEquals(THEORIA_SOURCE_USER_AGENT, http.lastGet?.headers?.get("User-Agent"))
+        }
     }
 
     @Test
-    fun `newest search sends only the typed tags and pages before the lowest post id`() = runTest {
+    fun `newest search sends only the typed tags and pages before the lowest post id (ADR 0041)`() = runTest {
         val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, fullPage()) }
         val adapter = danbooru(http)
 
@@ -54,7 +59,7 @@ class DanbooruSourceAdapterTest {
     }
 
     @Test
-    fun `post maps Danbooru timestamps artists samples and durations`() = runTest {
+    fun `post maps Danbooru timestamps artists samples and durations (ADR 0048)`() = runTest {
         val http = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(200, """
                 {"id":7,"created_at":"2026-11-06T19:04:09.830-05:00","file_ext":"mp4","md5":"0123456789ABCDEF0123456789abcdef",
@@ -84,16 +89,56 @@ class DanbooruSourceAdapterTest {
     }
 
     @Test
-    fun `a post whose files are withheld is an account failure, not a missing post`() = runTest {
-        val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, """{"id":7,"file_ext":"jpg"}""") }
+    fun `a card uses the 720 px variant rather than the 180 px default (ADR 0048)`() = runTest {
+        val http = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(200, """
+                {"id":7,"file_url":"$CDN/original/7.jpg","preview_file_url":"$CDN/180x180/7.jpg",
+                 "media_asset":{"variants":[{"type":"180x180","url":"$CDN/180x180/7.jpg"},{"type":"360x360","url":"$CDN/360x360/7.jpg"},
+                   {"type":"720x720","url":"$CDN/720x720/7.webp"},{"type":"sample","url":"$CDN/sample/7.jpg"}]}}
+            """.trimIndent())
+        }
 
-        val failure = runCatching { danbooru(http).resolvePost(PostId(SourceKey.DANBOORU, "7")) }.exceptionOrNull()
-
-        assertEquals(SourceFailureReason.AUTH_REQUIRED, (failure as SourceAdapterException).reason)
+        assertEquals("$CDN/720x720/7.webp", danbooru(http).resolvePost(PostId(SourceKey.DANBOORU, "7"))?.preview?.url)
     }
 
     @Test
-    fun `ugoira plays its webm sample and posts without a file are left out`() = runTest {
+    fun `provider media addresses are upgraded to HTTPS, plain or protocol-relative (ADR 0048)`() = runTest {
+        val http = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(200, """
+                {"id":7,"file_url":"http://cdn.donmai.us/original/7.jpg","large_file_url":"//cdn.donmai.us/sample/7.jpg",
+                 "preview_file_url":"HTTP://cdn.donmai.us/180x180/7.jpg"}
+            """.trimIndent())
+        }
+        val withVariant = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(200, """
+                {"id":8,"file_url":"$CDN/original/8.jpg",
+                 "media_asset":{"variants":[{"type":"720x720","url":"http://cdn.donmai.us/720x720/8.webp"}]}}
+            """.trimIndent())
+        }
+
+        val post = requireNotNull(danbooru(http).resolvePost(PostId(SourceKey.DANBOORU, "7")))
+        val card = requireNotNull(danbooru(withVariant).resolvePost(PostId(SourceKey.DANBOORU, "8")))
+
+        assertEquals("https://cdn.donmai.us/original/7.jpg", post.full?.url)
+        assertEquals(listOf("https://cdn.donmai.us/sample/7.jpg"), post.full?.progressiveUrls)
+        assertEquals("https://cdn.donmai.us/180x180/7.jpg", post.preview.url)
+        assertEquals("https://cdn.donmai.us/720x720/8.webp", card.preview.url)
+    }
+
+    @Test
+    fun `a post whose files are withheld is an account failure, not a missing post (ADR 0041)`() = runTest {
+        for (key in listOf(null, UserApiKey("alice", "key"))) {
+            val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, """{"id":7,"file_ext":"jpg"}""") }
+            val adapter = DanbooruSourceAdapter(DanbooruSite.DANBOORU, http, credentials = { key })
+
+            val failure = runCatching { adapter.resolvePost(PostId(SourceKey.DANBOORU, "7")) }.exceptionOrNull()
+
+            assertEquals("$key", SourceFailureReason.AUTH_REQUIRED, (failure as? SourceAdapterException)?.reason)
+        }
+    }
+
+    @Test
+    fun `ugoira plays its webm sample and posts without a file are left out (ADR 0041)`() = runTest {
         val http = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(200, """
                 [{"id":1,"file_ext":"zip","file_url":"$CDN/original/1.zip","large_file_url":"$CDN/sample/1.webm"},
@@ -111,7 +156,7 @@ class DanbooruSourceAdapterTest {
     }
 
     @Test
-    fun `rejected search reports the provider's own explanation`() = runTest {
+    fun `rejected search reports the provider's own explanation (ADR 0041)`() = runTest {
         val http = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(422,
                 """{"success":false,"message":"You cannot search for more than 2 tags at a time."}""")
@@ -167,6 +212,35 @@ class DanbooruSourceAdapterTest {
         assertEquals("md5:$md5", http.lastGet?.query?.get("tags"))
         http.nextGetResponse = SourceHttpResponse(200, "[]")
         assertNull(danbooru(http).findByFileHash(md5))
+    }
+
+    @Test
+    fun `guests keep two terms, a ranked sort spends one, and animated falls back to the free filetype term (ADR 0041)`() {
+        val capabilities = danbooru(FakeHttpClient()).capabilities
+        fun animated(vararg tags: String, sort: SortMode = SortMode.NEWEST) =
+            Query(QueryMode.Source(SourceKey.DANBOORU), tags.toList(), emptyList(), sort, null, null)
+                .copy(media = MediaFilter.ANIMATED).withMediaTerms(capabilities).includeTags
+
+        assertEquals(listOf("cat", "animated"), animated("cat"))
+        assertEquals(listOf("cat", "filetype:gif,mp4,webm,zip"), animated("cat", sort = SortMode.TOP))
+        assertEquals(listOf("cat", "dog", "filetype:gif,mp4,webm,zip"), animated("cat", "dog"))
+    }
+
+    @Test
+    fun `a full raw page with non-object entries still pages from the lowest object id, and a short one ends paging (ADR 0045)`() = runTest {
+        val records = (40 downTo 3).map { id -> """{"id":$id,"file_url":"$CDN/original/$id.jpg"}""" } + listOf("null", "\"gone\"")
+        val http = FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, records.joinToString(",", "[", "]")) }
+
+        val page = danbooru(http).search(query(SortMode.NEWEST), pageToken = null)
+
+        assertEquals(38, page.items.size)
+        assertEquals("b3", page.nextPageToken)
+
+        val short = (39 downTo 1).joinToString(",", "[", "]") { id -> """{"id":$id,"file_url":"$CDN/original/$id.jpg"}""" }
+        val lastPage = danbooru(FakeHttpClient().apply { nextGetResponse = SourceHttpResponse(200, short) })
+            .search(query(SortMode.NEWEST), pageToken = null)
+        assertEquals(39, lastPage.items.size)
+        assertNull(lastPage.nextPageToken)
     }
 
     private fun danbooru(http: FakeHttpClient) = DanbooruSourceAdapter(DanbooruSite.DANBOORU, http)

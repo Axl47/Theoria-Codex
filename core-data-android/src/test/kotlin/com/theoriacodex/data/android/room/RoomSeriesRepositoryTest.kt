@@ -67,6 +67,31 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
+    fun `a chapter keeps how far into its page the reader was until another page is reached (ADR 0192)`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        suspend fun offset() = repository.entries(id).single().pageOffset
+
+        repository.recordProgress(id, "/c/1", position = 3, length = 9, pageOffset = 0.4f)
+        assertEquals(0.4f, offset())
+        repository.recordProgress(id, "/c/1", position = 3, length = 9)
+        assertEquals(0.4f, offset())
+        repository.recordProgress(id, "/c/1", position = 4, length = 9)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 4, length = 9, pageOffset = 7f)
+        assertEquals(1f, offset())
+        repository.setEntriesRead(id, listOf("/c/1"), read = false)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
+        repository.setAllRead(id, read = false)
+        assertNull(offset())
+        repository.recordProgress(id, "/c/1", position = 2, length = 9, pageOffset = 0.3f)
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 2L, 9L, null, null)
+        assertEquals(0.3f, offset())
+        database.seriesDao().mergeRestoredEntry(id.source.id, id.address, "/c/1", false, 5L, 9L, null, null)
+        assertNull(offset())
+    }
+
+    @Test
     fun `progress marks the entry opened last, and an entry read at its last page`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
 
@@ -96,7 +121,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a new listing keeps progress, follow, mode and shared first pages, adds new entries and hides dropped ones`() = runTest {
+    fun `a new listing keeps progress, follow, mode and shared first pages, adds new entries and hides dropped ones (ADR 0028)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.setFollowed(id, true)
         repository.setReadingMode(id, GalleryReadingMode.VERTICAL)
@@ -141,7 +166,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a dropped chapter that returns is neither new nor unread`() = runTest {
+    fun `a dropped chapter that returns is neither new nor unread (ADR 0028)`() = runTest {
         val first = SeriesEntry("/c/1", "Chapter 1")
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), first))
         repository.recordProgress(id, "/c/2", position = 2, length = 2)
@@ -154,7 +179,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a chapter that returns at a new address takes over its number's progress and is not new`() = runTest {
+    fun `a chapter that returns at a new address takes over its number's progress and is not new (ADR 0028)`() = runTest {
         val first = SeriesEntry("/c/1", "Chapter 1", number = 1f)
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2", number = 2f), first))
         repository.recordProgress(id, "/c/2", position = 3, length = 5)
@@ -175,7 +200,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `a listing that matches no stored chapter is a baseline with nothing new, and dropped chapters keep progress`() = runTest {
+    fun `a listing that matches no stored chapter is a baseline with nothing new, and dropped chapters keep progress (ADR 0028)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/2", "Chapter 2"), SeriesEntry("/c/1", "Chapter 1")))
         repository.recordProgress(id, "/c/1", position = 3, length = 3)
 
@@ -200,7 +225,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `another group's release of a number, or one of several, is a new unread chapter`() = runTest {
+    fun `another group's release of a number, or one of several, is a new unread chapter (ADR 0028)`() = runTest {
         val read = SeriesEntry("/c/1-a", "Chapter 1", number = 1f, translatorGroup = "A")
         val prologue = SeriesEntry("/c/0", "Prologue")
         repository.store(series, listOf(read, prologue))
@@ -257,7 +282,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `an empty listing and a details-only store leave the entries alone`() = runTest {
+    fun `an empty listing and a details-only store leave the entries alone (ADR 0028)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
 
         repository.store(series, emptyList())
@@ -348,6 +373,25 @@ class RoomSeriesRepositoryTest {
 
         repository.setFollowed(id, false)
         assertNull(repository.series(id)!!.followedAtEpochMs)
+    }
+
+    @Test
+    fun `the Following list's started flag agrees with hasProgress (ADR 0028)`() = runTest {
+        repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
+        repository.setFollowed(id, true)
+        val seen = mutableListOf<Pair<Boolean, Boolean>>()
+        suspend fun record() {
+            seen += repository.entries(id).any { it.hasProgress } to repository.observeFollowed().first().single().started
+        }
+        record()
+        repository.recordProgress(id, "/c/1", position = 1, length = 4)
+        record()
+        repository.setAllRead(id, read = false)
+        record()
+        repository.setAllRead(id, read = true)
+        record()
+
+        assertEquals(listOf(false, true, false, true).map { it to it }, seen)
     }
 
     @Test

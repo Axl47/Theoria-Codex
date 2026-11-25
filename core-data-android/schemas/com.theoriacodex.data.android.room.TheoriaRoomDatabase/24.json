@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 24,
-    "identityHash": "6c0a9d092fe601fb435cda68276819d9",
+    "identityHash": "d27871cb0f0f7053658fe997ce496131",
     "entities": [
       {
         "tableName": "codices",
@@ -573,7 +573,7 @@
       },
       {
         "tableName": "post_visual_signatures",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `phash_checked` INTEGER NOT NULL DEFAULT 1, `indexed_at_epoch_ms` INTEGER NOT NULL, `model_id` TEXT, `embedding` BLOB, `predicted_tags` TEXT, `frame_state` INTEGER NOT NULL DEFAULT 0, `frame_attempts` INTEGER NOT NULL DEFAULT 0, `preview_failed_at_epoch_ms` INTEGER, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `phash` INTEGER, `phash_checked` INTEGER NOT NULL DEFAULT 1, `indexed_at_epoch_ms` INTEGER NOT NULL, `model_id` TEXT, `embedding` BLOB, `predicted_tags` TEXT, `frame_state` INTEGER NOT NULL DEFAULT 0, `frame_attempts` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`source`, `source_post_id`), FOREIGN KEY(`source`, `source_post_id`) REFERENCES `posts`(`source`, `source_post_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "source",
@@ -633,11 +633,6 @@
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"
-          },
-          {
-            "fieldPath": "previewFailedAtEpochMs",
-            "columnName": "preview_failed_at_epoch_ms",
-            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -773,7 +768,7 @@
       },
       {
         "tableName": "series_entries",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, `last_read_at_epoch_ms` INTEGER, `memo` TEXT, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `series_address` TEXT NOT NULL, `address` TEXT NOT NULL, `name` TEXT NOT NULL, `number` REAL, `translator_group` TEXT, `uploaded_at_epoch_ms` INTEGER, `source_order` INTEGER NOT NULL, `first_seen_at_epoch_ms` INTEGER NOT NULL, `read` INTEGER NOT NULL, `last_page` INTEGER NOT NULL, `page_count` INTEGER, `last_read_at_epoch_ms` INTEGER, `memo` TEXT, `page_offset` REAL, PRIMARY KEY(`source`, `series_address`, `address`), FOREIGN KEY(`source`, `series_address`) REFERENCES `series`(`source`, `address`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "source",
@@ -852,6 +847,11 @@
             "fieldPath": "memo",
             "columnName": "memo",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pageOffset",
+            "columnName": "page_offset",
+            "affinity": "REAL"
           }
         ],
         "primaryKey": {
@@ -881,7 +881,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6c0a9d092fe601fb435cda68276819d9')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd27871cb0f0f7053658fe997ce496131')"
     ]
   }
 }

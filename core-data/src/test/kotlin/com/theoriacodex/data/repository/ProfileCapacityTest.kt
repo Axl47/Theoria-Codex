@@ -16,7 +16,7 @@ import org.junit.rules.TemporaryFolder
 class ProfileCapacityTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `profile favorite and blacklist overflow preserve the complete durable state`() = runTest {
+    @Test fun `profile favorite and blacklist overflow preserve the complete durable state (ADR 0036)`() = runTest {
         val directory = temporary.newFolder()
         val scope = newDataStoreScope()
         val expected = fullSettings(64).copy(
@@ -37,7 +37,7 @@ class ProfileCapacityTest {
         } finally { reopenedScope.closeDataStores() }
     }
 
-    @Test fun `restore checks combined capacity before mutation and last available slot survives reopen`() = runTest {
+    @Test fun `restore checks combined capacity before mutation and last available slot survives reopen (ADR 0036)`() = runTest {
         val directory = temporary.newFolder()
         val scope = newDataStoreScope()
         val library = RecordingLibrary()

@@ -62,7 +62,7 @@ class DataStoreRepositoryContractsTest(
     }
 
     @Test
-    fun `source combinations remember independent weights regardless of source order`() = runTest {
+    fun `source combinations remember independent weights regardless of source order (ADR 0036)`() = runTest {
         val repository = createSettingsRepository()
         val pair = linkedSetOf(SourceKey.PIXIV, SourceKey.GELBOORU)
         repository.setEnabledSources(pair)

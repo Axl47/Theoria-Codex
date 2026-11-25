@@ -36,7 +36,7 @@ class BrowserCookieJarTest {
     }
 
     @Test
-    fun `a host the jar does not allow neither sends nor keeps cookies`() {
+    fun `a host the jar does not allow neither sends nor keeps cookies (ADR 0050)`() {
         store.header = "session=abc"
         val jar = BrowserCookieJar(store) { it != "site.test" }
 
@@ -46,7 +46,7 @@ class BrowserCookieJarTest {
     }
 
     @Test
-    fun `a store that cannot answer means no cookies, never an exception`() {
+    fun `a store that cannot answer means no cookies, never an exception (ADR 0050)`() {
         store.throwing = true
         val jar = BrowserCookieJar(store) { true }
 
