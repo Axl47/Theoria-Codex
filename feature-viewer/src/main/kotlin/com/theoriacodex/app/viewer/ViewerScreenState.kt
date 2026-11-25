@@ -35,7 +35,7 @@ internal class ViewerScreenState {
     var touchSerial by mutableIntStateOf(0)
     val playingVideos = ViewerPlayingVideos()
     var timelineInteractionActive by mutableStateOf(false)
-    var chromeShownForScrub = false
+    var chromeShownForScrub by mutableStateOf(false)
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
     var heldBack = false

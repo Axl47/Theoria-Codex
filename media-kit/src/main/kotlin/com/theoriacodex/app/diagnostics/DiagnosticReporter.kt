@@ -28,6 +28,7 @@ class DiagnosticReporter(
     private val context: Context,
     private val store: DiagnosticLogStore,
     private val appVersion: String,
+    private val readSystemLog: () -> String = ::logcat,
 ) {
     suspend fun build(sections: Set<DiagnosticSection>): String = withContext(Dispatchers.IO) {
         DiagnosticSection.entries.filter(sections::contains).joinToString(separator = "\n\n") { section ->
@@ -36,7 +37,7 @@ class DiagnosticReporter(
                 DiagnosticSection.CRASHES -> store.readCrashes().joinToString("\n\n").ifBlank { "None recorded." }
                 DiagnosticSection.APP_EXITS -> appExits()
                 DiagnosticSection.EVENTS -> store.readEvents().ifBlank { "None recorded." }
-                DiagnosticSection.SYSTEM_LOG -> systemLog()
+                DiagnosticSection.SYSTEM_LOG -> readSystemLog()
             }
         }.let(DiagnosticRedaction::redact)
     }
@@ -64,19 +65,20 @@ class DiagnosticReporter(
                 "importance=${exit.importance} rss=${exit.rss}KB ${exit.description.orEmpty()}$trace"
         }.ifBlank { "None recorded." }
 
-    private fun systemLog(): String = runCatching {
-        val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "2000").redirectErrorStream(true).start()
-        try {
-            val output = process.inputStream.readTail(MAX_SYSTEM_LOG_CHARS)
-            process.waitFor(SYSTEM_LOG_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            output
-        } finally {
-            process.destroy()
-        }
-    }.getOrElse { "Could not read the system log." }.ifBlank { "None recorded." }
-
-    private fun InputStream.readTail(maxChars: Int): String = bufferedReader().use { it.readText() }.takeLast(maxChars)
 }
+
+private fun logcat(): String = runCatching {
+    val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "2000").redirectErrorStream(true).start()
+    try {
+        val output = process.inputStream.readTail(MAX_SYSTEM_LOG_CHARS)
+        process.waitFor(SYSTEM_LOG_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        output
+    } finally {
+        process.destroy()
+    }
+}.getOrElse { "Could not read the system log." }.ifBlank { "None recorded." }
+
+private fun InputStream.readTail(maxChars: Int): String = bufferedReader().use { it.readText() }.takeLast(maxChars)
 
 private fun exitReasonName(reason: Int): String = when (reason) {
     ApplicationExitInfo.REASON_ANR -> "FROZEN (ANR)"

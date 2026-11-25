@@ -12,7 +12,7 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    def test_connected_lane_executes_and_retains_every_instrumentation_owner(self) -> None:
+    def test_connected_lane_executes_and_retains_every_instrumentation_owner_adr_0109(self) -> None:
         self.assertIn("script: bash scripts/verify_ci_emulator.sh debug", self.workflow)
         wrapper = (REPOSITORY_ROOT / "scripts/verify_ci_emulator.sh").read_text(encoding="utf-8")
         self.assertIn("scripts/verify_debug_device.sh all", wrapper)
@@ -20,6 +20,11 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("DEVICE_TEST_SHARD: ${{ matrix.shard }}/2", self.workflow)
         lane = (REPOSITORY_ROOT / "scripts/verify_debug_device.sh").read_text(encoding="utf-8")
         self.assertIn(":app:connectedDebugAndroidTest", lane)
+        for owner, module in (("app", "app"), ("data", "core-data-android"), ("media", "media-kit")):
+            self.assertRegex(
+                lane,
+                rf'if \[\[ "\$owner" == {owner} \|\| "\$owner" == all \]\]; then\n  connected\+=\(":{module}:connectedDebugAndroidTest"\)',
+            )
         for module in ("core-data-android", "media-kit"):
             self.assertIn(f":{module}:connectedDebugAndroidTest", lane)
             self.assertIn(f":{module}:assembleDebugAndroidTest", self.workflow)

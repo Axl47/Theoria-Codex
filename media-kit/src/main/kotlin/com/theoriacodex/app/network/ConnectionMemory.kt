@@ -121,9 +121,9 @@ class ConnectionMemory(
         avoidIpv6Until = 0L
     }
 
-    private companion object {
-        const val MAX_RECENT_HOSTS = 12
-        const val IPV6_LOSSES_TO_AVOID = 2
-        const val IPV6_AVOID_MS = 10 * 60 * 1000L
+    internal companion object {
+        private const val MAX_RECENT_HOSTS = 12
+        internal const val IPV6_LOSSES_TO_AVOID = 2
+        internal const val IPV6_AVOID_MS = 10 * 60 * 1000L
     }
 }
