@@ -31,6 +31,8 @@ class DiagnosticReporterTest {
                 .setDescription("lost https://cdn.example/private/exit.jpg api_key=EXITSECRET")
                 .build(),
         )
+        folder.root.resolve("crash-1.txt").writeText("crashed at https://cdn.example/private/crash.jpg api_key=CRASHSECRET")
+        folder.root.resolve("events.log").writeText("failed https://cdn.example/private/event.jpg api_key=EVENTSECRET\n")
         val reporter = DiagnosticReporter(
             context,
             DiagnosticLogStore(folder.root),
@@ -43,7 +45,12 @@ class DiagnosticReporterTest {
         assertTrue(report, "CRASH" in report)
         assertTrue(report, "App 1.0 api_key=" in report)
         assertTrue(report, "I Theoria: player ready" in report)
-        listOf("SECRET123", "EXITSECRET", "private/exit.jpg", "LOGSECRET", "private/log.jpg").forEach { secret ->
+        assertTrue(report, "crashed at" in report)
+        assertTrue(report, "failed " in report)
+        listOf(
+            "SECRET123", "EXITSECRET", "private/exit.jpg", "LOGSECRET", "private/log.jpg",
+            "CRASHSECRET", "private/crash.jpg", "EVENTSECRET", "private/event.jpg",
+        ).forEach { secret ->
             assertFalse(report, secret in report)
         }
     }

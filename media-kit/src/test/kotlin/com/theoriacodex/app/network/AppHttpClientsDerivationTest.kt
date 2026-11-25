@@ -72,6 +72,7 @@ class AppHttpClientsDerivationTest {
         val defaults = Dispatcher()
         assertTrue("Images get more than the default per-host limit", clients.images.dispatcher.maxRequestsPerHost > defaults.maxRequestsPerHost)
         assertEquals("Sources never queue behind a host", clients.sources.dispatcher.maxRequests, clients.sources.dispatcher.maxRequestsPerHost)
+        assertTrue("Sources get more than the default per-host limit", clients.sources.dispatcher.maxRequestsPerHost > defaults.maxRequestsPerHost)
         assertNotEquals(clients.shared.connectTimeoutMillis, clients.downloads.connectTimeoutMillis)
         assertNotEquals(clients.shared.readTimeoutMillis, clients.downloads.readTimeoutMillis)
         assertFalse(clients.downloads.followSslRedirects)
