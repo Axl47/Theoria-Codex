@@ -103,6 +103,7 @@ internal fun BoxScope.ViewerRotationControl(
     suppressed: Boolean,
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
     existingOffer: ViewerRotationOffer? = null,
+    inStripRow: Boolean = false,
 ) {
     val offer = existingOffer ?: rememberViewerRotation(selection, rotation, inPictureInPicture)
     var hinting by remember { mutableStateOf(false) }
@@ -117,7 +118,7 @@ internal fun BoxScope.ViewerRotationControl(
     ViewerFooterButton(
         selection, chromeVisible, visible = (chromeVisible || hinting) && !suppressed, alignment = Alignment.BottomStart,
         icon = Icons.Default.ScreenRotation, contentDescription = if (offer.fits) "Rotate to fit" else "Rotate", testTag = "viewer-rotate",
-        bottomRowHeight = bottomRowHeight, onClick = offer.rotate,
+        bottomRowHeight = bottomRowHeight, inStripRow = inStripRow, onClick = offer.rotate,
     )
 }
 

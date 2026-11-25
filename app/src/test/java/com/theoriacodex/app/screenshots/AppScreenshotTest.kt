@@ -7,7 +7,10 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -91,7 +94,7 @@ class AppScreenshotTest {
         compose.setContent {
             if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
         }
-        waitFor { compose.onAllNodesWithContentDescription("Library").fetchSemanticsNodes().isNotEmpty() }
+        waitFor { compose.onAllNodes(libraryTab).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @After fun close() {
@@ -131,8 +134,16 @@ class AppScreenshotTest {
         capture("viewer")
     }
 
+    @Test @Config(qualifiers = "w914dp-h411dp-land-xxhdpi") fun `viewer landscape`() {
+        openSearchResults()
+        compose.onNodeWithTag(searchCardTestTag(posts[0].id)).performClick()
+        waitFor { compose.onNodeWithContentDescription("More actions").isDisplayed() }
+        waitFor { compose.onAllNodesWithTag("viewer-slideshow").fetchSemanticsNodes().isNotEmpty() }
+        capture("viewer_landscape")
+    }
+
     @Test fun `settings`() {
-        compose.onNodeWithContentDescription("Library").performClick()
+        compose.onAllNodes(libraryTab).onFirst().performClick()
         waitFor { compose.onAllNodesWithTag(LIBRARY_SETTINGS_TAG).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(LIBRARY_SETTINGS_TAG).performClick()
         waitFor { compose.onAllNodesWithText("${posts.size} saved", substring = true).fetchSemanticsNodes().isNotEmpty() }
@@ -140,7 +151,7 @@ class AppScreenshotTest {
     }
 
     private fun openLibrary(section: LibrarySection) {
-        compose.onNodeWithContentDescription("Library").performClick()
+        compose.onAllNodes(libraryTab).onFirst().performClick()
         waitFor { compose.onAllNodesWithTag(librarySectionTag(section)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(librarySectionTag(section)).performClick()
     }
@@ -163,6 +174,7 @@ class AppScreenshotTest {
     }
 
     private companion object {
+        val libraryTab = hasContentDescription("Library") or hasText("Library")
         const val CODEX_ID = "fixture-codex"
         const val SEARCH_ID = "fixture-search"
     }

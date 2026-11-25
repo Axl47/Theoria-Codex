@@ -371,7 +371,7 @@ private fun ViewerBottomStack(
         } else {
             ViewerPostStrip(navigation.originalPosts, stripIndex, { index ->
                 pendingPostId.value = navigation.originalPosts[index].id
-            }, Modifier.testTag("viewer-post-navigation-strip"),
+            }, Modifier.padding(horizontal = if (frame.isLandscape) VIEWER_STRIP_ROW_BUTTON_SLOT else 0.dp).testTag("viewer-post-navigation-strip"),
                 onLoadMore = loadMoreFromStrip, onInteraction = { controls.markInteraction() },
                 openPages = ViewerStripPages(selection.post.id, selection.overviewItems, selection.mediaIndex, mirrored) {
                     controls.jumpToMedia(selection.post.id, it)
@@ -392,8 +392,12 @@ private fun BoxScope.ViewerFooterButtons(
     val watching = frame.watching
     val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
     val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
-    ViewerRotationControl(frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow, existingOffer = rotationOffer)
-    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture || watching, onAction)
+    val inStripRow = frame.isLandscape && !watching
+    ViewerRotationControl(
+        frame.selection, activity?.viewerRotation, frame.inPictureInPicture, frame.chromeVisible, rotationSuppressed, bottomRow,
+        existingOffer = rotationOffer, inStripRow = inStripRow,
+    )
+    ViewerSlideshowControl(frame, suppressed = bottomOwned || frame.inPictureInPicture || watching, inStripRow, onAction)
 }
 
 internal const val VIEWER_LOCK_OVERLAY_TAG = "viewer-lock-overlay"

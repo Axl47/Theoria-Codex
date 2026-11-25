@@ -32,9 +32,14 @@ internal fun BoxScope.ViewerFooterButton(
     contentDescription: String,
     testTag: String,
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
+    inStripRow: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val footer = viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
+    val footer = if (inStripRow && chromeVisible) {
+        viewerFooterHeight(selection, chromeVisible = true, bottomRowHeight = 0.dp) + VIEWER_POST_STRIP_CELL_CENTER - VIEWER_FOOTER_BUTTON_TOUCH / 2 - VIEWER_FOOTER_BUTTON_GAP
+    } else {
+        viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
+    }
     val lift by animateDpAsState(footer, tween(TheoriaMotion.SHORT_MS), label = "Viewer footer button lift")
     ViewerChromeVisibility(
         visible,
@@ -67,3 +72,5 @@ internal fun viewerFooterBarHeight(selection: ViewerSelection): Dp = when {
 }
 
 private val VIEWER_FOOTER_BUTTON_GAP = 12.dp
+private val VIEWER_FOOTER_BUTTON_TOUCH = 48.dp
+internal val VIEWER_STRIP_ROW_BUTTON_SLOT = VIEWER_FOOTER_BUTTON_GAP + VIEWER_FOOTER_BUTTON_TOUCH

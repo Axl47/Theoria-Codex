@@ -81,6 +81,7 @@
 
 ### Changed
 
+- In landscape, the Viewer's rotate and slideshow buttons sit in the thumbnail strip's row, rotate at the left end and slideshow at the right, instead of floating over the picture. Portrait is unchanged.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
 - In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.
