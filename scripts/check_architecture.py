@@ -269,6 +269,10 @@ def off_main_notes_run_where_work_runs() -> list[str]:
 VISION_COMMIT = re.compile(r"\bVisionCommit\b")
 VISION_OPT_IN = re.compile(r"\bOptIn\s*\([^)]*\bVisionCommit\b")
 VISION_TAGGER = "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt"
+VISION_WIDE_OPT_IN = re.compile(
+    r"@file:OptIn\s*\([^)]*\bVisionCommit\b"
+    r"|\bOptIn\s*\([^)]*\bVisionCommit\b[^)]*\)\s*(?:@[\w.]+(?:\([^)]*\))?\s*|(?:public|internal|private|open|abstract|data|sealed)\s+)*(?:class|object|interface)\b"
+)
 VISION_PROPAGATORS = (
     "core-data/src/main/kotlin/com/theoriacodex/data/repository/VisualSignatureRepository.kt",
     "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomVisualSignatureRepository.kt",
@@ -299,6 +303,8 @@ def vision_results_are_written_under_commits() -> list[str]:
     failures = []
     for relative, text in shipped_sources() + build_scripts():
         if relative == VISION_TAGGER:
+            if VISION_WIDE_OPT_IN.search(text):
+                failures.append(f"{relative} opts into VisionCommit for a whole class or file; opt in on each function that writes; {reason}")
             continue
         if relative in VISION_PROPAGATORS:
             if VISION_OPT_IN.search(text):

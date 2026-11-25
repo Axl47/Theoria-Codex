@@ -241,7 +241,9 @@ class VisionCommitRuleTest(unittest.TestCase):
         self.assertIn(check_architecture.vision_results_are_written_under_commits, check_architecture.RULES)
         opt_in = "@OptIn(VisionCommit::class)\nfun writeAround() = Unit\n"
         with main_sources({
-            check_architecture.VISION_TAGGER: "@OptIn(VisionCommit::class)\nclass PictureTagger\n",
+            check_architecture.VISION_TAGGER: (
+                "@OptIn(ExperimentalCoroutinesApi::class)\nclass PictureTagger {\n    @OptIn(VisionCommit::class)\n    suspend fun forget() = Unit\n}\n"
+            ),
             check_architecture.VISION_PROPAGATORS[0]: "annotation class VisionCommit\n@VisionCommit suspend fun clearVision()\n",
             check_architecture.VISION_PROPAGATORS[1]: "@VisionCommit override suspend fun clearVision() = Unit\n",
             "app/src/main/java/com/theoriacodex/app/vision/AppPictures.kt": opt_in,
@@ -279,6 +281,18 @@ class VisionCommitRuleTest(unittest.TestCase):
                 check_architecture.VISION_PROPAGATORS[1],
                 [failure.split(" ", 1)[0] for failure in check_architecture.vision_results_are_written_under_commits()],
             )
+            tagger = check_architecture.ROOT / check_architecture.VISION_TAGGER
+            for wide in (
+                "@OptIn(ExperimentalCoroutinesApi::class, VisionCommit::class)\nclass PictureTagger\n",
+                "@OptIn(VisionCommit::class)\n@Suppress(\"x\")\ninternal class PictureTagger\n",
+                "@file:OptIn(com.theoriacodex.data.repository.VisionCommit::class)\npackage x\n",
+            ):
+                tagger.write_text(wide, encoding="utf-8")
+                self.assertIn(
+                    check_architecture.VISION_TAGGER,
+                    [failure.split(" ", 1)[0] for failure in check_architecture.vision_results_are_written_under_commits()],
+                    wide,
+                )
 
 
 if __name__ == "__main__":
