@@ -2,7 +2,7 @@ package com.theoriacodex.app.fixtures
 
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import android.app.PictureInPictureParams
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Modifier
@@ -14,9 +14,19 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.ui.TheoriaAppContent
+import com.theoriacodex.app.viewer.ViewerAutoPictureInPicture
+import com.theoriacodex.app.viewer.ViewerHostActivity
+import com.theoriacodex.app.viewer.ViewerRotationState
 
 @OptIn(ExperimentalComposeUiApi::class)
-class JourneyTestActivity : ComponentActivity() {
+class JourneyTestActivity : ViewerHostActivity() {
+    override val viewerPictureInPictureActive = false
+    override val viewerAutoPictureInPicture = ViewerAutoPictureInPicture(this)
+    override val viewerRotation = ViewerRotationState()
+    override val keepViewerPlayingOnPause = false
+
+    override fun requestViewerPictureInPicture(params: PictureInPictureParams): Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

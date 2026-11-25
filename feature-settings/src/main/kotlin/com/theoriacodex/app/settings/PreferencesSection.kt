@@ -12,7 +12,7 @@ import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 
 private val CONTROL_TOGGLES = listOf(
-    SettingToggles.OldSearchBar, SettingToggles.InstantSeek, SettingToggles.InvertScrollDirection, SettingToggles.AutoRotateVideos,
+    SettingToggles.OldSearchBar, SettingToggles.InstantSeek, SettingToggles.InvertScrollDirection,
 )
 
 @Composable

@@ -3,8 +3,8 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.ViewerOrientation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -22,106 +23,76 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class)
+@Config(application = Application::class, qualifiers = "port")
 class ViewerRotationTest {
     @get:Rule val compose = createComposeRule()
     private val rotation = ViewerRotationState()
-    private val shown = mutableStateOf(true)
     private val chrome = mutableStateOf(true)
-    private val selection = mutableStateOf(selection("a", WIDE, IMAGE))
-    private val fork = mutableStateOf<ViewerSelection?>(null)
+    private val lock = mutableStateOf<ViewerOrientation?>(null)
+    private val selection = mutableStateOf(selection("a", WIDE))
 
-    @Test fun `rotates once when the opening post resolves to a wide video, then holds`() {
-        show(autoRotate = true)
-        compose.runOnIdle { assertNull(rotation.held) }
-        selection.value = selection("a", WIDE, VIDEO)
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
-        selection.value = selection("b", TALL, VIDEO)
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
+    @Test fun `swiping across wide and tall posts never rotates on its own (ADR 0174)`() {
+        show()
+        listOf(selection("b", TALL), selection("c", WIDE, VIDEO), selection("d", TALL, VIDEO), selection("e", WIDE)).forEach {
+            selection.value = it
+            compose.runOnIdle { assertNull(rotation.held) }
+        }
     }
 
-    @Test fun `a video still waiting for its stream rotates as soon as it opens`() {
-        selection.value = selection("a", WIDE, IMAGE, full = null, durationMs = 45_000L)
-        show(autoRotate = true)
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
-    }
-
-    @Test fun `with the controls hidden, a post offering rotation shows the button briefly`() {
-        selection.value = selection("a", WIDE, VIDEO)
+    @Test fun `with the controls hidden the chip shows for a few seconds on a post that fits the other way, then fades (ADR 0174)`() {
         compose.mainClock.autoAdvance = false
-        show(autoRotate = false, chromeVisible = false)
+        show(chromeVisible = false)
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithContentDescription("Rotate to fit").assertExists()
         compose.mainClock.advanceTimeBy(VIEWER_ROTATE_HINT_MS + 500)
         compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
+        compose.runOnIdle { assertNull(rotation.held) }
     }
 
-    @Test fun `leaving the opening post cancels the automatic rotation, and the button rotates instead`() {
-        show(autoRotate = true)
-        selection.value = selection("b", WIDE, VIDEO)
-        compose.runOnIdle { assertNull(rotation.held) }
+    @Test fun `a chip tap rotates once and the hold survives swiping (ADR 0174)`() {
+        show()
         compose.onNodeWithContentDescription("Rotate to fit").performClick()
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
-    }
-
-    @Test fun `with the setting off nothing rotates on its own`() {
-        selection.value = selection("a", WIDE, VIDEO)
-        show(autoRotate = false)
-        compose.runOnIdle { assertNull(rotation.held) }
-        compose.onNodeWithContentDescription("Rotate to fit").performClick()
+        selection.value = selection("b", TALL)
         compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
     }
 
-    @Test fun `a trail level keeps the held rotation, even once the level under it leaves, until the Viewer releases it`() {
-        selection.value = selection("a", WIDE, VIDEO)
-        show(autoRotate = true)
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
-        fork.value = selection("b", TALL, VIDEO)
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
-        shown.value = false
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
-        rotation.release()
-        compose.runOnIdle { assertNull(rotation.held) }
-    }
-
-    @Test fun `media that rotating would not fit still offers a plain rotate, without the brief hint`() {
-        selection.value = selection("a", SQUARE, VIDEO)
-        compose.mainClock.autoAdvance = false
-        show(autoRotate = true, chromeVisible = false)
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithContentDescription("Rotate").assertDoesNotExist()
-        compose.mainClock.autoAdvance = true
-        chrome.value = true
+    @Test fun `media that fits either way offers no chip`() {
+        selection.value = selection("a", SQUARE)
+        show()
         compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Rotate").performClick()
-        compose.runOnIdle { assertEquals(ViewerOrientation.LANDSCAPE, rotation.held) }
     }
 
-    private fun show(autoRotate: Boolean, chromeVisible: Boolean = true) {
+    @Test fun `the lock pins the current orientation and hides the chip until unlocked, which drops any hold (ADR 0174)`() {
+        show()
+        compose.onNodeWithContentDescription("Rotate to fit").performClick()
+        compose.onNodeWithContentDescription("Lock rotation").performClick()
+        compose.runOnIdle { assertEquals(ViewerOrientation.PORTRAIT, lock.value) }
+        compose.onNodeWithContentDescription("Rotate to fit").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Unlock rotation").performClick()
+        compose.runOnIdle {
+            assertNull(lock.value)
+            assertNull(rotation.held)
+        }
+        compose.onNodeWithContentDescription("Rotate to fit").assertExists()
+    }
+
+    private fun show(chromeVisible: Boolean = true) {
         chrome.value = chromeVisible
         compose.setContent {
-            if (shown.value) {
-                CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
-                    Box(Modifier.fillMaxSize()) {
-                        ViewerRotationControl(selection.value, rotation, inPictureInPicture = false, chrome.value, suppressed = false)
-                    }
-                }
-            }
-            fork.value?.let { forked ->
-                CompositionLocalProvider(LocalViewerAutoRotateVideos provides autoRotate) {
-                    Box(Modifier.fillMaxSize()) {
-                        ViewerRotationControl(forked, rotation, inPictureInPicture = false, chrome.value, suppressed = false)
-                    }
-                }
+            Box(Modifier.fillMaxSize()) {
+                val offer = rememberViewerRotation(selection.value, rotation, inPictureInPicture = false, lock.value) { lock.value = it }
+                ViewerRotationLockButton(selection.value, offer, chrome.value, suppressed = false, Alignment.BottomStart)
+                ViewerRotationChip(selection.value, offer, chrome.value, suppressed = false, slot = 1)
             }
         }
     }
 
-    private fun selection(id: String, size: Pair<Int, Int>, media: ImageRef, full: ImageRef? = media, durationMs: Long? = null): ViewerSelection {
+    private fun selection(id: String, size: Pair<Int, Int>, media: ImageRef = IMAGE): ViewerSelection {
         val post = Post(
-            id = PostId(SourceKey.IWARA, id), preview = media, full = full, pageUrl = null,
+            id = PostId(SourceKey.IWARA, id), preview = media, full = media, pageUrl = null,
             width = size.first, height = size.second, canonicalTags = emptyList(), rawTags = emptyList(),
-            authorName = null, createdAtEpochMs = null, durationMs = durationMs,
+            authorName = null, createdAtEpochMs = null,
         )
         return ViewerSelection(post, listOf(media), mediaIndex = 0, canPlayUgoira = false, overviewItems = emptyList())
     }

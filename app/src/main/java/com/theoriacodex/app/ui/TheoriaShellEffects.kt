@@ -2,8 +2,9 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.ui.routes.codexCollectionOwner
 import com.theoriacodex.app.library.LibrarySection
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.filterNotNull
-import com.theoriacodex.app.MainActivity
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -44,6 +45,7 @@ import com.theoriacodex.app.ui.routes.PixivAuthorizationCallbackEffect
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.update.mergeReleaseHistory
+import com.theoriacodex.app.viewer.ViewerHostActivity
 import kotlinx.coroutines.flow.collect
 
 @Composable
@@ -267,10 +269,14 @@ internal suspend fun PagerState.scrollToRoute(route: String) {
 internal fun ShellPlatformEffects(shell: TheoriaShell, currentRoute: String?) {
     val hostContext = LocalContext.current
     val hostActivity = remember(hostContext) { hostContext.findActivity() }
+    val orientationLock by remember(shell) {
+        shell.data.settingsRepository.observeSettings().map { it.viewer.orientationLock }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(null)
     TheoriaAppPlatformEffects(
         hostActivity = hostActivity,
         viewerActive = currentRoute == AppRoute.Viewer,
-        viewerRotation = (hostActivity as? MainActivity)?.viewerRotation,
+        viewerRotation = (hostActivity as? ViewerHostActivity)?.viewerRotation,
+        orientationLock = orientationLock,
         orientation = LocalConfiguration.current.orientation,
     )
     val lifecycleOwner = LocalLifecycleOwner.current

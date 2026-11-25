@@ -46,10 +46,6 @@ object SettingToggles {
         read = { it.viewer.invertMultiImageScrollDirection },
         write = { settings, on -> settings.copy(viewer = settings.viewer.copy(invertMultiImageScrollDirection = on)) },
     )
-    val AutoRotateVideos = SettingToggle(
-        "auto-rotate", "Auto-Rotate Videos", listOf("rotate", "orientation"),
-        read = { it.viewer.autoRotateVideos }, write = { settings, on -> settings.copy(viewer = settings.viewer.copy(autoRotateVideos = on)) },
-    )
     val DownloadsOverMetered = SettingToggle(
         "downloads-metered", "Download over metered networks", listOf("mobile data", "metered"),
         read = { it.cache.downloadsOverMetered },
@@ -77,7 +73,7 @@ object SettingToggles {
     )
 
     val all: List<SettingToggle> = listOf(
-        OldSearchBar, InstantSeek, InvertScrollDirection, AutoRotateVideos,
+        OldSearchBar, InstantSeek, InvertScrollDirection,
         DownloadsOverMetered, DownloadsOverRoaming, KeepMediaOffline, FindAnimationDurations, SeriesDeleteAfterReading,
     )
 }

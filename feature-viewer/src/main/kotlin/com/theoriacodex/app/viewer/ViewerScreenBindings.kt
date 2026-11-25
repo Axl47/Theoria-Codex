@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.VideoQuality
+import com.theoriacodex.domain.model.ViewerOrientation
 import com.theoriacodex.domain.model.ViewerPlaybackMode
 
 data class ViewerScreenConfig(
@@ -19,7 +20,7 @@ data class ViewerScreenConfig(
     val videoQuality: VideoQuality = VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val instantSeek: Boolean = false,
-    val autoRotateVideos: Boolean = false,
+    val orientationLock: ViewerOrientation? = null,
     val commentOrder: CommentOrder = CommentOrder.OLDEST,
     val likedPostIds: Set<PostId> = emptySet(),
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
@@ -32,6 +33,7 @@ data class ViewerStripMark(val badge: String? = null, val label: String? = null,
 data class ViewerScreenCallbacks(
     val onPlaybackModeSelected: (ViewerPlaybackMode) -> Unit = {},
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
+    val onOrientationLockSelected: (ViewerOrientation?) -> Unit = {},
     val onCommentOrderSelected: (CommentOrder) -> Unit = {},
     val onGalleryReadingModeSelected: (PostId, GalleryReadingMode) -> Unit = { _, _ -> },
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
@@ -57,5 +59,6 @@ class ViewerScreenHost(
     val onVisibleMediaChanged: ((Post, Int, Float?) -> Unit)? = null,
     val onPlaybackProgress: ((Post, ViewerPlaybackProgress) -> Unit)? = null,
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
+    val onOrientationLockChanged: (ViewerOrientation?) -> Unit = {},
     val durations: ViewerPostDurations = ViewerPostDurations.None,
 )

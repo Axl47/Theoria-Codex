@@ -392,7 +392,7 @@ data class ViewerSettings(
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val instantSeek: Boolean = false,
-    val autoRotateVideos: Boolean = true,
+    val orientationLock: com.theoriacodex.domain.model.ViewerOrientation? = null,
     val commentOrder: com.theoriacodex.domain.model.CommentOrder = com.theoriacodex.domain.model.CommentOrder.OLDEST,
 )
 

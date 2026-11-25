@@ -40,7 +40,7 @@ internal data class SettingsStoreRecord(
     @SerialName("seriesDeleteAfterReading") val seriesDeleteAfterReading: Boolean? = null,
     @SerialName("codexLibrarySort") val codexLibrarySort: String? = null,
     @SerialName("instantSeek") val instantSeek: Boolean = false,
-    @SerialName("viewerAutoRotateVideos") val viewerAutoRotateVideos: Boolean? = null,
+    @SerialName("viewerOrientationLock") val viewerOrientationLock: String? = null,
     @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
     @SerialName("recommendationProfiles")
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
@@ -130,7 +130,7 @@ internal data class SettingsStoreRecord(
             videoQuality = decodeVideoQuality(videoQuality, com.theoriacodex.domain.model.VideoQuality.AUTO),
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
             instantSeek = instantSeek,
-            autoRotateVideos = viewerAutoRotateVideos ?: true,
+            orientationLock = com.theoriacodex.domain.model.ViewerOrientation.entries.firstOrNull { it.name == viewerOrientationLock },
             commentOrder = com.theoriacodex.domain.model.CommentOrder.entries.firstOrNull { it.name == viewerCommentOrder }
                 ?: com.theoriacodex.domain.model.CommentOrder.OLDEST,
         )
@@ -161,7 +161,7 @@ internal data class SettingsStoreRecord(
                 resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
                 instantSeek = settings.viewer.instantSeek,
-                viewerAutoRotateVideos = settings.viewer.autoRotateVideos,
+                viewerOrientationLock = settings.viewer.orientationLock?.name,
                 viewerCommentOrder = settings.viewer.commentOrder.name,
                 recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,

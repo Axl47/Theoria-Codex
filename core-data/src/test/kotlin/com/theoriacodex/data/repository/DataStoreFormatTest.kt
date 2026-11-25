@@ -30,7 +30,7 @@ class DataStoreFormatTest {
             seriesDeleteAfterReading = true,
             codexLibrarySort = "NAME",
             instantSeek = true,
-            viewerAutoRotateVideos = false,
+            viewerOrientationLock = "LANDSCAPE",
             viewerCommentOrder = "NEWEST",
             recommendationProfiles = listOf(RecommendationProfileRecord("profile-main", "Main = 1")),
             activeProfileId = "profile-main",
@@ -41,7 +41,7 @@ class DataStoreFormatTest {
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
         )
         val full = SettingsDataStoreFile(settings = settings)
-        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = setOf("settings.scenarioPreset"))
+        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = setOf("settings.scenarioPreset", "settings.viewerAutoRotateVideos"))
     }
 
     @Test
