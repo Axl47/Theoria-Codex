@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.SortMode
 
 class SavedSearchNewPostsChecker(
     private val store: UiRestoreRepository,
+    private val savedSearches: suspend () -> List<SavedSearchEntry>,
     private val firstPage: suspend (SavedSearchEntry) -> List<Post>?,
 ) {
     suspend fun checkIfStale(entries: List<SavedSearchEntry>, nowEpochMs: Long) {
@@ -21,6 +22,7 @@ class SavedSearchNewPostsChecker(
         recent.mapConcurrent(concurrency = 2) { entry ->
             if (!claim(entry.id, saved, nowEpochMs)) return@mapConcurrent
             val ids = firstPage(entry.newestFirst())?.map { it.id.markKey() } ?: return@mapConcurrent
+            if (savedSearches().none { it.id == entry.id && it.search == entry.search }) return@mapConcurrent
             store.updateSavedSearchNewPosts { state ->
                 if (state.attempts[entry.id] != nowEpochMs) return@updateSavedSearchNewPosts state
                 val kept = state.marks.filterKeys { it in saved }

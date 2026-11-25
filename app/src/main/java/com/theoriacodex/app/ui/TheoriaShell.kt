@@ -321,6 +321,7 @@ internal class TheoriaShell(
     savedSearches: State<List<SavedSearchEntry>>,
     pendingLikePostIds: State<Map<String, Set<PostId>>>,
     pendingCreatorProfile: MutableState<CreatorProfile?>,
+    editingSavedSearchId: MutableState<String?>,
 ) {
     val data = container.data
     val sources = container.sources
@@ -344,7 +345,7 @@ internal class TheoriaShell(
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry, data.fileMirrors::copiesOf)
     val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
-    var editingSavedSearchId by mutableStateOf<String?>(null)
+    var editingSavedSearchId by editingSavedSearchId
         private set
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val seriesReader = container.series?.let(::SeriesReader)
@@ -714,6 +715,7 @@ internal fun rememberTheoriaShell(
     val pendingLikePostIds = owners.postMutations.pendingLikePostIds.collectAsStateWithLifecycle()
     val homeTabRoute = rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     val pendingCreatorProfile = rememberSaveable(stateSaver = CreatorProfileStateSaver) { mutableStateOf<CreatorProfile?>(null) }
+    val editingSavedSearchId = rememberSaveable { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState(pageCount = { TopLevelDestination.entries.size })
     val routes = remember { RouteOwners() }
     val pendingSave = remember { PendingCodexSave() }
@@ -723,6 +725,7 @@ internal fun rememberTheoriaShell(
         TheoriaShell(
             container, viewerSessions, appShellOwner, appContext, scope, snackbarHostState, registry, transfers, owners,
             codexImportLauncher, routes, navigation, pendingSave, overlays, savedSearches, pendingLikePostIds, pendingCreatorProfile,
+            editingSavedSearchId,
         )
     }
 }

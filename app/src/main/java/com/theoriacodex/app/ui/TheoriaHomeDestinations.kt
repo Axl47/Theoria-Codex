@@ -91,9 +91,7 @@ private fun SearchDestination(shell: TheoriaShell) {
                 onOpenSavedSearch = shell::openSavedSearch,
                 onResultsShown = shell.savedSearchOpens::resultsShown,
                 onSaveSearch = shell.owners.savedSearches::save,
-                onUpdateSavedSearch = { saved, search ->
-                    shell.owners.savedSearches.update(saved.id, search) { shell.endSavedSearchEdit(saved.id) }
-                },
+                onUpdateSavedSearch = { saved, search -> shell.owners.savedSearches.update(saved.id, search) },
                 onEndSavedSearchEdit = { shell.endSavedSearchEdit(it.id) },
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },
                 onOpenSourceAccounts = { shell.owners.settings.onAction(SettingsAction.OpenCustomSites) },

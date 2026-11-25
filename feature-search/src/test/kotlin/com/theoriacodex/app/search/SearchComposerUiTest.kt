@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performTextInput
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
 import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchSuggestionsUiState
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.emptySearchQuery
@@ -116,6 +117,38 @@ class SearchComposerUiTest {
             assertEquals(groups, updated?.second?.query?.includeTermGroups)
             assertEquals(0, saves)
         }
+    }
+
+    @Test fun `Update waits for a change that has run and names the saved search it would duplicate (ADR 0218)`() {
+        val state = SearchUiState().let { base ->
+            val draft = emptySearchQuery(QueryMode.Source(SourceKey.GELBOORU)).copy(includeTermGroups = groups)
+            val scope = SearchSourceScope.fromQuery(draft)
+            base.copy(query = base.query.copy(draft = draft, applied = draft, appliedQueryHash = "applied",
+                draftSourceScope = scope, appliedSourceScope = scope))
+        }
+        var onScreen: RecentSearchEntry? = null
+        composerSavedSearches(state, emptyList(), null, { _, search -> onScreen = search }, { _, _ -> }, {}, {}).onSaveCurrent?.invoke("x")
+        val shown = checkNotNull(onScreen)
+        val evening = SavedSearchEntry("evening", "Evening", RecentSearchEntry(emptySearchQuery(), "old", 1L), 1L)
+        val morning = SavedSearchEntry("morning", "Morning", shown, 1L)
+        fun update(state: SearchUiState, editing: SavedSearchEntry, entries: List<SavedSearchEntry>) =
+            checkNotNull(composerSavedSearches(state, entries, editing, { _, _ -> }, { _, _ -> }, {}, {}).update)
+
+        assertEquals(true, update(state, evening, listOf(evening)).onUpdate != null)
+        assertEquals(null, update(state, evening.copy(search = shown), listOf(evening)).onUpdate)
+        val pending = state.copy(query = state.query.copy(draft = state.query.draft.withIncludeTermsAsRequired(emptyList())))
+        assertEquals(null, update(pending, evening, listOf(evening)).onUpdate)
+        val duplicate = update(state, evening, listOf(evening, morning))
+        assertEquals("Morning", duplicate.conflict)
+        assertEquals(null, duplicate.onUpdate)
+    }
+
+    @Test fun `a duplicate shows why Update is off (ADR 0218)`() {
+        open(SourceKey.GELBOORU, emptyList(), savedSearches = {
+            ComposerSavedSearches(update = ComposerSavedSearchUpdate("Evening", conflict = "Morning"))
+        })
+        compose.onNodeWithText("Update “Evening”").assertIsNotEnabled()
+        compose.onNodeWithText("“Morning” already saves this search.").assertExists()
     }
 
     @Test fun `without a saved search being edited the composer offers Save, not Update (ADR 0218)`() {

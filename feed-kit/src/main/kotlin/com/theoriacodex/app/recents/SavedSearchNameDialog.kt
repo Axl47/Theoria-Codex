@@ -22,7 +22,7 @@ fun SavedSearchNameDialog(
     renaming: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
-    onEdit: (() -> Unit)? = null,
+    onEdit: ((String) -> Unit)? = null,
 ) {
     var name by rememberSaveable(initialName, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length)))
@@ -46,7 +46,7 @@ fun SavedSearchNameDialog(
         },
         dismissButton = {
             Row {
-                onEdit?.let { TextButton(onClick = it) { Text("Edit search") } }
+                onEdit?.let { edit -> TextButton(onClick = { edit(name.text.trim()) }) { Text("Edit search") } }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         },

@@ -595,9 +595,13 @@ private fun ComposerSavedSection(
                     Text("Save", Modifier.padding(start = 4.dp))
                 }
             }
-            savedSearches.onUpdateCurrent?.let { update ->
-                TextButton(onClick = update, modifier = Modifier.widthIn(max = UPDATE_BUTTON_MAX_WIDTH)) {
-                    Text("Update “${savedSearches.editing?.name}”", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            savedSearches.update?.let { update ->
+                TextButton(
+                    onClick = { update.onUpdate?.invoke() },
+                    enabled = update.onUpdate != null,
+                    modifier = Modifier.widthIn(max = UPDATE_BUTTON_MAX_WIDTH),
+                ) {
+                    Text("Update “${update.name}”", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (savedSearches.entries.isNotEmpty()) {
@@ -606,6 +610,13 @@ private fun ComposerSavedSection(
                     modifier = Modifier.semantics { contentDescription = "Manage saved searches" },
                 ) { Text("Manage") }
             }
+        }
+        savedSearches.update?.conflict?.let { name ->
+            Text(
+                "“$name” already saves this search.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
         if (savedSearches.entries.isNotEmpty()) SavedSearchChips(savedSearches)
         if (naming) {

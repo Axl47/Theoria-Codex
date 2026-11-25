@@ -78,13 +78,18 @@ internal class ComposerSavedSearches(
     val onSaveCurrent: ((String) -> Unit)? = null,
     val suggestedName: String = "",
     val onManage: () -> Unit = {},
-    val editing: SavedSearchEntry? = null,
-    val onUpdateCurrent: (() -> Unit)? = null,
+    val update: ComposerSavedSearchUpdate? = null,
 ) {
-    val canSaveCurrent: Boolean get() = onSaveCurrent != null || onUpdateCurrent != null
+    val canSaveCurrent: Boolean get() = onSaveCurrent != null || update != null
 
     fun isCurrent(entry: SavedSearchEntry): Boolean = currentQueryHash != null && entry.search.queryHash == currentQueryHash
 }
+
+internal class ComposerSavedSearchUpdate(
+    val name: String,
+    val conflict: String? = null,
+    val onUpdate: (() -> Unit)? = null,
+)
 
 internal class ComposerSavedTags(
     val entries: List<FavoriteTagEntry>,

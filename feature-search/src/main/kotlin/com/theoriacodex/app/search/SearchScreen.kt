@@ -54,6 +54,7 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.SavedSearchEntry
+import com.theoriacodex.data.repository.savedFor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
@@ -144,7 +145,11 @@ fun SearchScreen(
         SearchPostSheet(post, actionPost, state, related, onAction, onRequestSaveToCodex, onAddFavoriteTag, onToggleLike)
     }
     if (chrome.composerOpen) {
-        val saved = composerSavedSearches(state, savedSearches, editingSavedSearch, onSaveSearch, onUpdateSavedSearch, onManageSavedSearches) {
+        val update = { saved: SavedSearchEntry, search: RecentSearchEntry ->
+            onUpdateSavedSearch(saved, search)
+            chrome.closeComposer(onAction)
+        }
+        val saved = composerSavedSearches(state, savedSearches, editingSavedSearch, onSaveSearch, update, onManageSavedSearches) {
             chrome.closeComposer(onAction)
             onOpenSavedSearch(it)
         }
@@ -545,11 +550,24 @@ internal fun composerSavedSearches(
         currentQueryHash = current?.queryHash,
         onOpen = onOpen,
         onSaveCurrent = current?.takeIf { editing == null }?.let { entry -> { name: String -> onSave(name, entry) } },
-        editing = editing,
-        onUpdateCurrent = current?.let { entry -> editing?.let { saved -> { onUpdate(saved, entry) } } },
+        update = editing?.let { saved -> savedSearchUpdate(state, entries, saved, current, onUpdate) },
         suggestedName = current?.let { recentSearchPresentation(it).title.take(MAX_SAVED_SEARCH_NAME_LENGTH) }.orEmpty(),
         onManage = onManage,
     )
+}
+
+private fun savedSearchUpdate(
+    state: SearchUiState,
+    entries: List<SavedSearchEntry>,
+    editing: SavedSearchEntry,
+    current: RecentSearchEntry?,
+    onUpdate: (SavedSearchEntry, RecentSearchEntry) -> Unit,
+): ComposerSavedSearchUpdate {
+    val conflict = current?.let { entries.filterNot { it.id == editing.id }.savedFor(it) }
+    val ready = current?.takeIf {
+        conflict == null && !state.hasPendingChanges && !state.execution.liveSearchWaiting && listOf(editing).savedFor(it) == null
+    }
+    return ComposerSavedSearchUpdate(editing.name, conflict?.name, ready?.let { search -> { onUpdate(editing, search) } })
 }
 
 private fun savedTagSource(state: SearchUiState): SourceKey? =

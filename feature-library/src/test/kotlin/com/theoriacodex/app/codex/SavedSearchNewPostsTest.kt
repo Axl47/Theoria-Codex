@@ -26,7 +26,8 @@ class SavedSearchNewPostsTest {
     private val checkedSorts = mutableListOf<SortMode>()
     private var hang = false
     private var gate: CompletableDeferred<Unit>? = null
-    private val checker = SavedSearchNewPostsChecker(store) { entry ->
+    private var stored = listOf<SavedSearchEntry>()
+    private val checker = SavedSearchNewPostsChecker(store, { stored }) { entry ->
         checked += entry.id
         checkedSorts += entry.search.query.sort
         if (hang) awaitCancellation()
@@ -34,15 +35,20 @@ class SavedSearchNewPostsTest {
         pages[entry.id]?.map { testPost(SourceKey.PIXIV, it) }
     }
 
+    private suspend fun check(entries: List<SavedSearchEntry>, now: Long) {
+        stored = entries
+        checker.checkIfStale(entries, now)
+    }
+
     private suspend fun counts() = store.observeSavedSearchNewPosts().first().marks.mapValues { it.value.newPostCount }
 
     @Test fun `first check sets the baseline, later ones count, and opening clears them`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(searches, 0L)
+        check(searches, 0L)
         assertEquals(mapOf("a" to 0), counts())
         pages = mapOf("a" to listOf("2", "1"))
-        checker.checkIfStale(searches, 3 * hour)
+        check(searches, 3 * hour)
         assertEquals(mapOf("a" to 1), counts())
         store.markSavedSearchesSeen(setOf("a"))
         assertEquals(mapOf("a" to 0), counts())
@@ -51,9 +57,9 @@ class SavedSearchNewPostsTest {
     @Test fun `a feed clears only the posts it showed`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(searches, 0L)
+        check(searches, 0L)
         pages = mapOf("a" to listOf("2", "1"))
-        checker.checkIfStale(searches, 3 * hour)
+        check(searches, 3 * hour)
         store.markSavedSearchPostsSeen(setOf("PIXIV:9"))
         assertEquals(mapOf("a" to 1), counts())
         store.markSavedSearchPostsSeen(setOf("PIXIV:2"))
@@ -63,8 +69,8 @@ class SavedSearchNewPostsTest {
     @Test fun `checks wait out the interval after a failure and take the eight newest`() = runTest {
         val searches = (1..10).map { entry("s$it", it.toLong()) }
         pages = searches.associate { it.id to null }
-        checker.checkIfStale(searches, 0L)
-        checker.checkIfStale(searches, 2 * hour)
+        check(searches, 0L)
+        check(searches, 2 * hour)
         assertEquals((10 downTo 3).map { "s$it" }.toSet(), checked.toSet())
         assertEquals(8, checked.size)
         assertEquals(emptyMap<String, Int>(), counts())
@@ -72,21 +78,21 @@ class SavedSearchNewPostsTest {
 
     @Test fun `searches are checked newest first whatever sort they were saved with`() = runTest {
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(listOf(entry("a", 1, SortMode.RANDOM)), 0L)
+        check(listOf(entry("a", 1, SortMode.RANDOM)), 0L)
         assertEquals(listOf(SortMode.NEWEST), checkedSorts)
     }
 
     @Test fun `a search cancelled by leaving the app is not sent again within the interval`() = runTest {
         val searches = listOf(entry("a", 1))
         hang = true
-        val cancelled = launch { checker.checkIfStale(searches, 0L) }
+        val cancelled = launch { check(searches, 0L) }
         runCurrent()
         cancelled.cancelAndJoin()
         hang = false
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(searches, hour)
+        check(searches, hour)
         assertEquals(listOf("a"), checked)
-        checker.checkIfStale(searches, 3 * hour)
+        check(searches, 3 * hour)
         assertEquals(listOf("a", "a"), checked)
         assertEquals(mapOf("a" to 0), counts())
     }
@@ -94,8 +100,8 @@ class SavedSearchNewPostsTest {
     @Test fun `overlapping checks send each search once`() = runTest {
         val searches = listOf(entry("a", 1), entry("b", 2))
         hang = true
-        val first = launch { checker.checkIfStale(searches, 0L) }
-        val second = launch { checker.checkIfStale(searches, 0L) }
+        val first = launch { check(searches, 0L) }
+        val second = launch { check(searches, 0L) }
         runCurrent()
         assertEquals(setOf("a", "b"), checked.toSet())
         assertEquals(2, checked.size)
@@ -108,7 +114,7 @@ class SavedSearchNewPostsTest {
         val oldQueryAnswer = CompletableDeferred<Unit>()
         gate = oldQueryAnswer
         pages = mapOf("a" to listOf("old2", "old1"))
-        val running = launch { checker.checkIfStale(listOf(saved), 6 * hour) }
+        val running = launch { check(listOf(saved), 6 * hour) }
         runCurrent()
         store.resetSavedSearchNewPosts(saved.id)
         oldQueryAnswer.complete(Unit)
@@ -116,16 +122,29 @@ class SavedSearchNewPostsTest {
         assertEquals(emptyMap<String, Int>(), counts())
         gate = null
         pages = mapOf("a" to listOf("9", "3"))
-        checker.checkIfStale(listOf(saved), 6 * hour + 1)
+        check(listOf(saved), 6 * hour + 1)
+        assertEquals(mapOf("a" to 0), counts())
+    }
+
+    @Test fun `a check started before an edit drops what the old query found even when it claims after the edit (ADR 0218)`() = runTest {
+        val original = savedSearchWithTwoNew()
+        val edited = original.copy(search = original.search.copy(queryHash = "edited"))
+        stored = listOf(edited)
+        store.resetSavedSearchNewPosts(original.id)
+        pages = mapOf("a" to listOf("old2", "old1"))
+        checker.checkIfStale(listOf(original), 6 * hour)
+        assertEquals(emptyMap<String, Int>(), counts())
+        pages = mapOf("a" to listOf("9", "3"))
+        check(listOf(edited), 9 * hour)
         assertEquals(mapOf("a" to 0), counts())
     }
 
     private suspend fun savedSearchWithTwoNew(): SavedSearchEntry {
         val saved = entry("a", 1)
         pages = mapOf("a" to listOf("1"))
-        checker.checkIfStale(listOf(saved), 0L)
+        check(listOf(saved), 0L)
         pages = mapOf("a" to listOf("3", "2", "1"))
-        checker.checkIfStale(listOf(saved), 3 * hour)
+        check(listOf(saved), 3 * hour)
         assertEquals(mapOf("a" to 2), counts())
         return saved
     }

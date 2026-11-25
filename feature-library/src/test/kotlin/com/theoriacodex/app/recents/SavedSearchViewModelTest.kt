@@ -92,19 +92,17 @@ class SavedSearchViewModelTest {
         val state = SavedSearchNewPosts(attempts = mapOf(edited.id to 5, other.id to 5), marks = mapOf(edited.id to marks, other.id to marks))
         newPosts.updateSavedSearchNewPosts { state }
         val owner = owner()
-        var updated = 0
 
-        owner.update(edited.id, search().copy(searchedAtEpochMs = 900)) { updated++ }
+        owner.update(edited.id, search().copy(searchedAtEpochMs = 900))
         advanceUntilIdle()
         assertEquals(state, newPosts.observeSavedSearchNewPosts().first())
 
         val night = search().copy(queryHash = "night", query = search().query.withIncludeTermsAsRequired(listOf(SearchTerm("night"))))
-        owner.update(edited.id, night) { updated++ }
+        owner.update(edited.id, night)
         advanceUntilIdle()
 
         assertEquals(edited.copy(search = night), repository.observeSavedSearches().first().first { it.id == edited.id })
         assertEquals(SavedSearchNewPosts(mapOf(other.id to 5L), mapOf(other.id to marks)), newPosts.observeSavedSearchNewPosts().first())
-        assertEquals(2, updated)
         assertEquals("Saved search updated.", owner.effects.first())
     }
 
@@ -113,14 +111,12 @@ class SavedSearchViewModelTest {
         val edited = repository.save("Edited", search())
         val other = repository.save("Other", search().copy(queryHash = "other", query = search().query.copy(sort = SortMode.POPULAR)))
         val owner = owner()
-        var updated = false
 
-        owner.update(edited.id, other.search) { updated = true }
+        owner.update(edited.id, other.search)
         advanceUntilIdle()
 
         assertEquals("“Other” already saves this search.", owner.effects.first())
         assertEquals(search(), repository.observeSavedSearches().first().first { it.id == edited.id }.search)
-        assertEquals(false, updated)
     }
 
     @Test

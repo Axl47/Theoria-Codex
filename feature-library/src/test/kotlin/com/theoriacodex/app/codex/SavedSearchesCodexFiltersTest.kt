@@ -55,20 +55,23 @@ class SavedSearchesCodexFiltersTest {
         compose.runOnIdle { assertEquals("b", removed) }
     }
 
-    @Test fun `the rename dialog's Edit search hands over that saved search and renames nothing (ADR 0218)`() {
+    @Test fun `the rename dialog's Edit search hands over that saved search and keeps a name typed first (ADR 0218)`() {
         val entries = listOf(entry("a", "First"), entry("b", "Second"))
-        var renamed: Pair<String, String>? = null
-        var edited: SavedSearchEntry? = null
+        val renamed = mutableListOf<Pair<String, String>>()
+        val edited = mutableListOf<SavedSearchEntry>()
         compose.setContent { MaterialTheme { Column {
-            SavedSearchesCodexFilters(entries, FeedFabRestoreState(), {}, { id, name -> renamed = id to name }, {}, { edited = it })
+            SavedSearchesCodexFilters(entries, FeedFabRestoreState(), {}, { id, name -> renamed += id to name }, {}, { edited += it })
         } } }
         compose.onNodeWithContentDescription("Rename Second").performClick()
         compose.onNodeWithText("Edit search").performClick()
-        compose.runOnIdle {
-            assertEquals(entries[1], edited)
-            assertEquals(null, renamed)
-        }
         compose.onNodeWithText("Edit search").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Rename First").performClick()
+        compose.onNodeWithText("Name").performTextReplacement("Evening")
+        compose.onNodeWithText("Edit search").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(entries[1], entries[0]), edited)
+            assertEquals(listOf("a" to "Evening"), renamed)
+        }
     }
 
     private fun entry(id: String, name: String) = SavedSearchEntry(id, name, RecentSearchEntry(

@@ -59,7 +59,8 @@ internal fun NewPostsCheckEffect(shell: TheoriaShell) {
 
 private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker {
     val loader = SavedSearchFeedLoader(shell.features.search)
-    return SavedSearchNewPostsChecker(shell.data.uiRestoreRepository) { entry ->
+    val saved = shell.data.savedSearches.observeSavedSearches()
+    return SavedSearchNewPostsChecker(shell.data.uiRestoreRepository, { saved.first() }) { entry ->
         val runtime = shell.data.settingsRepository.observeSettings().first().runtime
         val sources = shell.sources.availableSources.value
         loader.updateEnvironment(sources, runtime.copy(enabledSources = runtime.enabledSources.intersect(sources)))

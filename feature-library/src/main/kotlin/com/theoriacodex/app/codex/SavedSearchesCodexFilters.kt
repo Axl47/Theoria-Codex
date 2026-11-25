@@ -62,7 +62,11 @@ fun SavedSearchesCodexFilters(
     renaming?.let { entry ->
         SavedSearchNameDialog(entry.name, renaming = true, onDismiss = { renaming = null },
             onConfirm = { onRename(entry.id, it); renaming = null },
-            onEdit = { renaming = null; onEdit(entry) },
+            onEdit = { name ->
+                renaming = null
+                if (name.isNotEmpty() && name != entry.name) onRename(entry.id, name)
+                onEdit(entry)
+            },
         )
     }
 }

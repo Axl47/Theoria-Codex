@@ -46,9 +46,8 @@ class SavedSearchViewModel(
         repository.rename(id, name)
     }
 
-    fun update(id: String, search: RecentSearchEntry, onUpdated: () -> Unit = {}) = mutate("Saved search updated.") {
+    fun update(id: String, search: RecentSearchEntry) = mutate("Saved search updated.") {
         if (repository.update(id, search)) newPosts.resetSavedSearchNewPosts(id)
-        onUpdated()
     }
 
     fun remove(id: String) = mutate("Saved search removed.") {
