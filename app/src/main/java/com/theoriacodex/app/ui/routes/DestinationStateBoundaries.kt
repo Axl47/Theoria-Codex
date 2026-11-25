@@ -70,6 +70,9 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.GalleryReadingMode
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import com.theoriacodex.domain.series.ExtensionAlerts
 
 internal data class BrowsingDestinationState(
     val settings: AppSettings,
@@ -410,16 +413,19 @@ internal fun SettingsDestinationStateBoundary(
 ) {
     val state = owner.state.collectAsStateWithLifecycle()
     val statistics = owner.statistics.collectAsStateWithLifecycle()
+    val alerts = (series?.extensionAlerts ?: NoExtensionAlerts).collectAsStateWithLifecycle()
     DestinationStateBoundary(state) {
         SettingsScreen(
             state = it, onAction = owner::onAction, statistics = statistics.value,
             storageSummary = storageSummary, sites = sites, backup = backup, pictures = pictures, statsActions = statsActions,
             diagnostics = diagnostics,
             storageTools = storageTools, showSeries = series != null, appLock = { AppLockRow() }, onClose = onClose, closesFrom = closesFrom,
-            onOpenExtensions = onOpenExtensions,
+            onOpenExtensions = onOpenExtensions, extensionAlerts = alerts.value,
         )
     }
 }
+
+private val NoExtensionAlerts = MutableStateFlow(ExtensionAlerts()).asStateFlow()
 
 @Composable
 internal fun CredentialRecoveryOverlay(

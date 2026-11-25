@@ -17,9 +17,10 @@ Settings:
   task opens its own page.
 - Settings can be opened at any page (`closesFrom`). Back on that page closes Settings; Back on any other page returns
   to the Settings home. When Settings was opened at Compare, closing the comparison closes Settings too.
-- Settings that only apply to Series (Extensions, how often followed series are checked, and Delete after reading) sit
-  in their own Series group right after Sources, so Sources holds only what applies to every source. The Series group
-  appears only in a build with extensions, where the app has a series container.
+- Settings that only apply to Series (how often followed series are checked, and Delete after reading) sit in their own
+  Series group right after Sources, so Sources holds only what applies to every source. The Series group appears only
+  in a build with extensions, where the app has a series container. Extensions sits above every group instead
+  (ADR 0221).
 - The Series updates sheet holds a single choice, so choosing an interval closes it. Its Notification settings button
   leaves the sheet open.
 - While a series check is scheduled but the app may not post notifications, the Series updates row reads

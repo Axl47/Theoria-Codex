@@ -126,6 +126,7 @@ fun SettingsRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
+    summaryMaxLines: Int = 2,
 ) {
     val clickModifier = if (onClick == null) Modifier else {
         Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -148,7 +149,7 @@ fun SettingsRow(
                     summary,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (summaryIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = summaryMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

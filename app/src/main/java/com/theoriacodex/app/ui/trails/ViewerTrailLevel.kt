@@ -37,6 +37,7 @@ internal class ViewerLevel(
     val nameRoot: (ViewerLaunchContext, Query?) -> Unit,
     val remove: (Int) -> Unit = {},
     val replay: CrumbTag? = null,
+    val restart: (CrumbTag) -> Unit = {},
 ) {
     fun clearsReturnOnDispose(): Boolean = !isFork && !coveredByFork()
 
@@ -104,6 +105,10 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
                 }
             },
             replay = replay.firstOrNull()?.let(::decodeCrumbTag),
+            restart = { tag ->
+                popTo(0)
+                navController.currentBackStackEntry?.savedStateHandle?.planTrailReplay(listOf(tag))
+            },
         )
     }
 }

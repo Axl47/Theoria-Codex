@@ -13,6 +13,7 @@ import com.theoriacodex.app.settings.SettingsSitesEntry
 import com.theoriacodex.app.settings.SettingsUiState
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.data.repository.SettingToggles
+import com.theoriacodex.domain.series.ExtensionAlerts
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +33,7 @@ class SettingsSeriesScreenshotTest {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     SettingsScreen(
                         state = SettingsUiState(), onAction = {}, showSeries = true, onOpenExtensions = {},
+                        extensionAlerts = ExtensionAlerts(missing = 3, updates = 2),
                         sites = SettingsSitesEntry("Add a booru by its address") { _, _ -> },
                     )
                 }

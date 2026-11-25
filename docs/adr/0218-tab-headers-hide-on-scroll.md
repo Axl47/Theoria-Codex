@@ -8,7 +8,7 @@ The owner asked for headers that leave on scroll-down and return on scroll-up, s
 calculation that trusts a list's viewport (Viewer return reveals, Codex reorder auto-scroll, page demand,
 centered empty states) needs that viewport to match what is on screen, and feed cards hold playback leases while
 laid out (ADR 0119), so a laid-out card that is not visible costs a decoder. Scrolling must not relayout more than
-the list already does. The Search and Series corner strips (Expand Search, the source picker and the Extensions
+the list already does. The Search and Series corner strips (Expand Search, the source picker and the Settings
 button) must stay put. The Viewer has its own chrome rules and is out of scope.
 
 ## Decision
@@ -70,7 +70,7 @@ is why it was left out.
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `release settles toward the last direction but never hides at the top (ADR 0218)`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `the lowest hideable sets the range and an inactive chrome never hides (ADR 0218)`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `show returns the header at once (ADR 0218)`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndExtensionsStayPinned_adr_0218`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabScreenTest.kt`: `scrollingDownHidesTheViewSwitchUntilAnyScrollUpWhileSearchAndSettingsStayPinned_adr_0218`
 - `app/src/androidTest/java/com/theoriacodex/app/journeys/HeaderHidesOnScrollJourneyTest.kt`: `theLibraryHeaderLeavesOnScrollDownAndReturnsOnScrollUpAndAfterATabSwitchWhileTabsStay_adr_0218`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `at the top a downward scroll goes to the list and pull to refresh, never the header (ADR 0218)`
 - `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/ScrollChromeStateTest.kt`: `a focused header control keeps the header shown (ADR 0218)`

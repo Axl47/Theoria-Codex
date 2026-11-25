@@ -19,8 +19,11 @@ import com.theoriacodex.app.ui.ReportLaunchContent
 import com.theoriacodex.app.ui.TheoriaShell
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.launchViewer
+import com.theoriacodex.app.ui.openSettings
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
+import com.theoriacodex.domain.series.SeriesSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,6 +75,7 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
             series.extensions.revision,
             createSavedStateHandle(),
             SharedPreferencesSeriesLibraryPreferences(shell.appContext),
+            download = { id, choice -> series.downloads.download(id, choice) },
         ) { only, onProgress -> series.checkFollowed(only = only, onProgress = onProgress) { notifySeriesUpdate(shell.appContext, it) } }
     }
     val tabShown = LocalTabShown.current
@@ -86,14 +90,17 @@ internal fun SeriesTabDestination(shell: TheoriaShell) {
     }
     val settings by shell.data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null)
     val content by viewModel.content.collectAsStateWithLifecycle()
+    val alerts by series.extensionAlerts.collectAsStateWithLifecycle()
     ReportLaunchContent(TopLevelDestination.Series, drawn = content.firstContentDrawn)
     SeriesTabScreen(
         viewModel,
         onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         onOpenExtensions = shell::openExtensions,
+        onOpenSettings = { shell.openSettings() },
+        extensionAlerts = alerts,
         oldSearchBar = settings?.oldSearchBar == true,
         snackbar = shell.snackbarHostState,
-        switchSource = series::switchSourceViewModel,
+        switchSource = shell.switchSources(series),
     )
 }
 
@@ -105,15 +112,18 @@ internal fun ExtensionsDestination(shell: TheoriaShell, entry: NavBackStackEntry
     val missing = remember(series) {
         MissingExtensionsActions(
             missing = { MissingSeriesViewModel(series.repository, series.sources, series.extensions.revision) },
-            switchSource = series::switchSourceViewModel,
+            switchSource = shell.switchSources(series),
             onOpenSeries = { id -> shell.navController.navigate(AppRoute.series(id)) },
         )
     }
     ExtensionsScreen(viewModel, onBack = { shell.navController.popBackStack() }, missing = missing)
 }
 
-private fun SeriesDependencies.switchSourceViewModel(id: SeriesId) =
-    SwitchSourceViewModel(id, sources, extensions.revision, store = { repository.store(it) }) { source, to -> switchSource(id, source, to) }
+private fun TheoriaShell.switchSourceViewModel(series: SeriesDependencies, id: SeriesId, switch: suspend (SeriesSource, Series) -> Boolean) =
+    SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }, choices = data.uiRestoreRepository, switch = switch)
+
+private fun TheoriaShell.switchSources(series: SeriesDependencies): (SeriesId) -> SwitchSourceViewModel =
+    { id -> switchSourceViewModel(series, id) { source, to -> series.switchSource(id, source, to) } }
 
 internal fun TheoriaShell.openExtensions(page: ExtensionsSubpage? = null) {
     navController.navigate(AppRoute.extensions(page)) { launchSingleTop = true }
@@ -137,9 +147,7 @@ internal fun SeriesPageDestination(shell: TheoriaShell, entry: NavBackStackEntry
         )
     }
     val switchSource = viewModel {
-        SwitchSourceViewModel(id, series.sources, series.extensions.revision, store = { series.repository.store(it) }) { source, to ->
-            viewModel.whileMoving { series.switchSource(id, source, to) }
-        }
+        shell.switchSourceViewModel(series, id) { source, to -> viewModel.whileMoving { series.switchSource(id, source, to) } }
     }
     val openEntry: suspend (String) -> Unit = { address ->
         shell.seriesReader?.session(id, address)?.let { session -> shell.launchViewer(session, saveContext = false, singleTop = true) }

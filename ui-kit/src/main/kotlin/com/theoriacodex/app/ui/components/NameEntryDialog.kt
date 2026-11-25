@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,6 +27,7 @@ fun NameEntryDialog(
     onSave: (String) -> Unit,
     optional: Boolean = false,
     hint: String? = null,
+    extraAction: (@Composable () -> Unit)? = null,
 ) {
     var value by remember(initialName) { mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length))) }
     fun saveIfValid() {
@@ -48,7 +50,12 @@ fun NameEntryDialog(
                 keyboardActions = KeyboardActions(onDone = { saveIfValid() }),
             )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            Row {
+                extraAction?.invoke()
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
         confirmButton = { TextButton(onClick = { saveIfValid() }) { Text("Save") } },
     )
 }

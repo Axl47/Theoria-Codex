@@ -19,10 +19,10 @@ internal fun viewerTransformBounds(width: Float, height: Float, aspectRatio: Flo
 }
 
 internal data class ViewerTransformState(
-    val zoom: Float = FIT_SCALE,
-    val panX: Float = 0f,
-    val panY: Float = 0f,
-) {
+    override val zoom: Float = FIT_SCALE,
+    override val panX: Float = 0f,
+    override val panY: Float = 0f,
+) : ViewerContentTransform {
     val isZoomed: Boolean
         get() = zoom > FIT_SCALE + FIT_TOLERANCE
 

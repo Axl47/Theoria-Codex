@@ -191,7 +191,7 @@ private fun ViewerLoadedScreen(
         }
     }
     if (uiState.controls.panel == ViewerPanel.INFO && !inPictureInPicture) {
-        ViewerInfoSheet(selection, controls, host, config, uiState.series, saveContext.query, contextActions, comments)
+        ViewerInfoSheet(selection, controls, host, config, uiState.series, saveContext.query, contextActions, comments, trail)
     }
 }
 
