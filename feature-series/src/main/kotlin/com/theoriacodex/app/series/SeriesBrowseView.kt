@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,7 +81,7 @@ internal fun BrowseBody(
                     onPick = { picking = true },
                     onChoose = onChoose,
                     onFilter = onFilter,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.hidesOnScroll().padding(horizontal = 16.dp),
                 )
             }
             LazyVerticalGrid(
