@@ -2,6 +2,7 @@ package com.theoriacodex.app.triage
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -259,20 +260,27 @@ internal fun TriageDragOverlays(
             val armed = hints.armed == SwipeDirection.Left || hints.armed == SwipeDirection.Right
             TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, hints.sideways, armed)
         }
-        if (hints.vertical > 0f) {
-            val pointer = drag.rowPointer
-            val fade = Modifier.alpha(hints.vertical)
-            when {
-                offset.y < 0f && targets.save.isEmpty() ->
-                    TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
-                offset.y > 0f && targets.hide.isEmpty() ->
-                    TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, hints.armed == SwipeDirection.Down)
-                offset.y < 0f ->
-                    CollectTargets(targets.save, pointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState)
-                else ->
-                    CollectTargets(targets.hide, pointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState)
-            }
-        }
+        if (hints.vertical > 0f) VerticalEdgeHint(drag, targets, saveState, hideState, hints)
+    }
+}
+
+@Composable
+private fun BoxScope.VerticalEdgeHint(
+    drag: TriageDrag,
+    targets: TriageTargets,
+    saveState: CollectTargetsState<SaveTarget>,
+    hideState: CollectTargetsState<String>,
+    hints: EdgeHints,
+) {
+    val up = drag.offset.y < 0f
+    val fade = Modifier.alpha(hints.vertical)
+    when {
+        up && targets.save.isEmpty() ->
+            TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
+        !up && targets.hide.isEmpty() ->
+            TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, hints.armed == SwipeDirection.Down)
+        up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState)
+        else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState)
     }
 }
 
