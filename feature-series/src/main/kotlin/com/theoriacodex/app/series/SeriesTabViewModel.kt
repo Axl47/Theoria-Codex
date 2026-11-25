@@ -133,7 +133,7 @@ data class SeriesTabContent(
     val checkWords: EntryWords? get() = followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull()?.words
 }
 
-internal fun SeriesTabState.content(followed: List<FollowedSeries>?, downloads: Map<SeriesId, Int> = emptyMap()): SeriesTabContent {
+internal fun SeriesTabState.content(followed: List<FollowedSeries>?, downloads: Map<SeriesId, Int>? = emptyMap()): SeriesTabContent {
     val all = followed.orEmpty()
     val kinds = (sources.orEmpty().map { it.key.seriesKind } + all.map { it.series.id.source.seriesKind }).toSet()
     val filter = kind.takeIf { kinds.size > 1 }
@@ -141,7 +141,8 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?, downloads: 
         kinds = kinds,
         filter = filter,
         view = view ?: SeriesView.FOLLOWING,
-        following = followed?.filter { filter.admits(it.series.id.source) }?.arranged(library, followingQuery, downloads),
+        following = followed?.takeIf { downloads != null || library.show != LibraryShow.DOWNLOADED }
+            ?.filter { filter.admits(it.series.id.source) }?.arranged(library, followingQuery, downloads.orEmpty()),
         followsAny = all.isNotEmpty(),
         followed = all.associateBy { it.series.id },
         library = library,
@@ -150,7 +151,7 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?, downloads: 
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
         missingExtensions = sources?.let { missingSeries(all, it).map(FollowedSeries::series) }.orEmpty(),
-        downloads = downloads,
+        downloads = downloads.orEmpty(),
     )
 }
 
@@ -194,8 +195,7 @@ class SeriesTabViewModel(
         repository.observeFollowed().map<List<FollowedSeries>, List<FollowedSeries>?> { it }.onStart { emit(null) },
         downloads.map<Map<SeriesId, Int>, Map<SeriesId, Int>?> { it }.onStart { emit(null) },
     ) { state, followed, downloaded ->
-        val ready = state.libraryLoaded && (downloaded != null || state.library.show != LibraryShow.DOWNLOADED)
-        state.content(followed.takeIf { ready }, downloaded.orEmpty())
+        state.content(followed.takeIf { state.libraryLoaded }, downloaded)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), mutableState.value.content(null))
 
     init {

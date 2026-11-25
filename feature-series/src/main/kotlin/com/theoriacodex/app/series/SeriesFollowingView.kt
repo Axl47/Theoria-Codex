@@ -40,6 +40,7 @@ import com.theoriacodex.app.ui.components.SortOption
 import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
+import com.theoriacodex.domain.model.SortChoice
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
@@ -65,14 +66,7 @@ internal fun FollowingBody(
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var failuresOpen by rememberSaveable { mutableStateOf(false) }
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
-    val sort = content.library.sort
-    var arrangedSort by remember { mutableStateOf(sort) }
-    LaunchedEffect(sort) {
-        if (sort != arrangedSort) {
-            arrangedSort = sort
-            grid.scrollToItem(0)
-        }
-    }
+    ScrollToTopOnSortChange(content.library.sort.takeIf { content.following != null }, grid)
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
             FollowingControls(
@@ -138,6 +132,17 @@ internal fun missingExtensionsLine(count: Int): String =
 
 internal val FollowedCheck.message: String
     get() = if (failed == checked) "Couldn't check for updates" else "Couldn't check $failed series"
+
+@Composable
+private fun ScrollToTopOnSortChange(sort: SortChoice<LibrarySort>?, grid: LazyGridState) {
+    var arrangedSort by remember { mutableStateOf(sort) }
+    LaunchedEffect(sort) {
+        val before = arrangedSort
+        if (sort == null) return@LaunchedEffect
+        arrangedSort = sort
+        if (before != null && before != sort) grid.scrollToItem(0)
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
