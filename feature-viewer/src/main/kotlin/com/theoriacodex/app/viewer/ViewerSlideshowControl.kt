@@ -18,6 +18,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import com.theoriacodex.app.viewer.state.VIEWER_SLIDESHOW_IMAGE_MS
+import com.theoriacodex.app.viewer.state.autoAdvanceHeld
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.holdViewerSlideshowImage
 import com.theoriacodex.app.viewer.state.slideshowImageHold
@@ -45,6 +46,7 @@ internal fun BoxScope.ViewerSlideshowControl(frame: ViewerFrame, suppressed: Boo
     ViewerFooterButton(
         frame.selection, frame.chromeVisible, visible = frame.chromeVisible && offered && !suppressed, alignment = Alignment.BottomEnd,
         icon = if (running) Icons.Default.Pause else Icons.Default.PlayArrow,
+        paused = running && state.autoAdvanceHeld,
         contentDescription = if (running) "Stop slideshow" else "Start slideshow", testTag = "viewer-slideshow",
         onClick = { onAction(ViewerAction.SetSlideshow(!running)) },
     )

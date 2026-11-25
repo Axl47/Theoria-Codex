@@ -81,6 +81,8 @@
 
 ### Changed
 
+- In Play Next and slideshows, every post stays on screen for at least five seconds. A shorter clip, GIF or Pixiv animation replays until then and moves on at the end of a play-through, and touching, zooming, seeking or showing the controls starts the five seconds again.
+- Swiping back to an earlier post in Play Next or a slideshow stops it moving on by itself until you go forward again. A small pause badge on the playback settings and slideshow buttons shows while it's stopped.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
 - In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.

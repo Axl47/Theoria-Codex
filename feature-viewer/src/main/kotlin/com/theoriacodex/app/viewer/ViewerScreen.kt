@@ -274,6 +274,10 @@ private fun ViewerBackdrop(
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     onTouch()
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                    } while (event.changes.any { it.pressed })
+                    onTouch()
                 }
             }
             .drawBehind {

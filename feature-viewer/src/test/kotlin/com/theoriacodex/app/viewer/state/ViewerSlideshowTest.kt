@@ -50,7 +50,7 @@ class ViewerSlideshowTest {
         holdViewerSlideshowImage(state, actions::add)
         assertTrue(actions.isEmpty())
         val media = requireNotNull(state.currentMedia)
-        state = reduceViewerState(state, ViewerAction.PlaybackCompleted(session, media.key, media.loadGeneration)).state
+        state = reduceViewerState(state, ViewerAction.PlaybackCompleted(session, media.key, media.loadGeneration, 0L)).state
         assertEquals(1, state.currentPageIndex)
         assertEquals(ViewerPlaybackMode.LOOP, state.controls.playbackMode)
     }
