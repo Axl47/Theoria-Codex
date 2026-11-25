@@ -139,7 +139,7 @@ class HostInterceptorsTest {
     }
 
     @Test
-    fun `a refusal without a challenge reaches the extension and is logged once per host, without the server's text (ADR 0057)`() {
+    fun `a refusal without a challenge reaches the extension and is logged once per host and status, without the server's text (ADR 0057)`() {
         val logged = mutableListOf<String>()
         Diagnostics.install { _, message, _ -> logged += message }
         val outages = HostOutageTracker()
