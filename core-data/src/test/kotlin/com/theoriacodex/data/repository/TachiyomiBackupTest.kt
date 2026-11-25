@@ -222,16 +222,18 @@ class TachiyomiBackupTest {
             message(1) { long(1, 2); string(2, "/ext"); string(3, "Ext") }
             message(1) { long(1, 3); string(2, "/lang"); string(3, "Lang") }
             message(1) { long(1, 4); string(2, "/gone"); string(3, "Gone") }
+            message(1) { long(1, 5); string(2, "/copy"); string(3, "Copy") }
             message(101) { string(1, "Mangadex"); long(2, 1) }
             message(101) { string(1, "Comix"); long(2, 2) }
             message(101) { string(1, "Comix"); long(2, 3) }
             message(101) { string(1, "Vanished"); long(2, 4) }
+            message(101) { string(1, "Comix"); long(2, 5) }
         }
         fun key(id: Int) = SourceKey.parseOrThrow("custom_mihon_$id")
         val directory = temporary.newFolder()
         val service = ProfileBackupService(InMemorySettingsRepository(), RecordingStore(), InMemorySavedSearchRepository(),
             FileBackedReadingPositionRepository(directory), directory.resolve("restore.json"),
-            extensionSources = { SourceAvailability(on = setOf(key(1)), off = mapOf(key(2) to SourceOff("Comix"), key(3) to SourceOff("Comix", "es"))) })
+            extensionSources = { SourceAvailability(on = setOf(key(1)), off = mapOf(key(2) to SourceOff("Comix"), key(3) to SourceOff("Comix", "es", "/apk/a"), key(5) to SourceOff("Comix", "es", "/apk/b"))) })
 
         val preview = service.preview(bytes) as BackupPreview.Series
 
