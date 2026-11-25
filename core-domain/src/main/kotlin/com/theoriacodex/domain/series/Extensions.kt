@@ -34,7 +34,7 @@ data class ApkIcon(val packageName: String, val versionCode: Long, val apk: Stri
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
 
-data class SourceOff(val extension: String, val language: String? = null)
+data class SourceOff(val extension: String, val language: String? = null, val extensionId: String? = null)
 
 data class SourceAvailability(val on: Set<SourceKey> = emptySet(), val off: Map<SourceKey, SourceOff> = emptyMap())
 

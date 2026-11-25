@@ -101,7 +101,7 @@ internal sealed interface InstalledGap {
 internal fun installedGap(copy: InstalledExtension, series: List<Series>, off: Map<SourceKey, SourceOff>): InstalledGap = when {
     !copy.on -> InstalledGap.Off
     copy.problem != null -> InstalledGap.NotLoaded
-    else -> series.mapNotNull { off[it.id.source]?.takeIf { gap -> gap.extension == copy.name }?.language }.distinct().takeIf { it.isNotEmpty() }?.let(InstalledGap::LanguagesOff) ?: InstalledGap.NotInVersion
+    else -> series.mapNotNull { off[it.id.source]?.takeIf { gap -> gap.extensionId == copy.id }?.language }.distinct().takeIf { it.isNotEmpty() }?.let(InstalledGap::LanguagesOff) ?: InstalledGap.NotInVersion
 }
 
 internal fun installedCopy(extension: RepoExtension, installed: List<InstalledExtension>?): InstalledExtension? {

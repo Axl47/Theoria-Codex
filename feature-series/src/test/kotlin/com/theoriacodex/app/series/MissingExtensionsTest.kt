@@ -64,13 +64,13 @@ class MissingExtensionsTest {
         val kaiju = series(SeriesKind.MANGA, 1, "Kaiju")
         val dandadan = series(SeriesKind.MANGA, 2, "Dandadan")
         val copy = InstalledExtension("/apk/dex", "Ink Dex", "1.0", signer = "key", on = true)
-        val off = mapOf(kaiju.id.source to SourceOff("Ink Dex", "es"), dandadan.id.source to SourceOff("Ink Dex", "es"))
+        val off = mapOf(kaiju.id.source to SourceOff("Ink Dex", "es", "/apk/dex"), dandadan.id.source to SourceOff("Ink Dex", "es", "/apk/dex"))
 
         assertEquals(InstalledGap.Off, installedGap(copy.copy(on = false), listOf(kaiju), off))
         assertEquals(InstalledGap.LanguagesOff(listOf("es")), installedGap(copy, listOf(kaiju, dandadan), off))
         assertEquals(InstalledGap.NotLoaded, installedGap(copy.copy(problem = "Unsupported"), listOf(kaiju), off))
         assertEquals(InstalledGap.NotInVersion, installedGap(copy, listOf(kaiju), emptyMap()))
-        assertEquals(InstalledGap.NotInVersion, installedGap(copy, listOf(kaiju), mapOf(kaiju.id.source to SourceOff("Other Dex", "es"))))
+        assertEquals(InstalledGap.NotInVersion, installedGap(copy, listOf(kaiju), mapOf(kaiju.id.source to SourceOff("Ink Dex", "es", "/apk/dex-copy"))))
         assertEquals("${languageName("es")} off", languagesOffLine(listOf("es")))
     }
 

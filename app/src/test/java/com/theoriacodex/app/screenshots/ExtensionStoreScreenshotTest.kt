@@ -124,7 +124,7 @@ class ExtensionStoreScreenshotTest {
         }
         val cedar = InstalledExtension("/apk/cedar", "Cedar", "1.0", signer = "fixture-key", on = false, icon = ApkIcon("fixture.cedar", 1, "/apk/cedar"))
         val dune = InstalledExtension("/apk/dune", "Dune", "1.0", signer = "fixture-key", on = true, languages = listOf(ExtensionLanguage("en", true), ExtensionLanguage("es", false)), icon = ApkIcon("fixture.dune", 1, "/apk/dune"))
-        val extensions = ExtensionsViewModel(Device(listOf(cedar, dune), off = mapOf(SeriesKind.MANGA.extensionSourceKey(5) to SourceOff("Dune", "es"))), repos)
+        val extensions = ExtensionsViewModel(Device(listOf(cedar, dune), off = mapOf(SeriesKind.MANGA.extensionSourceKey(5) to SourceOff("Dune", "es", "/apk/dune"))), repos)
         val missing = MissingSeriesViewModel(repository, { emptyList() }, flowOf(Unit))
         val actions = MissingExtensionsActions({ missing }, { error("unused") }, onOpenSeries = {})
         compose.setContent {

@@ -115,7 +115,7 @@ class MissingExtensionsScreenTest {
                 installed("pkg.tide", "Tide Works", on = true),
                 installed("pkg.kelp", "Kelp", on = true),
             ),
-        ).apply { off = mapOf(SeriesKind.MANGA.extensionSourceKey(3) to SourceOff("Moon Reel", "es")) }
+        ).apply { off = mapOf(SeriesKind.MANGA.extensionSourceKey(3) to SourceOff("Moon Reel", "es", "/apk/pkg.reel")) }
         val missing = MissingSeriesViewModel(repository, { listOf(FakeSeriesSource("custom_mihon_1", "Ink Harbor", "en", count = 1)) }, device.revision)
         val extensions = ExtensionsViewModel(device, repos)
         show(extensions, missing)
