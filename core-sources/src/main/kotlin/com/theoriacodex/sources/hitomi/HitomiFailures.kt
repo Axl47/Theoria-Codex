@@ -3,6 +3,7 @@ package com.theoriacodex.sources.hitomi
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.networkFailure
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import java.io.IOException
 
@@ -15,7 +16,7 @@ internal suspend fun <T> hitomiCall(operation: String, block: suspend () -> T): 
 } catch (error: SourceHttpBodyTooLargeException) {
     throw hitomiParseFailure("Hitomi $operation response exceeded its bounded size", error)
 } catch (error: IOException) {
-    throw SourceAdapterException(SourceFailureReason.NETWORK, "Hitomi $operation request failed", error)
+    networkFailure("Hitomi $operation request failed", error)
 }
 
 internal fun hitomiParseFailure(message: String, cause: Throwable? = null): SourceAdapterException =

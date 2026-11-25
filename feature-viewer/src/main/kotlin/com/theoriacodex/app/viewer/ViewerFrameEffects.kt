@@ -141,7 +141,7 @@ internal fun ViewerFrameEffects(
         interactionSerial = screen.interactionSerial,
         interactionBlocked = screen.timelineInteractionActive || frame.mediaOverviewVisible || showInfoSheet ||
             uiState.controls.panel?.inChrome == true || screen.relatedStripExpanded || screen.saveFan.holdsChrome ||
-            screen.trailForks.busy != null,
+            screen.trailForks.busy != null || screen.trailForks.chromeHolds > 0,
         touchExplorationEnabled = frame.touchExplorationEnabled,
         onHide = { onAction(ViewerAction.ToggleChrome) },
     )

@@ -1,11 +1,5 @@
 package com.theoriacodex.app.settings
 
-import android.app.NotificationManager
-import android.content.Intent
-import android.provider.Settings
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LifecycleResumeEffect
-import com.theoriacodex.data.repository.SeriesUpdateInterval
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
@@ -28,7 +21,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
@@ -63,7 +55,6 @@ import com.theoriacodex.app.ui.components.ConfirmDialog
 import com.theoriacodex.app.ui.components.NameEntryDialog
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.app.ui.components.ActionMenuSheet
-import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 import com.theoriacodex.app.ui.components.SwitchRow
@@ -215,15 +206,7 @@ private fun SettingsHome(
 }
 
 @Composable
-private fun SettingsSourcesGroup(
-    state: SettingsUiState,
-    sites: SettingsSitesEntry?,
-    showSeries: Boolean,
-    onAction: (SettingsAction) -> Unit,
-    onOpenExtensions: (() -> Unit)?,
-    onOpenSites: () -> Unit,
-    onSheet: (SettingsSheet) -> Unit,
-) {
+private fun SettingsSourcesGroup(state: SettingsUiState, sites: SettingsSitesEntry?, onOpenSites: () -> Unit) {
     SettingsGroup("Sources") {
         if (sites != null) {
             SettingsRow(
@@ -232,40 +215,8 @@ private fun SettingsSourcesGroup(
             )
             SettingsRowDivider()
         }
-        if (onOpenExtensions != null) {
-            SettingsRow(SettingDestinations.Extensions.title, icon = Icons.Default.Extension, onClick = onOpenExtensions)
-            SettingsRowDivider()
-        }
         OpenLinksRow()
-        if (showSeries) {
-            SettingsRowDivider()
-            SeriesUpdatesRow(state.settings.seriesUpdateInterval) { onSheet(SettingsSheet.SERIES_UPDATES) }
-            SettingsRowDivider()
-            val deleteAfterReading = SettingToggles.SeriesDeleteAfterReading
-            SwitchRow(deleteAfterReading, state.settings) { onAction(SettingsAction.SetToggle(deleteAfterReading, it)) }
-        }
     }
-}
-
-@Composable
-private fun SeriesUpdatesRow(interval: SeriesUpdateInterval, onChooseInterval: () -> Unit) {
-    val silenced = notificationSettingsOpener() != null && interval.hours != null
-    SettingsRow(
-        SettingChoices.SeriesUpdates.title, if (silenced) NOTIFICATIONS_OFF else seriesUpdateIntervalLabel(interval), Icons.Default.Notifications,
-        onClick = onChooseInterval,
-    )
-}
-
-@Composable
-private fun notificationSettingsOpener(): (() -> Unit)? {
-    val context = LocalContext.current
-    var notificationsOn by remember { mutableStateOf(true) }
-    LifecycleResumeEffect(Unit) {
-        notificationsOn = context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
-        onPauseOrDispose {}
-    }
-    if (notificationsOn) return null
-    return { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
 }
 
 @Composable
@@ -283,7 +234,8 @@ private fun SettingsHomeGroups(
     onSheet: (SettingsSheet) -> Unit,
 ) {
     val open = { page: SettingsPage -> onAction(SettingsAction.OpenPage(page)) }
-    SettingsSourcesGroup(state, sites, showSeries, onAction, onOpenExtensions, { open(SettingsPage.SITES) }, onSheet)
+    SettingsSourcesGroup(state, sites) { open(SettingsPage.SITES) }
+    if (showSeries) SeriesSettingsGroup(state, onAction, onOpenExtensions) { onSheet(SettingsSheet.SERIES_UPDATES) }
     SettingsGroup("Viewing") {
         SettingsRow(SettingDestinations.Controls.title, "Search bar, seeking, swipes, rotation", Icons.Default.TouchApp, onClick = {
             onSheet(SettingsSheet.CONTROLS)

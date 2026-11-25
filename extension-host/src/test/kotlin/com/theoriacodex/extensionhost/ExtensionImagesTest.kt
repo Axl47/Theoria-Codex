@@ -48,22 +48,23 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a page is fetched by the source's client with the request the source builds`() {
+    fun `a page is fetched by the source's client with the request the source builds (ADR 0059)`() {
         val address = serverImages.pageAddress(chapter, page)!!
 
         assertEquals("source-token page-request", fetch(address))
     }
 
     @Test
-    fun `a cover is fetched by the source's client at its untagged address`() {
+    fun `a cover is fetched by the source's client at its untagged address (ADR 0059)`() {
         val address = images.cover(server.key, "https://covers.test/1.jpg")
 
         assertTrue(address.startsWith("https://covers.test/1.jpg#mihon=custom_mihon_1."))
         assertEquals("source-token https://covers.test/1.jpg", fetch(address))
+        assertEquals("https://cdn.test/", source.sent.last().header("Referer"))
     }
 
     @Test
-    fun `a stored cover is tagged from its series' source key without loading the extension`() {
+    fun `a stored cover is tagged from its series' source key without loading the extension (ADR 0059)`() {
         val asked = mutableListOf<SourceKey>()
         lateinit var cold: ExtensionImages
         cold = ExtensionImages(key) { source ->
@@ -97,7 +98,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a tag this host did not issue is not sent through an extension and is taken off`() {
+    fun `a tag this host did not issue is not sent through an extension and is taken off (ADR 0059)`() {
         var loads = 0
         lateinit var checking: ExtensionImages
         checking = ExtensionImages(key) {
@@ -126,7 +127,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `covers of two kinds' sources with the same numeric id are fetched by their own source`() {
+    fun `covers of two kinds' sources with the same numeric id are fetched by their own source (ADR 0056, 0059)`() {
         val anime = HostedSource(
             series = object : SeriesSource by server.series {
                 override val key = SourceKey.parseOrThrow("custom_aniyomi_1")
@@ -144,8 +145,14 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `an untagged address passes down the chain unchanged`() {
+    fun `an untagged address passes down the chain unchanged (ADR 0059)`() {
         assertEquals("app https://other.test/a.jpg", fetch("https://other.test/a.jpg"))
+        assertEquals("app https://other.test/a.jpg#theirs", fetch("https://other.test/a.jpg#theirs"))
+        val seen = mutableListOf<Request>()
+        val client = OkHttpClient.Builder().addInterceptor(images).addInterceptor(answering { seen += it; cannedResponse(it, body = "") }).build()
+        val sent = Request.Builder().url("https://other.test/a.jpg#theirs").header("Referer", "https://site.test/").build()
+        client.newCall(sent).execute().close()
+        assertEquals(listOf(sent.url to sent.headers), seen.map { it.url to it.headers })
     }
 
     @Test
@@ -160,7 +167,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a source turned off or removed stops answering once the sources are published again`() {
+    fun `a source turned off or removed stops answering once the sources are published again (ADR 0059)`() {
         val address = images.cover(server.key, "https://covers.test/1.jpg")
         assertEquals("source-token https://covers.test/1.jpg", fetch(address))
 
@@ -184,7 +191,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a request that may only read caches never asks the source or loads its extension`() {
+    fun `a request that may only read caches never asks the source or loads its extension (ADR 0059)`() {
         var loads = 0
         val loading = ExtensionImages(key) { loads += 1 }
         val address = images.cover(server.key, "https://covers.test/1.jpg")
@@ -196,7 +203,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a source its load does not publish is asked for once per publish`() {
+    fun `a source its load does not publish is asked for once per publish (ADR 0059)`() {
         var loads = 0
         val off = ExtensionImages(key) { loads += 1 }
         val address = images.cover(server.key, "https://covers.test/1.jpg")
@@ -224,7 +231,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `a chapter's pages are handed out without asking where each image is`() = runTest {
+    fun `a chapter's pages are handed out without asking where each image is (ADR 0059)`() = runTest {
         val reader = PagePerImageSource()
 
         val pages = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1"))
@@ -248,7 +255,7 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `pages that share an address are told apart, also once they are no longer held`() = runTest {
+    fun `pages that share an address are told apart, also once they are no longer held (ADR 0059)`() = runTest {
         val reader = PagePerImageSource(pages = listOf("viewer", "viewer"))
         val (first, second) = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
         val restarted = ExtensionImages(key).also { it.publish(listOf(mihon(reader, it))) }
@@ -260,7 +267,20 @@ class ExtensionImagesTest {
     }
 
     @Test
-    fun `an image address that did not give the image is asked for again`() = runTest {
+    fun `a chapter's pages beyond the newest 8192 are forgotten oldest first and listed again when asked (ADR 0059)`() = runTest {
+        listOf(8_192 to 1, 8_193 to 2).forEach { (count, listings) ->
+            val reader = PagePerImageSource(pages = List(count) { "p$it" })
+            val pages = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).map { it.url!! }
+
+            assertEquals("image https://img.test/p${count - 1}-${count - 1}.jpg", fetch(pages.last()))
+            assertEquals(1, reader.listed.size)
+            assertEquals("image https://img.test/p0-0.jpg", fetch(pages.first()))
+            assertEquals(listings, reader.listed.size)
+        }
+    }
+
+    @Test
+    fun `an image address that did not give the image is asked for again (ADR 0059)`() = runTest {
         val reader = PagePerImageSource()
         val first = mihon(reader).also { images.publish(listOf(it)) }.series.entryPages(SeriesEntry("/c/1", "Chapter 1")).first().url!!
 
@@ -377,6 +397,24 @@ class ExtensionImagesTest {
         assertEquals(listOf("/p/1"), reader.asked)
     }
 
+    @Test
+    fun `an image's own fragment reaches its source through the tag (ADR 0059)`() {
+        val source = FragmentSource()
+        val key = MihonKind.sourceKey(source.id)
+        images.publish(listOf(server, mihon(source)))
+        val forgotten = MihonImages(source, key, images)
+        listOf("""{"tiles":[3,0,2,1],"tileCols":2,"n":"a%b#c/d"}""", "tile%20").forEachIndexed { index, tiles ->
+            val own = "https://img.test/#$tiles".toHttpUrl().encodedFragment
+            val page = checkNotNull(forgotten.pageAddress(chapter, Page(index, imageUrl = "https://img.test/$index.webp#$tiles")))
+
+            assertEquals("fragment $own", fetch(page))
+            assertEquals("fragment $own", fetch(images.cover(key, "https://img.test/cover$index.webp#$tiles")))
+        }
+        val plain = images.cover(key, "https://img.test/plain.webp")
+        assertEquals(images.tag(key, "https://img.test/plain.webp#"), plain)
+        assertEquals("app https://img.test/plain.webp", fetch("$plain~e30"))
+    }
+
     private fun mihon(source: HttpSource, images: ExtensionImages = this.images) = MihonKind.hosted(source, HostServices(images))
 
     private fun ExtensionImages.cover(source: SourceKey, url: String): String =
@@ -471,6 +509,20 @@ class ExtensionImagesTest {
         override fun pageListParse(response: Response): List<Page> = listOf(Page(0, imageUrl = "https://img.test/listed.jpg"))
     }
 
+    private class FragmentSource : HttpSource() {
+        override val id = 5L
+        override val name = "Tiles"
+        override val lang = "en"
+        override val baseUrl = "https://tiles.test"
+        override val supportsLatest = false
+
+        override val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(answering { request -> cannedResponse(request, body = "fragment ${request.url.encodedFragment}") })
+            .build()
+
+        override fun headersBuilder() = Headers.Builder()
+    }
+
     private class GatedPagesSource : HttpSource() {
         override val id = 3L
         override val name = "Gated"
@@ -511,12 +563,15 @@ class ExtensionImagesTest {
             .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header(TOKEN_HEADER, "source-token").build()) }
             .addInterceptor(
                 answering { request ->
+                    sent += request
                     cannedResponse(request, body = "${request.header(TOKEN_HEADER)} ${request.header(PAGE_HEADER) ?: request.url}")
                 },
             )
             .build()
 
-        override fun headersBuilder() = Headers.Builder()
+        val sent = mutableListOf<Request>()
+
+        override fun headersBuilder() = Headers.Builder().add("Referer", "https://cdn.test/")
 
         var failure: Throwable? = null
 

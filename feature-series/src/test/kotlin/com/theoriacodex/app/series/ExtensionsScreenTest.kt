@@ -20,6 +20,7 @@ import coil.fetch.DrawableResult
 import coil.fetch.Fetcher
 import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import com.theoriacodex.domain.series.ApkIcon
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
@@ -83,8 +84,26 @@ class ExtensionsScreenTest {
         assertEquals(listOf("https://repo.example/icon/a.pkg.png"), requested.map(Any::toString).distinct())
     }
 
-    private fun show(repos: ExtensionRepos): ExtensionsViewModel {
-        val vm = ExtensionsViewModel(NoDevice, repos)
+    @Test fun `installed and update rows lead with the installed package's icon, or a placeholder without one`() {
+        val requested = mutableListOf<Any>()
+        recordImageRequests(requested)
+        val icon = ApkIcon("a.pkg", 3, "/data/app/a.apk")
+        val alpha = InstalledExtension("a", "Alpha", "1.0", signer = "key", on = false, icon = icon)
+        val beta = InstalledExtension("b", "Beta", "1.0", signer = "key", on = false)
+        val update = RepoExtension("https://repo.example", "a.pkg", "Alpha", listOf("en"), "1.1", SeriesKind.MANGA, RepoExtension.Status.UPDATE, "https://repo.example/icon/a.pkg.png")
+        val vm = show(FakeRepos(listOf(update)), Device(listOf(alpha, beta)))
+        compose.waitUntilSettled { vm.state.value.extensions != null && vm.state.value.listing != null }
+
+        val icons = compose.onAllNodesWithTag(EXTENSION_ICON_TAG).fetchSemanticsNodes()
+        assertEquals(3, icons.size)
+        val expected = with(compose.density) { 40.dp.roundToPx() }
+        icons.forEach { assertEquals(IntSize(expected, expected), it.size) }
+        compose.waitUntilSettled { requested.size >= 2 }
+        assertEquals(listOf<Any>(icon, icon), requested)
+    }
+
+    private fun show(repos: ExtensionRepos, device: SeriesExtensions = Device()): ExtensionsViewModel {
+        val vm = ExtensionsViewModel(device, repos)
         compose.setContent {
             TheoriaNightTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ExtensionsScreen(vm, onBack = {}) } }
         }
@@ -122,9 +141,9 @@ class ExtensionsScreenTest {
         override suspend fun uninstall(id: String) = Unit
     }
 
-    private object NoDevice : SeriesExtensions {
+    private class Device(private val installed: List<InstalledExtension> = emptyList()) : SeriesExtensions {
         override val revision = MutableStateFlow(0)
-        override suspend fun installed() = emptyList<InstalledExtension>()
+        override suspend fun installed() = installed
         override suspend fun setOn(id: String, signer: String, on: Boolean) = emptyList<InstalledExtension>()
         override suspend fun setLanguage(id: String, language: String, on: Boolean) = emptyList<InstalledExtension>()
         override suspend fun settings(id: String) = emptyList<ExtensionSourceSettings>()

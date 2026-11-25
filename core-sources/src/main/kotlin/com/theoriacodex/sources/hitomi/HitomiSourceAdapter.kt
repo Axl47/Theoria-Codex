@@ -28,6 +28,7 @@ import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.networkFailure
 import com.theoriacodex.sources.common.sourceCall
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -298,11 +299,7 @@ class HitomiSourceAdapter(
     } catch (error: SourceHttpBodyTooLargeException) {
         throw hitomiParseFailure("Hitomi response exceeded its bounded size ($url)", error)
     } catch (error: IOException) {
-        throw SourceAdapterException(
-            reason = SourceFailureReason.NETWORK,
-            message = "Hitomi request failed ($url)",
-            cause = error,
-        )
+        networkFailure("Hitomi request failed ($url)", error)
     }
 
     companion object {

@@ -35,6 +35,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
+import com.theoriacodex.domain.model.SortMode
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -94,6 +97,14 @@ class SearchComposerUiTest {
         compose.onNodeWithText("Saved searches").assertExists()
         compose.onNodeWithText("My landscapes").performClick()
         compose.runOnIdle { assertEquals(entry, opened) }
+    }
+
+    @Test fun `a saved search chip names its sort only when it is not Newest`() {
+        val newest = SavedSearchEntry("newest", "Landscapes", RecentSearchEntry(emptySearchQuery(), "a", 1L), 1L)
+        val top = SavedSearchEntry("top", "Gel faves", RecentSearchEntry(emptySearchQuery().copy(sort = SortMode.TOP), "b", 1L), 1L)
+        open(SourceKey.GELBOORU, emptyList(), listOf(newest, top))
+        compose.onNodeWithText("Top").assertExists()
+        compose.onAllNodesWithText("Newest").assertCountEquals(0)
     }
 
     @Test fun `saved tags cycle through the search and can be managed`() {

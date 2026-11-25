@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.view.accessibility.CaptioningManager
 import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -554,7 +555,9 @@ private fun ViewerVideoContent(
                 .then(mediaModifier),
         )
         if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
-        ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing, Modifier.matchParentSize()) {
+        val holdScrub = LocalViewerHoldScrub.current
+        val holdScrubbing by remember(holdScrub) { derivedStateOf { holdScrub?.phase is ViewerHoldScrubPhase.Dragging } }
+        ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing && !holdScrubbing, Modifier.matchParentSize()) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = VIEWER_DIM_BACKDROP_ALPHA)))
         }
         if (state.loading && !state.failed) CircularProgressIndicator()

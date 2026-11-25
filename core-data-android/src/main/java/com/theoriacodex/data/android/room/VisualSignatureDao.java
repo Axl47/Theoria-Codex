@@ -13,8 +13,15 @@ public interface VisualSignatureDao {
     @Query("INSERT INTO post_visual_signatures (source, source_post_id, phash, phash_checked, indexed_at_epoch_ms) "
             + "SELECT :source, :sourcePostId, :phash, 1, :indexedAtEpochMs WHERE EXISTS "
             + "(SELECT 1 FROM posts WHERE source = :source AND source_post_id = :sourcePostId) "
-            + "ON CONFLICT(source, source_post_id) DO UPDATE SET phash = excluded.phash, phash_checked = 1")
+            + "ON CONFLICT(source, source_post_id) DO UPDATE SET phash = excluded.phash, phash_checked = 1, "
+            + "preview_failed_at_epoch_ms = NULL")
     void put(String source, String sourcePostId, Long phash, long indexedAtEpochMs);
+
+    @Query("INSERT INTO post_visual_signatures (source, source_post_id, phash, phash_checked, indexed_at_epoch_ms, "
+            + "preview_failed_at_epoch_ms) SELECT :source, :sourcePostId, NULL, 0, :failedAtEpochMs, :failedAtEpochMs WHERE EXISTS "
+            + "(SELECT 1 FROM posts WHERE source = :source AND source_post_id = :sourcePostId) "
+            + "ON CONFLICT(source, source_post_id) DO UPDATE SET preview_failed_at_epoch_ms = excluded.preview_failed_at_epoch_ms")
+    void failPreview(String source, String sourcePostId, long failedAtEpochMs);
 
     @Query("INSERT INTO post_visual_signatures (source, source_post_id, phash, phash_checked, indexed_at_epoch_ms, "
             + "model_id, embedding, predicted_tags, frame_state, frame_attempts) "
@@ -43,23 +50,23 @@ public interface VisualSignatureDao {
 
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
-            + "AND signature.phash_checked = 1) "
+            + "AND (signature.phash_checked = 1 OR signature.preview_failed_at_epoch_ms > :failedSinceEpochMs)) "
             + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
             + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
-    List<PostEntity> libraryPostsWithoutSignature(int limit, int skip);
+    List<PostEntity> libraryPostsWithoutSignature(int limit, int skip, long failedSinceEpochMs);
 
     @Query("SELECT posts.* FROM posts WHERE NOT EXISTS (SELECT 1 FROM post_visual_signatures AS signature "
             + "WHERE signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
-            + "AND signature.model_id = :modelId) "
+            + "AND (signature.model_id = :modelId OR signature.preview_failed_at_epoch_ms > :failedSinceEpochMs)) "
             + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
             + "AND liked_posts.source_post_id = posts.source_post_id)) "
-            + "ORDER BY posts.rowid DESC LIMIT :limit")
-    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit);
+            + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
+    List<PostEntity> libraryPostsWithoutVision(String modelId, int limit, int skip, long failedSinceEpochMs);
 
     @Query("SELECT posts.* FROM posts JOIN post_visual_signatures AS signature "
             + "ON signature.source = posts.source AND signature.source_post_id = posts.source_post_id "
@@ -71,16 +78,17 @@ public interface VisualSignatureDao {
             + "ORDER BY posts.rowid DESC LIMIT :limit OFFSET :skip")
     List<PostEntity> libraryPostsAwaitingFrames(String modelId, int maxAttempts, int limit, int skip);
 
-    @Query("SELECT (SELECT COUNT(*) FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "
-            + "AND NOT (signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts) "
-            + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = signature.source "
-            + "AND codex_items.source_post_id = signature.source_post_id) "
-            + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = signature.source "
-            + "AND liked_posts.source_post_id = signature.source_post_id))) AS analysed, "
+    @Query("SELECT COUNT(*) AS tagged, "
+            + "COALESCE(SUM(signature.frame_state = 1 AND signature.frame_attempts < :maxAttempts), 0) AS awaitingFrames, "
             + "(SELECT COUNT(*) FROM posts WHERE EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = posts.source "
-            + "AND liked_posts.source_post_id = posts.source_post_id)) AS total")
+            + "AND liked_posts.source_post_id = posts.source_post_id)) AS total "
+            + "FROM post_visual_signatures AS signature WHERE signature.model_id = :modelId "
+            + "AND (EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = signature.source "
+            + "AND codex_items.source_post_id = signature.source_post_id) "
+            + "OR EXISTS (SELECT 1 FROM liked_posts WHERE liked_posts.source = signature.source "
+            + "AND liked_posts.source_post_id = signature.source_post_id))")
     Flow<ProgressRow> observeVisionProgress(String modelId, int maxAttempts);
 
     @Query("SELECT COUNT(*) FROM posts WHERE EXISTS (SELECT 1 FROM codex_items WHERE codex_items.source = posts.source "
@@ -93,7 +101,7 @@ public interface VisualSignatureDao {
             + "frame_attempts = 0")
     void clearVision();
 
-    @Query("DELETE FROM post_visual_signatures WHERE phash_checked = 0")
+    @Query("DELETE FROM post_visual_signatures WHERE phash_checked = 0 AND preview_failed_at_epoch_ms IS NULL")
     void deleteUnhashedRows();
 
     final class HashRow {
@@ -125,11 +133,13 @@ public interface VisualSignatureDao {
     }
 
     final class ProgressRow {
-        public final int analysed;
+        public final int tagged;
+        public final int awaitingFrames;
         public final int total;
 
-        public ProgressRow(int analysed, int total) {
-            this.analysed = analysed;
+        public ProgressRow(int tagged, int awaitingFrames, int total) {
+            this.tagged = tagged;
+            this.awaitingFrames = awaitingFrames;
             this.total = total;
         }
     }

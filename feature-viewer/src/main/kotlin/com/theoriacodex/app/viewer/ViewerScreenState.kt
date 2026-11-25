@@ -38,7 +38,7 @@ internal class ViewerScreenState {
     var dwellStartedAtMs by mutableStateOf<Long?>(null)
     val playingVideos = ViewerPlayingVideos()
     var timelineInteractionActive by mutableStateOf(false)
-    var chromeShownForScrub = false
+    var chromeShownForScrub by mutableStateOf(false)
     var relatedStripExpanded by mutableStateOf(false)
     var pendingDismiss by mutableStateOf(false)
     var heldBack = false
