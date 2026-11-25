@@ -124,8 +124,8 @@ class ViewerReturnTransition {
         if (tapped != null && tapped in postIds) unclaimedPost = null else clear()
     }
 
-    fun finishOpening() {
-        openingBounds = null
+    fun finishOpening(opened: ViewerReturnOrigin?) {
+        if (opened === origin) openingBounds = null
     }
 
     fun begin(postId: PostId) {

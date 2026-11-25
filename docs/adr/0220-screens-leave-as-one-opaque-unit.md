@@ -35,7 +35,8 @@ only a root Viewer composes, keeps the `ViewerReturnOrigin` current when the ent
 ViewModel and releases it when the entry leaves the back stack, which navigation does only after the closing hold ends. A release clears only that origin,
 so a card tapped during the hold keeps its own. A Viewer covered by a full screen, such as a creator profile or a
 series page, or by a trail fork, therefore still closes into its card when the user comes back to it, and a covered
-Viewer removed from the back stack without being shown again lets its card go.
+Viewer removed from the back stack without being shown again lets its card go. An opening cut short, as when a full
+screen covers the Viewer at once, still ends, but only for the origin it opened from (`finishOpening`).
 
 Feeds keep the Viewer's posts past their hide filters (`retainPosts`) only while the Viewer is composed: the route
 retains them in every composition under its own `ViewerPostRetention`, releases them when it leaves composition, at the
@@ -94,6 +95,7 @@ one that must show what is beneath it would need its own transitions that never 
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a covered Viewer removed from the back stack lets its card go (ADR 0220)`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/triage/TriageCardsTest.kt`: `a Viewer opened from the top card closes into that card (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer that leaves releases only the posts it retained (ADR 0220)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `an older Viewer's opening never ends a newer Viewer's (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a tap outside any return grid records no card to close into (ADR 0220)`
 - Left to prose: that `ViewerRoute` releases its retained posts when it leaves composition; no host test composes the route under a covering screen.
 - Left to prose: that every new full-screen destination uses `opaqueScreen`; a policy rule in `scripts/check_architecture.py` could require it for `composable(` calls in `TheoriaNavDestinations.kt`.

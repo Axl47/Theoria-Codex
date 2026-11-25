@@ -181,10 +181,11 @@ internal fun rememberViewerReturnProgress(): State<Float> {
     LaunchedEffect(request) {
         if (request == null) {
             if (transition?.openingBounds != null) {
+                val opened = transition.origin
                 try {
                     progress.animateTo(0f, tween(VIEWER_RETURN_DURATION_MS))
                 } finally {
-                    transition.finishOpening()
+                    transition.finishOpening(opened)
                 }
             }
             return@LaunchedEffect

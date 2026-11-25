@@ -101,6 +101,18 @@ class ViewerReturnTransitionTest {
         assertTrue(transition.retainedPostIds.isEmpty())
     }
 
+    @Test fun `an older Viewer's opening never ends a newer Viewer's (ADR 0220)`() {
+        val transition = ViewerReturnTransition()
+        transition.openedFrom("origin", Rect(0f, 0f, 10f, 10f), post = postId)
+        val older = transition.origin
+        transition.openedFrom("origin", Rect(0f, 0f, 20f, 20f), post = postId)
+        transition.finishOpening(older)
+        assertEquals(Rect(0f, 0f, 20f, 20f), transition.openingBounds)
+
+        transition.finishOpening(transition.origin)
+        assertEquals(null, transition.openingBounds)
+    }
+
     @Test fun `a tap outside any return grid records no card to close into (ADR 0220)`() {
         val transition = ViewerReturnTransition()
         transition.openedFrom(gridId = null, post = postId)
