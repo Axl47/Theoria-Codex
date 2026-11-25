@@ -106,7 +106,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     }
     ViewerDockOverlay(watching, frame, screen, controls, activity, quality, qualityHeight, host, config, comments, saveContext, fadesWhileScrubbing)
     ViewerEpisodeCenterOverlay(watching, frame, screen, controls, swipe, config, host.onAction, fadesWhileScrubbing)
-    ViewerFooterButtons(frame, screen, activity, rotationOffer, host.onAction)
+    ViewerFooterButtons(frame, screen, rotationOffer, host.onAction)
     ViewerTopBarOverlay(watching, frame, screen, controls, episodeStream, config, trail, host.onAction, fadesWhileScrubbing)
     ViewerRelatedStripOverlay(frame, screen, controls, swipe, pendingPostId, relatedShelf, fadesWhileScrubbing)
     ViewerSaveFanOverlay(screen.saveFan)
@@ -384,30 +384,40 @@ private fun ViewerBottomStack(
 private fun BoxScope.ViewerFooterButtons(
     frame: ViewerFrame,
     screen: ViewerScreenState,
-    activity: ViewerHostActivity?,
     rotationOffer: ViewerRotationOffer?,
     onAction: (ViewerAction) -> Unit,
 ) {
-    val bottomOwned = frame.mediaOverviewVisible || screen.timelineInteractionActive
-    val watching = frame.watching
-    val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (watching && frame.chromeVisible)
-    val bottomRow = if (watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
-    val inStripRow = frame.isLandscape && !watching
+    val rules = ViewerFooterRules(frame, screen.timelineInteractionActive)
+    if (rules.inStripRow) ViewerStripRowRotation(frame, rotationOffer, rules) else ViewerFloatingRotation(frame, rotationOffer, rules)
+    ViewerSlideshowControl(frame, rules.chromeVisible, suppressed = rules.slideshowSuppressed, rules.inStripRow, onAction)
+}
+
+private class ViewerFooterRules(frame: ViewerFrame, timelineInteractionActive: Boolean) {
+    private val bottomOwned = frame.mediaOverviewVisible || timelineInteractionActive
+    val inStripRow = frame.isLandscape && !frame.watching
     val chromeVisible = frame.chromeVisible && (!inStripRow || frame.chromeStage.value >= VIEWER_CHROME_STAGE_STRIPS)
-    val slideshowSuppressed = bottomOwned || frame.inPictureInPicture || watching
-    val lockSuppressed = bottomOwned || frame.locked || watching
-    if (inStripRow) {
-        ViewerRotationChip(frame.selection, rotationOffer, chromeVisible, rotationSuppressed, inStripRow = true)
-        val slideshowShown = frame.offersSlideshow && !slideshowSuppressed
-        ViewerRotationLockButton(
-            frame.selection, rotationOffer, chromeVisible, lockSuppressed, Alignment.BottomEnd, slot = if (slideshowShown) 1 else 0, inStripRow = true,
-        )
-    } else {
-        ViewerRotationLockButton(frame.selection, rotationOffer, chromeVisible, lockSuppressed, Alignment.BottomStart)
-        val lockShown = rotationOffer != null && chromeVisible && !lockSuppressed
-        ViewerRotationChip(frame.selection, rotationOffer, chromeVisible, rotationSuppressed, slot = if (lockShown) 1 else 0, bottomRowHeight = bottomRow)
-    }
-    ViewerSlideshowControl(frame, chromeVisible, suppressed = slideshowSuppressed, inStripRow, onAction)
+    val bottomRow = if (frame.watching) VIEWER_EPISODE_CONTROLS_HEIGHT else VIEWER_POST_STRIP_HEIGHT
+    val rotationSuppressed = bottomOwned || frame.uiState.controls.slideshow || frame.locked || (frame.watching && frame.chromeVisible)
+    val slideshowSuppressed = bottomOwned || frame.inPictureInPicture || frame.watching
+    val lockSuppressed = bottomOwned || frame.locked || frame.watching
+}
+
+@Composable
+private fun BoxScope.ViewerStripRowRotation(frame: ViewerFrame, offer: ViewerRotationOffer?, rules: ViewerFooterRules) {
+    ViewerRotationChip(frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, inStripRow = true)
+    val slideshowShown = frame.offersSlideshow && !rules.slideshowSuppressed
+    ViewerRotationLockButton(
+        frame.selection, offer, rules.chromeVisible, rules.lockSuppressed, Alignment.BottomEnd, slot = if (slideshowShown) 1 else 0, inStripRow = true,
+    )
+}
+
+@Composable
+private fun BoxScope.ViewerFloatingRotation(frame: ViewerFrame, offer: ViewerRotationOffer?, rules: ViewerFooterRules) {
+    ViewerRotationLockButton(frame.selection, offer, rules.chromeVisible, rules.lockSuppressed, Alignment.BottomStart)
+    val lockShown = offer != null && rules.chromeVisible && !rules.lockSuppressed
+    ViewerRotationChip(
+        frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, slot = if (lockShown) 1 else 0, bottomRowHeight = rules.bottomRow,
+    )
 }
 
 internal const val VIEWER_LOCK_OVERLAY_TAG = "viewer-lock-overlay"

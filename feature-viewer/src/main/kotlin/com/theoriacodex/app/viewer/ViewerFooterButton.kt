@@ -39,32 +39,43 @@ internal fun BoxScope.ViewerFooterButton(
     onClick: () -> Unit,
 ) {
     val inRow = inStripRow && chromeVisible
-    val footer = if (inRow) {
-        viewerFooterHeight(selection, chromeVisible = true, bottomRowHeight = 0.dp) + VIEWER_POST_STRIP_CELL_CENTER - VIEWER_FOOTER_BUTTON_TOUCH / 2 - VIEWER_FOOTER_BUTTON_GAP
-    } else {
-        viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
-    }
+    val footer = viewerFooterButtonLift(selection, chromeVisible, bottomRowHeight, inRow)
     val glide by animateDpAsState(footer, tween(TheoriaMotion.SHORT_MS), label = "Viewer footer button lift")
     ViewerChromeVisibility(
         visible,
         Modifier.align(alignment)
             .padding(horizontal = VIEWER_FOOTER_BUTTON_GAP)
-            .padding(
-                start = if (alignment == Alignment.BottomStart) VIEWER_FOOTER_BUTTON_TOUCH * slot else 0.dp,
-                end = if (alignment == Alignment.BottomEnd) VIEWER_FOOTER_BUTTON_TOUCH * slot else 0.dp,
-            )
+            .viewerFooterSlot(alignment, slot)
             .padding(bottom = VIEWER_FOOTER_BUTTON_GAP)
             .offset { IntOffset(0, -(if (inRow) footer else glide).roundToPx()) },
     ) {
-        val accent = LocalViewerAccent.current
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape)
-                .then(if (emphasized) Modifier.border(1.5.dp, accent, CircleShape) else Modifier)
-                .testTag(testTag),
-        ) {
-            Icon(icon, contentDescription = contentDescription, tint = if (emphasized) accent else Color.White)
-        }
+        ViewerFooterIconButton(icon, contentDescription, testTag, emphasized, onClick)
+    }
+}
+
+@Composable
+private fun viewerFooterButtonLift(selection: ViewerSelection, chromeVisible: Boolean, bottomRowHeight: Dp, inRow: Boolean): Dp =
+    if (inRow) {
+        viewerFooterHeight(selection, chromeVisible = true, bottomRowHeight = 0.dp) + VIEWER_POST_STRIP_CELL_CENTER - VIEWER_FOOTER_BUTTON_TOUCH / 2 - VIEWER_FOOTER_BUTTON_GAP
+    } else {
+        viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
+    }
+
+private fun Modifier.viewerFooterSlot(alignment: Alignment, slot: Int): Modifier = padding(
+    start = if (alignment == Alignment.BottomStart) VIEWER_FOOTER_BUTTON_TOUCH * slot else 0.dp,
+    end = if (alignment == Alignment.BottomEnd) VIEWER_FOOTER_BUTTON_TOUCH * slot else 0.dp,
+)
+
+@Composable
+private fun ViewerFooterIconButton(icon: ImageVector, contentDescription: String, testTag: String, emphasized: Boolean, onClick: () -> Unit) {
+    val accent = LocalViewerAccent.current
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape)
+            .then(if (emphasized) Modifier.border(1.5.dp, accent, CircleShape) else Modifier)
+            .testTag(testTag),
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = if (emphasized) accent else Color.White)
     }
 }
 
