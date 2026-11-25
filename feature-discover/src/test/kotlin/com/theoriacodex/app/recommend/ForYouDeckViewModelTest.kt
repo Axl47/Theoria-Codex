@@ -4,6 +4,8 @@ import com.theoriacodex.app.codex.ChosenCodex
 import com.theoriacodex.app.feed.FeedCursor
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.trails.TrailPage
+import com.theoriacodex.app.trails.TrailPager
 import com.theoriacodex.app.triage.TriageChoice
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
@@ -72,7 +74,7 @@ class ForYouDeckViewModelTest {
         assertEquals(listOf("a-0-0", "b-0-0", "c-0-0", "a-0-1"), owner.posts.map { it.id.sourcePostId })
         assertEquals(DeckOrigin.Lane(laneId("b"), "b"), owner.originOf(owner.posts[1].id))
         assertEquals(listOf("b"), owner.laneTags(owner.posts[1].id))
-        assertEquals(listOf("a", "b", "c"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "b", "c"), owner.state.value.lanes.map(ForYouLaneChoice::label))
         assertEquals(owner.top.id, owner.viewerFeed.queryHash)
     }
 
@@ -90,20 +92,43 @@ class ForYouDeckViewModelTest {
         assertEquals(12, owner(deckEnvironment(grid = true)).posts.size)
     }
 
-    @Test fun `a chip narrows the Mix to its lane and the undecided cards are dealt again after`() {
+    @Test fun `a lane focus asks for the lane's own tags, is named after the lane, and carries only a card from that lane (ADR 0134)`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
         val owner = owner()
-        val mix = owner.top.id
-        owner.selectChip(laneId("b"))
-        assertEquals(laneId("b"), owner.state.value.only)
-        assertEquals(listOf("b-0-0", "b-0-1", "b-0-2", "b-0-3"), owner.posts.map { it.id.sourcePostId })
-        assertNotEquals(mix, owner.top.id)
+        val card = owner.current
+        owner.focusLane(laneId("b"))
 
-        val skipped = owner.decide(TriageChoice.Skip)
-        owner.selectChip(null)
-        assertNull(owner.state.value.only)
-        assertEquals(setOf("a", "b", "c"), owner.posts.lanes().toSet())
-        assertFalse(skipped in owner.posts)
-        assertEquals("a-0-0", owner.posts.first { it.id.sourcePostId.startsWith("a") }.id.sourcePostId)
+        val asked = trails.asked.single() as TrailRequest.Tag
+        assertEquals("b" to DECK_SOURCE, asked.tag to asked.source)
+        assertEquals(listOf("Mix", "b"), owner.levels.value.map(ForYouLevel::label))
+        assertEquals(listOf(PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
+
+        owner.popTo(0)
+        owner.focusLane(laneId("a"))
+        assertEquals(listOf(card.id, PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
+    }
+
+    @Test fun `Undo on the Mix after an undone decision while focused restores its steering (ADR 0134)`() {
+        val owner = owner()
+        owner.skip(4)
+        val mix = owner.top
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        owner.decide(TriageChoice.Skip)
+        owner.top.deck.undo()
+        owner.popTo(0)
+
+        mix.deck.undo()
+        assertEquals("a-0-1", owner.current.id.sourcePostId)
+        owner.decide(TriageChoice.Skip)
+        assertEquals(listOf(false, false, false), owner.state.value.lanes.map(ForYouLaneChoice::cooled))
+    }
+
+    @Test fun `in the grid a focus carries no card`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        val owner = owner(deckEnvironment(grid = true))
+        owner.focusLane(laneId("b"))
+        assertEquals(listOf(PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
     }
 
     @Test fun `a like asks for two unseen similar posts, which land a few cards later with their reason`() {
@@ -117,20 +142,18 @@ class ForYouDeckViewModelTest {
 
         assertEquals(listOf("a", "b", "c", "a", "s", "s"), owner.posts.lanes().take(6))
         assertEquals(fresh.take(2), owner.posts.subList(4, 6))
-        assertEquals(DeckOrigin.Similar(liked.id, saved = false), owner.originOf(fresh[0].id))
-        assertEquals("Like one you liked", owner.originOf(fresh[0].id)?.label())
+        assertEquals(DeckOrigin.Similar(liked.id), owner.originOf(fresh[0].id))
         assertEquals(listOf(liked.id), actions.liked)
     }
 
-    @Test fun `similar posts a save asked for say it was a save`() {
+    @Test fun `a save asks for similar posts as a like does`() {
         val fresh = testPost(DECK_SOURCE, "s-1")
         trails.similar = listOf(fresh)
         val owner = owner()
         val saved = owner.decide(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         owner.skip(1)
 
-        assertEquals(DeckOrigin.Similar(saved.id, saved = true), owner.originOf(fresh.id))
-        assertEquals("Like one you saved", owner.originOf(fresh.id)?.label())
+        assertEquals(DeckOrigin.Similar(saved.id), owner.originOf(fresh.id))
     }
 
     @Test fun `a save on a source without similar posts asks its creator instead`() {
@@ -139,8 +162,7 @@ class ForYouDeckViewModelTest {
         val saved = owner.decide(TriageChoice.Save(ChosenCodex.Existing("codex-1", "Skies")))
         owner.skip(1)
 
-        assertEquals(DeckOrigin.Creator(saved.id, "artist"), owner.originOf(owner.posts[4].id))
-        assertEquals("More by artist", owner.originOf(owner.posts[4].id)?.label())
+        assertEquals(DeckOrigin.Creator(saved.id, checkNotNull(saved.creatorProfile)), owner.originOf(owner.posts[4].id))
         assertEquals(listOf(saved.id), quickSave.saved)
         assertTrue(quickSave.fromForYou)
     }
@@ -216,17 +238,17 @@ class ForYouDeckViewModelTest {
         assertFalse("s" in owner.posts.lanes())
     }
 
-    @Test fun `hiding a tag mid-session drops its lane, its chip and its cards`() {
+    @Test fun `hiding a tag mid-session drops its lane, its Filters entry and its cards`() {
         val owner = owner()
         owner.synchronize(deckEnvironment(hiding("b")))
-        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "c"), owner.state.value.lanes.map(ForYouLaneChoice::label))
         assertEquals(listOf("a", "c", "a"), owner.posts.lanes())
         owner.skip(5)
         assertFalse("b" in owner.posts.lanes())
         assertEquals(1, engine.builds)
 
         owner.synchronize(deckEnvironment())
-        assertEquals(listOf("a", "b", "c"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "b", "c"), owner.state.value.lanes.map(ForYouLaneChoice::label))
         owner.skip(4)
         assertTrue("b" in owner.posts.lanes().takeLast(4))
     }
@@ -245,32 +267,18 @@ class ForYouDeckViewModelTest {
         assertEquals(4, owner.posts.size)
     }
 
-    @Test fun `hiding the tag of the chip's lane widens the same deck to the Mix, and Undo brings the card back`() {
+    @Test fun `a lane cooled by skips reads as cooled until its lanes are warmed (ADR 0070)`() {
         val owner = owner()
-        owner.selectChip(laneId("b"))
-        val level = owner.top
-        val hid = owner.decide(TriageChoice.Hide("b"))
-        assertEquals(listOf(DECK_SOURCE to "b"), actions.hidden)
-        owner.synchronize(deckEnvironment(hiding("b")))
+        repeat(9) { if (owner.originOf(owner.current.id) == DeckOrigin.Lane(laneId("b"), "b")) owner.decide(TriageChoice.Skip) else owner.decide(TriageChoice.Like) }
+        assertEquals(listOf(false, true, false), owner.state.value.lanes.map(ForYouLaneChoice::cooled))
 
-        assertSame(level, owner.top)
-        assertNull(owner.state.value.only)
-        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
-        assertEquals(setOf("a", "c"), owner.posts.lanes().toSet())
-        assertTrue(owner.current in owner.posts)
-
-        level.deck.undo()
-        assertSame(hid, owner.current)
-        assertTrue(actions.hidden.isEmpty())
-        owner.synchronize(deckEnvironment())
-        assertSame(level, owner.top)
-        assertSame(hid, owner.current)
-        assertEquals(listOf("a", "b", "c"), owner.state.value.chips.map(ForYouChip::label))
+        owner.warmLanes()
+        assertEquals(listOf(false, false, false), owner.state.value.lanes.map(ForYouLaneChoice::cooled))
     }
 
     @Test fun `removing a hide the Mix was built under brings its lane in and keeps the deck`() {
         val owner = owner(deckEnvironment(hiding("b")))
-        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "c"), owner.state.value.lanes.map(ForYouLaneChoice::label))
         owner.skip(1)
         val level = owner.top
         val card = owner.current
@@ -278,7 +286,7 @@ class ForYouDeckViewModelTest {
         owner.synchronize(deckEnvironment())
         assertSame(level, owner.top)
         assertSame(card, owner.current)
-        assertEquals(listOf("a", "c", "b"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "c", "b"), owner.state.value.lanes.map(ForYouLaneChoice::label))
         owner.skip(4)
         assertTrue("b" in owner.posts.lanes())
     }
@@ -300,10 +308,10 @@ class ForYouDeckViewModelTest {
         owner.synchronize(deckEnvironment(hiding("b")))
         engine.planGate = null
         gate.complete(Unit)
-        assertEquals(listOf("a", "c"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "c"), owner.state.value.lanes.map(ForYouLaneChoice::label))
 
         owner.synchronize(deckEnvironment())
-        assertEquals(listOf("a", "c", "b"), owner.state.value.chips.map(ForYouChip::label))
+        assertEquals(listOf("a", "c", "b"), owner.state.value.lanes.map(ForYouLaneChoice::label))
     }
 
     @Test fun `hiding the last lane ends the grid instead of leaving it loading`() {
@@ -349,30 +357,123 @@ class ForYouDeckViewModelTest {
         )
     }
 
-    @Test fun `a fork opens a trail on top and leaving it returns to the Mix where it was`() {
-        val trail = listOf(lanePost("a", 0, 3), testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
-        trails.tag = trail
-        val owner = owner()
+    @Test fun `a fork focuses in place, leading with the card and leaving out its copies (ADR 0134)`() {
+        val copy = testPost(DECK_SOURCE, "t-copy")
+        val owner = owner(copiesOf = { post -> if (post.id == copy.id) setOf(copy.id, PostId(DECK_SOURCE, "b-0-0")) else setOf(post.id) })
         owner.skip(1)
         val mix = owner.top
         val card = owner.current
+        trails.tag = listOf(card, copy, testPost(DECK_SOURCE, "t-1"))
         owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = card))
 
         assertEquals(listOf("Mix", "sea"), owner.levels.value.map(ForYouLevel::label))
-        assertEquals(trail, owner.posts)
+        assertSame(card, owner.current)
+        assertEquals(listOf(card.id, PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
         assertEquals(owner.top.id, owner.viewerFeed.queryHash)
         assertEquals(listOf("sea"), owner.top.query?.includeTags)
-        owner.selectChip(laneId("b"))
-        assertEquals(2, owner.levels.value.size)
 
-        owner.decide(TriageChoice.Skip)
         owner.popTo(0)
         assertSame(mix, owner.levels.value.single())
         assertSame(card, owner.current)
         assertEquals(mix.id, owner.viewerFeed.queryHash)
-        owner.skip(7)
-        assertTrue(owner.posts.size >= 12)
-        assertFalse(trail[0] in owner.posts)
+        mix.deck.undo()
+        assertEquals("a-0-0", owner.current.id.sourcePostId)
+    }
+
+    @Test fun `a trail's page that lands after a deeper focus closes passes over what was decided there (ADR 0134)`() {
+        val gate = CompletableDeferred<Unit>()
+        val late = testPost(DECK_SOURCE, "t-late")
+        val first = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
+        var pages = 0
+        trails.tag = emptyList()
+        trails.pager = TrailPager {
+            if (pages++ == 0) TrailPage(first, canLoadMore = true) else gate.await().let { TrailPage(first + late, canLoadMore = false) }
+        }
+        val owner = owner()
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        owner.skip(1)
+        trails.pager = null
+        trails.similar = listOf(late)
+        owner.fork(TrailRequest.Similar(owner.current))
+        owner.skip(2)
+
+        owner.popTo(1)
+        gate.complete(Unit)
+        assertEquals("t-2", owner.current.id.sourcePostId)
+        owner.skip(1)
+        assertTrue(owner.top.deck.state.value.finished)
+    }
+
+    @Test fun `Undo after Reset keeps the lanes warm (ADR 0134)`() {
+        val owner = owner()
+        val b = DeckOrigin.Lane(laneId("b"), "b")
+        repeat(9) { owner.decide(if (owner.originOf(owner.current.id) == b) TriageChoice.Skip else TriageChoice.Like) }
+        while (owner.originOf(owner.current.id) != b) owner.decide(TriageChoice.Like)
+        owner.decide(TriageChoice.Like)
+        owner.warmLanes()
+
+        owner.top.deck.undo()
+        assertEquals(listOf(false, false, false), owner.state.value.lanes.map(ForYouLaneChoice::cooled))
+    }
+
+    @Test fun `a like on a focus that fails after the focus closed says so (ADR 0134)`() = runTest {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        val owner = owner()
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        val gate = CompletableDeferred<Unit>().also { actions.likeGate = it }
+        actions.failLike = true
+        owner.decide(TriageChoice.Like)
+        owner.popTo(0)
+        gate.complete(Unit)
+
+        assertEquals("Couldn't like", owner.messages.first())
+    }
+
+    @Test fun `the Mix passes over cards decided while focused, and Undo cannot reach back over them (ADR 0134)`() {
+        val owner = owner()
+        owner.skip(1)
+        val mix = owner.top
+        val card = owner.current
+        val ahead = owner.posts[2]
+        trails.tag = listOf(ahead, testPost(DECK_SOURCE, "t-1"))
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = card))
+        owner.skip(2)
+
+        owner.popTo(0)
+        assertEquals("a-0-1", owner.current.id.sourcePostId)
+        assertNull(mix.deck.state.value.last)
+        mix.deck.undo()
+        assertEquals("a-0-1", owner.current.id.sourcePostId)
+        owner.skip(8)
+        assertEquals(2, owner.posts.count { it.id == card.id || it.id == ahead.id })
+    }
+
+    @Test fun `a like while focused asks the Mix for more and steers the carried card's lane (ADR 0134)`() {
+        val fresh = listOf(testPost(DECK_SOURCE, "s-1"), testPost(DECK_SOURCE, "s-2"))
+        val owner = owner()
+        val card = owner.current
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        trails.similar = fresh
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = card))
+        owner.decide(TriageChoice.Like)
+
+        assertEquals(TrailRequest.Similar(card), trails.asked.last())
+        assertEquals(listOf(card.id), actions.liked)
+        owner.popTo(0)
+        owner.skip(4)
+        assertEquals(DeckOrigin.Similar(card.id), owner.originOf(fresh[0].id))
+        assertTrue(fresh[0] in owner.posts)
+    }
+
+    @Test fun `a card swiped before its focus opens is left out of it (ADR 0134)`() {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        val gate = CompletableDeferred<Unit>().also { trails.gate = it }
+        val owner = owner()
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        owner.skip(1)
+        gate.complete(Unit)
+
+        assertEquals(listOf(PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
     }
 
     @Test fun `a trail leaves out what was decided or kept before it opened, and keeps the cards decided on it`() {
@@ -381,12 +482,14 @@ class ForYouDeckViewModelTest {
         val owner = owner(deckEnvironment(kept = setOf(keptBefore.id)))
         val skipped = owner.decide(TriageChoice.Skip)
         trails.tag = listOf(skipped, keptBefore) + fresh
-        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
-        assertEquals(fresh, owner.posts)
+        val carried = owner.current
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = carried))
+        assertEquals(listOf(carried) + fresh, owner.posts)
 
+        owner.skip(1)
         val liked = owner.decide(TriageChoice.Like)
         owner.synchronize(deckEnvironment(kept = setOf(keptBefore.id, liked.id)))
-        assertEquals(fresh, owner.posts)
+        assertEquals(listOf(carried) + fresh, owner.posts)
         owner.top.deck.undo()
         assertSame(liked, owner.current)
     }
@@ -409,11 +512,12 @@ class ForYouDeckViewModelTest {
         val gate = CompletableDeferred<Unit>().also { trails.gate = it }
         val owner = owner()
         owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
-        owner.selectChip(laneId("b"))
+        val mix = owner.top
+        owner.rebuild()
         gate.complete(Unit)
 
         assertEquals(listOf("Mix"), owner.levels.value.map(ForYouLevel::label))
-        assertEquals(laneId("b"), owner.state.value.only)
+        assertNotEquals(mix.id, owner.top.id)
     }
 
     @Test fun `a fork that cannot open says so and stays on the Mix`() = runTest {
@@ -453,8 +557,9 @@ class ForYouDeckViewModelTest {
         verdicts.record(ForYouVerdict(AppSettings().activeProfileId, skipped.id, ForYouVerdictKind.SKIPPED, 1, null))
         trails.creator = listOf(skipped, testPost(DECK_SOURCE, "t-2"))
         val owner = owner(deckEnvironment(creatorBrowsingSources = setOf(DECK_SOURCE)))
-        owner.fork(TrailRequest.Creator(checkNotNull(owner.current.creatorProfile), owner.current))
-        assertEquals(listOf(skipped.id, PostId(DECK_SOURCE, "t-2")), owner.posts.map(Post::id))
+        val carried = owner.current
+        owner.fork(TrailRequest.Creator(checkNotNull(carried.creatorProfile), carried))
+        assertEquals(listOf(carried.id, skipped.id, PostId(DECK_SOURCE, "t-2")), owner.posts.map(Post::id))
     }
 
     @Test fun `a session's skips stay out of a refreshed Mix`() {

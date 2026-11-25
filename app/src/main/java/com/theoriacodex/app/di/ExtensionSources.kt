@@ -1,6 +1,7 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.series.ChapterPictures
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesDownloads
 import com.theoriacodex.data.repository.SeriesRepository
@@ -34,8 +35,13 @@ class SeriesDependencies(
 ) {
     private val checking = Mutex()
 
-    suspend fun checkFollowed(runEvery: Duration? = null, onUpdate: suspend (SeriesUpdate) -> Unit = {}): FollowedCheck = checking.withLock {
-        repository.checkFollowed(source, runEvery) { update ->
+    suspend fun checkFollowed(
+        runEvery: Duration? = null,
+        only: Set<SeriesId>? = null,
+        onProgress: (CheckProgress) -> Unit = {},
+        onUpdate: suspend (SeriesUpdate) -> Unit = {},
+    ): FollowedCheck = checking.withLock {
+        repository.checkFollowed(source, runEvery, only = only, onProgress = onProgress) { update ->
             downloads.downloadNew(update)
             onUpdate(update)
         }

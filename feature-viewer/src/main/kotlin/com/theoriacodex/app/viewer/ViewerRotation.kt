@@ -8,10 +8,8 @@ import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.outlined.ScreenLockRotation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
@@ -22,7 +20,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.domain.model.ViewerOrientation
-import kotlinx.coroutines.delay
 
 class ViewerRotationState {
     var held by mutableStateOf<ViewerOrientation?>(null)
@@ -39,6 +36,7 @@ data class MeasuredVideoShape(val key: ViewerMediaKey, val fill: ViewerOrientati
 
 internal class ViewerRotationOffer(
     val fits: Boolean,
+    val target: ViewerOrientation,
     val lock: ViewerOrientation?,
     val rotate: () -> Unit,
     val toggleLock: () -> Unit,
@@ -61,18 +59,13 @@ internal fun rememberViewerRotation(
     }
     val key = ViewerMediaKey(selection.post.id, selection.mediaIndex)
     val fill = selection.fillOrientation(rotation.measured?.takeIf { it.key == key })
+    val target = screen.opposite
     return ViewerRotationOffer(
-        fits = viewerOffersRotation(fill, screen, lock),
+        fits = viewerFitsOtherWay(fill, screen),
+        target = target,
         lock = lock,
-        rotate = { if (lock != null) onLockChange(lock.opposite) else rotation.held = screen.opposite },
-        toggleLock = {
-            if (lock == null) {
-                onLockChange(screen)
-            } else {
-                rotation.held = null
-                onLockChange(null)
-            }
-        },
+        rotate = { rotation.held = target },
+        toggleLock = { onLockChange(if (lock == null) screen else null) },
     )
 }
 
@@ -83,7 +76,7 @@ private fun ViewerSelection.fillOrientation(measured: MeasuredVideoShape?): View
 }
 
 @Composable
-internal fun BoxScope.ViewerRotationChip(
+internal fun BoxScope.ViewerRotateButton(
     selection: ViewerSelection,
     offer: ViewerRotationOffer?,
     chromeVisible: Boolean,
@@ -92,22 +85,18 @@ internal fun BoxScope.ViewerRotationChip(
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
     inStripRow: Boolean = false,
 ) {
-    val fits = offer?.fits == true
-    var hinting by remember { mutableStateOf(false) }
-    LaunchedEffect(selection.post.id, selection.mediaIndex, fits) {
-        hinting = fits
-        if (hinting) {
-            delay(VIEWER_ROTATE_HINT_MS)
-            hinting = false
-        }
-    }
-    if (offer == null || !fits) return
+    if (offer == null || offer.lock != null) return
     ViewerFooterButton(
-        selection, chromeVisible, visible = (chromeVisible || hinting) && !suppressed, alignment = Alignment.BottomStart,
-        icon = Icons.Default.ScreenRotation, contentDescription = "Rotate to fit", testTag = "viewer-rotate",
-        bottomRowHeight = bottomRowHeight, inStripRow = inStripRow, slot = slot, emphasized = true, onClick = offer.rotate,
+        selection, chromeVisible, visible = chromeVisible && !suppressed, alignment = Alignment.BottomStart,
+        icon = Icons.Default.ScreenRotation, contentDescription = offer.rotateDescription, testTag = VIEWER_ROTATE_TAG,
+        bottomRowHeight = bottomRowHeight, inStripRow = inStripRow, slot = slot, emphasized = offer.fits, onClick = offer.rotate,
     )
 }
+
+internal val ViewerRotationOffer.rotateDescription: String
+    get() = if (target == ViewerOrientation.LANDSCAPE) "Rotate to landscape" else "Rotate to portrait"
+
+internal const val VIEWER_ROTATE_TAG = "viewer-rotate"
 
 @Composable
 internal fun BoxScope.ViewerRotationLockButton(
@@ -134,8 +123,6 @@ internal val ViewerRotationOffer.lockDescription: String
     get() = if (lock != null) "Unlock rotation" else "Lock rotation"
 
 internal const val VIEWER_ROTATION_LOCK_TAG = "viewer-rotation-lock"
-
-internal const val VIEWER_ROTATE_HINT_MS = 3_000L
 
 @Composable
 internal fun ReportViewerVideoShape(player: Player?, active: Boolean, key: ViewerMediaKey) {

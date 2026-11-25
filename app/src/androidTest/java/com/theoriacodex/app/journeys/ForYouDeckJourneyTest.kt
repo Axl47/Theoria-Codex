@@ -7,7 +7,6 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -17,16 +16,20 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import com.theoriacodex.app.codex.profileScopedCodexId
-import com.theoriacodex.app.recommend.FOR_YOU_CHIPS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMBS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_CRUMB_TAG_PREFIX
+import com.theoriacodex.app.recommend.FOR_YOU_FORK_ROW_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_FORK_TAG_PREFIX
 import com.theoriacodex.app.recommend.FOR_YOU_GRID_TAG
+import com.theoriacodex.app.recommend.FOR_YOU_FILTERS_TAG
+import com.theoriacodex.app.recommend.FOR_YOU_MIX_LANE_TAG_PREFIX
 import com.theoriacodex.app.recommend.FOR_YOU_ORIGIN_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_SAVE_SEARCH_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_REFRESH_TAG
@@ -61,22 +64,38 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     }
 
     @Test
-    fun aChipNarrowsTheDeckToItsInterestAndMixWidensIt() {
+    fun theOriginPillFocusesInPlaceAndMixResumesPastWhatWasDecidedThere() {
         openDeck()
-        val chips = compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG))).fetchSemanticsNodes()
-        val interest = chips.map { it.text() }.last { it != "Mix" }
-        activate(compose.onNode(chip(interest)))
-        waitFor("deck origin is $interest") { origin() == interest }
-        repeat(3) {
-            decide("Skip")
-            assertEquals(interest, origin())
-        }
-        saveScreenshot("deck-chip-narrowed")
+        decide("Skip")
+        val card = currentCard()
+        val interest = checkNotNull(origin())
+        activate(compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG))
+        waitFor("crumb 1 reads $interest") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().singleOrNull()?.text() == interest }
+        assertEquals(card, currentCard())
+        saveScreenshot("deck-focused-in-place")
 
-        activate(compose.onNode(chip("Mix")))
-        waitFor("Mix chip is selected") { compose.onNode(chip("Mix")).fetchSemanticsNode().config[SemanticsProperties.Selected] }
-        val widened = (0 until 6).any { (origin() != interest).also { other -> if (!other) decide("Skip") } }
-        assertTrue("The Mix dealt only $interest after widening", widened)
+        decide("Skip")
+        activate(compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0"))
+        waitFor("crumbs are gone after Mix") { compose.onAllNodesWithTag(FOR_YOU_CRUMBS_TAG).fetchSemanticsNodes().isEmpty() }
+        assertNotEquals(card, currentCard())
+        compose.onNodeWithTag(FOR_YOU_ORIGIN_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(FOR_YOU_UNDO_TAG).assertIsNotEnabled()
+    }
+
+    @Test
+    fun aMixLaneInFiltersFocusesTheDeckOnIt() {
+        openDeck()
+        val card = currentCard()
+        val label = checkNotNull(origin())
+        activate(compose.onNodeWithTag(FOR_YOU_FILTERS_TAG))
+        val lane = SemanticsMatcher("the card's Mix lane") { node ->
+            node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(FOR_YOU_MIX_LANE_TAG_PREFIX) == true && node.text() == label
+        }
+        waitFor("the card's lane is listed") { compose.onAllNodes(lane).fetchSemanticsNodes().isNotEmpty() }
+        activate(compose.onNode(lane))
+        waitFor("crumb 1 reads $label") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().singleOrNull()?.text() == label }
+        assertEquals(card, currentCard())
+        saveScreenshot("deck-lane-focused")
     }
 
     @Test
@@ -87,7 +106,7 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val tag = forkByTag()
         assertEquals("Mix", compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}0").fetchSemanticsNode().text())
         assertEquals(tag, compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNode().text())
-        assertTrue(compose.onAllNodesWithTag(FOR_YOU_CHIPS_TAG).fetchSemanticsNodes().isEmpty())
+        assertEquals(card, currentCard())
         saveScreenshot("deck-tag-trail")
 
         pressSystemBack()
@@ -130,18 +149,18 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     fun aLikeBringsACardLikeItWithinTheNextSixCards() {
         openDeck()
         decide("Like")
-        val brought = (0 until 6).any { (origin() == "Like one you liked").also { found -> if (!found) decide("Skip") } }
+        val brought = (0 until 6).any { (origin() == "Similar").also { found -> if (!found) decide("Skip") } }
         assertTrue("No card like the liked one in the next six", brought)
-        saveScreenshot("deck-like-one-you-liked")
+        saveScreenshot("deck-similar-origin")
         assertEquals(1, io { container.data.likesRepository.observeLikedPostIds("profile-main").first() }.size)
     }
 
     @Test
-    fun aSaveBringsACardLikeItThatSaysItWasASave() {
+    fun aSaveBringsACardLikeIt() {
         io { container.content.ensureCodex(profileScopedCodexId("profile-main", "journey-saves"), "Journey saves") }
         openDeck()
         decide { it.startsWith("Save to ") }
-        val brought = (0 until 6).any { (origin() == "Like one you saved").also { found -> if (!found) decide("Skip") } }
+        val brought = (0 until 6).any { (origin() == "Similar").also { found -> if (!found) decide("Skip") } }
         assertTrue("No card like the saved one in the next six", brought)
     }
 
@@ -258,15 +277,13 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
         val fork = SemanticsMatcher("a tag fork") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("${FOR_YOU_FORK_TAG_PREFIX}tag:") == true
         }
-        waitFor("tag fork is offered") { compose.onAllNodes(fork).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the pill row is shown") { compose.onAllNodesWithTag(FOR_YOU_FORK_ROW_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(FOR_YOU_FORK_ROW_TAG).performScrollToNode(fork)
         val label = compose.onAllNodes(fork).onFirst().fetchSemanticsNode().text()
         activate(compose.onAllNodes(fork).onFirst())
         waitFor("crumb 1 is displayed after forking") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().isNotEmpty() }
         return label
     }
-
-    private fun chip(label: String) = hasClickAction() and hasAnyAncestor(hasTestTag(FOR_YOU_CHIPS_TAG)) and
-        SemanticsMatcher("reads $label") { it.text() == label }
 
     private fun origin(): String? = compose.onAllNodesWithTag(FOR_YOU_ORIGIN_TAG).fetchSemanticsNodes().singleOrNull()?.text()
 

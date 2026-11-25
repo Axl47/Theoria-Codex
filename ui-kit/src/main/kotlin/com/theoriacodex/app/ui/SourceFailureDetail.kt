@@ -4,6 +4,8 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 
 fun sourceFailureDetail(reason: SourceFailureReason?, rawMessage: String = ""): String = when (reason) {
     SourceFailureReason.RATE_LIMITED -> "Too many requests. Try again later."
+    SourceFailureReason.BLOCKED -> rawMessage.takeIf(String::isNotBlank) ?: "The site refused the request."
+    SourceFailureReason.TIMED_OUT -> "The site took too long to answer."
     SourceFailureReason.NETWORK -> rawMessage.takeIf(String::isNotBlank)
         ?: "Provider unreachable or blocked right now."
     SourceFailureReason.PARSE -> rawMessage.takeIf(String::isNotBlank)

@@ -21,8 +21,8 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,17 +33,24 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.series.Series
+import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 
 @Composable
 internal fun FollowingBody(
     content: SeriesTabContent,
-    refreshing: Boolean,
+    checking: CheckProgress?,
+    found: List<SeriesUpdate>,
     failedCheck: FollowedCheck?,
     grid: LazyGridState,
     onRefresh: () -> Unit,
+    onRetryFailed: (Set<SeriesId>) -> Unit,
+    onDismissFailures: () -> Unit,
+    onUnfollow: (SeriesId) -> Unit,
     onChooseKind: (SeriesKind?) -> Unit,
     onChooseLibrary: (LibraryOptions) -> Unit,
     onShowAll: () -> Unit,
@@ -52,12 +59,13 @@ internal fun FollowingBody(
     onOpenSeries: (Series) -> Unit,
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
-    val following = content.following
+    var failuresOpen by rememberSaveable { mutableStateOf(false) }
+    val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
             FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
         }
-        PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        FollowingRefreshBox(checking, found, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(CARD_WIDTH),
                 state = grid,
@@ -66,28 +74,44 @@ internal fun FollowingBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                followingNotices(content, failedCheck, onRefresh)
-                when {
-                    following == null -> Unit
-                    following.isEmpty() && content.followingQuery.isNotBlank() ->
-                        fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
-                    !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
-                    following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
-                    else -> items(following, key = { it.series.id.toString() }) { item ->
-                        SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
+                if (failed != null) {
+                    fullWidth("following-check-failed") {
+                        CheckFailedCard(failed.message, onOpen = { failuresOpen = true }, onRetry = onRefresh, onDismiss = onDismissFailures)
                     }
                 }
+                followingCards(content, onShowAll, onSearchAll, onBrowse, onOpenSeries)
             }
         }
+    }
+    LaunchedEffect(failed == null) { if (failed == null) failuresOpen = false }
+    if (failuresOpen && failed != null) {
+        FollowedFailuresSheet(failed, content, onUnfollow, onOpenSeries, onRetry = { ids ->
+            failuresOpen = false
+            onRetryFailed(ids)
+        }) { failuresOpen = false }
     }
     if (optionsOpen) {
         LibraryOptionsSheet(content.library, content.words, onChoose = onChooseLibrary, onDismiss = { optionsOpen = false })
     }
 }
 
-private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit) {
-    if (failedCheck != null && content.followsAny) {
-        fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
+private fun LazyGridScope.followingCards(
+    content: SeriesTabContent,
+    onShowAll: () -> Unit,
+    onSearchAll: () -> Unit,
+    onBrowse: () -> Unit,
+    onOpenSeries: (Series) -> Unit,
+) {
+    val following = content.following
+    when {
+        following == null -> Unit
+        following.isEmpty() && content.followingQuery.isNotBlank() ->
+            fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
+        !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
+        following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
+        else -> items(following, key = { it.series.id.toString() }) { item ->
+            SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
+        }
     }
 }
 

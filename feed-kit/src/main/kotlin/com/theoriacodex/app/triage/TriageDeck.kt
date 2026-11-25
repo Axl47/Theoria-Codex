@@ -39,8 +39,9 @@ class TriageDeck(
     private val onDecision: (TriageDecisionEvent) -> Unit = {},
     ownerHidden: Flow<Map<SourceKey, Set<String>>> = emptyFlow(),
     pictures: PictureTags = PictureTags.None,
+    lead: Post? = null,
 ) {
-    private val mutableState = MutableStateFlow(TriageDeckState())
+    private val mutableState = MutableStateFlow(TriageDeckState(posts = listOfNotNull(lead), canLoadMore = lead != null))
     val state: StateFlow<TriageDeckState> = mutableState.asStateFlow()
 
     val removes: Boolean get() = removal != null
@@ -132,6 +133,20 @@ class TriageDeck(
         mutableState.update { deck -> deck.restoring(work.decision).copy(last = null, notice = null) }
         onDecision(TriageDecisionEvent.Reverted(work.decision))
         writes.trySend { work.reversal?.invoke() }
+    }
+
+    fun passOver(decidedElsewhere: Set<PostId>, forgetUndo: Boolean) {
+        if (forgetUndo) latest = null
+        mutableState.update { deck ->
+            val told = deck.copy(
+                elsewhere = deck.elsewhere + decidedElsewhere,
+                last = if (forgetUndo) null else deck.last,
+                notice = null,
+                restored = deck.restored.takeUnless { it in decidedElsewhere },
+            )
+            told.copy(index = told.shownFrom(told.index))
+        }
+        pageIfNearEnd()
     }
 
     fun retryPage() {

@@ -82,7 +82,7 @@ internal fun BoxScope.TriageConfirmation(notice: TriageNotice?) {
     }
 }
 
-internal fun noticeLabel(notice: TriageNotice): String? = when (val decision = notice.decision) {
+fun noticeLabel(notice: TriageNotice): String? = when (val decision = notice.decision) {
     is TriageDecision.Liked -> if (notice.failed) "Couldn't like" else "Liked"
     is TriageDecision.Saved -> if (notice.failed) "Couldn't save" else "Saved to ${decision.codexName}"
     is TriageDecision.Hid -> if (notice.failed) "Couldn't hide" else "Hid ${tagLabel(decision.tag)}"

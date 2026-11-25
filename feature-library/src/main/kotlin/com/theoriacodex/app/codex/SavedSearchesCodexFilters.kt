@@ -22,13 +22,18 @@ import com.theoriacodex.app.recents.SavedSearchRow
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.SavedSearchEntry
 
+class SavedSearchActions(
+    val rename: (id: String, name: String) -> Unit,
+    val remove: (id: String) -> Unit,
+    val edit: (SavedSearchEntry) -> Unit,
+)
+
 @Composable
 fun SavedSearchesCodexFilters(
     entries: List<SavedSearchEntry>,
     state: FeedFabRestoreState,
     onChange: (FeedFabRestoreState) -> Unit,
-    onRename: (String, String) -> Unit,
-    onRemove: (String) -> Unit,
+    actions: SavedSearchActions,
     newCounts: Map<String, Int> = emptyMap(),
 ) {
     var filter by remember { mutableStateOf("") }
@@ -53,14 +58,19 @@ fun SavedSearchesCodexFilters(
                     val next = if (entry.id in excluded) excluded - entry.id else excluded + entry.id
                     onChange(state.copy(excludedSavedSearches = next.intersect(currentIds).toList()))
                 },
-                onRename = { renaming = it }, onRemove = { onRemove(it.id) }, selected = entry.id !in excluded,
+                onRename = { renaming = it }, onRemove = { actions.remove(it.id) }, selected = entry.id !in excluded,
                 newCount = newCounts[entry.id] ?: 0,
             )
         }
     }
     renaming?.let { entry ->
-        SavedSearchNameDialog(entry.name, renaming = true, onDismiss = { renaming = null }, onConfirm = {
-            onRename(entry.id, it); renaming = null
-        })
+        SavedSearchNameDialog(entry.name, renaming = true, onDismiss = { renaming = null },
+            onConfirm = { actions.rename(entry.id, it); renaming = null },
+            onEdit = { name ->
+                renaming = null
+                if (name.isNotEmpty() && name != entry.name) actions.rename(entry.id, name)
+                actions.edit(entry)
+            },
+        )
     }
 }

@@ -96,14 +96,14 @@ class ForYouDeckVettingTest {
         assertFalse("a-0-2" in owner.ids)
     }
 
-    @Test fun `a chip that restarts vetting runs one loop though the first post deals again before the loop suspends (ADR 0135)`() {
+    @Test fun `a refresh that restarts vetting runs one loop though the first post deals again before the loop suspends (ADR 0135)`() {
         val pictures = FakePictureTags()
         val owner = owner(pictures)
         pictures.unseen = setOf("a-0-0")
         pictures.held = CompletableDeferred()
         val before = pictures.asked.size
         pictures.mostLooking = 0
-        owner.selectChip(laneId("a"))
+        owner.rebuild()
 
         assertEquals(1, pictures.mostLooking)
         pictures.release()
@@ -141,14 +141,13 @@ class ForYouDeckVettingTest {
         assertEquals(emptyList<String>(), pictures.asked)
     }
 
-    @Test fun `cards dealt before the first hidden tag are vetted when a chip deals them again`() {
+    @Test fun `cards dealt before the first hidden tag are vetted when a refresh deals them again`() {
         val pictures = FakePictureTags(predicted = mapOf("b-0-0" to seen("x")))
         val owner = owner(pictures, deckEnvironment())
         assertTrue("b-0-0" in owner.ids)
 
         owner.synchronize(deckEnvironment(hiding("x")))
-        owner.selectChip(laneId("b"))
-        owner.selectChip(null)
+        owner.rebuild()
 
         assertTrue(owner.posts.isNotEmpty())
         assertFalse("b-0-0" in owner.ids)

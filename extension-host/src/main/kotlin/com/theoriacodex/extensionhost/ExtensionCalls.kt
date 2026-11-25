@@ -12,6 +12,8 @@ import com.theoriacodex.sources.http.HostOutageKind
 import com.theoriacodex.sources.http.HostUnavailableException
 import eu.kanade.tachiyomi.network.HttpException
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
@@ -33,14 +35,21 @@ internal class ExtensionCalls(private val name: String, private val onChallenged
     fun failure(error: Throwable): SourceAdapterException {
         if (error is SourceAdapterException) return error
         if (error.isBrowserCheck()) generateSequence(error) { it.cause }.firstNotNullOf { it as? HostUnavailableException }.let { onChallenged(it.host) }
-        val reason = when (error) {
-            is HttpException -> if (error.code == HTTP_TOO_MANY_REQUESTS) SourceFailureReason.RATE_LIMITED else SourceFailureReason.NETWORK
-            is IOException -> SourceFailureReason.NETWORK
-            is LinkageError -> {
+        val reason = when {
+            error is HttpException -> when (error.code) {
+                HTTP_TOO_MANY_REQUESTS -> SourceFailureReason.RATE_LIMITED
+                HTTP_FORBIDDEN -> SourceFailureReason.BLOCKED
+                else -> SourceFailureReason.NETWORK
+            }
+            error.isBrowserCheck() -> SourceFailureReason.BLOCKED
+            error is HostUnavailableException && error.kind == HostOutageKind.RATE_LIMITED -> SourceFailureReason.RATE_LIMITED
+            error is SocketTimeoutException || error is InterruptedIOException && error.message == OKHTTP_CALL_TIMEOUT -> SourceFailureReason.TIMED_OUT
+            error is IOException -> SourceFailureReason.NETWORK
+            error is LinkageError -> {
                 Diagnostics.report(LOG_AREA, "$name needs host API this module lacks", error)
                 SourceFailureReason.UNKNOWN
             }
-            is Error -> {
+            error is Error -> {
                 Diagnostics.report(LOG_AREA, "$name failed", error)
                 SourceFailureReason.UNKNOWN
             }
@@ -51,6 +60,8 @@ internal class ExtensionCalls(private val name: String, private val onChallenged
 
     private companion object {
         const val HTTP_TOO_MANY_REQUESTS = 429
+        const val HTTP_FORBIDDEN = 403
+        const val OKHTTP_CALL_TIMEOUT = "timeout"
         const val LOG_AREA = "extensions"
     }
 }

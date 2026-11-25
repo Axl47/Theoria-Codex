@@ -252,10 +252,14 @@ private fun SeriesTabViewBody(
     when {
         content.view == SeriesView.FOLLOWING -> FollowingBody(
             content = content,
-            refreshing = state.refreshing,
+            checking = state.checking,
+            found = state.found,
             failedCheck = state.failedCheck,
             grid = grids.following,
             onRefresh = viewModel::refresh,
+            onRetryFailed = viewModel::retry,
+            onDismissFailures = viewModel::dismissFailures,
+            onUnfollow = viewModel::unfollow,
             onChooseKind = viewModel::chooseKind,
             onChooseLibrary = viewModel::chooseLibrary,
             onShowAll = viewModel::showAllFollowing,

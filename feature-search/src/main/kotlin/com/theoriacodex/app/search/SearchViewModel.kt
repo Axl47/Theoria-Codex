@@ -185,6 +185,10 @@ class SearchViewModel(
 
             is SearchAction.ApplyTagSearch -> runAfterRestoration { applyTagSearch(action) }
 
+            is SearchAction.EditSavedSearch -> runAfterRestoration { editSavedSearch(action) }
+
+            SearchAction.EndSavedSearchEdit -> endSavedSearchEdit()
+
             is SearchAction.RetrySource -> retrySource(action.source)
 
             SearchAction.Retry -> retry()
@@ -240,6 +244,7 @@ class SearchViewModel(
     }
 
     private fun stepHistory(back: Boolean) {
+        endSavedSearchEdit()
         clearSuggestionState()
         val current = mutableState.value
         val onScreen = current.appliedHistoryEntry(session.savedScroll ?: SearchScrollState(0, 0))
@@ -325,6 +330,7 @@ class SearchViewModel(
     }
 
     private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
+        endSavedSearchEdit()
         val reduction = SearchDraftReducer.prepareTagSearch(
             state = mutableState.value,
             includeTermGroups = action.includeTermGroups,
@@ -350,10 +356,28 @@ class SearchViewModel(
     }
 
     private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope) {
+        endSavedSearchEdit()
         if (restoreDraft(query, sourceScope)) runDraft()
     }
 
-    private fun restoreDraft(query: Query, sourceScope: SearchSourceScope): Boolean {
+    private fun editSavedSearch(action: SearchAction.EditSavedSearch) {
+        endSavedSearchEdit()
+        val scope = action.sourceScope
+        if (scope is SearchSourceScope.Temporary && scope.reconciledWith(mutableState.value.query.availableSources.toSet()) != scope) {
+            effectChannel.trySend(SearchEffect.ShowMessage("Multi-Search sources are unavailable"))
+            return
+        }
+        if (!restoreDraft(action.query, scope, editingSavedSearchId = action.id)) return
+        effectChannel.trySend(SearchEffect.OpenComposer)
+        runDraft()
+    }
+
+    private fun endSavedSearchEdit() {
+        val current = mutableState.value
+        if (current.editingSavedSearchId != null) mutableState.value = current.copy(editingSavedSearchId = null)
+    }
+
+    private fun restoreDraft(query: Query, sourceScope: SearchSourceScope, editingSavedSearchId: String? = null): Boolean {
         val reduction = SearchDraftReducer.restoreDraft(mutableState.value, query)
         if (!reduction.accepted) {
             effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
@@ -367,6 +391,7 @@ class SearchViewModel(
         suggestionRefresh.cancelAutocomplete()
         mutableState.value = reduction.state.copy(
             query = reduction.state.query.copy(draftSourceScope = restoredScope),
+            editingSavedSearchId = editingSavedSearchId,
         )
         persistDraftQuery()
         return true
@@ -768,7 +793,9 @@ class SearchViewModel(
                 effectChannel.send(effect)
             }
 
-            is SearchEffect.ShowMessage -> effectChannel.trySend(effect)
+            is SearchEffect.ShowMessage,
+            SearchEffect.OpenComposer,
+            -> effectChannel.trySend(effect)
         }
     }
 

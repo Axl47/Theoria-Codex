@@ -36,6 +36,7 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.TheoriaApplication
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.recommend.FOR_YOU_FILTERS_TAG
 import com.theoriacodex.app.recommend.FOR_YOU_VIEW_TOGGLE_TAG
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
@@ -148,9 +149,10 @@ class RelatedViewerReturnTest {
         compose.onNodeWithContentDescription("For You").performClick()
         compose.waitUntilSettled(10_000) { compose.onAllNodesWithTag(FOR_YOU_VIEW_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(FOR_YOU_VIEW_TOGGLE_TAG).performClick()
-        val chip = hasText("seed") and hasClickAction()
-        compose.waitUntilSettled(10_000) { compose.onAllNodes(chip).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(chip).performClick()
+        compose.onNodeWithTag(FOR_YOU_FILTERS_TAG).performClick()
+        val lane = hasText("seed") and hasClickAction()
+        compose.waitUntilSettled(10_000) { compose.onAllNodes(lane).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(lane).performClick()
     }
 
     private fun relatedPosts(source: SourceKey, video: Boolean): List<com.theoriacodex.domain.model.Post> {

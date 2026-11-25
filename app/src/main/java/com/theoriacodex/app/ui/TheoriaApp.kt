@@ -1,8 +1,6 @@
 package com.theoriacodex.app.ui
 
 import android.net.Uri
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +52,6 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.theoriacodex.uikit.R
 import com.theoriacodex.app.ui.components.PostMenuActions
@@ -187,7 +184,7 @@ private fun ShellOverlaySheets(shell: TheoriaShell) {
         shell.feedFabRestoreRegistry.state(context)?.let { restore ->
             com.theoriacodex.app.codex.SavedSearchesManagementSheet(
                 shell.savedSearches, restore, { shell.feedFabRestoreRegistry.update(context, it) },
-                shell.owners.savedSearches::rename, shell.owners.savedSearches::remove,
+                shell.savedSearchActions,
                 onDismiss = { overlays.showSavedSearchManagement = false },
                 newCounts = news.marks.mapValues { it.value.newPostCount },
             )
@@ -293,33 +290,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
 
 @Composable
 private fun TheoriaNavHost(shell: TheoriaShell, sharedScope: androidx.compose.animation.SharedTransitionScope) {
-    NavHost(
-        navController = shell.navController,
-        startDestination = AppRoute.Home,
-        enterTransition = {
-            if (targetState.destination.route == AppRoute.CodexDetail) codexEnterTransition()
-            else pushEnterTransition()
-        },
-        exitTransition = {
-            when (targetState.destination.route) {
-                AppRoute.Viewer -> ExitTransition.None
-                AppRoute.CodexDetail -> codexUnderneathExit()
-                else -> pushExitTransition()
-            }
-        },
-        popEnterTransition = {
-            when (initialState.destination.route) {
-                AppRoute.Viewer -> EnterTransition.None
-                AppRoute.CodexDetail -> codexUnderneathEnter()
-                else -> popEnterTransition()
-            }
-        },
-        popExitTransition = {
-            if (initialState.destination.route == AppRoute.CodexDetail) codexExitTransition()
-            else popExitTransition()
-        },
-        modifier = Modifier.fillMaxSize(),
-    ) {
+    TheoriaScreenHost(shell.navController, AppRoute.Home, Modifier.fillMaxSize()) {
         theoriaDestinations(shell, sharedScope)
     }
 }

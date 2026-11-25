@@ -45,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +71,7 @@ import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.FeedPostActionSheet
 import com.theoriacodex.app.ui.components.rememberFeedCardEnvironment
 import com.theoriacodex.app.related.RelatedShelfBinding
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -407,19 +409,22 @@ private fun CodexSelectablePostCard(
     onToggleSelection: (PostId) -> Unit,
     onOpenPostActions: (Post) -> Unit,
 ) {
+    val viewerReturn = LocalViewerReturnTransition.current
     Box {
-        FeedPostCard(
-            post = post,
-            environment = cards,
-            onClick = {
-                if (editing) onToggleSelection(post.id) else onOpenViewer(index)
-            },
-            onLongPress = { if (!editing) onOpenPostActions(post) },
-            showSourceBadge = true,
-            likeEnabled = !editing,
-            refreshOnPreviewError = true,
-            resolvePostById = resolvePostById,
-        )
+        CompositionLocalProvider(LocalViewerReturnTransition provides viewerReturn.takeUnless { editing }) {
+            FeedPostCard(
+                post = post,
+                environment = cards,
+                onClick = {
+                    if (editing) onToggleSelection(post.id) else onOpenViewer(index)
+                },
+                onLongPress = { if (!editing) onOpenPostActions(post) },
+                showSourceBadge = true,
+                likeEnabled = !editing,
+                refreshOnPreviewError = true,
+                resolvePostById = resolvePostById,
+            )
+        }
         if (editing) CodexSelectionMarker(selected)
     }
 }
