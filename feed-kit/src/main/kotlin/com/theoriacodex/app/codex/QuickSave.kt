@@ -23,9 +23,9 @@ data class QuickSaveRecord(
 
 data class SaveSuggestion(val codexId: String, val name: String, val cover: List<CodexCoverCandidate>)
 
-data class SaveSuggestions(val targets: List<SaveSuggestion>, val inAnyCodex: Boolean) {
+data class SaveSuggestions(val targets: List<SaveSuggestion>, val savedIn: SaveSuggestion? = null) {
     companion object {
-        val Empty = SaveSuggestions(emptyList(), inAnyCodex = false)
+        val Empty = SaveSuggestions(emptyList())
     }
 }
 
