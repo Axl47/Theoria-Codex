@@ -15,7 +15,7 @@ class OriginUrlTest {
     }
 
     @Test
-    fun `Pixiv image addresses and a known Pixiv ID become the artwork page`() {
+    fun `Pixiv image addresses and a known Pixiv ID become the artwork page (ADR 0048)`() {
         val artwork = "https://www.pixiv.net/artworks/98214188"
 
         assertEquals(artwork, originUrlOrNull("https://i.pximg.net/img-original/img/2022/05/08/23/40/37/98214188_p0.jpg"))

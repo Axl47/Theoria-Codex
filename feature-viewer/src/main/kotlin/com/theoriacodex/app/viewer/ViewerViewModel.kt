@@ -255,12 +255,13 @@ class ViewerViewModel(
     fun recordVisibleMedia(
         post: Post,
         viewedMediaNumber: Int,
-        record: suspend (Post, Int, ViewerSession) -> Unit,
+        pageOffset: Float?,
+        record: suspend (Post, Int, Float?, ViewerSession) -> Unit,
     ) {
         val current = mutableSession.value ?: return
         if (state.value.currentPage?.post?.id != post.id) return
         workScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            runCatchingPreservingCancellation { record(post, viewedMediaNumber, current) }
+            runCatchingPreservingCancellation { record(post, viewedMediaNumber, pageOffset, current) }
         }
     }
 

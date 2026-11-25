@@ -71,7 +71,7 @@ class AppHttpClients(
             .build()
     }
 
-    private val stalledPageRescue: OkHttpClient by lazy {
+    internal val stalledPageRescue: OkHttpClient by lazy {
         shared.newBuilder().connectionPool(ConnectionPool(1, IDLE_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES))
             .countedAs(NetworkUsage.Stack.IMAGE)
             .build()

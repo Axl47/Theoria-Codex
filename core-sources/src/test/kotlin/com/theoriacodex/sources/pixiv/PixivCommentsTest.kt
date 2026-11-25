@@ -40,7 +40,7 @@ class PixivCommentsTest {
     """.trimIndent()
 
     @Test
-    fun `the first page maps comments and stamps and takes its total from the illustration`() = runTest {
+    fun `the first page maps comments and stamps and takes its total from the illustration (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(
             mapOf(
                 comments to SourceHttpResponse(200, firstPage),
@@ -72,30 +72,34 @@ class PixivCommentsTest {
     }
 
     @Test
-    fun `a failed total lookup leaves the total unknown instead of failing the page`() = runTest {
-        val client = RoutedHttpClient(
-            mapOf(comments to SourceHttpResponse(200, firstPage), detail to SourceHttpResponse(500, "")),
-        )
+    fun `a failed total lookup leaves the total unknown instead of failing the page (ADR 0046)`() = runTest {
+        listOf(SourceHttpResponse(500, ""), SourceHttpResponse(200, "<html>busy</html>")).forEach { totalAnswer ->
+            val client = RoutedHttpClient(mapOf(comments to SourceHttpResponse(200, firstPage), detail to totalAnswer))
 
-        val page = adapter(client).comments(post, pageToken = null)
+            val page = adapter(client).comments(post, pageToken = null)
 
-        assertNull(page.total)
-        assertEquals(2, page.comments.size)
+            assertNull(totalAnswer.body, page.total)
+            assertEquals(2, page.comments.size)
+        }
     }
 
     @Test
-    fun `a page token is requested as given`() = runTest {
+    fun `a page token is requested as given (ADR 0046)`() = runTest {
         val client = RoutedHttpClient(mapOf(nextUrl to SourceHttpResponse(200, """{"comments":[],"next_url":null}""")))
 
-        val page = adapter(client).comments(post, pageToken = nextUrl)
+        val parent = PostComment("1", "alice", null, "text", null, hasReplies = true)
 
-        assertEquals(listOf(nextUrl to emptyMap<String, String>()), client.requests)
+        val page = adapter(client).comments(post, pageToken = nextUrl)
+        val replyPage = adapter(client).comments(post, pageToken = nextUrl, parent = parent)
+
+        assertEquals(List(2) { nextUrl to emptyMap<String, String>() }, client.requests)
         assertNull(page.nextPageToken)
         assertNull(page.total)
+        assertNull(replyPage.total)
     }
 
     @Test
-    fun `replies are requested for the parent comment`() = runTest {
+    fun `replies are requested for the parent comment (ADR 0046)`() = runTest {
         val replies = "https://app-api.pixiv.net/v2/illust/comment/replies"
         val client = RoutedHttpClient(
             mapOf(
@@ -114,12 +118,14 @@ class PixivCommentsTest {
     }
 
     @Test
-    fun `a next link outside Pixiv's API is never followed with the token`() = runTest {
-        val client = RoutedHttpClient(emptyMap())
+    fun `a next link outside Pixiv's API is never followed with the token (ADR 0046)`() = runTest {
+        listOf("https://evil.example/x", "https://app-api.pixiv.net.evil.example/v3/illust/comments").forEach { link ->
+            val client = RoutedHttpClient(emptyMap())
 
-        val failure = runCatching { adapter(client).comments(post, pageToken = "https://evil.example/x") }.exceptionOrNull()
+            val failure = runCatching { adapter(client).comments(post, pageToken = link) }.exceptionOrNull()
 
-        assertEquals(SourceFailureReason.PARSE, (failure as SourceAdapterException).reason)
-        assertTrue(client.requests.isEmpty())
+            assertEquals(link, SourceFailureReason.PARSE, (failure as? SourceAdapterException)?.reason)
+            assertTrue(link, client.requests.isEmpty())
+        }
     }
 }

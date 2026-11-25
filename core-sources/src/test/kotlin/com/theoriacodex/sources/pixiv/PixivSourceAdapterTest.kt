@@ -87,58 +87,48 @@ class PixivSourceAdapterTest {
     }
 
     @Test
-    fun `unauthorized search refreshes once and retries with the new access token`() = runTest {
-        val credentials = FakeCredentialsProvider().apply {
-            pixivTokens = PixivAuthTokens(
-                accessToken = "expired-access",
-                refreshToken = "refresh-token",
-                expiresAtEpochMs = Long.MAX_VALUE,
-            )
-        }
-        val authorizationHeaders = mutableListOf<String?>()
-        val httpClient = object : SourceHttpClient {
-            var getCount = 0
+    fun `an authorization refusal refreshes once and retries once, and a second refusal is reported (ADR 0046)`() = runTest {
+        class Attempt(val result: Result<Int>, val authorizations: List<String?>, val refreshes: Int, val credentials: FakeCredentialsProvider)
 
-            override suspend fun get(
-                url: String,
-                query: Map<String, String>,
-                headers: Map<String, String>,
-            ): SourceHttpResponse {
-                getCount += 1
-                authorizationHeaders += headers["Authorization"]
-                return if (getCount == 1) {
-                    SourceHttpResponse(statusCode = 401, body = "{}")
-                } else {
-                    SourceHttpResponse(statusCode = 200, body = """{"illusts":[]}""")
+        suspend fun search(vararg statuses: Int): Attempt {
+            val credentials = FakeCredentialsProvider().apply {
+                pixivTokens = PixivAuthTokens(accessToken = "expired-access", refreshToken = "refresh-token", expiresAtEpochMs = Long.MAX_VALUE)
+            }
+            val authorizations = mutableListOf<String?>()
+            var refreshes = 0
+            val httpClient = object : SourceHttpClient {
+                override suspend fun get(url: String, query: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
+                    authorizations += headers["Authorization"]
+                    val status = statuses.getOrElse(authorizations.size - 1) { 200 }
+                    return SourceHttpResponse(statusCode = status, body = if (status == 200) """{"illusts":[]}""" else "{}")
+                }
+
+                override suspend fun postForm(url: String, form: Map<String, String>, headers: Map<String, String>): SourceHttpResponse {
+                    refreshes += 1
+                    assertEquals("refresh-token", form["refresh_token"])
+                    return SourceHttpResponse(200, """{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":3600}""")
                 }
             }
-
-            override suspend fun postForm(
-                url: String,
-                form: Map<String, String>,
-                headers: Map<String, String>,
-            ): SourceHttpResponse {
-                assertEquals("refresh-token", form["refresh_token"])
-                return SourceHttpResponse(
-                    statusCode = 200,
-                    body = """{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":3600}""",
-                )
-            }
+            val adapter = PixivSourceAdapter(httpClient = httpClient, credentialsProvider = credentials, minRequestIntervalMs = 0L)
+            return Attempt(runCatching { adapter.search(sampleQuery(), pageToken = null).items.size }, authorizations, refreshes, credentials)
         }
-        val adapter = PixivSourceAdapter(
-            httpClient = httpClient,
-            credentialsProvider = credentials,
-            minRequestIntervalMs = 0L,
-        )
 
-        val page = adapter.search(sampleQuery(), pageToken = null)
+        for (refusal in listOf(401, 403)) {
+            val recovered = search(refusal, 200)
+            assertEquals("$refusal", 0, recovered.result.getOrThrow())
+            assertEquals("$refusal", listOf("Bearer expired-access", "Bearer fresh-access"), recovered.authorizations)
+            assertEquals("$refusal", 1, recovered.refreshes)
+            assertEquals("$refusal", "fresh-access", recovered.credentials.pixivTokens?.accessToken)
 
-        assertTrue(page.items.isEmpty())
-        assertEquals(
-            listOf("Bearer expired-access", "Bearer fresh-access"),
-            authorizationHeaders,
-        )
-        assertEquals("fresh-access", credentials.pixivTokens?.accessToken)
+            val refusedTwice = search(refusal, refusal, 200, 200)
+            assertTrue("$refusal", refusedTwice.result.exceptionOrNull() is SourceAdapterException)
+            assertEquals("$refusal", listOf("Bearer expired-access", "Bearer fresh-access"), refusedTwice.authorizations)
+            assertEquals("$refusal", 1, refusedTwice.refreshes)
+        }
+        val badRequest = search(400, 200)
+        assertTrue(badRequest.result.exceptionOrNull() is SourceAdapterException)
+        assertEquals(listOf("Bearer expired-access"), badRequest.authorizations)
+        assertEquals(0, badRequest.refreshes)
     }
 
     @Test
@@ -384,7 +374,7 @@ class PixivSourceAdapterTest {
 
 
     @Test
-    fun `creator search uses user illustrations endpoint and preserves pagination`() = runTest {
+    fun `creator search uses user illustrations endpoint and preserves pagination (ADR 0046)`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(
                 accessToken = "access",

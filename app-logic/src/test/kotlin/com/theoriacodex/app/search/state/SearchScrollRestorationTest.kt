@@ -15,7 +15,7 @@ class SearchScrollRestorationTest {
     private val state = SearchUiState(restoration = pending,
         content = SearchContentUiState(hasExecutedSearch = true, canLoadMore = true))
 
-    @Test fun `missing anchor waits for continuation and exhaustion permits empty fallback`() {
+    @Test fun `missing anchor waits for continuation and exhaustion permits empty fallback (ADR 0081)`() {
         assertFalse(state.canApplyScrollRestoration)
         assertTrue(state.copy(content = state.content.copy(canLoadMore = false)).canApplyScrollRestoration)
     }
@@ -31,7 +31,7 @@ class SearchScrollRestorationTest {
         )).canApplyScrollRestoration)
     }
 
-    @Test fun `only acknowledged restoration allows scroll persistence`() {
+    @Test fun `only acknowledged restoration allows scroll persistence (ADR 0081)`() {
         assertFalse(SearchRestorationUiState.NotStarted.allowsScrollPersistence)
         assertFalse(SearchRestorationUiState.Restoring.allowsScrollPersistence)
         assertFalse(SearchRestorationUiState.Failed("Retry").allowsScrollPersistence)
@@ -39,7 +39,7 @@ class SearchScrollRestorationTest {
         assertTrue(pending.copy(scrollState = null).allowsScrollPersistence)
     }
 
-    @Test fun `only a request still owed a move has an open id`() {
+    @Test fun `only a request still owed a move has an open id (ADR 0081)`() {
         assertEquals(1L, pending.openScrollRequestId)
         assertEquals(null, pending.copy(scrollState = null).openScrollRequestId)
         assertEquals(null, SearchRestorationUiState.Restoring.openScrollRequestId)
@@ -71,7 +71,7 @@ class SearchScrollRestorationTest {
         assertEquals(ScrollStep.Wait, notRestored.scrollStepAfterJump(reachedTarget = true, canScrollForward = true))
     }
 
-    @Test fun `unfinished or loading search waits even for a reset to top`() {
+    @Test fun `unfinished or loading search waits even for a reset to top (ADR 0081)`() {
         for (request in listOf(pending, reset)) {
             assertEquals(ScrollStep.Wait, ready(request).let { it.copy(content = it.content.copy(hasExecutedSearch = false)) }.step())
             for (kind in listOf(SearchRequestKind.INITIAL, SearchRequestKind.PAGE)) {
@@ -93,18 +93,18 @@ class SearchScrollRestorationTest {
         assertEquals(ScrollStep.Jump(1L, 0, 0), ready(reset).step(visibilityDecided = false))
     }
 
-    @Test fun `showing failure waits even when no more pages can load`() {
+    @Test fun `showing failure waits even when no more pages can load (ADR 0081)`() {
         assertEquals(ScrollStep.Wait, ready(error = failure, canLoadMore = false).step())
     }
 
-    @Test fun `unloaded anchor waits for more pages and jumps once results are exhausted`() {
+    @Test fun `unloaded anchor waits for more pages and jumps once results are exhausted (ADR 0081)`() {
         assertEquals(ScrollStep.Wait, ready(loaded = 20).step(presented = 20))
         assertEquals(ScrollStep.Wait, ready(loaded = 22).step(presented = 22))
         assertEquals(jump, ready(loaded = 23).step(presented = 23))
         assertEquals(jump, ready(loaded = 20, canLoadMore = false).step(presented = 20))
     }
 
-    @Test fun `undecided anchor visibility waits`() {
+    @Test fun `undecided anchor visibility waits (ADR 0081)`() {
         assertEquals(ScrollStep.Wait, ready().step(visibilityDecided = false))
     }
 
@@ -112,7 +112,7 @@ class SearchScrollRestorationTest {
         assertEquals(finish, ready().step(presented = 0))
     }
 
-    @Test fun `keep-live request leaves a grid that was showing posts alone and still jumps one that was not`() {
+    @Test fun `keep-live request leaves a grid that was showing posts alone and still jumps one that was not (ADR 0081)`() {
         val keepLive = pending.copy(keepLiveGrid = true)
         assertEquals(finish, ready(keepLive).step(wasShowingPosts = true))
         assertEquals(jump, ready(keepLive).step(wasShowingPosts = false))
@@ -132,11 +132,11 @@ class SearchScrollRestorationTest {
         assertEquals(finish, ready().scrollStepAfterJump(reachedTarget = false, canScrollForward = true))
     }
 
-    @Test fun `jump stopped at the end of exhausted results finishes`() {
+    @Test fun `jump stopped at the end of exhausted results finishes (ADR 0081)`() {
         assertEquals(finish, ready(canLoadMore = false).scrollStepAfterJump(reachedTarget = false, canScrollForward = false))
     }
 
-    @Test fun `jump stopped at the list end above the target waits for the next page`() {
+    @Test fun `jump stopped at the list end above the target waits for the next page (ADR 0081)`() {
         assertEquals(ScrollStep.Wait, ready().scrollStepAfterJump(reachedTarget = false, canScrollForward = false))
     }
 

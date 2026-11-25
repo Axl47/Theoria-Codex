@@ -12,26 +12,29 @@ class DurationRevealTest {
     private val known = MediaDurationState.Known(1_000L, MediaDurationProvenance.CONTAINER_PROBE)
 
     @Test
-    fun `later decisions wait behind an undecided post`() {
+    fun `later decisions wait behind an undecided post (ADR 0068)`() {
         val reveal = advance(DurationReveal(), decided = setOf(0, 2, 3))
 
         assertEquals(listOf("0"), reveal.present(posts).ids())
     }
 
     @Test
-    fun `a post stuck behind a full window is passed and joins the bottom when it arrives`() {
+    fun `a post stuck behind a full window is passed and joins the bottom when it arrives (ADR 0068)`() {
         val passed = advance(DurationReveal(), decided = setOf(0, 2, 3), window = 2)
         assertEquals(listOf("0", "1", "2", "3"), passed.present(posts).ids())
 
         val arrived = advance(passed, decided = setOf(0, 1, 2, 3), window = 2)
         assertEquals(listOf("0", "2", "3", "1"), arrived.present(posts).ids())
 
+        val withAdvance = advance(passed, decided = (0..5).toSet(), window = 2)
+        assertEquals(listOf("0", "2", "3", "1", "4", "5"), withAdvance.present(posts).ids())
+
         val extended = advance(arrived, decided = setOf(0, 1, 2, 3, 4, 5), window = 2)
         assertEquals(listOf("0", "2", "3", "1", "4", "5"), extended.present(posts).ids())
     }
 
     @Test
-    fun `a failed post that later gains a duration also joins the bottom`() {
+    fun `a failed post that later gains a duration also joins the bottom (ADR 0068)`() {
         val failure = MediaDurationState.RetryableFailure(1L, MediaDurationFailureReason.TIMEOUT)
         val failed = advanceDurationReveal(
             DurationReveal(), posts,
@@ -44,9 +47,9 @@ class DurationRevealTest {
     }
 
     @Test
-    fun `a replaced post list starts over`() {
+    fun `a replaced post list starts over (ADR 0068)`() {
         val reveal = advance(DurationReveal(), decided = posts.indices.toSet())
-        val replacement = listOf(video(100), video(101))
+        val replacement = (100 until 106).map(::video)
 
         val next = advanceDurationReveal(reveal, replacement, emptyMap(), emptyMap())
 

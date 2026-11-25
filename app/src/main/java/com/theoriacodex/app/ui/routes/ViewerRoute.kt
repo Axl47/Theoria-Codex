@@ -301,8 +301,8 @@ private fun rememberViewerScreenHost(
                 viewerOwner.recordVisiblePost(identity, post, viewedMediaNumber, callbacks.onVisiblePostChanged)
             }
         },
-        onVisibleMediaChanged = { post, viewedMediaNumber ->
-            viewerOwner.recordVisibleMedia(post, viewedMediaNumber, callbacks.onVisibleMediaChanged)
+        onVisibleMediaChanged = { post, viewedMediaNumber, pageOffset ->
+            viewerOwner.recordVisibleMedia(post, viewedMediaNumber, pageOffset, callbacks.onVisibleMediaChanged)
         },
         onPlaybackProgress = { post, progress ->
             viewerOwner.recordPlaybackProgress(post, progress, callbacks.onPlaybackProgress)
