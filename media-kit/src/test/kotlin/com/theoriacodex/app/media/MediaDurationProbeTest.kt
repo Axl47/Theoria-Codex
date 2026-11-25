@@ -32,7 +32,7 @@ class MediaDurationProbeTest {
     }
 
     @Test
-    fun `duration probe leaves an episode's streams to its player`() {
+    fun `duration probe leaves an episode's streams to its player (ADR 0104)`() {
         val episode = ImageRef("https://video.test/v.mp4", null, "video/mp4", streams = listOf(MediaStream("https://video.test/v.mp4", "A")))
 
         assertNull(authoritativeDurationProbeRef(post(full = episode)))

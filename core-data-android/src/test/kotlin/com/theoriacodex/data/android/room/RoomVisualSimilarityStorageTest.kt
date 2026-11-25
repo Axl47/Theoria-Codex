@@ -122,7 +122,7 @@ class RoomVisualSimilarityStorageTest {
         assertEquals(setOf(id("unreadable"), id("new")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
     }
 
-    @Test fun `a preview that failed to load waits a day before it is listed for hashing or tagging again`() = runTest {
+    @Test fun `a preview that failed to load waits a day before it is listed for hashing or tagging again (ADR 0111)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         var now = 1_000L
         val signatures = RoomVisualSignatureRepository(database, clock = { now })

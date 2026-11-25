@@ -23,3 +23,9 @@ Playback tests are deterministic and offline. Regenerating a fixture binary chan
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/StreamPlaybackDeviceTest.kt`: `StreamPlaybackDeviceTest`, `skipIfTheEmulatorDecoderFailed`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/OfflineQueueRecoveryTest.kt`: `loadNow`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/ui/components/OffMainComputationTest.kt`: `landOffMainCompute`
+
+## Guarded by
+
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/VideoStreamPlaybackTest.kt`: `the fixture server refuses a request without the stream headers, answers 404 to an unknown path and serves a byte range (ADR 0109)`
+- `scripts/tests/test_device_validation_workflow.py`: `test_connected_lane_executes_and_retains_every_instrumentation_owner_adr_0109`
+- Left to prose: that the device test skips only on the emulator's own decoder failing, and that Android 16 runs it in full, shows only on an emulator; `loadNow` and the park-then-idle order in `landOffMainCompute` are how two tests avoid scheduler traps, and those tests are their own guard; how the fixture binaries were made is a record of their origin.

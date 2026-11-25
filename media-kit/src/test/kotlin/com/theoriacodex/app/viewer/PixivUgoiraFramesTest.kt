@@ -7,6 +7,9 @@ import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -27,7 +30,7 @@ class PixivUgoiraFramesTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun `the tagger's sample spreads frames through the animation and decodes them no smaller than asked`() = runTest {
+    fun `the tagger's sample spreads frames through the animation and decodes them no smaller than asked (ADR 0107)`() = runTest {
         val archive = temporaryFolder.newFile("sample.zip")
         val specs = List(12) { UgoiraFrameSpec("$it.png", 50) }
         ZipOutputStream(FileOutputStream(archive)).use { zip ->
@@ -44,7 +47,7 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `a frame held longer is sampled once per stretch of time it fills`() {
+    fun `a frame held longer is sampled once per stretch of time it fills (ADR 0107)`() {
         val held = listOf(UgoiraFrameSpec("0.png", 3_000)) + List(3) { UgoiraFrameSpec("${it + 1}.png", 1_000) }
         assertEquals(listOf(0, 0, 0, 1, 2, 3), ugoiraSampleIndices(held, count = 6))
 
@@ -53,7 +56,40 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `decoder publishes the first frame immediately and reuses it for complete playback`() = runTest {
+    fun `a frame held longer is returned once for each stretch it fills (ADR 0107)`() = runTest {
+        val archive = temporaryFolder.newFile("held.zip")
+        val specs = listOf(UgoiraFrameSpec("0.png", 3_000)) + List(3) { UgoiraFrameSpec("${it + 1}.png", 1_000) }
+        ZipOutputStream(FileOutputStream(archive)).use { zip ->
+            specs.forEach { spec ->
+                zip.putNextEntry(ZipEntry(spec.fileName))
+                Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, zip)
+                zip.closeEntry()
+            }
+        }
+
+        assertEquals(6, sampleUgoiraFrames(archive, specs, count = 6, sizePx = 4).size)
+    }
+
+    @Test
+    fun `a sidecar that cannot be written leaves the archive without timing or a temporary file (ADR 0112)`() {
+        val folder = temporaryFolder.newFolder()
+        val archive = java.io.File(folder, "blocked.zip").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        ugoiraMetadataFile(archive).apply { mkdirs(); resolve("occupied").writeText("x") }
+
+        writeUgoiraFrameMetadata(archive, listOf(UgoiraFrameSpec("frame.jpg", 50)))
+
+        assertNull(readUgoiraFrameMetadata(archive))
+        assertEquals(setOf("blocked.zip", "blocked.zip.json"), folder.list().orEmpty().toSet())
+    }
+
+    @Test
+    fun `a frame without delay still counts one millisecond of playing time (ADR 0107)`() {
+        val instant = List(3) { UgoiraFrameSpec("$it.png", 0) } + UgoiraFrameSpec("3.png", 1)
+        assertEquals(listOf(0, 1, 2, 3), ugoiraSampleIndices(instant, count = 4))
+    }
+
+    @Test
+    fun `decoder publishes the first frame immediately and reuses it for complete playback (ADR 0112)`() = runTest {
         val archive = temporaryFolder.newFile("frames.zip")
         val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
         val bytes = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
@@ -88,20 +124,38 @@ class PixivUgoiraFramesTest {
     }
 
     @Test
-    fun `disk metadata rejects damaged or replaced cache pairs`() {
+    fun `disk metadata rejects damaged or replaced cache pairs (ADR 0112)`() {
         val archive = temporaryFolder.newFile("cached.zip").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val specs = listOf(UgoiraFrameSpec("frame.jpg", 50))
         writeUgoiraFrameMetadata(archive, specs)
         assertEquals(specs, readUgoiraFrameMetadata(archive))
-        archive.appendBytes(byteArrayOf(4))
+        val modified = archive.lastModified()
+        archive.writeBytes(byteArrayOf(1, 2, 3, 4))
+        archive.setLastModified(modified)
         assertNull(readUgoiraFrameMetadata(archive))
+
+        archive.writeBytes(byteArrayOf(1, 2, 3))
+        writeUgoiraFrameMetadata(archive, specs)
+        archive.setLastModified(archive.lastModified() + 2_000L)
+        assertNull(readUgoiraFrameMetadata(archive))
+
         writeUgoiraFrameMetadata(archive, specs)
         ugoiraMetadataFile(archive).writeText("broken")
         assertNull(readUgoiraFrameMetadata(archive))
     }
 
     @Test
-    fun `disk metadata the Gson writer stored still matches its archive`() {
+    fun `the timing sidecar stores only frame timing and the archive's size and time (ADR 0112)`() {
+        val archive = temporaryFolder.newFile("stored.zip").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        writeUgoiraFrameMetadata(archive, listOf(UgoiraFrameSpec("frame.jpg", 50)))
+
+        val stored = Json.parseToJsonElement(ugoiraMetadataFile(archive).readText()).jsonObject
+        assertEquals(setOf("version", "archiveBytes", "archiveModifiedMs", "frames"), stored.keys)
+        assertEquals(listOf(setOf("file", "delay")), stored.getValue("frames").jsonArray.map { it.jsonObject.keys })
+    }
+
+    @Test
+    fun `disk metadata the Gson writer stored still matches its archive (ADR 0112)`() {
         val archive = temporaryFolder.newFile("ugoira-123.zip").apply {
             writeBytes(ByteArray(64) { it.toByte() })
             setLastModified(1_700_000_000_000L)
