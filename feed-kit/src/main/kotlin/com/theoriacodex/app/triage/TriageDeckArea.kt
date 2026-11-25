@@ -260,7 +260,7 @@ internal fun TriageDragOverlays(
                 TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, progress)
             }
             offset.y < -thresholds.cuePx && targets.save.isEmpty() ->
-                TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Choose Codex", Alignment.TopCenter, progress)
+                TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, progress)
             offset.y < -thresholds.cuePx ->
                 CollectTargets(targets.save, pointer, CollectTargetsLayout.EdgeRow(atTop = true), state = saveState)
             offset.y > thresholds.cuePx ->
