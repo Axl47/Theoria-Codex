@@ -382,7 +382,7 @@ class ExtensionImagesTest {
         val source = FragmentSource()
         images.publish(listOf(server, mihon(source)))
         val forgotten = MihonImages(source, MihonKind.sourceKey(source.id), images)
-        val tiles = """{"tiles":[3,0,2,1],"tileCols":2}"""
+        val tiles = """{"tiles":[3,0,2,1],"tileCols":2,"n":"a%b#c/d"}"""
         val address = checkNotNull(forgotten.pageAddress(chapter, Page(0, imageUrl = "https://img.test/1.webp#$tiles")))
 
         assertEquals("fragment $tiles", fetch(address))
