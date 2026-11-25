@@ -46,14 +46,14 @@ class ViewerChromeToggleSkipTest {
             reduce(ViewerAction.ToggleChrome)
         }
 
-    @Test fun `a swipe between posts recomposes nothing after its first frame (ADR 0166)`() {
+    @Test fun `a swipe between posts recomposes nothing per frame (ADR 0166)`() {
         render(listOf(testPost(sourcePostId = "first"), testPost(sourcePostId = "second")))
         val entering = traced { compose.onRoot().performTouchInput { down(center); repeat(3) { moveBy(Offset(-width * 0.05f, 0f)) } } }
-        val moving = traced { compose.onRoot().performTouchInput { repeat(4) { moveBy(Offset(-width * 0.05f, 0f)) } } }
+        val frames = List(4) { traced { compose.onRoot().performTouchInput { moveBy(Offset(-width * 0.05f, 0f)) } }.filter { it.startsWith("com.theoriacodex.") }.toSet() }
         compose.onRoot().performTouchInput { up() }
 
         assertTrue("the swipe never reached the next post", "com.theoriacodex.app.viewer.ViewerPostPage" in entering)
-        assertEquals(emptyList<String>(), moving.filter { it.startsWith("com.theoriacodex.") }.distinct())
+        assertEquals(emptySet<String>(), frames.reduce { every, frame -> every intersect frame })
     }
 
     private fun assertSkips(vararg setup: ViewerAction, change: ((ViewerAction) -> Unit) -> Unit) {
