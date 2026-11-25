@@ -16,13 +16,11 @@ import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.continueEntry
 import com.theoriacodex.data.repository.refresh
 import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
-import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
 import com.theoriacodex.domain.series.SeriesSource
 import com.theoriacodex.domain.series.UnsupportedEntriesException
 import com.theoriacodex.domain.series.seriesKind
-import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -241,13 +239,7 @@ class SeriesPageViewModel(
     }
 
     fun markAllRead(read: Boolean, onUndo: (BulkReadUndo) -> Unit) {
-        viewModelScope.launch {
-            val restore = repository.setAllRead(id, read)
-            if (!restore.isEmpty) {
-                val label = "Marked all as ${if (read) kind.words.done else kind.words.notDone}"
-                onUndo(BulkReadUndo(label, restore))
-            }
-        }
+        viewModelScope.launch { repository.markAllRead(id, read)?.let(onUndo) }
     }
 
     fun undoBulkRead(undo: BulkReadUndo) {
@@ -264,13 +256,7 @@ class SeriesPageViewModel(
 
     private fun changeDownloads(change: suspend SeriesDownloads.() -> Unit) {
         val downloads = downloads ?: return
-        viewModelScope.launch {
-            try {
-                downloads.change()
-            } catch (error: IOException) {
-                Diagnostics.report("series", "Downloads could not change", error)
-            }
-        }
+        viewModelScope.changeDownloads { downloads.change() }
     }
 
     fun setDownloadNewChapters(on: Boolean) {

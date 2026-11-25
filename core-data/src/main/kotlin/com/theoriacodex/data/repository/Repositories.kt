@@ -581,7 +581,7 @@ data class SearchAnimationFilterRestoreState(
     @SerialName("durationMaxBucket") val durationMaxBucket: Int = 25,
 )
 
-interface UiRestoreRepository {
+interface UiRestoreRepository : SwitchSourceSkips {
     suspend fun setLastTab(route: String)
     suspend fun getLastTab(): String?
 
@@ -596,6 +596,11 @@ interface UiRestoreRepository {
     suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState>
     fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>
     suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
+}
+
+interface SwitchSourceSkips {
+    fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>>
+    suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>)
 }
 
 fun interface SourceLibraryPresence {

@@ -74,6 +74,7 @@ class DataStoreFormatTest {
         val full = UiRestoreDataStoreFile(state = state)
         assertStoredFormat(
             golden("ui-restore-full.json") to full,
+            golden("ui-restore-switch-source.json") to UiRestoreDataStoreFile(state = UiRestoreStoreRecord(switchSourceSkipped = listOf("custom_mihon_7"))),
             retiredKeys = setOf("state.feedFabRestoreStates{}.searchAnimationByScope{}.animatedOnly"),
         )
     }

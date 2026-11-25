@@ -1,7 +1,7 @@
 package com.theoriacodex.app.series
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -89,12 +89,13 @@ internal fun SeriesCard(
     counts: CardCounts = CardCounts(unread = 0, downloaded = 0),
     followed: Boolean = false,
     marked: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val kind = series.id.source.seriesKind
     val anime = marked && kind == SeriesKind.ANIME
     val description = counts.description(kind)
     Box(modifier.aspectRatio(COVER_ASPECT)) {
-        CardFace(series, onClick, followed, anime, description)
+        CardFace(series, onClick, onLongClick, followed, anime, description)
         CountBadge(counts, Modifier.align(Alignment.TopStart).offset(-COUNT_OVERHANG, -COUNT_OVERHANG))
     }
 }
@@ -105,12 +106,12 @@ private fun CardCounts.description(kind: SeriesKind): String? = listOfNotNull(
 ).joinToString(", ").ifEmpty { null }
 
 @Composable
-private fun CardFace(series: Series, onClick: () -> Unit, followed: Boolean, anime: Boolean, counts: String?) {
+private fun CardFace(series: Series, onClick: () -> Unit, onLongClick: (() -> Unit)?, followed: Boolean, anime: Boolean, counts: String?) {
     Box(
         Modifier
             .fillMaxSize()
             .clip(COVER_SHAPE)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = onLongClick?.let { MORE_OPTIONS })
             .semantics { counts?.let { stateDescription = it } },
     ) {
         SeriesCover(series, Modifier.fillMaxSize())
