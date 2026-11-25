@@ -22,6 +22,8 @@ data class SeriesUpdate(val series: Series, val newEntries: List<SeriesEntry>)
 
 data class FollowedCheck(val updates: List<SeriesUpdate>, val checked: Int, val failed: Int, val notDue: Int = 0)
 
+data class CheckProgress(val done: Int, val total: Int)
+
 internal val refreshLocks = ConcurrentHashMap<SourceKey, Mutex>()
 
 suspend fun SeriesRepository.refresh(
@@ -43,6 +45,7 @@ suspend fun SeriesRepository.checkFollowed(
     source: suspend (SourceKey) -> SeriesSource?,
     runEvery: Duration? = null,
     now: Long = System.currentTimeMillis(),
+    onProgress: (CheckProgress) -> Unit = {},
     onUpdate: suspend (SeriesUpdate) -> Unit = {},
 ): FollowedCheck = coroutineScope {
     val followed = observeFollowed().first().map(FollowedSeries::series)
@@ -51,8 +54,9 @@ suspend fun SeriesRepository.checkFollowed(
     } else {
         followed.filter { isCheckDue(series(it.id)?.checkedAtEpochMs, runEvery, now) { entries(it.id) } }
     }
+    val progress = CheckCounter(due.size, onProgress)
     val checks = due.groupBy { it.id.source }.values.map { sameSource ->
-        async { sameSource.map { series -> check(source, series, onUpdate) } }
+        async { sameSource.map { series -> check(source, series, onUpdate).also(progress::finished) } }
     }.awaitAll().flatten()
     FollowedCheck(
         updates = checks.filterIsInstance<Checked.Updated>().map(Checked.Updated::update),
@@ -60,6 +64,20 @@ suspend fun SeriesRepository.checkFollowed(
         failed = checks.count { it == Checked.Failed },
         notDue = followed.size - due.size,
     )
+}
+
+private class CheckCounter(total: Int, private val onProgress: (CheckProgress) -> Unit) {
+    private var progress = CheckProgress(0, total)
+
+    init {
+        onProgress(progress)
+    }
+
+    @Synchronized
+    fun finished(checked: Checked) {
+        progress = if (checked == Checked.Skipped) progress.copy(total = progress.total - 1) else progress.copy(done = progress.done + 1)
+        onProgress(progress)
+    }
 }
 
 private sealed interface Checked {

@@ -4,9 +4,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.ui.sourceFailureDetail
+import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
@@ -22,7 +24,9 @@ import com.theoriacodex.domain.series.changedFrom
 import com.theoriacodex.domain.series.seriesKind
 import com.theoriacodex.domain.series.withChoices
 import com.theoriacodex.domain.series.languageName
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,7 +101,8 @@ data class SeriesTabState(
     val search: List<SeriesSourceListing>? = null,
     val searchQuery: String = "",
     val dedicated: DedicatedSourceState? = null,
-    val refreshing: Boolean = false,
+    val checking: CheckProgress? = null,
+    val found: List<SeriesUpdate> = emptyList(),
     val failedCheck: FollowedCheck? = null,
     val kind: SeriesKind? = null,
     val view: SeriesView? = null,
@@ -123,6 +128,7 @@ data class SeriesTabContent(
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
     val words: EntryWords get() = (filter ?: kinds.singleOrNull() ?: SeriesKind.MANGA).words
+    val checkWords: EntryWords? get() = (filter ?: followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull())?.words
 }
 
 internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabContent {
@@ -151,8 +157,10 @@ class SeriesTabViewModel(
     sourcesChanged: Flow<*> = flowOf(Unit),
     private val saved: SavedStateHandle = SavedStateHandle(),
     private val library: SeriesLibraryPreferences = NoOpSeriesLibraryPreferences,
-    private val checkFollowed: suspend () -> FollowedCheck,
+    private val checkFollowed: suspend (onProgress: (CheckProgress) -> Unit) -> FollowedCheck,
 ) : ViewModel() {
+    private var foundShown: Job? = null
+
     private var searchText: String? = saved[SAVED_SEARCH]
 
     private var pendingGenre: Pair<SourceKey, String>? = null
@@ -232,14 +240,19 @@ class SeriesTabViewModel(
     }
 
     fun refresh() {
-        if (state.value.refreshing) return
-        mutableState.update { it.copy(refreshing = true, failedCheck = null) }
-        viewModelScope.launch {
+        if (state.value.checking != null) return
+        foundShown?.cancel()
+        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = null) }
+        foundShown = viewModelScope.launch {
             var check: FollowedCheck? = null
             try {
-                check = checkFollowed()
+                check = checkFollowed { progress -> mutableState.update { it.copy(checking = progress) } }
             } finally {
-                mutableState.update { it.copy(refreshing = false, failedCheck = check?.takeIf { it.failed > 0 }) }
+                mutableState.update { it.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = check?.takeIf { it.failed > 0 }) }
+            }
+            if (check?.updates.orEmpty().isNotEmpty()) {
+                delay(FOUND_SHOWN)
+                mutableState.update { it.copy(found = emptyList()) }
             }
         }
     }
@@ -544,6 +557,7 @@ internal fun failureLine(error: Throwable): String = when (error) {
 }
 
 private const val SAVED_SEARCH = "search"
+private val FOUND_SHOWN = 3.seconds
 private const val SAVED_BROWSE = "browse"
 private const val SAVED_VIEW = "view"
 
