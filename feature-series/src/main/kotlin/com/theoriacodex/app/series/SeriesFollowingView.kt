@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -49,13 +50,12 @@ internal fun FollowingBody(
     onSearchAll: () -> Unit,
     onBrowse: () -> Unit,
     onOpenSeries: (Series) -> Unit,
-    onShowMissing: () -> Unit,
 ) {
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     val following = content.following
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
-            FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.padding(horizontal = 16.dp))
+            FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
         }
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
@@ -66,7 +66,7 @@ internal fun FollowingBody(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                followingNotices(content, failedCheck, onRefresh, onShowMissing)
+                followingNotices(content, failedCheck, onRefresh)
                 when {
                     following == null -> Unit
                     following.isEmpty() && content.followingQuery.isNotBlank() ->
@@ -85,14 +85,9 @@ internal fun FollowingBody(
     }
 }
 
-private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit, onShowMissing: () -> Unit) {
+private fun LazyGridScope.followingNotices(content: SeriesTabContent, failedCheck: FollowedCheck?, onRefresh: () -> Unit) {
     if (failedCheck != null && content.followsAny) {
         fullWidth("following-check-failed") { FailureRow(onRefresh, message = failedCheck.message) }
-    }
-    if (content.missingExtensions.isNotEmpty()) {
-        fullWidth("following-missing-extensions") {
-            FailureRow(onShowMissing, message = missingExtensionsLine(content.missingExtensions.size), actionLabel = SHOW_MISSING)
-        }
     }
 }
 

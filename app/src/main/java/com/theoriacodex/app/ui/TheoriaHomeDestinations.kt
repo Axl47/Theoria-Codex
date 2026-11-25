@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
 import com.theoriacodex.app.series.SeriesTabDestination
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,11 +65,15 @@ internal fun HomePager(shell: TheoriaShell) {
             userScrollEnabled = tabSwipeEnabled(pagerState.settledPage, forYouGrid),
             flingBehavior = topLevelPagerFling(pagerState),
         ) { page ->
-            when (TopLevelDestination.entries[page]) {
-                TopLevelDestination.Search -> SearchDestination(shell)
-                TopLevelDestination.ForYou -> ForYouDestination(shell)
-                TopLevelDestination.Library -> LibraryDestination(shell)
-                TopLevelDestination.Series -> SeriesTabDestination(shell)
+            val destination = TopLevelDestination.entries[page]
+            val shown = remember(pagerState, destination) { { tabShown(destination, pagerState.targetPage, pagerState.settledPage) } }
+            CompositionLocalProvider(LocalTabShown provides shown) {
+                when (destination) {
+                    TopLevelDestination.Search -> SearchDestination(shell)
+                    TopLevelDestination.ForYou -> ForYouDestination(shell)
+                    TopLevelDestination.Library -> LibraryDestination(shell)
+                    TopLevelDestination.Series -> SeriesTabDestination(shell)
+                }
             }
         }
     }
@@ -134,8 +139,8 @@ private suspend fun TheoriaShell.openSearchViewer(effect: SearchEffect.OpenViewe
 private fun ForYouDestination(shell: TheoriaShell) {
     val quickSave = LocalQuickSave.current
     val writes = rememberTriageHandOff()
-    val pager = shell.navigation.pagerState
-    val shown by remember(pager) { derivedStateOf { tabShown(TopLevelDestination.ForYou, pager.targetPage, pager.settledPage) } }
+    val tabShown = LocalTabShown.current
+    val shown by remember(tabShown) { derivedStateOf(tabShown) }
     BrowsingDestinationStateBoundary(shell.data, shell.sources) { state ->
         val fabRestoreState = shell.feedFabRestoreRegistry.state(FOR_YOU_FEED_FAB_CONTEXT) ?: return@BrowsingDestinationStateBoundary
         ForYouRoute(

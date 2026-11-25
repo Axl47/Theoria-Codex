@@ -175,7 +175,8 @@ class RoomSeriesRepositoryTest {
         assertEquals(listOf(200L, 100L), entries.map { it.firstSeenAtEpochMs })
         assertEquals("Chapter 2 (v2)", entries.last().entry.name)
         assertTrue(entries.last().read)
-        assertEquals(1, repository.observeFollowed().first().single().unreadCount)
+        val followed = repository.observeFollowed().first().single()
+        assertEquals(1 to 2, followed.unreadCount to followed.entryCount)
     }
 
     @Test
@@ -410,7 +411,7 @@ class RoomSeriesRepositoryTest {
         now = 200L
         repository.setFollowed(id, true)
         repository.setFollowed(id, true)
-        assertEquals(FollowedSeries(series, 2, followedAtEpochMs = 200L, lastUpdatedAtEpochMs = 50L), repository.observeFollowed().first().single())
+        assertEquals(FollowedSeries(series, 2, followedAtEpochMs = 200L, lastUpdatedAtEpochMs = 50L, entryCount = 2), repository.observeFollowed().first().single())
 
         now = 300L
         repository.recordProgress(id, "/c/1", position = 1, length = 4)

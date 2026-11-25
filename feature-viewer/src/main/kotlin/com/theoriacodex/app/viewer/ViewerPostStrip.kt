@@ -132,7 +132,8 @@ internal fun ViewerPostStrip(
         val cell = ((maxWidth - 32.dp) / slots).coerceIn(1.dp, STRIP_MAX_CELL)
         val gap = ((maxWidth - cell * slots) / (slots + 1)).coerceAtLeast(0.dp)
         val unfolded = openPages?.takeIf { it.items.size > 1 && posts.getOrNull(selectedIndex)?.id == it.postId }
-        val selectedWidth = unfolded?.let { viewerStripUnfoldedWidth(it.items.size, cell, gap, slots) } ?: cell
+        val alone = posts.size == 1
+        val selectedWidth = unfolded?.let { viewerStripUnfoldedWidth(it.items.size, cell, gap, slots, alone) } ?: cell
         val cellPx = with(LocalDensity.current) { cell.toPx() }
         val selectedWidthPx = with(LocalDensity.current) { selectedWidth.toPx() }
         val centerPx = with(LocalDensity.current) { ((maxWidth - cell) / 2 - gap).toPx() }
@@ -148,7 +149,7 @@ internal fun ViewerPostStrip(
                 val pages = rememberPagesWhileOpen(unfolded?.takeIf { index == selectedIndex }) { width() > cellPx + 0.5f }
                 Box(Modifier.stripSlot(width, cell, clipPages = pages != null), contentAlignment = Alignment.Center) {
                     if (pages != null) {
-                        val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap, slots)
+                        val pagesWidth = viewerStripUnfoldedWidth(pages.items.size, cell, gap, slots, alone)
                         ViewerUnfoldedPages(post.id.source, pages, cell, onInteraction, Modifier.requiredWidth(pagesWidth).height(cell))
                     } else {
                         val mark = stripMarks[post.id]
@@ -278,9 +279,10 @@ internal fun viewerStripSlotCount(width: Dp): Int {
     return odd.coerceAtLeast(STRIP_MIN_SLOTS)
 }
 
-internal fun viewerStripUnfoldedWidth(pageCount: Int, cell: Dp, gap: Dp, slots: Int): Dp {
+internal fun viewerStripUnfoldedWidth(pageCount: Int, cell: Dp, gap: Dp, slots: Int, alone: Boolean): Dp {
     val pages = cell * pageCount + UNFOLDED_PAGE_GAP * (pageCount - 1) + UNFOLDED_PADDING * 2
-    return minOf(pages, cell * (slots - 2) + gap * (slots - 3))
+    val room = if (alone) slots else slots - 2
+    return minOf(pages, cell * room + gap * (room - 1))
 }
 
 @Composable

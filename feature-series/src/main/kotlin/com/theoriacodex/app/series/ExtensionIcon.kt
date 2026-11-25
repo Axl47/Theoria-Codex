@@ -41,7 +41,7 @@ private fun IconSlot(data: Any?) {
     val request = remember(context, data) { data?.let { ImageRequest.Builder(context).data(it).allowHardware(false).build() } }
     Box(
         Modifier
-            .size(ICON_SIZE)
+            .size(EXTENSION_ICON_SIZE)
             .clip(ICON_SHAPE)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .testTag(EXTENSION_ICON_TAG),
@@ -64,6 +64,6 @@ fun ComponentRegistry.Builder.addExtensionIcons(): ComponentRegistry.Builder =
         }
     }).add(Keyer<ApkIcon> { icon, _ -> "extension-icon:${icon.packageName}:${icon.versionCode}:${icon.apk}:${icon.modified}:${icon.size}" })
 
-private val ICON_SIZE = 40.dp
+internal val EXTENSION_ICON_SIZE = 40.dp
 private val ICON_SHAPE = RoundedCornerShape(8.dp)
 private const val APK_ICON_PX = 160

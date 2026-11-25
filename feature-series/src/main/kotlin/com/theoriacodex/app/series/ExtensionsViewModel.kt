@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
@@ -11,6 +12,7 @@ import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoExtension
 import com.theoriacodex.domain.series.RepoListing
 import com.theoriacodex.domain.series.SeriesExtensions
+import com.theoriacodex.domain.series.SourceOff
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -31,6 +33,7 @@ data class ExtensionsState(
     val installing: Set<String> = emptySet(),
     val failures: Map<String, String> = emptyMap(),
     val addRepo: AddRepo? = null,
+    val sourcesOff: Map<SourceKey, SourceOff> = emptyMap(),
 ) {
     val updates: List<RepoExtension> get() = listing?.extensions.orEmpty().filter { it.status == RepoExtension.Status.UPDATE }
 }
@@ -39,13 +42,11 @@ class ExtensionsViewModel(
     private val extensions: SeriesExtensions,
     private val repos: ExtensionRepos,
     val entryPage: ExtensionsSubpage? = null,
-    val entryExtension: String? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ExtensionsState(subpage = entryPage))
     val state: StateFlow<ExtensionsState> = mutableState
 
     init {
-        open(entryExtension)
         viewModelScope.launch {
             extensions.revision.collect {
                 show(extensions.installed())
@@ -152,7 +153,10 @@ class ExtensionsViewModel(
         mutableState.update { it.copy(listing = listing) }
     }
 
-    private fun show(listed: List<InstalledExtension>) = mutableState.update { it.copy(extensions = listed) }
+    private suspend fun show(listed: List<InstalledExtension>) {
+        val off = extensions.availability().off
+        mutableState.update { it.copy(extensions = listed, sourcesOff = off) }
+    }
 
     private suspend fun showSettings(id: String, read: suspend () -> List<ExtensionSourceSettings>) {
         val settings = read()
