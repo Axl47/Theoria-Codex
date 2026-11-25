@@ -171,7 +171,11 @@ internal class ViewerAccentState(private val pager: State<PagerState>, private v
             samples[post.id] = color
             if (settledId == post.id) retarget(settledColor(), color)
         }
-        animate(progress, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ -> progress = value }
+        if (settledFrom == settledTo) {
+            progress = 1f
+        } else {
+            animate(progress, 1f, animationSpec = tween(TheoriaMotion.MEDIUM_MS)) { value, _ -> progress = value }
+        }
     }
 
     suspend fun sampleNeighbour(neighbour: Post, sampler: ViewerAccentSampler) {
