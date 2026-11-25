@@ -250,8 +250,8 @@ class DataStoreUiRestoreRepository(
     override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> =
         dataStore.data.map { it.toMemoryState().switchSourceSkipped }.distinctUntilChanged()
 
-    override suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>) {
-        mutateState { current -> current.copy(switchSourceSkipped = sources) }
+    override suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>) {
+        mutateState { current -> current.copy(switchSourceSkipped = transform(current.switchSourceSkipped)) }
     }
 
     private suspend fun mutateState(

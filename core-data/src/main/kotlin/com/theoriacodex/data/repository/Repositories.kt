@@ -582,7 +582,7 @@ interface UiRestoreRepository : SwitchSourceSkips {
 
 interface SwitchSourceSkips {
     fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>>
-    suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>)
+    suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>)
 }
 
 fun interface SourceLibraryPresence {

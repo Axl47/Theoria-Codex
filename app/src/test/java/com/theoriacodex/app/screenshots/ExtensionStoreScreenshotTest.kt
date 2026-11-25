@@ -170,7 +170,7 @@ class ExtensionStoreScreenshotTest {
             FixtureSource(14, "Birch", "en", listOf("Paper Lantern")),
             FixtureSource(15, "Cobalt", "en"),
         )
-        val skips = InMemoryUiRestoreRepository().apply { runBlocking { setSwitchSourceSkipped(setOf(french)) } }
+        val skips = InMemoryUiRestoreRepository().apply { runBlocking { updateSwitchSourceSkipped { setOf(french) } } }
         val missing = MissingSeriesViewModel(repository, { sources }, flowOf(Unit))
         var switchSource: SwitchSourceViewModel? = null
         val actions = MissingExtensionsActions(

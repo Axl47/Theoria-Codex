@@ -117,9 +117,8 @@ class SwitchSourceViewModel(
 
     private fun keep(skipped: Set<SourceKey>) {
         val shown = others.mapTo(HashSet(), SeriesSource::key)
-        storedSkips = storedSkips.filterNot(shown::contains).toSet() + skipped.filter(shown::contains)
-        val saved = storedSkips
-        viewModelScope.launch { withContext(NonCancellable) { saves.withLock { choices.setSwitchSourceSkipped(saved) } } }
+        val kept = skipped.filterTo(HashSet(), shown::contains)
+        viewModelScope.launch { withContext(NonCancellable) { saves.withLock { choices.updateSwitchSourceSkipped { it - shown + kept } } } }
     }
 
     fun editQuery(query: String) = updateSheet { it.copy(query = query) }
@@ -144,7 +143,8 @@ class SwitchSourceViewModel(
     fun retry(key: SourceKey) {
         if (switching) return
         val job = searching ?: return
-        val source = others.firstOrNull { it.key == key && key !in state.value.sheet?.skipped.orEmpty() } ?: return
+        if (state.value.sheet?.results?.firstOrNull { it.key == key }?.listing !is SwitchListing.Failed) return
+        val source = others.firstOrNull { it.key == key } ?: return
         updateResult(key) { it.copy(listing = SwitchListing.Loading) }
         search(source, job)
     }

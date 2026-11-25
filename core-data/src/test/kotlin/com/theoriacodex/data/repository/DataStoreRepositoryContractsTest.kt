@@ -108,7 +108,8 @@ class DataStoreRepositoryContractsTest(
         assertEquals(5, repository.getSearchScrollState("query")?.firstVisibleItemIndex)
         assertEquals(launch, repository.observeViewerLaunchContext().first())
         assertEquals(emptySet<SourceKey>(), repository.observeSwitchSourceSkipped().first())
-        repository.setSwitchSourceSkipped(setOf(SourceKey.PIXIV))
+        repository.updateSwitchSourceSkipped { setOf(SourceKey.PIXIV, SourceKey.IWARA) }
+        repository.updateSwitchSourceSkipped { it - SourceKey.IWARA }
         assertEquals(setOf(SourceKey.PIXIV), repository.observeSwitchSourceSkipped().first())
     }
 

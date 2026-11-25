@@ -505,8 +505,8 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
 
     override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> = switchSourceSkipped
 
-    override suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>) {
-        switchSourceSkipped.value = sources
+    override suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>) {
+        mutex.withLock { switchSourceSkipped.value = transform(switchSourceSkipped.value) }
     }
 }
 

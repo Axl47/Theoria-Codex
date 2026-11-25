@@ -231,5 +231,5 @@ private object NoRepos : ExtensionRepos {
 
 private object NoSkips : SwitchSourceSkips {
     override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> = flowOf(emptySet())
-    override suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>) = Unit
+    override suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>) = Unit
 }

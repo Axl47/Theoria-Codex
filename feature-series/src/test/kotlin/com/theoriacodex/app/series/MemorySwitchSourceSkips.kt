@@ -11,7 +11,7 @@ class MemorySwitchSourceSkips(skipped: Set<SourceKey> = emptySet()) : SwitchSour
 
     override fun observeSwitchSourceSkipped(): Flow<Set<SourceKey>> = stored
 
-    override suspend fun setSwitchSourceSkipped(sources: Set<SourceKey>) {
-        stored.value = sources
+    override suspend fun updateSwitchSourceSkipped(transform: (Set<SourceKey>) -> Set<SourceKey>) {
+        stored.value = transform(stored.value)
     }
 }
