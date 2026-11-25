@@ -132,7 +132,11 @@ internal fun ViewerMediaPage(
                 .viewerDismissDrag(dismissDrag, returnProgress),
             contentAlignment = Alignment.Center,
         ) {
-            CompositionLocalProvider(LocalViewerMediaAspectRatio provides overlayAspectRatio, LocalViewerHoldScrub provides holdScrub) {
+            CompositionLocalProvider(
+                LocalViewerMediaAspectRatio provides overlayAspectRatio,
+                LocalViewerHoldScrub provides holdScrub,
+                LocalViewerContentTransform provides transform,
+            ) {
                 ViewerMediaContent(
                     post, media, key, kind,
                     controls.copy(
