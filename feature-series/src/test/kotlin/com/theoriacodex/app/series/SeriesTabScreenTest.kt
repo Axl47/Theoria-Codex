@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import com.theoriacodex.app.ui.components.SETTINGS_LABEL
 import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
@@ -129,7 +130,7 @@ class SeriesTabScreenTest {
         compose.waitForIdle()
         following.assertIsNotDisplayed()
         compose.onNodeWithTag("collapsed-search-strip").assertIsDisplayed()
-        compose.onNodeWithContentDescription(SETTINGS).assertIsDisplayed()
+        compose.onNodeWithContentDescription(SETTINGS_LABEL).assertIsDisplayed()
 
         compose.onRoot().performTouchInput { swipeDown(startY = centerY, endY = centerY + 150f) }
         compose.waitForIdle()
@@ -146,7 +147,7 @@ class SeriesTabScreenTest {
         }
         compose.waitForIdle()
 
-        val button = compose.onNodeWithContentDescription(SETTINGS)
+        val button = compose.onNodeWithContentDescription(SETTINGS_LABEL)
         button.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "2 series need their extension, 1 update"))
         compose.onNodeWithText("3").assertIsDisplayed()
         button.performClick()

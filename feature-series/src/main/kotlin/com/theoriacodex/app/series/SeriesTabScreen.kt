@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,11 +32,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -58,8 +54,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,11 +61,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.CollapsingSearchChrome
-import com.theoriacodex.app.ui.components.CountBadge
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SearchBarMinHeight
+import com.theoriacodex.app.ui.components.SettingsButton
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.ExtensionAlerts
 import com.theoriacodex.domain.series.Series
@@ -537,16 +531,3 @@ private fun noExtensionsOn(kind: SeriesKind?): String =
     kind?.let { "No ${it.label.lowercase(Locale.getDefault())} extensions on" } ?: "No extensions on"
 
 internal fun seriesViewTag(view: SeriesView) = "series-view-${view.name.lowercase()}"
-
-@Composable
-private fun SettingsButton(alerts: ExtensionAlerts, onClick: () -> Unit) {
-    BadgedBox(badge = { if (alerts.count > 0) CountBadge(alerts.count, Modifier.offset(x = -BADGE_INSET, y = BADGE_DROP)) }) {
-        IconButton(onClick = onClick, modifier = Modifier.semantics { if (alerts.count > 0) stateDescription = alerts.lines.joinToString(", ") }) {
-            Icon(Icons.Default.Settings, contentDescription = SETTINGS)
-        }
-    }
-}
-
-internal const val SETTINGS = "Settings"
-private val BADGE_INSET = 16.dp
-private val BADGE_DROP = 14.dp
