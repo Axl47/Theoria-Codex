@@ -24,7 +24,7 @@ class FamilyAdapterTest {
     private val http = ScriptedHttpClient()
 
     @Test
-    fun `a custom Danbooru site sends its keys, headers and term limit`() = runTest {
+    fun `a custom Danbooru site sends its keys, headers and term limit (ADR 0041)`() = runTest {
         val context = SiteRequestContext(http, SiteHeaders(userAgent = "Custom/1.0", referer = "https://booru.example/"), SiteCredentials("alice", "k1"))
         val profile = profile(ProtocolFamily.DANBOORU, termLimit = 4)
         val adapter = DanbooruFamily.createAdapter(profile, SourceKey.of(profile), context)
@@ -55,7 +55,7 @@ class FamilyAdapterTest {
     }
 
     @Test
-    fun `a custom Gelbooru site expands OR groups client-side and sends keys as user_id`() = runTest {
+    fun `a custom Gelbooru site expands OR groups client-side and sends keys as user_id (ADR 0040)`() = runTest {
         val profile = profile(ProtocolFamily.GELBOORU_02)
         val adapter = GelbooruFamily.createAdapter(
             profile,
@@ -79,7 +79,7 @@ class FamilyAdapterTest {
     }
 
     @Test
-    fun `an XML-only tag list switches suggestions and counts to autocomplete once`() = runTest {
+    fun `an XML-only tag list switches suggestions and counts to autocomplete once (ADR 0040, 0042)`() = runTest {
         val profile = profile(ProtocolFamily.GELBOORU_02)
         val adapter = GelbooruFamily.createAdapter(profile, SourceKey.of(profile), SiteRequestContext(http))
         val safebooruTagList = FixtureSiteTransport.resource("safebooru/tag_list_ignores_json.xml").decodeToString()

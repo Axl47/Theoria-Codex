@@ -16,6 +16,7 @@ Some sites answer any client other than the extension's own with a bot check for
 - The fragment prefix stays `mihon=` for every kind because covers stored before 2026-11-22 carry it and `FRAGMENT` finds those to replace.
 - Mihon pages whose source has not named an image are handed out as the naming page's address, tagged with place and chapter, so pages never share an address. The image address is asked for at request time and again after a failed fetch (they expire), dropping only the address that fetch used. Pages are held under one lock each, in a bounded map; once evicted, the chapter's pages are listed again and the same index taken. Pages asking together share one listing per chapter (`listings`), so a site is not asked once per page; a failed listing fails every page waiting on it and is not kept, so the next request lists again. A page's own `imageUrl` can be a bare path, so `pageAddress` asks the source what it would request.
 - Page and cover requests use `HttpSource.imageCall`, which builds the request on the source's `client` (covers as a plain request with the source's headers, as Mihon does).
+- The source's call runs for the app's call that asked (`executeFor`, `blockingFor`): cancelling the app's call cancels it, and for a call already cancelled the source is never asked (`intercept` refuses it before anything loads or lists), so none of the extension's own interceptors run either. A fetch cancelled this way keeps the image address the source named; only a failed fetch drops it. OkHttp runs application interceptors even for a cancelled call, and extensions rate-limit their client per site (Asura Scans: two requests per two seconds), so without this a closed reader's leftover pages held the site's queue and the next chapter's page list waited behind them for tens of seconds. A shared chapter listing (`listings`) runs on IO rather than on its first caller's blocking loop, so it is cancelled only once every page waiting on it has been (`SharedFlights` counts its waiters).
 - `getImage` ignores Mihon's `existingSize`: the host always fetches the whole image.
 - Addresses handed to the app end in a fragment naming the source by full key, so sources of two kinds with the same numeric id stay apart. `ExtensionImages` on the app's media client answers tagged addresses through that source and passes other requests on.
 - A tag is honored only with an HMAC, under a per-install key, of the address and tag contents. A forged tag (bare tag, made-up code, a real code moved to another host) goes out as an ordinary request without the fragment, and no extension loads.
@@ -28,8 +29,15 @@ Renaming the tag prefix orphans stored covers. Any new image source for extensio
 
 ## Applies to
 
-- `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionImages.kt`: `ExtensionImages`, `issued`, `marker`, `publish`, `published`, `address`, `tag`, `TAG`, `FRAGMENT`
+- `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionImages.kt`: `ExtensionImages`, `issued`, `marker`, `publish`, `published`, `address`, `tag`, `TAG`, `FRAGMENT`, `SourceImages`, `executeFor`, `blockingFor`
+- `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/AniyomiSeriesSource.kt`: `sourceImages`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionHost.kt`: `imageKey`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/MihonImages.kt`: `MihonImages`, `pageAddress`, `fetch`, `unresolvedPage`, `imageCall`, `listings`, `MAX_PAGES`
 - `extension-host/src/main/kotlin/eu/kanade/tachiyomi/source/online/HttpSource.kt`: `imageCall`, `getImage`
-- `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/ExtensionImages.kt`: `ExtensionImages`
+
+## Guarded by
+
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionImagesTest.kt`: `pages missing together list their chapter once, and a failed listing is not kept (ADR 0059)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionImagesTest.kt`: `a reader closed mid-load hands its source's rate limit back to the next page list (ADR 0059)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionImagesTest.kt`: `a page the app no longer wants never reaches its source (ADR 0059)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionImagesTest.kt`: `a page cancelled while it loads keeps the image address its source named (ADR 0059)`

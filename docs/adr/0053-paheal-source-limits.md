@@ -19,3 +19,8 @@ Paheal can join hash lookup once `hash=` search is verified through this path.
 ## Applies to
 
 - `core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/Rule34PahealSourceAdapter.kt`: `Rule34PahealSourceAdapter`, `pahealFileMime`, `PAHEAL_THUMBNAIL_MIME`
+
+## Guarded by
+
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/RealAdapterRegistryTest.kt`: `only the families with an md5 search look up files by hash (ADR 0008, 0053)`
+- `core-sources/src/test/kotlin/com/theoriacodex/sources/rule34/Rule34PahealSourceAdapterTest.kt`: `rss types extensionless files from data-mime and keeps thumbnails as images (ADR 0053)`, `data-mime wins over data-ext and an older card's data-ext still types the file (ADR 0053)`, `no tags reads the listing page with the same file types (ADR 0053)`

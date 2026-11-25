@@ -15,7 +15,7 @@ class SourceEntryPointCompletenessTest {
         .toList()
 
     @Test
-    fun `every boundary function runs its whole body through sourceCall`() {
+    fun `every boundary function runs its whole body through sourceCall (ADR 0049)`() {
         val interfaceNames = Regex("""suspend\s+fun\s+(\w+)""")
             .findAll(File(repoDir, SOURCE_ADAPTER_FILE).readText()).map { it.groupValues[1] }.toSet()
         assertTrue("SourceAdapter.kt declares no suspending functions", "search" in interfaceNames)
@@ -41,7 +41,7 @@ class SourceEntryPointCompletenessTest {
     }
 
     @Test
-    fun `production code never chooses the dispatcher`() {
+    fun `production code never chooses the dispatcher (ADR 0049)`() {
         val productionFiles = repoDir.listFiles().orEmpty()
             .map { File(it, "src/main") }
             .filter(File::isDirectory)
@@ -82,7 +82,7 @@ class SourceEntryPointCompletenessTest {
             val name = match.groupValues[3]
             val at = match.range.first + match.groupValues[1].length
             val owner = classBodies.firstOrNull { (_, body) -> at in body && braceDepth(file.text, body.first, at) == 1 }
-            val isPublic = modifiers.none { it in setOf("private", "internal", "protected") }
+            val isPublic = modifiers.none { it in setOf("private", "protected") }
             val kind = when {
                 "override" in modifiers && "suspend" in modifiers && name in interfaceNames -> Kind.INTERFACE
                 owner != null && "suspend" in modifiers && isPublic -> Kind.CLASS_MEMBER

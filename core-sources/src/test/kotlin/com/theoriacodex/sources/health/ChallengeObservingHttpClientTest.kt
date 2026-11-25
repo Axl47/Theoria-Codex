@@ -21,7 +21,7 @@ class ChallengeObservingHttpClientTest {
     }
 
     @Test
-    fun `maintenance pages and plain refusals are not browser challenges`() {
+    fun `maintenance pages and plain refusals are not browser challenges (ADR 0047)`() {
         val maintenance = SourceHttpResponse(503, "<!doctype html><h1>Down for maintenance</h1>")
         val forbidden = SourceHttpResponse(403, """{"message":"forbidden"}""")
 
@@ -30,7 +30,7 @@ class ChallengeObservingHttpClientTest {
     }
 
     @Test
-    fun `counts only the challenges it passes through on every transport`() = runTest {
+    fun `counts only the challenges it passes through on every transport (ADR 0047)`() = runTest {
         val cleared = SourceHttpResponse(200, "{}")
         val challenge = SourceHttpResponse(403, "", mapOf("CF-Mitigated" to listOf("challenge")))
         val texts = ArrayDeque(listOf(cleared, challenge, challenge, challenge))

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+import ipaddress
 import re
 import sys
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -296,6 +298,70 @@ def vision_results_are_written_under_commits() -> list[str]:
         elif VISION_COMMIT.search(text):
             failures.append(f"{relative} names VisionCommit; {reason}")
     return failures
+
+
+ANDROID_NAMESPACE = "{http://schemas.android.com/apk/res/android}"
+TOOLS_NAMESPACE = "{http://schemas.android.com/tools}"
+CLEARTEXT_ADR = "(docs/adr/0048-provider-media-urls.md)"
+
+
+@rule
+def provider_media_never_loads_in_cleartext() -> list[str]:
+    failures = []
+    for manifest_path in shipped_files("*/src/*/AndroidManifest.xml"):
+        name = manifest_path.relative_to(ROOT).as_posix()
+        application = ElementTree.fromstring(manifest_path.read_text(encoding="utf-8")).find("application")
+        if application is None:
+            continue
+        config_name = application.get(f"{ANDROID_NAMESPACE}networkSecurityConfig")
+        if config_name not in (None, "@xml/network_security_config") or (config_name is None and name == "app/src/main/AndroidManifest.xml"):
+            failures.append(f"{name} must apply @xml/network_security_config {CLEARTEXT_ADR}")
+        if application.get(f"{ANDROID_NAMESPACE}usesCleartextTraffic", "false") != "false":
+            failures.append(f"{name} must not set usesCleartextTraffic {CLEARTEXT_ADR}")
+        removed = application.get(f"{TOOLS_NAMESPACE}remove", "")
+        if application.get(f"{TOOLS_NAMESPACE}node") in ("replace", "remove") or "networkSecurityConfig" in removed:
+            failures.append(f"{name} must not drop the application's network security config {CLEARTEXT_ADR}")
+    configs = shipped_files("*/src/*/res/xml*/network_security_config.xml")
+    if not any(path.relative_to(ROOT).parts[0] == "app" for path in configs):
+        failures.append(f"app has no network_security_config.xml {CLEARTEXT_ADR}")
+    for config_path in configs:
+        name = config_path.relative_to(ROOT).as_posix()
+        config = ElementTree.fromstring(config_path.read_text(encoding="utf-8"))
+        for element in config.iter():
+            value = element.get("cleartextTrafficPermitted")
+            if value not in (None, "true", "false"):
+                failures.append(f'{name} sets cleartextTrafficPermitted="{value}"; write true or false {CLEARTEXT_ADR}')
+        base = config.find("base-config")
+        if base is None or base.get("cleartextTrafficPermitted") != "false":
+            failures.append(f"{name} must refuse cleartext in its base-config {CLEARTEXT_ADR}")
+        base_permits = base is None or base.get("cleartextTrafficPermitted", "true") != "false"
+        for host in sorted(host for host in cleartext_hosts(config, base_permits) if not is_loopback(host)):
+            failures.append(f"{name} allows cleartext to {host}; only loopback may {CLEARTEXT_ADR}")
+    return failures
+
+
+def shipped_files(pattern: str) -> list[Path]:
+    return [path for path in sorted(ROOT.glob(pattern)) if not path.relative_to(ROOT).parts[2].startswith(("test", "androidTest"))]
+
+
+def is_loopback(host: str) -> bool:
+    name = host.strip().strip("[]").lower()
+    if name == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def cleartext_hosts(parent: ElementTree.Element, inherited: bool) -> set[str]:
+    hosts: set[str] = set()
+    for domain_config in parent.findall("domain-config"):
+        permitted = domain_config.get("cleartextTrafficPermitted", "true" if inherited else "false") != "false"
+        if permitted:
+            hosts |= {(domain.text or "").strip() for domain in domain_config.findall("domain")}
+        hosts |= cleartext_hosts(domain_config, permitted)
+    return hosts
 
 
 def main() -> int:
