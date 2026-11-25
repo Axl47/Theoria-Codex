@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
@@ -157,14 +158,18 @@ class ExtensionCatalogTest {
         serve(Triple("old", 1, "16"))
         slowFirst.restore(listOf(ExtensionRepo(repoUrl, "Anime", key)))
 
-        val first = async(Dispatchers.IO) { slowFirst.available(refresh = false) }
-        reached.await()
-        serve(Triple("old", 2, "16"))
-        val refreshed = async(Dispatchers.IO) { slowFirst.available(refresh = true) }
-        withTimeoutOrNull(OVERLAP_MS) { refreshed.await() }
-        release.countDown()
-        first.await()
-        refreshed.await()
+        try {
+            val first = async(Dispatchers.IO) { slowFirst.available(refresh = false) }
+            withTimeout(OVERLAP_MS * 10) { reached.await() }
+            serve(Triple("old", 2, "16"))
+            val refreshed = async(Dispatchers.IO) { slowFirst.available(refresh = true) }
+            withTimeoutOrNull(OVERLAP_MS) { refreshed.await() }
+            release.countDown()
+            first.await()
+            refreshed.await()
+        } finally {
+            release.countDown()
+        }
 
         assertEquals(listOf("16.2"), slowFirst.available().extensions.map { it.versionName })
     }
