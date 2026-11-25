@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
-@OptIn(VisionCommit::class)
 class RoomVisualSignatureRepository(
     private val database: TheoriaRoomDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -47,6 +46,7 @@ class RoomVisualSignatureRepository(
         dao.libraryPostsWithoutSignature(limit, skip).decoded()
     }
 
+    @VisionCommit
     override suspend fun putVision(entries: List<PictureVision>) {
         if (entries.isEmpty()) return
         val now = clock()
@@ -68,12 +68,14 @@ class RoomVisualSignatureRepository(
     override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
         withContext(Dispatchers.IO) { dao.libraryPostsAwaitingFrames(modelId, MAX_FRAME_ATTEMPTS, limit, skip).decoded() }
 
+    @VisionCommit
     override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {
         withContext(Dispatchers.IO) {
             dao.addFrameAttempts(postId.source.id, postId.sourcePostId, modelId, if (permanently) MAX_FRAME_ATTEMPTS else 1)
         }
     }
 
+    @VisionCommit
     override suspend fun unwantFrames(postIds: List<PostId>, modelId: String) {
         if (postIds.isEmpty()) return
         withContext(Dispatchers.IO) {
@@ -101,6 +103,7 @@ class RoomVisualSignatureRepository(
     override fun observeLibraryTotal(): Flow<Int> =
         database.invalidationTracker.createFlow(*LIBRARY).map { dao.libraryTotal() }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
+    @VisionCommit
     override suspend fun clearVision() {
         withContext(Dispatchers.IO) {
             database.withTransaction {

@@ -5,7 +5,10 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.vision.PredictedTag
 import kotlinx.coroutines.flow.Flow
 
-@RequiresOptIn(message = "Only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)")
+@RequiresOptIn(
+    message = "Only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)",
+    level = RequiresOptIn.Level.ERROR,
+)
 @Retention(AnnotationRetention.BINARY)
 @Target(AnnotationTarget.FUNCTION)
 annotation class VisionCommit
