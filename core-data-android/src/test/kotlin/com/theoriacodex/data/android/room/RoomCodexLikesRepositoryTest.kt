@@ -575,11 +575,14 @@ class RoomCodexLikesRepositoryTest {
         val repository = repository()
         val codex = repository.createCodex("Kept")
         repository.addItem(codex.codexId, post("one"))
+        repository.addItem(codex.codexId, post("two"))
 
-        val newest = repository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED).first().single()
-        val oldest = repository.observeCodexPosts(codex.codexId, CodexSortMode.OLDEST_SAVED).first().single()
+        val sorted = CodexSortMode.entries.associateWith { repository.observeCodexPosts(codex.codexId, it).first() }
 
-        assertSame(newest, oldest)
+        assertEquals(listOf("two", "one"), sorted.getValue(CodexSortMode.NEWEST_SAVED).map { it.id.sourcePostId })
+        assertEquals(listOf("one", "two"), sorted.getValue(CodexSortMode.OLDEST_SAVED).map { it.id.sourcePostId })
+        val first = sorted.getValue(CodexSortMode.NEWEST_SAVED).associateBy { it.id }
+        for ((mode, posts) in sorted) for (each in posts) assertSame(mode.name, first.getValue(each.id), each)
     }
 
     @Test
@@ -605,6 +608,7 @@ class RoomCodexLikesRepositoryTest {
             execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('retired_source','1','{}')")
             execSQL("INSERT INTO codex_items VALUES(?,'retired_source','1',1)", arrayOf(codex.codexId))
             execSQL("INSERT INTO liked_posts VALUES('profile-main','retired_source','1',1,'[]')")
+            execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display,group_index) VALUES(?,'retired_source','sky','sky',0)", arrayOf(codex.codexId))
             execSQL("UPDATE liked_posts SET tags_json = 'not json' WHERE source_post_id = 'liked'")
         }
 
@@ -612,6 +616,8 @@ class RoomCodexLikesRepositoryTest {
         val likes = repository.observeLikes("profile-main").first()
         assertEquals(listOf(post("liked").id), likes.map { it.postId })
         assertEquals(emptyList<String>(), likes.single().tags)
+        assertEquals(setOf(post("liked").id), repository.observeLikedPostIds("profile-main").first())
+        assertEquals(emptyList<CodexAutomaticTag>(), repository.observeCodex(codex.codexId).first()?.automaticTags)
     }
 
     private fun repository(): RoomCodexLikesRepository {

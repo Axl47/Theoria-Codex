@@ -87,6 +87,7 @@ class RoomProfileBackupStoreTest {
         )
         series.setFollowed(id, true)
         series.setReadingMode(id, GalleryReadingMode.VERTICAL)
+        series.setDownloadNewChapters(id, true)
         series.recordProgress(id, "/chapter/1", position = 18, length = 18)
         series.recordProgress(id, "/chapter/2", position = 3, length = 20)
         series.store(Series(SeriesId(id.source, "/title/2"), "Glanced at"))
@@ -104,18 +105,24 @@ class RoomProfileBackupStoreTest {
 
         restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series SET memo = NULL")
         restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET memo = '{\"id\":\"device\"}' WHERE address = '/chapter/1'")
+        restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series_entries SET last_read_at_epoch_ms = 10 WHERE address = '/chapter/1'")
         restored.setFollowed(id, false)
+        restored.setDownloadNewChapters(id, false)
         restored.setReadingMode(id, GalleryReadingMode.RIGHT_TO_LEFT)
         restored.recordProgress(id, "/chapter/2", position = 20, length = 20)
         RoomProfileBackupStore(restoredDatabase).merge(snapshot)
         val kept = restored.series(id)!!
-        assertTrue(kept.followed)
+        assertTrue(kept.followed && kept.downloadNewChapters)
         assertEquals(30L, kept.followedAtEpochMs)
+        assertEquals(30L, restored.entries(id).single { it.entry.address == "/chapter/1" }.lastReadAtEpochMs)
         assertEquals(restoredAt, restored.entries(id).single { it.entry.address == "/chapter/2" }.lastReadAtEpochMs)
         assertEquals(GalleryReadingMode.RIGHT_TO_LEFT, kept.readingMode)
         assertTrue(restored.entries(id).single { it.entry.address == "/chapter/2" }.read)
         assertEquals("""{"slug":"t1"}""", kept.series.memo)
         assertEquals("""{"id":"device"}""", restored.entries(id).single { it.entry.address == "/chapter/1" }.entry.memo)
+        restoredDatabase.openHelper.writableDatabase.execSQL("UPDATE series SET memo = '{\"slug\":\"device\"}'")
+        RoomProfileBackupStore(restoredDatabase).merge(snapshot)
+        assertEquals("""{"slug":"device"}""", restored.series(id)!!.series.memo)
         restoredDatabase.close()
     }
 
@@ -130,12 +137,22 @@ class RoomProfileBackupStoreTest {
         assertEquals(listOf(mode, opened), backups.snapshot(includeRecents = false).series.map { it.series.series.id })
     }
 
-    @Test fun `a snapshot holding a like from an unknown source fails instead of dropping it (ADR 0016)`() = runTest {
-        database.openHelper.writableDatabase.execSQL("INSERT INTO liked_posts VALUES('profile-main','retired_source','1',1,'[]')")
+    @Test fun `a snapshot holding a like, a Codex item or an automatic tag from an unknown source fails instead of dropping it (ADR 0016)`() = runTest {
+        val db = database.openHelper.writableDatabase
+        db.execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+        db.execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('retired_source','1','{}')")
+        val rows = mapOf(
+            "liked_posts" to "INSERT INTO liked_posts VALUES('profile-main','retired_source','1',1,'[]')",
+            "codex_items" to "INSERT INTO codex_items VALUES('saved','retired_source','1',1)",
+            "codex_automatic_tags" to "INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display,group_index) VALUES('saved','retired_source','sky','sky',0)",
+        )
+        for ((table, insert) in rows) {
+            db.execSQL(insert)
+            val failure = runCatching { backups.snapshot(true) }.exceptionOrNull()
+            db.execSQL("DELETE FROM $table WHERE source = 'retired_source'")
 
-        val failure = runCatching { backups.snapshot(true) }.exceptionOrNull()
-
-        assertTrue(failure.toString(), failure is IllegalArgumentException)
+            assertTrue("$table: $failure", failure is IllegalArgumentException)
+        }
     }
 
     @Test fun `restoring a backup never unfollows a series or turns off its new-chapter downloads (ADR 0014)`() = runTest {
@@ -168,6 +185,7 @@ class RoomProfileBackupStoreTest {
         series.recordProgress(partway, "/chapter/1", position = 5, length = 18)
         series.setEntriesRead(partway, listOf("/chapter/1"), false)
         for (each in listOf(single, partway)) assertNull(series.series(each)?.lastOpenedEntry)
+        series.storeEntries(partway, listOf(SeriesEntry("/chapter/1", "Ch.1")))
 
         val snapshot = backups.snapshot(includeRecents = false)
         assertEquals(listOf(bulk, dropped, partway, single), snapshot.series.map { it.series.series.id })
@@ -183,6 +201,9 @@ class RoomProfileBackupStoreTest {
             database.seriesDao().allEntries(dropped.source.id, dropped.address).map { it.address to it.read }.toSet(),
         )
         assertTrue(dao.allEntries(dropped.source.id, dropped.address).single { it.address == "/chapter/1" }.read)
+        fun SeriesDao.progress(id: SeriesId) = allEntries(id.source.id, id.address).map { listOf(it.address, it.read, it.lastPage, it.sourceOrder) }.toSet()
+        assertEquals(database.seriesDao().progress(partway), dao.progress(partway))
+        assertTrue(dao.progress(partway).contains(listOf("/chapter/2", false, 3L, NOT_LISTED)))
         restoredDatabase.close()
     }
 

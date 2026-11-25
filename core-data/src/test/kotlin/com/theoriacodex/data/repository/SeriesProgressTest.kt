@@ -121,6 +121,8 @@ class SeriesProgressTest {
         assertEquals("c2", continueEntry(unlisted, unread)?.entry?.address)
         val read = listOf(entry("c2", order = 0, read = true), entry("c1", order = 1, read = true))
         assertEquals("c2", continueEntry(unlisted, read)?.entry?.address)
+        val readWithPage = listOf(entry("c3", order = 0), entry("c2", order = 1, read = true, position = 9), entry("c1", order = 2, read = true))
+        assertEquals("c3", continueEntry(unlisted, readWithPage)?.entry?.address)
     }
 
     private fun series(lastOpened: String?) =

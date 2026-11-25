@@ -26,6 +26,7 @@ class SeriesCheckScheduleTest {
     fun `fewer than three upload dates give no pace, so the series is checked every run (ADR 0015)`() {
         assertNull(checkWait(dated(400, 800), now))
         assertNull(checkWait(List(5) { entry(null) }, now))
+        assertNull(checkWait(dated(400, 800) + List(3) { entry(null) }, now))
         assertTrue(isCheckDue(now, 6.hours, now) { List(5) { entry(null) } })
     }
 
@@ -38,6 +39,11 @@ class SeriesCheckScheduleTest {
     @Test
     fun `the median gap, not the shortest or the longest, sets the wait (ADR 0015)`() {
         assertEquals(7.hours, checkWait(dated(0, 1, 8, 15, 60), now))
+    }
+
+    @Test
+    fun `only the ten newest uploads set the pace (ADR 0015)`() {
+        assertEquals(1.hours, checkWait(dated(0, 1, 2, 3, 4, 5, 35, 65, 95, 125, 155, 185, 215), now))
     }
 
     @Test

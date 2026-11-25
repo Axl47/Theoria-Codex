@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.SERIES_CHECK_CEILING
+import com.theoriacodex.data.repository.SeriesRepository
+import com.theoriacodex.data.repository.StoredSeriesEntry
 import com.theoriacodex.data.repository.checkFollowed
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.EntryMedia
@@ -14,6 +16,7 @@ import com.theoriacodex.domain.series.SeriesFilter
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesPage
 import com.theoriacodex.domain.series.SeriesSource
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -65,6 +68,19 @@ class SeriesCheckPaceTest {
     }
 
     @Test
+    fun `a series never checked is found due without loading its chapters (ADR 0015)`() = runTest {
+        val loads = AtomicInteger()
+        val counting = object : SeriesRepository by repository {
+            override suspend fun entries(id: SeriesId): List<StoredSeriesEntry> = repository.entries(id).also { loads.incrementAndGet() }
+        }
+        follow(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/never"), "Never"))
+
+        counting.checkFollowed({ null }, RUN_EVERY, now)
+
+        assertEquals(0, loads.get())
+    }
+
+    @Test
     fun `a listing the series page stores counts as a check, a series stored without its chapters does not (ADR 0015)`() = runTest {
         val source = PacedSource("custom_mihon_1") { now }
         val quiet = source.add(Pace.quiet(lastDaysAgo = 300), "quiet")
@@ -97,7 +113,7 @@ class SeriesCheckPaceTest {
     }
 
     @Test
-    fun `over four weeks a mixed library needs about half the requests and still hears of every chapter within the ceiling`() = runTest {
+    fun `over four weeks a mixed library needs about half the requests and still hears of every chapter within the ceiling (ADR 0015)`() = runTest {
         val before = simulate(adaptive = false)
         val after = simulate(adaptive = true)
         println("series-check-pace before: $before")

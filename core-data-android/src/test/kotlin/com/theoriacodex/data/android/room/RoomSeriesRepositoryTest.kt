@@ -1,8 +1,10 @@
 package com.theoriacodex.data.android.room
 
 import android.content.Context
+import java.util.concurrent.ConcurrentLinkedQueue
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.EntryProgressRestore
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.SourceKey
@@ -71,6 +73,7 @@ class RoomSeriesRepositoryTest {
         assertNull(repository.listedEntry(id, "/c/9"))
         repository.storeEntries(id, listOf(SeriesEntry("/c/2", "Chapter 2")))
         assertNull("Dropped by its source", repository.listedEntry(id, "/c/1"))
+        assertEquals(listOf("/c/2"), repository.observeEntries(id).first().map { it.entry.address })
         assertEquals("Still stored", "Chapter 1", repository.storedEntry(id, "/c/1")?.entry?.name)
     }
 
@@ -223,6 +226,14 @@ class RoomSeriesRepositoryTest {
         assertEquals(arrived, repository.store(series, arrived + prologue))
         assertEquals(List(5) { false }, repository.entries(id).map { it.read })
         assertEquals("/c/1-a", repository.series(id)!!.lastOpenedEntry)
+
+        val other = id.copy(address = "/series/b")
+        val anchor = SeriesEntry("/b/2", "Chapter 2", number = 2f)
+        repository.store(series.copy(id = other), listOf(SeriesEntry("/b/1-a", "Chapter 1", number = 1f, translatorGroup = "A"), SeriesEntry("/b/extra", "Extra"), anchor))
+        repository.setEntriesRead(other, listOf("/b/1-a", "/b/extra"), read = true)
+        val replaced = listOf(SeriesEntry("/b/1-b", "Chapter 1", number = 1f, translatorGroup = "B"), SeriesEntry("/b/extra-2", "Extra"))
+        assertEquals(replaced, repository.store(series.copy(id = other), replaced + anchor))
+        assertEquals(listOf(false, false), replaced.map { repository.storedEntry(other, it.address)!!.read })
     }
 
     @Test
@@ -249,7 +260,7 @@ class RoomSeriesRepositoryTest {
     }
 
     @Test
-    fun `storing entries alone leaves what is stored about the series as it is`() = runTest {
+    fun `storing entries alone leaves what is stored about the series as it is (ADR 0015)`() = runTest {
         repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
         repository.store(series.copy(title = "Renamed", description = "A synopsis."))
 
@@ -432,26 +443,44 @@ class RoomSeriesRepositoryTest {
         repository.setAllRead(id, read = true)
         delay(QUIET_MS)
         assertTrue(wakes.isEmpty)
+
+        repository.setAllRead(id, read = false)
+        withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() }
+        delay(QUIET_MS)
+        while (wakes.tryReceive().isSuccess) Unit
+        repository.setAllRead(id, read = false)
+        repository.setEntriesRead(id, listOf("/c/2"), read = false)
+        repository.restoreProgress(id, EntryProgressRestore(entries = repository.entries(id)))
+        delay(QUIET_MS)
+        assertTrue(wakes.isEmpty)
         watching.cancel()
     }
 
     @Test
     fun `entry progress does not wake the has-followed query (ADR 0013)`() = runBlocking {
+        val queries = ConcurrentLinkedQueue<String>()
+        val logged = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), TheoriaRoomDatabase::class.java)
+            .setQueryCallback({ sql, _ -> queries += sql }, Runnable::run).build()
+        val repository = RoomSeriesRepository(logged) { now }
         repository.store(series, listOf(SeriesEntry("/c/1", "Chapter 1")))
         repository.setFollowed(id, true)
         repository.recordProgress(id, "/c/1", position = 1, length = 4)
         val wakes = Channel<Boolean>(Channel.UNLIMITED)
-        val watching = launch(Dispatchers.IO) { database.seriesDao().observeHasFollowed().collect(wakes::send) }
+        val watching = launch(Dispatchers.IO) { repository.observeHasFollowed().collect(wakes::send) }
         assertTrue(withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() })
+        delay(QUIET_MS)
+        queries.clear()
 
         repository.recordProgress(id, "/c/1", position = 2, length = 4)
         repository.recordProgress(id, "/c/1", position = 4, length = 4)
         delay(QUIET_MS)
+        assertEquals(emptyList<String>(), queries.filter { it.trimStart().startsWith("SELECT", ignoreCase = true) && "followed" in it })
         assertTrue(wakes.isEmpty)
 
         repository.setFollowed(id, false)
         assertFalse(withTimeout(UPDATE_TIMEOUT_MS) { wakes.receive() })
         watching.cancel()
+        logged.close()
     }
 
     @Test

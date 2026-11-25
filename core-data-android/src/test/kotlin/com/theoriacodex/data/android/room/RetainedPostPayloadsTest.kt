@@ -4,9 +4,15 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -94,6 +100,36 @@ class RetainedPostPayloadsTest {
         assertSame(b.first(), cache.projection("b").project(rows).first())
         cache.projection("a").project(rows)
         assertEquals(6, decoded)
+    }
+
+    @Test fun `only the latest projection's posts are kept for the next one (ADR 0013)`() {
+        var decoded = 0
+        val projection = RetainedPostPayloads { row -> decoded++; testPost(row) }
+        val one = listOf(PostEntity("PIXIV", "1", "one"))
+
+        projection.project(one)
+        projection.project(listOf(PostEntity("PIXIV", "2", "two")))
+        projection.project(one)
+
+        assertEquals(3, decoded)
+    }
+
+    @Test fun `a collector whose projection was evicted keeps decoding into it (ADR 0013)`() = runBlocking {
+        val decoded = AtomicInteger()
+        val cache = RetainedPostPayloadCache(decode = { row -> decoded.incrementAndGet(); testPost(row) }, maxEntries = 1)
+        val kept = PostEntity("PIXIV", "1", "payload")
+        val rows = MutableStateFlow(listOf(kept))
+        val seen = Channel<List<Post>>(Channel.UNLIMITED)
+        val collecting = launch { rows.decodePostSnapshots(cache, "a").collect(seen::send) }
+        withTimeout(5_000) { seen.receive() }
+        cache.projection("b").project(listOf(PostEntity("PIXIV", "2", "other")))
+        cache.trim()
+
+        rows.value = listOf(kept, PostEntity("PIXIV", "3", "new"))
+        withTimeout(5_000) { seen.receive() }
+        collecting.cancel()
+
+        assertEquals(3, decoded.get())
     }
 
     private fun testPost(row: PostEntity) = Post(PostId(SourceKey.PIXIV, row.sourcePostId), ImageRef(null, null, null),

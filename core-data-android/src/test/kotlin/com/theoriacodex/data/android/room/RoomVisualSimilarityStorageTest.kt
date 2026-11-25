@@ -5,7 +5,6 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.ForYouVerdict
 import com.theoriacodex.data.repository.ForYouVerdictKind
-import com.theoriacodex.data.repository.MAX_FRAME_ATTEMPTS
 import com.theoriacodex.data.repository.PictureVision
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.VisionCommit
@@ -44,6 +43,7 @@ class RoomVisualSimilarityStorageTest {
         val verdicts = RoomForYouVerdictRepository(database, guard, limit = 2)
         verdicts.record(verdict("a", "1", ForYouVerdictKind.SKIPPED, at = 1))
         verdicts.record(verdict("a", "1", ForYouVerdictKind.LIKED, at = 2))
+        assertEquals(listOf("1" to ForYouVerdictKind.LIKED), verdicts.verdicts("a").map { it.postId.sourcePostId to it.kind })
         verdicts.record(verdict("a", "2", ForYouVerdictKind.HID, at = 3))
         verdicts.record(verdict("a", "3", ForYouVerdictKind.SAVED, at = 4))
         verdicts.record(verdict("b", "1", ForYouVerdictKind.SKIPPED, at = 5))
@@ -78,13 +78,15 @@ class RoomVisualSimilarityStorageTest {
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
         library.addItems(codex.codexId, listOf(post("hashed"), post("flat"), post("waiting")))
+        library.toggleLikeAndSyncSystemCodex("p", "likes-p", "Likes", post("liked"), emptyList())
+        database.openHelper.writableDatabase.execSQL("DELETE FROM codex_items WHERE source_post_id = 'liked'")
 
         signatures.putHashes(mapOf(id("hashed") to 94L))
         signatures.putHashes(mapOf(id("flat") to null))
         signatures.putHashes(mapOf(id("never-stored") to 7L))
 
         assertEquals(mapOf(id("hashed") to 94L), signatures.observePictureHashes().first())
-        assertEquals(listOf(id("waiting")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
+        assertEquals(setOf(id("waiting"), id("liked")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id).toSet())
         library.removeItems(codex.codexId, setOf(id("hashed")))
         assertTrue(signatures.observePictureHashes().first().isEmpty())
     }
@@ -140,7 +142,7 @@ class RoomVisualSimilarityStorageTest {
         assertTrue(signatures.libraryPostsAwaitingFrames("m2", limit = 10).isEmpty())
         signatures.putVision(listOf(vision("clip", "m1", frames = VisionFrames.READ)))
         signatures.failFrames(id("gone"), "m1", permanently = true)
-        repeat(MAX_FRAME_ATTEMPTS - 1) { signatures.failFrames(id("flaky"), "m1", permanently = false) }
+        repeat(2) { signatures.failFrames(id("flaky"), "m1", permanently = false) }
         assertEquals(setOf(id("flaky")), awaiting())
         assertEquals(3, signatures.observeVisionProgress("m1").first().analysed)
         signatures.failFrames(id("flaky"), "m1", permanently = false)
@@ -195,17 +197,21 @@ class RoomVisualSimilarityStorageTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
         val codex = library.ensureCodex("saved", "Saved")
-        library.addItems(codex.codexId, listOf(post("hashed"), post("visionOnly")))
-        signatures.putHashes(mapOf(id("hashed") to 3L))
-        signatures.putVision(listOf(vision("hashed", "m1", tags = listOf(tag("x", 0.5f))), vision("visionOnly", "m1", tags = listOf(tag("x", 0.5f)))))
+        library.addItems(codex.codexId, listOf(post("hashed"), post("visionOnly"), post("flat")))
+        signatures.putHashes(mapOf(id("hashed") to 3L, id("flat") to null))
+        signatures.putVision(
+            listOf(vision("hashed", "m1", tags = listOf(tag("x", 0.5f))), vision("visionOnly", "m1", tags = listOf(tag("x", 0.5f))), vision("flat", "m1", embedding = null, tags = null)),
+        )
 
         signatures.clearVision()
 
         assertEquals(mapOf(id("hashed") to 3L), signatures.observePictureHashes().first())
         assertTrue(signatures.predictedTags("m1").isEmpty())
-        assertEquals(VisionProgress(analysed = 0, total = 2), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(analysed = 0, total = 3), signatures.observeVisionProgress("m1").first())
         assertEquals(listOf(id("visionOnly")), signatures.libraryPostsWithoutSignature(limit = 10).map(Post::id))
-        database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM post_visual_signatures").use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
+        database.openHelper.readableDatabase.query("SELECT source_post_id, model_id FROM post_visual_signatures ORDER BY source_post_id").use {
+            assertEquals(listOf("flat" to null, "hashed" to null), buildList { while (it.moveToNext()) add(it.getString(0) to it.getString(1)) })
+        }
     }
 
     @Test fun `vision rows follow their post when it is deleted (ADR 0017)`() = runTest {
@@ -224,14 +230,16 @@ class RoomVisualSimilarityStorageTest {
     @Test fun `analyses of posts that do not play stop waiting for frames and count as analysed (ADR 0017)`() = runTest {
         val library = RoomCodexLikesRepository(database)
         val signatures = RoomVisualSignatureRepository(database)
-        library.addItems(library.ensureCodex("saved", "Saved").codexId, listOf(post("still"), post("clip")))
-        signatures.putVision(listOf(vision("still", "m1", frames = VisionFrames.WANTED), vision("clip", "m1", frames = VisionFrames.WANTED)))
-        assertEquals(VisionProgress(analysed = 0, total = 2), signatures.observeVisionProgress("m1").first())
+        library.addItems(library.ensureCodex("saved", "Saved").codexId, listOf("still", "still2", "clip", "older").map(::post))
+        signatures.putVision(listOf("still", "still2", "clip").map { vision(it, "m1", frames = VisionFrames.WANTED) } + vision("older", "m2", frames = VisionFrames.WANTED))
+        assertEquals(VisionProgress(analysed = 0, total = 4), signatures.observeVisionProgress("m1").first())
 
-        signatures.unwantFrames(listOf(id("still")), "m1")
+        signatures.unwantFrames(listOf(id("still"), id("still2"), id("older")), "m1")
+        signatures.failFrames(id("older"), "m1", permanently = true)
 
         assertEquals(listOf(id("clip")), signatures.libraryPostsAwaitingFrames("m1", limit = 10).map(Post::id))
-        assertEquals(VisionProgress(analysed = 1, total = 2), signatures.observeVisionProgress("m1").first())
+        assertEquals(VisionProgress(analysed = 2, total = 4), signatures.observeVisionProgress("m1").first())
+        assertEquals(listOf(id("older")), signatures.libraryPostsAwaitingFrames("m2", limit = 10).map(Post::id))
     }
 
     @Test fun `frame states are stored as 0 for a still, 1 for frames to read and 2 for frames read (ADR 0017)`() = runTest {

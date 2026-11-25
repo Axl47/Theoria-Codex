@@ -420,13 +420,14 @@ class ProfileBackupServiceTest {
 
     @Test fun `a series' check time is not carried by a backup, so a restored series is due (ADR 0015)`() {
         val id = SeriesId(SourceKey.parseOrThrow("custom_mihon_7"), "/title/1")
-        val checked = BackupSeries(StoredSeries(Series(id, "Title"), followed = true, checkedAtEpochMs = 987_654_321L), emptyList())
+        val checked = BackupSeries(StoredSeries(Series(id, "Title"), followed = true, followedAtEpochMs = 123_456L, checkedAtEpochMs = 987_654_321L), emptyList())
         val plain = backup()
 
         val encoded = codec.encode(plain.copy(library = plain.library.copy(series = listOf(checked))))
 
         assertFalse(encoded.toString(Charsets.UTF_8).contains("987654321"))
-        assertNull(codec.decode(encoded).library.series.single().series.checkedAtEpochMs)
+        val restored = codec.decode(encoded).library.series.single().series
+        assertEquals(123_456L to null, restored.followedAtEpochMs to restored.checkedAtEpochMs)
     }
 
     @Test fun `a series' choice to download new chapters round trips and older backups restore with it off`() {

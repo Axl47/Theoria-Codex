@@ -124,6 +124,12 @@ class SeriesMoveTest {
 
         assertTrue(runCatching { repository.switchSource(old.id, source, new) }.exceptionOrNull() is NoChaptersToMoveToException)
         assertTrue(repository.series(old.id)!!.followed)
+
+        val partway = Series(SeriesId(old.id.source, "/partway"), "Series")
+        repository.store(partway, listOf(SeriesEntry("/p1", "Chapter 1", 1f)))
+        repository.recordProgress(partway.id, "/p1", 2, 10)
+        repository.store(partway, listOf(SeriesEntry("/p2", "Chapter 2", 2f)))
+        assertTrue(runCatching { repository.switchSource(partway.id, source, new) }.exceptionOrNull() is NoChaptersToMoveToException)
     }
 
     @Test
