@@ -110,9 +110,8 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.ReplaceSession -> error("Handled above")
         is ViewerAction.AppendPosts -> state.ifCurrentSession(action.session) { appendPosts(action) }
         is ViewerAction.IncludeRelatedPosts -> state.ifCurrentSession(action.session) { includeRelatedPosts(action) }
-        is ViewerAction.SelectPage -> state.selectPage(action.pageIndex)
-        is ViewerAction.SelectMedia -> state.selectMedia(action.mediaIndex)
-        is ViewerAction.Navigate -> state.navigate(action.pageIndex, action.mediaIndex)
+        is ViewerAction.SelectPage, is ViewerAction.SelectMedia, is ViewerAction.Navigate -> state.movedByUser(state.moveTo(action))
+        is ViewerAction.RestartDwell -> state.withControls(state.controls.copy(dwell = ViewerDwell(action.atMs, state.controls.dwell.held, action.interacting)))
         ViewerAction.ToggleChrome -> ViewerReduction(state.toggleChrome())
         is ViewerAction.SetChromeVisible ->
             ViewerReduction(if (action.visible == state.controls.chromeVisible) state else state.toggleChrome())
@@ -417,11 +416,42 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
     if (session != action.session || currentMedia?.key != action.key ||
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
         loopsPlayback) return ViewerReduction(this)
-    if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) advanceInQueue()?.let { return it }
+    if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) {
+        if (dwellApplies && (controls.dwell.held || !controls.dwell.elapsed(action.atMs))) return ViewerReduction(restartPlayback())
+        advanceInQueue()?.let { return it }
+    }
     return ViewerReduction(copy(controls = controls.copy(
         playback = controls.playback.copy(playing = false, completed = true),
         slideshow = false,
     )))
+}
+
+private fun ViewerUiState.moveTo(action: ViewerAction): ViewerReduction = when (action) {
+    is ViewerAction.SelectPage -> selectPage(action.pageIndex)
+    is ViewerAction.SelectMedia -> selectMedia(action.mediaIndex)
+    is ViewerAction.Navigate -> navigate(action.pageIndex, action.mediaIndex)
+    else -> ViewerReduction(this)
+}
+
+private fun ViewerUiState.movedByUser(moved: ViewerReduction): ViewerReduction {
+    val positions = listOf(this, moved.state).firstNotNullOfOrNull { order ->
+        val from = queuePosition(order) ?: return@firstNotNullOfOrNull null
+        val to = moved.state.queuePosition(order) ?: return@firstNotNullOfOrNull null
+        from to to
+    } ?: return moved
+    val order = compareValuesBy(positions.first, positions.second, { it.first }, { it.second })
+    val held = when {
+        order > 0 -> true
+        order < 0 -> false
+        else -> return moved
+    }
+    val state = moved.state
+    return moved.copy(state = state.copy(controls = state.controls.copy(dwell = state.controls.dwell.copy(held = held))))
+}
+
+private fun ViewerUiState.queuePosition(order: ViewerUiState): Pair<Int, Int>? {
+    val index = com.theoriacodex.app.viewer.viewerPostNavigation(order).sourceIndices.indexOf(currentPageIndex).takeIf { it >= 0 } ?: return null
+    return index to (currentPage?.selectedMediaIndex ?: 0)
 }
 
 private fun ViewerUiState.advanceInQueue(): ViewerReduction? {
@@ -441,7 +471,10 @@ private fun ViewerUiState.setSlideshow(running: Boolean): ViewerUiState {
 }
 
 private fun ViewerUiState.advanceSlideshow(action: ViewerAction.SlideshowAdvance): ViewerReduction {
-    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key) return ViewerReduction(this)
+    val dwell = controls.dwell
+    if (!controls.slideshow || session != action.session || currentMedia?.key != action.key || dwell.held || dwell.interacting || dwell.startedAtMs != action.dwellStartedAtMs) {
+        return ViewerReduction(this)
+    }
     return advanceInQueue() ?: ViewerReduction(setSlideshow(false))
 }
 

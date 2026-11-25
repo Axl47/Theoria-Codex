@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
@@ -18,8 +19,9 @@ internal fun viewerRendererEvents(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit,
     onDurationKnown: (Long) -> Unit,
     onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
+    nowMs: () -> Long = SystemClock::uptimeMillis,
 ): ViewerRendererEvents = ViewerRendererEvents(
-    onPlaybackCompleted = { session?.let { onAction(ViewerAction.PlaybackCompleted(it, key, generation)) } },
+    onPlaybackCompleted = { session?.let { onAction(ViewerAction.PlaybackCompleted(it, key, generation, nowMs())) } },
     onError = { message -> session?.let {
         onAction(ViewerAction.MediaFailed(it, ViewerMediaError.Recoverable(key, message), generation))
     } },
