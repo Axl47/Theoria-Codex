@@ -30,7 +30,7 @@ data class InstalledExtension(
     val icon: ApkIcon? = null,
 )
 
-data class ApkIcon(val packageName: String, val versionCode: Long, val apk: String, val modified: Long = 0)
+data class ApkIcon(val packageName: String, val versionCode: Long, val apk: String, val modified: Long = 0, val size: Long = 0)
 
 data class ExtensionLanguage(val code: String, val on: Boolean)
 

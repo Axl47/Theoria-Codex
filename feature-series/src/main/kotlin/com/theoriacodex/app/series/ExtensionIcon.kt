@@ -62,7 +62,7 @@ fun ComponentRegistry.Builder.addExtensionIcons(): ComponentRegistry.Builder =
             val bitmap = drawable.toBitmap(side, side)
             DrawableResult(bitmap.toDrawable(options.context.resources), isSampled = false, DataSource.DISK)
         }
-    }).add(Keyer<ApkIcon> { icon, _ -> "extension-icon:${icon.packageName}:${icon.versionCode}:${icon.apk}:${icon.modified}" })
+    }).add(Keyer<ApkIcon> { icon, _ -> "extension-icon:${icon.packageName}:${icon.versionCode}:${icon.apk}:${icon.modified}:${icon.size}" })
 
 private val ICON_SIZE = 40.dp
 private val ICON_SHAPE = RoundedCornerShape(8.dp)

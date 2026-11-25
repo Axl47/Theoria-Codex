@@ -218,7 +218,7 @@ class ExtensionRegistry(
                 problem = extension.unsupported ?: NOT_SIGNED.takeIf { extension.signer == null },
                 kind = extension.kind.seriesKind,
                 removable = extension.origin == ExtensionOrigin.PRIVATE,
-                icon = ApkIcon(extension.packageName, extension.versionCode, extension.apk.path, extension.modified),
+                icon = ApkIcon(extension.packageName, extension.versionCode, extension.apk.path, extension.modified, extension.size),
             )
             if (!trusted || extension.unsupported != null) return@map listing
             val code = loaded[extension] ?: if (everything || extension.identity in wanted) {
