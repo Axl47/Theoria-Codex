@@ -17,6 +17,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -162,10 +163,12 @@ internal fun TheoriaScreenHost(
 internal fun NavGraphBuilder.opaqueScreen(
     route: String,
     arguments: List<NamedNavArgument> = emptyList(),
+    reachesBottomEdge: Boolean = false,
     content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
 ) {
     composable(route, arguments) { entry ->
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), propagateMinConstraints = true) {
+        val inset = if (reachesBottomEdge) Modifier else Modifier.windowInsetsPadding(screenBottomInsets)
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(inset), propagateMinConstraints = true) {
             this@composable.content(entry)
         }
     }

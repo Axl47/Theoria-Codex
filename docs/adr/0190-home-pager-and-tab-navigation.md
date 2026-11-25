@@ -17,7 +17,7 @@ The top-level tabs sit side by side in a pager that a swipe or a bar tap can mov
 - The For You tab icon is `AutoAwesome` (sparkles) rather than a heart, which would read as Likes.
 - `calculateBottomNavigationSizing` keeps the bar at the established gesture-navigation size: the standard 24 dp gesture area (`INCLUDED_GESTURE_INSET_DP`) is already part of the base height, so only the inset beyond it (Android's larger three-button inset) adds height below the controls.
 - A Codex opens by growing out of its tile, so `codexEnterTransition` and `codexExitTransition` only fade, above the screen beneath it. That screen stays opaque throughout: fading both would let whatever is behind them show through. `CodexDetailEntry` sends system Back through the same animated `popBackStack` as the toolbar, so both close the Codex by shrinking it back into its tile.
-- `TheoriaAdaptiveScaffold` keeps one stable content slot, which preserves navigation owners and scroll state while the window resizes. It insets its content for the system bars, so tab screens such as `ForYouDeckScreen` add no system-bar padding of their own. Its container color is black on the Viewer route and the theme background elsewhere, because the status bar's inset shows that color and the Viewer letterboxes in black.
+- `TheoriaNavigationChrome` keeps one stable content slot, which preserves navigation owners and scroll state while the window resizes. `TheoriaAdaptiveScaffold` insets the screens for the top and side system bars and each screen takes the bottom one ([0222](0222-navigation-chrome-belongs-to-home.md)), so tab screens such as `ForYouDeckScreen` add no system-bar padding of their own. Its container color is black on the Viewer route and the theme background elsewhere, because the status bar's inset shows that color and the Viewer letterboxes in black.
 - Every cross-tab jump selects its tab with `showTab`, which moves the pager without a page animation, since one would pass over the tabs between. `showTab` records `homeTabRoute` and scrolls only while Home is current; with another screen on top, `HomeTabEffects` scrolls the pager there when Home returns. `goToTab` first pops back to Home (or navigates there) and then calls `showTab`.
 - Stored last-tab routes from before Library existed (`recents`, `codex`, `settings`) are kept in `legacyTabSections`: they restore to Library at the History section, the Codices section, or (for \`settings\`) Library's own section. `restoredHomeTab` opens Library for any retired tab and Search for anything unknown.
 
@@ -28,7 +28,7 @@ A new tab must be considered in `tabTap`, `tabShown` and the saved-route restore
 ## Applies to
 
 - `app/src/main/java/com/theoriacodex/app/ui/AppNavigation.kt`: `topLevelPagerFling`, `tabShown`, `TabTap`, `tabTap`, `tabSwipeEnabled`, `codexEnterTransition`, `codexExitTransition`
-- `app/src/main/java/com/theoriacodex/app/ui/TheoriaAdaptiveScaffold.kt`: `TheoriaAdaptiveScaffold`, `navigateTopLevelDestination`
+- `app/src/main/java/com/theoriacodex/app/ui/TheoriaAdaptiveScaffold.kt`: `TheoriaAdaptiveScaffold`, `TheoriaNavigationChrome`, `navigateTopLevelDestination`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt`: `TheoriaNavigationSurface` (`onDestinationSelected`, `containerColor`)
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShell.kt`: `showTab`, `goToTab`, `homeTabRoute`
 - `app/src/main/java/com/theoriacodex/app/ui/TheoriaShellEffects.kt`: `HomeTabEffects`

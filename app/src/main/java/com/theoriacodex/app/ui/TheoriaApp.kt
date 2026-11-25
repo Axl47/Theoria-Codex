@@ -5,6 +5,8 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ButtonDefaults
@@ -251,7 +253,7 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
     val pagerState = navigation.pagerState
     val density = LocalDensity.current
     val windowHeightDp = LocalWindowInfo.current.containerSize.height / density.density
-    val bottomBarWindowInsets = NavigationBarDefaults.windowInsets
+    val bottomBarWindowInsets = NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)
     val bottomSystemInsetDp = with(density) { bottomBarWindowInsets.getBottom(this).toDp().value }
     val bottomNavigationSizing = remember(windowHeightDp, bottomSystemInsetDp) {
         calculateBottomNavigationSizing(windowHeightDp = windowHeightDp, bottomSystemInsetDp = bottomSystemInsetDp)
@@ -259,39 +261,51 @@ private fun TheoriaNavigationSurface(shell: TheoriaShell, currentRoute: String?)
     val tabReselects = remember { MutableSharedFlow<TopLevelDestination>(extraBufferCapacity = 1) }
     NewPostsCheckEffect(shell)
     val libraryHasNew = rememberSavedNewPosts(shell.data).isNotEmpty()
+    val windowWidthDp = LocalWindowInfo.current.containerSize.width / density.density
+    val barLift = (bottomNavigationSizing.totalHeightDp - bottomSystemInsetDp).coerceAtLeast(0f).dp
+    val homeChrome: @Composable (@Composable (Modifier) -> Unit) -> Unit = { homeContent ->
+        TheoriaNavigationChrome(
+            selectedIndex = pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex),
+            bottomBarHeight = bottomNavigationSizing.totalHeightDp.dp,
+            bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp,
+            bottomBarWindowInsets = bottomBarWindowInsets,
+            destinations = TopLevelDestination.entries,
+            marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
+            windowWidthDp = windowWidthDp,
+            onDestinationSelected = { destination ->
+                val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
+                    tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
+                navigation.homeTabRoute = destination.route
+                if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
+                    shell.data.librarySections.select(LibrarySection.Saved)
+                }
+                if (alreadyShowing) tabReselects.tryEmit(destination)
+                else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
+            },
+            content = homeContent,
+        )
+    }
     TheoriaAdaptiveScaffold(
-        navigationVisible = currentRoute == AppRoute.Home,
-        selectedIndex = pagerState.currentPage.coerceIn(0, TopLevelDestination.entries.lastIndex),
-        bottomBarHeight = bottomNavigationSizing.totalHeightDp.dp,
-        bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp,
-        bottomBarWindowInsets = bottomBarWindowInsets,
         snackbarHostState = shell.snackbarHostState,
-        destinations = TopLevelDestination.entries,
-        marked = if (libraryHasNew) setOf(TopLevelDestination.Library) else emptySet(),
+        snackbarLift = if (currentRoute == AppRoute.Home && !useNavigationRail(windowWidthDp)) barLift else 0.dp,
         containerColor = if (currentRoute == AppRoute.Viewer) Color.Black else MaterialTheme.colorScheme.background,
-        onDestinationSelected = { destination ->
-            val alreadyShowing = navigation.currentRoute == AppRoute.Home &&
-                tabTap(destination, pagerState.targetPage, pagerState.settledPage, pagerState.isScrollInProgress) == TabTap.Reselect
-            navigation.homeTabRoute = destination.route
-            if (destination == TopLevelDestination.Library && !alreadyShowing && libraryHasNew) {
-                shell.data.librarySections.select(LibrarySection.Saved)
-            }
-            if (alreadyShowing) tabReselects.tryEmit(destination)
-            else shell.scope.launch { navigateTopLevelDestination(navigation.navController, pagerState, destination) }
-        },
     ) { contentModifier ->
         CompositionLocalProvider(LocalTabReselects provides tabReselects, *libraryTransferLocals(shell.transfers)) {
             SharedTransitionLayout(contentModifier) {
-                TheoriaNavHost(shell, this)
+                TheoriaNavHost(shell, this, homeChrome)
             }
         }
     }
 }
 
 @Composable
-private fun TheoriaNavHost(shell: TheoriaShell, sharedScope: androidx.compose.animation.SharedTransitionScope) {
+private fun TheoriaNavHost(
+    shell: TheoriaShell,
+    sharedScope: androidx.compose.animation.SharedTransitionScope,
+    homeChrome: @Composable (@Composable (Modifier) -> Unit) -> Unit,
+) {
     TheoriaScreenHost(shell.navController, AppRoute.Home, Modifier.fillMaxSize()) {
-        theoriaDestinations(shell, sharedScope)
+        theoriaDestinations(shell, sharedScope, homeChrome)
     }
 }
 
