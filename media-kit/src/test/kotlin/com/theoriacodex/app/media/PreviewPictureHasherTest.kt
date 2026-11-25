@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -39,7 +40,7 @@ import org.robolectric.annotation.Config
 class PreviewPictureHasherTest {
     @Test fun `a listing waits for its previews only as long as the budget, and the next listing has the late hashes (ADR 0006, 0111)`() = runTest {
         val loads = mutableListOf<String>()
-        val hasher = PreviewPictureHasher(backgroundScope, { candidate ->
+        val hasher = PreviewPictureHasher(backgroundScope) { candidate, _ ->
             loads += candidate.url
             when {
                 "slow" in candidate.url -> {
@@ -49,7 +50,7 @@ class PreviewPictureHasherTest {
                 "flat" in candidate.url -> PictureHashResult.Unhashable
                 else -> PictureHashResult.Hashed(candidate.url.length.toLong())
             }
-        })
+        }
         val posts = listOf(post("quick"), post("slow"), post("flat"), post("video", mime = "video/mp4"))
 
         val annotated = hasher.annotate(posts, budgetMs = 100)
@@ -64,10 +65,10 @@ class PreviewPictureHasherTest {
     }
 
     @Test fun `a listing waits 600 ms by default for its previews (ADR 0111)`() = runTest {
-        val hasher = PreviewPictureHasher(backgroundScope, { candidate ->
+        val hasher = PreviewPictureHasher(backgroundScope) { candidate, _ ->
             delay(if ("inside" in candidate.url) 599 else 601)
             PictureHashResult.Hashed(3)
-        })
+        }
 
         val annotated = hasher.annotate(listOf(post("inside"), post("outside")))
 
@@ -77,7 +78,7 @@ class PreviewPictureHasherTest {
 
     @Test fun `a preview's answer is remembered by its address, shared while loading, and an unavailable one is tried again (ADR 0111)`() = runTest {
         val loads = mutableListOf<String>()
-        val hasher = PreviewPictureHasher(backgroundScope, { candidate ->
+        val hasher = PreviewPictureHasher(backgroundScope) { candidate, _ ->
             val name = candidate.url.substringAfterLast('/')
             loads += name
             when (name) {
@@ -90,7 +91,7 @@ class PreviewPictureHasherTest {
                 }
                 else -> PictureHashResult.Hashed(5)
             }
-        })
+        }
         val custom = post("custom").copy(id = PostId(requireNotNull(SourceKey.parse("custom_booru_example")), "custom"))
         val posts = listOf(post("seen"), post("flat"), post("gone"), post("broken"), custom)
 
@@ -110,10 +111,10 @@ class PreviewPictureHasherTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun `answers are keyed by preview address, not post, and a load that finishes at once is still remembered (ADR 0111)`() = runTest {
         val loads = mutableListOf<String>()
-        val hasher = PreviewPictureHasher(CoroutineScope(UnconfinedTestDispatcher(testScheduler)), { candidate ->
+        val hasher = PreviewPictureHasher(CoroutineScope(UnconfinedTestDispatcher(testScheduler))) { candidate, _ ->
             loads += candidate.url
             PictureHashResult.Hashed(4)
-        })
+        }
         val original = post("shared")
         val repost = original.copy(id = PostId(SourceKey.GELBOORU, "repost"))
         val renamed = original.copy(preview = ImageRef("https://cdn.example/other.jpg", null, "image/jpeg"))
@@ -158,6 +159,26 @@ class PreviewPictureHasherTest {
             Coil.reset()
             Dispatchers.resetMain()
         }
+    }
+
+    @Test fun `a preview that waited for a loader slot while its host was rate limited is read from cache only`() = runTest {
+        var limited = false
+        val gate = CompletableDeferred<Unit>()
+        val cachedOnly = mutableMapOf<String, Boolean>()
+        val hasher = PreviewPictureHasher(backgroundScope, limited = { limited }, concurrentLoads = 1) { candidate, fromCache ->
+            cachedOnly[candidate.url] = fromCache
+            if ("first" in candidate.url) gate.await()
+            PictureHashResult.Unavailable
+        }
+        val first = async { hasher.hash(post("first")) }
+        val second = async { hasher.hash(post("second")) }
+        runCurrent()
+        limited = true
+        gate.complete(Unit)
+        first.await()
+        second.await()
+
+        assertEquals(mapOf(post("first").preview.url to false, post("second").preview.url to true), cachedOnly)
     }
 
     private fun post(name: String, mime: String = "image/jpeg") = Post(

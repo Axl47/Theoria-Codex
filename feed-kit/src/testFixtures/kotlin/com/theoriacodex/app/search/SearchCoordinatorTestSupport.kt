@@ -70,7 +70,8 @@ class TestAdapter(
         )
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = autocomplete.take(limit)
+    var trendingCalls = 0
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = autocomplete.take(limit).also { trendingCalls++ }
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
         autocompleteFailure?.let { throw it }
@@ -117,6 +118,7 @@ internal class FacetedAdapter(
 class RecordingTagStore : TagSuggestionStore {
     private val legacy = mutableMapOf<SourceKey, MutableList<TagSuggestion>>()
     private val trending = mutableMapOf<SourceKey, List<TagSuggestion>>()
+    val trendingRefreshes = mutableMapOf<SourceKey, Long>()
     val faceted = mutableListOf<FacetedTagSuggestion>()
 
     override fun get(source: SourceKey, limit: Int): List<TagSuggestion> = legacy[source].orEmpty().take(limit)
@@ -136,6 +138,12 @@ class RecordingTagStore : TagSuggestionStore {
     override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) {
         trending[source] = suggestions
         put(source, suggestions)
+    }
+
+    override fun trendingRefreshedAt(source: SourceKey): Long? = trendingRefreshes[source]
+
+    override fun markTrendingRefreshed(source: SourceKey, atEpochMs: Long) {
+        trendingRefreshes[source] = atEpochMs
     }
 
     override fun getFaceted(

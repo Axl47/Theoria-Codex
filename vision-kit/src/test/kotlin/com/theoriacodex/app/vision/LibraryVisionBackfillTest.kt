@@ -58,6 +58,10 @@ class LibraryVisionBackfillTest {
         var tagReads = 0
         override fun observePictureHashes(): Flow<Map<PostId, Long>> = flowOf(emptyMap())
         override suspend fun putHashes(hashes: Map<PostId, Long?>) = Unit
+        val failed = LinkedHashSet<PostId>()
+        override suspend fun failPreviews(postIds: Collection<PostId>) {
+            failed += postIds
+        }
         override suspend fun libraryPostsWithoutSignature(limit: Int, skip: Int): List<Post> = emptyList()
         override suspend fun putVision(entries: List<PictureVision>) {
             for (entry in entries) {
@@ -67,8 +71,8 @@ class LibraryVisionBackfillTest {
             }
             changes.value += 1
         }
-        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int): List<Post> =
-            posts.filter { post -> stored.none { it.postId == post.id } }.take(limit)
+        override suspend fun libraryPostsWithoutVision(modelId: String, limit: Int, skip: Int): List<Post> =
+            posts.filter { post -> post.id !in failed && stored.none { it.postId == post.id } }.drop(skip).take(limit)
         override suspend fun libraryPostsAwaitingFrames(modelId: String, limit: Int, skip: Int): List<Post> =
             posts.filter { it.id in signaturesAwaitingFrames() }.drop(skip).take(limit)
         override suspend fun failFrames(postId: PostId, modelId: String, permanently: Boolean) {
@@ -134,7 +138,7 @@ class LibraryVisionBackfillTest {
     }
 
     @Test
-    fun `previews that fail to load are skipped, so the older Library is still indexed, and a later run tries them again`() = runBlocking {
+    fun `previews that fail to load are stamped and left for a later day, so the older Library is still indexed`() = runBlocking {
         val dead = List(40) { post("dead-$it") }
         val older = List(3) { post("no-still-$it") }
         val library = Library(dead + older)
@@ -142,9 +146,25 @@ class LibraryVisionBackfillTest {
         assertEquals(ModelState.Ready, store.states.value)
         val tagger = PictureTagger(store, library, Pictures(hasStill = { it.id.sourcePostId.startsWith("dead") }), scope)
 
-        assertTrue(backfill(tagger, library).drain())
+        assertFalse(backfill(tagger, library).drain())
 
         assertEquals(older.map(Post::id), library.stored.map(PictureVision::postId))
+        assertEquals(dead.map(Post::id).toSet(), library.failed)
+    }
+
+    @Test
+    fun `posts on a host that is holding requests off are not loaded, and a later run tries them again`() = runBlocking {
+        val held = List(40) { post("held-$it") }
+        val open = List(3) { post("open-$it") }
+        val library = Library(held + open)
+        val loaded = mutableListOf<String>()
+        val pictures = Pictures(still = { loaded += it.id.sourcePostId; Pattern.TOP.bitmap() })
+        val tagger = PictureTagger(readyStore(), library, pictures, scope, openModel = { _, _ -> PatternModel(mutableListOf()) })
+
+        assertTrue(LibraryVisionBackfill(tagger, library, hot = { false }) { !it.id.sourcePostId.startsWith("held") }.drain())
+
+        assertEquals(open.map { it.id.sourcePostId }, loaded)
+        assertEquals(open.map(Post::id), library.stored.map(PictureVision::postId))
     }
 
     @Test

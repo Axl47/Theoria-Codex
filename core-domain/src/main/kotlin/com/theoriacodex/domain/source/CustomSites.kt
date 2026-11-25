@@ -183,7 +183,7 @@ data class SiteProfile(
     }
 }
 
-enum class ProbeFailure { DNS, TLS, TIMEOUT, HTTP_ERROR, BLOCKED, INSECURE_REDIRECT, CROSS_HOST_REDIRECT }
+enum class ProbeFailure { DNS, TLS, TIMEOUT, HTTP_ERROR, BLOCKED, RATE_LIMITED, INSECURE_REDIRECT, CROSS_HOST_REDIRECT }
 
 sealed interface SiteProbeResult {
     data class Supported(

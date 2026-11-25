@@ -4,16 +4,6 @@
 0015-series-entry-storage.md
 0016-shared-post-storage.md
 0017-visual-similarity-storage.md
-0055-aniyomi-stream-resolution.md
-0056-extension-binary-compatibility.md
-0057-extension-challenge-handling.md
-0058-extension-device-harness.md
-0060-extension-isolation-and-failures.md
-0061-extension-preferences-storage.md
-0062-extension-registry-loading.md
-0063-extension-repos-and-install.md
-0064-extension-source-state.md
-0065-extension-source-ids.md
 0067-custom-sites-controller.md
 0090-viewer-and-feed-playback.md
 0091-feed-chrome-stability.md
@@ -65,7 +55,6 @@
 0149-library-offline-and-download-removals.md
 0150-library-section-persistence.md
 0151-likes-codex-sync-writes.md
-0152-live-saved-collections.md
 0153-pixiv-pkce-login.md
 0154-recents-history-behavior.md
 0155-settings-backup.md
@@ -85,7 +74,6 @@
 0172-viewer-page-strip-and-scrubber.md
 0173-viewer-reading-modes-and-navigation.md
 0174-viewer-rotation-pip-and-system-controls.md
-0175-viewer-save-button.md
 0176-viewer-scrub-preview-player.md
 0177-viewer-episode-resume-positions.md
 0178-viewer-session-state-rules.md

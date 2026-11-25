@@ -1,6 +1,7 @@
 package com.theoriacodex.app.network
 
 import com.theoriacodex.sources.http.BrowserAddressDns
+import com.theoriacodex.sources.http.HostOutageTracker
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.CopyOnWriteArrayList
@@ -87,6 +88,28 @@ class AppHttpClientsDerivationTest {
             clients.warmRecentHosts()
             clients.warmRecentHosts()
         }
+
+        assertEquals(listOf("plain.example"), lookups.toList())
+    }
+
+    @Test
+    fun `warm-up stands down on a site that is rate limited (ADR 0102)`() {
+        val outages = HostOutageTracker()
+        outages.recordResponse("https://limited.example/", 429, emptyMap())
+        val clients = AppHttpClients(
+            jar,
+            memory = ConnectionMemory(
+                object : RecentHostStore {
+                    override fun load() = listOf("limited.example", "plain.example")
+                    override fun save(hosts: List<String>) = Unit
+                },
+                activeNetwork = { null },
+                resolver = Dns { host -> lookups += host; throw UnknownHostException(host) },
+            ),
+            outages = outages,
+        )
+
+        runBlocking { clients.warmRecentHosts() }
 
         assertEquals(listOf("plain.example"), lookups.toList())
     }

@@ -91,7 +91,7 @@ class SourceFailureUiTextTest {
         assertEquals(
             """
             NHentai: Provider unreachable or blocked right now.
-            Iwara: Rate limited. Wait a bit, then retry.
+            Iwara: Too many requests. Try again later.
             AIBooru: Provider response changed; parsing needs an update.
             +1 more source errors
             """.trimIndent(),

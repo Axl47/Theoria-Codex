@@ -24,7 +24,7 @@ internal class AniyomiStreams(
     private val source: AnimeSource,
     private val host: HostServices,
     private val calls: ExtensionCalls,
-    private val limits: Limits = Limits(),
+    internal val limits: Limits = Limits(),
 ) {
     private val http = source as? AnimeHttpSource
     private val hasServerList = declaresServerList(source.javaClass)
