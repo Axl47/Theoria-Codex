@@ -8,6 +8,7 @@ import androidx.room.Embedded;
 public final class FollowedSeriesRow {
     @NonNull @Embedded public final SeriesEntity series;
     @ColumnInfo(name = "unread_count") public final int unreadCount;
+    @ColumnInfo(name = "entry_count") public final int entryCount;
     @Nullable @ColumnInfo(name = "last_updated_at_epoch_ms") public final Long lastUpdatedAtEpochMs;
     @Nullable @ColumnInfo(name = "last_read_at_epoch_ms") public final Long lastReadAtEpochMs;
     @ColumnInfo(name = "started") public final boolean started;
@@ -15,12 +16,14 @@ public final class FollowedSeriesRow {
     public FollowedSeriesRow(
             @NonNull SeriesEntity series,
             int unreadCount,
+            int entryCount,
             @Nullable Long lastUpdatedAtEpochMs,
             @Nullable Long lastReadAtEpochMs,
             boolean started
     ) {
         this.series = series;
         this.unreadCount = unreadCount;
+        this.entryCount = entryCount;
         this.lastUpdatedAtEpochMs = lastUpdatedAtEpochMs;
         this.lastReadAtEpochMs = lastReadAtEpochMs;
         this.started = started;

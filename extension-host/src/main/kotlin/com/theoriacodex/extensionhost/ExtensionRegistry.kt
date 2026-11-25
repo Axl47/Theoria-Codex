@@ -87,7 +87,7 @@ class ExtensionRegistry(
         offer?.sources.orEmpty()
     }
 
-    suspend fun availability(): SourceAvailability = locked {
+    override suspend fun availability(): SourceAvailability = locked {
         loadEverything()
         val choices = choices.choices()
         val on = offer?.sources.orEmpty().mapTo(HashSet()) { it.key }

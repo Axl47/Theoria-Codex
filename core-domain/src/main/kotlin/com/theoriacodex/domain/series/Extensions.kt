@@ -92,6 +92,8 @@ interface SeriesExtensions {
     suspend fun settings(id: String): List<ExtensionSourceSettings>
 
     suspend fun change(id: String, sourceId: String, setting: ExtensionSetting): List<ExtensionSourceSettings>
+
+    suspend fun availability(): SourceAvailability = SourceAvailability()
 }
 
 fun ExtensionChoices.trusts(extension: String, signer: String?): Boolean = !signer.isNullOrBlank() && trusted[extension] == signer
