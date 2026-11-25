@@ -34,11 +34,12 @@ internal class TrailFeed(
         scope, relatedLoader, currentState = { RelatedPostsUiState.Idle }, canonicalPosts = { snapshot.value.results }, updateState = {},
     )
 
-    suspend fun start(visible: (List<Post>) -> List<Post> = { it }): List<Post> {
+    suspend fun start(isOrigin: (Post) -> Boolean = { false }, visible: (List<Post>) -> List<Post> = { it }): List<Post>? {
         repeat(FIRST_PAGE_LIMIT) {
-            if (!step()) return emptyList()
+            if (!step()) return null
             val shown = visible(snapshot.value.results)
-            if (shown.isNotEmpty() || !snapshot.value.canLoadMore) return shown
+            if (shown.any { !isOrigin(it) }) return shown
+            if (!snapshot.value.canLoadMore) return emptyList()
         }
         return emptyList()
     }

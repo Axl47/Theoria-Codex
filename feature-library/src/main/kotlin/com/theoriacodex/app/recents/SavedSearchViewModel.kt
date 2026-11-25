@@ -18,7 +18,10 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class SavedSearchViewModel(private val repository: SavedSearchRepository) : ViewModel() {
+class SavedSearchViewModel(
+    private val repository: SavedSearchRepository,
+    private val resetNewPosts: suspend (id: String) -> Unit,
+) : ViewModel() {
     val savedSearches = repository.observeSavedSearches()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val messages = Channel<String>(Channel.BUFFERED)
@@ -39,6 +42,13 @@ class SavedSearchViewModel(private val repository: SavedSearchRepository) : View
     fun rename(id: String, name: String) = mutate("Saved search renamed.") {
         justSaved.compareAndSet(id, null)
         repository.rename(id, name)
+    }
+
+    fun update(id: String, search: RecentSearchEntry) = mutate(successMessage = null) {
+        if (repository.update(id, search)) {
+            resetNewPosts(id)
+            messages.send("Saved search updated.")
+        }
     }
 
     fun remove(id: String) = mutate("Saved search removed.") {

@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.navigation.TrailFork
+import com.theoriacodex.app.ui.navigation.TrailOutcome
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -27,25 +28,29 @@ internal class ViewerTrailForks(
     var failed by mutableStateOf<TrailFork?>(null)
         private set
 
+    var failedEmpty by mutableStateOf(false)
+        private set
+
     var chromeHolds by mutableIntStateOf(0)
         private set
 
     private var from: PostId? = null
     private var job: Job? = null
 
-    fun open(chip: TrailFork, post: PostId, start: suspend () -> Boolean): Boolean {
+    fun open(chip: TrailFork, post: PostId, start: suspend () -> TrailOutcome): Boolean {
         if (busy != null) return false
         from = post
         busy = chip
         failed = null
         val launched = scope.launch(start = CoroutineStart.LAZY) {
             val self = coroutineContext.job
-            val opened = try {
+            val outcome = try {
                 start()
             } finally {
                 if (job === self) busy = null
             }
-            if (opened || job !== self) return@launch
+            if (outcome == TrailOutcome.Opened || job !== self) return@launch
+            failedEmpty = outcome == TrailOutcome.Empty
             failed = chip
             delay(FAILED_FORK_MS)
             if (job === self) failed = null

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.ui.components.rememberTouchExplorationEnabled
 import com.theoriacodex.app.viewer.state.dwellApplies
 import android.os.SystemClock
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -152,7 +153,7 @@ private fun ViewerLoadedScreen(
     ViewerTrailReplay(trail, selection.post, screen.trailForks)
     val levelControls = rememberViewerLevelControls(!inPictureInPicture, restoreVolume = selection.media?.let(::isVideoMediaRef) == true && !uiState.overview.visible)
     val holdScrub = remember { ViewerHoldScrub() }
-    val touchExplorationEnabled = rememberViewerTouchExploration()
+    val touchExplorationEnabled = rememberTouchExplorationEnabled()
     val chromeVisible = viewerChromeVisible(uiState, touchExplorationEnabled, inPictureInPicture, returning, opening, dismissDrag)
     val chromeVisibleState = rememberUpdatedState(chromeVisible)
     val chromeStage = rememberViewerChromeStage(chromeVisible)

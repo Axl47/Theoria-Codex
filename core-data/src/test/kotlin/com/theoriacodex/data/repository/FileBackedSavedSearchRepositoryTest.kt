@@ -204,6 +204,44 @@ internal class FileBackedSavedSearchRepositoryTest : FileBackedRepositoryTestFix
         assertEquals(entries.drop(1), FileBackedSavedSearchRepository(directory).observeSavedSearches().first())
     }
 
+    @Test
+    fun `update replaces only the search, keeps id name date and place, and survives restart (ADR 0218)`() = runTest {
+        val directory = tempDir("pin-update")
+        val repository = FileBackedSavedSearchRepository(directory, now = { 300 })
+        val older = repository.save("Older", execution().copy(queryHash = "older"))
+        val edited = repository.save("Edited", execution())
+        val newer = execution().copy(query = execution().query.withIncludeTermsAsRequired(listOf(SearchTerm("night"))), queryHash = "night")
+
+        assertTrue(repository.update(edited.id, newer))
+
+        val expected = listOf(edited.copy(search = newer), older)
+        assertEquals(expected, repository.observeSavedSearches().first())
+        assertEquals(expected, FileBackedSavedSearchRepository(directory).observeSavedSearches().first())
+    }
+
+    @Test
+    fun `update to the same search changes nothing and to another pin's search is refused (ADR 0218)`() = runTest {
+        val repository = FileBackedSavedSearchRepository(tempDir("pin-update-identity"))
+        val other = repository.save("Other", execution().copy(queryHash = "other", sources = listOf(SourceKey.PIXIV, SourceKey.AIBOORU)))
+        val edited = repository.save("Edited", execution())
+        val before = repository.observeSavedSearches().first()
+
+        assertFalse(repository.update(edited.id, execution().copy(searchedAtEpochMs = 900, queryHash = "rehashed")))
+        val refusal = runCatching { repository.update(edited.id, other.search.copy(queryHash = "rehashed")) }.exceptionOrNull()
+        assertEquals("“Other” already saves this search.", (refusal as IllegalArgumentException).message)
+        assertEquals(before, repository.observeSavedSearches().first())
+    }
+
+    @Test
+    fun `searches replay alike whatever their stored hash or source order, and Unified ones whatever sources Recents recorded (ADR 0218)`() {
+        val unified = execution().copy(kind = RecentSearchKind.UNIFIED, sources = emptyList())
+        assertTrue(unified.replaysAs(unified.copy(queryHash = "older", sources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU))))
+        assertTrue(execution().replaysAs(execution().copy(queryHash = "older")))
+        assertTrue(execution().replaysAs(execution().copy(sources = execution().sources.reversed())))
+        assertFalse(execution().replaysAs(execution().copy(sources = listOf(SourceKey.PIXIV, SourceKey.AIBOORU))))
+        assertFalse(execution().replaysAs(unified))
+    }
+
     private fun execution() = RecentSearchEntry(
         query = sampleQuery().copy(mode = QueryMode.Unified),
         queryHash = "multi-search",

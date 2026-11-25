@@ -15,6 +15,7 @@ import com.theoriacodex.app.tags.PostTagSavedTags
 import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.TrailOutcome
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -54,7 +55,7 @@ class ViewerTrailTagActionsTest {
             savedTags = PostTagSavedTags(flowOf(emptySet()), add = { _, tag -> saves += tag }),
             tagSuggestions = { _, input -> listOf(TagSuggestion("${input}ry_sky", null, 48_000)) },
         ) {
-            CompositionLocalProvider(LocalTrailOpener provides TrailOpener { request -> opened += request; true }) {
+            CompositionLocalProvider(LocalTrailOpener provides TrailOpener { request -> opened += request; TrailOutcome.Opened }) {
                 ViewerTrailRow(
                     shown, emptyList(), ViewerTrail(crumbs, levelQuery, { crumbTaps += it }, { removed += it }),
                     emptySet(), forks, {},
