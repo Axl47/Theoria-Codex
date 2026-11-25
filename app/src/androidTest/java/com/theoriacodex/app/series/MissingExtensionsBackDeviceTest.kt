@@ -37,6 +37,7 @@ import com.theoriacodex.domain.series.ExtensionRepo
 import com.theoriacodex.domain.series.ExtensionRepos
 import com.theoriacodex.domain.series.ExtensionSetting
 import com.theoriacodex.domain.series.ExtensionSourceSettings
+import com.theoriacodex.domain.series.ExtensionAlerts
 import com.theoriacodex.domain.series.InstalledExtension
 import com.theoriacodex.domain.series.NewExtensionRepo
 import com.theoriacodex.domain.series.RepoListing
@@ -62,20 +63,21 @@ class MissingExtensionsBackDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun theSeriesTabExtensionsButtonTellsAccessibilityHowManySeriesNeedTheirExtension() {
+    fun theSeriesTabSettingsButtonTellsAccessibilityWhatNeedsAttentionInExtensions() {
         val tab = SeriesTabViewModel(Followed, { listOf(Loaded) }) { _, _ -> FollowedCheck(emptyList(), checked = 0) }
-        compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}) } }
-        compose.waitUntil(TIMEOUT_MS) { tab.content.value.missingExtensions.isNotEmpty() }
+        val alerts = ExtensionAlerts(missing = 1, updates = 2)
+        compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}, extensionAlerts = alerts) } }
         compose.waitForIdle()
 
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         val heard = {
             automation.rootInActiveWindow?.let(::nodes).orEmpty()
-                .filter { button -> button.isClickable && nodes(button).any { it.contentDescription == "Extensions" } }
+                .filter { button -> button.isClickable && nodes(button).any { it.contentDescription == "Settings" } }
                 .map { "${it.stateDescription}" }
         }
-        runCatching { compose.waitUntil(TIMEOUT_MS) { heard() == listOf("1 series needs its extension") } }
-        assertEquals(listOf("1 series needs its extension"), heard())
+        val expected = listOf("1 series needs its extension, 2 updates")
+        runCatching { compose.waitUntil(TIMEOUT_MS) { heard() == expected } }
+        assertEquals(expected, heard())
         val shown = nodes(automation.rootInActiveWindow)
         assertEquals(0, shown.count { it.text?.contains("needs its extension") == true })
     }
@@ -91,7 +93,7 @@ class MissingExtensionsBackDeviceTest {
             }
             FollowedCheck(listOf(found), checked = 2)
         }
-        compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}) } }
+        compose.setContent { MaterialTheme { SeriesTabScreen(tab, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}) } }
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(TITLE).fetchSemanticsNodes().isNotEmpty() }
 
         val card = compose.onNodeWithText(TITLE)

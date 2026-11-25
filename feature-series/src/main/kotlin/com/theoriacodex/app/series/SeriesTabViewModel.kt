@@ -123,7 +123,6 @@ data class SeriesTabContent(
     val sources: List<SeriesSource>?,
     val browse: SeriesSourceListing?,
     val search: List<SeriesSourceListing>?,
-    val missingExtensions: List<Series> = emptyList(),
 ) {
     val followedIds: Set<SeriesId> get() = followed.keys
     val offersFilter: Boolean get() = kinds.size > 1
@@ -148,7 +147,6 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         sources = sources,
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
-        missingExtensions = sources?.let { missingSeries(all, it).map(FollowedSeries::series) }.orEmpty(),
     )
 }
 
