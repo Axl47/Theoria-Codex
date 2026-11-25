@@ -182,10 +182,7 @@ private fun PostInfoSheet(
     val nowEpochMs = remember { System.currentTimeMillis() }
     var commentsCollapsed by remember(post.id) { mutableStateOf(false) }
     val highlightedComment = rememberHighlightedComment(post, comments)
-    val onFork = rememberViewerTagFork(controls.trailForks, post, saveToCodexQuery) {
-        controls.setInfoSheetVisible(false)
-        controls.markInteraction()
-    }
+    val onFork = rememberViewerTagFork(controls.trailForks, post, saveToCodexQuery) { controls.setInfoSheetVisible(false); controls.markInteraction() }
     AdaptiveViewerInfo(onDismiss = { controls.setInfoSheetVisible(false) }) {
         PostTagActionSection(
             header = {
