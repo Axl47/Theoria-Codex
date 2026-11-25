@@ -84,6 +84,15 @@ class CollectTargetsState<T> {
     }
 }
 
+@Immutable
+data class ArmedColors(val container: Color, val content: Color)
+
+@Composable
+fun armedColors(armed: Boolean): ArmedColors {
+    val colors = MaterialTheme.colorScheme
+    return if (armed) ArmedColors(colors.primaryContainer, colors.onPrimaryContainer) else ArmedColors(colors.surfaceContainerHigh, colors.onSurface)
+}
+
 @Composable
 fun <T> rememberCollectTargetsState(): CollectTargetsState<T> = remember { CollectTargetsState() }
 
@@ -143,18 +152,19 @@ private fun <T> CollectTargetBubble(
     labelWidth: Dp = LABEL_WIDTH,
 ) {
     val scale by animateFloatAsState(if (hovered) HOVERED_SCALE else 1f, label = "collect-target-scale")
-    val colors = MaterialTheme.colorScheme
+    val fill = armedColors(hovered)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             shape = CircleShape,
-            color = colors.surfaceContainerHigh,
+            color = fill.container,
+            contentColor = fill.content,
             shadowElevation = 6.dp,
             modifier = Modifier
                 .size(TARGET_SIZE)
                 .testTag("Collect target ${target.key}")
                 .onGloballyPositioned { state.place(target.key, it.boundsInWindow()) }
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .then(if (hovered) Modifier.border(3.dp, colors.primary, CircleShape) else Modifier),
+                .then(if (hovered) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 when (val visual = target.visual) {
