@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ import com.theoriacodex.app.media.MediaDeliveryActivation
 import com.theoriacodex.app.media.viewerMediaDeliveryPlan
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -43,6 +45,9 @@ import com.theoriacodex.domain.model.SourceKey
 internal class ViewerImageSession {
     val loadedLocations = mutableSetOf<String>()
     val recoveryRequests = mutableSetOf<String>()
+    val stills = mutableStateSetOf<ImageRef>()
+
+    fun isAnimated(kind: ViewerMediaKind, media: ImageRef): Boolean = kind.animated && media !in stills
 }
 
 @Composable
@@ -88,6 +93,7 @@ internal fun ViewerImageRenderer(
                     modifier = Modifier.fillMaxSize(), mediaModifier = mediaModifier,
                     controls = controls, events = events,
                     onLoading = { state.loading = true }, onSuccess = onReady, onError = onError,
+                    onStill = { imageSession.stills += media },
                 )
             model != null -> {
                 AsyncImage(

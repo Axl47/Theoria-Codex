@@ -67,7 +67,7 @@ internal fun ViewerPostPagerSurface(
     val vertical = config.readingModeOf(frame.uiState.currentPage, frame.uiState.series) == GalleryReadingMode.VERTICAL
     val verticalGallery = screen.verticalGalleries[selection.post.id]?.takeIf { vertical }
     val layoutZoomed = if (vertical) verticalGallery?.zoomed == true else zoomed
-    val reservedBottom = if (selection.isAnimated && frame.chromeVisible) {
+    val reservedBottom = if (selection.reservesTimeline && frame.chromeVisible) {
         with(LocalDensity.current) { (VIEWER_TIMELINE_HEIGHT + LocalViewerTimelineInset.current).toPx() }
     } else 0f
     Box(
