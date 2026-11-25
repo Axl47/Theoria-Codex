@@ -404,6 +404,31 @@ class ForYouDeckViewModelTest {
         assertTrue(owner.top.deck.state.value.finished)
     }
 
+    @Test fun `Undo after Reset keeps the lanes warm (ADR 0134)`() {
+        val owner = owner()
+        val b = DeckOrigin.Lane(laneId("b"), "b")
+        repeat(9) { owner.decide(if (owner.originOf(owner.current.id) == b) TriageChoice.Skip else TriageChoice.Like) }
+        while (owner.originOf(owner.current.id) != b) owner.decide(TriageChoice.Like)
+        owner.decide(TriageChoice.Like)
+        owner.warmLanes()
+
+        owner.top.deck.undo()
+        assertEquals(listOf(false, false, false), owner.state.value.lanes.map(ForYouLaneChoice::cooled))
+    }
+
+    @Test fun `a like on a focus that fails after the focus closed says so (ADR 0134)`() = runTest {
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        val owner = owner()
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        val gate = CompletableDeferred<Unit>().also { actions.likeGate = it }
+        actions.failLike = true
+        owner.decide(TriageChoice.Like)
+        owner.popTo(0)
+        gate.complete(Unit)
+
+        assertEquals("Couldn't like", owner.messages.first())
+    }
+
     @Test fun `the Mix passes over cards decided while focused, and Undo cannot reach back over them (ADR 0134)`() {
         val owner = owner()
         owner.skip(1)

@@ -16,8 +16,10 @@ import com.theoriacodex.app.triage.TriageDecisionEvent
 import com.theoriacodex.app.triage.TriageDeck
 import com.theoriacodex.app.triage.TriageFeed
 import com.theoriacodex.app.triage.TriageFeedSnapshot
+import com.theoriacodex.app.triage.TriageNotice
 import com.theoriacodex.app.triage.hiddenBy
 import com.theoriacodex.app.triage.needsPictureCheck
+import com.theoriacodex.app.triage.noticeLabel
 import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -307,6 +309,7 @@ class ForYouDeckViewModel(
     fun warmLanes() {
         val mix = mix ?: return
         mix.steering = mix.steering.warmed()
+        steeredFrom.clear()
         publish()
     }
 
@@ -493,9 +496,13 @@ class ForYouDeckViewModel(
         val source = carried?.let { trail.leadingWith(it) } ?: trail
         top.leftWith = seen.toSet()
         relatedPosts.clear("level opened")
-        val level = level("$LEVEL_ID_PREFIX$session:trail:${++trailCount}", label, request, spec.query, source, scope = scope, lead = carried) { event ->
+        val id = "$LEVEL_ID_PREFIX$session:trail:${++trailCount}"
+        val level = level(id, label, request, spec.query, source, scope = scope, lead = carried) { event ->
             record(event)
             steer(event)
+            if (event is TriageDecisionEvent.Reverted && stack.value.none { it.id == id }) {
+                noticeLabel(TriageNotice(event.decision, failed = true))?.let(messageChannel::trySend)
+            }
         }
         stack.update { it + level }
     }

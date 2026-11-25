@@ -169,7 +169,7 @@ class ForYouDeckScreenTest {
         compose.onNodeWithTag(FOR_YOU_REFRESH_TAG).assertDoesNotExist()
     }
 
-    @Test fun `a pill focuses in place, keeping the card and its player, and Mix resumes on it (ADR 0134)`() {
+    @Test fun `a pill focuses in place, keeping the card's node and so its player lease, and Mix resumes on it (ADR 0134)`() {
         trails.tag = listOf(testPost(DECK_SOURCE, "t-1"), testPost(DECK_SOURCE, "t-2"))
         val owner = render()
         val before = card("fog-0-0").fetchSemanticsNode().id

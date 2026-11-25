@@ -60,7 +60,7 @@ internal fun ForYouBody(
             FeedFailureTile(state.failure?.takeIf { level.fork == null } ?: LOAD_FAILED, onRetry = level::retryPage)
         }
         config.grid -> ForYouGrid(level, feed, config, related, callbacks, onLongPress, end, mixFailed = state.mix == ForYouMixState.Failed)
-        else -> ForYouDeck(owner, level, feed, config, callbacks, end)
+        else -> ForYouDeck(owner, level, feed, state.lanes, config, callbacks, end)
     }
 }
 
@@ -69,6 +69,7 @@ private fun ForYouDeck(
     owner: ForYouDeckViewModel,
     level: ForYouLevel,
     feed: TriageFeedSnapshot,
+    lanes: List<ForYouLaneChoice>,
     config: ForYouScreenConfig,
     callbacks: ForYouDeckCallbacks,
     end: @Composable () -> Unit,
@@ -92,7 +93,7 @@ private fun ForYouDeck(
         support = config.support,
         callbacks = deckCallbacks,
         showTopBar = false,
-        cardFooter = { post -> ForYouCardFooter(owner, level, post, feedShare, creatorBrowsingSources) },
+        cardFooter = { post -> ForYouCardFooter(owner, level, post, feedShare, lanes, creatorBrowsingSources) },
         endContent = end,
     )
 }

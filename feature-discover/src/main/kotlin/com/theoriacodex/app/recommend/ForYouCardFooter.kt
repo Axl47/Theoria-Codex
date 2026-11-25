@@ -40,11 +40,13 @@ internal fun ForYouCardFooter(
     level: ForYouLevel,
     post: Post,
     feedShare: Map<String, Double>,
+    lanes: List<ForYouLaneChoice>,
     creatorBrowsingSources: Set<SourceKey>,
 ) {
     val similarSupported = LocalRelatedPostsSupport.current(post.id.source)
     val affinity by LocalTagAffinityInputs.current.collectAsStateWithLifecycle()
-    val origin = if (level.fork == null) owner.originOf(post.id) else null
+    val origin = owner.originOf(post.id).takeIf { level.fork == null }
+        ?.takeUnless { it is DeckOrigin.Lane && lanes.none { lane -> lane.laneId == it.laneId } }
     val pills = remember(post, affinity, feedShare, similarSupported, creatorBrowsingSources, level, origin) {
         val creator = creatorProfileActions(post, creatorBrowsingSources).firstNotNullOfOrNull { it.profile }
             ?.takeUnless { (level.fork as? TrailRequest.Creator)?.creator == it }
