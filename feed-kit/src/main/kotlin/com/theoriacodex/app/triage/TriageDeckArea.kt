@@ -260,11 +260,13 @@ internal fun TriageDragOverlays(
             TriageEdgeCue(icon, label, if (offset.x > 0f) Alignment.CenterEnd else Alignment.CenterStart, hints.sideways, armed)
         }
         if (hints.vertical > 0f) {
-            val pointer = drag.pointer
+            val pointer = drag.rowPointer
             val fade = Modifier.alpha(hints.vertical)
             when {
                 offset.y < 0f && targets.save.isEmpty() ->
                     TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
+                offset.y > 0f && targets.hide.isEmpty() ->
+                    TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, hints.armed == SwipeDirection.Down)
                 offset.y < 0f ->
                     CollectTargets(targets.save, pointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState)
                 else ->
