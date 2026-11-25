@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.Dp
 import com.theoriacodex.app.comments.CommentCount
+import com.theoriacodex.app.viewer.state.autoAdvanceHeld
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.VideoQuality
@@ -88,6 +89,7 @@ private fun ViewerPlaybackSettings(
     val uiState = frame.uiState
     PlaybackSettingsMenu(
         expanded = uiState.controls.panel == ViewerPanel.PLAYBACK_SETTINGS,
+        autoAdvancePaused = uiState.autoAdvanceHeld,
         onExpandedChange = { expanded ->
             controls.setPlaybackSettingsExpanded(expanded)
             if (expanded) controls.markInteraction()

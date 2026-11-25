@@ -60,7 +60,7 @@ class ViewerStateReducerTest {
         val second = samplePost("second", media = listOf(media("video/mp4", "three.mp4")))
         var state = createViewerUiState(session("queue"), listOf(first, second))
         fun ended() = ViewerAction.PlaybackCompleted(requireNotNull(state.session), requireNotNull(state.currentMedia).key,
-            requireNotNull(state.currentMedia).loadGeneration)
+            requireNotNull(state.currentMedia).loadGeneration, 0L)
         assertEquals(state, reduceViewerState(state, ended()).state)
         state = reduceViewerState(state, ViewerAction.SetPlaybackMode(ViewerPlaybackMode.ONCE)).state
         state = reduceViewerState(state, ended()).state

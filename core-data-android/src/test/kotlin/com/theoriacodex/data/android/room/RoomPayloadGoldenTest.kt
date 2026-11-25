@@ -38,19 +38,19 @@ class RoomPayloadGoldenTest {
         database.close()
     }
 
-    @Test fun `golden posts payload decodes to the original post`() {
+    @Test fun `golden posts payload decodes to the original post (ADR 0016)`() {
         val entity = PostEntity("PIXIV", "gold-1", golden("post-payload.json"))
 
         assertEquals(goldenPost, LocalPostPayloadCodec.decode(entity))
     }
 
-    @Test fun `golden full posts payload decodes every field`() {
+    @Test fun `golden full posts payload decodes every field (ADR 0016)`() {
         val entity = PostEntity("GELBOORU", "gold-full", golden("post-payload-full.json"))
 
         assertEquals(goldenFullPost, LocalPostPayloadCodec.decode(entity))
     }
 
-    @Test fun `golden liked tags decode to the original tags`() = runTest {
+    @Test fun `golden liked tags decode to the original tags (ADR 0016)`() = runTest {
         val dao = database.codexLikesDao()
         dao.insertPost(PostEntity("PIXIV", "gold-1", golden("post-payload.json")))
         dao.insertLike(LikedPostEntity("profile-main", "PIXIV", "gold-1", 1L, golden("liked-tags.json")))
@@ -60,7 +60,7 @@ class RoomPayloadGoldenTest {
         assertEquals(listOf("a&b", "c=d", "<x>", "it's", "q>r"), liked.tags)
     }
 
-    @Test fun `upserting an unchanged post keeps the Gson-written row (ADR 0038)`() {
+    @Test fun `upserting an unchanged post keeps the Gson-written row (ADR 0016, 0038)`() {
         val dao = database.codexLikesDao()
         val golden = golden("post-payload-full.json")
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden))
@@ -70,7 +70,7 @@ class RoomPayloadGoldenTest {
         assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
     }
 
-    @Test fun `upserting a post with sparser tags and creators keeps the row`() {
+    @Test fun `upserting a post with sparser tags and creators keeps the row (ADR 0016)`() {
         val dao = database.codexLikesDao()
         val golden = golden("post-payload-full.json")
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden))
@@ -84,7 +84,7 @@ class RoomPayloadGoldenTest {
         assertEquals(golden, dao.post("GELBOORU", "gold-full")?.payloadJson)
     }
 
-    @Test fun `upserting a changed post rewrites the row`() {
+    @Test fun `upserting a changed post rewrites the row (ADR 0016)`() {
         val dao = database.codexLikesDao()
         dao.insertPost(PostEntity("GELBOORU", "gold-full", golden("post-payload-full.json")))
 

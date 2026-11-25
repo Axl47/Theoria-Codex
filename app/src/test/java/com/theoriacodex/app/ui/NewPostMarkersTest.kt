@@ -1,0 +1,125 @@
+package com.theoriacodex.app.ui
+
+import android.app.Application
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
+import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
+import com.theoriacodex.app.di.DataDependencies
+import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.waitUntilSettled
+import com.theoriacodex.app.ui.components.FeedDurations
+import com.theoriacodex.app.ui.components.rememberFeedView
+import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.data.repository.NewPostMarks
+import com.theoriacodex.data.repository.SavedSearchNewPosts
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.markKey
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+class NewPostMarkersTest {
+    @get:Rule val compose = createComposeRule()
+    @get:Rule val temporary = TemporaryFolder()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val graph by lazy {
+        runBlocking(Dispatchers.IO) {
+            JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(), emptyMap(), scope).also { it.awaitReady() }
+        }
+    }
+    private val posts = listOf("a", "b", "c").map { testPost(sourcePostId = it) }
+    private val show = mutableStateOf(true)
+
+    @After fun cleanup() {
+        compose.runOnIdle { show.value = false }
+        compose.waitForIdle()
+        runBlocking(Dispatchers.IO) { graph.shutdown() }
+        scope.cancel()
+    }
+
+    @Test
+    fun `new posts keep their markers after the visit marks them seen until opened from this collection, and lose the rest on the next visit (ADR 0152)`() {
+        val data = graph.data
+        runBlocking {
+            data.uiRestoreRepository.updateSavedSearchNewPosts {
+                SavedSearchNewPosts(marks = mapOf("search" to NewPostMarks(latestPostIds = posts.map { it.id.markKey() }, checkedAtEpochMs = 1)))
+            }
+        }
+        lateinit var navigation: NavHostController
+        compose.setContent {
+            navigation = rememberNavController()
+            if (show.value) NavHost(navigation, startDestination = "library") {
+                composable("library") { Text("library") }
+                composable("collection") { Collection(data) }
+                composable("viewer") { Text("viewer") }
+            }
+        }
+        compose.runOnIdle { navigation.navigate("collection") }
+        awaitText("new: a, b, c")
+        compose.waitUntilSettled(10_000) { runBlocking { liveNewPosts(data).isEmpty() } }
+        compose.onNodeWithText("new: a, b, c").assertExists()
+
+        compose.runOnIdle { navigation.navigate("viewer") }
+        runBlocking {
+            data.markViewedNewPost(posts[0], ViewerSession(posts, launchedFrom(FOLLOWED_CODEX_ID)))
+            data.markViewedNewPost(posts[1], ViewerSession(posts, launchedFrom(SAVED_SEARCHES_CODEX_ID)))
+        }
+        compose.runOnIdle { navigation.popBackStack() }
+        awaitText("new: a, c")
+
+        compose.runOnIdle {
+            navigation.popBackStack()
+            navigation.navigate("collection")
+        }
+        awaitText("new: none")
+    }
+
+    @Composable
+    private fun Collection(data: DataDependencies) {
+        val news = remember { data.uiRestoreRepository.observeSavedSearchNewPosts() }.collectAsState(null).value ?: return
+        val markers = rememberNewPostMarkers(data, SAVED_SEARCHES_CODEX_ID, posts) {
+            news.marks.values.flatMapTo(mutableSetOf()) { it.newPostIds }
+        }
+        val feed = rememberFeedView("new-post-markers", posts, SearchVisibilityFilters(), FeedDurations.NONE, RelatedPostsUiState.Idle)
+        val header = requireNotNull(markingNewPostsSeen(data, SAVED_SEARCHES_CODEX_ID, loading = false) { _, _ -> })
+        header(feed, rememberLazyStaggeredGridState())
+        Text("new: " + posts.filter { it.id in markers }.joinToString { it.id.sourcePostId }.ifEmpty { "none" })
+    }
+
+    private fun launchedFrom(codexId: String) = ViewerLaunchContext("codex:$codexId", 0, ViewerStreamSource.CODEX, 0)
+
+    private suspend fun liveNewPosts(data: DataDependencies) =
+        data.uiRestoreRepository.observeSavedSearchNewPosts().first().marks.values.flatMap { it.newPostIds }
+
+    private fun awaitText(text: String) =
+        compose.waitUntilSettled(10_000) { compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
+}

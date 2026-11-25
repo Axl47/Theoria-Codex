@@ -64,7 +64,7 @@ class ViewerPostNavigationTest {
                 playbackMode = ViewerPlaybackMode.NEXT, playback = it.controls.playback.copy(playing = true),
             )) }
             return reduceViewerState(current, ViewerAction.PlaybackCompleted(
-                requireNotNull(current.session), requireNotNull(current.currentMedia).key, current.currentMedia!!.loadGeneration,
+                requireNotNull(current.session), requireNotNull(current.currentMedia).key, current.currentMedia!!.loadGeneration, 0L,
             )).state
         }
         assertEquals(originals[2].id, complete(originals[1]).currentPage?.post?.id)

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.vision
 
 import com.theoriacodex.data.repository.PictureVision
+import com.theoriacodex.data.repository.VisionCommit
 import com.theoriacodex.data.repository.VisionFrames
 import com.theoriacodex.data.repository.VisualSignatureRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -130,6 +131,7 @@ class PictureTagger(
 
     suspend fun release() = holder.release()
 
+    @OptIn(VisionCommit::class)
     suspend fun forget() = commits.withLock {
         holder.release()
         vocabularyLock.withLock { vocabulary = null }
@@ -137,6 +139,7 @@ class PictureTagger(
         signatures.clearVision()
     }
 
+    @OptIn(VisionCommit::class)
     suspend fun store(results: Map<Post, PictureResult>): Boolean = commits.withLock {
         if (!current) return@withLock false
         val visions = results.mapNotNull { (post, result) ->
@@ -151,12 +154,14 @@ class PictureTagger(
         true
     }
 
+    @OptIn(VisionCommit::class)
     suspend fun playing(posts: List<Post>): List<Post> {
         val (playing, still) = posts.partition(pictures::plays)
         if (still.isNotEmpty()) commits.withLock { if (current) signatures.unwantFrames(still.map(Post::id), store.id) }
         return playing
     }
 
+    @OptIn(VisionCommit::class)
     suspend fun storeFrames(postId: PostId, result: PictureResult): Boolean = commits.withLock {
         if (!current) return@withLock false
         when (result) {
@@ -198,7 +203,7 @@ class PictureTagger(
     }
 }
 
-private class SessionAnalyses {
+internal class SessionAnalyses {
     private val byPost = object : LinkedHashMap<PostId, PictureResult>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PostId, PictureResult>) = size > LIMIT
     }
@@ -212,7 +217,7 @@ private class SessionAnalyses {
 
     fun clear() = synchronized(byPost) { byPost.clear() }
 
-    private companion object {
+    companion object {
         const val LIMIT = 2_048
     }
 }

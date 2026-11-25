@@ -11,6 +11,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.SideEffect
+import android.os.SystemClock
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -36,6 +37,7 @@ import androidx.navigationevent.NavigationEventHandler
 import androidx.navigationevent.NavigationEventInfo
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.viewer.state.dwellApplies
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -147,6 +149,7 @@ internal fun ViewerFrameEffects(
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
     ViewerUnlockPeekEffect(frame, screen)
+    ViewerDwellEffect(frame, screen, onAction)
     ViewerPendingPostEffect(frame, screen, swipe, postPagerState, pendingPostId, config)
 }
 
@@ -157,8 +160,24 @@ internal fun viewerKeepsScreenOn(frame: ViewerFrame, screen: ViewerScreenState):
         reading = frame.reading,
         videoPlaying = screen.playingVideos.held.intValue > 0,
         loopingClipPlaying = screen.playingVideos.looping.intValue > 0,
-        activity = { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) },
+        activity = viewerActivity(frame, screen),
     )
+
+internal fun viewerActivity(frame: ViewerFrame, screen: ViewerScreenState): () -> Any =
+    { listOf(screen.touchSerial, screen.interactionSerial, frame.selection.post.id, frame.selection.mediaIndex) }
+
+@Composable
+private fun ViewerDwellEffect(frame: ViewerFrame, screen: ViewerScreenState, onAction: (ViewerAction) -> Unit) {
+    val dwellApplies = frame.uiState.dwellApplies
+    val activity by rememberUpdatedState(viewerActivity(frame, screen))
+    val dispatch by rememberUpdatedState(onAction)
+    LaunchedEffect(dwellApplies) {
+        if (!dwellApplies) return@LaunchedEffect
+        snapshotFlow { activity() }.collect {
+            dispatch(ViewerAction.RestartDwell(SystemClock.uptimeMillis(), interacting = screen.touching))
+        }
+    }
+}
 
 @Stable
 internal class ViewerPlayingVideos {

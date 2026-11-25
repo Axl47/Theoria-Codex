@@ -266,6 +266,54 @@ def off_main_notes_run_where_work_runs() -> list[str]:
     )
 
 
+VISION_COMMIT = re.compile(r"\bVisionCommit\b")
+VISION_OPT_IN = re.compile(r"\bOptIn\s*\([^)]*\bVisionCommit\b")
+VISION_TAGGER = "vision-kit/src/main/kotlin/com/theoriacodex/app/vision/PictureTagger.kt"
+VISION_WIDE_OPT_IN = re.compile(
+    r"@file:OptIn\s*\([^)]*\bVisionCommit\b"
+    r"|\bOptIn\s*\([^)]*\bVisionCommit\b[^)]*\)\s*(?:@[\w.]+(?:\([^)]*\))?\s*|(?:public|internal|private|open|abstract|data|sealed)\s+)*(?:class|object|interface)\b"
+)
+VISION_PROPAGATORS = (
+    "core-data/src/main/kotlin/com/theoriacodex/data/repository/VisualSignatureRepository.kt",
+    "core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomVisualSignatureRepository.kt",
+)
+TEST_SOURCE_SET = re.compile(r"^(test|androidTest|sharedTest|testFixtures)")
+
+
+def shipped_sources() -> list[tuple[str, str]]:
+    sources = []
+    for path in sorted(ROOT.glob("*/src/*/**/*")):
+        relative = path.relative_to(ROOT)
+        if path.suffix in (".kt", ".java") and path.is_file() and not TEST_SOURCE_SET.match(relative.parts[2]):
+            sources.append((relative.as_posix(), KOTLIN_LITERAL.sub('""', path.read_text(encoding="utf-8"))))
+    return sources
+
+
+def build_scripts() -> list[tuple[str, str]]:
+    return [
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
+        for path in sorted([*ROOT.glob("**/*.gradle.kts"), *ROOT.glob("**/*.gradle")])
+        if path.is_file() and not {"build", ".gradle"} & set(path.relative_to(ROOT).parts[:-1])
+    ]
+
+
+@rule
+def vision_results_are_written_under_commits() -> list[str]:
+    reason = "only PictureTagger writes vision results, under its commits lock (docs/adr/0097-picture-tagger-session-and-commits.md)"
+    failures = []
+    for relative, text in shipped_sources() + build_scripts():
+        if relative == VISION_TAGGER:
+            if VISION_WIDE_OPT_IN.search(text):
+                failures.append(f"{relative} opts into VisionCommit for a whole class or file; opt in on each function that writes; {reason}")
+            continue
+        if relative in VISION_PROPAGATORS:
+            if VISION_OPT_IN.search(text):
+                failures.append(f"{relative} opts into VisionCommit; it may only pass the marker on; {reason}")
+        elif VISION_COMMIT.search(text):
+            failures.append(f"{relative} names VisionCommit; {reason}")
+    return failures
+
+
 READ_LOGS_REQUEST = re.compile(r"<uses-permission\b[^>]*>")
 XML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 REMOVED_BY_MERGER = re.compile(r"""tools:node\s*=\s*["']remove["']""")

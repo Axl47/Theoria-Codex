@@ -100,6 +100,7 @@ fun SearchResultCard(
     mediaAspectRatio: Float? = null,
     showTitle: Boolean = true,
     liked: Boolean = false,
+    isNew: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
@@ -133,6 +134,7 @@ fun SearchResultCard(
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
+            .newPostMarking(isNew, cardShape, MaterialTheme.colorScheme.primary)
             .testTag(searchCardTestTag(post.id))
             .clickable {
                 viewerReturn?.openedFrom(
@@ -147,7 +149,7 @@ fun SearchResultCard(
     ) {
         SearchCardContent(
             post, resolution, pixivUgoiraClient, playbackActive, acquiredDurationMs, showSourceBadge, metadataLabel,
-            viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, onToggleLike, resolvePostById,
+            viewedMediaNumber, showWatchHistory, mediaAspectRatio, showTitle, liked, isNew, onToggleLike, resolvePostById,
             recoverPostMedia, refreshOnPreviewError, playbackDiagnosticsEnabled, onAuthoritativeDurationKnown,
             mediaGeometry, mediaTracking,
         )
@@ -319,6 +321,7 @@ private fun SearchCardContent(
     mediaAspectRatio: Float?,
     showTitle: Boolean,
     liked: Boolean,
+    isNew: Boolean,
     onToggleLike: (() -> Unit)?,
     resolvePostById: (suspend (PostId) -> Post?)?,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)?,
@@ -381,7 +384,7 @@ private fun SearchCardContent(
         )
         SearchCardBadges(
             effectivePost, watch.viewedMediaNumber, watch.watchedDescription, liked, onToggleLike, metadataLabel, showSourceBadge,
-            supportingContent.showPreviewContext, animatedDurationLabel(effectivePost, acquiredDurationMs),
+            supportingContent.showPreviewContext, animatedDurationLabel(effectivePost, acquiredDurationMs), isNew,
         )
     }
     if (titleBelowMedia) SearchCardTitle(requireNotNull(title))

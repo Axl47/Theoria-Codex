@@ -32,6 +32,7 @@ internal fun BoxScope.ViewerFooterButton(
     contentDescription: String,
     testTag: String,
     bottomRowHeight: Dp = VIEWER_POST_STRIP_HEIGHT,
+    paused: Boolean = false,
     onClick: () -> Unit,
 ) {
     val footer = viewerFooterHeight(selection, chromeVisible, bottomRowHeight)
@@ -44,7 +45,7 @@ internal fun BoxScope.ViewerFooterButton(
             .offset { IntOffset(0, -lift.roundToPx()) },
     ) {
         IconButton(onClick = onClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape).testTag(testTag)) {
-            Icon(icon, contentDescription = contentDescription, tint = Color.White)
+            ViewerPausedBadge(paused) { Icon(icon, contentDescription = contentDescription, tint = Color.White) }
         }
     }
 }

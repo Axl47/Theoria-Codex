@@ -101,6 +101,7 @@ data class ViewerControlsState(
     val panel: ViewerPanel? = null,
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
     val slideshow: Boolean = false,
+    val dwell: ViewerDwell = ViewerDwell(),
     val locked: Boolean = false,
     val fillScreen: Boolean = false,
     val episode: ViewerEpisodeChoice = ViewerEpisodeChoice(),
