@@ -9,7 +9,7 @@ data class CrumbTag(val value: String, val source: SourceKey)
 
 data class ViewerCrumb(val label: String, val trailKey: String? = null, val tag: CrumbTag? = null)
 
-data class TrailRemoval(val backTo: Int, val replay: List<String>)
+data class TrailRemoval(val backTo: Int, val replay: List<CrumbTag>)
 
 @Immutable
 class ViewerTrail(
@@ -17,7 +17,7 @@ class ViewerTrail(
     val levelQuery: Query?,
     val onCrumb: (Int) -> Unit,
     val onRemove: (Int) -> Unit = {},
-    val replay: String? = null,
+    val replay: CrumbTag? = null,
 ) {
     val levelTrailKey: String? get() = crumbs.lastOrNull()?.trailKey
 
@@ -28,7 +28,7 @@ class ViewerTrail(
 
 fun List<ViewerCrumb>.removal(index: Int): TrailRemoval? {
     if (index <= 0 || getOrNull(index)?.tag == null) return null
-    val replay = asSequence().drop(index + 1).map { it.tag?.value }.takeWhile { it != null }.filterNotNull().toList()
+    val replay = asSequence().drop(index + 1).map { it.tag }.takeWhile { it != null }.filterNotNull().toList()
     return TrailRemoval(index - 1, replay)
 }
 

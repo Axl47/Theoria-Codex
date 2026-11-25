@@ -36,7 +36,7 @@ internal class ViewerLevel(
     val popTo: (Int) -> Unit,
     val nameRoot: (ViewerLaunchContext, Query?) -> Unit,
     val remove: (Int) -> Unit = {},
-    val replay: String? = null,
+    val replay: CrumbTag? = null,
 ) {
     fun clearsReturnOnDispose(): Boolean = !isFork && !coveredByFork()
 
@@ -104,20 +104,28 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
                     navController.currentBackStackEntry?.savedStateHandle?.planTrailReplay(removal.replay)
                 }
             },
-            replay = replay.firstOrNull(),
+            replay = replay.firstOrNull()?.let(::decodeReplayTag),
         )
     }
 }
 
-internal fun SavedStateHandle.takeTrailReplay(request: TrailRequest): List<String> {
-    val pending = get<ArrayList<String>>(TRAIL_REPLAY_KEY).orEmpty()
+internal fun SavedStateHandle.takeTrailReplay(request: TrailRequest): List<CrumbTag> {
+    val pending = get<ArrayList<String>>(TRAIL_REPLAY_KEY).orEmpty().mapNotNull(::decodeReplayTag)
     if (pending.isEmpty()) return emptyList()
     this[TRAIL_REPLAY_KEY] = ArrayList<String>()
-    return pending.drop(1).takeIf { (request as? TrailRequest.Tag)?.tag == pending.first() }.orEmpty()
+    val opened = (request as? TrailRequest.Tag)?.let { CrumbTag(it.tag, it.source) }
+    return pending.drop(1).takeIf { opened == pending.first() }.orEmpty()
 }
 
-internal fun SavedStateHandle.planTrailReplay(tags: List<String>) {
-    if (tags.isNotEmpty()) this[TRAIL_REPLAY_KEY] = ArrayList(tags)
+internal fun SavedStateHandle.planTrailReplay(tags: List<CrumbTag>) {
+    if (tags.isNotEmpty()) this[TRAIL_REPLAY_KEY] = encodeReplay(tags)
+}
+
+private fun encodeReplay(tags: List<CrumbTag>): ArrayList<String> = tags.mapTo(ArrayList()) { "${it.source.id}$REPLAY_SEPARATOR${it.value}" }
+
+private fun decodeReplayTag(encoded: String): CrumbTag? {
+    val source = SourceKey.parse(encoded.substringBefore(REPLAY_SEPARATOR, "")) ?: return null
+    return CrumbTag(encoded.substringAfter(REPLAY_SEPARATOR), source)
 }
 
 private fun SavedStateHandle.recordStep(level: TrailLevel) {
@@ -125,7 +133,7 @@ private fun SavedStateHandle.recordStep(level: TrailLevel) {
         this[TRAIL_TAG_KEY] = tag.value
         this[TRAIL_TAG_SOURCE_KEY] = tag.source.id
     }
-    this[TRAIL_REPLAY_KEY] = ArrayList(level.replay)
+    this[TRAIL_REPLAY_KEY] = encodeReplay(level.replay)
 }
 
 private fun SavedStateHandle.crumb(label: String): ViewerCrumb {
@@ -152,6 +160,7 @@ private const val TRAIL_ANCESTOR_IDS_KEY = "viewer-trail-ancestor-ids"
 private const val TRAIL_TAG_KEY = "viewer-trail-tag"
 private const val TRAIL_TAG_SOURCE_KEY = "viewer-trail-tag-source"
 private const val TRAIL_REPLAY_KEY = "viewer-trail-replay"
+private const val REPLAY_SEPARATOR = '\n'
 private const val UNNAMED_LEVEL = "Viewer"
 
 internal fun ViewerRouteEffectCallbacks.forLevel(level: ViewerLevel, popLevel: () -> Unit): ViewerRouteEffectCallbacks = copy(

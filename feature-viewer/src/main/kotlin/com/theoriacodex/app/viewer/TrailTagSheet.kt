@@ -42,14 +42,12 @@ import kotlinx.coroutines.delay
 internal fun TrailTagSheet(source: SourceKey, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val suggest = LocalTagSuggestions.current
     var input by remember { mutableStateOf("") }
-    val suggestions by produceState(emptyList<TagSuggestion>(), source, input) {
-        if (input.isBlank()) {
-            value = emptyList()
-            return@produceState
-        }
+    val answered by produceState(input to emptyList<TagSuggestion>(), source, input) {
+        if (input.isBlank()) return@produceState
         delay(SUGGEST_DEBOUNCE_MS)
-        value = suggest(source, input)
+        value = input to suggest(source, input)
     }
+    val suggestions = answered.second.takeIf { answered.first == input }.orEmpty()
     val focus = remember { FocusRequester() }
     LaunchedEffect(focus) { focus.requestFocus() }
     ExpandedBottomSheet(onDismiss) {

@@ -37,7 +37,7 @@ internal class TrailLevel(
     val trailKey: String,
     val feed: TrailFeed,
     val tag: CrumbTag? = null,
-    val replay: List<String> = emptyList(),
+    val replay: List<CrumbTag> = emptyList(),
 )
 
 internal class TrailHandoffViewModel : ViewModel() {

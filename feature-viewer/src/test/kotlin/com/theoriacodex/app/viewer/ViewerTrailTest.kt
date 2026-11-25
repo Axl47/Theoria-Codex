@@ -22,13 +22,15 @@ class ViewerTrailTest {
         assertNotEquals(TrailRequest.Creator(creator.copy(displayName = "Other"), post("p")).trailKey(), fork.trailKey())
     }
 
-    private fun tag(value: String) = ViewerCrumb(value, "tag:DANBOORU:$value", CrumbTag(value, SourceKey.DANBOORU))
+    private fun crumbTag(value: String) = CrumbTag(value, SourceKey.DANBOORU)
+
+    private fun tag(value: String) = ViewerCrumb(value, "tag:DANBOORU:$value", crumbTag(value))
 
     @Test
     fun `removing a middle step goes back before it and re-runs the later steps in order (ADR 0217)`() {
         val path = listOf(ViewerCrumb("landscape"), tag("night_sky"), tag("aurora"), tag("snow"))
 
-        assertEquals(TrailRemoval(backTo = 0, replay = listOf("aurora", "snow")), path.removal(1))
+        assertEquals(TrailRemoval(backTo = 0, replay = listOf(crumbTag("aurora"), crumbTag("snow"))), path.removal(1))
     }
 
     @Test
@@ -42,7 +44,7 @@ class ViewerTrailTest {
     fun `the re-run ends before a creator or Similar step (ADR 0217)`() {
         val path = listOf(ViewerCrumb("landscape"), tag("night_sky"), tag("aurora"), ViewerCrumb("Mika", "creator:PIXIV:Mika"), tag("snow"))
 
-        assertEquals(TrailRemoval(backTo = 0, replay = listOf("aurora")), path.removal(1))
+        assertEquals(TrailRemoval(backTo = 0, replay = listOf(crumbTag("aurora"))), path.removal(1))
     }
 
     @Test

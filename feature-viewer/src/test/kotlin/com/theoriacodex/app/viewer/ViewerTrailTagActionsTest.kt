@@ -38,6 +38,7 @@ class ViewerTrailTagActionsTest {
     private val crumbTaps = mutableListOf<Int>()
     private val removed = mutableListOf<Int>()
     private val saves = mutableListOf<String>()
+    private val forks = ViewerTrailForks()
     private val levelQuery = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("aurora", "landscape"), emptyList(), SortMode.NEWEST, null, null)
     private val shown = post("p", SourceKey.DANBOORU).copy(canonicalTags = listOf("mountain"))
     private val crumbs = listOf(
@@ -55,7 +56,7 @@ class ViewerTrailTagActionsTest {
             CompositionLocalProvider(LocalTrailOpener provides TrailOpener { request -> opened += request; true }) {
                 ViewerTrailRow(
                     shown, emptyList(), ViewerTrail(crumbs, levelQuery, { crumbTaps += it }, { removed += it }),
-                    emptySet(), ViewerTrailForks(), {},
+                    emptySet(), forks, {},
                 )
             }
         }
@@ -92,6 +93,18 @@ class ViewerTrailTagActionsTest {
         compose.waitUntil { opened.isNotEmpty() }
 
         assertEquals(listOf(TrailRequest.Tag("starry_sky", SourceKey.DANBOORU, levelQuery, shown)), opened)
+    }
+
+    @Test
+    fun `an open step menu keeps the chrome from hiding until it closes (ADR 0217)`() {
+        showRow()
+        compose.onNodeWithTag("viewer-trail-crumb-1").performTouchInput { longClick() }
+        compose.waitForIdle()
+        assertEquals(1, forks.chromeHolds)
+
+        compose.onNodeWithText("Save").performClick()
+        compose.waitForIdle()
+        assertEquals(0, forks.chromeHolds)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTagCount(tag: String) =

@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ import com.theoriacodex.app.ui.components.TrailCrumbArrow
 import com.theoriacodex.app.ui.navigation.LocalTrailOpener
 import com.theoriacodex.app.ui.navigation.TrailFork
 import com.theoriacodex.app.ui.navigation.TrailOpener
+import com.theoriacodex.app.ui.navigation.TrailRequest
 import com.theoriacodex.app.ui.navigation.request
 import com.theoriacodex.app.ui.navigation.trailForks
 import com.theoriacodex.domain.model.Post
@@ -79,7 +81,7 @@ internal fun ViewerTrailRow(
     val canAdd = opener != TrailOpener.None
     if (crumbs.isEmpty() && shown.isEmpty() && !canAdd) return
     var adding by remember { mutableStateOf(false) }
-    val start: (TrailFork) -> Unit = { chip ->
+    val start: (TrailFork) -> Boolean = { chip ->
         onInteraction()
         forks.open(chip, post.id) { opener.openTrail(chip.request(post, trail.levelQuery)) }
     }
@@ -89,26 +91,27 @@ internal fun ViewerTrailRow(
         horizontalArrangement = Arrangement.spacedBy(TrailChipGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        itemsIndexed(crumbs) { index, crumb -> ViewerTrailCrumb(crumb, index, crumbs, trail) }
+        itemsIndexed(crumbs) { index, crumb -> ViewerTrailCrumb(crumb, index, crumbs, trail, forks) }
         items(shown, key = { it.key }) { chip ->
-            ViewerForkChip(chip, post.id.source, busy = forks.busy?.key == chip.key, failed = forks.failed?.key == chip.key) { start(chip) }
+            ViewerForkChip(chip, post.id.source, forks) { start(chip) }
         }
-        if (canAdd) item(key = "add") { ViewerAddTagChip { onInteraction(); adding = true } }
+        if (canAdd) item(key = "add") { ViewerAddTagChip(enabled = forks.busy == null) { onInteraction(); adding = true } }
     }
     if (adding) {
+        HoldChrome(forks)
         TrailTagSheet(post.id.source, onDismiss = { adding = false }) { tag ->
-            adding = false
-            start(TrailFork.Tag(tag))
+            if (start(TrailFork.Tag(tag))) adding = false
         }
     }
 }
 
 @Composable
-private fun ViewerTrailCrumb(crumb: ViewerCrumb, index: Int, crumbs: List<ViewerCrumb>, trail: ViewerTrail) {
+private fun ViewerTrailCrumb(crumb: ViewerCrumb, index: Int, crumbs: List<ViewerCrumb>, trail: ViewerTrail, forks: ViewerTrailForks) {
     val remove = TagChipAction("Remove from trail") { trail.onRemove(index) }.takeIf { crumbs.removal(index) != null }
     val save = crumb.tag?.let { rememberSavedTagAction(it.source, it.value) }
     val actions = listOfNotNull(remove, save)
     var menuOpen by remember { mutableStateOf(false) }
+    if (menuOpen) HoldChrome(forks)
     Box {
         TrailCrumb(
             crumb.label,
@@ -127,9 +130,12 @@ private fun ViewerTrailCrumb(crumb: ViewerCrumb, index: Int, crumbs: List<Viewer
 }
 
 @Composable
-private fun ViewerForkChip(chip: TrailFork, source: SourceKey, busy: Boolean, failed: Boolean, onClick: () -> Unit) {
+private fun ViewerForkChip(chip: TrailFork, source: SourceKey, forks: ViewerTrailForks, onClick: () -> Unit) {
     val save = (chip as? TrailFork.Tag)?.let { rememberSavedTagAction(source, it.tag) }
+    val busy = forks.busy?.key == chip.key
+    val failed = forks.failed?.key == chip.key
     var menuOpen by remember { mutableStateOf(false) }
+    if (menuOpen) HoldChrome(forks)
     Box {
         TrailChip(
             if (failed) "No posts" else chip.label,
@@ -148,13 +154,21 @@ private fun ViewerForkChip(chip: TrailFork, source: SourceKey, busy: Boolean, fa
 }
 
 @Composable
-private fun ViewerAddTagChip(onClick: () -> Unit) {
+private fun HoldChrome(forks: ViewerTrailForks) {
+    DisposableEffect(forks) {
+        val release = forks.holdChrome()
+        onDispose { release() }
+    }
+}
+
+@Composable
+private fun ViewerAddTagChip(enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
             .size(32.dp)
             .clip(CircleShape)
             .background(ViewerVeil.Capsule)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .testTag("viewer-trail-add"),
         contentAlignment = Alignment.Center,
     ) {
@@ -168,9 +182,8 @@ internal fun ViewerTrailReplay(trail: ViewerTrail, post: Post, forks: ViewerTrai
     val tag = trail.replay ?: return
     val latestPost by rememberUpdatedState(post)
     LaunchedEffect(tag) {
-        val chip = TrailFork.Tag(tag)
         val from = latestPost
-        forks.open(chip, from.id) { opener.openTrail(chip.request(from, trail.levelQuery)) }
+        forks.open(TrailFork.Tag(tag.value), from.id) { opener.openTrail(TrailRequest.Tag(tag.value, tag.source, trail.levelQuery, from)) }
     }
 }
 
