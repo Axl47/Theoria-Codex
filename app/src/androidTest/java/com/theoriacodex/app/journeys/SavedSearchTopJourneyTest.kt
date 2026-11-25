@@ -57,7 +57,7 @@ class SavedSearchTopJourneyTest : AppJourneyFixture() {
     }
 
     private suspend fun checked() =
-        container.data.uiRestoreRepository.observeSavedSearchNewPosts().first().attemptedAtEpochMs != null
+        container.data.uiRestoreRepository.observeSavedSearchNewPosts().first().marks.isNotEmpty()
 
     private fun shows(id: PostId) = compose.onAllNodesWithTag(searchCardTestTag(id)).fetchSemanticsNodes().isNotEmpty()
 

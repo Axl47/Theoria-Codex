@@ -48,6 +48,7 @@ class TagSuggestionStoreGoldenTest {
     fun `the full cache holds every stored key (ADR 0034)`() {
         val full = TagStoreSnapshot(
             mapOf("GELBOORU" to listOf(TagStoreEntry("a & b", "ARTIST", "artist", "artist", 3, "A <b>", listOf("SEEN", "TRENDING")))),
+            mapOf("GELBOORU" to 1_700_000_000_000L),
         )
         assertStoredFormat(golden("full.json") to full)
     }

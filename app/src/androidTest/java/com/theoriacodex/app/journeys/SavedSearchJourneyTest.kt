@@ -56,7 +56,7 @@ class SavedSearchJourneyTest : AppJourneyFixture() {
         assertEquals(listOf(savedSearch), io { container.data.savedSearches.observeSavedSearches().first() })
         assertTrue(io { container.data.recentsRepository.observeSearches().first().isEmpty() })
         waitFor("the launch new-posts check finishes", timeoutMillis = 15_000) {
-            io { container.data.uiRestoreRepository.observeSavedSearchNewPosts().first().attemptedAtEpochMs != null }
+            io { savedSearch.id in container.data.uiRestoreRepository.observeSavedSearchNewPosts().first().marks }
         }
         container.registry.requests.clear()
         library(LibrarySection.Saved)

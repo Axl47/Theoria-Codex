@@ -12,6 +12,7 @@ Search autocomplete reads tags and counts from a local store that is filled by p
 - The persisted snapshot (`TagStoreSnapshot`) uses nullable lists so a damaged source list or entry does not discard the whole cache.
 - `FileBackedTagSuggestionStore` charges every entry's approximate persisted size (`estimatedBytes`, never persisted, recomputed by `copy`) against a total byte budget. After seeding, the estimate is rebuilt from scratch (`rebuildByteEstimateLocked`) so a seed past the budget gets trimmed.
 - Counts are read from an immutable index (`countsBySource`, `@Volatile`) published under the store lock, so Compose-driven `getCount` reads never wait on merges. Trimmed sources republish their index, because otherwise `getCount` would keep answering for tags the store dropped.
+- Each source's trending refresh time is persisted with the trending tags (`trendingRefreshedAt`). `SearchSuggestionCoordinator` and the For You lanes stamp it when a fetch starts (`markTrendingRefreshed`), whatever the fetch returns, so the `TRENDING_REFRESH_INTERVAL_MS` window holds across process restarts and a failed or rate-limited fetch is not repeated on every cold start; an empty cache still forces a fetch.
 - A persistence failure keeps the dirty version pending so `flush`, the write-behind retry or the next lifecycle flush can retry it, and the failure reaches whoever flushed (ADR 0215); cancellation still propagates.
 
 ## Consequences
@@ -21,4 +22,5 @@ Autocomplete keeps working with a missing asset, a half-damaged cache or a faili
 ## Applies to
 
 - `feature-search/src/main/kotlin/com/theoriacodex/app/search/TagSuggestionSeedData.kt`: `loadSeedTagSuggestions`, `parseSeedTagSuggestions`, `TagSeedFile`
-- `feature-search/src/main/kotlin/com/theoriacodex/app/search/TagSuggestionStore.kt`: `FileBackedTagSuggestionStore`, `countsBySource`, `persistPending`, `rebuildByteEstimateLocked`, `TagStoreSnapshot`, `CachedSuggestion.estimatedBytes`
+- `feature-search/src/main/kotlin/com/theoriacodex/app/search/TagSuggestionStore.kt`: `FileBackedTagSuggestionStore`, `countsBySource`, `persistPending`, `rebuildByteEstimateLocked`, `TagStoreSnapshot`, `CachedSuggestion.estimatedBytes`, `trendingRefreshedAt`
+- `feed-kit/src/main/kotlin/com/theoriacodex/app/search/SearchSuggestionCoordinator.kt`: `shouldRefreshTrending`, `fetchTrendingForSource`
