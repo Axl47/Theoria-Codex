@@ -80,7 +80,7 @@ class CheckFailuresTest {
                 FollowingBody(
                     content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = 0, grid = rememberLazyGridState(),
                     onRefresh = {}, onRetryFailed = { retried += it }, onDismissFailures = { failed = null }, onUnfollow = {},
-                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
+                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD,
                 )
             }
         }
@@ -106,7 +106,7 @@ class CheckFailuresTest {
                 FollowingBody(
                     content = content, checking = null, found = emptyList(), failedCheck = FollowedCheck(emptyList(), checked = 2, failures = listOf(stuck)), checkRun = 0,
                     grid = rememberLazyGridState(), onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
-                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, failureTools = tools,
+                    onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {}, hold = NO_HOLD, failureTools = tools,
                 )
             }
         }
@@ -137,7 +137,7 @@ class CheckFailuresTest {
                         content = content, checking = null, found = emptyList(), failedCheck = failed, checkRun = runs, grid = grid,
                         onRefresh = {}, onRetryFailed = {}, onDismissFailures = {}, onUnfollow = {},
                         onChooseKind = {}, onChooseLibrary = {}, onShowAll = {}, onSearchAll = {}, onBrowse = {}, onOpenSeries = {},
-                        failureTools = CheckFailureTools(snackbar = snackbar),
+                        hold = NO_HOLD, failureTools = CheckFailureTools(snackbar = snackbar),
                     )
                     SnackbarHost(snackbar)
                 }
