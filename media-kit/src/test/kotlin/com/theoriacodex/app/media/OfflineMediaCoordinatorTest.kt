@@ -10,6 +10,8 @@ import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.domain.model.VideoVariant
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
@@ -309,6 +311,33 @@ class OfflineMediaCoordinatorTest {
         assertEquals(setOf("codex:other"), removingCoordinator.jobs.value.keys)
         removalProceeds.complete(Unit)
         removing.join()
+    }
+
+    @Test
+    fun `a save stays refused until the last of two removals of its owner ends (ADR 0110)`() = runTest {
+        val (coordinator, _) = gatedCoordinator()
+        val proceed = loadedPreparation(coordinator)
+        val first = launch { coordinator.remove("codex:a") }
+        val second = launch { coordinator.remove("codex:a") }
+        runCurrent()
+        var savedBetween: Job? = null
+        val jobsBetween = mutableListOf<Set<String>>()
+        listOf(first, second).forEach { removal ->
+            removal.invokeOnCompletion {
+                if (savedBetween == null && !(first.isCompleted && second.isCompleted)) {
+                    savedBetween = launch(start = CoroutineStart.UNDISPATCHED) {
+                        coordinator.makeAvailableOffline("codex:a", listOf(post("again")))
+                        jobsBetween += coordinator.jobs.value.keys
+                    }
+                }
+            }
+        }
+        proceed.complete(Unit)
+        first.join()
+        second.join()
+        savedBetween?.join()
+
+        assertEquals(listOf(emptySet<String>()), jobsBetween)
     }
 
     private fun TestScope.gatedCoordinator(): Pair<OfflineMediaCoordinator, OfflineMediaStore> {
