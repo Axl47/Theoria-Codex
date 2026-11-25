@@ -403,7 +403,7 @@ private class ViewerFooterRules(frame: ViewerFrame, screen: ViewerScreenState) {
 
 @Composable
 private fun BoxScope.ViewerStripRowRotation(frame: ViewerFrame, offer: ViewerRotationOffer?, rules: ViewerFooterRules) {
-    ViewerRotationChip(frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, inStripRow = true)
+    ViewerRotateButton(frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, inStripRow = true)
     val slideshowShown = frame.offersSlideshow && !rules.slideshowSuppressed
     ViewerRotationLockButton(
         frame.selection, offer, rules.chromeVisible, rules.lockSuppressed, Alignment.BottomEnd, slot = if (slideshowShown) 1 else 0, inStripRow = true,
@@ -414,7 +414,7 @@ private fun BoxScope.ViewerStripRowRotation(frame: ViewerFrame, offer: ViewerRot
 private fun BoxScope.ViewerFloatingRotation(frame: ViewerFrame, offer: ViewerRotationOffer?, rules: ViewerFooterRules) {
     ViewerRotationLockButton(frame.selection, offer, rules.chromeVisible, rules.lockSuppressed, Alignment.BottomStart)
     val lockShown = offer != null && rules.chromeVisible && !rules.lockSuppressed
-    ViewerRotationChip(
+    ViewerRotateButton(
         frame.selection, offer, rules.chromeVisible, rules.rotationSuppressed, slot = if (lockShown) 1 else 0, bottomRowHeight = rules.bottomRow,
     )
 }

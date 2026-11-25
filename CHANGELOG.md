@@ -85,7 +85,7 @@
 
 ### Changed
 
-- The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. When a post would fit better the other way, a rotate button shows for a few seconds; tap it to turn once, and the Viewer follows the phone again once you turn it to match.
+- The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.
 - In landscape, the Viewer's rotate, lock and slideshow buttons sit in the thumbnail strip's row instead of floating over the picture.
 - In Play Next and slideshows, every post stays on screen for at least five seconds. A shorter clip, GIF or Pixiv animation replays until then and moves on at the end of a play-through, and touching, zooming, seeking or showing the controls starts the five seconds again.
@@ -162,6 +162,7 @@
 
 ### Fixed
 
+- Unlocking the Viewer's rotation keeps the orientation you chose with rotate before locking, instead of snapping back to portrait when system auto-rotate is off.
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Holding and dragging to seek a video while the controls are hidden no longer flashes the controls at the start of the drag.
 - Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
