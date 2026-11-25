@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -513,11 +514,21 @@ internal fun seriesViewTag(view: SeriesView) = "series-view-${view.name.lowercas
 
 @Composable
 private fun ExtensionsButton(missing: Int, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.semantics { if (missing > 0) stateDescription = missingExtensionsLine(missing) }) {
-        BadgedBox(badge = { if (missing > 0) Badge { Text(if (missing > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else "$missing", Modifier.clearAndSetSemantics {}) } }) {
+    BadgedBox(
+        badge = {
+            if (missing > 0) {
+                Badge(Modifier.offset(x = -BADGE_INSET, y = BADGE_DROP)) {
+                    Text(if (missing > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else "$missing", Modifier.clearAndSetSemantics {})
+                }
+            }
+        },
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.semantics { if (missing > 0) stateDescription = missingExtensionsLine(missing) }) {
             Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE)
         }
     }
 }
 
 private const val MAX_BADGE_COUNT = 99
+private val BADGE_INSET = 16.dp
+private val BADGE_DROP = 14.dp

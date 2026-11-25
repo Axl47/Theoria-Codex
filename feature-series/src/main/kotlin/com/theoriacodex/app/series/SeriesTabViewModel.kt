@@ -455,10 +455,6 @@ class SeriesTabViewModel(
         mutableState.update { it.copy(search = null, searchQuery = "", dedicated = null) }
     }
 
-    fun unfollow(id: SeriesId) {
-        viewModelScope.launch { repository.setFollowed(id, false) }
-    }
-
     fun open(series: Series, opened: (SeriesId) -> Unit) {
         viewModelScope.launch {
             repository.store(series)
