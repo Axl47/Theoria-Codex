@@ -1,11 +1,19 @@
 package com.theoriacodex.app.triage
 
 import android.app.Application
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,14 +23,17 @@ import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class)
+@Config(application = Application::class, qualifiers = "w400dp-h800dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TriageCardsTest {
     @get:Rule val compose = createComposeRule()
 
@@ -35,13 +46,41 @@ class TriageCardsTest {
     )
     private val drag = TriageDrag()
 
-    private fun showCards(footer: (@Composable (Post) -> Unit)? = null) = compose.setContent {
+    private fun showCards(commitPx: Float = 100f, footer: (@Composable (Post) -> Unit)? = null) = compose.setContent {
         MaterialTheme {
-            TriageCards(
-                TriageDeckState(posts = listOf(top, next)), drag, TriageCardSupport(environment, null, null),
-                SwipeThresholds(commitPx = 100f, flingPx = 100f, cuePx = 10f), ratioFloor = 0.5f, footer = footer, onOpen = {},
-            )
+            Box(Modifier.fillMaxSize().background(Color.Red)) {
+                TriageCards(
+                    TriageDeckState(posts = listOf(top, next)), drag, TriageCardSupport(environment, null, null),
+                    SwipeThresholds(commitPx = commitPx, flingPx = 100f, cuePx = 10f), ratioFloor = 0.5f, footer = footer, onOpen = {},
+                )
+            }
         }
+    }
+
+    private fun cardShowingAt(x: Int, y: Int): Float = compose.onRoot().captureToImage().toPixelMap()[x, y].green
+
+    @Test
+    fun `the next card shows only as far as the top card has travelled`() {
+        showCards(commitPx = 4_000f)
+        val behindTopCardEdge = 30
+        val middle = 400
+        compose.runOnIdle { drag.dragBy(Offset(200f, 0f), Offset(200f, 0f)) }
+        assertTrue("a short drag leaves the next card nearly unseen", cardShowingAt(behindTopCardEdge, middle) < 0.1f)
+
+        compose.runOnIdle { drag.dragBy(Offset(3_800f, 0f), Offset(4_000f, 0f)) }
+        assertTrue("a full drag shows the next card", cardShowingAt(behindTopCardEdge, middle) > 0.8f)
+    }
+
+    @Test
+    fun `dragging redraws the cards without recomposing them`() {
+        var compositions = 0
+        showCards { compositions++ }
+        compose.runOnIdle { drag.dragBy(Offset(5f, 0f), Offset(5f, 0f)) }
+        compose.waitForIdle()
+        val afterStart = compositions
+        repeat(20) { step -> compose.runOnIdle { drag.dragBy(Offset(3f, 0f), Offset(8f + step * 3f, 0f)) } }
+        compose.waitForIdle()
+        assertEquals(afterStart, compositions)
     }
 
     @Test
@@ -58,7 +97,7 @@ class TriageCardsTest {
 
     @Test
     fun `each shown card carries its own footer`() {
-        showCards { post -> Text("footer ${post.id.sourcePostId}") }
+        showCards(footer = { post -> Text("footer ${post.id.sourcePostId}") })
         compose.onNodeWithText("footer top").assertExists()
         compose.onNodeWithText("footer next").assertDoesNotExist()
 
