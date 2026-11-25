@@ -22,6 +22,7 @@ internal fun viewerRendererEvents(
     nowMs: () -> Long = SystemClock::uptimeMillis,
 ): ViewerRendererEvents = ViewerRendererEvents(
     onPlaybackCompleted = { session?.let { onAction(ViewerAction.PlaybackCompleted(it, key, generation, nowMs())) } },
+    onPlaybackLooped = { session?.let { onAction(ViewerAction.PlaybackCompleted(it, key, generation, nowMs(), looped = true)) } },
     onError = { message -> session?.let {
         onAction(ViewerAction.MediaFailed(it, ViewerMediaError.Recoverable(key, message), generation))
     } },

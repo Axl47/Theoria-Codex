@@ -302,7 +302,9 @@ private fun viewerVideoListener(
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (state.player !== player) return
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) state.looped = true
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
+            state.looped = true
+            events().onPlaybackLooped()
         }
         override fun onRenderedFirstFrame() {
             if (state.player !== player) return

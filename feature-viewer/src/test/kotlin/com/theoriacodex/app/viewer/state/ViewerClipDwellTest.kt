@@ -24,6 +24,18 @@ class ViewerClipDwellTest {
         assertEquals(1, state.currentPageIndex)
     }
 
+    @Test fun `a clip the player loops itself moves on at the first loop past five seconds, without a restart request (ADR 0217)`() {
+        var state = playNext().act(ViewerAction.RestartDwell(0L, interacting = false))
+        (1..4).forEach { second ->
+            state = state.complete(second * 1_000L, looped = true)
+            assertEquals("still on the first post after $second s", 0, state.currentPageIndex)
+        }
+        assertEquals(0L, state.controls.playback.restartRequest)
+        assertEquals(1, state.complete(5_000L, looped = true).currentPageIndex)
+        val last = state.act(ViewerAction.SelectPage(state.pages.lastIndex)).ready().act(ViewerAction.Play)
+        assertTrue("the queue's last clip keeps playing", last.complete(10_000L, looped = true).controls.playback.playing)
+    }
+
     @Test fun `a six second clip moves on when it first ends (ADR 0217)`() {
         val state = playNext().act(ViewerAction.RestartDwell(0L, interacting = false)).complete(6_000L)
         assertEquals(1, state.currentPageIndex)
@@ -93,9 +105,9 @@ class ViewerClipDwellTest {
         return act(ViewerAction.MediaReady(this@ViewerClipDwellTest.session, media.key, media.loadGeneration))
     }
 
-    private fun ViewerUiState.complete(atMs: Long): ViewerUiState {
+    private fun ViewerUiState.complete(atMs: Long, looped: Boolean = false): ViewerUiState {
         val media = requireNotNull(currentMedia)
-        val completed = act(ViewerAction.PlaybackCompleted(this@ViewerClipDwellTest.session, media.key, media.loadGeneration, atMs))
+        val completed = act(ViewerAction.PlaybackCompleted(this@ViewerClipDwellTest.session, media.key, media.loadGeneration, atMs, looped))
         return if (completed.currentPageIndex == currentPageIndex) completed else completed.ready().act(ViewerAction.Play)
     }
 

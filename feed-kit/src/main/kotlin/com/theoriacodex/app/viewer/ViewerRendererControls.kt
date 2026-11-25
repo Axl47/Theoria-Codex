@@ -40,6 +40,7 @@ data class ViewerRendererEvents(
     val onPlaybackIntentChanged: (Boolean) -> Unit,
     val onTimelineInteractionActiveChanged: (Boolean) -> Unit,
     val onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
+    val onPlaybackLooped: () -> Unit = {},
 ) {
     companion object {
         fun feedCard(onDurationKnown: (Long) -> Unit) = ViewerRendererEvents(
