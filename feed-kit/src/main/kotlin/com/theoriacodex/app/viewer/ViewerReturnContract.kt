@@ -57,15 +57,29 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
         if (titleFooter) CornerRadius.Zero else rounded.bottomLeftCornerRadius)
 }
 
+class ViewerReturnOrigin internal constructor()
+
+class ViewerPostRetention
+
 class ViewerReturnTransition {
     var retainedPostIds by mutableStateOf<Set<PostId>>(emptySet())
         private set
+    private val retentions = mutableMapOf<ViewerPostRetention, Set<PostId>>()
 
-    fun retainPosts(postIds: Set<PostId>) {
-        retainedPostIds = postIds
+    fun retainPosts(owner: ViewerPostRetention, postIds: Set<PostId>) {
+        if (retentions.put(owner, postIds) != postIds) publishRetained()
     }
 
-    private var hasOrigin = false
+    fun releasePosts(owner: ViewerPostRetention) {
+        if (retentions.remove(owner) != null) publishRetained()
+    }
+
+    private fun publishRetained() {
+        retainedPostIds = retentions.values.flatMapTo(mutableSetOf()) { it }
+    }
+
+    var origin: ViewerReturnOrigin? = null
+        private set
     private var unclaimedPost: PostId? = null
     private var originGridId: String? = null
     private var originShelfId: ViewerReturnShelfId? = null
@@ -95,7 +109,8 @@ class ViewerReturnTransition {
         post: PostId,
     ) {
         clear()
-        hasOrigin = true
+        if (gridId == null) return
+        origin = ViewerReturnOrigin()
         unclaimedPost = post
         originGridId = gridId
         originShelfId = shelfId
@@ -109,12 +124,12 @@ class ViewerReturnTransition {
         if (tapped != null && tapped in postIds) unclaimedPost = null else clear()
     }
 
-    fun finishOpening() {
-        openingBounds = null
+    fun finishOpening(opened: ViewerReturnOrigin?) {
+        if (opened === origin) openingBounds = null
     }
 
     fun begin(postId: PostId) {
-        if (!hasOrigin) return
+        if (origin == null) return
         openingBounds = null
         request = ViewerReturnRequest(originGridId, postId, originShelfId)
         mediaSettling = true
@@ -153,11 +168,14 @@ class ViewerReturnTransition {
         targetCorners = mediaCorners[postId] ?: ViewerReturnCorners()
     }
 
+    fun release(released: ViewerReturnOrigin?) {
+        if (released != null && released === origin) clear()
+    }
+
     fun clear() {
-        hasOrigin = false
+        origin = null
         unclaimedPost = null
         mediaSettling = false
-        retainedPostIds = emptySet()
         openingCorners = ViewerReturnCorners()
         targetCorners = ViewerReturnCorners()
         mediaCorners.clear()
@@ -223,6 +241,22 @@ fun viewerReturnScrollDirection(targetIndex: Int, lastVisibleIndex: Int): Float 
 private const val MAX_VIEWER_RETURN_SCROLL_STEPS = 48
 
 @Composable
+internal fun rememberViewerReturnGridId(): String = rememberSaveable { UUID.randomUUID().toString() }
+
+@Composable
+internal fun ViewerReturnCard(postId: PostId, content: @Composable () -> Unit) {
+    val gridId = rememberViewerReturnGridId()
+    val transition = LocalViewerReturnTransition.current
+    val request = transition?.request
+    LaunchedEffect(request, gridId, postId) {
+        if (request?.gridId != gridId || request.postId != postId) return@LaunchedEffect
+        withFrameNanos { }
+        transition.positioned(gridId, postId)
+    }
+    CompositionLocalProvider(LocalViewerReturnGrid provides gridId, content = content)
+}
+
+@Composable
 internal fun ViewerReturnShelfEffect(shelfId: ViewerReturnShelfId, postIds: List<PostId>, state: LazyListState) {
     val transition = LocalViewerReturnTransition.current ?: return
     val gridId = LocalViewerReturnGrid.current ?: return
@@ -250,7 +284,7 @@ fun ViewerReturnColumn(
     rowOf: (ViewerReturnRequest) -> Int,
     content: @Composable () -> Unit,
 ) {
-    val gridId = rememberSaveable { UUID.randomUUID().toString() }
+    val gridId = rememberViewerReturnGridId()
     val transition = LocalViewerReturnTransition.current
     val request = transition?.request
     LaunchedEffect(request, gridId, rowsKey) {

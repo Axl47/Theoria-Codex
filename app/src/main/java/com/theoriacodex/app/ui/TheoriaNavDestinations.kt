@@ -73,6 +73,7 @@ import com.theoriacodex.app.ui.trails.isTrailLevel
 import com.theoriacodex.app.ui.trails.rememberViewerLevel
 import com.theoriacodex.app.viewer.ViewerCoveredLifecycle
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
+import com.theoriacodex.app.viewer.ViewerReturnOriginLifetime
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.ViewerScreenCallbacks
 import com.theoriacodex.app.viewer.ViewerScreenConfig
@@ -295,6 +296,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
 private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
     val routes = shell.routes
     val level = rememberViewerLevel(shell.navController, entry, shell.viewerSessions.session.value?.sessionId)
+    if (!level.isFork) ViewerReturnOriginLifetime()
     val tagActions = remember(shell) { viewerTagSearchActions(shell) }
     val effectCallbacks = remember(shell, level.isFork, level.feed) { viewerEffectCallbacks(shell, tagActions).forLevel(level) { shell.navController.popBackStack() } }
     val screenCallbacks = remember(shell) { viewerScreenCallbacks(shell) }

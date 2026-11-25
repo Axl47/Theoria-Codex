@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -16,12 +17,17 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerReturnTransition
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -46,13 +52,17 @@ class TriageCardsTest {
     )
     private val drag = TriageDrag()
 
+    private val viewerReturn = ViewerReturnTransition()
+
     private fun showCards(commitPx: Float = 100f, footer: (@Composable (Post) -> Unit)? = null) = compose.setContent {
         MaterialTheme {
-            Box(Modifier.fillMaxSize().background(Color.Red)) {
-                TriageCards(
-                    TriageDeckState(posts = listOf(top, next)), drag, TriageCardSupport(environment, null, null),
-                    SwipeThresholds(commitPx = commitPx, flingPx = 100f, cuePx = 10f), ratioFloor = 0.5f, footer = footer, onOpen = {},
-                )
+            CompositionLocalProvider(LocalViewerReturnTransition provides viewerReturn) {
+                Box(Modifier.fillMaxSize().background(Color.Red)) {
+                    TriageCards(
+                        TriageDeckState(posts = listOf(top, next)), drag, TriageCardSupport(environment, null, null),
+                        SwipeThresholds(commitPx = commitPx, flingPx = 100f, cuePx = 10f), ratioFloor = 0.5f, footer = footer, onOpen = {},
+                    )
+                }
             }
         }
     }
@@ -104,5 +114,17 @@ class TriageCardsTest {
         compose.runOnIdle { drag.dragBy(Offset(20f, 0f), Offset(20f, 0f)) }
         compose.onNodeWithText("footer next").assertExists()
         assertEquals(2, compose.onAllNodesWithTag(TRIAGE_CARD_FOOTER_TAG).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `a Viewer opened from the top card closes into that card (ADR 0220)`() {
+        showCards()
+        compose.onNodeWithTag(searchCardTestTag(top.id)).performClick()
+        compose.runOnIdle { viewerReturn.begin(top.id) }
+        compose.waitForIdle()
+
+        val card = compose.onNodeWithTag(searchCardTestTag(top.id)).fetchSemanticsNode().boundsInWindow
+        val target = checkNotNull(viewerReturn.targetBounds) { "The card never answered the return" }
+        assertTrue("The return lands in $target, outside the card $card", card.contains(target.center))
     }
 }
