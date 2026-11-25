@@ -57,4 +57,15 @@ class CodexTagFilterSheetTest {
         compose.runOnIdle { assertEquals(emptyList<String>(), selected) }
         compose.onNodeWithText("Tags").assertExists()
     }
+
+    @Test fun `the deck chip opens the swipe deck under its own name`() {
+        var opened = false
+        compose.setContent {
+            MaterialTheme {
+                CodexDetailChipRow(CodexDetailChips(CodexSortMode.NEWEST_SAVED, listOf(CodexSortMode.NEWEST_SAVED), {}, filter) { opened = true })
+            }
+        }
+        compose.onNodeWithText("Swipe").performClick()
+        compose.runOnIdle { assertEquals(true, opened) }
+    }
 }
