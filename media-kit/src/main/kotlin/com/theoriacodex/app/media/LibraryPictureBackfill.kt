@@ -16,22 +16,26 @@ class LibraryPictureBackfill(
         while (true) {
             val batch = signatures.libraryPostsWithoutSignature(BATCH, skip = held.size).filterNot { it.id in held }
             if (batch.isEmpty() || batch.any { it.id in tried }) return held.isNotEmpty()
-            val hashes = HashMap<PostId, Long?>()
-            val failed = ArrayList<PostId>()
-            batch.mapConcurrent(concurrency = LOADS) { post -> post to if (reachable(post)) hash(post) else null }.forEach { (post, loaded) ->
-                val result = loaded.takeUnless { it == PictureHashResult.Unavailable && !reachable(post) }
-                if (result == null) held += post.id else tried += post.id
-                when (result) {
-                    is PictureHashResult.Hashed -> hashes[post.id] = result.hash
-                    PictureHashResult.Unhashable -> hashes[post.id] = null
-                    PictureHashResult.Unavailable -> failed += post.id
-                    null -> Unit
-                }
-            }
-            signatures.putHashes(hashes)
-            signatures.failPreviews(failed)
+            val results = load(batch)
+            results.forEach { (post, result) -> if (result == null) held += post.id else tried += post.id }
+            signatures.putHashes(results.mapNotNull { (post, result) -> result.storedHash()?.let { post.id to it.value } }.toMap())
+            signatures.failPreviews(results.filter { it.second == PictureHashResult.Unavailable }.map { it.first.id })
         }
     }
+
+    private suspend fun load(batch: List<Post>): List<Pair<Post, PictureHashResult?>> =
+        batch.mapConcurrent(concurrency = LOADS) { post ->
+            val loaded = if (reachable(post)) hash(post) else null
+            post to loaded.takeUnless { it == PictureHashResult.Unavailable && !reachable(post) }
+        }
+
+    private fun PictureHashResult?.storedHash(): StoredHash? = when (this) {
+        is PictureHashResult.Hashed -> StoredHash(hash)
+        PictureHashResult.Unhashable -> StoredHash(null)
+        PictureHashResult.Unavailable, null -> null
+    }
+
+    private class StoredHash(val value: Long?)
 
     private companion object {
         const val BATCH = 32

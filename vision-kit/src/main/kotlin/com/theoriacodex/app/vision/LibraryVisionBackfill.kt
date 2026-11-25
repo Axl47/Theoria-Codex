@@ -15,25 +15,32 @@ class LibraryVisionBackfill(
     private val reachable: (Post) -> Boolean = { true },
 ) {
     suspend fun drain(): Boolean {
-        val unreachable = HashSet<PostId>()
+        val held = HashSet<PostId>()
+        val tried = HashSet<PostId>()
         while (tagger.ready.value) {
             if (hot()) return true
-            val listed = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, skip = unreachable.size).filterNot { it.id in unreachable }
-            if (listed.isEmpty()) return unreachable.isNotEmpty()
+            val listed = signatures.libraryPostsWithoutVision(tagger.modelId, BATCH, skip = held.size).filterNot { it.id in held }
+            if (listed.isEmpty() || listed.any { it.id in tried }) return held.isNotEmpty()
             val started = TimeSource.Monotonic.markNow()
-            val results = LinkedHashMap<Post, PictureResult>()
-            for (post in listed) {
-                if (reachable(post)) results[post] = tagger.analyze(post, remember = false) else unreachable += post.id
-            }
+            val results = analyzeReachable(listed, held)
             if (results.isEmpty()) continue
             if (PictureResult.Unavailable in results.values) return tagger.ready.value
-            val failed = results.filterValues { it == PictureResult.Unreachable }.keys
-            unreachable += failed.map { it.id }
-            signatures.failPreviews(failed.filter(reachable).map { it.id })
+            results.keys.mapTo(tried) { it.id }
+            val (failed, limited) = results.filterValues { it == PictureResult.Unreachable }.keys.partition(reachable)
+            limited.mapTo(held) { it.id }
+            signatures.failPreviews(failed.map { it.id })
             if (!tagger.store(results)) return false
             delay(started.elapsedNow())
         }
         return false
+    }
+
+    private suspend fun analyzeReachable(posts: List<Post>, held: MutableSet<PostId>): Map<Post, PictureResult> {
+        val results = LinkedHashMap<Post, PictureResult>()
+        for (post in posts) {
+            if (reachable(post)) results[post] = tagger.analyze(post, remember = false) else held += post.id
+        }
+        return results
     }
 
     suspend fun drainFrames(): Boolean {
