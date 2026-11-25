@@ -22,8 +22,6 @@ import com.theoriacodex.data.repository.SettingChoices
 import com.theoriacodex.data.repository.SettingDestinations
 import com.theoriacodex.data.repository.SettingToggles
 
-const val SERIES_SETTINGS_GROUP = "Series"
-
 @Composable
 internal fun SeriesSettingsGroup(
     state: SettingsUiState,
@@ -31,7 +29,7 @@ internal fun SeriesSettingsGroup(
     onOpenExtensions: (() -> Unit)?,
     onChooseInterval: () -> Unit,
 ) {
-    SettingsGroup(SERIES_SETTINGS_GROUP) {
+    SettingsGroup("Series") {
         if (onOpenExtensions != null) {
             SettingsRow(SettingDestinations.Extensions.title, icon = Icons.Default.Extension, onClick = onOpenExtensions)
             SettingsRowDivider()

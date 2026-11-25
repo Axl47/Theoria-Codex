@@ -28,7 +28,7 @@ class SeriesSettingsGroupTest {
     @Test
     fun `series settings sit in their own group after sources`() {
         showSettings(series = true)
-        val order = listOf("Sources", "Open links in Theoria", SERIES_SETTINGS_GROUP) + seriesRows + "Viewing"
+        val order = listOf("Sources", "Open links in Theoria", "Series") + seriesRows + "Viewing"
         val tops = order.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
         assertEquals(order, order.zip(tops).sortedBy { it.second }.map { it.first })
     }
@@ -36,7 +36,7 @@ class SeriesSettingsGroupTest {
     @Test
     fun `without series the group and its rows are absent`() {
         showSettings(series = false)
-        (seriesRows + SERIES_SETTINGS_GROUP).forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        (seriesRows + "Series").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
     }
 
     private fun showSettings(series: Boolean) {
