@@ -131,7 +131,8 @@ data class SeriesTabContent(
     val offersFilter: Boolean get() = kinds.size > 1
     val marked: Boolean get() = offersFilter && filter == null
     val words: EntryWords get() = (filter ?: kinds.singleOrNull() ?: SeriesKind.MANGA).words
-    val checkWords: EntryWords? get() = followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull()?.words
+    val checkWords: EntryWords? get() = filter?.words ?: followedIds.mapTo(HashSet()) { it.source.seriesKind }.singleOrNull()?.words
+    val checkScope: Set<SeriesId>? get() = filter?.let { kind -> followedIds.filterTo(HashSet()) { kind.admits(it.source) } }
 }
 
 internal fun SeriesTabState.content(followed: List<FollowedSeries>?, downloads: Map<SeriesId, Int>? = emptyMap()): SeriesTabContent {
@@ -246,9 +247,9 @@ class SeriesTabViewModel(
         chooseView(SeriesView.BROWSE)
     }
 
-    fun refresh() = check(only = null)
+    fun refresh() = check(only = content.value.checkScope, retrying = false)
 
-    fun retry(series: Set<SeriesId>) = check(only = series)
+    fun retry(series: Set<SeriesId>) = check(only = series, retrying = true)
 
     fun dismissFailures() {
         mutableState.update { it.copy(failedCheck = null) }
@@ -276,10 +277,10 @@ class SeriesTabViewModel(
         viewModelScope.launch { repository.setFollowed(id, false) }
     }
 
-    private fun check(only: Set<SeriesId>?) {
+    private fun check(only: Set<SeriesId>?, retrying: Boolean) {
         if (state.value.checking != null) return
         foundShown?.cancel()
-        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = it.failedCheck.takeIf { only != null }) }
+        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = it.failedCheck.takeIf { retrying }) }
         foundShown = viewModelScope.launch {
             var check: FollowedCheck? = null
             try {

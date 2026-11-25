@@ -4,6 +4,10 @@ import com.theoriacodex.data.repository.CheckFailure
 import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.data.repository.FollowedCheck
+import com.theoriacodex.data.repository.FollowedSeries
+import com.theoriacodex.domain.series.SeriesKind
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
@@ -137,6 +141,32 @@ class SeriesTabRefreshTest {
         advanceUntilIdle()
 
         assertNull(viewModel.state.value.failedCheck)
+    }
+
+    @Test
+    fun aRefreshChecksOnlyTheFilteredKind_adr_0219() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val manga = failure("/m")
+        val anime = failure("/a", source = "custom_aniyomi_1")
+        val asked = mutableListOf<Set<SeriesId>?>()
+        val followed = Following(flowOf(listOf(manga, anime).map { FollowedSeries(it.series, unreadCount = 0) }))
+        val viewModel = SeriesTabViewModel(followed, { emptyList() }) { only, _ ->
+            asked += only
+            val scoped = listOf(manga, anime).filter { only == null || it.series.id in only }
+            FollowedCheck(emptyList(), checked = scoped.size, failures = scoped)
+        }
+        backgroundScope.launch { viewModel.content.collect {} }
+        advanceUntilIdle()
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        viewModel.chooseKind(SeriesKind.ANIME)
+        advanceUntilIdle()
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf(null, setOf(anime.series.id)), asked)
+        assertEquals(FollowedCheck(emptyList(), checked = 1, failures = listOf(anime)), viewModel.state.value.failedCheck)
     }
 
     @Test

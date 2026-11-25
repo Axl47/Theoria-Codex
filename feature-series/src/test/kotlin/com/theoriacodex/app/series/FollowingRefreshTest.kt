@@ -42,10 +42,11 @@ class FollowingRefreshTest {
     }
 
     @Test
-    fun thePullNamesWhatTheCheckCoversWhicheverKindIsFiltered_adr_0219() {
+    fun thePullNamesWhatTheCheckCovers_adr_0219() {
         val manga = FollowedSeries(update("custom_mihon_1", "/a", 0).series, unreadCount = 0)
         val anime = FollowedSeries(update("custom_aniyomi_1", "/c", 0).series, unreadCount = 0)
-        assertNull(SeriesTabState(kind = SeriesKind.MANGA).content(listOf(manga, anime)).checkWords)
+        assertEquals(EntryWords.CHAPTERS, SeriesTabState(kind = SeriesKind.MANGA).content(listOf(manga, anime)).checkWords)
+        assertNull(SeriesTabState().content(listOf(manga, anime)).checkWords)
         assertEquals(EntryWords.EPISODES, SeriesTabState().content(listOf(anime)).checkWords)
     }
 
