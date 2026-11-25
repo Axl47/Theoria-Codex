@@ -14,6 +14,9 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.viewer.state.reduceViewerState
+import com.theoriacodex.app.viewer.state.createViewerUiState
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
@@ -184,6 +187,21 @@ class ViewerViewModelTest {
         runCurrent()
 
         assertEquals(setOf(chapters[0].id, chapters[2].id), started.drop(1).toSet())
+    }
+
+    @Test
+    fun `only a chapter's pages take a fresh load generation over its cover (ADR 0170)`() {
+        fun firstGeneration(series: ViewerSeries, resolved: Post): Long {
+            val placeholder = resolved.copy(media = emptyList(), full = null, galleryLengthUnknown = true)
+            val identity = ViewerSessionIdentity("generation")
+            val opened = createViewerUiState(identity, listOf(placeholder), requiresResolution = { true }, series = series)
+            assertEquals(0L, requireNotNull(opened.currentMedia).loadGeneration)
+            val state = reduceViewerState(opened, ViewerAction.ResolutionCompleted(identity, resolved)).state
+            return requireNotNull(state.currentMedia).loadGeneration
+        }
+
+        assertEquals(1L, firstGeneration(ViewerSeries.Reading(GalleryReadingMode.VERTICAL), post("chapter", SourceKey.HITOMI)))
+        assertEquals(0L, firstGeneration(ViewerSeries.Watching(), post("episode", SourceKey.HITOMI, listOf(video("episode.mp4")))))
     }
 
     @Test

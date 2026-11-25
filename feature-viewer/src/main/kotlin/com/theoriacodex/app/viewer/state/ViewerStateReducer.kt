@@ -509,7 +509,7 @@ private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?, r
     )
     val replacement = when {
         recovered -> resolved.withLoadGenerationsAfter(previous, step = 0L)
-        previous.hasPendingGalleryMedia() -> resolved.withLoadGenerationsAfter(previous, step = 1L)
+        series is ViewerSeries.Reading && previous.hasPendingGalleryMedia() -> resolved.withLoadGenerationsAfter(previous, step = 1L)
         else -> resolved
     }
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
