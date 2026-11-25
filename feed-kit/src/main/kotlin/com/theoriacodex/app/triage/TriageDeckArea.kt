@@ -90,7 +90,7 @@ internal fun TriageDeckArea(
         val ratioFloor = maxWidth / (maxHeight - CAPTION_ALLOWANCE - if (cardFooter != null) TRIAGE_CARD_FOOTER_HEIGHT else 0.dp)
         val area = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
         val release by rememberUpdatedState { velocity: Velocity? ->
-            val released = ReleasedOn(saveState.hovered?.payload, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload)
+            val released = ReleasedOn(saveState.armed?.payload, hideState.armed?.payload ?: targets.hide.firstOrNull()?.payload)
             drag.releaseIn(scope) {
                 val choose: suspend (SwipeDirection) -> TriageChoice? = { released.choice(it, post, suggestions, deck.removes) }
                 this.release(velocity, thresholds, area, choose, { choice -> onDecide(choice, post.id) }) {
@@ -279,10 +279,21 @@ private fun BoxScope.VerticalEdgeHint(
             TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
         !up && targets.hide.isEmpty() ->
             TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, hints.armed == SwipeDirection.Down)
-        up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState)
-        else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState)
+        up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState) { hovered ->
+            releasePick(hovered, targets.save, hints.armed == SwipeDirection.Up) { it is SaveTarget.Codex }
+        }
+        else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState) { hovered ->
+            releasePick(hovered, targets.hide, hints.armed == SwipeDirection.Down) { true }
+        }
     }
 }
+
+internal fun <T> releasePick(
+    hovered: CollectTarget<T>?,
+    targets: List<CollectTarget<T>>,
+    committed: Boolean,
+    isDefault: (T) -> Boolean,
+): CollectTarget<T>? = hovered ?: targets.firstOrNull { isDefault(it.payload) }?.takeIf { committed }
 
 internal class EdgeHints(val sideways: Float, val vertical: Float, val armed: SwipeDirection?)
 
