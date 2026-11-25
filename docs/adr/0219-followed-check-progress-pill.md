@@ -1,4 +1,4 @@
-# 0218. The followed-series check reports progress in one pull pill
+# 0219. The followed-series check reports progress in one pull pill
 
 Status: Accepted
 
@@ -35,9 +35,9 @@ indeterminate bar until the lock frees.
 
 ## Guarded by
 
-- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/SeriesUpdateCheckTest.kt`: `progress counts each due series as it finishes, failures included and missing extensions left out (ADR 0218)`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenWhatWasNew_adr_0218`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `pullingSaysWhatTheCheckLooksForAndArmsAtTheThreshold_adr_0218`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `thePullNamesWhatTheCheckCoversWhicheverKindIsFiltered_adr_0218`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `aRunningCheckShowsItsProgressAndAFinishedOneOnlyWhatWasNew_adr_0218`
+- `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/SeriesUpdateCheckTest.kt`: `progress counts each due series as it finishes, failures included and missing extensions left out (ADR 0219)`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenWhatWasNew_adr_0219`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `pullingSaysWhatTheCheckLooksForAndArmsAtTheThreshold_adr_0219`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `thePullNamesWhatTheCheckCoversWhicheverKindIsFiltered_adr_0219`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `aRunningCheckShowsItsProgressAndAFinishedOneOnlyWhatWasNew_adr_0219`
 - Left to prose: the pill floating over the grid while it scrolls, which needs a rendered screen.

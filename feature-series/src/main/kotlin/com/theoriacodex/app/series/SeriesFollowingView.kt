@@ -1,5 +1,6 @@
 package com.theoriacodex.app.series
 
+import com.theoriacodex.app.ui.components.hidesOnScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,7 +65,7 @@ internal fun FollowingBody(
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
-            FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.padding(horizontal = 16.dp))
+            FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
         }
         FollowingRefreshBox(checking, found, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
             LazyVerticalGrid(

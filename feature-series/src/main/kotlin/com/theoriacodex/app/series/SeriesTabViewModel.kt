@@ -266,7 +266,7 @@ class SeriesTabViewModel(
                     state.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 })
                 }
             }
-            if (check?.updates.orEmpty().isNotEmpty()) {
+            if (check.updates.isNotEmpty()) {
                 delay(FOUND_SHOWN)
                 mutableState.update { it.copy(found = emptyList()) }
             }

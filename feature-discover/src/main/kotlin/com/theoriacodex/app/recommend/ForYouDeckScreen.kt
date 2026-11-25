@@ -1,5 +1,7 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.ui.components.hidesOnScroll
+import com.theoriacodex.app.ui.components.ScrollChromeBox
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -75,25 +77,29 @@ fun ForYouDeckScreen(
     ForgetRetainedFeedsEffect(LEVEL_ID_PREFIX, levels.mapTo(mutableSetOf(), ForYouLevel::id))
     BackHandler(enabled = onTrail) { owner.popTo(levels.lastIndex - 1) }
 
-    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ForYouBar(state, level, config, callbacks, onRefresh = owner::rebuild, onShowFilters = { showFilters = true })
-        if (onTrail) {
-            val query = level.query
-            ForYouCrumbs(
-                levels, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
-                onSaveSearch = query?.let { { callbacks.onSaveSearch(it) } },
-            )
-        } else {
-            ForYouChips(state.chips, state.only, owner::selectChip)
-            if (state.failures.isNotEmpty()) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    StatusRow(state.failures, onRetrySource = owner::retrySource, onOpenAccounts = callbacks.onOpenSourceAccounts)
+    ScrollChromeBox(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), enabled = config.grid) {
+        Column(Modifier.fillMaxSize()) {
+            Column(Modifier.hidesOnScroll()) {
+                ForYouBar(state, level, config, callbacks, onRefresh = owner::rebuild, onShowFilters = { showFilters = true })
+                if (onTrail) {
+                    val query = level.query
+                    ForYouCrumbs(
+                        levels, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
+                        onSaveSearch = query?.let { { callbacks.onSaveSearch(it) } },
+                    )
+                } else {
+                    ForYouChips(state.chips, state.only, owner::selectChip)
+                    if (state.failures.isNotEmpty()) {
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                            StatusRow(state.failures, onRetrySource = owner::retrySource, onOpenAccounts = callbacks.onOpenSourceAccounts)
+                        }
+                    }
                 }
             }
-        }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            key(level.id, config.grid) {
-                ForYouBody(owner, state, level, config, related, callbacks) { actionPost = it }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                key(level.id, config.grid) {
+                    ForYouBody(owner, state, level, config, related, callbacks) { actionPost = it }
+                }
             }
         }
     }

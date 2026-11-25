@@ -52,7 +52,7 @@ class SeriesTabRefreshTest {
     }
 
     @Test
-    fun aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenWhatWasNew_adr_0218() = runTest {
+    fun aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenWhatWasNew_adr_0219() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val step = Channel<Unit>()
         val update = SeriesUpdate(Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_1"), "/a"), "A"), listOf(SeriesEntry("/c/2", "Chapter 2")))

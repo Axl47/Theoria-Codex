@@ -16,7 +16,7 @@ Showing chrome over playing video must not cost one long frame. The footer fades
 - `ViewerFrame` and `ViewerControls` (`rememberViewerFrame`, `rememberViewerControls`) stay the same objects across a chrome toggle and read visibility through a `State`, so a toggle recomposes only what reads it; `ViewerFrame.uiState` always reads as visible, and readers use `ViewerFrame.chromeVisible`. Any other change replaces them, since an instance held across a change would toggle chrome or dismiss against a passed state. Pages remember their renderer events and video options so an unchanged page skips recomposition. `ViewerSelection.mediaItems` is keyed by post so a readiness change rebuilds neither the media list nor its kinds. A new slideshow returns zoomed media to fit so the next touch reaches the gesture that stops it.
 - `systemControlsReady` is false while the Viewer opens (connecting system controls costs frames) and once its session ended, because a closing Viewer's paused pages stay for the return transition and a system Play would start the closed Viewer's player.
 - Layout of motion media: still images always fill the page; animated and video media sit under a 40 dp portrait top gap clear of the top bar unless the layout is edge to edge (landscape, picture-in-picture or reading a chapter). A post whose motion resolves only after opening (`Post.awaitsMotion`) keeps the gap while it shows its poster, so it does not shift when the stream arrives.
-- `rememberViewerTouchExploration` tracks accessibility-service changes while the Viewer is open without making playback depend on accessibility.
+- `rememberTouchExplorationEnabled` tracks accessibility-service changes while the Viewer is open without making playback depend on accessibility.
 - Accent: `viewerAccentFromPixels` samples the thumbnail at 48 px so small vivid details survive downscaling, buckets hues, weights vividness over area, discounts skin hues (10-50 degrees, saturation below 0.7, weight 0.15) because they would give nearly every character art the same peach, returns null (white accent) when fewer than 6% of pixels are colourful (monochrome art such as manga), then fixes saturation and lightness so the accent reads over dark scrims. Sampling waits for `enabled` so it never competes with the opening animation, and swiping past a post cancels its sample.
 
 ## Consequences
@@ -34,7 +34,7 @@ New chrome parts need a stage. The footer-height helper is the single source for
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerFrameEffects.kt`: `ViewerNavigationEffects`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPostPager.kt`: `ViewerPostPage`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerMediaPage.kt`: `viewerMediaTopGap`, `Post.awaitsMotion`
-- `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerAccessibility.kt`: `rememberViewerTouchExploration`
+- `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/components/TouchExploration.kt`: `rememberTouchExplorationEnabled`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerArtworkAccent.kt`: `viewerAccentFromPixels`, `rememberViewerAccent`
 
 ## Guarded by

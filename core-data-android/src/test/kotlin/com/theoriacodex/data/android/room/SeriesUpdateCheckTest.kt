@@ -113,7 +113,7 @@ class SeriesUpdateCheckTest {
     }
 
     @Test
-    fun `progress counts each due series as it finishes, failures included and missing extensions left out (ADR 0218)`() = runTest {
+    fun `progress counts each due series as it finishes, failures included and missing extensions left out (ADR 0219)`() = runTest {
         val failing = FakeSource("custom_mihon_2", fails = true)
         val onFailing = Series(SeriesId(failing.key, "/series/b"), "Broken")
         val uninstalled = Series(SeriesId(SourceKey.parseOrThrow("custom_mihon_3"), "/series/c"), "Gone")

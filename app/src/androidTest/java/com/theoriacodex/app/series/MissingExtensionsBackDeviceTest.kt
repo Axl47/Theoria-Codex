@@ -1,12 +1,14 @@
 package com.theoriacodex.app.series
 
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.activity.BackEventCompat
+import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -17,7 +19,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.data.repository.EntryProgressRestore
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performTouchInput
@@ -58,7 +59,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class MissingExtensionsBackDeviceTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun theSeriesTabExtensionsButtonTellsAccessibilityHowManySeriesNeedTheirExtension() {
@@ -149,9 +150,12 @@ class MissingExtensionsBackDeviceTest {
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(SERIES_PAGE).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
 
-        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        val middle = device.displayHeight / 2
-        device.swipe(1, middle, device.displayWidth / 2, middle, GESTURE_STEPS)
+        val back = compose.activity.onBackPressedDispatcher
+        compose.runOnUiThread { back.dispatchOnBackStarted(BackEventCompat(0f, 0f, 0f, BackEventCompat.EDGE_LEFT)) }
+        compose.waitForIdle()
+        compose.runOnUiThread { back.dispatchOnBackProgressed(BackEventCompat(0f, 0f, GESTURE_PROGRESS, BackEventCompat.EDGE_LEFT)) }
+        compose.waitForIdle()
+        compose.runOnUiThread { back.onBackPressed() }
         compose.waitUntil(TIMEOUT_MS) { nav.currentDestination?.route == EXTENSIONS }
         compose.waitForIdle()
 
@@ -168,8 +172,8 @@ private const val MISSING = "Missing extensions"
 private const val TITLE = "Kaiju"
 private const val SOURCE_NAME = "Ink Harbor"
 private const val TIMEOUT_MS = 10_000L
-private const val GESTURE_STEPS = 30
 private const val PULL_STEPS = 4
+private const val GESTURE_PROGRESS = 0.5f
 
 private object Loaded : SeriesSource {
     override val key: SourceKey = SeriesKind.MANGA.extensionSourceKey(1)

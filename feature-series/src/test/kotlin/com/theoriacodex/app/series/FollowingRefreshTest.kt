@@ -31,7 +31,7 @@ class FollowingRefreshTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun pullingSaysWhatTheCheckLooksForAndArmsAtTheThreshold_adr_0218() {
+    fun pullingSaysWhatTheCheckLooksForAndArmsAtTheThreshold_adr_0219() {
         val short = refreshPill(null, emptyList(), 0.6f, EntryWords.CHAPTERS) as RefreshPill.Pulling
         assertEquals("Check for new chapters", short.label)
         assertFalse(short.armed)
@@ -42,7 +42,7 @@ class FollowingRefreshTest {
     }
 
     @Test
-    fun thePullNamesWhatTheCheckCoversWhicheverKindIsFiltered_adr_0218() {
+    fun thePullNamesWhatTheCheckCoversWhicheverKindIsFiltered_adr_0219() {
         val manga = FollowedSeries(update("custom_mihon_1", "/a", 0).series, unreadCount = 0)
         val anime = FollowedSeries(update("custom_aniyomi_1", "/c", 0).series, unreadCount = 0)
         assertNull(SeriesTabState(kind = SeriesKind.MANGA).content(listOf(manga, anime)).checkWords)
@@ -50,7 +50,7 @@ class FollowingRefreshTest {
     }
 
     @Test
-    fun aRunningCheckShowsItsProgressAndAFinishedOneOnlyWhatWasNew_adr_0218() {
+    fun aRunningCheckShowsItsProgressAndAFinishedOneOnlyWhatWasNew_adr_0219() {
         assertEquals(RefreshPill.Checking(CheckProgress(12, 40)), refreshPill(CheckProgress(12, 40), emptyList(), 1f, EntryWords.CHAPTERS))
         assertNull(refreshPill(null, emptyList(), 0f, EntryWords.CHAPTERS))
         val found = listOf(update("custom_mihon_1", "/a", 2), update("custom_mihon_1", "/b", 1), update("custom_aniyomi_1", "/c", 1))
