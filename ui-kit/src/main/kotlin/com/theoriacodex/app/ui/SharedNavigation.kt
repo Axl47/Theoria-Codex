@@ -1,5 +1,11 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.ui.components.ScrollChromeTopEffect
+import com.theoriacodex.app.ui.components.LocalScrollChrome
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +51,23 @@ fun Modifier.codexMorph(codexId: String, morph: CodexMorphScope? = LocalCodexMor
 val LocalNetworkOnline = staticCompositionLocalOf<StateFlow<Boolean>> { MutableStateFlow(true) }
 
 val LocalTabReselects = staticCompositionLocalOf<SharedFlow<TopLevelDestination>> { MutableSharedFlow() }
+
+val LocalTabShown = staticCompositionLocalOf<() -> Boolean> { { true } }
+
+@Composable
+fun ScrollToTopOnTabReselect(destination: TopLevelDestination, scrollable: ScrollableState, onReselect: () -> Unit = {}) {
+    val chrome = LocalScrollChrome.current
+    ScrollToTopOnTabReselect(destination) {
+        chrome?.show()
+        when (scrollable) {
+            is LazyListState -> scrollable.animateScrollToItem(0)
+            is LazyGridState -> scrollable.animateScrollToItem(0)
+            is LazyStaggeredGridState -> scrollable.animateScrollToItem(0)
+        }
+        onReselect()
+    }
+    if (chrome != null) ScrollChromeTopEffect(chrome, scrollable)
+}
 
 @Composable
 fun ScrollToTopOnTabReselect(destination: TopLevelDestination, scrollToTop: suspend () -> Unit) {

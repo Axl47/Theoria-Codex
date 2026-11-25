@@ -96,7 +96,7 @@ internal fun SavedCodexRoute(
     val scroll = rememberLazyListState()
     val children = remember(likesId, news) { savedCodexChildren(likesId).newFirst(news) }
     val shelfIds = remember(children) { children.map { ViewerReturnShelfId.Saved(it.codexId) } }
-    ScrollToTopOnTabReselect(TopLevelDestination.Library) { scroll.animateScrollToItem(0) }
+    ScrollToTopOnTabReselect(TopLevelDestination.Library, scroll)
     Column(Modifier.fillMaxSize()) {
         header()
         ViewerReturnColumn(shelfIds, scroll) {
