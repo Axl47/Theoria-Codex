@@ -100,7 +100,7 @@ internal fun EntryRow(
     download: ChapterDownload?,
     canToggleDownload: Boolean,
     onClick: () -> Unit,
-    onToggleRead: () -> Unit,
+    onSetRead: (Boolean) -> Unit,
     onMarkPreviousRead: () -> Unit,
     onToggleDownload: () -> Unit,
 ) {
@@ -152,12 +152,12 @@ internal fun EntryRow(
         EntryContextMenu(
             expanded = menuOpen,
             words = kind.words,
-            read = entry.read,
+            entry = entry,
             hasPreviousUnread = hasPreviousUnread,
             download = download,
             canToggleDownload = canToggleDownload,
             onDismiss = { menuOpen = false },
-            onToggleRead = onToggleRead,
+            onSetRead = onSetRead,
             onMarkPreviousRead = onMarkPreviousRead,
             onToggleDownload = onToggleDownload,
         )
@@ -180,21 +180,28 @@ private fun Modifier.entryRowInteraction(key: String, actionsLabel: String, enab
 private fun EntryContextMenu(
     expanded: Boolean,
     words: EntryWords,
-    read: Boolean,
+    entry: StoredSeriesEntry,
     hasPreviousUnread: Boolean,
     download: ChapterDownload?,
     canToggleDownload: Boolean,
     onDismiss: () -> Unit,
-    onToggleRead: () -> Unit,
+    onSetRead: (Boolean) -> Unit,
     onMarkPreviousRead: () -> Unit,
     onToggleDownload: () -> Unit,
 ) {
     if (!expanded) return
+    val read = entry.read
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         DropdownMenuItem(
             text = { Text("Mark as ${if (read) words.notDone else words.done}") },
-            onClick = { onDismiss(); onToggleRead() },
+            onClick = { onDismiss(); onSetRead(!read) },
         )
+        if (!read && entry.position > 0) {
+            DropdownMenuItem(
+                text = { Text("Mark as ${words.notDone}") },
+                onClick = { onDismiss(); onSetRead(false) },
+            )
+        }
         if (hasPreviousUnread) {
             DropdownMenuItem(
                 text = { Text("Mark previous as ${words.done}") },
