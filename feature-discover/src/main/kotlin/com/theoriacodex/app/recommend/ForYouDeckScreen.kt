@@ -77,6 +77,8 @@ fun ForYouDeckScreen(
     val levels by owner.levels.collectAsStateWithLifecycle()
     val level = levels.last()
     val onTrail = levels.size > 1
+    var trail by remember { mutableStateOf(levels) }
+    if (onTrail) trail = levels
     var showFilters by remember { mutableStateOf(false) }
     var actionPost by remember { mutableStateOf<Post?>(null) }
     ForgetRetainedFeedsEffect(LEVEL_ID_PREFIX, levels.mapTo(mutableSetOf(), ForYouLevel::id))
@@ -87,9 +89,9 @@ fun ForYouDeckScreen(
             Column(Modifier.hidesOnScroll()) {
                 ForYouBar(state, level, config, callbacks, onRefresh = owner::rebuild, onShowFilters = { showFilters = true })
                 AnimatedVisibility(onTrail, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                    val query = level.query
+                    val query = trail.last().query
                     ForYouCrumbs(
-                        levels, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
+                        trail, onCrumb = owner::popTo, saved = query != null && config.isSearchSaved(query),
                         onSaveSearch = query?.let { { callbacks.onSaveSearch(it) } },
                     )
                 }

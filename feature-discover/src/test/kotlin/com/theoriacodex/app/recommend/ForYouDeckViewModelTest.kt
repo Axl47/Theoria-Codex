@@ -90,7 +90,7 @@ class ForYouDeckViewModelTest {
         assertEquals(12, owner(deckEnvironment(grid = true)).posts.size)
     }
 
-    @Test fun `a lane focus asks for the lane's own tags, is named after the lane, and carries the card (ADR 0134)`() {
+    @Test fun `a lane focus asks for the lane's own tags, is named after the lane, and carries only a card from that lane (ADR 0134)`() {
         trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
         val owner = owner()
         val card = owner.current
@@ -99,7 +99,27 @@ class ForYouDeckViewModelTest {
         val asked = trails.asked.single() as TrailRequest.Tag
         assertEquals("b" to DECK_SOURCE, asked.tag to asked.source)
         assertEquals(listOf("Mix", "b"), owner.levels.value.map(ForYouLevel::label))
+        assertEquals(listOf(PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
+
+        owner.popTo(0)
+        owner.focusLane(laneId("a"))
         assertEquals(listOf(card.id, PostId(DECK_SOURCE, "t-1")), owner.posts.map(Post::id))
+    }
+
+    @Test fun `Undo on the Mix after an undone decision while focused restores its steering (ADR 0134)`() {
+        val owner = owner()
+        owner.skip(4)
+        val mix = owner.top
+        trails.tag = listOf(testPost(DECK_SOURCE, "t-1"))
+        owner.fork(TrailRequest.Tag("sea", DECK_SOURCE, context = null, from = owner.current))
+        owner.decide(TriageChoice.Skip)
+        owner.top.deck.undo()
+        owner.popTo(0)
+
+        mix.deck.undo()
+        assertEquals("a-0-1", owner.current.id.sourcePostId)
+        owner.decide(TriageChoice.Skip)
+        assertEquals(listOf(false, false, false), owner.state.value.lanes.map(ForYouLaneChoice::cooled))
     }
 
     @Test fun `in the grid a focus carries no card`() {

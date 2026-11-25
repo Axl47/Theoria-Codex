@@ -106,7 +106,7 @@ class ForYouDeckViewModel(
 
     private val verdictLog = ForYouVerdictLog(wiring.verdicts, wiring.writeScope, workScope, wiring.clock)
 
-    private var lastDecision: Pair<PostId, DeckSteering>? = null
+    private val steeredFrom = mutableMapOf<PostId, DeckSteering>()
     private val asking = mutableMapOf<PostId, Job>()
 
     private var opening = false
@@ -213,7 +213,7 @@ class ForYouDeckViewModel(
         work.cancelChildren()
         asking.clear()
         mix = null
-        lastDecision = null
+        steeredFrom.clear()
         plannedUnder = hidden
         heldAsks.clear()
         resetLevels()
@@ -282,7 +282,7 @@ class ForYouDeckViewModel(
         publish()
     }
 
-    fun fork(request: TrailRequest, label: String? = null) {
+    fun fork(request: TrailRequest, label: String? = null, carry: Boolean = true) {
         val from = top
         val animatedOnly = inputs?.animatedOnly == true
         forking.launchIfIdle {
@@ -290,16 +290,18 @@ class ForYouDeckViewModel(
             when {
                 top !== from -> Unit
                 spec == null -> messageChannel.trySend("Couldn't open ${request.name()}")
-                else -> push(request, spec, label ?: spec.label, carried = from.deck.state.value.current?.takeIf { !grid && it.id == request.from.id })
+                else -> push(request, spec, label ?: spec.label, carried = from.deck.state.value.current?.takeIf { carry && !grid && it.id == request.from.id })
             }
         }
     }
 
     fun focusLane(laneId: String, from: Post? = null) {
         val lane = mix?.lanes?.firstOrNull { it.origin.laneId == laneId } ?: return
-        val post = from ?: top.deck.state.value.current ?: top.feed.value.posts.firstOrNull() ?: return
-        val query = lane.lane.cursor.queriesBySource[lane.lane.source]
-        fork(TrailRequest.Tag(lane.lane.tags.last(), lane.lane.source, query, post), lane.origin.label)
+        val tag = lane.lane.tags.lastOrNull() ?: return
+        val current = top.deck.state.value.current
+        val post = from ?: current ?: top.feed.value.posts.firstOrNull() ?: return
+        val carry = from != null || current != null && originOf(current.id) == lane.origin
+        fork(TrailRequest.Tag(tag, lane.lane.source, lane.lane.cursor.queriesBySource[lane.lane.source], post), lane.origin.label, carry)
     }
 
     fun warmLanes() {
@@ -319,7 +321,7 @@ class ForYouDeckViewModel(
 
     private fun resume(level: ForYouLevel) {
         val deck = level.deck.state.value
-        val decided = deck.posts.drop(deck.index).filter { it.copyOfAny(::isKnown) }.mapTo(mutableSetOf(), Post::id)
+        val decided = deck.posts.drop(deck.index).filter { it.copyOfAny(seen::contains) }.mapTo(mutableSetOf(), Post::id)
         level.deck.passOver(decided, forgetUndo = seen != level.leftWith)
     }
 
@@ -562,7 +564,7 @@ class ForYouDeckViewModel(
             is TriageDecisionEvent.Decided -> {
                 val signal = event.decision.verdictKind() ?: return
                 mix.origins[post.id]?.let { origin ->
-                    lastDecision = post.id to mix.steering
+                    steeredFrom[post.id] = mix.steering
                     mix.steering = mix.steering.after(signal, origin)
                     publish()
                 }
@@ -570,8 +572,7 @@ class ForYouDeckViewModel(
             }
             is TriageDecisionEvent.Reverted -> {
                 asking.remove(post.id)?.cancel()
-                val before = lastDecision?.takeIf { it.first == post.id }?.second
-                if (before != null) lastDecision = null
+                val before = steeredFrom.remove(post.id)
                 mix.steering = mix.steering.undone(before ?: mix.steering, post.id)
                 publish()
             }

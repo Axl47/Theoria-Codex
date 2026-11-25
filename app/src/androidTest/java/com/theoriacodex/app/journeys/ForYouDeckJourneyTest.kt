@@ -16,7 +16,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
@@ -87,13 +86,13 @@ class ForYouDeckJourneyTest : AppJourneyFixture() {
     fun aMixLaneInFiltersFocusesTheDeckOnIt() {
         openDeck()
         val card = currentCard()
+        val label = checkNotNull(origin())
         activate(compose.onNodeWithTag(FOR_YOU_FILTERS_TAG))
-        val lane = SemanticsMatcher("a Mix lane") { node ->
-            node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(FOR_YOU_MIX_LANE_TAG_PREFIX) == true
+        val lane = SemanticsMatcher("the card's Mix lane") { node ->
+            node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(FOR_YOU_MIX_LANE_TAG_PREFIX) == true && node.text() == label
         }
-        waitFor("Mix lanes are listed") { compose.onAllNodes(lane).fetchSemanticsNodes().size > 1 }
-        val label = compose.onAllNodes(lane).fetchSemanticsNodes().last().text()
-        activate(compose.onAllNodes(lane).onLast())
+        waitFor("the card's lane is listed") { compose.onAllNodes(lane).fetchSemanticsNodes().isNotEmpty() }
+        activate(compose.onNode(lane))
         waitFor("crumb 1 reads $label") { compose.onAllNodesWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").fetchSemanticsNodes().singleOrNull()?.text() == label }
         assertEquals(card, currentCard())
         saveScreenshot("deck-lane-focused")

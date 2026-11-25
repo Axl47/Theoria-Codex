@@ -290,9 +290,10 @@ class ForYouDeckScreenTest {
         compose.onNodeWithText("Reset").performClick()
         compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${laneId("sea")}").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         val current = compose.runOnIdle { checkNotNull(owner.levels.value.single().deck.state.value.current).id }
-        compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${laneId("sea")}").performClick()
+        val lane = compose.runOnIdle { owner.originOf(current) as DeckOrigin.Lane }
+        compose.onNodeWithTag("$FOR_YOU_MIX_LANE_TAG_PREFIX${lane.laneId}").performClick()
 
-        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals("sea")
+        compose.onNodeWithTag("${FOR_YOU_CRUMB_TAG_PREFIX}1").assertTextEquals(lane.label)
         compose.onNodeWithText("Animated only").assertDoesNotExist()
         compose.onNodeWithTag(searchCardTestTag(current)).assertExists()
     }
