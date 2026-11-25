@@ -3,7 +3,7 @@ package com.theoriacodex.app.ui
 import com.theoriacodex.domain.adapter.SourceFailureReason
 
 fun sourceFailureDetail(reason: SourceFailureReason?, rawMessage: String = ""): String = when (reason) {
-    SourceFailureReason.RATE_LIMITED -> "Rate limited. Wait a bit, then retry."
+    SourceFailureReason.RATE_LIMITED -> "Too many requests. Try again later."
     SourceFailureReason.NETWORK -> rawMessage.takeIf(String::isNotBlank)
         ?: "Provider unreachable or blocked right now."
     SourceFailureReason.PARSE -> rawMessage.takeIf(String::isNotBlank)

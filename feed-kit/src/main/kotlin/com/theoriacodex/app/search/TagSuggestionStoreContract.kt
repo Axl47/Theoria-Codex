@@ -46,6 +46,10 @@ interface TagSuggestionStore {
     fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) =
         put(source, suggestions, TagSuggestionOrigin.TRENDING)
 
+    fun trendingRefreshedAt(source: SourceKey): Long? = null
+
+    fun markTrendingRefreshed(source: SourceKey, atEpochMs: Long) = Unit
+
     suspend fun awaitLoaded() = Unit
     suspend fun flush() = Unit
     suspend fun close() = Unit

@@ -154,16 +154,24 @@
 ### Fixed
 
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
+- Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
 - A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
 - Opening a chapter loads its own pages before the chapters around it, so on sites that limit how fast they can be loaded, such as Asura Scans, its first page shows sooner.
 - A spinner shows over a chapter until its pages arrive.
 - Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
 - A Pixiv animation whose details came back garbled once gets its length again on the next try. It used to stay without one until the app restarted.
+- Going to Recents and back no longer repeats the check for new posts from followed creators and saved searches each time; each one is checked at most every three hours, even when you leave the app before the check finishes.
+- Reopening the app after Android closed it in the background no longer downloads trending tags again; they refresh at most every 12 hours.
+- When a site answers "too many requests", searches, trending tags, new-post checks and background picture work stop asking it for at least 10 minutes instead of retrying, so a short limit is less likely to turn into a block for hours. Searches on that site say "Too many requests. Try again later." until then, and testing it in Settings › Sites says the same without sending anything.
+- Library pictures whose preview fails to load are tried again after a day, not every time the phone charges, and pictures are not fetched from a site that is limiting requests.
 - Statistics keep the time from your last visit when you leave the app with Back. The daily automatic backup also includes that time.
 - The screen can turn off again while a video in the Viewer is paused or finished, and while you browse feeds with playing cards. Playing videos, including in picture-in-picture, still keep it on.
 - The notification saying chapters wait for their extension no longer stays up after chapter downloads fail. It comes back once downloads get through if those chapters are still waiting.
-- Saved searches and Followed show their new posts first when you open them after the count says there are some. They used to show the posts from your last visit, and the new ones only turned up while scrolling, some jumping to the top.
+- Searches shows each saved search's newest posts first, matching the new-posts count, even when the search was saved with Top, Popular or Random. It used to show the same top-scored page every time. Opening the saved search in Search still uses its own sort.
+- Scrolling Followed or Searches, sorted by Recently added or Oldest first, adds posts below the ones already shown instead of slotting them in throughout the grid.
+- Gelbooru, rule34.xxx and other Gelbooru-style sites date posts by when they were uploaded, not when their tags were last edited, so newest-first orders and date filters match the site.
+- When refreshing Followed or Searches fails, the posts you had stay and the error shows with Retry, instead of failing silently.
 - A series you followed before its source listed any chapters now notifies you when its first ones come out, when the source dates its chapters. Before, those first chapters arrived silently.
 - Pressing Back twice quickly to leave the Viewer now goes back two screens. The second Back used to be lost while the post slid back into its card.
 - Download new chapters also gets the chapters a series page finds when you open or refresh it. Before, opening the page counted them as seen, so they never downloaded.

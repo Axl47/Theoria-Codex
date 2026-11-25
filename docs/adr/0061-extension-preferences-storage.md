@@ -31,3 +31,10 @@ Settings are not restored from backups. Making writes asynchronous would need a 
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/FilePreferences.kt`: `FilePreferences`
 - `extension-host/src/main/kotlin/com/theoriacodex/extensionhost/SourceSettings.kt`: settings screen building
 - `extension-host/src/main/kotlin/androidx/preference/Preferences.kt`: `Preference.attach`
+
+## Guarded by
+
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/ExtensionHostTest.kt`: `extensions get the app's own application and context, except that every preferences name is a no-backup file of the host's (ADR 0057, 0061)`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/FilePreferencesTest.kt`: `preferencesLiveWhereAndroidDoesNotBackUpAndOldFilesAreDeletedNotImported_adr_0061_adr_0189`, `aFileWrittenByAnEarlierBuildIsReadAndValuesAreWrittenUnderTheSameOneLetterTypes_adr_0061`, `anEditWhoseWriteFailsIsStillVisibleAndCommitSaysSo_adr_0061`, `valuesOfEveryTypeAreKeptAcrossReopeningAndChangesAreAnnouncedOnTheMainThread_adr_0061`, `aListenerThatFailsToLinkIsReportedAndTheOthersStillHear_adr_0061`, `oneUnreadableEntryIsDroppedAndAnUnreadableFileIsSetAside_adr_0061`
+- `extension-host/src/test/kotlin/com/theoriacodex/extensionhost/SourceSettingsTest.kt`: `a default is stored only for a named key the store lacks, and only of the preference's own type (ADR 0061)`, `a list offers its entries and its summary names the chosen one (ADR 0061)`, `a summary the source works out is worked out again for each listing (ADR 0061)`
+- Left to prose: legacy preferences being deleted at every start is not yet guarded, testable in `:app`; `SourceSettings.change` using `commit` cannot be told apart from `apply`, which also writes before returning; a manga and an anime source with the same id sharing one file is a known limitation.

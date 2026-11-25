@@ -42,12 +42,8 @@ class SaveSuggestionSource(
             val ranked = rankSaveTargets(
                 library.codices, library.profileId, containing, scores, searchSaves, query, library.lastSavedAt,
             )
-            SaveSuggestions(
-                targets = ranked.suggestions.take(limit).map { codex ->
-                    SaveSuggestion(codex.codexId, codex.name, library.covers[codex.codexId].orEmpty())
-                },
-                inAnyCodex = ranked.inAnyCodex,
-            )
+            val suggestion = { codex: Codex -> SaveSuggestion(codex.codexId, codex.name, library.covers[codex.codexId].orEmpty()) }
+            SaveSuggestions(targets = ranked.suggestions.take(limit).map(suggestion), savedIn = ranked.savedIn?.let(suggestion))
         }.distinctUntilChanged()
 
     private fun observeLibrary(
