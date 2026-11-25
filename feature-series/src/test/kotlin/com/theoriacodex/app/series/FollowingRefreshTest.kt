@@ -7,9 +7,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import com.theoriacodex.data.repository.CheckFailure
 import com.theoriacodex.data.repository.CheckProgress
+import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesUpdate
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesEntry
@@ -32,13 +35,13 @@ class FollowingRefreshTest {
 
     @Test
     fun pullingSaysWhatTheCheckLooksForAndArmsAtTheThreshold_adr_0219() {
-        val short = refreshPill(null, emptyList(), 0.6f, EntryWords.CHAPTERS) as RefreshPill.Pulling
+        val short = refreshPill(null, null, 0.6f, EntryWords.CHAPTERS) as RefreshPill.Pulling
         assertEquals("Check for new chapters", short.label)
         assertFalse(short.armed)
-        assertFalse((refreshPill(null, emptyList(), 1f, EntryWords.CHAPTERS) as RefreshPill.Pulling).armed)
-        assertTrue((refreshPill(null, emptyList(), 1.2f, EntryWords.CHAPTERS) as RefreshPill.Pulling).armed)
-        assertEquals("Check for new episodes", (refreshPill(null, emptyList(), 0.5f, EntryWords.EPISODES) as RefreshPill.Pulling).label)
-        assertEquals("Check for updates", (refreshPill(null, emptyList(), 0.5f, null) as RefreshPill.Pulling).label)
+        assertFalse((refreshPill(null, null, 1f, EntryWords.CHAPTERS) as RefreshPill.Pulling).armed)
+        assertTrue((refreshPill(null, null, 1.2f, EntryWords.CHAPTERS) as RefreshPill.Pulling).armed)
+        assertEquals("Check for new episodes", (refreshPill(null, null, 0.5f, EntryWords.EPISODES) as RefreshPill.Pulling).label)
+        assertEquals("Check for updates", (refreshPill(null, null, 0.5f, null) as RefreshPill.Pulling).label)
     }
 
     @Test
@@ -51,11 +54,15 @@ class FollowingRefreshTest {
     }
 
     @Test
-    fun aRunningCheckShowsItsProgressAndAFinishedOneOnlyWhatWasNew_adr_0219() {
-        assertEquals(RefreshPill.Checking(CheckProgress(12, 40)), refreshPill(CheckProgress(12, 40), emptyList(), 1f, EntryWords.CHAPTERS))
-        assertNull(refreshPill(null, emptyList(), 0f, EntryWords.CHAPTERS))
+    fun aFinishedCheckSaysHowManySeriesItRefreshedAndWhatWasNew_adr_0219() {
+        assertEquals(RefreshPill.Checking(CheckProgress(12, 40)), refreshPill(CheckProgress(12, 40), null, 1f, EntryWords.CHAPTERS))
+        assertNull(refreshPill(null, null, 0f, EntryWords.CHAPTERS))
         val found = listOf(update("custom_mihon_1", "/a", 2), update("custom_mihon_1", "/b", 1), update("custom_aniyomi_1", "/c", 1))
-        assertEquals(RefreshPill.Found("3 new chapters · 1 new episode"), refreshPill(null, found, 0f, null))
+        assertEquals(RefreshPill.Done("Refreshed 5 series · 3 new chapters · 1 new episode"), refreshPill(null, FollowedCheck(found, checked = 5), 0f, null))
+        assertEquals(RefreshPill.Done("Refreshed 4 series"), refreshPill(null, FollowedCheck(emptyList(), checked = 4), 0f, EntryWords.EPISODES))
+        val failure = CheckFailure(found.first().series, SourceFailureReason.NETWORK)
+        assertEquals(RefreshPill.Done("Refreshed 3 series"), refreshPill(null, FollowedCheck(emptyList(), checked = 4, failures = listOf(failure)), 0f, null))
+        assertNull(refreshPill(null, FollowedCheck(emptyList(), checked = 1, failures = listOf(failure)), 0f, null))
     }
 
     @Test

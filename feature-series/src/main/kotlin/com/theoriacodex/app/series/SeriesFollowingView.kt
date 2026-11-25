@@ -44,7 +44,6 @@ import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
-import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.model.SortChoice
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
@@ -54,7 +53,7 @@ import com.theoriacodex.domain.series.SeriesKind
 internal fun FollowingBody(
     content: SeriesTabContent,
     checking: CheckProgress?,
-    found: List<SeriesUpdate>,
+    finished: FollowedCheck?,
     failedCheck: FollowedCheck?,
     checkRun: Int,
     grid: LazyGridState,
@@ -87,7 +86,7 @@ internal fun FollowingBody(
                 Modifier.hidesOnScroll().padding(horizontal = 16.dp),
             )
         }
-        FollowingRefreshBox(checking, found, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
+        FollowingRefreshBox(checking, finished, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(CARD_WIDTH),
                 state = grid,

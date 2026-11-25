@@ -9,7 +9,6 @@ import com.theoriacodex.data.repository.DownloadChoice
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.FollowedSeries
 import com.theoriacodex.data.repository.SeriesRepository
-import com.theoriacodex.data.repository.SeriesUpdate
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.coroutines.runCatchingExceptionsPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
@@ -103,7 +102,7 @@ data class SeriesTabState(
     val searchQuery: String = "",
     val dedicated: DedicatedSourceState? = null,
     val checking: CheckProgress? = null,
-    val found: List<SeriesUpdate> = emptyList(),
+    val finished: FollowedCheck? = null,
     val failedCheck: FollowedCheck? = null,
     val checkRun: Int = 0,
     val kind: SeriesKind? = null,
@@ -166,7 +165,7 @@ class SeriesTabViewModel(
     private val download: (suspend (SeriesId, DownloadChoice) -> Unit)? = null,
     private val checkFollowed: suspend (only: Set<SeriesId>?, onProgress: (CheckProgress) -> Unit) -> FollowedCheck,
 ) : ViewModel() {
-    private var foundShown: Job? = null
+    private var finishedShown: Job? = null
 
     private var searchText: String? = saved[SAVED_SEARCH]
 
@@ -279,21 +278,21 @@ class SeriesTabViewModel(
 
     private fun check(only: Set<SeriesId>?, retrying: Boolean) {
         if (state.value.checking != null) return
-        foundShown?.cancel()
-        mutableState.update { it.copy(checking = CheckProgress(0, 0), found = emptyList(), failedCheck = it.failedCheck.takeIf { retrying }) }
-        foundShown = viewModelScope.launch {
+        finishedShown?.cancel()
+        mutableState.update { it.copy(checking = CheckProgress(0, 0), finished = null, failedCheck = it.failedCheck.takeIf { retrying }) }
+        finishedShown = viewModelScope.launch {
             var check: FollowedCheck? = null
             try {
                 check = checkFollowed(only) { progress -> mutableState.update { it.copy(checking = progress) } }
             } finally {
                 mutableState.update { state ->
                     val failed = check?.let { done -> state.failedCheck?.retried(only.orEmpty(), done) ?: done } ?: state.failedCheck
-                    state.copy(checking = null, found = check?.updates.orEmpty(), failedCheck = failed?.takeIf { it.failed > 0 }, checkRun = state.checkRun + if (check?.failures.isNullOrEmpty()) 0 else 1)
+                    state.copy(checking = null, finished = check?.takeIf { it.refreshed > 0 }, failedCheck = failed?.takeIf { it.failed > 0 }, checkRun = state.checkRun + if (check?.failures.isNullOrEmpty()) 0 else 1)
                 }
             }
-            if (check.updates.isNotEmpty()) {
-                delay(FOUND_SHOWN)
-                mutableState.update { it.copy(found = emptyList()) }
+            if (state.value.finished != null) {
+                delay(FINISHED_SHOWN)
+                mutableState.update { it.copy(finished = null) }
             }
         }
     }
@@ -601,7 +600,7 @@ private fun FollowedCheck.retried(series: Set<SeriesId>, retry: FollowedCheck): 
     copy(failures = failures.filter { it.series.id !in series } + retry.failures)
 
 private const val SAVED_SEARCH = "search"
-private val FOUND_SHOWN = 3.seconds
+private val FINISHED_SHOWN = 3.seconds
 private const val SAVED_BROWSE = "browse"
 private const val SAVED_VIEW = "view"
 
