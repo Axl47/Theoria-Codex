@@ -59,7 +59,7 @@ class RelatedPostsRouteControllerTest {
     }
 
     @Test
-    fun `liking a shelf post promotes it and opens a retained next page`() = runTest {
+    fun `liking a shelf post promotes it and opens a retained next page (ADR 0077)`() = runTest {
         val seed = testPost(sourcePostId = "seed")
         val promoted = testPost(sourcePostId = "promoted")
         val sibling = testPost(sourcePostId = "sibling")

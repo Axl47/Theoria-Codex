@@ -2,6 +2,7 @@ package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.app.media.PostMediaKind
 import com.theoriacodex.app.viewer.ViewerSeries
+import com.theoriacodex.app.viewer.hasPendingGalleryMedia
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
@@ -506,11 +507,11 @@ private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?, r
             resolvedAtMs = resolvedAtMs,
         ),
     )
-    val replacement = if (!recovered) resolved else resolved.copy(
-        media = resolved.media.map { media ->
-            previous.media.firstOrNull { it.key == media.key }?.let { media.copy(loadGeneration = it.loadGeneration) } ?: media
-        },
-    )
+    val replacement = when {
+        recovered -> resolved.withLoadGenerationsAfter(previous, step = 0L)
+        series is ViewerSeries.Reading && previous.hasPendingGalleryMedia() -> resolved.withLoadGenerationsAfter(previous, step = 1L)
+        else -> resolved
+    }
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
     if (pageIndex != currentPageIndex) return copy(pages = updatedPages)
     val playback = playbackControlsFor(media = replacement.selectedMedia, playbackRate = controls.playback.playbackRate)
@@ -523,6 +524,12 @@ private fun ViewerUiState.replaceResolvedPost(post: Post, resolvedAtMs: Long?, r
         mediaError = null,
     )
 }
+
+private fun ViewerPageState.withLoadGenerationsAfter(previous: ViewerPageState, step: Long): ViewerPageState = copy(
+    media = media.map { media ->
+        previous.media.firstOrNull { it.key == media.key }?.let { media.copy(loadGeneration = it.loadGeneration + step) } ?: media
+    },
+)
 
 private fun ViewerUiState.withCurrentMediaReadiness(ready: Boolean): ViewerUiState {
     val page = currentPage ?: return this

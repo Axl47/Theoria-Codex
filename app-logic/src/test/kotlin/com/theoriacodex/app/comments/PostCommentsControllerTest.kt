@@ -27,7 +27,7 @@ class PostCommentsControllerTest {
         PostCommentsController(loader, this, gate)
 
     @Test
-    fun `the current post's first page loads once and swiping back asks for nothing`() = runTest(UnconfinedTestDispatcher()) {
+    fun `the current post's first page loads once and swiping back asks for nothing (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader)
 
@@ -41,7 +41,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `nothing loads for a source without comments or a listing that says none`() = runTest(UnconfinedTestDispatcher()) {
+    fun `nothing loads for a source without comments or a listing that says none (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val unsupported = FakeCommentsLoader(pages, supported = false)
         controller(unsupported).show(post)
         val none = FakeCommentsLoader(pages)
@@ -53,7 +53,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `the background request waits for the gate`() = runTest(UnconfinedTestDispatcher()) {
+    fun `the background request waits for the gate (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val open = CompletableDeferred<Unit>()
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader) { open.await() }
@@ -65,7 +65,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `more comments continue from the page token and a failure retries the same page`() = runTest(UnconfinedTestDispatcher()) {
+    fun `more comments continue from the page token and a failure retries the same page (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader)
         controller.show(post)
@@ -99,7 +99,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `replies load on first opening, stay loaded when closed, and page on their own`() = runTest(UnconfinedTestDispatcher()) {
+    fun `replies load on first opening, stay loaded when closed, and page on their own (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader)
         controller.show(post)
@@ -130,7 +130,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `focusing a top-level comment pages until it appears and then acts once`() = runTest(UnconfinedTestDispatcher()) {
+    fun `focusing a top-level comment pages until it appears and then acts once (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader)
         controller.show(post)
@@ -144,7 +144,21 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `focusing a reply opens its parent's replies and pages them`() = runTest(UnconfinedTestDispatcher()) {
+    fun `focusing waits for the gate like the background request (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
+        val open = CompletableDeferred<Unit>()
+        val loader = FakeCommentsLoader(pages)
+        val controller = controller(loader) { open.await() }
+
+        controller.show(post)
+        controller.focus(post, CommentTarget("c"))
+        assertTrue(loader.requests.isEmpty())
+        open.complete(Unit)
+        assertEquals("comment:c", controller.state.value.getValue(post.id).focusKey)
+        assertEquals(listOf("1:/", "1:/p2"), loader.requests)
+    }
+
+    @Test
+    fun `focusing a reply opens its parent's replies and pages them (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val loader = FakeCommentsLoader(pages)
         val controller = controller(loader)
 
@@ -157,7 +171,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `a comment that is not there leaves the post's comments as they were`() = runTest(UnconfinedTestDispatcher()) {
+    fun `a comment that is not there leaves the post's comments as they were (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val missing = FakeCommentsLoader(pages)
         val controller = controller(missing)
         controller.focus(post, CommentTarget("nope"))
@@ -173,7 +187,7 @@ class PostCommentsControllerTest {
     }
 
     @Test
-    fun `the search stops after a bounded number of pages and after a failed one`() = runTest(UnconfinedTestDispatcher()) {
+    fun `the search stops after a bounded number of pages and after a failed one (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
         val endless = (0..20).associate { page ->
             (if (page == 0) "/" else "/p$page") to commentPage("x$page", next = "p${page + 1}")
         }
@@ -186,6 +200,53 @@ class PostCommentsControllerTest {
         controller.focus(post, CommentTarget("c"))
         assertEquals(1, failing.requests.size)
         assertNull(controller.state.value.getValue(post.id).focusKey)
+    }
+
+    @Test
+    fun `a reply search on a later page stops at the cap and keeps every page it loaded (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
+        val endlessReplies = (0..20).associate { page ->
+            (if (page == 0) "a/" else "a/r$page") to commentPage("r$page", next = "r${page + 1}")
+        }
+        val loader = FakeCommentsLoader(
+            mapOf("/" to commentPage("x", next = "p1"), "/p1" to commentPage("a")) + endlessReplies,
+        )
+        val controller = controller(loader)
+
+        controller.focus(post, CommentTarget("never", parentId = "a"))
+
+        val state = controller.state.value.getValue(post.id)
+        assertEquals(12, loader.requests.size)
+        assertEquals(listOf("x", "a"), state.top.comments.map { it.id })
+        assertEquals((0..9).map { "r$it" }, state.replies.getValue("a").comments.map { it.id })
+        assertEquals(CommentLoadStatus.Loaded, state.replies.getValue("a").status)
+        assertNull(state.focusKey)
+    }
+
+    @Test
+    fun `a page that fails after others loaded keeps them and sets no focus (ADR 0076)`() = runTest(UnconfinedTestDispatcher()) {
+        val threads = mapOf(
+            "/" to commentPage("x", next = "p1"),
+            "/p1" to commentPage("a"),
+            "a/" to commentPage("r0", next = "r1"),
+        )
+        val topFails = FakeCommentsLoader(threads, failKeys = setOf("/p1"))
+        val topController = controller(topFails)
+        topController.focus(post, CommentTarget("a"))
+        val top = topController.state.value.getValue(post.id)
+        assertEquals(listOf("1:/", "1:/p1"), topFails.requests)
+        assertEquals(listOf("x"), top.top.comments.map { it.id })
+        assertEquals(CommentLoadStatus.Failed, top.top.status)
+        assertNull(top.focusKey)
+
+        val repliesFail = FakeCommentsLoader(threads, failKeys = setOf("a/r1"))
+        val replyController = controller(repliesFail)
+        replyController.focus(post, CommentTarget("r9", parentId = "a"))
+        val state = replyController.state.value.getValue(post.id)
+        assertEquals(listOf("1:/", "1:/p1", "1:a/", "1:a/r1"), repliesFail.requests)
+        assertEquals(listOf("x", "a"), state.top.comments.map { it.id })
+        assertEquals(listOf("r0"), state.replies.getValue("a").comments.map { it.id })
+        assertEquals(CommentLoadStatus.Failed, state.replies.getValue("a").status)
+        assertNull(state.focusKey)
     }
 
     @Test

@@ -5,6 +5,8 @@ import com.theoriacodex.data.repository.DailyUsageDuration
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.data.repository.StatisticsTagKey
 import com.theoriacodex.data.repository.UsageDurationDelta
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -40,6 +42,33 @@ class StatisticsProjectionTest {
         assertEquals(29, first.topOpened.first().percentage)
         assertEquals(600L, first.topVideos.first().value)
         assertEquals(emptyList<CodexPostStatistic>(), first.topImages)
+    }
+
+    @Test
+    fun `a Codex summary keeps every recorded post beyond its top five (ADR 0086)`() {
+        val posts = (1..7).associate { index ->
+            "PIXIV:$index" to com.theoriacodex.data.repository.CodexPostStatistics(label = "Post $index", opens = index.toLong())
+        } + ("PIXIV:8" to com.theoriacodex.data.repository.CodexPostStatistics(label = "Post 8", videoMs = 9L))
+        val rows = codexStatistics(
+            LifetimeStatistics(codexStatistics = mapOf("first" to com.theoriacodex.data.repository.CodexStatistics(0L, 0L, posts))),
+            listOf(codex("first", "First")),
+        )
+
+        assertEquals(5, rows.single().topOpened.size)
+        assertEquals(posts, rows.single().posts)
+    }
+
+    @Test
+    fun `only a launch from a Codex carries a Codex id (ADR 0086)`() {
+        fun launch(hash: String, source: ViewerStreamSource) = ViewerLaunchContext(hash, 0, source, 0)
+
+        assertEquals("abc", statisticsCodexId(launch("codex:abc", ViewerStreamSource.CODEX)))
+        val others = ViewerStreamSource.entries.filterNot { it == ViewerStreamSource.CODEX }
+        assertEquals(7, others.size)
+        others.forEach { source -> assertNull(source.name, statisticsCodexId(launch("codex:abc", source))) }
+        assertNull(statisticsCodexId(launch("codex:", ViewerStreamSource.CODEX)))
+        assertNull(statisticsCodexId(launch("recents:abc", ViewerStreamSource.CODEX)))
+        assertNull(statisticsCodexId(null))
     }
 
     @Test

@@ -81,6 +81,7 @@
 
 ### Changed
 
+- Settings has a Series group, after Sources, holding Extensions, Check for new chapters and Delete after reading. Sources now holds only what applies to every source.
 - Swiping through posts stays fast after long use.
 - Scrolling Search, For You and Codex grids is smoother: loading more results, liking a post or ticking a post in a Codex's edit mode no longer redraws every card on screen.
 - In the Viewer, the controls disappear at once when you tap to hide them, instead of fading out. Showing them still fades in.
@@ -153,7 +154,9 @@
 ### Fixed
 
 - The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
+- A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
+- Opening a chapter loads its own pages before the chapters around it, so on sites that limit how fast they can be loaded, such as Asura Scans, its first page shows sooner.
 - A spinner shows over a chapter until its pages arrive.
 - Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
 - A Pixiv animation whose details came back garbled once gets its length again on the next try. It used to stay without one until the app restarted.
