@@ -153,6 +153,7 @@
 
 ### Fixed
 
+- Once a post is saved, the Viewer's Save button names the Codex it is in, with a check, instead of showing the next suggestion with a check as if the post were already there. Tapping still saves to the next suggested Codex, shown beside it as its cover with a plus.
 - A chapter you come back to, including after swiping the app away, opens where you were on the page in vertical reading, not at the top of that page. Chapters you left before this update still open at the top of their page.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
 - Opening a chapter loads its own pages before the chapters around it, so on sites that limit how fast they can be loaded, such as Asura Scans, its first page shows sooner.
