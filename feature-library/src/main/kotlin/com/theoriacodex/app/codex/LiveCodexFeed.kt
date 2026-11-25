@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.related.RelatedPostsLoading
-import com.theoriacodex.app.ui.components.RetainedFrames
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
@@ -24,24 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-
-val LiveCodexSortFrames = RetainedFrames<Post, List<Post>>()
-
-fun sortLiveCodexPosts(
-    posts: List<Post>,
-    sort: CodexSortMode,
-    usage: Map<String, CodexUsage> = emptyMap(),
-    durations: Map<PostId, Long> = emptyMap(),
-): List<Post> = posts.sortedWith(liveCodexOrder(sort, usage, durations))
-
-private fun liveCodexOrder(sort: CodexSortMode, usage: Map<String, CodexUsage>, durations: Map<PostId, Long>): Comparator<Post> {
-    val date: Comparator<Post> = if (sort == CodexSortMode.OLDEST_SAVED) {
-        compareBy { it.createdAtEpochMs }
-    } else {
-        compareByDescending { it.createdAtEpochMs }
-    }
-    return codexPostRefinement(sort, usage, durations)?.then(date) ?: date
-}
 
 data class LiveCodexFeedState(
     val posts: List<Post> = emptyList(),
@@ -101,6 +82,9 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var loadedAt: Long? = null
     private var keptBranches: Map<String, B>? = null
     private var keptLoadedAt: Long? = null
+    private var refreshErrors = emptyMap<String, String>()
+    private val slots = LinkedHashMap<PostId, FeedSlot>()
+    private var batch = 0
     private var coverSort = CodexSortMode.NEWEST_SAVED
     private var coverUsage = emptyMap<String, CodexUsage>()
     private var coverDurations = emptyMap<PostId, Long>()
@@ -110,19 +94,21 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         scope = scope,
         loader = relatedPostsLoader,
         currentState = { mutableRelated.value },
-        canonicalPosts = { sortLiveCodexPosts(state.value.posts, coverSort, coverUsage, coverDurations) },
+        canonicalPosts = { sortCodexPosts(state.value.posts, coverSort, coverUsage, coverDurations) },
         updateState = { mutableRelated.value = it },
     )
 
-    fun updateCoverSort(
+    fun updateSort(
         sort: CodexSortMode,
         usage: Map<String, CodexUsage> = emptyMap(),
         durations: Map<PostId, Long> = emptyMap(),
     ) {
         coverDurations = durations
         if (coverSort == sort && coverUsage == usage) return
+        val flipped = (coverSort == CodexSortMode.OLDEST_SAVED) != (sort == CodexSortMode.OLDEST_SAVED)
         coverSort = sort
         coverUsage = usage
+        if (flipped) mutableState.value = state.value.copy(posts = state.value.posts.sortedWith(feedOrder()))
         related.clear("live codex re-sorted")
         scope.launch { cacheFirstPost(generation, root = true) }
     }
@@ -133,42 +119,53 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         generation++
         coverPostId = null
         keptBranches = null
+        refreshErrors = emptyMap()
+        slots.clear()
         loadedAt = System.currentTimeMillis()
         branches.clear()
         initial.associateByTo(branches) { it.id }
         mutableState.value = LiveCodexFeedState(generation = generation, loadedAtEpochMs = loadedAt)
-        load(branches.keys.toList(), retry = false, cacheInitialCover = true)
+        load(branches.keys.toList(), retry = false, initial = true)
     }
 
-    fun reload(initial: List<B>) {
-        if (keptBranches != null || initial.isEmpty()) return
+    fun reload(initial: List<B>, only: Set<String>? = null) {
+        val fresh = initial.filter { only == null || it.id in only }
+        if (keptBranches != null || fresh.isEmpty()) return
         keptBranches = LinkedHashMap(branches)
         keptLoadedAt = loadedAt
         job?.cancel()
         related.clear("live codex reloaded")
         generation++
         loadedAt = System.currentTimeMillis()
-        branches.clear()
-        initial.associateByTo(branches) { it.id }
-        load(branches.keys.toList(), retry = false, reloading = true)
+        if (only == null) branches.clear()
+        fresh.forEach { branches[it.id] = it }
+        load(fresh.map { it.id }, retry = false, reloading = true)
     }
 
     fun loadMore() {
         if (!state.value.loading) load(branches.values.filter { it.canLoadMore }.map { it.id }, retry = false)
     }
 
-    fun retry() {
-        if (!state.value.loading) load(branches.values.filter { it.error != null }.map { it.id }, retry = true)
+    fun retry(initial: List<B>) {
+        if (state.value.loading) return
+        val failed = branches.values.filter { it.error != null }.map { it.id }
+        if (refreshErrors.isNotEmpty()) reload(initial, only = refreshErrors.keys)
+        else load(failed, retry = true)
     }
 
-    private fun load(ids: List<String>, retry: Boolean, cacheInitialCover: Boolean = false, reloading: Boolean = false) {
+    private fun load(ids: List<String>, retry: Boolean, initial: Boolean = false, reloading: Boolean = false) {
         if (ids.isEmpty()) return
         val admitted = ++generation
+        batch = slots.values.maxOfOrNull(FeedSlot::batch)?.plus(1) ?: 0
         mutableState.value = state.value.copy(loading = true, generation = generation)
         job = scope.launch {
             try {
-                ids.mapConcurrent(concurrency = 2) { id -> fetchBranch(id, retry, admitted, publishEach = !reloading, cacheInitialCover) }
-                if (reloading && generation == admitted) finishReload(admitted)
+                ids.mapConcurrent(concurrency = 2) { id -> fetchBranch(id, retry, admitted, progressive = initial) }
+                if (reloading && generation == admitted) finishReload(admitted, ids)
+                if (!initial && !reloading && generation == admitted) {
+                    publish(loading = true)
+                    cacheFirstPost(admitted, root = false)
+                }
             } finally {
                 if (generation == admitted) {
                     if (reloading) keptBranches = null
@@ -178,28 +175,32 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         }
     }
 
-    private suspend fun fetchBranch(id: String, retry: Boolean, admitted: Long, publishEach: Boolean, cacheInitialCover: Boolean) {
+    private suspend fun fetchBranch(id: String, retry: Boolean, admitted: Long, progressive: Boolean) {
         val branch = branches[id] ?: return
         val result = fetch(branch, retry)
         if (generation != admitted) return
         branches[id] = result
-        if (!publishEach) return
+        if (!progressive) return
         publish(loading = true)
-        cacheFirstPost(admitted, cacheInitialCover)
+        cacheFirstPost(admitted, root = true)
     }
 
-    private suspend fun finishReload(admitted: Long) {
+    private suspend fun finishReload(admitted: Long, reloaded: List<String>) {
         val kept = keptBranches.orEmpty()
-        val failed = branches.filter { (id, branch) -> branch.posts.isEmpty() && branch.error != null && id in kept }.keys
+        val failed = reloaded.filter { id -> id in kept && branches.getValue(id).run { posts.isEmpty() && error != null } }
+        refreshErrors = failed.associateWith { id -> checkNotNull(branches.getValue(id).error) }
         failed.forEach { branches[it] = kept.getValue(it) }
-        if (failed.isNotEmpty()) loadedAt = keptLoadedAt
+        if (reloaded.any { branches.getValue(it).error != null } || failed.isNotEmpty()) loadedAt = keptLoadedAt
+        val unchanged = branches.keys - reloaded.toSet() + failed
+        slots.keys.retainAll(unchanged.flatMapTo(HashSet()) { id -> branches.getValue(id).posts.map(Post::id) })
+        batch = 0
         publish(loading = true)
         cacheFirstPost(admitted, root = true)
     }
 
     private suspend fun cacheFirstPost(admitted: Long, root: Boolean) {
-        if (generation != admitted) return
-        val post = state.value.posts.minWithOrNull(liveCodexOrder(coverSort, coverUsage, coverDurations)) ?: return
+        if (generation != admitted || (!root && coverPostId != null)) return
+        val post = sortCodexPosts(state.value.posts, coverSort, coverUsage, coverDurations).firstOrNull() ?: return
         if (post.id == coverPostId || (!root && coverPostId != null)) return
         coverPostId = post.id
         val result = runCatchingPreservingCancellation { cacheCover(post) }
@@ -207,13 +208,29 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     }
 
     private fun publish(loading: Boolean) {
+        val shown = slots.keys.withIndex().associate { (rank, id) -> id to rank }
+        val posts = branches.values.flatMap { it.posts }.sortedBy { shown[it.id] ?: Int.MAX_VALUE }.distinctByFile()
+        posts.forEach { post -> slots.getOrPut(post.id) { FeedSlot(batch, post.createdAtEpochMs) } }
         mutableState.value = LiveCodexFeedState(
-            posts = branches.values.flatMap { it.posts }.distinctByFile(),
+            posts = posts.sortedWith(feedOrder()),
             loading = loading,
             canLoadMore = branches.values.any { it.canLoadMore },
-            errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap(),
+            errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap() +
+                refreshErrors.filterKeys { it in branches },
             generation = generation,
             loadedAtEpochMs = loadedAt,
         )
     }
+
+    private fun feedOrder(): Comparator<Post> {
+        val slot = { post: Post -> slots[post.id] ?: FeedSlot(0, post.createdAtEpochMs) }
+        val date: Comparator<Post> = if (coverSort == CodexSortMode.OLDEST_SAVED) {
+            compareBy { slot(it).createdAtEpochMs }
+        } else {
+            compareByDescending { slot(it).createdAtEpochMs }
+        }
+        return compareBy<Post> { slot(it).batch }.then(date)
+    }
 }
+
+private data class FeedSlot(val batch: Int, val createdAtEpochMs: Long?)
