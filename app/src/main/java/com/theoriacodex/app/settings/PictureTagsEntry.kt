@@ -75,6 +75,7 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
                         libraryProgress(progress)?.let { summary ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(summary.count)
+                                summary.frames?.let { Text(it) }
                                 summary.pending?.let {
                                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -106,19 +107,22 @@ internal fun PictureTagsPage(model: VisualModelStore, library: Flow<VisionProgre
     }
 }
 
-internal data class LibraryProgress(val count: String, val pending: String?)
+internal data class LibraryProgress(val count: String, val frames: String?, val pending: String?)
 
 internal fun libraryProgress(progress: VisionProgress): LibraryProgress? {
     if (progress.total == 0) return null
-    val count = progress.awaitingFrames
-    val videos = if (count == 1) "1 video finishes from its frames" else "$count videos finish from their frames"
+    val waiting = progress.awaitingFrames
+    val frames = when (waiting) {
+        0 -> null
+        1 -> "1 video waiting on its frames"
+        else -> "$waiting videos waiting on their frames"
+    }
     val pending = when {
-        progress.tagged < progress.total && count > 0 -> "The rest are tagged while charging on Wi-Fi, and $videos once the phone is also idle"
-        progress.tagged < progress.total -> "The rest are tagged while charging on Wi-Fi"
-        count > 0 -> "$videos while charging and idle on Wi-Fi"
+        waiting > 0 -> "Finishes while the phone is charging and idle on Wi-Fi"
+        progress.tagged < progress.total -> "Finishes while the phone is charging on Wi-Fi"
         else -> null
     }
-    return LibraryProgress("${progress.tagged} of ${progress.total} Library posts tagged", pending)
+    return LibraryProgress("${progress.tagged} of ${progress.total} Library posts tagged", frames, pending)
 }
 
 private fun percent(bytes: Long, total: Long): Long = if (total <= 0) 0 else bytes * 100 / total

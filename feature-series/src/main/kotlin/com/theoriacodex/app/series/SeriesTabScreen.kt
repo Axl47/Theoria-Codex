@@ -39,6 +39,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -60,6 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -494,9 +496,15 @@ private fun <T> SeriesRow(
 }
 
 @Composable
-internal fun FailureRow(onRetry: (() -> Unit)?, modifier: Modifier = Modifier, message: String = LOAD_FAILED, actionLabel: String = "Retry") {
+internal fun FailureRow(
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    message: String = LOAD_FAILED,
+    actionLabel: String = "Retry",
+    style: TextStyle = LocalTextStyle.current,
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(message, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, Modifier.weight(1f, fill = false), style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (onRetry != null) TextButton(onClick = onRetry) { Text(actionLabel) }
     }
 }

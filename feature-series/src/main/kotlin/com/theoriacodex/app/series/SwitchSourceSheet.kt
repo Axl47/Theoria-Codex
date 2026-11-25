@@ -91,7 +91,7 @@ private fun SourceResult(result: SwitchSourceResult, enabled: Boolean, onRetry: 
             SourceLine(result.name)
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         }
-        is SwitchListing.Failed -> FailureRow(onRetry, message = "${result.name} · ${listing.message}")
+        is SwitchListing.Failed -> FailureRow(onRetry, message = "${result.name} · ${listing.message}", style = MaterialTheme.typography.bodyMedium)
         is SwitchListing.Found ->
             if (listing.matches.isEmpty()) SourceLine("${result.name} · no match", Modifier.padding(vertical = 12.dp))
             else listing.matches.forEach { match -> MatchRow(match, result.name, enabled) { onPick(match) } }
