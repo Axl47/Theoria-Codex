@@ -132,11 +132,12 @@ internal fun ViewerPostStrip(
         val selectedWidth = unfolded?.let { viewerStripUnfoldedWidth(it.items.size, cell, gap, slots) } ?: cell
         val cellPx = with(LocalDensity.current) { cell.toPx() }
         val selectedWidthPx = with(LocalDensity.current) { selectedWidth.toPx() }
+        val centerPx = with(LocalDensity.current) { ((maxWidth - cell) / 2 - gap).toPx() }
         val motion = remember(list) { ViewerStripMotion(selectedIndex, selectedWidthPx) }
-        CenterSelectedPost(list, motion, selectedIndex, selectedWidthPx, cellPx)
+        CenterSelectedPost(list, motion, selectedIndex, selectedWidthPx, cellPx, centerPx)
         LazyRow(
             state = list,
-            contentPadding = PaddingValues(start = (maxWidth - cell) / 2, end = (maxWidth - cell) / 2, top = STRIP_TOP_PADDING, bottom = STRIP_BOTTOM_PADDING),
+            contentPadding = PaddingValues(start = gap, end = gap, top = STRIP_TOP_PADDING, bottom = STRIP_BOTTOM_PADDING),
             horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
             itemsIndexed(posts, key = { _, post -> "${post.id.source}:${post.id.sourcePostId}" }) { index, post ->
@@ -197,26 +198,26 @@ private class ViewerStripMotion(selected: Int, selectedWidth: Float) {
 }
 
 @Composable
-private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float) {
-    LaunchedEffect(list, index, width) {
+private fun CenterSelectedPost(list: LazyListState, motion: ViewerStripMotion, index: Int, width: Float, cell: Float, center: Float) {
+    LaunchedEffect(list, index, width, center) {
         if (motion.isAt(index, width)) {
-            list.scrollToItem(index, ((width - cell) / 2).roundToInt())
+            list.scrollToItem(index, ((width - cell) / 2 - center).roundToInt())
             return@LaunchedEffect
         }
-        val startingError = list.distanceFromCenter(index, cell)
+        val startingError = list.distanceFromCenter(index, cell + center * 2)
         motion.moveTo(index, width, cell)
         animate(0f, 1f, animationSpec = tween(TheoriaMotion.SCREEN_MS, easing = LinearOutSlowInEasing)) { value, _ ->
             motion.progress = value
             if (!list.isScrollInProgress) {
-                list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - startingError * (1f - value)).roundToInt())
+                list.requestScrollToItem(index, ((motion.width(index, cell) - cell) / 2 - center - startingError * (1f - value)).roundToInt())
             }
         }
     }
 }
 
-private fun LazyListState.distanceFromCenter(index: Int, cell: Float): Float {
+private fun LazyListState.distanceFromCenter(index: Int, centerSpan: Float): Float {
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-    return if (item != null) item.offset + item.size / 2f - cell / 2f else (index - firstVisibleItemIndex).sign * layoutInfo.viewportSize.width.toFloat()
+    return if (item != null) item.offset + item.size / 2f - centerSpan / 2f else (index - firstVisibleItemIndex).sign * layoutInfo.viewportSize.width.toFloat()
 }
 
 @Composable

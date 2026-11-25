@@ -9,6 +9,7 @@ The strip below the media unfolds a multi-page post in place, and the page scrub
 ## Decision
 
 - `ViewerStripMotion` makes every change of post one eased motion: each slot's width and the centering read the same progress, so the row never jumps as one post folds and another unfolds, and a new tap carries on from wherever the last one had reached. `CenterSelectedPost` works per frame so widths and scroll land in the same layout; a finger on the strip wins.
+- The strip's scroll range ends at its first and last posts: its edge padding is one inter-slot gap, and `CenterSelectedPost` asks for the centred position, which the row clamps, so the first or last post rests against its edge instead of centring into blank space, and a drag cannot pull the row past either end.
 - Unfolded pages are always laid out at full width and revealed by a clip, so opening never disturbs their own scroller. `rememberPagesWhileOpen` keeps a post's last pages while it is still folding shut. An unfolded post's pages scroll inside all but the outermost slots so neighbouring posts stay in reach at both ends. Slot width is read at layout, so folding does not recompose.
 - Emphasis on a thumbnail is drawn, not laid out, so slots and centering stay put as selection moves; resting thumbnails are dimmed rather than made transparent so the cards stacked behind never show through. The page stack rises rather than spreads because gaps between slots are too narrow. `SELECTED_THUMBNAIL_GROWTH` is small enough that a grown thumbnail never overlaps its neighbours, in the strip or the related shelf. Series chapters are named by their titles because their ids are addresses.
 - `viewerPageAt`: each page owns an equal share of the track, and a held page keeps the touch until it is `holdPx` (at most half a share) past its share, so a finger resting on a boundary or rolling as it lifts does not flip between pages. Long posts give each page a sliver, so this matters most there. A drag floats the target page and its neighbours and turns the page once, on release; the scrubber is keyed by post so a drag held across a post change is cancelled instead of landing on the new post.
@@ -25,3 +26,8 @@ Strip changes must keep widths and centering reading one progress value. Tuning 
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPageScrubber.kt`: `ViewerPageScrubber`, `viewerPageAt`, `ViewerPagePreview`, `ViewerPagePreviewFrame`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerPageTop.kt`: `PageTopCrop`, `pageTopStart`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerScreenChrome.kt`: `ViewerBottomStack`
+
+## Guarded by
+
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerPostStripTest.kt`: `on the first post the strip rests against its leading edge and will not drag past it (ADR 0172)`, `on the last post the strip rests against its trailing edge and will not drag past it (ADR 0172)`
+- Left to prose: eased strip motion, scrubber hold and preview settling are judged by eye on a device; their existing tests predate this record's guard list.
