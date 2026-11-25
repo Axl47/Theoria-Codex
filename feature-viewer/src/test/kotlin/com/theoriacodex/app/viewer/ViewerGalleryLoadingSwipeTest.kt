@@ -56,7 +56,7 @@ class ViewerGalleryLoadingSwipeTest {
                     host = ViewerScreenHost(
                         onAction = { state.value = reduceViewerState(state.value, it).state },
                         onVisiblePostChanged = { post, number -> if (post.id == watched.id) recorded += number },
-                        onVisibleMediaChanged = { post, number -> if (post.id == watched.id) recorded += number },
+                        onVisibleMediaChanged = { post, number, _ -> if (post.id == watched.id) recorded += number },
                     ),
                 )
             }

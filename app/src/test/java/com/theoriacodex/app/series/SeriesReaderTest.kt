@@ -2,6 +2,7 @@ package com.theoriacodex.app.series
 
 import com.theoriacodex.app.media.isLikelyImageLocation
 import com.theoriacodex.app.viewer.ViewerPlaybackProgress
+import com.theoriacodex.app.viewer.ViewerPageFraction
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.app.viewer.ViewerStripMark
 import com.theoriacodex.app.viewer.decodeViewerPostId
@@ -69,6 +70,24 @@ class SeriesReaderTest {
         assertEquals(chapter, decodeViewerPostId(encodeViewerPostId(chapter)))
         assertEquals(id, seriesIdOf(seriesQueryHash(id)))
         assertNull(seriesIdOf("codex:saved"))
+    }
+
+    @Test
+    fun `a session reopens each unread chapter where the reader was inside its page (ADR 0192)`() = runTest {
+        val entries = listOf(
+            StoredSeriesEntry(SeriesEntry("/c3", "Ch. 3"), sourceOrder = 0, firstSeenAtEpochMs = 0, position = 2, length = 9, pageOffset = 0.25f),
+            StoredSeriesEntry(SeriesEntry("/c2", "Ch. 2"), sourceOrder = 1, firstSeenAtEpochMs = 0, position = 7, length = 18, pageOffset = 0.6f),
+            StoredSeriesEntry(SeriesEntry("/c1", "Ch. 1"), sourceOrder = 2, firstSeenAtEpochMs = 0, read = true, position = 20, length = 20, pageOffset = 0.9f),
+        )
+        val reader = SeriesReader(dependencies(StoredOnly(StoredSeries(Series(id, "Title")), entries), sources = { emptyList() }))
+
+        val resumed = checkNotNull(reader.session(id, "/c2")).series as ViewerSeries.Reading
+        val picked = checkNotNull(reader.session(id, "/c2", pageIndex = 3)).series as ViewerSeries.Reading
+        val restored = checkNotNull(reader.session(id, "/c2", pageIndex = 6)).series as ViewerSeries.Reading
+
+        assertEquals(mapOf(PostId(source, "/c3") to ViewerPageFraction(1, 0.25f), PostId(source, "/c2") to ViewerPageFraction(6, 0.6f)), resumed.pageFractions)
+        assertEquals(mapOf(PostId(source, "/c3") to ViewerPageFraction(1, 0.25f)), picked.pageFractions)
+        assertEquals(resumed.pageFractions, restored.pageFractions)
     }
 
     @Test

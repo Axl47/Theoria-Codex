@@ -29,6 +29,7 @@ data class StoredSeriesEntry(
     val position: Long = 0,
     val length: Long? = null,
     val lastReadAtEpochMs: Long? = null,
+    val pageOffset: Float? = null,
 ) {
     val hasProgress: Boolean get() = read || position > 0
 }
@@ -85,15 +86,16 @@ interface SeriesRepository {
 
     suspend fun restoreProgress(id: SeriesId, restore: EntryProgressRestore)
 
-    suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?)
+    suspend fun recordProgress(id: SeriesId, entryAddress: String, position: Long, length: Long?, pageOffset: Float? = null)
 
     suspend fun moveSeries(from: SeriesId, to: Series, entries: List<SeriesEntry>): Boolean
 }
 
-fun StoredSeriesEntry.withProgress(position: Long, length: Long, kind: SeriesKind): StoredSeriesEntry = when (kind) {
+fun StoredSeriesEntry.withProgress(position: Long, length: Long, kind: SeriesKind, pageOffset: Float? = null): StoredSeriesEntry = when (kind) {
     SeriesKind.MANGA -> {
         val reached = position.coerceIn(1, length.coerceAtLeast(1))
-        copy(position = reached, length = length, read = read || reached >= length)
+        val offset = pageOffset?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: this.pageOffset.takeIf { reached == this.position }
+        copy(position = reached, length = length, read = read || reached >= length, pageOffset = offset)
     }
     SeriesKind.ANIME -> if (length <= 0) this else {
         val reached = position.coerceIn(0, length)
@@ -119,6 +121,8 @@ fun continueEntry(series: StoredSeries, entries: List<StoredSeriesEntry>): Store
 }
 
 fun StoredSeriesEntry.resumePageIndex(): Int = if (read) 0 else (position - 1).coerceAtLeast(0).toInt()
+
+fun StoredSeriesEntry.resumePageOffset(): Float? = if (read) null else pageOffset
 
 fun StoredSeriesEntry.resumePositionMs(): Long {
     val length = length ?: return position

@@ -91,7 +91,6 @@
 0165-viewer-back-hold-and-return-transition.md
 0167-viewer-episode-playback.md
 0169-viewer-gif-frame-rendering.md
-0170-viewer-image-loading-and-prefetch.md
 0171-viewer-level-controls.md
 0172-viewer-page-strip-and-scrubber.md
 0173-viewer-reading-modes-and-navigation.md
@@ -112,7 +111,6 @@
 0188-custom-source-runtime.md
 0190-home-pager-and-tab-navigation.md
 0191-series-background-work.md
-0192-series-reader-session.md
 0193-settings-and-search-entry-points.md
 0194-shell-activity-owned-state.md
 0195-shell-overlays-and-library-surfaces.md

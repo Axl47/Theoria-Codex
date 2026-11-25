@@ -35,6 +35,7 @@ class RepoReaderTest {
             val onsen = index.extensions.first()
             assertEquals("AnimeOnsen", onsen.name)
             assertEquals("https://repo.example/anime/apk/aniyomi-all.animeonsen-v16.12.apk", onsen.apkUrl)
+            assertEquals("https://repo.example/anime/icon/eu.kanade.tachiyomi.animeextension.all.animeonsen.png", onsen.iconUrl)
             assertEquals("16", onsen.libVersion)
             assertEquals(SeriesKind.ANIME, onsen.kind)
             assertEquals(listOf(false, true), index.extensions.map { it.torrent })
@@ -58,7 +59,7 @@ class RepoReaderTest {
         assertEquals("Fixture", index.name)
         assertEquals("The key is compared as lowercase hex", signingKey, index.signingKey)
         assertEquals(
-            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA)),
+            listOf(IndexedExtension("Achy", "eu.kanade.tachiyomi.extension.all.achy", "https://cdn.example.org/achy-v1.6.1.apk", "1.6", 106001, "1.6.1", listOf("es", "en"), SeriesKind.MANGA, iconUrl = "https://cdn.example.org/achy.png")),
             index.extensions,
         )
     }
