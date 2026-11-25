@@ -30,20 +30,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.tags.TagCount
-import com.theoriacodex.app.ui.components.SingleChoiceMenu
 import com.theoriacodex.app.ui.navigation.TriageMode
 import com.theoriacodex.app.ui.navigation.TriageRequest
 import com.theoriacodex.app.ui.navigation.TriageSeed
 import com.theoriacodex.app.ui.navigation.rememberTriageAction
+import com.theoriacodex.app.ui.components.SortDirectionMark
+import com.theoriacodex.app.ui.components.SortMenu
+import com.theoriacodex.app.ui.components.SortOption
+import com.theoriacodex.app.ui.components.label
+import com.theoriacodex.app.ui.components.labelOf
+import com.theoriacodex.data.repository.CodexPostSortKey
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.domain.model.next
 import com.theoriacodex.domain.model.Post
 
 internal class CodexDetailChips(
     val sortMode: CodexSortMode,
-    val sortModes: List<CodexSortMode>,
+    val sortOptions: List<SortOption<CodexPostSortKey>>,
     val onSortChange: (CodexSortMode) -> Unit,
     val tagFilter: CodexTagFilter,
     val onTriage: (() -> Unit)?,
@@ -97,8 +105,8 @@ internal fun rememberCodexTriageAction(codexId: String, real: Boolean, seed: Tri
     return rememberTriageAction(request.source, request.feedKey.takeIf { real }, seed, request.mode)
 }
 
-internal fun codexSortModes(hasAnimatedPosts: Boolean, current: CodexSortMode): List<CodexSortMode> =
-    CodexSortMode.entries.filter { hasAnimatedPosts || !it.usesDuration || it == current }
+internal fun codexSortOptions(hasAnimatedPosts: Boolean, current: CodexSortMode): List<SortOption<CodexPostSortKey>> =
+    CodexPostSortOptions.filter { hasAnimatedPosts || it.key != CodexPostSortKey.LENGTH || it.key == current.choice.key }
 
 @Composable
 internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Modifier) {
@@ -110,7 +118,7 @@ internal fun CodexDetailChipRow(chips: CodexDetailChips, modifier: Modifier = Mo
         item(key = "tags") {
             CodexTagFilterChip(filter.selectedTags, { filter.onSheetChange(CodexTagSheet.Filter) }) { filter.onSelectedChange(emptyList()) }
         }
-        item(key = "sort") { CodexSortChip(chips.sortMode, chips.sortModes, chips.onSortChange) }
+        item(key = "sort") { CodexSortChip(chips.sortMode, chips.sortOptions, chips.onSortChange) }
         chips.onTriage?.let { triage ->
             item(key = "triage") {
                 AssistChip(
@@ -154,21 +162,23 @@ private fun CodexTagFilterChip(selectedTags: List<String>, onOpen: () -> Unit, o
 }
 
 @Composable
-private fun CodexSortChip(sortMode: CodexSortMode, sortModes: List<CodexSortMode>, onSortChange: (CodexSortMode) -> Unit) {
+private fun CodexSortChip(sortMode: CodexSortMode, options: List<SortOption<CodexPostSortKey>>, onSortChange: (CodexSortMode) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    val direction = sortMode.choice.direction
     Box {
         AssistChip(
             onClick = { expanded = true },
-            label = { Text(sortMode.label) },
+            label = { Text(CodexPostSortOptions.labelOf(sortMode.choice.key)) },
             leadingIcon = { Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort", modifier = Modifier.size(18.dp)) },
+            trailingIcon = direction?.let { { SortDirectionMark(it) } },
+            modifier = Modifier.semantics { direction?.let { stateDescription = it.label } },
         )
-        SingleChoiceMenu(
+        SortMenu(
             expanded = expanded,
             onDismiss = { expanded = false },
-            options = sortModes,
-            selected = sortMode,
-            label = { it.label },
-            onSelect = onSortChange,
+            options = options,
+            choice = sortMode.choice,
+            onPick = { key -> onSortChange(CodexSortMode.entries.next(sortMode, key)) },
         )
     }
 }

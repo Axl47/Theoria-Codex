@@ -115,10 +115,10 @@ class CodexGridReorderUiTest {
     @Test fun `choosing Manual in the sort menu only selects it`() {
         sort.value = CodexLibrarySort.NAME_DESCENDING
         showLibrary()
-        compose.onNodeWithContentDescription("Sort Codices").performClick()
+        compose.onNodeWithContentDescription("$SORT_CODICES: Name").performClick()
         compose.onNodeWithText("Manual").performClick()
         compose.runOnIdle { assertEquals(CodexLibrarySort.MANUAL, sort.value) }
-        compose.onNodeWithContentDescription("Sort Codices").assertIsDisplayed()
+        compose.onNodeWithContentDescription("$SORT_CODICES: Manual").assertIsDisplayed()
         val left = { name: String -> compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot.left }
         assertTrue(left("Alpha") < left("Beta"))
         compose.runOnIdle { assertNull(committed) }

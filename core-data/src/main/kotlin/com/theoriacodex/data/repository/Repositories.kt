@@ -3,11 +3,14 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
+import com.theoriacodex.domain.model.DirectedSort
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SortChoice
+import com.theoriacodex.domain.model.SortDirection
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -64,17 +67,25 @@ data class CodexSummary(
     val coverPosts: List<Post>,
 )
 
-enum class CodexSortMode {
-    NEWEST_SAVED,
-    OLDEST_SAVED,
-    MOST_WATCHED,
-    MOST_OPENED,
-    MOST_PAGES,
-    FEWEST_PAGES,
-    LONGEST,
-    SHORTEST,
-    CREATOR_ASCENDING,
-    BY_SOURCE,
+enum class CodexPostSortKey { DATE_ADDED, WATCH_TIME, OPENS, PAGES, LENGTH, CREATOR, SOURCE }
+
+enum class CodexSortMode(key: CodexPostSortKey, direction: SortDirection?) : DirectedSort<CodexPostSortKey> {
+    NEWEST_SAVED(CodexPostSortKey.DATE_ADDED, SortDirection.DESCENDING),
+    OLDEST_SAVED(CodexPostSortKey.DATE_ADDED, SortDirection.ASCENDING),
+    MOST_WATCHED(CodexPostSortKey.WATCH_TIME, SortDirection.DESCENDING),
+    LEAST_WATCHED(CodexPostSortKey.WATCH_TIME, SortDirection.ASCENDING),
+    MOST_OPENED(CodexPostSortKey.OPENS, SortDirection.DESCENDING),
+    LEAST_OPENED(CodexPostSortKey.OPENS, SortDirection.ASCENDING),
+    MOST_PAGES(CodexPostSortKey.PAGES, SortDirection.DESCENDING),
+    FEWEST_PAGES(CodexPostSortKey.PAGES, SortDirection.ASCENDING),
+    LONGEST(CodexPostSortKey.LENGTH, SortDirection.DESCENDING),
+    SHORTEST(CodexPostSortKey.LENGTH, SortDirection.ASCENDING),
+    CREATOR_ASCENDING(CodexPostSortKey.CREATOR, SortDirection.ASCENDING),
+    CREATOR_DESCENDING(CodexPostSortKey.CREATOR, SortDirection.DESCENDING),
+    BY_SOURCE(CodexPostSortKey.SOURCE, null),
+    ;
+
+    override val choice = SortChoice(key, direction)
 }
 
 interface QueryRepository {
@@ -423,16 +434,23 @@ fun defaultRecommendationProfiles(): List<RecommendationProfile> {
     return DEFAULT_RECOMMENDATION_PROFILES
 }
 
-enum class CodexLibrarySort {
-    MANUAL,
-    NAME_ASCENDING,
-    NAME_DESCENDING,
-    NEWEST,
-    OLDEST,
-    MOST_ITEMS,
-    FEWEST_ITEMS,
-    MOST_WATCHED,
-    MOST_OPENED,
+enum class CodexLibrarySortKey { MANUAL, NAME, DATE_ADDED, POSTS, WATCH_TIME, OPENS }
+
+enum class CodexLibrarySort(key: CodexLibrarySortKey, direction: SortDirection?) : DirectedSort<CodexLibrarySortKey> {
+    MANUAL(CodexLibrarySortKey.MANUAL, null),
+    NAME_ASCENDING(CodexLibrarySortKey.NAME, SortDirection.ASCENDING),
+    NAME_DESCENDING(CodexLibrarySortKey.NAME, SortDirection.DESCENDING),
+    NEWEST(CodexLibrarySortKey.DATE_ADDED, SortDirection.DESCENDING),
+    OLDEST(CodexLibrarySortKey.DATE_ADDED, SortDirection.ASCENDING),
+    MOST_ITEMS(CodexLibrarySortKey.POSTS, SortDirection.DESCENDING),
+    FEWEST_ITEMS(CodexLibrarySortKey.POSTS, SortDirection.ASCENDING),
+    MOST_WATCHED(CodexLibrarySortKey.WATCH_TIME, SortDirection.DESCENDING),
+    LEAST_WATCHED(CodexLibrarySortKey.WATCH_TIME, SortDirection.ASCENDING),
+    MOST_OPENED(CodexLibrarySortKey.OPENS, SortDirection.DESCENDING),
+    LEAST_OPENED(CodexLibrarySortKey.OPENS, SortDirection.ASCENDING),
+    ;
+
+    override val choice = SortChoice(key, direction)
 }
 
 enum class SeriesUpdateInterval(val hours: Int?) {

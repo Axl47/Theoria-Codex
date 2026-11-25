@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -33,6 +32,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.ui.components.EmptyState
+import com.theoriacodex.app.ui.components.SortLabel
+import com.theoriacodex.app.ui.components.SortOption
 import com.theoriacodex.data.repository.CheckProgress
 import com.theoriacodex.data.repository.FollowedCheck
 import com.theoriacodex.data.repository.SeriesUpdate
@@ -63,14 +64,20 @@ internal fun FollowingBody(
     val failed = failedCheck?.stillFollowed(content.followedIds)?.takeIf { it.failed > 0 }
     Column(Modifier.fillMaxSize()) {
         if (content.followsAny) {
-            FollowingControls(content, onChooseKind, onOpenOptions = { optionsOpen = true }, Modifier.hidesOnScroll().padding(horizontal = 16.dp))
+            FollowingControls(
+                content,
+                onChooseKind,
+                onReverse = { onChooseLibrary(content.library.reversed()) },
+                onOpenOptions = { optionsOpen = true },
+                Modifier.hidesOnScroll().padding(horizontal = 16.dp),
+            )
         }
         FollowingRefreshBox(checking, found, content.checkWords, onRefresh, Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(CARD_WIDTH),
                 state = grid,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -110,7 +117,7 @@ private fun LazyGridScope.followingCards(
         !content.followsAny -> fullWidth("following-none") { EmptyState("Nothing followed", actionLabel = SeriesView.BROWSE.label, onAction = onBrowse) }
         following.isEmpty() -> fullWidth("following-no-match") { NoMatches(content.followingQuery, onShowAll, onSearchAll) }
         else -> items(following, key = { it.series.id.toString() }) { item ->
-            SeriesCard(item.series, { onOpenSeries(item.series) }, unread = item.unreadCount, marked = content.marked)
+            SeriesCard(item.series, { onOpenSeries(item.series) }, counts = item.cardCounts(content.library.show, content.downloads), marked = content.marked)
         }
     }
 }
@@ -122,10 +129,18 @@ internal val FollowedCheck.message: String
     get() = if (failed == checked) "Couldn't check for updates" else "Couldn't check $failed series"
 
 @Composable
-private fun FollowingControls(content: SeriesTabContent, onChooseKind: (SeriesKind?) -> Unit, onOpenOptions: () -> Unit, modifier: Modifier = Modifier) {
+private fun FollowingControls(
+    content: SeriesTabContent,
+    onChooseKind: (SeriesKind?) -> Unit,
+    onReverse: () -> Unit,
+    onOpenOptions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val filtered = content.library.show != LibraryShow.ALL
+    val sort = content.library.sort
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (content.offersFilter) KindFilter(content.filter, onChooseKind, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
+        SortLabel(sort.key.label(content.words), sort.direction, onReverse)
         IconButton(onClick = onOpenOptions, modifier = Modifier.semantics { if (filtered) stateDescription = "Filtered" }) {
             BadgedBox(badge = { if (filtered) Badge() }) {
                 Icon(Icons.Default.FilterList, contentDescription = SORT_AND_FILTER)
@@ -146,14 +161,12 @@ private fun NoMatches(query: String, onShowAll: () -> Unit, onSearchAll: () -> U
 @Composable
 private fun LibraryOptionsSheet(options: LibraryOptions, words: EntryWords, onChoose: (LibraryOptions) -> Unit, onDismiss: () -> Unit) {
     SortFilterSheet(
-        filters = LibraryShow.entries.map { SheetChoice(it, it.label(words)) },
+        filters = LibraryShow.entries.map { SortOption(it, it.label(words)) },
         filter = options.show,
         onFilter = { onChoose(options.copy(show = it)) },
-        sorts = LibrarySort.entries.map { SheetChoice(it, it.label(words)) },
+        sorts = LibrarySort.entries.map { SortOption(it, it.label(words)) },
         sort = options.sort,
-        onSort = { onChoose(options.copy(sort = it)) },
-        sortMark = Icons.Default.Check,
-        sortMarkDescription = null,
+        onSort = { onChoose(options.picking(it)) },
         onReset = { onChoose(LibraryOptions()) }.takeUnless { options.isDefault },
         onDismiss = onDismiss,
     )

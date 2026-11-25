@@ -3,19 +3,25 @@ package com.theoriacodex.app.codex
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.statistics.statisticsPostKey
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.data.repository.CodexLibrarySort
+import com.theoriacodex.data.repository.CodexLibrarySortKey
+import com.theoriacodex.data.repository.CodexPostSortKey
 import com.theoriacodex.data.repository.CodexPostStatistics
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.CodexStatistics
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LifetimeStatistics
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.DirectedSort
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.next
 import kotlin.random.Random
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodexPostSortingTest {
@@ -48,6 +54,27 @@ class CodexPostSortingTest {
 
     @Test fun `creator sort prefers the profile name, ignores case and puts unknown creators last`() {
         assertEquals(listOf("c", "d", "a", "b"), ids(CodexSortMode.CREATOR_ASCENDING))
+    }
+
+    @Test fun `least sorts reverse the most sorts and creators sort both ways with unknown creators last`() {
+        assertEquals(ids(CodexSortMode.MOST_WATCHED).reversed(), ids(CodexSortMode.LEAST_WATCHED))
+        assertEquals(ids(CodexSortMode.MOST_OPENED).reversed(), ids(CodexSortMode.LEAST_OPENED))
+        assertEquals(listOf("a", "d", "c", "b"), ids(CodexSortMode.CREATOR_DESCENDING))
+    }
+
+    @Test fun `picking the active sort flips its direction and another sort starts in its first direction`() {
+        assertEquals(CodexSortMode.OLDEST_SAVED, CodexSortMode.entries.next(CodexSortMode.NEWEST_SAVED, CodexPostSortKey.DATE_ADDED))
+        assertEquals(CodexSortMode.CREATOR_DESCENDING, CodexSortMode.entries.next(CodexSortMode.CREATOR_ASCENDING, CodexPostSortKey.CREATOR))
+        assertEquals(CodexSortMode.MOST_WATCHED, CodexSortMode.entries.next(CodexSortMode.OLDEST_SAVED, CodexPostSortKey.WATCH_TIME))
+        assertEquals(CodexSortMode.BY_SOURCE, CodexSortMode.entries.next(CodexSortMode.BY_SOURCE, CodexPostSortKey.SOURCE))
+        assertEquals(CodexLibrarySort.NAME_DESCENDING, CodexLibrarySort.entries.next(CodexLibrarySort.NAME_ASCENDING, CodexLibrarySortKey.NAME))
+        assertEquals(CodexLibrarySort.MANUAL, CodexLibrarySort.entries.next(CodexLibrarySort.MANUAL, CodexLibrarySortKey.MANUAL))
+    }
+
+    @Test fun `every directed Codex sort has its opposite`() {
+        fun <K> List<DirectedSort<K>>.paired() = all { sort -> sort.choice.direction == null || any { it.choice == sort.choice.copy(direction = sort.choice.direction?.flipped()) } }
+        assertTrue(CodexSortMode.entries.paired())
+        assertTrue(CodexLibrarySort.entries.paired())
     }
 
     @Test fun `store orders pass through unchanged`() {

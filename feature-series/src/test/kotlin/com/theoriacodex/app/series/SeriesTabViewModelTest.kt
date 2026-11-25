@@ -452,10 +452,10 @@ class SeriesTabViewModelTest {
         advanceUntilIdle()
         assertEquals(null, viewModel.content.value.following)
 
-        saved.complete(LibraryOptions(sort = LibrarySort.TITLE))
+        saved.complete(LibraryOptions(sort = LibrarySort.TITLE.choice()))
         advanceUntilIdle()
         assertEquals(listOf("M"), viewModel.content.value.following?.map { it.series.title })
-        assertEquals(LibrarySort.TITLE, viewModel.content.value.library.sort)
+        assertEquals(LibrarySort.TITLE, viewModel.content.value.library.sort.key)
         collecting.cancel()
     }
 
@@ -463,22 +463,22 @@ class SeriesTabViewModelTest {
     fun followingOptionsAreRememberedAndShowAllClearsEveryFilter() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val kept = object : SeriesLibraryPreferences {
-            var options = LibraryOptions(sort = LibrarySort.TITLE)
+            var options = LibraryOptions(sort = LibrarySort.TITLE.choice())
             override suspend fun read() = options
             override fun write(options: LibraryOptions) { this.options = options }
         }
         val viewModel = SeriesTabViewModel(NothingStored, { emptyList() }, library = kept) { _, _ -> NOTHING_CHECKED }
         advanceUntilIdle()
-        assertEquals(LibrarySort.TITLE, viewModel.state.value.library.sort)
+        assertEquals(LibrarySort.TITLE, viewModel.state.value.library.sort.key)
 
-        viewModel.chooseLibrary(LibraryOptions(LibrarySort.TITLE, LibraryShow.NOT_STARTED))
+        viewModel.chooseLibrary(LibraryOptions(LibrarySort.TITLE.choice(), LibraryShow.NOT_STARTED))
         viewModel.chooseKind(SeriesKind.ANIME)
         viewModel.filterFollowing("saga")
         assertEquals(LibraryShow.NOT_STARTED, kept.options.show)
 
         viewModel.showAllFollowing()
         val state = viewModel.state.value
-        assertEquals(LibraryOptions(LibrarySort.TITLE, LibraryShow.ALL), kept.options)
+        assertEquals(LibraryOptions(LibrarySort.TITLE.choice(), LibraryShow.ALL), kept.options)
         assertEquals(Triple(null, "", LibraryShow.ALL), Triple(state.kind, state.followingQuery, state.library.show))
     }
 

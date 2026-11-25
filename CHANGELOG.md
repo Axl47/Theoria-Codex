@@ -91,6 +91,8 @@
 
 ### Changed
 
+- Series' Following grid shows each series' unread chapters (or unwatched episodes) as a bold count on the cover's top-left corner, instead of the small red badge. A Downloaded filter in Sort & filter shows the series with chapters on the device, and while it's on, each count also shows how many are downloaded.
+- The current sort is shown by name with an arrow: above Series' Following grid (tap it to reverse the order), on a Codex's sort chip, and in place of the Codices sort icon. In every sort list, tapping the selected sort again reverses it. Opposite pairs such as Name (A–Z) and Name (Z–A), or Most and Fewest posts, are now one choice each, and Watch time, Opens and Creator can be reversed too. Following remembers the direction.
 - The Viewer's accent colour now shifts from one post's colour to the next as you swipe, following your finger, instead of changing after the swipe ends. When the next post's colour isn't ready yet, it fades in once it is.
 - The Viewer no longer rotates on its own. How you hold the phone decides, following the system's auto-rotate setting. The rotate button is always there while the rotation isn't locked, so you can turn the Viewer without system auto-rotate; it stands out when a post would fit better the other way.
 - The Viewer has a rotation lock that keeps the current orientation until you unlock it, and it stays on between Viewer visits. The Auto-Rotate Videos setting is gone.

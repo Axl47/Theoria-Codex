@@ -1,31 +1,35 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.ui.components.SortOption
 import com.theoriacodex.data.repository.CodexLibrarySort
+import com.theoriacodex.data.repository.CodexLibrarySortKey
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.sortKeys
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-internal val CodexLibrarySort.label: String
-    get() = when (this) {
-        CodexLibrarySort.MANUAL -> "Manual"
-        CodexLibrarySort.NAME_ASCENDING -> "Name (A–Z)"
-        CodexLibrarySort.NAME_DESCENDING -> "Name (Z–A)"
-        CodexLibrarySort.NEWEST -> "Recently added"
-        CodexLibrarySort.OLDEST -> "Oldest first"
-        CodexLibrarySort.MOST_ITEMS -> "Most posts"
-        CodexLibrarySort.FEWEST_ITEMS -> "Fewest posts"
-        CodexLibrarySort.MOST_WATCHED -> "Most watched"
-        CodexLibrarySort.MOST_OPENED -> "Most opened"
-    }
+internal val CodexLibrarySortOptions: List<SortOption<CodexLibrarySortKey>> = CodexLibrarySort.entries.sortKeys().map { key ->
+    SortOption(
+        key,
+        when (key) {
+            CodexLibrarySortKey.MANUAL -> "Manual"
+            CodexLibrarySortKey.NAME -> "Name"
+            CodexLibrarySortKey.DATE_ADDED -> "Date added"
+            CodexLibrarySortKey.POSTS -> "Posts"
+            CodexLibrarySortKey.WATCH_TIME -> "Watch time"
+            CodexLibrarySortKey.OPENS -> "Opens"
+        },
+    )
+}
 
 internal val CodexLibrarySort.usesItemCounts: Boolean
-    get() = this == CodexLibrarySort.MOST_ITEMS || this == CodexLibrarySort.FEWEST_ITEMS
+    get() = choice.key == CodexLibrarySortKey.POSTS
 
 val CodexLibrarySort.usesUsage: Boolean
-    get() = this == CodexLibrarySort.MOST_WATCHED || this == CodexLibrarySort.MOST_OPENED
+    get() = choice.key == CodexLibrarySortKey.WATCH_TIME || choice.key == CodexLibrarySortKey.OPENS
 
 fun StatisticsRepository.observeCodexLibraryUsage(): Flow<Map<String, CodexUsage>> =
     observeStatistics()
@@ -58,7 +62,9 @@ internal fun sortCodicesForLibrary(
         CodexLibrarySort.MOST_ITEMS -> compareByDescending(itemCount)
         CodexLibrarySort.FEWEST_ITEMS -> compareBy(itemCount)
         CodexLibrarySort.MOST_WATCHED -> compareBy(CodexUsage.MostWatched, usageOf)
+        CodexLibrarySort.LEAST_WATCHED -> compareBy(CodexUsage.MostWatched.reversed(), usageOf)
         CodexLibrarySort.MOST_OPENED -> compareBy(CodexUsage.MostOpened, usageOf)
+        CodexLibrarySort.LEAST_OPENED -> compareBy(CodexUsage.MostOpened.reversed(), usageOf)
     }
     val (likes, others) = codices.partition { it.codexId == likesCodexId }
     return likes + others.sortedWith(comparator)
