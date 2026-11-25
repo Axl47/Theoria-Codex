@@ -152,6 +152,7 @@
 
 ### Fixed
 
+- The Viewer's thumbnail strip stops at its first and last posts. It no longer leaves blank space beside them or lets you drag past either end.
 - Reopening a chapter no longer waits behind the pages of the chapter you just closed, so its pages show sooner on sites that limit how fast they can be loaded, such as Asura Scans.
 - A spinner shows over a chapter until its pages arrive.
 - Swiping up while a chapter still shows only its cover no longer jumps to the next chapter.
