@@ -141,10 +141,7 @@ internal fun SeriesTabState.content(followed: List<FollowedSeries>?): SeriesTabC
         sources = sources,
         browse = browse,
         search = search?.filter { filter.admits(it.key) },
-        missingExtensions = sources?.let { on ->
-            val keys = on.mapTo(HashSet()) { it.key }
-            all.map { it.series }.filter { it.id.source !in keys }
-        }.orEmpty(),
+        missingExtensions = sources?.let { missingSeries(all.map { it.series }, it) }.orEmpty(),
     )
 }
 
