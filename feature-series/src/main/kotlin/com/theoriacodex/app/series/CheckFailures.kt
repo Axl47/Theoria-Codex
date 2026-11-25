@@ -154,7 +154,7 @@ internal fun OffScreenFailuresNotice(checkRun: Int, failed: FollowedCheck?, grid
             val gone = async { snapshotFlow { latest == null || grid.showsCheckFailed() }.first { it }.not() }
             select { notice.onAwait { it }; gone.onAwait { it } }.also { coroutineContext.cancelChildren() }
         }
-        if (show) grid.animateScrollToItem(0)
+        if (show && latest != null) grid.animateScrollToItem(0)
     }
 }
 
