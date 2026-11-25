@@ -44,9 +44,10 @@ internal fun TrailTagSheet(source: SourceKey, onDismiss: () -> Unit, onPick: (St
     var input by remember { mutableStateOf("") }
     val asked = source to input
     val answered by produceState(asked to emptyList<TagSuggestion>(), asked) {
-        if (input.isBlank()) return@produceState
+        val (askedSource, askedInput) = asked
+        if (askedInput.isBlank()) return@produceState
         delay(SUGGEST_DEBOUNCE_MS)
-        value = asked to suggest(source, input)
+        value = asked to suggest(askedSource, askedInput)
     }
     val suggestions = answered.second.takeIf { answered.first == asked }.orEmpty()
     val focus = remember { FocusRequester() }
