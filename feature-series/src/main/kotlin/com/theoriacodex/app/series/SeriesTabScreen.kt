@@ -33,8 +33,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material3.Badge
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -59,7 +58,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -69,11 +67,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theoriacodex.app.ui.ScrollToTopOnTabReselect
 import com.theoriacodex.app.ui.TopLevelDestination
 import com.theoriacodex.app.ui.components.CollapsingSearchChrome
+import com.theoriacodex.app.ui.components.CountBadge
 import com.theoriacodex.app.ui.components.EmptyState
 import com.theoriacodex.app.ui.components.FilterChoiceChip
 import com.theoriacodex.app.ui.components.LoadingState
 import com.theoriacodex.app.ui.components.SearchBarMinHeight
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.series.ExtensionAlerts
 import com.theoriacodex.domain.series.Series
 import com.theoriacodex.domain.series.SeriesId
 import com.theoriacodex.domain.series.SeriesKind
@@ -84,7 +84,9 @@ fun SeriesTabScreen(
     viewModel: SeriesTabViewModel,
     onOpenSeries: (SeriesId) -> Unit,
     onOpenExtensions: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    extensionAlerts: ExtensionAlerts = ExtensionAlerts(),
     oldSearchBar: Boolean = false,
     snackbar: SnackbarHostState? = null,
     switchSource: ((SeriesId) -> SwitchSourceViewModel)? = null,
@@ -123,6 +125,7 @@ fun SeriesTabScreen(
             oldSearchBar = oldSearchBar,
             onOpenSeries = open,
             onOpenExtensions = onOpenExtensions,
+            settingsButton = { SettingsButton(extensionAlerts, onOpenSettings) },
             hold = rememberSeriesHold(state, viewModel, canSwitchSource = switchSource != null),
             failureTools = CheckFailureTools(snackbar, switchSource, onOpenSeries),
             modifier = modifier,
@@ -149,6 +152,7 @@ private fun SeriesTabHomeContent(
     oldSearchBar: Boolean,
     onOpenSeries: (Series) -> Unit,
     onOpenExtensions: () -> Unit,
+    settingsButton: @Composable () -> Unit,
     hold: SeriesHold,
     failureTools: CheckFailureTools,
     modifier: Modifier,
@@ -156,9 +160,6 @@ private fun SeriesTabHomeContent(
     var searchBarDismissed by rememberSaveable { mutableStateOf(false) }
     var focusRequest by remember { mutableIntStateOf(0) }
     val search = searchBinding(state, content, query, onQueryChange, viewModel) { searchBarDismissed = false }
-    val extensionsButton: @Composable () -> Unit = {
-        ExtensionsButton(content.missingExtensions.size, onOpenExtensions)
-    }
     val scrollable = grids.shown(content.view, state.search != null)
 
     SeriesScrollChromeEffect(scrollable = scrollable, onScrollStarted = { searchBarDismissed = true })
@@ -171,7 +172,7 @@ private fun SeriesTabHomeContent(
             searchBarDismissed = false
             focusRequest++
         },
-        trailingControl = extensionsButton,
+        trailingControl = settingsButton,
         horizontalPadding = 16.dp,
         contentHorizontalPadding = 0.dp,
         modifier = modifier.fillMaxSize().padding(top = if (oldSearchBar) 6.dp else 0.dp),
@@ -184,7 +185,7 @@ private fun SeriesTabHomeContent(
                 onQueryChange = search.onQueryChange,
                 onSearch = search.onSearch,
                 onClear = search.onClear,
-                trailing = { if (oldSearchBar) extensionsButton() },
+                trailing = { if (oldSearchBar) settingsButton() },
             )
         },
     ) {
@@ -538,22 +539,14 @@ private fun noExtensionsOn(kind: SeriesKind?): String =
 internal fun seriesViewTag(view: SeriesView) = "series-view-${view.name.lowercase()}"
 
 @Composable
-private fun ExtensionsButton(missing: Int, onClick: () -> Unit) {
-    BadgedBox(
-        badge = {
-            if (missing > 0) {
-                Badge(Modifier.offset(x = -BADGE_INSET, y = BADGE_DROP)) {
-                    Text(if (missing > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else "$missing", Modifier.clearAndSetSemantics {})
-                }
-            }
-        },
-    ) {
-        IconButton(onClick = onClick, modifier = Modifier.semantics { if (missing > 0) stateDescription = missingExtensionsLine(missing) }) {
-            Icon(Icons.Default.Extension, contentDescription = EXTENSIONS_TITLE)
+private fun SettingsButton(alerts: ExtensionAlerts, onClick: () -> Unit) {
+    BadgedBox(badge = { if (alerts.count > 0) CountBadge(alerts.count, Modifier.offset(x = -BADGE_INSET, y = BADGE_DROP)) }) {
+        IconButton(onClick = onClick, modifier = Modifier.semantics { if (alerts.count > 0) stateDescription = alerts.lines.joinToString(", ") }) {
+            Icon(Icons.Default.Settings, contentDescription = SETTINGS)
         }
     }
 }
 
-private const val MAX_BADGE_COUNT = 99
+internal const val SETTINGS = "Settings"
 private val BADGE_INSET = 16.dp
 private val BADGE_DROP = 14.dp

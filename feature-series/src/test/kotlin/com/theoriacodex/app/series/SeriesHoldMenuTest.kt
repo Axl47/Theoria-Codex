@@ -41,7 +41,7 @@ class SeriesHoldMenuTest {
         val downloads = mutableListOf<Pair<SeriesId, DownloadChoice>>()
         val viewModel = SeriesTabViewModel(StubSeriesRepository(listOf(followed)), { listOf(own, other) }, download = { id, choice -> downloads += id to choice }) { _, _ -> NOTHING_CHECKED }
         compose.setContent {
-            MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, switchSource = { error("not opened") }) }
+            MaterialTheme { SeriesTabScreen(viewModel, onOpenSeries = {}, onOpenExtensions = {}, onOpenSettings = {}, switchSource = { error("not opened") }) }
         }
         compose.onNodeWithText(followed.series.title).performTouchInput { longClick() }
 

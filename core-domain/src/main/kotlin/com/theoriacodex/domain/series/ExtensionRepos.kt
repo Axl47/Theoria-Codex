@@ -1,6 +1,8 @@
 package com.theoriacodex.domain.series
 
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 data class ExtensionRepo(
     val url: String,
@@ -42,6 +44,8 @@ data class RepoExtension(
 data class RepoListing(val extensions: List<RepoExtension>, val problems: Map<String, String> = emptyMap())
 
 interface ExtensionRepos {
+    val changes: Flow<Unit> get() = emptyFlow()
+
     suspend fun repos(): List<ExtensionRepo>
 
     suspend fun add(repos: List<NewExtensionRepo>): Map<String, String>

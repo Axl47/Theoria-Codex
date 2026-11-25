@@ -152,6 +152,7 @@ internal class FakeExtensionRepos : ExtensionRepos {
     var problems = emptyMap<String, String>()
     var refreshDelay = 0L
     var cached: List<RepoExtension>? = null
+    var failing = false
     val installed = mutableListOf<String>()
     private val added = mutableListOf<ExtensionRepo>()
 
@@ -172,6 +173,7 @@ internal class FakeExtensionRepos : ExtensionRepos {
     }
 
     override suspend fun available(refresh: Boolean): RepoListing {
+        if (failing) error("listing unreadable")
         val now = cached?.takeUnless { refresh } ?: offered
         if (refresh) delay(refreshDelay)
         return RepoListing(now, problems)
