@@ -15,15 +15,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerTrailLevelTest {
-    private fun level(isFork: Boolean, covered: Boolean = false, feed: TrailFeed? = null) =
-        ViewerLevel(isFork, emptyList(), feed, { covered }, {}, { _, _ -> })
+    private fun level(isFork: Boolean, feed: TrailFeed? = null) =
+        ViewerLevel(isFork, emptyList(), feed, {}, { _, _ -> })
 
     private fun feed(job: Job = Job()) = TrailFeed("trail:t", { TrailPage(listOf(post("a")), true) }, related(), CoroutineScope(job))
 
@@ -34,13 +33,6 @@ class ViewerTrailLevelTest {
         assertEquals("long hair cat", viewerRootLabel(context(ViewerStreamSource.SEARCH), search))
         assertEquals("Search", viewerRootLabel(context(ViewerStreamSource.SEARCH), null))
         assertEquals("For You", viewerRootLabel(context(ViewerStreamSource.FOR_YOU), null))
-    }
-
-    @Test
-    fun `only a root no fork covers ends the card return when it leaves`() {
-        assertTrue(level(isFork = false).clearsReturnOnDispose())
-        assertFalse(level(isFork = false, covered = true).clearsReturnOnDispose())
-        assertFalse(level(isFork = true).clearsReturnOnDispose())
     }
 
     @Test

@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -73,7 +74,7 @@ sealed interface CollectTargetsLayout {
 class CollectTargetsState<T> {
     private val bounds = mutableStateMapOf<String, Rect>()
 
-    var hovered: CollectTarget<T>? by mutableStateOf(null)
+    var armed: CollectTarget<T>? by mutableStateOf(null)
         internal set
 
     fun targetAt(targets: List<CollectTarget<T>>, pointer: Offset, slop: Float = 0f): CollectTarget<T>? =
@@ -103,17 +104,19 @@ fun <T> CollectTargets(
     layout: CollectTargetsLayout,
     modifier: Modifier = Modifier,
     state: CollectTargetsState<T> = rememberCollectTargetsState(),
+    pick: (hovered: CollectTarget<T>?) -> CollectTarget<T>? = { it },
 ) {
     val slop = with(LocalDensity.current) { HIT_SLOP.toPx() }
-    val hovered = pointer?.let { state.targetAt(targets, it, slop) }
-    SideEffect { state.hovered = hovered }
+    val armed = pick(pointer?.let { state.targetAt(targets, it, slop) })
+    SideEffect { state.armed = armed }
+    DisposableEffect(state) { onDispose { state.armed = null } }
     val haptics = LocalHapticFeedback.current
-    LaunchedEffect(hovered?.key) { if (hovered != null) haptics.performHapticFeedback(TheoriaHaptics.Threshold) }
+    LaunchedEffect(armed?.key) { if (armed != null) haptics.performHapticFeedback(TheoriaHaptics.Threshold) }
     var origin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInWindow() }) {
         val stack: @Composable (Modifier, List<CollectTarget<T>>) -> Unit = { placement, shown ->
             Column(placement, Arrangement.spacedBy(12.dp), Alignment.CenterHorizontally) {
-                shown.forEach { target -> CollectTargetBubble(target, target.key == hovered?.key, state) }
+                shown.forEach { target -> CollectTargetBubble(target, target.key == armed?.key, state) }
             }
         }
         when (layout) {
@@ -128,7 +131,7 @@ fun <T> CollectTargets(
                     Arrangement.spacedBy(ROW_GAP),
                     Alignment.Top,
                 ) {
-                    targets.forEach { target -> CollectTargetBubble(target, target.key == hovered?.key, state, labelWidth) }
+                    targets.forEach { target -> CollectTargetBubble(target, target.key == armed?.key, state, labelWidth) }
                 }
             }
             is CollectTargetsLayout.Rising -> stack(Modifier.risingFrom(layout.anchor - origin), targets.asReversed())
@@ -147,12 +150,12 @@ private fun Modifier.risingFrom(anchor: Offset): Modifier = layout { measurable,
 @Composable
 private fun <T> CollectTargetBubble(
     target: CollectTarget<T>,
-    hovered: Boolean,
+    armed: Boolean,
     state: CollectTargetsState<T>,
     labelWidth: Dp = LABEL_WIDTH,
 ) {
-    val scale by animateFloatAsState(if (hovered) HOVERED_SCALE else 1f, label = "collect-target-scale")
-    val fill = armedColors(hovered)
+    val scale by animateFloatAsState(if (armed) ARMED_SCALE else 1f, label = "collect-target-scale")
+    val fill = armedColors(armed)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             shape = CircleShape,
@@ -164,9 +167,9 @@ private fun <T> CollectTargetBubble(
                 .testTag("Collect target ${target.key}")
                 .onGloballyPositioned { state.place(target.key, it.boundsInWindow()) }
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .then(if (hovered) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
+                .then(if (armed) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
         ) {
-            Box(Modifier.padding(if (hovered) ARMED_INSET else 0.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.padding(if (armed) ARMED_INSET else 0.dp), contentAlignment = Alignment.Center) {
                 when (val visual = target.visual) {
                     CollectTargetVisual.Busy -> CircularProgressIndicator(Modifier.size(TARGET_SIZE / 2), strokeWidth = 3.dp)
                     is CollectTargetVisual.Icon -> Icon(visual.icon, contentDescription = null)
@@ -194,4 +197,4 @@ private val ROW_GAP = 12.dp
 private val HIT_SLOP = 12.dp
 private val ARMED_INSET = 6.dp
 private val RISING_GAP = 12.dp
-private const val HOVERED_SCALE = 1.2f
+private const val ARMED_SCALE = 1.2f

@@ -236,7 +236,7 @@ private class ViewerSaveHold(private val fan: ViewerSaveFanState, private val ha
 
     fun end(released: Boolean) {
         if (fan.pointer == null) return
-        val target = fan.collect.hovered?.payload
+        val target = fan.collect.armed?.payload
         fan.pointer = null
         if (released) onRelease(target)
     }

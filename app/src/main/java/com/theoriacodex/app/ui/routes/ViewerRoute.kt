@@ -51,6 +51,7 @@ import com.theoriacodex.app.viewer.ViewerScreenConfig
 import com.theoriacodex.app.viewer.ViewerScreenHost
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
+import com.theoriacodex.app.viewer.ViewerPostRetention
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.app.viewer.ViewerTrail
 import com.theoriacodex.app.ui.trails.ViewerLevel
@@ -61,6 +62,7 @@ import com.theoriacodex.app.viewer.recoverMedia
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.viewer.state.ViewerEffect
+import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -124,6 +126,14 @@ internal data class ViewerRouteLiveSourceState(
     }
 }
 
+@Composable
+private fun RetainViewerPosts(viewerReturn: ViewerReturnTransition?, pages: List<ViewerPageState>, retains: Boolean) {
+    val owner = remember { ViewerPostRetention() }
+    val postIds = remember(pages) { pages.mapTo(mutableSetOf()) { it.post.id } }
+    SideEffect { if (retains) viewerReturn?.retainPosts(owner, postIds) else viewerReturn?.releasePosts(owner) }
+    DisposableEffect(viewerReturn, owner) { onDispose { viewerReturn?.releasePosts(owner) } }
+}
+
 internal data class ViewerDownloadRequest(
     val post: Post,
     val media: ImageRef,
@@ -155,7 +165,6 @@ internal fun ViewerRoute(
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val latestLevel = rememberUpdatedState(level)
-    DisposableEffect(viewerReturn) { onDispose { if (latestLevel.value.clearsReturnOnDispose()) viewerReturn?.clear() } }
     val latestDependencies = rememberUpdatedState(dependencies)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
     val latestScreenCallbacks = rememberUpdatedState(screenCallbacks)
@@ -169,8 +178,7 @@ internal fun ViewerRoute(
     )
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
-    val retainedPostIds = remember(viewerState.pages) { viewerState.pages.mapTo(mutableSetOf()) { it.post.id } }
-    SideEffect { if (!level.isFork) viewerReturn?.retainPosts(retainedPostIds) }
+    RetainViewerPosts(viewerReturn, viewerState.pages, retains = !level.isFork)
     val restoration = rememberViewerSessionRestoration(viewerOwner, latestDependencies)
     DisposableEffect(viewerOwner) {
         latestOnOwnerChanged.value(viewerOwner)

@@ -56,6 +56,7 @@ import com.theoriacodex.app.ui.components.CollectTargetsLayout
 import com.theoriacodex.app.ui.components.CollectTargetsState
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.motion.TheoriaHaptics
+import com.theoriacodex.app.viewer.ViewerReturnCard
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -90,7 +91,7 @@ internal fun TriageDeckArea(
         val ratioFloor = maxWidth / (maxHeight - CAPTION_ALLOWANCE - if (cardFooter != null) TRIAGE_CARD_FOOTER_HEIGHT else 0.dp)
         val area = with(density) { Size(maxWidth.toPx(), maxHeight.toPx()) }
         val release by rememberUpdatedState { velocity: Velocity? ->
-            val released = ReleasedOn(saveState.hovered?.payload, hideState.hovered?.payload ?: targets.hide.firstOrNull()?.payload)
+            val released = ReleasedOn(saveState.armed?.payload, hideState.armed?.payload ?: targets.hide.firstOrNull()?.payload)
             drag.releaseIn(scope) {
                 val choose: suspend (SwipeDirection) -> TriageChoice? = { released.choice(it, post, suggestions, deck.removes) }
                 this.release(velocity, thresholds, area, choose, { choice -> onDecide(choice, post.id) }) {
@@ -177,13 +178,15 @@ internal fun TriageCards(
         }
         TriageCard(next, support, ratioFloor, footer, onClick = {}, likeEnabled = false, modifier = peek)
     }
-    key(current.id) {
-        val dragged = Modifier.graphicsLayer {
-            translationX = drag.offset.x
-            translationY = drag.offset.y
-            rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
+    ViewerReturnCard(current.id) {
+        key(current.id) {
+            val dragged = Modifier.graphicsLayer {
+                translationX = drag.offset.x
+                translationY = drag.offset.y
+                rotationZ = drag.offset.x / size.width * MAX_TILT_DEGREES
+            }
+            TriageCard(current, support, ratioFloor, footer, onClick = onOpen, likeEnabled = true, modifier = dragged)
         }
-        TriageCard(current, support, ratioFloor, footer, onClick = onOpen, likeEnabled = true, modifier = dragged)
     }
 }
 
@@ -274,15 +277,27 @@ private fun BoxScope.VerticalEdgeHint(
 ) {
     val up = drag.offset.y < 0f
     val fade = Modifier.alpha(hints.vertical)
+    val held = drag.rowPointer != null
     when {
         up && targets.save.isEmpty() ->
-            TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, hints.armed == SwipeDirection.Up)
+            TriageEdgeCue(Icons.Outlined.CollectionsBookmark, "Save", Alignment.TopCenter, hints.vertical, held && hints.armed == SwipeDirection.Up)
         !up && targets.hide.isEmpty() ->
-            TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, hints.armed == SwipeDirection.Down)
-        up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState)
-        else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState)
+            TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, held && hints.armed == SwipeDirection.Down)
+        up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState) { hovered ->
+            releasePick(hovered, targets.save, held && hints.armed == SwipeDirection.Up) { it is SaveTarget.Codex }
+        }
+        else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState) { hovered ->
+            releasePick(hovered, targets.hide, held && hints.armed == SwipeDirection.Down) { true }
+        }
     }
 }
+
+internal fun <T> releasePick(
+    hovered: CollectTarget<T>?,
+    targets: List<CollectTarget<T>>,
+    committed: Boolean,
+    isDefault: (T) -> Boolean,
+): CollectTarget<T>? = hovered ?: targets.firstOrNull { isDefault(it.payload) }?.takeIf { committed }
 
 internal class EdgeHints(val sideways: Float, val vertical: Float, val armed: SwipeDirection?)
 
