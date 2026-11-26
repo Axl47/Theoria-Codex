@@ -38,7 +38,7 @@ internal class TriageDrag {
 
     fun dragBy(delta: Offset, to: Offset) {
         offset += delta
-        if (abs(offset.y) > abs(offset.x)) rowPointer = to
+        rowPointer = to.takeIf { abs(offset.y) > abs(offset.x) }
     }
 
     fun lift() {
