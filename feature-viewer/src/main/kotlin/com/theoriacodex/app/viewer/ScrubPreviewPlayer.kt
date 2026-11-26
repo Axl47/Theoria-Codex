@@ -42,6 +42,7 @@ import androidx.media3.exoplayer.video.PlaybackVideoGraphWrapper
 import androidx.media3.exoplayer.video.VideoFrameReleaseControl
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 
 internal class ScrubPreviewPlayer(
@@ -53,6 +54,7 @@ internal class ScrubPreviewPlayer(
     private val main = Handler(Looper.getMainLooper())
     private val mediaItem = request.mediaItem
     private val frames = ScrubFrameMatcher<ScrubFrame>()
+    private val renders = PreviewRenders()
     private var released = false
     private var attached = true
     private var pending: CompletableDeferred<ScrubFrame>? = null
@@ -66,12 +68,6 @@ internal class ScrubPreviewPlayer(
             act(frames.onIndexed())
         }
 
-        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-            if (reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT && pending != null) {
-                frames.onSeekResolved(newPosition.positionMs)?.let(::deliver)
-            }
-        }
-
         override fun onPlayerError(error: PlaybackException) {
             pending?.completeExceptionally(error)
             pending = null
@@ -80,7 +76,7 @@ internal class ScrubPreviewPlayer(
 
     private val player: ExoPlayer = ExoPlayer.Builder(
         context,
-        RenderersFactory { handler, videoListener, _, _, _ -> arrayOf(PreviewFrameRenderer(context, handler, videoListener)) },
+        RenderersFactory { handler, videoListener, _, _, _ -> arrayOf(PreviewFrameRenderer(context, handler, videoListener, renders)) },
         request.mediaSourceFactory,
     )
         .setLoadControl(previewLoadControl())
@@ -94,8 +90,10 @@ internal class ScrubPreviewPlayer(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
                     MatrixTransformation { Matrix().apply { setScale(1f, -1f) } },
-                    FrameGrabber { frameMs, bitmap ->
-                        main.post { if (!released) frames.onFrame(frameMs, ScrubFrame(frameMs, bitmap))?.let(::deliver) }
+                    FrameGrabber { frameUs, bitmap ->
+                        val generation = renders.generationOf(frameUs) ?: return@FrameGrabber
+                        val frame = ScrubFrame(frameUs / US_PER_MS, bitmap)
+                        main.post { if (!released) frames.onFrame(generation, frame)?.let(::deliver) }
                     },
                 ),
             )
@@ -141,9 +139,16 @@ internal class ScrubPreviewPlayer(
     }
 
     private fun act(next: ScrubFrameMatcher.Next<ScrubFrame>) = when (next) {
-        is ScrubFrameMatcher.Next.Seek -> player.seekTo(next.positionMs)
-        is ScrubFrameMatcher.Next.Answer -> deliver(next.frame)
+        is ScrubFrameMatcher.Next.Seek -> seek(next)
         ScrubFrameMatcher.Next.Wait -> Unit
+    }
+
+    private fun seek(next: ScrubFrameMatcher.Next.Seek) {
+        player.seekTo(next.positionMs)
+        player.createMessage { _, _ ->
+            val generation = renders.generation
+            main.post { if (!released) frames.onSettled(next.seek, generation)?.let(::deliver) }
+        }.setLooper(player.playbackLooper).send()
     }
 
     private fun deliver(frame: ScrubFrame) {
@@ -166,7 +171,22 @@ private fun previewLoadControl() = DefaultLoadControl.Builder()
 
 private const val PREVIEW_BUFFER_MS = 1_000
 
-private class PreviewFrameRenderer(context: Context, handler: Handler, listener: VideoRendererEventListener) :
+private class PreviewRenders {
+    @Volatile var generation = 0L
+        private set
+
+    private val last = AtomicReference<Pair<Long, Long>?>(null)
+
+    fun reset() {
+        generation++
+    }
+
+    fun rendered(presentationTimeUs: Long) = last.set(presentationTimeUs to generation)
+
+    fun generationOf(presentationTimeUs: Long): Long? = last.get()?.takeIf { (frameUs, _) -> frameUs == presentationTimeUs }?.second
+}
+
+private class PreviewFrameRenderer(context: Context, handler: Handler, listener: VideoRendererEventListener, private val renders: PreviewRenders) :
     MediaCodecVideoRenderer(
         Builder(context)
             .setMediaCodecSelector(MediaCodecSelector.PREFER_SOFTWARE)
@@ -228,11 +248,13 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
     override fun renderOutputBufferV21(codec: MediaCodecAdapter, index: Int, presentationTimeUs: Long, releaseTimeNs: Long) {
         if (frameRendered) return
         frameRendered = true
+        renders.rendered(presentationTimeUs)
         super.renderOutputBufferV21(codec, index, presentationTimeUs, releaseTimeNs)
     }
 
     override fun onPositionReset(positionUs: Long, joining: Boolean, sampleStreamIsResetToKeyFrame: Boolean) {
         frameRendered = false
+        renders.reset()
         super.onPositionReset(positionUs, joining, sampleStreamIsResetToKeyFrame)
     }
 
@@ -261,7 +283,7 @@ private class FrameGrabber(private val onFrame: (Long, Bitmap) -> Unit) : GlEffe
                 onError(VideoFrameProcessingException(error))
                 return
             }
-            onFrame(presentationTimeUs / US_PER_MS, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
+            onFrame(presentationTimeUs, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
             inputListener.onInputFrameProcessed(inputTexture)
         }
     }
