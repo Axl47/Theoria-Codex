@@ -105,11 +105,11 @@ class ViewerVideoPlayerPoolTest {
     }
 
     @Test
-    fun `scrub previews snap within a short clip's few frames but across an episode's keyframe gaps (ADR 0176)`() {
+    fun `scrub previews of clips up to 30 s land near the finger, longer videos on keyframes (ADR 0176)`() {
         val clip = scrubPreviewSeekParameters(5_000L)
         assertEquals(50_000L, clip.toleranceBeforeUs)
         assertEquals(50_000L, clip.toleranceAfterUs)
-        assertEquals(14_400_000L, scrubPreviewSeekParameters(Duration.ofMinutes(24).toMillis()).toleranceBeforeUs)
-        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(C.TIME_UNSET))
+        assertEquals(300_000L, scrubPreviewSeekParameters(30_000L).toleranceBeforeUs)
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(30_001L))
     }
 }

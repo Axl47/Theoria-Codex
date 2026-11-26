@@ -9,7 +9,7 @@ internal class ScrubFrameMatcher<F : Any> {
     private var shown: Pair<Long, F>? = null
 
     sealed interface Next<out F> {
-        data class Seek(val positionMs: Long, val seek: Long) : Next<Nothing>
+        data class Seek(val positionMs: Long, val token: Long) : Next<Nothing>
         data object Wait : Next<Nothing>
     }
 
@@ -28,16 +28,16 @@ internal class ScrubFrameMatcher<F : Any> {
         return queuedMs?.let { targetMs -> queuedMs = null; seek(targetMs) } ?: Next.Wait
     }
 
-    fun onSettled(seek: Long, generation: Long): F? {
-        if (seek != seeks) return null
-        shown?.let { (shownGeneration, frame) -> if (shownGeneration == generation) return frame }
+    fun onSettled(token: Long, generation: Long): F? {
+        if (token != seeks) return null
+        shown?.let { (shownGeneration, frame) -> if (shownGeneration >= generation) return frame }
         awaiting = generation
         return null
     }
 
     fun onFrame(generation: Long, frame: F): F? {
         shown = generation to frame
-        return frame.takeIf { awaiting == generation }?.also { awaiting = null }
+        return frame.takeIf { awaiting?.let { generation >= it } == true }?.also { awaiting = null }
     }
 
     fun detach() {

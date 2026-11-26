@@ -90,8 +90,7 @@ internal class ScrubPreviewPlayer(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
                     MatrixTransformation { Matrix().apply { setScale(1f, -1f) } },
-                    FrameGrabber { frameUs, bitmap ->
-                        val generation = renders.generationOf(frameUs) ?: return@FrameGrabber
+                    FrameGrabber(renders::generationOf) { frameUs, generation, bitmap ->
                         val frame = ScrubFrame(frameUs / US_PER_MS, bitmap)
                         main.post { if (!released) frames.onFrame(generation, frame)?.let(::deliver) }
                     },
@@ -147,7 +146,7 @@ internal class ScrubPreviewPlayer(
         player.seekTo(next.positionMs)
         player.createMessage { _, _ ->
             val generation = renders.generation
-            main.post { if (!released) frames.onSettled(next.seek, generation)?.let(::deliver) }
+            main.post { if (!released) frames.onSettled(next.token, generation)?.let(::deliver) }
         }.setLooper(player.playbackLooper).send()
     }
 
@@ -172,7 +171,7 @@ private fun previewLoadControl() = DefaultLoadControl.Builder()
 private const val PREVIEW_BUFFER_MS = 1_000
 
 private class PreviewRenders {
-    @Volatile var generation = 0L
+    var generation = 0L
         private set
 
     private val last = AtomicReference<Pair<Long, Long>?>(null)
@@ -266,11 +265,12 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
 
 private const val FULL_TURN = 360f
 
-private class FrameGrabber(private val onFrame: (Long, Bitmap) -> Unit) : GlEffect {
+private class FrameGrabber(private val generationOf: (Long) -> Long?, private val onFrame: (Long, Long, Bitmap) -> Unit) : GlEffect {
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = object : PassthroughShaderProgram() {
         private var pixels: ByteBuffer = ByteBuffer.allocateDirect(0)
 
         override fun queueInputFrame(glObjectsProvider: GlObjectsProvider, inputTexture: GlTextureInfo, presentationTimeUs: Long) {
+            val generation = generationOf(presentationTimeUs) ?: return inputListener.onInputFrameProcessed(inputTexture)
             val width = inputTexture.width
             val height = inputTexture.height
             if (pixels.capacity() != width * height * RGBA_BYTES) pixels = ByteBuffer.allocateDirect(width * height * RGBA_BYTES)
@@ -283,7 +283,7 @@ private class FrameGrabber(private val onFrame: (Long, Bitmap) -> Unit) : GlEffe
                 onError(VideoFrameProcessingException(error))
                 return
             }
-            onFrame(presentationTimeUs, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
+            onFrame(presentationTimeUs, generation, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
             inputListener.onInputFrameProcessed(inputTexture)
         }
     }
