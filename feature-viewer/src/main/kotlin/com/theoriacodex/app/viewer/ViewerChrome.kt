@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.platform.testTag
+import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Repeat
@@ -77,6 +80,26 @@ internal fun ViewerChrome(
 ) {
     ViewerTopBar(source, subtitle, indexLabel, onBack, modifier, trailing, below)
 }
+
+@Composable
+internal fun ViewerClipTopBar(range: EpisodeClipRange?, onCancel: () -> Unit, onSave: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(VIEWER_TOP_SCRIM_HEIGHT).background(ViewerVeil.TopScrim))
+        CompositionLocalProvider(LocalContentColor provides Color.White) {
+            Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onCancel) { Icon(Icons.Default.Close, contentDescription = "Cancel clip") }
+                Text(
+                    text = range?.let { "Clip · ${episodeClipTimeLabel(it.durationMs)}" } ?: "Clip",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = onSave, enabled = range != null, modifier = Modifier.padding(end = 8.dp).testTag(VIEWER_CLIP_SAVE_TAG)) { Text("Save") }
+            }
+        }
+    }
+}
+
+internal const val VIEWER_CLIP_SAVE_TAG = "viewer-clip-save"
 
 @Composable
 private fun ViewerTopBar(

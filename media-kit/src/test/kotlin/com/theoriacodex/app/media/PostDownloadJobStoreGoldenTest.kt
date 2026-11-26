@@ -1,6 +1,13 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.viewer.EpisodeClipRange
+import com.theoriacodex.app.viewer.EpisodeClipTracks
 import com.theoriacodex.data.storage.assertStoredFormat
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -52,6 +59,20 @@ class PostDownloadJobStoreGoldenTest {
                     ),
                 ),
             ),
+            checkNotNull(javaClass.getResource("/golden/download-queue/clip-written.json")).readText() to DownloadQueueFile(
+                3,
+                listOf(
+                    DownloadBatchRecord(
+                        1, "Clip",
+                        listOf(
+                            DownloadItemRecord(
+                                2, "HITOMI", "7", "Episode 7", "m-1", "Clip 1:01–1:31", null, "PREPARING", null, false, null, null,
+                                clipStartMs = 61_000L, clipEndMs = 91_000L,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
         )
     }
 
@@ -80,6 +101,27 @@ class PostDownloadJobStoreGoldenTest {
             file.writeText(text)
             assertTrue(text, runCatching { store.load() }.isFailure)
         }
+    }
+
+    @Test
+    fun `a clip keeps only its range across restarts, writes no status older builds lack, and a damaged clip row is dropped alone (ADR 0223)`() = runTest {
+        val file = temporary.newFile("queue.json")
+        val store = FileBackedPostDownloadJobStore(file)
+        val media = ImageRef("https://example.test/poster.jpg", null, "image/jpeg")
+        val post = Post(PostId(SourceKey.PIXIV, "7"), media, media, listOf(media), null, null, null,
+            emptyList(), emptyList(), null, null, title = "Episode 7")
+        val clip = EpisodeClipRequest(EpisodeClipRange(61_000L, 91_000L),
+            MediaStream("https://example.test/e7.m3u8", "Main", headers = mapOf("Cookie" to "secret")), EpisodeClipTracks(subtitles = true, subtitleIndex = 0, audioIndex = 0))
+        val item = PostDownloadItem(2, PostDownloadRequest(post, clip = clip), PostDownloadStatus.ENCODING)
+        store.save(listOf(PostDownloadBatch(1, "Clip", listOf(item))))
+
+        val restored = store.load().single().items.single()
+        assertEquals(EpisodeClipRequest(clip.range, stream = null), restored.request.clip)
+        assertEquals(PostDownloadStatus.QUEUED, restored.status)
+        assertTrue("secret" !in file.readText() && "e7.m3u8" !in file.readText() && "ENCODING" !in file.readText())
+
+        file.writeText(Regex(""""clipEndMs"\s*:\s*91000""").replace(file.readText(), "\"clipEndMs\": 999999"))
+        assertEquals(emptyList<PostDownloadBatch>(), store.load())
     }
 
     private fun summary(item: PostDownloadItem): String = with(item.request) {

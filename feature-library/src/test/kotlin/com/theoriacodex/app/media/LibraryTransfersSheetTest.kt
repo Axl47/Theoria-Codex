@@ -136,7 +136,7 @@ class LibraryTransfersSheetTest {
                 batches = if (downloads.isEmpty()) emptyList() else listOf(PostDownloadBatch(1, "Batch", downloads)),
                 downloadRemovals = DownloadRemovalRows(emptyMap()) {},
                 downloadActions = DownloadTileActions(
-                    open = { onOpen(it.id) }, cancel = {}, retryFailed = {},
+                    open = { onOpen(it.id) }, share = {}, cancel = {}, retryFailed = {},
                     remove = { ids, files, anchor -> removals += Triple(ids, files, anchor) }, localFile = { null },
                 ),
                 markedCodexId = markedCodexId,

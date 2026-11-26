@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Clip in an episode's ⋮ menu saves up to a minute of it as a small video, with the subtitles you're watching burned in. Drag the handles on the strip to pick the part, which plays on repeat, then tap Save. The clip encodes in Downloads, keeps going if you leave the app, and can be shared from there or from its notification.
+- Saved downloads have Share in their menu.
+
 ### Changed
 
 - Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.

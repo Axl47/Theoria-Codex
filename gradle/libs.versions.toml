@@ -88,6 +88,7 @@ androidx-media3-datasource-okhttp = { group = "androidx.media3", name = "media3-
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+androidx-media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 quickjs-android = { group = "com.github.zhanghai.quickjs-java", name = "quickjs-android", version.ref = "quickjs" }
 jspecify = { group = "org.jspecify", name = "jspecify", version.ref = "jspecify" }

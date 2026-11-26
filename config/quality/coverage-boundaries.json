@@ -74,6 +74,9 @@
     "*/src/main/**/viewer/PixivUgoiraPlayerUi.kt",
     "*/src/main/**/viewer/ExoVideoComponents.kt",
     "*/src/main/**/viewer/ScrubPreviewPlayer.kt",
-    "*/src/main/**/viewer/MediaTimelineBar.kt"
+    "*/src/main/**/viewer/MediaTimelineBar.kt",
+    "*/src/main/**/viewer/EpisodeClipExport.kt",
+    "*/src/main/**/viewer/ViewerClipStrip.kt",
+    "*/src/main/**/media/EpisodeClipService.kt"
   ]
 }

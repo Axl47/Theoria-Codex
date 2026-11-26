@@ -103,6 +103,8 @@ internal class ViewerControls(
 
     fun setActionsMenuExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.ACTIONS_MENU, expanded)
 
+    fun cancelClip() = onAction(ViewerAction.CancelClip)
+
     fun setPlaybackSettingsExpanded(expanded: Boolean) = setPanelOpen(ViewerPanel.PLAYBACK_SETTINGS, expanded)
 
     fun setPanelOpen(panel: ViewerPanel, open: Boolean) {
@@ -271,6 +273,8 @@ internal class ViewerFrame(
     val watching = uiState.series is ViewerSeries.Watching
 
     val locked = uiState.controls.locked && watching && !inPictureInPicture
+
+    val clipping = uiState.controls.clip != null && watching && !inPictureInPicture
 
     val reading = uiState.series is ViewerSeries.Reading
 

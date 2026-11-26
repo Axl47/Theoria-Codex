@@ -1,5 +1,9 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.viewer.viewerStream
+import com.theoriacodex.app.viewer.linksOld
+import com.theoriacodex.app.media.postMediaItems
+import com.theoriacodex.app.media.EpisodeClipRequest
 import com.theoriacodex.app.comments.CommentsLoading
 import com.theoriacodex.app.comments.UnsupportedCommentsLoader
 import com.theoriacodex.app.comments.ViewerComments
@@ -151,6 +155,7 @@ internal data class ViewerRouteEffectCallbacks(
     val onLoadMore: (ViewerStreamSource) -> Unit,
     val onDismiss: () -> Unit,
     val onRestorationUnavailable: suspend () -> Unit,
+    val onClipEpisode: (Post, EpisodeClipRequest) -> Unit = { _, _ -> },
 )
 
 @Composable
@@ -477,6 +482,7 @@ private suspend fun handleViewerEffect(
             viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
         }
         is ViewerEffect.DownloadMedia -> callbacks.onDownloadMedia(viewerDownloadRequest(effect, currentState))
+        is ViewerEffect.ClipEpisode -> clipViewerEpisode(effect, viewerOwner, callbacks)
         is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
             val launchAction = viewerOwner.session.value?.onToggleLike
             if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
@@ -514,6 +520,23 @@ private fun viewerDownloadRequest(effect: ViewerEffect.DownloadMedia, state: Vie
         pageIndex = effect.mediaKey.mediaIndex,
         totalPages = page.media.size,
     )
+}
+
+private fun clipViewerEpisode(effect: ViewerEffect.ClipEpisode, viewerOwner: ViewerViewModel, callbacks: ViewerRouteEffectCallbacks) {
+    val state = viewerOwner.state.value
+    val page = state.pages.firstOrNull { candidate -> candidate.post.id == effect.mediaKey.postId } ?: return
+    val media = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return
+    val label = state.controls.episode.streamLabelFor(effect.mediaKey)
+    val stream = media.viewerStream(label) ?: return
+    val resolution = page.resolution
+    val freshStream = viewerOwner.session.value?.context?.let { context ->
+        suspend {
+            if (!resolution.linksOld()) null
+            else callbacks.onRecoverMedia(page.post, media, context) { true }
+                ?.let { postMediaItems(it).getOrNull(effect.mediaKey.mediaIndex)?.viewerStream(label) }
+        }
+    }
+    callbacks.onClipEpisode(page.post, EpisodeClipRequest(effect.range, stream, effect.tracks, freshStream))
 }
 
 private suspend fun retryViewerMedia(

@@ -91,6 +91,19 @@ fun openDownloadedPostFile(context: Context, file: DownloadedPostFile): Boolean 
     })
 }.isSuccess
 
+fun shareDownloadedPostFileIntent(file: DownloadedPostFile): Intent = Intent.createChooser(
+    Intent(Intent.ACTION_SEND).apply {
+        type = file.mime ?: "application/octet-stream"
+        putExtra(Intent.EXTRA_STREAM, file.uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    },
+    null,
+)
+
+fun shareDownloadedPostFile(context: Context, file: DownloadedPostFile): Boolean = runCatching {
+    context.startActivity(shareDownloadedPostFileIntent(file).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}.isSuccess
+
 suspend fun openPostDownload(
     item: PostDownloadItem,
     findFile: suspend (PostDownloadItem) -> DownloadedPostFile?,

@@ -433,6 +433,10 @@ private fun viewerEffectCallbacks(shell: TheoriaShell, tagActions: PostTagSearch
             shell.transfers.showDownloads = true
         }
     },
+    onClipEpisode = { post, clip ->
+        shell.transfers.downloads.submitClip(post, clip)
+        shell.transfers.showDownloads = true
+    },
     onToggleLike = { post -> shell.toggleLikeAndSyncCodex(post) },
     onOpenCreatorProfile = { creator -> shell.openCreatorProfile(creator) },
     onApplyTag = { post, term, excluded ->

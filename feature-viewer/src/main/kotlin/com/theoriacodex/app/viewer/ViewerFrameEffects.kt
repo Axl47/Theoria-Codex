@@ -139,12 +139,15 @@ internal fun ViewerFrameEffects(
     ViewerChromeAutoHideEffect(
         chromeVisible = frame.chromeVisible,
         interactionSerial = screen.interactionSerial,
-        interactionBlocked = screen.timelineInteractionActive || frame.mediaOverviewVisible || showInfoSheet ||
+        interactionBlocked = frame.clipping || screen.timelineInteractionActive || frame.mediaOverviewVisible || showInfoSheet ||
             uiState.controls.panel?.inChrome == true || screen.relatedStripExpanded || screen.saveFan.holdsChrome ||
             screen.trailForks.busy != null || screen.trailForks.chromeHolds > 0,
         touchExplorationEnabled = frame.touchExplorationEnabled,
         onHide = { onAction(ViewerAction.ToggleChrome) },
     )
+    LaunchedEffect(frame.inPictureInPicture) {
+        if (frame.inPictureInPicture && uiState.controls.clip != null) onAction(ViewerAction.CancelClip)
+    }
     LaunchedEffect(frame.chromeVisible, frame.selection.isSeekable) {
         if (!frame.chromeVisible || !frame.selection.isSeekable) screen.timelineInteractionActive = false
     }
@@ -278,8 +281,9 @@ private fun ViewerBackHandlers(
         screen.revealUnlock()
     }
     BackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && frame.mediaOverviewVisible, onBack = controls::back)
+    BackHandler(enabled = !screen.pendingDismiss && !frame.returning && frame.clipping) { controls.cancelClip() }
     val backDistance = with(LocalDensity.current) { VIEWER_BACK_DISTANCE.toPx() }
-    PredictiveBackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && !frame.mediaOverviewVisible) { events ->
+    PredictiveBackHandler(enabled = !screen.pendingDismiss && !frame.returning && !frame.locked && !frame.clipping && !frame.mediaOverviewVisible) { events ->
         var committed = false
         try {
             events.collect { dismissDrag.followBack(it.progress, it.swipeEdge == BackEventCompat.EDGE_LEFT, backDistance) }

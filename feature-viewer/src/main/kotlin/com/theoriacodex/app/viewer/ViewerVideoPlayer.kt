@@ -3,14 +3,8 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
-import android.graphics.Typeface
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.view.ViewGroup
-import android.view.accessibility.CaptioningManager
 import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
@@ -41,7 +35,6 @@ import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.compose.ui.Alignment
@@ -110,7 +103,9 @@ internal fun ViewerVideoPlayer(
     val recovery = remember(key) { ViewerVideoRecovery(key.load, episode, key.label) }
     val state = remember(key) { ViewerVideoState(recovery.opening(positions.position(mediaKey))) }
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
-    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { resumeMs, progress ->
+    val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
+    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { releasedMs, progress ->
+        val resumeMs = clipReturn.ms ?: releasedMs
         positions.save(mediaKey, resumeMs)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
         progress?.let { events.onPlaybackProgress?.invoke(it) }
@@ -121,7 +116,7 @@ internal fun ViewerVideoPlayer(
     FollowViewerActiveTracks(state.player, controls.isActive, loading = state.loading && !state.failed)
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
-    ViewerVideoCommands(state, controls)
+    ViewerVideoCommands(state, controls, clipReturn)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
     ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
@@ -468,7 +463,7 @@ private fun ReportViewerPlaybackProgress(state: ViewerVideoState, report: ((View
 }
 
 @Composable
-private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendererControls) {
+private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendererControls, clipReturn: ViewerClipReturnPosition) {
     var handledRestart by remember(state) { mutableLongStateOf(controls.restartRequest) }
     LaunchedEffect(state.player, controls.repeatsAtEnd) {
         state.player?.repeatMode = if (controls.repeatsAtEnd) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
@@ -483,6 +478,7 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
             state.setPlaying(controls.isActive && controls.isPlaying)
         }
     }
+    ViewerClipReturn(state, controls.clipping, clipReturn)
     ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !state.failed && !state.scrubbing }, state::jump)
 }
 
@@ -625,29 +621,10 @@ private fun PlayerView.attachViewerSubtitleView(context: Context): SubtitleView 
     subtitleView?.visibility = View.GONE
     val overlay = SubtitleView(context).apply {
         tag = VIEWER_SUBTITLE_OVERLAY_TAG
-        setUserDefaultTextSize()
-        val captioning = context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
-        if (captioning?.isEnabled == true) setUserDefaultStyle() else setStyle(VIEWER_SUBTITLE_STYLE)
-        setApplyEmbeddedStyles(true)
-        setApplyEmbeddedFontSizes(false)
-        setBottomPaddingFraction(VIEWER_SUBTITLE_RESTING_BOTTOM_FRACTION)
+        applyViewerSubtitleStyle()
     }
     addView(overlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     return overlay
-}
-
-internal fun sanitizeViewerSubtitleCue(cue: Cue): Cue {
-    if (cue.bitmap != null) return cue
-    val builder = cue.buildUpon().clearWindowColor()
-    val text = cue.text
-    if (text is Spanned) {
-        val cleaned = SpannableString.valueOf(text)
-        cleaned.getSpans(0, cleaned.length, Any::class.java).forEach { span ->
-            if (span is BackgroundColorSpan || span is ForegroundColorSpan) cleaned.removeSpan(span)
-        }
-        builder.setText(cleaned)
-    }
-    return builder.build()
 }
 
 @Composable
@@ -658,6 +635,10 @@ private fun ViewerVideoTimelineOverlay(
     if (!controls.isActive && !controls.isPreloading || state.failed) return
     if (state.duration <= 0L || state.player == null) {
         ViewerPendingTimeline(controls, events, modifier)
+        return
+    }
+    if (controls.clipping) {
+        ViewerVideoClipping(state, controls, events, modifier)
         return
     }
     ViewerChromeVisibility(controls.showControls, modifier) {
@@ -685,14 +666,5 @@ private fun ViewerVideoMessage(message: String, modifier: Modifier) {
 
 internal fun viewerVideoTestTag(postId: PostId): String = "viewer_video_${postId.mediaTestTagPart()}"
 
-private const val VIEWER_SUBTITLE_RESTING_BOTTOM_FRACTION = 0.06f
 private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
-private val VIEWER_SUBTITLE_STYLE = CaptionStyleCompat(
-    android.graphics.Color.WHITE,
-    android.graphics.Color.TRANSPARENT,
-    android.graphics.Color.TRANSPARENT,
-    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-    android.graphics.Color.BLACK,
-    Typeface.SANS_SERIF,
-)

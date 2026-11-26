@@ -103,6 +103,13 @@ internal fun viewerMediaKind(post: Post, media: ImageRef): ViewerMediaKind {
 }
 
 fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReduction {
+    val reduction = reduceViewerAction(state, action)
+    val clip = reduction.state.controls.clip ?: return reduction
+    if (clip.mediaKey == reduction.state.currentMedia?.key) return reduction
+    return reduction.copy(state = reduction.state.copy(controls = reduction.state.controls.copy(clip = null)))
+}
+
+private fun reduceViewerAction(state: ViewerUiState, action: ViewerAction): ViewerReduction {
     if (action is ViewerAction.ReplaceSession) return state.replaceSession(action)
 
     val session = state.session ?: return ViewerReduction(state)
@@ -133,6 +140,7 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         is ViewerAction.ChooseAudio,
         is ViewerAction.SetLocked,
         ViewerAction.ToggleFillScreen -> ViewerReduction(state.reduceEpisodeAction(action))
+        is ViewerAction.Clip -> state.reduceClipAction(session, action)
         is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
         is ViewerAction.ResolutionCancelled,
         is ViewerAction.ResolutionStarted,
@@ -160,6 +168,27 @@ fun reduceViewerState(state: ViewerUiState, action: ViewerAction): ViewerReducti
         ViewerAction.LoadMore -> ViewerReduction(state, listOf(ViewerEffect.LoadMore(session)))
         ViewerAction.PrepareDismiss -> ViewerReduction(state.prepareDismiss())
         ViewerAction.Dismiss -> ViewerReduction(state, listOf(ViewerEffect.Dismiss(session)))
+    }
+}
+
+private fun ViewerUiState.reduceClipAction(session: ViewerSessionIdentity, action: ViewerAction.Clip): ViewerReduction {
+    val clip = controls.clip
+    return when (action) {
+        ViewerAction.StartClip -> {
+            val media = currentMedia?.takeIf { series is ViewerSeries.Watching && it.ref.streams.isNotEmpty() } ?: return ViewerReduction(this)
+            ViewerReduction(copy(controls = controls.copy(
+                clip = ViewerClipState(media.key),
+                panel = controls.panelOutsideChrome(),
+                chromeVisible = true,
+            )).setPlaying(true))
+        }
+        is ViewerAction.SetClipRange -> if (clip == null) ViewerReduction(this) else withControls(controls.copy(clip = clip.copy(range = action.range)))
+        ViewerAction.CancelClip -> withControls(controls.copy(clip = null))
+        is ViewerAction.SaveClip -> {
+            val range = clip?.range ?: return ViewerReduction(this)
+            ViewerReduction(copy(controls = controls.copy(clip = null)),
+                listOf(ViewerEffect.ClipEpisode(session, clip.mediaKey, range, action.tracks)))
+        }
     }
 }
 
@@ -415,7 +444,7 @@ private fun ViewerUiState.toggleChrome(): ViewerUiState {
 private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackCompleted): ViewerReduction {
     if (session != action.session || currentMedia?.key != action.key ||
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
-        loopsPlayback) return ViewerReduction(this)
+        loopsPlayback || controls.clip != null) return ViewerReduction(this)
     if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) {
         if (restartsAtEnd(controls.dwell.elapsed(action.atMs))) return ViewerReduction(if (action.looped) this else restartPlayback())
         advanceInQueue()?.let { return it }

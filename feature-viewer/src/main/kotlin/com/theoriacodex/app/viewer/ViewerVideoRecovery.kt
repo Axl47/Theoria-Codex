@@ -2,6 +2,8 @@
 
 package com.theoriacodex.app.viewer
 
+import com.theoriacodex.app.viewer.state.ViewerResolutionState
+
 import androidx.media3.common.PlaybackException
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -156,6 +158,9 @@ internal fun viewerVideoFailureMessage(errorCode: Int, message: String?): String
 internal const val VIEWER_VIDEO_FAILED = "Could not play video"
 
 internal const val VIEWER_LINKS_OLD_AFTER_MS = 120_000L
+
+fun ViewerResolutionState.linksOld(nowMs: Long = System.currentTimeMillis()): Boolean =
+    resolvedAtMs?.let { nowMs - it > VIEWER_LINKS_OLD_AFTER_MS } != false
 
 internal const val VIEWER_RECOVERED_PROGRESS_MS = 30_000L
 

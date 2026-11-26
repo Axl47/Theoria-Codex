@@ -19,6 +19,8 @@ data class ViewerRendererControls(
     val dimBackdrop: Boolean = false,
     val fillScreen: Boolean = false,
     val repeatsAtEnd: Boolean = loopPlayback,
+    val clipping: Boolean = false,
+    val clip: EpisodeClipRange? = null,
 ) {
     companion object {
         fun feedCard(isActive: Boolean) = ViewerRendererControls(
@@ -41,6 +43,7 @@ data class ViewerRendererEvents(
     val onTimelineInteractionActiveChanged: (Boolean) -> Unit,
     val onPlaybackProgress: ((ViewerPlaybackProgress) -> Unit)? = null,
     val onPlaybackLooped: () -> Unit = {},
+    val onClipRangeChanged: (EpisodeClipRange) -> Unit = {},
 ) {
     companion object {
         fun feedCard(onDurationKnown: (Long) -> Unit) = ViewerRendererEvents(

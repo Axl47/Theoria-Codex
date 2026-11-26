@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer.state
 
+import com.theoriacodex.app.viewer.EpisodeClipRange
+
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -105,7 +107,10 @@ data class ViewerControlsState(
     val locked: Boolean = false,
     val fillScreen: Boolean = false,
     val episode: ViewerEpisodeChoice = ViewerEpisodeChoice(),
+    val clip: ViewerClipState? = null,
 )
+
+data class ViewerClipState(val mediaKey: ViewerMediaKey, val range: EpisodeClipRange? = null)
 
 data class ViewerOverviewState(
     val visible: Boolean = false,

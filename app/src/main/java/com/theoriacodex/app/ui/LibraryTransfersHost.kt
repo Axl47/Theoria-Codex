@@ -20,6 +20,8 @@ import com.theoriacodex.app.media.PostDownloadItem
 import com.theoriacodex.app.media.codexOfflineOwner
 import com.theoriacodex.app.media.libraryTransfersStatus
 import com.theoriacodex.app.media.openDownloadedPostFile
+import com.theoriacodex.app.media.shareDownloadedPostFile
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.media.openPostDownload
 import com.theoriacodex.app.media.DownloadRemovalRows
 import com.theoriacodex.app.media.LocalCodexOfflineRemovals
@@ -115,6 +117,11 @@ private fun rememberDownloadTileActions(tools: LibraryTransferTools, onOpenPost:
                         )
                     } finally { opening = false }
                 }
+            }
+        },
+        share = { item ->
+            scope.launch {
+                runCatchingPreservingCancellation { downloads.localFile(item) }.getOrNull()?.let { shareDownloadedPostFile(context, it) }
             }
         },
         cancel = downloads::cancel,
