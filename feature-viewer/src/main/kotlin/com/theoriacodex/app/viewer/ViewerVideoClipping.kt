@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
@@ -34,15 +35,19 @@ internal fun ViewerVideoClipping(state: ViewerVideoState, controls: ViewerRender
     }
 }
 
+internal class ViewerClipReturnPosition {
+    var ms: Long? = null
+}
+
 @Composable
-internal fun ViewerClipReturn(state: ViewerVideoState, clipping: Boolean) {
-    var returnTo by remember(state) { mutableStateOf<Long?>(null) }
-    LaunchedEffect(state, clipping) {
+internal fun ViewerClipReturn(state: ViewerVideoState, clipping: Boolean, returnTo: ViewerClipReturnPosition) {
+    val current by rememberUpdatedState(state)
+    LaunchedEffect(clipping) {
         if (clipping) {
-            if (returnTo == null) returnTo = state.position
+            if (returnTo.ms == null) returnTo.ms = current.position
         } else {
-            returnTo?.let(state::seek)
-            returnTo = null
+            returnTo.ms?.let(current::seek)
+            returnTo.ms = null
         }
     }
 }

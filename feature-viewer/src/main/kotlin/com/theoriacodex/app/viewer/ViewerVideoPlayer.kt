@@ -103,7 +103,9 @@ internal fun ViewerVideoPlayer(
     val recovery = remember(key) { ViewerVideoRecovery(key.load, episode, key.label) }
     val state = remember(key) { ViewerVideoState(recovery.opening(positions.position(mediaKey))) }
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
-    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { resumeMs, progress ->
+    val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
+    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { releasedMs, progress ->
+        val resumeMs = clipReturn.ms ?: releasedMs
         positions.save(mediaKey, resumeMs)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
         progress?.let { events.onPlaybackProgress?.invoke(it) }
@@ -114,7 +116,7 @@ internal fun ViewerVideoPlayer(
     FollowViewerActiveTracks(state.player, controls.isActive, loading = state.loading && !state.failed)
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
-    ViewerVideoCommands(state, controls)
+    ViewerVideoCommands(state, controls, clipReturn)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
     ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
@@ -461,7 +463,7 @@ private fun ReportViewerPlaybackProgress(state: ViewerVideoState, report: ((View
 }
 
 @Composable
-private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendererControls) {
+private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendererControls, clipReturn: ViewerClipReturnPosition) {
     var handledRestart by remember(state) { mutableLongStateOf(controls.restartRequest) }
     LaunchedEffect(state.player, controls.repeatsAtEnd) {
         state.player?.repeatMode = if (controls.repeatsAtEnd) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
@@ -476,7 +478,7 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
             state.setPlaying(controls.isActive && controls.isPlaying)
         }
     }
-    ViewerClipReturn(state, controls.clipping)
+    ViewerClipReturn(state, controls.clipping, clipReturn)
     ViewerSeekJumps(controls.seekJumpSerial, controls.seekJumpDeltaMs, { controls.isActive && !state.failed && !state.scrubbing }, state::jump)
 }
 

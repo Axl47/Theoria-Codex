@@ -19,7 +19,8 @@ process, so an encode that only lives in the app's scope stalls once the user le
   loops it, even when the selection reaches the episode's end, so autoplay never moves on while clipping, and the
   top bar holds only ✕, "Clip · length" and Save. Watch progress is not recorded while clipping, so previewing a
   selection near the end does not mark the episode watched. Leaving the episode, entering picture-in-picture or
-  pressing Back ends clip mode, and the player returns to where it was. A handle drag keeps the handle nearest
+  pressing Back ends clip mode, and the player returns to where it was; if the player is released mid-clip, that
+  position, not the clip's, is saved as the resume point. A handle drag keeps the handle nearest
   the first touch.
 - Save emits `ViewerEffect.ClipEpisode`, and the route submits `PostDownloads.submitClip` at once, with the stream
   that is playing and the subtitle and audio tracks selected in the player (`EpisodeClipTracks`), so the job and
@@ -40,7 +41,8 @@ process, so an encode that only lives in the app's scope stalls once the user le
   in the download log or the "Clip saved" notification sends it.
 - Tracks travel by their position among the stream's sideloaded tracks (`PlaybackTrack.sideloadIndex`), not by
   their on-screen labels, which the player makes unique ("English (2)"). An audio track inside the stream is only
-  a preferred label.
+  a preferred label. When the job refreshes links, the chosen tracks are found again in the new stream by label and
+  repeat count; a track that is gone is dropped, so the clip never silently uses a different one.
 - Subtitles: the selected sideloaded track is parsed and drawn per frame by a `SubtitleView` styled
   with the player's own `applyViewerSubtitleStyle`, so the clip matches what was on screen. If the track cannot be
   burned, the clip saves without it and its download item says "Saved without subtitles".
@@ -71,6 +73,7 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/EpisodeClipExportDeviceTest.kt`: `aClipOfAnEncryptedHlsEpisodeKeepsOnlyItsRangeAndBurnsInTheCueShownThen_adr_0223`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipTracksTest.kt`: `refreshed links keep the chosen tracks by label and repeat, or drop a track that is gone (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, and a damaged clip row is dropped alone (ADR 0223)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerClipStateTest.kt`: `clipping starts only on a watched episode with streams (ADR 0223)`, `saving emits one clip for the episode and leaves clip mode (ADR 0223)`, `moving to another episode drops the selection (ADR 0223)`, `the end of the episode loops the clip instead of moving to the next one (ADR 0223)`

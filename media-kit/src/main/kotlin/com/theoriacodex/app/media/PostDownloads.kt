@@ -11,6 +11,7 @@ import java.io.FileOutputStream
 import com.theoriacodex.app.viewer.EpisodeClipException
 import com.theoriacodex.app.viewer.EpisodeClipRange
 import com.theoriacodex.app.viewer.label
+import com.theoriacodex.app.viewer.movedTo
 import com.theoriacodex.app.viewer.exportEpisodeClip
 import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.data.repository.CacheSettings
@@ -122,11 +123,13 @@ internal class AndroidPostDownloadBackend(
             throw DownloadPreparationException("This clip was interrupted. Clip it again from the episode.")
         }
         context.animationExportNetworkBlock(readSettings())?.let { throw DownloadPreparationException(it) }
-        val stream = clip.freshStream?.let { refresh -> runCatchingPreservingCancellation { refresh() }.getOrNull() } ?: current
+        val fresh = clip.freshStream?.let { refresh -> runCatchingPreservingCancellation { refresh() }.getOrNull() }
+        val stream = fresh ?: current
+        val tracks = if (fresh == null) clip.tracks else clip.tracks.movedTo(current, fresh)
         return PreparedPostDownload.Encode { onProgress ->
             try {
                 val result = try {
-                    exportEpisodeClip(context, context.videoPlaybackInfrastructure(), stream, clip.range, clip.tracks,
+                    exportEpisodeClip(context, context.videoPlaybackInfrastructure(), stream, clip.range, tracks,
                         encoded, onProgress)
                 } catch (error: EpisodeClipException) {
                     throw DownloadPreparationException(error.message.orEmpty(), error)

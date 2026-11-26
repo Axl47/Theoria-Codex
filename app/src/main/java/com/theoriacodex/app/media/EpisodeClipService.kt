@@ -36,13 +36,15 @@ class EpisodeClipService : Service() {
 
     private suspend fun watchClips() {
         val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().features.postDownloads
-        val reported = downloads.batches.value.clipItems().filterNot { it.active }.mapTo(mutableSetOf()) { it.id }
+        var wasActive = emptySet<Long>()
         var shown: Pair<Long, Int?>? = null
         while (true) {
             val seen = latestStartId
             withTimeoutOrNull(SUBMIT_GRACE_MS) { downloads.batches.first { it.activeClips().isNotEmpty() } }
             downloads.batches.transformWhile { batches -> emit(batches); batches.activeClips().isNotEmpty() }.collect { batches ->
-                batches.clipItems().filter { !it.active && reported.add(it.id) }.forEach { notifyClipOutcome(downloads, it) }
+                val clips = batches.clipItems()
+                clips.filter { it.id in wasActive && !it.active }.forEach { notifyClipOutcome(downloads, it) }
+                wasActive = clips.filter { it.active }.mapTo(mutableSetOf()) { it.id }
                 val clip = batches.activeClips().firstOrNull() ?: return@collect
                 if (shown == clip.id to clip.encodedPercent) return@collect
                 shown = clip.id to clip.encodedPercent

@@ -6,6 +6,8 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.model.MediaTrack
 import com.theoriacodex.domain.model.uniqueLabels
 
 data class PlaybackTrack(
@@ -23,6 +25,18 @@ data class EpisodeClipTracks(
     val audioIndex: Int? = null,
     val streamAudioLabel: String? = null,
 )
+
+fun EpisodeClipTracks.movedTo(from: MediaStream, to: MediaStream): EpisodeClipTracks = copy(
+    subtitleIndex = subtitleIndex?.let { sameTrackIndex(from.subtitles, to.subtitles, it) },
+    audioIndex = audioIndex?.let { sameTrackIndex(from.audioTracks, to.audioTracks, it) },
+)
+
+private fun sameTrackIndex(from: List<MediaTrack>, to: List<MediaTrack>, index: Int): Int? {
+    val source = from.filter { it.url.isNotBlank() }
+    val track = source.getOrNull(index) ?: return null
+    val occurrence = source.take(index).count { it.label == track.label }
+    return to.filter { it.url.isNotBlank() }.withIndex().filter { it.value.label == track.label }.getOrNull(occurrence)?.index
+}
 
 fun PlaybackTracks.clipTracks(): EpisodeClipTracks {
     val subtitle = subtitles.firstOrNull { it.selected }
