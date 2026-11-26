@@ -40,11 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.abs
-import kotlin.math.roundToLong
 import kotlinx.coroutines.delay
-
-private enum class ClipHandle { START, END }
 
 @Composable
 internal fun ViewerClipStrip(
@@ -73,7 +69,7 @@ internal fun ViewerClipStrip(
                 customActions = clipNudges(draft, episodeMs, onClipChange)
             },
     ) {
-        val scale = StripScale(window, constraints.maxWidth.toFloat())
+        val scale = EpisodeClipStripScale(window, constraints.maxWidth.toFloat())
         val handleReachPx = with(LocalDensity.current) { HANDLE_REACH.toPx() }
         Canvas(
             Modifier.fillMaxSize().pointerInput(scale) {
@@ -83,7 +79,7 @@ internal fun ViewerClipStrip(
                     val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
                     fun moveTo(x: Float) {
                         val at = scale.msAt(x)
-                        draft = if (handle == ClipHandle.START) draft.withStart(at) else draft.withEnd(at, episodeMs)
+                        draft = if (handle == EpisodeClipHandle.START) draft.withStart(at) else draft.withEnd(at, episodeMs)
                     }
                     moveTo(slop.position.x)
                     val finished = horizontalDrag(slop.id) { change ->
@@ -97,22 +93,7 @@ internal fun ViewerClipStrip(
     }
 }
 
-private data class StripScale(val window: LongRange, val widthPx: Float) {
-    private val span = (window.last - window.first).coerceAtLeast(1L).toFloat()
-    fun xOf(ms: Long) = (ms - window.first) / span * widthPx
-    fun msAt(x: Float) = window.first + (x.coerceIn(0f, widthPx) / widthPx * span).roundToLong()
-    fun handleNear(clip: EpisodeClipRange, x: Float, reachPx: Float): ClipHandle? {
-        val toStart = abs(x - xOf(clip.startMs))
-        val toEnd = abs(x - xOf(clip.endMs))
-        return when {
-            minOf(toStart, toEnd) > reachPx -> null
-            toStart < toEnd -> ClipHandle.START
-            else -> ClipHandle.END
-        }
-    }
-}
-
-private fun DrawScope.drawClipStrip(scale: StripScale, clip: EpisodeClipRange, position: Long, accent: Color, text: TextMeasurer) {
+private fun DrawScope.drawClipStrip(scale: EpisodeClipStripScale, clip: EpisodeClipRange, position: Long, accent: Color, text: TextMeasurer) {
     val top = LABEL_HEIGHT.toPx()
     val stripHeight = STRIP_HEIGHT.toPx()
     val corner = CornerRadius(CORNER.toPx())

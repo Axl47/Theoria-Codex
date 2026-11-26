@@ -25,8 +25,7 @@ class EpisodeClipService : Service() {
     private val scope = MainScope()
     private var watching: Job? = null
     private var latestStartId = 0
-    private val awaitingEnd = mutableMapOf<String, Long>()
-    private val awaitingRetry = mutableSetOf<String>()
+    private val watch = EpisodeClipWatch(SUBMIT_GRACE_MS)
     private var shown: Pair<Long, Int?>? = null
 
     override fun onBind(intent: Intent?) = null
@@ -34,7 +33,7 @@ class EpisodeClipService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStartId = startId
         intent?.getStringArrayExtra(EXTRA_MARKERS)?.let { markers ->
-            if (intent.getBooleanExtra(EXTRA_RETRIED, false)) awaitingRetry += markers else markers.forEach(::awaitEnd)
+            watch.expect(markers.toList(), intent.getBooleanExtra(EXTRA_RETRIED, false), SystemClock.uptimeMillis())
         }
         startForeground(CLIP_NOTIFICATION_ID, clipNotification(this, null, null), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
         if (watching?.isActive != true) watching = scope.launch { watchClips() }
@@ -46,11 +45,11 @@ class EpisodeClipService : Service() {
         while (true) {
             val seen = latestStartId
             withTimeoutOrNull(SUBMIT_GRACE_MS) {
-                downloads.batches.first { batches -> batches.activeClips().isNotEmpty() || awaitingEnd.keys.any(batches::holdsClip) }
+                downloads.batches.first(watch::hasWork)
             }
             downloads.batches.transformWhile { batches -> emit(batches); batches.activeClips().isNotEmpty() }
                 .collect { batches -> showClips(downloads, batches) }
-            if (latestStartId != seen || !doneWith(downloads.batches.value)) continue
+            if (latestStartId != seen || !watch.done(downloads.batches.value, SystemClock.uptimeMillis())) continue
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(seen)
             return
@@ -58,25 +57,12 @@ class EpisodeClipService : Service() {
     }
 
     private suspend fun showClips(downloads: PostDownloads, batches: List<PostDownloadBatch>) {
-        batches.clipItems().forEach { item ->
-            val marker = item.request.marker
-            if (item.active && awaitingRetry.remove(marker)) awaitEnd(marker)
-            if (!item.active && awaitingEnd.remove(marker) != null) notifyClipOutcome(downloads, item)
-        }
+        watch.finished(batches, SystemClock.uptimeMillis()).forEach { notifyClipOutcome(downloads, it) }
         val clip = batches.activeClips().firstOrNull() ?: return
         if (shown == clip.id to clip.encodedPercent) return
         shown = clip.id to clip.encodedPercent
         getSystemService(NotificationManager::class.java)
             .notify(CLIP_NOTIFICATION_ID, clipNotification(this, clip.request.post.title, clip.encodedPercent))
-    }
-
-    private fun doneWith(batches: List<PostDownloadBatch>): Boolean {
-        awaitingEnd.entries.removeAll { (marker, deadline) -> deadline <= SystemClock.uptimeMillis() && !batches.holdsClip(marker) }
-        return batches.activeClips().isEmpty() && awaitingEnd.keys.all(batches::holdsClip)
-    }
-
-    private fun awaitEnd(marker: String) {
-        awaitingEnd[marker] = SystemClock.uptimeMillis() + SUBMIT_GRACE_MS
     }
 
     private suspend fun notifyClipOutcome(downloads: PostDownloads, item: PostDownloadItem) {
@@ -156,7 +142,3 @@ private const val CLIP_NOTIFICATION_ID = 5_800
 private const val CLIP_OUTCOME_TAG = "episode-clip"
 private const val PERCENT = 100
 private const val SUBMIT_GRACE_MS = 10_000L
-
-private fun List<PostDownloadBatch>.clipItems(): List<PostDownloadItem> = flatMap { it.items }.filter { it.request.clip != null }
-
-private fun List<PostDownloadBatch>.holdsClip(marker: String) = clipItems().any { it.request.marker == marker }

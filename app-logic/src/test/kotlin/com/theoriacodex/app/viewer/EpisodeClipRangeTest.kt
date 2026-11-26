@@ -27,4 +27,14 @@ class EpisodeClipRangeTest {
         assertEquals(1_320_000L..1_440_000L, episodeClipWindow(EpisodeClipRange(1_420_000L, 1_440_000L), 1_440_000L))
         assertEquals(0L..40_000L, episodeClipWindow(EpisodeClipRange(5_000L, 35_000L), 40_000L))
     }
+
+    @Test fun `a touch picks the nearer handle within reach and maps back to episode time (ADR 0223)`() {
+        val scale = EpisodeClipStripScale(0L..120_000L, 1_200f)
+        val clip = EpisodeClipRange(30_000L, 33_000L)
+        assertEquals(EpisodeClipHandle.START, scale.handleNear(clip, 295f, 40f))
+        assertEquals(EpisodeClipHandle.END, scale.handleNear(clip, 340f, 40f))
+        assertNull(scale.handleNear(clip, 900f, 40f))
+        assertEquals(60_000L, scale.msAt(scale.xOf(60_000L)))
+        assertEquals(120_000L, scale.msAt(5_000f))
+    }
 }

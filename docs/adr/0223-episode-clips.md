@@ -72,6 +72,7 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerClipStrip.kt`: `ViewerClipStrip`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerVideoClipping.kt`: `ViewerVideoClipping`, `ViewerClipReturn`
 - `app/src/main/java/com/theoriacodex/app/media/EpisodeClipService.kt`: `EpisodeClipService`
+- `media-kit/src/main/kotlin/com/theoriacodex/app/media/EpisodeClipWatch.kt`: `EpisodeClipWatch`
 - `app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt`: `clipViewerEpisode`
 
 ## Guarded by
@@ -80,7 +81,8 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipTracksTest.kt`: `refreshed links keep the chosen tracks by label and repeat, or drop a track that is gone or ambiguous (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, and a damaged clip row is dropped alone (ADR 0223)`
-- `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`
+- `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`, `a touch picks the nearer handle within reach and maps back to episode time (ADR 0223)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/EpisodeClipWatchTest.kt`: `a clip that fails before it is ever seen running is still reported once (ADR 0223)`, `a retried clip is reported only after it has run again (ADR 0223)`, `the watch stays open for a clip that has not reached the queue until its grace ends (ADR 0223)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerClipStateTest.kt`: `clipping starts only on a watched episode with streams (ADR 0223)`, `saving emits one clip for the episode and leaves clip mode (ADR 0223)`, `moving to another episode drops the selection (ADR 0223)`, `the end of the episode loops the clip instead of moving to the next one (ADR 0223)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerClipModeTest.kt`: `clip mode swaps the episode chrome for its own bar and saves the selected range (ADR 0223)`
 - Left to prose: that the foreground service keeps an encode alive with the app in the background; host tests cannot freeze a process, so this needs a phone check.

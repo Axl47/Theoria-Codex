@@ -1,5 +1,8 @@
 package com.theoriacodex.app.viewer
 
+import kotlin.math.abs
+import kotlin.math.roundToLong
+
 data class EpisodeClipRange(val startMs: Long, val endMs: Long) {
     init {
         require(startMs >= 0 && endMs - startMs in EPISODE_CLIP_MIN_MS..EPISODE_CLIP_MAX_MS)
@@ -38,6 +41,26 @@ fun episodeClipTimeLabel(ms: Long): String {
     val minutes = seconds / SECONDS_PER_MINUTE % MINUTES_PER_HOUR
     val clock = "$minutes:${(seconds % SECONDS_PER_MINUTE).toString().padStart(2, '0')}"
     return if (hours > 0) "$hours:${clock.padStart(5, '0')}" else clock
+}
+
+enum class EpisodeClipHandle { START, END }
+
+data class EpisodeClipStripScale(val window: LongRange, val widthPx: Float) {
+    private val span = (window.last - window.first).coerceAtLeast(1L).toFloat()
+
+    fun xOf(ms: Long): Float = (ms - window.first) / span * widthPx
+
+    fun msAt(x: Float): Long = window.first + (x.coerceIn(0f, widthPx) / widthPx * span).roundToLong()
+
+    fun handleNear(clip: EpisodeClipRange, x: Float, reachPx: Float): EpisodeClipHandle? {
+        val toStart = abs(x - xOf(clip.startMs))
+        val toEnd = abs(x - xOf(clip.endMs))
+        return when {
+            minOf(toStart, toEnd) > reachPx -> null
+            toStart < toEnd -> EpisodeClipHandle.START
+            else -> EpisodeClipHandle.END
+        }
+    }
 }
 
 val EpisodeClipRange.label: String get() = "${episodeClipTimeLabel(startMs)}–${episodeClipTimeLabel(endMs)}"
