@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.app.viewer.EpisodeClipRange
+import com.theoriacodex.app.viewer.EpisodeClipTracks
 
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -64,7 +65,7 @@ sealed interface ViewerAction {
     data object StartClip : Clip
     data class SetClipRange(val range: EpisodeClipRange) : Clip
     data object CancelClip : Clip
-    data class SaveClip(val subtitleLabel: String?, val audioLabel: String?) : Clip
+    data class SaveClip(val tracks: EpisodeClipTracks) : Clip
 
     data class RequestPageResolution(val postId: PostId) : ViewerAction
     data class ResolutionCancelled(val session: ViewerSessionIdentity, val postId: PostId) : ViewerAction
@@ -141,8 +142,7 @@ sealed interface ViewerEffect {
         override val session: ViewerSessionIdentity,
         val mediaKey: ViewerMediaKey,
         val range: EpisodeClipRange,
-        val subtitleLabel: String?,
-        val audioLabel: String?,
+        val tracks: EpisodeClipTracks,
     ) : Route
 
     data class SetLiked(

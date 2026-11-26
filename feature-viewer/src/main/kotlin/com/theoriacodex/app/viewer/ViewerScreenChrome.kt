@@ -101,8 +101,7 @@ internal fun BoxScope.ViewerChromeOverlays(
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
     if (frame.clipping) {
         ViewerClipTopBar(frame.uiState.controls.clip?.range, onCancel = controls::cancelClip, onSave = {
-            val tracks = screen.activeTracks.tracks
-            host.onAction(ViewerAction.SaveClip(tracks.subtitles.firstOrNull { it.selected }?.label, tracks.audio.firstOrNull { it.selected }?.label))
+            host.onAction(ViewerAction.SaveClip(screen.activeTracks.tracks.clipTracks()))
         }, modifier = Modifier.align(Alignment.TopCenter))
         return
     }

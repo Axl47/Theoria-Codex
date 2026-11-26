@@ -126,7 +126,7 @@ internal class AndroidPostDownloadBackend(
         return PreparedPostDownload.Encode { onProgress ->
             try {
                 val result = try {
-                    exportEpisodeClip(context, context.videoPlaybackInfrastructure(), stream, clip.range, clip.subtitleLabel, clip.audioLabel,
+                    exportEpisodeClip(context, context.videoPlaybackInfrastructure(), stream, clip.range, clip.tracks,
                         encoded, onProgress)
                 } catch (error: EpisodeClipException) {
                     throw DownloadPreparationException(error.message.orEmpty(), error)
@@ -136,7 +136,7 @@ internal class AndroidPostDownloadBackend(
                         encoded.inputStream().use { input -> input.copyTo(FileOutputStream(descriptor)) }
                     }
                 }
-                "Saved without subtitles".takeIf { clip.subtitleLabel != null && !result.subtitlesBurned }
+                "Saved without subtitles".takeIf { clip.tracks.subtitles && !result.subtitlesBurned }
             } finally {
                 withContext(NonCancellable + Dispatchers.IO) { encoded.delete() }
             }

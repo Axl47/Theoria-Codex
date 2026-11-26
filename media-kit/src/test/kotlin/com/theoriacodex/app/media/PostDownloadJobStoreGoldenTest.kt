@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.app.viewer.EpisodeClipRange
+import com.theoriacodex.app.viewer.EpisodeClipTracks
 import com.theoriacodex.data.storage.assertStoredFormat
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
@@ -110,12 +111,12 @@ class PostDownloadJobStoreGoldenTest {
         val post = Post(PostId(SourceKey.PIXIV, "7"), media, media, listOf(media), null, null, null,
             emptyList(), emptyList(), null, null, title = "Episode 7")
         val clip = EpisodeClipRequest(EpisodeClipRange(61_000L, 91_000L),
-            MediaStream("https://example.test/e7.m3u8", "Main", headers = mapOf("Cookie" to "secret")), "English", "Japanese")
+            MediaStream("https://example.test/e7.m3u8", "Main", headers = mapOf("Cookie" to "secret")), EpisodeClipTracks(subtitles = true, subtitleIndex = 0, audioIndex = 0))
         val item = PostDownloadItem(2, PostDownloadRequest(post, clip = clip), PostDownloadStatus.ENCODING)
         store.save(listOf(PostDownloadBatch(1, "Clip", listOf(item))))
 
         val restored = store.load().single().items.single()
-        assertEquals(EpisodeClipRequest(clip.range, stream = null, subtitleLabel = null, audioLabel = null), restored.request.clip)
+        assertEquals(EpisodeClipRequest(clip.range, stream = null), restored.request.clip)
         assertEquals(PostDownloadStatus.QUEUED, restored.status)
         assertTrue("secret" !in file.readText() && "e7.m3u8" !in file.readText())
 

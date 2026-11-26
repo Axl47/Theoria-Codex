@@ -187,7 +187,7 @@ private fun ViewerUiState.reduceClipAction(session: ViewerSessionIdentity, actio
         is ViewerAction.SaveClip -> {
             val range = clip?.range ?: return ViewerReduction(this)
             ViewerReduction(copy(controls = controls.copy(clip = null)),
-                listOf(ViewerEffect.ClipEpisode(session, clip.mediaKey, range, action.subtitleLabel, action.audioLabel)))
+                listOf(ViewerEffect.ClipEpisode(session, clip.mediaKey, range, action.tracks)))
         }
     }
 }
@@ -444,7 +444,7 @@ private fun ViewerUiState.toggleChrome(): ViewerUiState {
 private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackCompleted): ViewerReduction {
     if (session != action.session || currentMedia?.key != action.key ||
         currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
-        loopsPlayback) return ViewerReduction(this)
+        loopsPlayback || controls.clip != null) return ViewerReduction(this)
     if (controls.playbackMode == ViewerPlaybackMode.NEXT || controls.slideshow) {
         if (restartsAtEnd(controls.dwell.elapsed(action.atMs))) return ViewerReduction(if (action.looped) this else restartPlayback())
         advanceInQueue()?.let { return it }

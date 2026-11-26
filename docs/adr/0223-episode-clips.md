@@ -16,12 +16,16 @@ process, so an encode that only lives in the app's scope stalls once the user le
 - Selection: "Clip" in the episode's ⋮ menu puts the Viewer in clip mode (`ViewerControlsState.clip`). The bottom
   bar becomes a two-minute strip centred on the selection with a handle at each end, starting with the 30 seconds
   after the playhead. A selection is one second to one minute inside the episode (`EpisodeClipRange`). The player
-  loops it, and the top bar holds only ✕, "Clip · length" and Save. Leaving the episode, entering
-  picture-in-picture or pressing Back ends clip mode, and the player returns to where it was.
+  loops it, even when the selection reaches the episode's end, so autoplay never moves on while clipping, and the
+  top bar holds only ✕, "Clip · length" and Save. Watch progress is not recorded while clipping, so previewing a
+  selection near the end does not mark the episode watched. Leaving the episode, entering picture-in-picture or
+  pressing Back ends clip mode, and the player returns to where it was. A handle drag keeps the handle nearest
+  the first touch.
 - Save emits `ViewerEffect.ClipEpisode`, and the route submits `PostDownloads.submitClip` at once, with the stream
-  that is playing and the subtitle and audio labels selected in the player, so the job and its foreground service
-  start while the app is still in front. When the links are old, the request carries an in-memory refresh that the
-  job runs before encoding, so closing the Viewer cannot lose the clip. The clip then
+  that is playing and the subtitle and audio tracks selected in the player (`EpisodeClipTracks`), so the job and
+  its foreground service start while the app is still in front. The request carries an in-memory refresh that the
+  job runs each time it prepares, retries included; it fetches new links only if they are old by then, so closing
+  the Viewer cannot lose the clip and a clip queued behind another does not encode from expired links. The clip then
   shows in the download log like any download, with a determinate "Clipping" bar while it encodes.
 - The queue runs a clip as `PreparedPostDownload.Encode` under the status `ENCODING`. Only one clip holds a worker
   at a time; the others stay queued, so they never take a slot from ordinary downloads. The job
@@ -31,15 +35,18 @@ process, so an encode that only lives in the app's scope stalls once the user le
 - `exportEpisodeClip` reads through `VideoPlaybackInfrastructure.bind` without the cache, so it gets the player's
   headers, HLS and AES-128 handling and separate audio. Media3 Transformer clips only with its own source factory, so
   the export wraps the bound one in `ClippingMediaSource`. It takes the lowest rendition at least 540 px on the short
-  side and only the chosen separate audio track, scales to 540 px, tone-maps HDR to SDR, and encodes H.264 at
+  side and binds only the chosen separate audio track, selecting it over audio inside the stream, scales to 540 px, tone-maps HDR to SDR, and encodes H.264 at
   1.1 Mbit/s with AAC at 128 kbit/s. The result goes through `AnimationExportDestination` into Movies, and Share
   in the download log or the "Clip saved" notification sends it.
-- Subtitles: a sideloaded track with the selected label is parsed and drawn per frame by a `SubtitleView` styled
+- Tracks travel by their position among the stream's sideloaded tracks (`PlaybackTrack.sideloadIndex`), not by
+  their on-screen labels, which the player makes unique ("English (2)"). An audio track inside the stream is only
+  a preferred label.
+- Subtitles: the selected sideloaded track is parsed and drawn per frame by a `SubtitleView` styled
   with the player's own `applyViewerSubtitleStyle`, so the clip matches what was on screen. If the track cannot be
   burned, the clip saves without it and its download item says "Saved without subtitles".
 - A `mediaProcessing` foreground service (`EpisodeClipService`) starts when a clip is submitted or retried, shows
-  progress, posts "Clip saved" (tap to share) or "Clip failed" as each clip ends, and stops only when no clip is
-  active and no newer start arrived.
+  progress, posts "Clip saved" (tap to share) or "Clip failed" for every clip that ends, each in its own
+  notification, and stops only when no clip is active and no newer start arrived.
 
 ## Consequences
 
@@ -66,6 +73,6 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, and a damaged clip row is dropped alone (ADR 0223)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerClipStateTest.kt`: `clipping starts only on a watched episode with streams (ADR 0223)`, `saving emits one clip for the episode and leaves clip mode (ADR 0223)`, `moving to another episode drops the selection (ADR 0223)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerClipStateTest.kt`: `clipping starts only on a watched episode with streams (ADR 0223)`, `saving emits one clip for the episode and leaves clip mode (ADR 0223)`, `moving to another episode drops the selection (ADR 0223)`, `the end of the episode loops the clip instead of moving to the next one (ADR 0223)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerClipModeTest.kt`: `clip mode swaps the episode chrome for its own bar and saves the selected range (ADR 0223)`
 - Left to prose: that the foreground service keeps an encode alive with the app in the background; host tests cannot freeze a process, so this needs a phone check.

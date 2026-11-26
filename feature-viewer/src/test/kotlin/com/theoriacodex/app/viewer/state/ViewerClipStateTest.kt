@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer.state
 
 import com.theoriacodex.app.viewer.EpisodeClipRange
+import com.theoriacodex.app.viewer.EpisodeClipTracks
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
@@ -25,14 +26,15 @@ class ViewerClipStateTest {
     @Test
     fun `saving emits one clip for the episode and leaves clip mode (ADR 0223)`() {
         val range = EpisodeClipRange(10_000L, 40_000L)
+        val tracks = EpisodeClipTracks(subtitles = true, subtitleIndex = 0, audioIndex = 1)
         val started = start(episodes("e1"), ViewerSeries.Watching())
         val ranged = reduceViewerState(started, ViewerAction.SetClipRange(range)).state
 
-        val saved = reduceViewerState(ranged, ViewerAction.SaveClip("English", "Japanese"))
+        val saved = reduceViewerState(ranged, ViewerAction.SaveClip(tracks))
 
         assertNull(saved.state.controls.clip)
         assertEquals(
-            listOf(ViewerEffect.ClipEpisode(identity, checkNotNull(started.currentMedia).key, range, "English", "Japanese")),
+            listOf(ViewerEffect.ClipEpisode(identity, checkNotNull(started.currentMedia).key, range, tracks)),
             saved.effects,
         )
     }
@@ -43,6 +45,18 @@ class ViewerClipStateTest {
 
         assertNull(reduceViewerState(started, ViewerAction.SelectPage(1)).state.controls.clip)
         assertNull(reduceViewerState(started, ViewerAction.CancelClip).state.controls.clip)
+    }
+
+    @Test
+    fun `the end of the episode loops the clip instead of moving to the next one (ADR 0223)`() {
+        val opened = reduceViewerState(ViewerUiState.Empty, ViewerAction.ReplaceSession(identity, episodes("e1", "e2"), series = ViewerSeries.Watching())).state
+        val autoplay = reduceViewerState(opened, ViewerAction.SetPlaybackMode(ViewerPlaybackMode.NEXT)).state
+        val started = reduceViewerState(autoplay, ViewerAction.StartClip).state
+
+        val looped = reduceViewerState(started, ViewerAction.PlaybackCompleted(identity, checkNotNull(started.currentMedia).key, 0L, 0L, looped = true)).state
+
+        assertEquals(0, looped.currentPageIndex)
+        assertNotNull(looped.controls.clip)
     }
 
     private fun start(posts: List<Post>, series: ViewerSeries?): ViewerUiState {

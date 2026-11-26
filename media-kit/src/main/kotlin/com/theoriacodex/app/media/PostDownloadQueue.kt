@@ -3,6 +3,7 @@ package com.theoriacodex.app.media
 import com.theoriacodex.domain.diagnostics.DiagnosticSink
 import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.app.viewer.EpisodeClipRange
+import com.theoriacodex.app.viewer.EpisodeClipTracks
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
@@ -31,8 +32,7 @@ data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownlo
 data class EpisodeClipRequest(
     val range: EpisodeClipRange,
     val stream: MediaStream?,
-    val subtitleLabel: String?,
-    val audioLabel: String?,
+    val tracks: EpisodeClipTracks = EpisodeClipTracks(),
     val freshStream: (suspend () -> MediaStream?)? = null,
 )
 data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)

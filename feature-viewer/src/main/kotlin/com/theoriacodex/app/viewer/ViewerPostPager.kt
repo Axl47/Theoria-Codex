@@ -266,10 +266,11 @@ private fun ViewerScreenHost.rememberPageEvents(
 ): ViewerRendererEvents {
     val session = frame.uiState.session
     val series = frame.uiState.series
-    return remember(session, key, loadGeneration, this, controls, post, media, series) {
+    val clipping = frame.clipping
+    return remember(session, key, loadGeneration, this, controls, post, media, series, clipping) {
         viewerRendererEvents(
             session = session, key = key, generation = loadGeneration,
-            onAction = onAction, onPlaybackProgress = episodeProgress(series, post),
+            onAction = onAction, onPlaybackProgress = episodeProgress(series, post).takeUnless { clipping },
             onTimelineInteractionActiveChanged = { controls.onTimelineInteractionChanged(it) },
             onDurationKnown = { duration -> if (carriesPostDuration(post, media)) durations.onPlayerDuration(post, duration) },
         )

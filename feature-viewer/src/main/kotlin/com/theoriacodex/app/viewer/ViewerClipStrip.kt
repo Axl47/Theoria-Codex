@@ -1,7 +1,10 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -74,24 +77,21 @@ internal fun ViewerClipStrip(
         val handleReachPx = with(LocalDensity.current) { HANDLE_REACH.toPx() }
         Canvas(
             Modifier.fillMaxSize().pointerInput(scale) {
-                var dragging: ClipHandle? = null
-                detectHorizontalDragGestures(
-                    onDragStart = { offset -> dragging = scale.handleNear(draft, offset.x, handleReachPx) },
-                    onHorizontalDrag = { change, _ ->
-                        val handle = dragging ?: return@detectHorizontalDragGestures
-                        change.consume()
-                        val at = scale.msAt(change.position.x)
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val handle = scale.handleNear(draft, down.position.x, handleReachPx) ?: return@awaitEachGesture
+                    val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
+                    fun moveTo(x: Float) {
+                        val at = scale.msAt(x)
                         draft = if (handle == ClipHandle.START) draft.withStart(at) else draft.withEnd(at, episodeMs)
-                    },
-                    onDragEnd = {
-                        if (dragging != null && draft != committed) onClipChange(draft)
-                        dragging = null
-                    },
-                    onDragCancel = {
-                        draft = committed
-                        dragging = null
-                    },
-                )
+                    }
+                    moveTo(slop.position.x)
+                    val finished = horizontalDrag(slop.id) { change ->
+                        change.consume()
+                        moveTo(change.position.x)
+                    }
+                    if (!finished) draft = committed else if (draft != committed) onClipChange(draft)
+                }
             },
         ) { drawClipStrip(scale, draft, position, accent, text) }
     }

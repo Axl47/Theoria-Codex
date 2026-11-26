@@ -106,7 +106,7 @@ internal data class DownloadItemRecord(
         val status = PostDownloadStatus.valueOf(status)
         val clip = clipStartMs?.let { start ->
             val range = clipEndMs?.let { end -> runCatching { EpisodeClipRange(start, end) }.getOrNull() } ?: return null
-            EpisodeClipRequest(range, stream = null, subtitleLabel = null, audioLabel = null)
+            EpisodeClipRequest(range, stream = null)
         }
         val restoredStatus = if (status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.ENCODING,
                 PostDownloadStatus.DOWNLOADING, PostDownloadStatus.WAITING)) PostDownloadStatus.QUEUED else status

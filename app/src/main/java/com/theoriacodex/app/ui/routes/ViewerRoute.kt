@@ -528,13 +528,15 @@ private fun clipViewerEpisode(effect: ViewerEffect.ClipEpisode, viewerOwner: Vie
     val media = page.media.firstOrNull { candidate -> candidate.key == effect.mediaKey }?.ref ?: return
     val label = state.controls.episode.streamLabelFor(effect.mediaKey)
     val stream = media.viewerStream(label) ?: return
-    val freshStream = viewerOwner.session.value?.context?.takeIf { page.resolution.linksOld() }?.let { context ->
+    val resolution = page.resolution
+    val freshStream = viewerOwner.session.value?.context?.let { context ->
         suspend {
-            callbacks.onRecoverMedia(page.post, media, context) { true }
+            if (!resolution.linksOld()) null
+            else callbacks.onRecoverMedia(page.post, media, context) { true }
                 ?.let { postMediaItems(it).getOrNull(effect.mediaKey.mediaIndex)?.viewerStream(label) }
         }
     }
-    callbacks.onClipEpisode(page.post, EpisodeClipRequest(effect.range, stream, effect.subtitleLabel, effect.audioLabel, freshStream))
+    callbacks.onClipEpisode(page.post, EpisodeClipRequest(effect.range, stream, effect.tracks, freshStream))
 }
 
 private suspend fun retryViewerMedia(

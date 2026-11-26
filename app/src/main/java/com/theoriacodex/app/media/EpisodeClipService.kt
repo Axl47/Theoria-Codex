@@ -15,10 +15,8 @@ import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -38,19 +36,19 @@ class EpisodeClipService : Service() {
 
     private suspend fun watchClips() {
         val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().features.postDownloads
-        val active = downloads.batches.map { batches -> batches.activeClips().firstOrNull() }
-        var shownId: Long? = null
+        val reported = downloads.batches.value.clipItems().filterNot { it.active }.mapTo(mutableSetOf()) { it.id }
+        var shown: Pair<Long, Int?>? = null
         while (true) {
             val seen = latestStartId
-            withTimeoutOrNull(SUBMIT_GRACE_MS) { active.first { it != null } }
-            active.distinctUntilChanged().takeWhile { it != null }.collect { clip ->
-                if (shownId != null && shownId != clip?.id) shownId?.let { notifyClipOutcome(downloads, it) }
-                shownId = clip?.id
+            withTimeoutOrNull(SUBMIT_GRACE_MS) { downloads.batches.first { it.activeClips().isNotEmpty() } }
+            downloads.batches.transformWhile { batches -> emit(batches); batches.activeClips().isNotEmpty() }.collect { batches ->
+                batches.clipItems().filter { !it.active && reported.add(it.id) }.forEach { notifyClipOutcome(downloads, it) }
+                val clip = batches.activeClips().firstOrNull() ?: return@collect
+                if (shown == clip.id to clip.encodedPercent) return@collect
+                shown = clip.id to clip.encodedPercent
                 getSystemService(NotificationManager::class.java)
-                    .notify(CLIP_NOTIFICATION_ID, clipNotification(this, clip?.request?.post?.title, clip?.encodedPercent))
+                    .notify(CLIP_NOTIFICATION_ID, clipNotification(this, clip.request.post.title, clip.encodedPercent))
             }
-            shownId?.let { notifyClipOutcome(downloads, it) }
-            shownId = null
             if (latestStartId != seen || downloads.batches.value.activeClips().isNotEmpty()) continue
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(seen)
@@ -58,8 +56,7 @@ class EpisodeClipService : Service() {
         }
     }
 
-    private suspend fun notifyClipOutcome(downloads: PostDownloads, itemId: Long) {
-        val item = downloads.batches.value.firstNotNullOfOrNull { batch -> batch.items.firstOrNull { it.id == itemId } } ?: return
+    private suspend fun notifyClipOutcome(downloads: PostDownloads, item: PostDownloadItem) {
         when (item.status) {
             PostDownloadStatus.SAVED -> downloads.localFile(item)?.let { file -> notifyClipSaved(this, item, file) }
             PostDownloadStatus.FAILED -> notifyClipFailed(this, item)
@@ -107,7 +104,7 @@ private fun notifyClipSaved(context: Context, item: PostDownloadItem, file: Down
     if (!manager.areNotificationsEnabled()) return
     val share = PendingIntent.getActivity(context, item.id.toInt(), shareDownloadedPostFileIntent(file),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    manager.notify(CLIP_SAVED_NOTIFICATION_ID, clipNotificationBuilder(context)
+    manager.notify(CLIP_OUTCOME_TAG, item.id.toInt(), clipNotificationBuilder(context)
         .setContentTitle("Clip saved")
         .setContentText(item.request.post.title)
         .setContentIntent(share)
@@ -118,7 +115,7 @@ private fun notifyClipSaved(context: Context, item: PostDownloadItem, file: Down
 private fun notifyClipFailed(context: Context, item: PostDownloadItem) {
     val manager = context.getSystemService(NotificationManager::class.java)
     if (!manager.areNotificationsEnabled()) return
-    manager.notify(CLIP_SAVED_NOTIFICATION_ID, clipNotificationBuilder(context)
+    manager.notify(CLIP_OUTCOME_TAG, item.id.toInt(), clipNotificationBuilder(context)
         .setContentTitle("Clip failed")
         .setContentText(item.message ?: item.request.post.title)
         .setContentIntent(PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
@@ -128,6 +125,8 @@ private fun notifyClipFailed(context: Context, item: PostDownloadItem) {
 
 private const val CLIPS_CHANNEL = "episode-clips"
 private const val CLIP_NOTIFICATION_ID = 5_800
-private const val CLIP_SAVED_NOTIFICATION_ID = 5_801
+private const val CLIP_OUTCOME_TAG = "episode-clip"
 private const val PERCENT = 100
 private const val SUBMIT_GRACE_MS = 10_000L
+
+private fun List<PostDownloadBatch>.clipItems(): List<PostDownloadItem> = flatMap { it.items }.filter { it.request.clip != null }

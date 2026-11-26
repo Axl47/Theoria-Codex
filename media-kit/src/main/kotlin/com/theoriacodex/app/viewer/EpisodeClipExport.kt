@@ -3,6 +3,7 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
+import android.util.Pair
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -31,6 +32,8 @@ import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.source.ClippingMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.trackselection.ExoTrackSelection
+import androidx.media3.exoplayer.trackselection.MappingTrackSelector.MappedTrackInfo
 import androidx.media3.exoplayer.trackselection.TrackSelector
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.text.CuesWithTiming
@@ -71,21 +74,26 @@ suspend fun exportEpisodeClip(
     infrastructure: VideoPlaybackInfrastructure,
     stream: MediaStream,
     range: EpisodeClipRange,
-    subtitleLabel: String?,
-    audioLabel: String?,
+    tracks: EpisodeClipTracks,
     output: File,
     onProgress: suspend (Int) -> Unit,
 ): EpisodeClipResult {
     val cues = withContext(Dispatchers.IO) {
-        subtitleLabel?.let { label -> runCatchingPreservingCancellation { loadSubtitleCues(infrastructure, stream, label) }.getOrNull() }
+        tracks.subtitleIndex?.let { index -> runCatchingPreservingCancellation { loadSubtitleCues(infrastructure, stream, index) }.getOrNull() }
     }
-    val separateAudio = stream.audioTracks.filter { it.label == audioLabel }.take(1).ifEmpty { stream.audioTracks }
+    val playableAudio = stream.audioTracks.filter { it.url.isNotBlank() }
+    val chosenAudio = tracks.audioIndex?.let(playableAudio::getOrNull)
+    val separateAudio = when {
+        chosenAudio != null -> listOf(chosenAudio)
+        tracks.streamAudioLabel != null -> emptyList()
+        else -> playableAudio
+    }
     val bound = infrastructure.bind(VideoPlaybackRequest(stream.url, stream.headers, stream.mime, audioTracks = separateAudio, cache = false))
     val item = bound.mediaItem.buildUpon().setClippingConfiguration(
         MediaItem.ClippingConfiguration.Builder().setStartPositionMs(range.startMs).setEndPositionMs(range.endMs).build(),
     ).build()
     val assets = DefaultAssetLoaderFactory(context, DefaultDecoderFactory.Builder(context).build(), Clock.DEFAULT,
-        ClippingSourceFactory(bound.mediaSourceFactory), DataSourceBitmapLoader.Builder(context).build(), clipTrackSelector(audioLabel))
+        ClippingSourceFactory(bound.mediaSourceFactory), DataSourceBitmapLoader.Builder(context).build(), clipTrackSelector(forceSeparateAudio = chosenAudio != null, tracks.streamAudioLabel))
     output.parentFile?.mkdirs()
     val thread = HandlerThread("EpisodeClipExport").apply { start() }
     try {
@@ -105,13 +113,32 @@ suspend fun exportEpisodeClip(
     return EpisodeClipResult(subtitlesBurned = cues != null)
 }
 
-private fun clipTrackSelector(audioLabel: String?) = TrackSelector.Factory { context ->
-    DefaultTrackSelector(context, DefaultTrackSelector.Parameters.Builder()
+private fun clipTrackSelector(forceSeparateAudio: Boolean, streamAudioLabel: String?) = TrackSelector.Factory { context ->
+    val parameters = DefaultTrackSelector.Parameters.Builder()
         .setMinVideoSize(0, EPISODE_CLIP_SHORT_SIDE_PX)
         .setForceLowestBitrate(true)
         .setConstrainAudioChannelCountToDeviceCapabilities(false)
-        .apply { audioLabel?.let { setPreferredAudioLabels(it) } }
-        .build())
+        .apply { streamAudioLabel?.let { setPreferredAudioLabels(it) } }
+        .build()
+    if (forceSeparateAudio) SeparateAudioTrackSelector(context, parameters) else DefaultTrackSelector(context, parameters)
+}
+
+private class SeparateAudioTrackSelector(context: Context, parameters: DefaultTrackSelector.Parameters) :
+    DefaultTrackSelector(context, parameters) {
+    override fun selectAudioTrack(
+        mappedTrackInfo: MappedTrackInfo,
+        rendererFormatSupports: Array<Array<IntArray>>,
+        rendererMixedMimeTypeAdaptationSupports: IntArray,
+        params: DefaultTrackSelector.Parameters,
+    ): Pair<ExoTrackSelection.Definition, Int>? {
+        for (renderer in 0 until mappedTrackInfo.rendererCount) {
+            if (mappedTrackInfo.getRendererType(renderer) != C.TRACK_TYPE_AUDIO) continue
+            val groups = mappedTrackInfo.getTrackGroups(renderer)
+            val separate = (0 until groups.length).map(groups::get).firstOrNull { it.id.startsWith(SEPARATE_AUDIO_GROUP_PREFIX) }
+            if (separate != null) return Pair(ExoTrackSelection.Definition(separate, 0), renderer)
+        }
+        return super.selectAudioTrack(mappedTrackInfo, rendererFormatSupports, rendererMixedMimeTypeAdaptationSupports, params)
+    }
 }
 
 private suspend fun runTransformer(
@@ -174,8 +201,8 @@ internal fun clipFailureMessage(errorCode: Int): String = when (errorCode) {
     else -> "Could not save this clip. Try again."
 }
 
-private fun loadSubtitleCues(infrastructure: VideoPlaybackInfrastructure, stream: MediaStream, label: String): List<CuesWithTiming>? {
-    val track = stream.subtitles.firstOrNull { it.label == label && it.url.isNotBlank() } ?: return null
+private fun loadSubtitleCues(infrastructure: VideoPlaybackInfrastructure, stream: MediaStream, index: Int): List<CuesWithTiming>? {
+    val track = stream.subtitles.filter { it.url.isNotBlank() }.getOrNull(index) ?: return null
     val bytes = infrastructure.dataSourceFactory(stream.headers).createDataSource().run {
         try {
             open(DataSpec(videoLocationToUri(track.url)))
@@ -255,6 +282,7 @@ internal class SubtitleBurnIn(
 
 private val CuesWithTiming.activeUntilUs: Long get() = if (durationUs == C.TIME_UNSET) Long.MAX_VALUE else startTimeUs + durationUs
 
+private const val SEPARATE_AUDIO_GROUP_PREFIX = "1:"
 private const val EPISODE_CLIP_SHORT_SIDE_PX = 540
 private const val EPISODE_CLIP_VIDEO_BITRATE = 1_100_000
 private const val EPISODE_CLIP_AUDIO_BITRATE = 128_000

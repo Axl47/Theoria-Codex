@@ -37,7 +37,7 @@ class EpisodeClipExportDeviceTest {
             val progress = CopyOnWriteArrayList<Int>()
             val result = runBlocking {
                 exportEpisodeClip(context, VideoPlaybackInfrastructure(context), stream, EpisodeClipRange(1_000L, 4_000L),
-                    "English", "Japanese", output) { progress += it }
+                    EpisodeClipTracks(subtitles = true, subtitleIndex = 0, audioIndex = 0), output) { progress += it }
             }
 
             assertTrue(result.subtitlesBurned)

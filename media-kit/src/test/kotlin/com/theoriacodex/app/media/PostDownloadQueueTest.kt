@@ -411,7 +411,7 @@ class PostDownloadQueueTest {
 
     private fun clip(id: Int) = request(id).copy(clip = EpisodeClipRequest(
         com.theoriacodex.app.viewer.EpisodeClipRange(1_000L, 4_000L),
-        com.theoriacodex.domain.model.MediaStream("https://example.test/$id.m3u8", "Main"), subtitleLabel = "English", audioLabel = null,
+        com.theoriacodex.domain.model.MediaStream("https://example.test/$id.m3u8", "Main"), com.theoriacodex.app.viewer.EpisodeClipTracks(subtitles = true, subtitleIndex = 0),
     ))
 
     private class FakeBackend : PostDownloadBackend {
