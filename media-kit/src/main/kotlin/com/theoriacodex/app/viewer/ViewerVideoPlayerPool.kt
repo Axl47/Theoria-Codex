@@ -114,8 +114,10 @@ fun ExoPlayer.scrubTo(targetMs: Long) {
 
 fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> if (scrubbing) setScrubbingModeEnabled(false) }
 
+private const val SCRUB_SNAP_FRACTION = 0.05
+
 private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
-    .setFractionalSeekTolerance(1.0, 0.0)
+    .setFractionalSeekTolerance(SCRUB_SNAP_FRACTION, 0.0)
     .setDisabledTrackTypes(ScrubbingModeParameters.DEFAULT.disabledTrackTypes + C.TRACK_TYPE_TEXT)
     .build()
 
