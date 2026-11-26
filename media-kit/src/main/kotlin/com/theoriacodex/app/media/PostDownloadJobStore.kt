@@ -127,7 +127,7 @@ internal data class DownloadItemRecord(
             marker = item.request.marker,
             origin = item.request.originLabel.take(200),
             untrackedPreparation = true.takeIf { item.request.untrackedPreparation },
-            status = item.status.name,
+            status = (if (item.status == PostDownloadStatus.ENCODING) PostDownloadStatus.PREPARING else item.status).name,
             downloadId = item.downloadId,
             enqueuePending = item.enqueuePending,
             page = item.request.selectedMedia?.pageIndex,

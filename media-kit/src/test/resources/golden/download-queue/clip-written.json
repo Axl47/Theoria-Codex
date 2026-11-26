@@ -1,1 +1,1 @@
-{"version":3,"batches":[{"id":1,"title":"Clip","items":[{"id":2,"source":"HITOMI","postId":"7","title":"Episode 7","marker":"m-1","origin":"Clip 1:01–1:31","status":"ENCODING","enqueuePending":false,"clipStartMs":61000,"clipEndMs":91000}]}]}
+{"version":3,"batches":[{"id":1,"title":"Clip","items":[{"id":2,"source":"HITOMI","postId":"7","title":"Episode 7","marker":"m-1","origin":"Clip 1:01–1:31","status":"PREPARING","enqueuePending":false,"clipStartMs":61000,"clipEndMs":91000}]}]}

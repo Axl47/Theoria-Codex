@@ -32,7 +32,8 @@ process, so an encode that only lives in the app's scope stalls once the user le
   at a time; the others stay queued, so they never take a slot from ordinary downloads. The job
   file stores the clip's range only, never URLs or headers, matching ADR 0113. A clip restored after the process
   died fails with "This clip was interrupted" and is not retryable, since its links are gone. A damaged clip row is
-  dropped alone instead of failing the whole queue.
+  dropped alone instead of failing the whole queue. `ENCODING` is never written: it is saved as `PREPARING`, which
+  restores the same way, so the file stays readable by builds from before clips.
 - `exportEpisodeClip` reads through `VideoPlaybackInfrastructure.bind` without the cache, so it gets the player's
   headers, HLS and AES-128 handling and separate audio. Media3 Transformer clips only with its own source factory, so
   the export wraps the bound one in `ClippingMediaSource`. It takes the lowest rendition at least 540 px on the short
@@ -80,7 +81,7 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/EpisodeClipExportDeviceTest.kt`: `aClipOfAnEncryptedHlsEpisodeKeepsOnlyItsRangeAndBurnsInTheCueShownThen_adr_0223`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipTracksTest.kt`: `refreshed links keep the chosen tracks by label and repeat, or drop a track that is gone or ambiguous (ADR 0223)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, and a damaged clip row is dropped alone (ADR 0223)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, writes no status older builds lack, and a damaged clip row is dropped alone (ADR 0223)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`, `a touch picks the nearer handle within reach and maps back to episode time (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/EpisodeClipWatchTest.kt`: `a clip that fails before it is ever seen running is still reported once (ADR 0223)`, `a retried clip is reported only after it has run again (ADR 0223)`, `the watch stays open for a clip that has not reached the queue until its grace ends (ADR 0223)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerClipStateTest.kt`: `clipping starts only on a watched episode with streams (ADR 0223)`, `saving emits one clip for the episode and leaves clip mode (ADR 0223)`, `moving to another episode drops the selection (ADR 0223)`, `the end of the episode loops the clip instead of moving to the next one (ADR 0223)`

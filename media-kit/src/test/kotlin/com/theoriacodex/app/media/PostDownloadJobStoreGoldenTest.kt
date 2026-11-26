@@ -66,7 +66,7 @@ class PostDownloadJobStoreGoldenTest {
                         1, "Clip",
                         listOf(
                             DownloadItemRecord(
-                                2, "HITOMI", "7", "Episode 7", "m-1", "Clip 1:01–1:31", null, "ENCODING", null, false, null, null,
+                                2, "HITOMI", "7", "Episode 7", "m-1", "Clip 1:01–1:31", null, "PREPARING", null, false, null, null,
                                 clipStartMs = 61_000L, clipEndMs = 91_000L,
                             ),
                         ),
@@ -104,7 +104,7 @@ class PostDownloadJobStoreGoldenTest {
     }
 
     @Test
-    fun `a clip keeps only its range across restarts, and a damaged clip row is dropped alone (ADR 0223)`() = runTest {
+    fun `a clip keeps only its range across restarts, writes no status older builds lack, and a damaged clip row is dropped alone (ADR 0223)`() = runTest {
         val file = temporary.newFile("queue.json")
         val store = FileBackedPostDownloadJobStore(file)
         val media = ImageRef("https://example.test/poster.jpg", null, "image/jpeg")
@@ -118,7 +118,7 @@ class PostDownloadJobStoreGoldenTest {
         val restored = store.load().single().items.single()
         assertEquals(EpisodeClipRequest(clip.range, stream = null), restored.request.clip)
         assertEquals(PostDownloadStatus.QUEUED, restored.status)
-        assertTrue("secret" !in file.readText() && "e7.m3u8" !in file.readText())
+        assertTrue("secret" !in file.readText() && "e7.m3u8" !in file.readText() && "ENCODING" !in file.readText())
 
         file.writeText(Regex(""""clipEndMs"\s*:\s*91000""").replace(file.readText(), "\"clipEndMs\": 999999"))
         assertEquals(emptyList<PostDownloadBatch>(), store.load())
