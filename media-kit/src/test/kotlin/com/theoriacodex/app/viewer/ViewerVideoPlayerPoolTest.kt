@@ -111,5 +111,6 @@ class ViewerVideoPlayerPoolTest {
         assertEquals(50_000L, clip.toleranceAfterUs)
         assertEquals(300_000L, scrubPreviewSeekParameters(30_000_000L).toleranceBeforeUs)
         assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(30_000_001L))
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(C.TIME_UNSET))
     }
 }

@@ -117,7 +117,7 @@ fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> i
 private const val SCRUB_SNAP_FRACTION = 0.01
 
 fun scrubPreviewSeekParameters(durationUs: Long): SeekParameters =
-    if (durationUs > NEAR_FINGER_PREVIEW_MAX_US) SeekParameters.CLOSEST_SYNC
+    if (durationUs !in 1L..NEAR_FINGER_PREVIEW_MAX_US) SeekParameters.CLOSEST_SYNC
     else (durationUs * SCRUB_SNAP_FRACTION).toLong().let { toleranceUs -> SeekParameters(toleranceUs, toleranceUs) }
 
 private const val NEAR_FINGER_PREVIEW_MAX_US = 30_000_000L

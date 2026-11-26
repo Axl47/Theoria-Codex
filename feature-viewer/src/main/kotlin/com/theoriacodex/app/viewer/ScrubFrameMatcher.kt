@@ -8,12 +8,12 @@ internal class ScrubFrameMatcher<F : Any> {
     private var awaiting: Long? = null
     private var shown: Pair<Long, F>? = null
 
-    sealed interface Next<out F> {
-        data class Seek(val positionMs: Long, val token: Long) : Next<Nothing>
-        data object Wait : Next<Nothing>
+    sealed interface Next {
+        data class Seek(val positionMs: Long, val token: Long) : Next
+        data object Wait : Next
     }
 
-    fun request(targetMs: Long): Next<F> {
+    fun request(targetMs: Long): Next {
         awaiting = null
         if (!indexed) {
             queuedMs = targetMs
@@ -22,7 +22,7 @@ internal class ScrubFrameMatcher<F : Any> {
         return seek(targetMs)
     }
 
-    fun onIndexed(): Next<F> {
+    fun onIndexed(): Next {
         if (!attached || indexed) return Next.Wait
         indexed = true
         return queuedMs?.let { targetMs -> queuedMs = null; seek(targetMs) } ?: Next.Wait

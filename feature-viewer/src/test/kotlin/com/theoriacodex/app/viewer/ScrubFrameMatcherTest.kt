@@ -69,4 +69,18 @@ class ScrubFrameMatcherTest {
         assertEquals(Next.Seek(8_000, 3), frames.onIndexed())
         assertNull("the shown frame went with the stream", frames.onSettled(token = 3, generation = 2))
     }
+
+    @Test fun `a frame from before a stop never answers the next drag, since stopping starts a new generation (ADR 0176)`() {
+        frames.onIndexed()
+        frames.request(9_000)
+        frames.detach()
+        frames.attach()
+        frames.request(8_000)
+        frames.onIndexed()
+
+        assertNull(frames.onFrame(2, "late"))
+        assertNull(frames.onSettled(token = 3, generation = 3))
+        assertNull(frames.onFrame(2, "later"))
+        assertEquals("new", frames.onFrame(4, "new"))
+    }
 }

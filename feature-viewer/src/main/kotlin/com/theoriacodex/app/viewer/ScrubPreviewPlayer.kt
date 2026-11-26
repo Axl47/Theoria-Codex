@@ -90,9 +90,9 @@ internal class ScrubPreviewPlayer(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
                     MatrixTransformation { Matrix().apply { setScale(1f, -1f) } },
-                    FrameGrabber(renders::generationOf) { frameUs, generation, bitmap ->
-                        val frame = ScrubFrame(frameUs / US_PER_MS, bitmap)
-                        main.post { if (!released) frames.onFrame(generation, frame)?.let(::deliver) }
+                    FrameGrabber(renders::renderAt) { render, bitmap ->
+                        val frame = ScrubFrame(render.mediaUs / US_PER_MS, bitmap)
+                        main.post { if (!released) frames.onFrame(render.generation, frame)?.let(::deliver) }
                     },
                 ),
             )
@@ -137,7 +137,7 @@ internal class ScrubPreviewPlayer(
         player.release()
     }
 
-    private fun act(next: ScrubFrameMatcher.Next<ScrubFrame>) = when (next) {
+    private fun act(next: ScrubFrameMatcher.Next) = when (next) {
         is ScrubFrameMatcher.Next.Seek -> seek(next)
         ScrubFrameMatcher.Next.Wait -> Unit
     }
@@ -174,15 +174,18 @@ private class PreviewRenders {
     var generation = 0L
         private set
 
-    private val last = AtomicReference<Pair<Long, Long>?>(null)
+    private val last = AtomicReference<Render?>(null)
+
+    data class Render(val graphUs: Long, val mediaUs: Long, val generation: Long)
 
     fun reset() {
         generation++
+        last.set(null)
     }
 
-    fun rendered(presentationTimeUs: Long) = last.set(presentationTimeUs to generation)
+    fun rendered(graphUs: Long, mediaUs: Long) = last.set(Render(graphUs, mediaUs, generation))
 
-    fun generationOf(presentationTimeUs: Long): Long? = last.get()?.takeIf { (frameUs, _) -> frameUs == presentationTimeUs }?.second
+    fun renderAt(graphUs: Long): Render? = last.get()?.takeIf { it.graphUs == graphUs }
 }
 
 private class PreviewFrameRenderer(context: Context, handler: Handler, listener: VideoRendererEventListener, private val renders: PreviewRenders) :
@@ -247,8 +250,13 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
     override fun renderOutputBufferV21(codec: MediaCodecAdapter, index: Int, presentationTimeUs: Long, releaseTimeNs: Long) {
         if (frameRendered) return
         frameRendered = true
-        renders.rendered(presentationTimeUs)
+        renders.rendered(graphUs = presentationTimeUs + outputStreamOffsetUs + bufferTimestampAdjustmentUs, mediaUs = presentationTimeUs)
         super.renderOutputBufferV21(codec, index, presentationTimeUs, releaseTimeNs)
+    }
+
+    override fun onDisabled() {
+        renders.reset()
+        super.onDisabled()
     }
 
     override fun onPositionReset(positionUs: Long, joining: Boolean, sampleStreamIsResetToKeyFrame: Boolean) {
@@ -265,12 +273,12 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
 
 private const val FULL_TURN = 360f
 
-private class FrameGrabber(private val generationOf: (Long) -> Long?, private val onFrame: (Long, Long, Bitmap) -> Unit) : GlEffect {
+private class FrameGrabber<T : Any>(private val claim: (Long) -> T?, private val onFrame: (T, Bitmap) -> Unit) : GlEffect {
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = object : PassthroughShaderProgram() {
         private var pixels: ByteBuffer = ByteBuffer.allocateDirect(0)
 
         override fun queueInputFrame(glObjectsProvider: GlObjectsProvider, inputTexture: GlTextureInfo, presentationTimeUs: Long) {
-            val generation = generationOf(presentationTimeUs) ?: return inputListener.onInputFrameProcessed(inputTexture)
+            val claimed = claim(presentationTimeUs) ?: return inputListener.onInputFrameProcessed(inputTexture)
             val width = inputTexture.width
             val height = inputTexture.height
             if (pixels.capacity() != width * height * RGBA_BYTES) pixels = ByteBuffer.allocateDirect(width * height * RGBA_BYTES)
@@ -284,7 +292,7 @@ private class FrameGrabber(private val generationOf: (Long) -> Long?, private va
                 inputListener.onInputFrameProcessed(inputTexture)
                 return
             }
-            onFrame(presentationTimeUs, generation, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
+            onFrame(claimed, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
             inputListener.onInputFrameProcessed(inputTexture)
         }
     }
