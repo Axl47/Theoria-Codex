@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.os.Trace
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
@@ -116,11 +117,17 @@ fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> i
 
 private const val SCRUB_SNAP_FRACTION = 0.01
 
-fun scrubPreviewSeekParameters(durationUs: Long): SeekParameters =
-    if (durationUs !in 1L..NEAR_FINGER_PREVIEW_MAX_US) SeekParameters.CLOSEST_SYNC
-    else (durationUs * SCRUB_SNAP_FRACTION).toLong().let { toleranceUs -> SeekParameters(toleranceUs, toleranceUs) }
+fun scrubPreviewSeekParameters(durationUs: Long, video: Format): SeekParameters {
+    val pixels = if (video.width > 0 && video.height > 0) video.width.toLong() * video.height else 0L
+    val frameRate = video.frameRate.takeIf { it > 0f } ?: ASSUMED_FRAME_RATE
+    val wholeClipPixels = pixels * frameRate * durationUs / US_PER_SECOND
+    return if (durationUs <= 0L || pixels == 0L || wholeClipPixels > NEAR_FINGER_DECODE_BUDGET_PIXELS) SeekParameters.CLOSEST_SYNC
+    else SeekParameters((durationUs * SCRUB_SNAP_FRACTION).toLong(), 0L)
+}
 
-private const val NEAR_FINGER_PREVIEW_MAX_US = 30_000_000L
+private const val NEAR_FINGER_DECODE_BUDGET_PIXELS = 750_000_000.0
+private const val ASSUMED_FRAME_RATE = 30f
+private const val US_PER_SECOND = 1_000_000.0
 
 private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
     .setFractionalSeekTolerance(SCRUB_SNAP_FRACTION, 0.0)

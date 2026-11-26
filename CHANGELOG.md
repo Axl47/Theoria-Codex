@@ -9,7 +9,7 @@
 ### Fixed
 
 - With Instant Seek on, tapping or dragging the timeline of a short looping video shows the frame at that point instead of the video's first frame.
-- With Instant Seek off, dragging the timeline of a video up to 30 seconds long previews the frame near your finger and plays from there when you let go, instead of restarting the video.
+- With Instant Seek off, dragging the timeline of a short video previews the frame near your finger and plays from there when you let go, instead of restarting the video.
 - The timeline preview no longer stalls and then shows "Preview unavailable" when you drag close to where it last showed a frame, or on videos with a low frame rate.
 
 ## [2.0.0] - 2026-11-25

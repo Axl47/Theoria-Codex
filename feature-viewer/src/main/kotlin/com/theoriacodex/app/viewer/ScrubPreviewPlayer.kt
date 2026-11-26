@@ -18,6 +18,7 @@ import androidx.media3.common.GlTextureInfo
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoFrameProcessingException
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.GlUtil
@@ -60,13 +61,9 @@ internal class ScrubPreviewPlayer(
     private var pending: CompletableDeferred<ScrubFrame>? = null
 
     private val listener = object : Player.Listener {
-        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-            if (timeline.isEmpty) return
-            val window = timeline.getWindow(0, Timeline.Window())
-            if (window.isPlaceholder || window.durationUs == C.TIME_UNSET) return
-            player.setSeekParameters(scrubPreviewSeekParameters(window.durationUs))
-            act(frames.onIndexed())
-        }
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) = index()
+
+        override fun onTracksChanged(tracks: Tracks) = index()
 
         override fun onPlayerError(error: PlaybackException) {
             pending?.completeExceptionally(error)
@@ -85,7 +82,6 @@ internal class ScrubPreviewPlayer(
         .build()
         .apply {
             setForegroundMode(true)
-            addListener(listener)
             setVideoEffects(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
@@ -97,9 +93,13 @@ internal class ScrubPreviewPlayer(
                 ),
             )
             playWhenReady = false
-            setMediaItem(mediaItem)
-            prepare()
         }
+
+    init {
+        player.addListener(listener)
+        player.setMediaItem(mediaItem)
+        player.prepare()
+    }
 
     override suspend fun frameAt(positionMs: Long): ScrubFrame {
         check(!released) { "Preview player released" }
@@ -135,6 +135,16 @@ internal class ScrubPreviewPlayer(
         pending?.cancel()
         pending = null
         player.release()
+    }
+
+    private fun index() {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return
+        val window = timeline.getWindow(0, Timeline.Window())
+        if (window.isPlaceholder || window.durationUs == C.TIME_UNSET) return
+        val video = player.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO }?.getTrackFormat(0) ?: return
+        player.setSeekParameters(scrubPreviewSeekParameters(window.durationUs, video))
+        act(frames.onIndexed())
     }
 
     private fun act(next: ScrubFrameMatcher.Next) = when (next) {

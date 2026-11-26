@@ -5,6 +5,7 @@ package com.theoriacodex.app.viewer
 import android.app.Application
 import android.os.Looper
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.SeekParameters
 import java.time.Duration
@@ -105,12 +106,15 @@ class ViewerVideoPlayerPoolTest {
     }
 
     @Test
-    fun `scrub previews of clips up to 30 s land near the finger, longer videos on keyframes (ADR 0176)`() {
-        val clip = scrubPreviewSeekParameters(5_000_000L)
-        assertEquals(50_000L, clip.toleranceBeforeUs)
-        assertEquals(50_000L, clip.toleranceAfterUs)
-        assertEquals(300_000L, scrubPreviewSeekParameters(30_000_000L).toleranceBeforeUs)
-        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(30_000_001L))
-        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(C.TIME_UNSET))
+    fun `scrub previews land near the finger, like Instant Seek, while the whole clip decodes within budget, else on keyframes (ADR 0176)`() {
+        fun video(width: Int, height: Int, frameRate: Float = Format.NO_VALUE.toFloat()) =
+            Format.Builder().setWidth(width).setHeight(height).setFrameRate(frameRate).build()
+        assertEquals(SeekParameters(50_000L, 0L), scrubPreviewSeekParameters(5_000_000L, video(320, 180, 24f)))
+        assertEquals(SeekParameters(120_000L, 0L), scrubPreviewSeekParameters(12_000_000L, video(1920, 1080)))
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(13_000_000L, video(1920, 1080, 30f)))
+        assertEquals(SeekParameters(270_000L, 0L), scrubPreviewSeekParameters(27_000_000L, video(1280, 720, 30f)))
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(4_000_000L, video(3840, 2160, 30f)))
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(5_000_000L, video(Format.NO_VALUE, Format.NO_VALUE)))
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(C.TIME_UNSET, video(320, 180)))
     }
 }
