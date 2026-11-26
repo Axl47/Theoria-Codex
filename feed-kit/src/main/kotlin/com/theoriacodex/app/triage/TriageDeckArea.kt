@@ -284,20 +284,23 @@ private fun BoxScope.VerticalEdgeHint(
         !up && targets.hide.isEmpty() ->
             TriageEdgeCue(Icons.Filled.Close, "Skip", Alignment.BottomCenter, hints.vertical, held && hints.armed == SwipeDirection.Down)
         up -> CollectTargets(targets.save, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = true), fade, saveState) { hovered ->
-            releasePick(hovered, targets.save, held && hints.armed == SwipeDirection.Up) { it is SaveTarget.Codex }
+            releasePick(hovered, saveState.armed, targets.save, held && hints.armed == SwipeDirection.Up) { it is SaveTarget.Codex }
         }
         else -> CollectTargets(targets.hide, drag.rowPointer, CollectTargetsLayout.EdgeRow(atTop = false), fade, hideState) { hovered ->
-            releasePick(hovered, targets.hide, held && hints.armed == SwipeDirection.Down) { true }
+            releasePick(hovered, hideState.armed, targets.hide, held && hints.armed == SwipeDirection.Down) { true }
         }
     }
 }
 
 internal fun <T> releasePick(
     hovered: CollectTarget<T>?,
+    previous: CollectTarget<T>?,
     targets: List<CollectTarget<T>>,
     committed: Boolean,
     isDefault: (T) -> Boolean,
-): CollectTarget<T>? = hovered ?: targets.firstOrNull { isDefault(it.payload) }?.takeIf { committed }
+): CollectTarget<T>? = hovered ?: if (!committed) null else {
+    previous?.let { kept -> targets.firstOrNull { it.key == kept.key } } ?: targets.firstOrNull { isDefault(it.payload) }
+}
 
 internal class EdgeHints(val sideways: Float, val vertical: Float, val armed: SwipeDirection?)
 

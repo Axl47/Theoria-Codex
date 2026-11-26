@@ -6,6 +6,7 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import com.theoriacodex.app.codex.SaveSuggestion
 import com.theoriacodex.app.codex.SaveTarget
@@ -46,14 +47,37 @@ class TriageDragOverlaysTest {
 
     private fun dragTo(offset: Offset) = compose.runOnIdle { drag.dragBy(offset - drag.offset, offset) }
 
-    @Test fun `a release picks the hovered target, else the default once committed, else nothing`() {
+    @Test fun `a release picks the hovered target, else the default once committed, else nothing (ADR 0122)`() {
         val (skies, seas, new) = saveTargets
         val isCodex = { target: SaveTarget -> target is SaveTarget.Codex }
-        assertEquals(seas, releasePick(seas, saveTargets, committed = true, isDefault = isCodex))
-        assertEquals(new, releasePick(new, saveTargets, committed = false, isDefault = isCodex))
-        assertEquals(skies, releasePick(null, saveTargets, committed = true, isDefault = isCodex))
-        assertNull(releasePick(null, saveTargets, committed = false, isDefault = isCodex))
-        assertNull(releasePick(null, saveTargets.drop(2), committed = true, isDefault = isCodex))
+        assertEquals(seas, releasePick(seas, null, saveTargets, committed = true, isDefault = isCodex))
+        assertEquals(new, releasePick(new, null, saveTargets, committed = false, isDefault = isCodex))
+        assertEquals(skies, releasePick(null, null, saveTargets, committed = true, isDefault = isCodex))
+        assertNull(releasePick(null, null, saveTargets, committed = false, isDefault = isCodex))
+        assertNull(releasePick(null, null, saveTargets.drop(2), committed = true, isDefault = isCodex))
+    }
+
+    @Test fun `a committed release keeps the last armed target on the card, falling back to the default when it is gone (ADR 0122)`() {
+        val (skies, seas, new) = saveTargets
+        val isCodex = { target: SaveTarget -> target is SaveTarget.Codex }
+        assertEquals(seas, releasePick(null, seas, saveTargets, committed = true, isDefault = isCodex))
+        assertEquals(new, releasePick(new, seas, saveTargets, committed = true, isDefault = isCodex))
+        assertNull(releasePick(null, seas, saveTargets, committed = false, isDefault = isCodex))
+        assertEquals(skies, releasePick(null, seas, listOf(skies, new), committed = true, isDefault = isCodex))
+    }
+
+    @Test fun `easing back off a hovered codex keeps it armed until the drag drops below the commit distance (ADR 0122)`() {
+        showOverlays(removes = false, save = saveTargets)
+        dragTo(Offset(0f, -110f))
+        val seas = compose.onNodeWithTag("Collect target codex:codex-2").fetchSemanticsNode().boundsInWindow.center
+        compose.runOnIdle { drag.dragBy(Offset.Zero, seas) }
+        compose.runOnIdle { assertEquals("codex:codex-2", saveState.armed?.key) }
+        dragTo(Offset(0f, -105f))
+        compose.runOnIdle { assertEquals("codex:codex-2", saveState.armed?.key) }
+        dragTo(Offset(0f, -60f))
+        compose.runOnIdle { assertNull(saveState.armed) }
+        dragTo(Offset(0f, -110f))
+        compose.runOnIdle { assertEquals("codex:codex-1", saveState.armed?.key) }
     }
 
     @Test fun `an upward drag past the commit distance arms the default codex until it drops back`() {

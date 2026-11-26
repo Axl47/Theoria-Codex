@@ -8,7 +8,7 @@ Lifting a card or swiping a triage card shows save, like and hide targets under 
 
 ## Decision
 
-- What the user sees highlighted is what a release acts on (`session.targetAt`); triage reads the armed targets at release, before the lifted pointer clears them. A triage drag past the commit distance with nothing hovered arms the default target (top Codex up, first hide tag down) through `releasePick`, the same rule the release reads. A fling that commits from below that distance still takes the default without a highlight.
+- What the user sees highlighted is what a release acts on (`session.targetAt`); triage reads the armed targets at release, before the lifted pointer clears them. A triage drag past the commit distance with nothing hovered keeps the target last armed on that card, or else arms the default target (top Codex up, first hide tag down), through `releasePick`, the same rule the release reads; dropping back below the distance forgets it, and each card starts from the default. A fling that commits from below that distance still takes the default without a highlight.
 - Only a release commits. A cancelled drag springs back however far it went; a release that outlives its card is cancelled (`cancelRelease`) so it cannot decide for the next card.
 - Letting go on no target is each surface's call: the Viewer's hold opens the picker, a lift is a pick-up and cancels, the deck's upward swipe saves to the top suggestion. A save swiped before targets load waits for them.
 - A finger within touch slop of the pick-up hovers nothing and releasing opens the post menu. The end edge takes no hover until the first ranking arrives, since its targets shift then.
@@ -31,3 +31,8 @@ Surfaces share the save menu but differ at "no target". New targets must be wire
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/triage/TriageDeckArea.kt`: `TriageDeckArea`, `ReleasedOn`, `releasePick`, `triageActions`, `TriageCards`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/triage/TriageDeckGesture.kt`: `release`
 - `feed-kit/src/main/kotlin/com/theoriacodex/app/ui/components/FeedPostCard.kt`: `FeedPostCard`
+
+## Guarded by
+
+- `feed-kit/src/test/kotlin/com/theoriacodex/app/triage/TriageDragOverlaysTest.kt`: `a release picks the hovered target, else the default once committed, else nothing (ADR 0122)`, `a committed release keeps the last armed target on the card, falling back to the default when it is gone (ADR 0122)`, `easing back off a hovered codex keeps it armed until the drag drops below the commit distance (ADR 0122)`
+- Left to prose: the other release-time behaviours are gesture timing across several screens, covered by their own screens' tests rather than one guard.

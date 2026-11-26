@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.
+
 ## [2.0.0] - 2026-11-25
 
 ### Added

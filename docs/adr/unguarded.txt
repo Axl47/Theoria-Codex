@@ -15,7 +15,6 @@
 0119-video-player-tuning.md
 0120-viewer-image-decoding.md
 0121-codex-save-relevance.md
-0122-drag-gestures-act-on-release.md
 0123-failure-presentation.md
 0124-feed-pipeline-and-grid.md
 0125-file-mirror-index.md
