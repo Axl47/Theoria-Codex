@@ -32,4 +32,5 @@ Simultaneous autoplay keeps working; release cost stays off interactive paths.
 
 ## Guarded by
 
-- Left to prose: the scrubbing tolerance shows only with a real decoder, so StreamPlaybackDeviceTest.aHeldInstantSeekInASingleKeyframeClipShowsFramesNearTheTarget checks it on the emulator, and a device test's name cannot carry the record's tag (dex method names allow no spaces); the pool, buffering and codec tuning are measured on devices and in benchmarks rather than held by one test.
+- `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/StreamPlaybackDeviceTest.kt`: `aHeldInstantSeekInASingleKeyframeClipShowsFramesNearTheTarget_adr_0119`
+- Left to prose: the pool, buffering and codec tuning are measured on devices and in benchmarks rather than held by one test.

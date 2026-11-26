@@ -102,7 +102,7 @@ class StreamPlaybackDeviceTest {
     }
 
     @Test
-    fun aHeldInstantSeekInASingleKeyframeClipShowsFramesNearTheTarget() {
+    fun aHeldInstantSeekInASingleKeyframeClipShowsFramesNearTheTarget_adr_0119() {
         val clip = instrumentation.context.assets.open("single-keyframe-clip.mp4").use { it.readBytes() }
         val surface = ImageReader.newInstance(320, 180, ImageFormat.PRIVATE, 4)
         surface.setOnImageAvailableListener({ reader -> reader.acquireLatestImage()?.close() }, Handler(Looper.getMainLooper()))
