@@ -80,6 +80,18 @@ class TriageDragOverlaysTest {
         compose.runOnIdle { assertEquals("codex:codex-1", saveState.armed?.key) }
     }
 
+    @Test fun `a sideways turn lets go of the hovered codex, so returning up away from it arms the default (ADR 0122)`() {
+        showOverlays(removes = false, save = saveTargets)
+        dragTo(Offset(0f, -110f))
+        val seas = compose.onNodeWithTag("Collect target codex:codex-2").fetchSemanticsNode().boundsInWindow.center
+        compose.runOnIdle { drag.dragBy(Offset.Zero, seas) }
+        compose.runOnIdle { assertEquals("codex:codex-2", saveState.armed?.key) }
+        dragTo(Offset(-90f, -60f))
+        compose.runOnIdle { assertNull(saveState.armed) }
+        dragTo(Offset(0f, -110f))
+        compose.runOnIdle { assertEquals("codex:codex-1", saveState.armed?.key) }
+    }
+
     @Test fun `an upward drag past the commit distance arms the default codex until it drops back`() {
         showOverlays(removes = false, save = saveTargets)
         dragTo(Offset(0f, -60f))
