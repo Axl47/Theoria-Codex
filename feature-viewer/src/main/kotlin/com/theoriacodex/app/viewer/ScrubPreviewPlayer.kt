@@ -64,7 +64,7 @@ internal class ScrubPreviewPlayer(
             if (timeline.isEmpty) return
             val window = timeline.getWindow(0, Timeline.Window())
             if (window.isPlaceholder || window.durationUs == C.TIME_UNSET) return
-            player.setSeekParameters(scrubPreviewSeekParameters(window.durationMs))
+            player.setSeekParameters(scrubPreviewSeekParameters(window.durationUs))
             act(frames.onIndexed())
         }
 
@@ -281,6 +281,7 @@ private class FrameGrabber(private val generationOf: (Long) -> Long?, private va
                 GlUtil.checkGlError()
             } catch (error: GlUtil.GlException) {
                 onError(VideoFrameProcessingException(error))
+                inputListener.onInputFrameProcessed(inputTexture)
                 return
             }
             onFrame(presentationTimeUs, generation, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })

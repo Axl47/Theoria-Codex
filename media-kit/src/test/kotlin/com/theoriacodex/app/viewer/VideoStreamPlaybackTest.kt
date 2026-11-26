@@ -73,6 +73,16 @@ class VideoStreamPlaybackTest {
         )
     }
 
+    @Test fun `scrub previews come only from single-file videos that read ahead freely (ADR 0176)`() {
+        assertEquals(
+            listOf(true, true, false, false, false),
+            listOf(
+                request("https://cdn.test/clip", mime = "video/webm"), request("/data/clip.mp4"), request("/data/episode.m3u8"),
+                request("https://cdn.test/master.m3u8"), request("https://cdn.test/clip.mp4", cache = false),
+            ).map { it.previewsScrubFrames() },
+        )
+    }
+
     @Test fun `the fixture server refuses a request without the stream headers, answers 404 to an unknown path and serves a byte range (ADR 0109)`() {
         val client = okhttp3.OkHttpClient()
         fun get(path: String, headers: Map<String, String>, range: String? = null) = client.newCall(

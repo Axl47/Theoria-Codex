@@ -40,6 +40,9 @@ fun VideoPlaybackRequest.usesSharedCache(): Boolean =
 
 fun VideoPlaybackRequest.readsAheadFreely(): Boolean = usesSharedCache() || !isHttpVideoLocation(location)
 
+fun VideoPlaybackRequest.previewsScrubFrames(): Boolean =
+    readsAheadFreely() && streamType(videoLocationToUri(location), streamMimeType(mime)) == StreamType.PROGRESSIVE
+
 private fun separateAudioType(uri: Uri, main: StreamType): StreamType =
     if ('.' in uri.lastPathSegment.orEmpty()) streamType(uri, null) else main
 

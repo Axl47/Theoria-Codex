@@ -127,7 +127,7 @@ class ViewerScrubPreviews(
     }
 }
 
-private val SHOWN_FRAME_SEEK = SeekParameters(0L, 1_000L)
+internal val SHOWN_FRAME_SEEK = SeekParameters(0L, 1_000L)
 
 internal const val SCRUB_FRAME_SETTLE_MS = 80L
 

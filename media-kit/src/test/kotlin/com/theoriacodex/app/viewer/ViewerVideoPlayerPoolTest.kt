@@ -106,10 +106,10 @@ class ViewerVideoPlayerPoolTest {
 
     @Test
     fun `scrub previews of clips up to 30 s land near the finger, longer videos on keyframes (ADR 0176)`() {
-        val clip = scrubPreviewSeekParameters(5_000L)
+        val clip = scrubPreviewSeekParameters(5_000_000L)
         assertEquals(50_000L, clip.toleranceBeforeUs)
         assertEquals(50_000L, clip.toleranceAfterUs)
-        assertEquals(300_000L, scrubPreviewSeekParameters(30_000L).toleranceBeforeUs)
-        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(30_001L))
+        assertEquals(300_000L, scrubPreviewSeekParameters(30_000_000L).toleranceBeforeUs)
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(30_000_001L))
     }
 }
