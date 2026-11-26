@@ -99,6 +99,13 @@ internal fun BoxScope.ViewerChromeOverlays(
     val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture, config.orientationLock, host.onOrientationLockChanged)
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
+    if (frame.clipping) {
+        ViewerClipTopBar(frame.uiState.controls.clip?.range, onCancel = controls::cancelClip, onSave = {
+            val tracks = screen.activeTracks.tracks
+            host.onAction(ViewerAction.SaveClip(tracks.subtitles.firstOrNull { it.selected }?.label, tracks.audio.firstOrNull { it.selected }?.label))
+        }, modifier = Modifier.align(Alignment.TopCenter))
+        return
+    }
 
     ViewerBottomStackOverlay(frame, postPagerState, controls, pendingPostId, config, loadMoreFromStrip, fadesWhileScrubbing) {
         ViewerEpisodeBar(frame, controls, rotationOffer, pictureInPicture, host.onAction)
@@ -230,6 +237,7 @@ private fun BoxScope.ViewerTopBarOverlay(
                         onOpenPanel = { panel -> controls.setPanelOpen(panel, true); controls.markInteraction() },
                         onMoreExpandedChange = { expanded -> controls.setActionsMenuExpanded(expanded); if (expanded) controls.markInteraction() },
                         onStartOver = { restartViewerEpisode(selection.post, controls, onAction) },
+                        onClip = { onAction(ViewerAction.StartClip) },
                     )
                 }
             },

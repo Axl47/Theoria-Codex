@@ -68,6 +68,8 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.dash)
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 

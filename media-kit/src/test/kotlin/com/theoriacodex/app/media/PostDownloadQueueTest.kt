@@ -371,6 +371,45 @@ class PostDownloadQueueTest {
         assertEquals(listOf("1"), backend.prepared)
     }
 
+    @Test
+    fun `clips encode one at a time with progress and end saved with their note (ADR 0223)`() = runTest {
+        val backend = FakeBackend()
+        val finish = CompletableDeferred<Unit>()
+        backend.prepareOverride = { PreparedPostDownload.Encode { progress -> progress(40); finish.await(); "Saved without subtitles" } }
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        queue.submit("Clip", listOf(clip(1), clip(2)))
+        runCurrent()
+
+        assertEquals(listOf(PostDownloadStatus.ENCODING to 40, PostDownloadStatus.PREPARING to null),
+            queue.batches.value.single().items.map { it.status to it.encodedPercent })
+        finish.complete(Unit)
+        runCurrent()
+
+        assertEquals(listOf(PostDownloadStatus.SAVED, PostDownloadStatus.SAVED), queue.batches.value.single().items.map { it.status })
+        assertEquals("Saved without subtitles", queue.batches.value.single().items.first().message)
+    }
+
+    @Test
+    fun `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`() = runTest {
+        val backend = FakeBackend()
+        backend.prepareOverride = { PreparedPostDownload.Encode { kotlinx.coroutines.awaitCancellation() } }
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        val id = requireNotNull(queue.submit("Clip", listOf(clip(1))))
+        runCurrent()
+        queue.cancel(id)
+        runCurrent()
+
+        assertEquals(PostDownloadStatus.CANCELLED, queue.batches.value.single().items.single().status)
+        val interrupted = PostDownloadItem(1, clip(1).let { it.copy(clip = it.clip?.copy(stream = null)) }, PostDownloadStatus.FAILED)
+        assertFalse(interrupted.retryable)
+        assertTrue(PostDownloadItem(2, clip(2), PostDownloadStatus.FAILED).retryable)
+    }
+
+    private fun clip(id: Int) = request(id).copy(clip = EpisodeClipRequest(
+        com.theoriacodex.app.viewer.EpisodeClipRange(1_000L, 4_000L),
+        com.theoriacodex.domain.model.MediaStream("https://example.test/$id.m3u8", "Main"), subtitleLabel = "English", audioLabel = null,
+    ))
+
     private class FakeBackend : PostDownloadBackend {
         val deleted = mutableListOf<String>()
         var failDeletePost: String? = null

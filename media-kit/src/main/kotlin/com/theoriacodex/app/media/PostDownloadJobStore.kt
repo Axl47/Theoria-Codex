@@ -1,5 +1,6 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.viewer.EpisodeClipRange
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.DurableJson
 import com.theoriacodex.domain.model.ImageRef
@@ -26,12 +27,12 @@ class FileBackedPostDownloadJobStore(private val file: File,
         require(root.version in 1..3) { "Unsupported download queue version" }
         require(root.batches.size <= 200) { "Too many download batches" }
         require(root.batches.sumOf { it.items.size } <= 20_000) { "Too many queued downloads" }
-        root.batches.map { batch ->
-            PostDownloadBatch(batch.id, batch.title, batch.items.map { row -> row.toItem(root.version) })
-        }.also { result ->
-            val ids = result.flatMap { listOf(it.id) + it.items.map(PostDownloadItem::id) }
-            require(ids.all { it > 0 } && ids.distinct().size == ids.size) { "Invalid download identities" }
+        val batches = root.batches.map { batch ->
+            PostDownloadBatch(batch.id, batch.title, batch.items.mapNotNull { row -> row.toItem(root.version) })
         }
+        val ids = batches.flatMap { listOf(it.id) + it.items.map(PostDownloadItem::id) }
+        require(ids.all { it > 0 } && ids.distinct().size == ids.size) { "Invalid download identities" }
+        batches.filter { it.items.isNotEmpty() }
     }
 
     override suspend fun save(batches: List<PostDownloadBatch>) {
@@ -87,8 +88,12 @@ internal data class DownloadItemRecord(
     val page: Int? = null,
     @SerialName("totalPages")
     val totalPages: Int? = null,
+    @SerialName("clipStartMs")
+    val clipStartMs: Long? = null,
+    @SerialName("clipEndMs")
+    val clipEndMs: Long? = null,
 ) {
-    fun toItem(version: Int): PostDownloadItem {
+    fun toItem(version: Int): PostDownloadItem? {
         val id = postId.also { require(it.isNotBlank() && it.length <= 500) }
         val post = Post(PostId(SourceKey.parseOrThrow(source), id), ImageRef(null, null, null), null,
             pageUrl = null, width = null, height = null, canonicalTags = emptyList(), rawTags = emptyList(),
@@ -99,13 +104,17 @@ internal data class DownloadItemRecord(
             SelectedDownloadMedia(ImageRef(null, null, null), page, total)
         }
         val status = PostDownloadStatus.valueOf(status)
-        val restoredStatus = if (status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.DOWNLOADING,
-                PostDownloadStatus.WAITING)) PostDownloadStatus.QUEUED else status
+        val clip = clipStartMs?.let { start ->
+            val range = clipEndMs?.let { end -> runCatching { EpisodeClipRange(start, end) }.getOrNull() } ?: return null
+            EpisodeClipRequest(range, stream = null, subtitleLabel = null, audioLabel = null)
+        }
+        val restoredStatus = if (status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.ENCODING,
+                PostDownloadStatus.DOWNLOADING, PostDownloadStatus.WAITING)) PostDownloadStatus.QUEUED else status
         return PostDownloadItem(this.id,
             PostDownloadRequest(post, selected, marker, restored = true,
                 untrackedPreparation = untrackedPreparation == true ||
                     version == 1 && status in setOf(PostDownloadStatus.PREPARING, PostDownloadStatus.FAILED),
-                originLabel = origin?.take(200)?.let { if (it == "FYP") "For You" else it } ?: "Downloads"),
+                originLabel = origin?.take(200)?.let { if (it == "FYP") "For You" else it } ?: "Downloads", clip = clip),
             restoredStatus, downloadId, enqueuePending = enqueuePending ?: false)
     }
 
@@ -123,6 +132,8 @@ internal data class DownloadItemRecord(
             enqueuePending = item.enqueuePending,
             page = item.request.selectedMedia?.pageIndex,
             totalPages = item.request.selectedMedia?.totalPages,
+            clipStartMs = item.request.clip?.range?.startMs,
+            clipEndMs = item.request.clip?.range?.endMs,
         )
     }
 }

@@ -18,6 +18,6 @@ internal fun Context.animationExportNetworkBlock(settings: com.theoriacodex.data
     val roaming = connectivity?.getNetworkCapabilities(connectivity.activeNetwork)
         ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING) == false
     return if (blockedAnimationExport(settings, isMediaNetworkMetered(), roaming)) {
-        "Connect to an allowed network or change download preferences before exporting animation"
+        "Connect to an allowed network or change download preferences, then retry."
     } else null
 }

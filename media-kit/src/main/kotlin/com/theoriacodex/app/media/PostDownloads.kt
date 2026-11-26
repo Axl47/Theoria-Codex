@@ -7,6 +7,12 @@ import com.theoriacodex.app.ui.state.MutationFeedback
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import androidx.core.net.toUri
 import java.io.File
+import java.io.FileOutputStream
+import com.theoriacodex.app.viewer.EpisodeClipException
+import com.theoriacodex.app.viewer.EpisodeClipRange
+import com.theoriacodex.app.viewer.label
+import com.theoriacodex.app.viewer.exportEpisodeClip
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.data.repository.CacheSettings
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -27,6 +33,7 @@ class PostDownloads(
     resolvePost: suspend (Post) -> Post?,
     exportAnimation: suspend (Post, String) -> Result<Unit>,
     sourcesReady: suspend () -> Unit,
+    private val onClipWork: () -> Unit = {},
 ) {
     private val queueDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val queueScope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]) + queueDispatcher)
@@ -54,6 +61,11 @@ class PostDownloads(
         }
     }
 
+    fun submitClip(post: Post, clip: EpisodeClipRequest) {
+        onClipWork()
+        command { queue.submit("Clip", listOf(PostDownloadRequest(post, originLabel = "Clip ${clip.range.label}", clip = clip))) }
+    }
+
     suspend fun localFile(item: PostDownloadItem): DownloadedPostFile? = backend.localFile(item)
 
     suspend fun removeNow(itemIds: Set<Long>, deleteFiles: Boolean): Boolean = withContext(queueDispatcher + NonCancellable) {
@@ -65,6 +77,7 @@ class PostDownloads(
     }
 
     fun retryFailed(batchId: Long) {
+        if (batches.value.any { batch -> batch.id == batchId && batch.items.any { it.request.clip != null } }) onClipWork()
         command { queue.retryFailed(batchId) }
     }
 }
@@ -76,6 +89,7 @@ internal class AndroidPostDownloadBackend(
     private val exportAnimation: suspend (Post, String) -> Result<Unit>,
 ) : PostDownloadBackend {
     override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload {
+        request.clip?.let { clip -> return prepareClip(request, clip) }
         if (request.restored && request.post.id.source == com.theoriacodex.domain.model.SourceKey.PIXIV &&
             AnimationExportDestination(context).findCompleted(request.marker) != null) return PreparedPostDownload.Saved
         val settings = readSettings()
@@ -97,6 +111,32 @@ internal class AndroidPostDownloadBackend(
             if (pages.isNotEmpty()) return PreparedPostDownload.Gallery(pages)
         }
         return PreparedPostDownload.Transfer { enqueueResolved(request, post, settings) }
+    }
+
+    private suspend fun prepareClip(request: PostDownloadRequest, clip: EpisodeClipRequest): PreparedPostDownload {
+        val destination = AnimationExportDestination(context)
+        if (destination.findCompleted(request.marker) != null) return PreparedPostDownload.Saved
+        val stream = clip.stream ?: throw DownloadPreparationException("This clip was interrupted. Clip it again from the episode.")
+        context.animationExportNetworkBlock(readSettings())?.let { throw DownloadPreparationException(it) }
+        return PreparedPostDownload.Encode { onProgress ->
+            val encoded = File(context.cacheDir, "$CLIP_CACHE_DIRECTORY/${request.marker}.mp4")
+            try {
+                val result = try {
+                    exportEpisodeClip(context, context.videoPlaybackInfrastructure(), stream, clip.range, clip.subtitleLabel, clip.audioLabel,
+                        encoded, onProgress)
+                } catch (error: EpisodeClipException) {
+                    throw DownloadPreparationException(error.message.orEmpty(), error)
+                }
+                withContext(Dispatchers.IO) {
+                    destination.save(clipFileName(request.post, clip.range), request.marker) { descriptor ->
+                        encoded.inputStream().use { input -> input.copyTo(FileOutputStream(descriptor)) }
+                    }
+                }
+                "Saved without subtitles".takeIf { clip.subtitleLabel != null && !result.subtitlesBurned }
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { encoded.delete() }
+            }
+        }
     }
 
     private fun enqueueResolved(request: PostDownloadRequest, post: Post, settings: CacheSettings): Long? {
@@ -153,7 +193,15 @@ internal class AndroidPostDownloadBackend(
     }
 }
 
-internal class DownloadPreparationException(message: String) : Exception(message)
+internal class DownloadPreparationException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+private fun clipFileName(post: Post, range: EpisodeClipRange): String {
+    val title = post.title?.takeIf(String::isNotBlank)?.take(80) ?: "Episode"
+    return "$title ${range.label}.mp4".replace(FILE_NAME_RESERVED, ".")
+}
+
+private val FILE_NAME_RESERVED = Regex("""[\\/:*?"<>|]""")
+private const val CLIP_CACHE_DIRECTORY = "episode-clips"
 
 fun downloadTransferSnapshot(status: Int, reason: Int, downloadedBytes: Long, totalBytes: Long): DownloadTransferSnapshot {
     val downloadStatus = when (status) {

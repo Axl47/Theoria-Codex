@@ -266,6 +266,9 @@ class VideoPlaybackInfrastructure(
     ): CacheDataSource.Factory =
         videoCacheDataSourceFactory(sharedFactories.cache, requestScopedHttp(headers), blockOnCache, lockChunkBytes)
 
+    internal fun dataSourceFactory(headers: Map<String, String>): DataSource.Factory =
+        DefaultDataSource.Factory(appContext, requestScopedHttp(headers))
+
     private fun requestScopedHttp(headers: Map<String, String>): DataSource.Factory {
         val immutableHeaders = headers.toMap()
         return ResolvingDataSource.Factory(sharedFactories.http) { dataSpec -> dataSpec.withAdditionalHeaders(immutableHeaders) }

@@ -41,6 +41,7 @@ import java.util.Locale
 
 class DownloadTileActions(
     val open: (PostDownloadItem) -> Unit,
+    val share: (PostDownloadItem) -> Unit,
     val cancel: (batchId: Long) -> Unit,
     val retryFailed: (batchId: Long) -> Unit,
     val remove: (ids: Set<Long>, deleteFiles: Boolean, anchor: UndoAnchor) -> Unit,
@@ -68,8 +69,8 @@ internal fun DownloadsHeader(batches: List<PostDownloadBatch>, items: List<PostD
                 if (batches.any { it.active }) DropdownMenuItem(text = { Text("Cancel all downloads") }, onClick = {
                     close(); batches.filter { it.active }.forEach { actions.cancel(it.id) }
                 })
-                if (batches.any { it.failedCount > 0 }) DropdownMenuItem(text = { Text("Retry all failed") }, onClick = {
-                    close(); batches.filter { it.failedCount > 0 }.forEach { actions.retryFailed(it.id) }
+                if (batches.any { it.retryable }) DropdownMenuItem(text = { Text("Retry all failed") }, onClick = {
+                    close(); batches.filter { it.retryable }.forEach { actions.retryFailed(it.id) }
                 })
             }
         }
@@ -114,7 +115,10 @@ private fun DownloadItemMenu(
         if (item.active && batch != null) {
             DropdownMenuItem(text = { Text("Cancel batch") }, onClick = { onDismiss(); actions.cancel(batch.id) })
         }
-        if (item.status == PostDownloadStatus.FAILED && batch != null) {
+        if (item.status == PostDownloadStatus.SAVED || item.status == PostDownloadStatus.ALREADY_EXISTS) {
+            DropdownMenuItem(text = { Text("Share") }, onClick = { onDismiss(); actions.share(item) })
+        }
+        if (item.retryable && batch != null) {
             DropdownMenuItem(text = { Text("Retry failed") }, onClick = { onDismiss(); actions.retryFailed(batch.id) })
         }
         DropdownMenuItem(text = { Text("Remove from Downloads") }, onClick = {
@@ -159,7 +163,10 @@ private fun DownloadItemStatus(item: PostDownloadItem) {
     }
     if (item.active) {
         val total = item.totalBytes
-        if (item.status == PostDownloadStatus.DOWNLOADING && total != null && total > 0) {
+        val encoded = item.encodedPercent
+        if (item.status == PostDownloadStatus.ENCODING && encoded != null) {
+            LinearProgressIndicator(progress = { (encoded / 100f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+        } else if (item.status == PostDownloadStatus.DOWNLOADING && total != null && total > 0) {
             LinearProgressIndicator(progress = { (item.downloadedBytes.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
         } else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     }
@@ -168,6 +175,7 @@ private fun DownloadItemStatus(item: PostDownloadItem) {
 internal fun downloadItemStatusLabel(item: PostDownloadItem): String = when (item.status) {
     PostDownloadStatus.QUEUED -> "Queued"
     PostDownloadStatus.PREPARING -> "Preparing media"
+    PostDownloadStatus.ENCODING -> "Clipping"
     PostDownloadStatus.DOWNLOADING -> item.totalBytes?.let {
         "${downloadBytesLabel(item.downloadedBytes)} of ${downloadBytesLabel(it)}"
     } ?: "${downloadBytesLabel(item.downloadedBytes)} downloaded"

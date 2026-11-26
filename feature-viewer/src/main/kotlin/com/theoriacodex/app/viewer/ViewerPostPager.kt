@@ -75,7 +75,7 @@ internal fun ViewerPostPagerSurface(
             .viewerGestures(
                 ViewerGestureConfig(
                     enabled = !layoutZoomed && !frame.inPictureInPicture && !frame.touchExplorationEnabled &&
-                        !screen.pendingDismiss && !frame.returning && !frame.opening && !frame.locked,
+                        !screen.pendingDismiss && !frame.returning && !frame.opening && !frame.locked && !frame.clipping,
                     levels = levelControls,
                     volumeAdjustable = selection.media?.let(::isVideoMediaRef) == true,
                     holdScrub = LocalViewerHoldScrub.current,
@@ -233,7 +233,7 @@ private fun ViewerPostPage(
             dismissDrag = dismissDrag.takeIf { active },
             mediaIndex = mediaPage,
             controls = viewerRendererControls(
-                frame, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
+                frame, key, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
                 expectedDurationMs = knownDurationMs?.takeIf { carriesPostDuration(post, media) },
             ),
             events = host.rememberPageEvents(frame, key, loadGeneration, controls, post, media),
@@ -302,10 +302,11 @@ private fun ViewerResolutionState.terminalMessage(): String? = takeIf { it.statu
     ?.message
 
 private fun viewerRendererControls(
-    frame: ViewerFrame, active: Boolean, preloading: Boolean, loadGeneration: Long, expectedDurationMs: Long?,
+    frame: ViewerFrame, key: ViewerMediaKey, active: Boolean, preloading: Boolean, loadGeneration: Long, expectedDurationMs: Long?,
 ): ViewerRendererControls {
     val controls = frame.uiState.controls
     val watching = frame.watching
+    val clip = controls.clip?.takeIf { active && it.mediaKey == key }
     return ViewerRendererControls(
         isActive = active,
         isPlaying = controls.playback.playing,
@@ -313,7 +314,7 @@ private fun viewerRendererControls(
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
         showPassiveProgress = active && !frame.inPictureInPicture && !frame.chromeVisible,
         loopPlayback = frame.uiState.loopsPlayback,
-        repeatsAtEnd = frame.videoRepeats,
+        repeatsAtEnd = frame.videoRepeats || clip != null,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,
@@ -323,6 +324,8 @@ private fun viewerRendererControls(
         showSpeedChip = !watching,
         dimBackdrop = watching,
         fillScreen = watching && controls.fillScreen && frame.isLandscape && !frame.inPictureInPicture,
+        clipping = clip != null,
+        clip = clip?.range,
     )
 }
 

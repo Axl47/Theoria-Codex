@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ClosedCaptionDisabled
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.HighQuality
@@ -165,6 +166,7 @@ internal fun RowScope.ViewerEpisodeTopActions(
     onOpenPanel: (ViewerPanel) -> Unit,
     onMoreExpandedChange: (Boolean) -> Unit,
     onStartOver: () -> Unit,
+    onClip: () -> Unit,
 ) {
     if (tracks.subtitles.isNotEmpty()) {
         val selected = tracks.subtitles.firstOrNull { it.selected }
@@ -194,6 +196,14 @@ internal fun RowScope.ViewerEpisodeTopActions(
                 onClick = {
                     onMoreExpandedChange(false)
                     onStartOver()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Clip") },
+                leadingIcon = { Icon(Icons.Default.ContentCut, contentDescription = null) },
+                onClick = {
+                    onMoreExpandedChange(false)
+                    onClip()
                 },
             )
         }

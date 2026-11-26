@@ -229,6 +229,7 @@ class ViewerEpisodeControlsTest {
                             onOpenPanel = { onAction(ViewerAction.ShowPanel(it)) },
                             onMoreExpandedChange = { onAction(if (it) ViewerAction.ShowPanel(ViewerPanel.ACTIONS_MENU) else ViewerAction.HidePanel(ViewerPanel.ACTIONS_MENU)) },
                             onStartOver = { onAction(ViewerAction.RestartPlayback) },
+                            onClip = {},
                         )
                     }
                     ViewerEpisodeControls(

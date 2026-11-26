@@ -1,6 +1,7 @@
 package com.theoriacodex.app.di
 
 import android.content.Context
+import com.theoriacodex.app.media.EpisodeClipService
 import com.theoriacodex.app.media.PostDownloads
 import com.theoriacodex.data.repository.SettingsRepository
 import java.io.File
@@ -24,4 +25,5 @@ internal fun appPostDownloads(
         sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { }
     },
     sourcesReady = sourcesReady,
+    onClipWork = { EpisodeClipService.start(context) },
 )

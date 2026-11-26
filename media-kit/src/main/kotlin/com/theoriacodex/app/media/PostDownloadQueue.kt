@@ -2,9 +2,12 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.diagnostics.DiagnosticSink
 import com.theoriacodex.domain.diagnostics.Diagnostics
+import com.theoriacodex.app.viewer.EpisodeClipRange
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.Post
 import java.util.UUID
+import kotlin.coroutines.ContinuationInterceptor
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CancellationException
@@ -24,10 +27,11 @@ import kotlinx.coroutines.yield
 
 data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null,
     val marker: String = UUID.randomUUID().toString(), val restored: Boolean = false,
-    val untrackedPreparation: Boolean = false, val originLabel: String = "Downloads")
+    val untrackedPreparation: Boolean = false, val originLabel: String = "Downloads", val clip: EpisodeClipRequest? = null)
+data class EpisodeClipRequest(val range: EpisodeClipRange, val stream: MediaStream?, val subtitleLabel: String?, val audioLabel: String?)
 data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)
 
-enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
+enum class PostDownloadStatus { QUEUED, PREPARING, ENCODING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
 
 data class PostDownloadItem(
     val id: Long,
@@ -39,8 +43,10 @@ data class PostDownloadItem(
     val message: String? = null,
     val enqueuePending: Boolean = false,
     val expandedFrom: Long? = null,
+    val encodedPercent: Int? = null,
 ) {
     val active: Boolean get() = status in ACTIVE_DOWNLOAD_STATUSES
+    val retryable: Boolean get() = status == PostDownloadStatus.FAILED && (request.clip == null || request.clip.stream != null)
 
     fun removedBy(ids: Set<Long>): Boolean = id in ids || expandedFrom in ids
 }
@@ -50,6 +56,7 @@ data class PostDownloadBatch(val id: Long, val title: String, val items: List<Po
     val savedCount: Int get() = items.count { it.status == PostDownloadStatus.SAVED }
     val existingCount: Int get() = items.count { it.status == PostDownloadStatus.ALREADY_EXISTS }
     val failedCount: Int get() = items.count { it.status == PostDownloadStatus.FAILED }
+    val retryable: Boolean get() = items.any(PostDownloadItem::retryable)
     val settledCount: Int get() = items.count { !it.active }
 }
 
@@ -60,6 +67,7 @@ sealed interface PreparedPostDownload {
     data class Transfer(val enqueue: () -> Long?) : PreparedPostDownload
     data class Gallery(val pages: List<PostDownloadRequest>) : PreparedPostDownload
     data object Saved : PreparedPostDownload
+    data class Encode(val run: suspend (onProgress: suspend (Int) -> Unit) -> String?) : PreparedPostDownload
 }
 
 data class DownloadTransferSnapshot(
@@ -92,6 +100,7 @@ class PostDownloadQueue(
     private var nextId = 0L
     private val persistence = Mutex()
     private val restoration = Mutex()
+    private val encoder = Mutex()
     private var restored = false
 
     suspend fun restore() = restoration.withLock {
@@ -141,7 +150,7 @@ class PostDownloadQueue(
     suspend fun retryFailed(batchId: Long) {
         restore()
         val failed = mutableBatches.value.find { it.id == batchId }?.items.orEmpty()
-            .filter { it.status == PostDownloadStatus.FAILED }
+            .filter(PostDownloadItem::retryable)
         failed.forEach { retryItem(it) }
         checkpoint()
         schedule()
@@ -226,6 +235,7 @@ class PostDownloadQueue(
             when (prepared) {
                 PreparedPostDownload.Saved -> update(item.id) { it.copy(status = PostDownloadStatus.SAVED) }
                 is PreparedPostDownload.Gallery -> expandGallery(item.id, prepared.pages)
+                is PreparedPostDownload.Encode -> encode(item.id, prepared)
                 is PreparedPostDownload.Transfer -> {
                     update(item.id) { it.copy(enqueuePending = true) }
                     checkpoint()
@@ -247,13 +257,21 @@ class PostDownloadQueue(
         } catch (error: DownloadPreparationException) {
             markFailed(item.id, error.message)
         } catch (error: Exception) {
-            markFailed(item.id, "Could not save this post. Try again.")
+            markFailed(item.id, if (item.request.clip != null) "Could not save this clip. Try again." else "Could not save this post. Try again.")
             diagnostics.record("downloads", "Saving a post to the device failed", error)
         } finally {
             if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
                 withContext(NonCancellable) { (downloadId ?: currentItem(item.id)?.downloadId)?.let { backend.cancel(it) } }
             }
         }
+    }
+
+    private suspend fun encode(itemId: Long, prepared: PreparedPostDownload.Encode) = encoder.withLock {
+        update(itemId) { it.copy(status = PostDownloadStatus.ENCODING, encodedPercent = 0) }
+        checkpoint()
+        val queueThread = checkNotNull(currentCoroutineContext()[ContinuationInterceptor])
+        val message = prepared.run { percent -> withContext(queueThread) { update(itemId) { it.copy(encodedPercent = percent) } } }
+        update(itemId) { it.copy(status = PostDownloadStatus.SAVED, encodedPercent = null, message = message) }
     }
 
     private suspend fun markFailed(itemId: Long, message: String?) {
@@ -342,6 +360,9 @@ fun galleryDownloadPages(post: Post): List<PostDownloadRequest> {
 }
 
 private val ACTIVE_DOWNLOAD_STATUSES = setOf(
-    PostDownloadStatus.QUEUED, PostDownloadStatus.PREPARING,
+    PostDownloadStatus.QUEUED, PostDownloadStatus.PREPARING, PostDownloadStatus.ENCODING,
     PostDownloadStatus.DOWNLOADING, PostDownloadStatus.WAITING,
 )
+
+fun List<PostDownloadBatch>.activeClips(): List<PostDownloadItem> =
+    flatMap { it.items }.filter { it.active && it.request.clip != null }

@@ -33,6 +33,7 @@ internal fun viewerRendererEvents(
     onPlaybackIntentChanged = { onAction(if (it) ViewerAction.Play else ViewerAction.Pause) },
     onTimelineInteractionActiveChanged = onTimelineInteractionActiveChanged,
     onPlaybackProgress = onPlaybackProgress,
+    onClipRangeChanged = { range -> onAction(ViewerAction.SetClipRange(range)) },
 )
 
 @Composable
