@@ -6,6 +6,10 @@
 
 - Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.
 
+### Fixed
+
+- With Instant Seek on, tapping or dragging the timeline of a short looping video shows the frame at that point instead of the video's first frame.
+
 ## [2.0.0] - 2026-11-25
 
 ### Added

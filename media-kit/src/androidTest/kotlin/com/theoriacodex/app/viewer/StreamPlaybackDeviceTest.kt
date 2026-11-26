@@ -1,6 +1,11 @@
 package com.theoriacodex.app.viewer
 
+import android.graphics.ImageFormat
+import android.media.ImageReader
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -92,6 +97,55 @@ class StreamPlaybackDeviceTest {
                 onMain { assertNull(player.playerError) }
             } finally {
                 onMain { infrastructure.viewerVideoPlayerPool.recycle(lease) }
+            }
+        }
+    }
+
+    @Test
+    fun aHeldInstantSeekInASingleKeyframeClipShowsFramesNearTheTarget_adr_0119() {
+        val clip = instrumentation.context.assets.open("single-keyframe-clip.mp4").use { it.readBytes() }
+        val surface = ImageReader.newInstance(320, 180, ImageFormat.PRIVATE, 4)
+        surface.setOnImageAvailableListener({ reader -> reader.acquireLatestImage()?.close() }, Handler(Looper.getMainLooper()))
+        val rendered = CopyOnWriteArrayList<Long>()
+        val frames = VideoFrameMetadataListener { presentationTimeUs, _, _, _ -> rendered += presentationTimeUs / 1_000L }
+        StreamFixtureServer(mapOf("/clip.mp4" to FixtureRoute.Body(clip))).use { server ->
+            val lease = onMain {
+                infrastructure.viewerVideoPlayerPool
+                    .acquire(VideoPlaybackRequest("${server.base}/clip.mp4", STREAM_FIXTURE_HEADERS, cache = false), loop = true)
+                    .also {
+                        it.player.setVideoSurface(surface.surface)
+                        it.player.setVideoFrameMetadataListener(frames)
+                        it.player.play()
+                    }
+            }
+            val player = lease.player
+            try {
+                awaitOnMain { player.currentPosition >= 1_000L || player.playerError != null }
+                skipIfTheEmulatorDecoderFailed(player)
+                onMain { player.pause() }
+                Thread.sleep(300L)
+                onMain {
+                    rendered.clear()
+                    player.scrubTo(3_500L)
+                }
+                awaitOnMain(timeoutMs = 2_000L) { rendered.isNotEmpty() }
+                val duringTap = rendered.toList()
+                onMain {
+                    rendered.clear()
+                    player.endScrub()
+                    player.seekTo(3_500L)
+                }
+                Thread.sleep(1_500L)
+                val afterTap = rendered.toList()
+                assertTrue("held: $duringTap", duringTap.all { it in 3_450L..3_500L })
+                assertTrue("released: $afterTap", afterTap.firstOrNull() == 3_500L)
+            } finally {
+                onMain {
+                    player.clearVideoFrameMetadataListener(frames)
+                    player.clearVideoSurface()
+                    infrastructure.viewerVideoPlayerPool.recycle(lease)
+                }
+                surface.close()
             }
         }
     }

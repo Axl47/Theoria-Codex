@@ -12,7 +12,6 @@
 0116-stream-playback-requests.md
 0117-video-cache-bounded-locks.md
 0118-video-http-transport.md
-0119-video-player-tuning.md
 0120-viewer-image-decoding.md
 0121-codex-save-relevance.md
 0123-failure-presentation.md
