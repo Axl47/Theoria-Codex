@@ -74,7 +74,7 @@ jobs:
         run: bash scripts/prepare_ci_android_sdk.sh
 
       - name: Build isolated test APKs before starting the emulator
-        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest :media-kit:assembleDebugAndroidTest --console=plain
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :core-data-android:assembleDebugAndroidTest :media-kit:assembleDebugAndroidTest :feature-viewer:assembleDebugAndroidTest --console=plain
 
       - name: Stop Gradle daemons before starting the emulator
         run: ./gradlew --stop
@@ -133,6 +133,8 @@ jobs:
             core-data-android/build/reports/androidTests/connected/
             media-kit/build/outputs/androidTest-results/connected/
             media-kit/build/reports/androidTests/connected/
+            feature-viewer/build/outputs/androidTest-results/connected/
+            feature-viewer/build/reports/androidTests/connected/
           if-no-files-found: warn
           retention-days: 14
 
