@@ -122,6 +122,8 @@ class StreamPlaybackDeviceTest {
             try {
                 awaitOnMain { player.currentPosition >= 1_000L || player.playerError != null }
                 skipIfTheEmulatorDecoderFailed(player)
+                onMain { player.pause() }
+                Thread.sleep(300L)
                 onMain {
                     rendered.clear()
                     player.scrubTo(3_500L)
@@ -135,8 +137,8 @@ class StreamPlaybackDeviceTest {
                 }
                 Thread.sleep(1_500L)
                 val afterTap = rendered.toList()
-                assertTrue("held: $duringTap", duringTap.all { it >= 3_250L })
-                assertTrue("released: $afterTap", afterTap.isNotEmpty() && afterTap.first() >= 3_250L)
+                assertTrue("held: $duringTap", duringTap.all { it in 3_450L..3_500L })
+                assertTrue("released: $afterTap", afterTap.firstOrNull() == 3_500L)
             } finally {
                 onMain {
                     player.clearVideoFrameMetadataListener(frames)

@@ -114,7 +114,7 @@ fun ExoPlayer.scrubTo(targetMs: Long) {
 
 fun ExoPlayer.endScrub(): Boolean = isScrubbingModeEnabled.also { scrubbing -> if (scrubbing) setScrubbingModeEnabled(false) }
 
-private const val SCRUB_SNAP_FRACTION = 0.05
+private const val SCRUB_SNAP_FRACTION = 0.01
 
 private val VIEWER_SCRUBBING = ScrubbingModeParameters.DEFAULT.buildUpon()
     .setFractionalSeekTolerance(SCRUB_SNAP_FRACTION, 0.0)
