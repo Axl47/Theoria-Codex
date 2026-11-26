@@ -51,7 +51,9 @@ process, so an encode that only lives in the app's scope stalls once the user le
   progress, posts "Clip saved" (tap to share) or "Clip failed" for every clip that ends, each in its own
   notification, and stops only when no clip is active and no newer start arrived. Each start names the clips it is
   for by marker, so a clip that fails before the service first looks is still reported, and a retried clip is
-  reported once it has run again.
+  reported once it has run again. The service also stays up until every clip it was started for has reached the
+  queue, or that clip's ten-second grace has passed, so a clip still waiting behind another queue command is never
+  left unprotected.
 
 ## Consequences
 
