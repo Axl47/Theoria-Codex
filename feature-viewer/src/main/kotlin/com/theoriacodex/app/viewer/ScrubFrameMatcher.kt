@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer
 
+import kotlin.math.abs
+
 internal class ScrubFrameMatcher<F : Any> {
     private var attached = true
     private var indexed = false
@@ -29,12 +31,12 @@ internal class ScrubFrameMatcher<F : Any> {
 
     fun onSeekResolved(positionMs: Long): F? {
         expectedMs = positionMs
-        return shown?.takeIf { (frameMs, _) -> frameMs == positionMs }?.second
+        return shown?.takeIf { (frameMs, _) -> frameMs.matches(positionMs) }?.second
     }
 
     fun onFrame(positionMs: Long, frame: F): F? {
         shown = positionMs to frame
-        return frame.takeIf { positionMs == expectedMs }
+        return frame.takeIf { expectedMs?.let(positionMs::matches) == true }
     }
 
     fun detach() {
@@ -51,6 +53,10 @@ internal class ScrubFrameMatcher<F : Any> {
 
     private fun seekOrAnswer(targetMs: Long): Next<F> {
         expectedMs = targetMs
-        return shown?.takeIf { (frameMs, _) -> frameMs == targetMs }?.let { (_, frame) -> Next.Answer(frame) } ?: Next.Seek(targetMs)
+        return shown?.takeIf { (frameMs, _) -> frameMs.matches(targetMs) }?.let { (_, frame) -> Next.Answer(frame) } ?: Next.Seek(targetMs)
     }
 }
+
+private fun Long.matches(targetMs: Long): Boolean = abs(this - targetMs) <= SCRUB_FRAME_MATCH_MS
+
+internal const val SCRUB_FRAME_MATCH_MS = 250L

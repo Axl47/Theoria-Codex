@@ -17,7 +17,16 @@ class ScrubFrameMatcherTest {
         assertEquals("keyframe", frames.onFrame(8_000, "keyframe"))
     }
 
-    @Test fun `a target resolving to the shown keyframe is answered with it, since nothing renders again`() {
+    @Test fun `an exact seek is answered by the first frame after its target, and a repeat of it by that frame (ADR 0176)`() {
+        frames.onIndexed()
+        assertEquals(Next.Seek(3_500), frames.request(3_500))
+
+        assertNull("a frame from an earlier seek", frames.onFrame(0, "start"))
+        assertEquals("next frame", frames.onFrame(3_541, "next frame"))
+        assertEquals(Next.Answer("next frame"), frames.request(3_500))
+    }
+
+    @Test fun `a target resolving to the shown keyframe is answered with it, since nothing renders again (ADR 0176)`() {
         frames.onIndexed()
         frames.request(9_000)
         frames.onSeekResolved(8_000)

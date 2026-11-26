@@ -6,6 +6,7 @@ import android.app.Application
 import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.SeekParameters
 import java.time.Duration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -101,5 +102,14 @@ class ViewerVideoPlayerPoolTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FEED_PREVIEW_IDLE_TIMEOUT_MS + 2_000))
         assertTrue(fullscreen.player.isReleased)
         assertTrue(visible.player.isReleased)
+    }
+
+    @Test
+    fun `scrub previews snap within a short clip's few frames but across an episode's keyframe gaps (ADR 0176)`() {
+        val clip = scrubPreviewSeekParameters(5_000L)
+        assertEquals(50_000L, clip.toleranceBeforeUs)
+        assertEquals(50_000L, clip.toleranceAfterUs)
+        assertEquals(14_400_000L, scrubPreviewSeekParameters(Duration.ofMinutes(24).toMillis()).toleranceBeforeUs)
+        assertEquals(SeekParameters.CLOSEST_SYNC, scrubPreviewSeekParameters(C.TIME_UNSET))
     }
 }

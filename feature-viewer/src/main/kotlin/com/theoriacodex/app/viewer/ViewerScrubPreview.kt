@@ -105,14 +105,14 @@ class ViewerScrubPreviews(
     }
 
     fun seekReleased(targetMs: Long): Long {
-        val keyframeMs = shown?.takeIf { (shownTargetMs, _) -> shownTargetMs == targetMs }?.second
+        val shownMs = shown?.takeIf { (shownTargetMs, _) -> shownTargetMs == targetMs }?.second
         preview?.second?.idle()
-        if (keyframeMs == null) return targetMs.also(player::seekTo)
+        if (shownMs == null) return targetMs.also(player::seekTo)
         val exactness = player.seekParameters
-        player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
-        player.seekTo(keyframeMs)
+        player.setSeekParameters(SHOWN_FRAME_SEEK)
+        player.seekTo(shownMs)
         player.setSeekParameters(exactness)
-        return keyframeMs
+        return shownMs
     }
 
     override fun close() {
@@ -126,6 +126,8 @@ class ViewerScrubPreviews(
         return openFrames(location).also { preview = location to it }
     }
 }
+
+private val SHOWN_FRAME_SEEK = SeekParameters(0L, 1_000L)
 
 internal const val SCRUB_FRAME_SETTLE_MS = 80L
 

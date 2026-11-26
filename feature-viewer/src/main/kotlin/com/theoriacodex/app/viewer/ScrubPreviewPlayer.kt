@@ -34,7 +34,6 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.FormatHolder
 import androidx.media3.exoplayer.RenderersFactory
-import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.MediaSource
@@ -62,7 +61,9 @@ internal class ScrubPreviewPlayer(
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             if (timeline.isEmpty) return
             val window = timeline.getWindow(0, Timeline.Window())
-            if (!window.isPlaceholder && window.durationUs != C.TIME_UNSET) act(frames.onIndexed())
+            if (window.isPlaceholder || window.durationUs == C.TIME_UNSET) return
+            player.setSeekParameters(scrubPreviewSeekParameters(window.durationMs))
+            act(frames.onIndexed())
         }
 
         override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -89,7 +90,6 @@ internal class ScrubPreviewPlayer(
         .apply {
             setForegroundMode(true)
             addListener(listener)
-            setSeekParameters(SeekParameters.CLOSEST_SYNC)
             setVideoEffects(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),

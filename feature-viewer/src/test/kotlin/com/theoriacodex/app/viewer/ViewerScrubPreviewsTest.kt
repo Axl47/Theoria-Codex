@@ -35,7 +35,7 @@ class ViewerScrubPreviewsTest {
         player.release()
     }
 
-    @Test fun `a release on the shown frame stops the preview, then lands on its keyframe with later seeks exact`() = runTest {
+    @Test fun `a release on the shown frame stops the preview, then lands on that frame with later seeks exact (ADR 0176)`() = runTest {
         val drag = launch { previews.follow(MutableStateFlow(9_000L)) { _, _ -> } }
         runCurrent()
 
