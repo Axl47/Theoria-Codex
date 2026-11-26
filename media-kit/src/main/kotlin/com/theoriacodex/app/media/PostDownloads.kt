@@ -34,7 +34,7 @@ class PostDownloads(
     resolvePost: suspend (Post) -> Post?,
     exportAnimation: suspend (Post, String) -> Result<Unit>,
     sourcesReady: suspend () -> Unit,
-    private val onClipWork: () -> Unit = {},
+    private val onClipWork: (markers: List<String>, retried: Boolean) -> Unit = { _, _ -> },
 ) {
     private val queueDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val queueScope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]) + queueDispatcher)
@@ -63,8 +63,9 @@ class PostDownloads(
     }
 
     fun submitClip(post: Post, clip: EpisodeClipRequest) {
-        onClipWork()
-        command { queue.submit("Clip", listOf(PostDownloadRequest(post, originLabel = "Clip ${clip.range.label}", clip = clip))) }
+        val request = PostDownloadRequest(post, originLabel = "Clip ${clip.range.label}", clip = clip)
+        onClipWork(listOf(request.marker), false)
+        command { queue.submit("Clip", listOf(request)) }
     }
 
     suspend fun localFile(item: PostDownloadItem): DownloadedPostFile? = backend.localFile(item)
@@ -78,7 +79,8 @@ class PostDownloads(
     }
 
     fun retryFailed(batchId: Long) {
-        if (batches.value.any { batch -> batch.id == batchId && batch.items.any { it.request.clip != null } }) onClipWork()
+        val clips = batches.value.find { it.id == batchId }?.items.orEmpty().filter { it.retryable && it.request.clip != null }
+        if (clips.isNotEmpty()) onClipWork(clips.map { it.request.marker }, true)
         command { queue.retryFailed(batchId) }
     }
 }

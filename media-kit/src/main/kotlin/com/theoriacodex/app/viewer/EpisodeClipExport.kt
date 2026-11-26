@@ -135,11 +135,13 @@ private class SeparateAudioTrackSelector(context: Context, parameters: DefaultTr
         for (renderer in 0 until mappedTrackInfo.rendererCount) {
             if (mappedTrackInfo.getRendererType(renderer) != C.TRACK_TYPE_AUDIO) continue
             val groups = mappedTrackInfo.getTrackGroups(renderer)
-            val group = (0 until groups.length).firstOrNull { groups[it].id.startsWith(SEPARATE_AUDIO_GROUP_PREFIX) } ?: continue
-            val track = (0 until groups[group].length).firstOrNull { track ->
-                RendererCapabilities.getFormatSupport(rendererFormatSupports[renderer][group][track]) == C.FORMAT_HANDLED
-            } ?: continue
-            return Pair(ExoTrackSelection.Definition(groups[group], track), renderer)
+            for (group in 0 until groups.length) {
+                if (!groups[group].id.startsWith(SEPARATE_AUDIO_GROUP_PREFIX)) continue
+                val track = (0 until groups[group].length).firstOrNull { track ->
+                    RendererCapabilities.getFormatSupport(rendererFormatSupports[renderer][group][track]) == C.FORMAT_HANDLED
+                } ?: continue
+                return Pair(ExoTrackSelection.Definition(groups[group], track), renderer)
+            }
         }
         return super.selectAudioTrack(mappedTrackInfo, rendererFormatSupports, rendererMixedMimeTypeAdaptationSupports, params)
     }

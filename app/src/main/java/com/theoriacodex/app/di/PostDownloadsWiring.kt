@@ -25,5 +25,5 @@ internal fun appPostDownloads(
         sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { }
     },
     sourcesReady = sourcesReady,
-    onClipWork = { EpisodeClipService.start(context) },
+    onClipWork = { markers, retried -> EpisodeClipService.start(context, markers, retried) },
 )

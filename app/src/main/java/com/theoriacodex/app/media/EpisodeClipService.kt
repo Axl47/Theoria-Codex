@@ -24,11 +24,16 @@ class EpisodeClipService : Service() {
     private val scope = MainScope()
     private var watching: Job? = null
     private var latestStartId = 0
+    private val awaitingEnd = mutableSetOf<String>()
+    private val awaitingRetry = mutableSetOf<String>()
 
     override fun onBind(intent: Intent?) = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStartId = startId
+        intent?.getStringArrayExtra(EXTRA_MARKERS)?.let { markers ->
+            if (intent.getBooleanExtra(EXTRA_RETRIED, false)) awaitingRetry += markers else awaitingEnd += markers
+        }
         startForeground(CLIP_NOTIFICATION_ID, clipNotification(this, null, null), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
         if (watching?.isActive != true) watching = scope.launch { watchClips() }
         return START_NOT_STICKY
@@ -36,15 +41,18 @@ class EpisodeClipService : Service() {
 
     private suspend fun watchClips() {
         val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().features.postDownloads
-        var wasActive = emptySet<Long>()
         var shown: Pair<Long, Int?>? = null
         while (true) {
             val seen = latestStartId
-            withTimeoutOrNull(SUBMIT_GRACE_MS) { downloads.batches.first { it.activeClips().isNotEmpty() } }
+            withTimeoutOrNull(SUBMIT_GRACE_MS) {
+                downloads.batches.first { batches -> batches.activeClips().isNotEmpty() || batches.clipItems().any { it.request.marker in awaitingEnd } }
+            }
             downloads.batches.transformWhile { batches -> emit(batches); batches.activeClips().isNotEmpty() }.collect { batches ->
-                val clips = batches.clipItems()
-                clips.filter { it.id in wasActive && !it.active }.forEach { notifyClipOutcome(downloads, it) }
-                wasActive = clips.filter { it.active }.mapTo(mutableSetOf()) { it.id }
+                batches.clipItems().forEach { item ->
+                    val marker = item.request.marker
+                    if (item.active && awaitingRetry.remove(marker)) awaitingEnd += marker
+                    if (!item.active && awaitingEnd.remove(marker)) notifyClipOutcome(downloads, item)
+                }
                 val clip = batches.activeClips().firstOrNull() ?: return@collect
                 if (shown == clip.id to clip.encodedPercent) return@collect
                 shown = clip.id to clip.encodedPercent
@@ -77,9 +85,12 @@ class EpisodeClipService : Service() {
     }
 
     companion object {
-        fun start(context: Context) {
+        fun start(context: Context, markers: List<String>, retried: Boolean) {
+            val intent = Intent(context, EpisodeClipService::class.java)
+                .putExtra(EXTRA_MARKERS, markers.toTypedArray())
+                .putExtra(EXTRA_RETRIED, retried)
             try {
-                context.startForegroundService(Intent(context, EpisodeClipService::class.java))
+                context.startForegroundService(intent)
             } catch (_: ForegroundServiceStartNotAllowedException) {
                 Unit
             }
@@ -125,6 +136,8 @@ private fun notifyClipFailed(context: Context, item: PostDownloadItem) {
         .build())
 }
 
+private const val EXTRA_MARKERS = "markers"
+private const val EXTRA_RETRIED = "retried"
 private const val CLIPS_CHANNEL = "episode-clips"
 private const val CLIP_NOTIFICATION_ID = 5_800
 private const val CLIP_OUTCOME_TAG = "episode-clip"

@@ -34,8 +34,9 @@ fun EpisodeClipTracks.movedTo(from: MediaStream, to: MediaStream): EpisodeClipTr
 private fun sameTrackIndex(from: List<MediaTrack>, to: List<MediaTrack>, index: Int): Int? {
     val source = from.filter { it.url.isNotBlank() }
     val track = source.getOrNull(index) ?: return null
-    val occurrence = source.take(index).count { it.label == track.label }
-    return to.filter { it.url.isNotBlank() }.withIndex().filter { it.value.label == track.label }.getOrNull(occurrence)?.index
+    val before = source.indices.filter { source[it].label == track.label }
+    val after = to.filter { it.url.isNotBlank() }.withIndex().filter { it.value.label == track.label }.map { it.index }
+    return if (before.size == after.size) after[before.indexOf(index)] else null
 }
 
 fun PlaybackTracks.clipTracks(): EpisodeClipTracks {

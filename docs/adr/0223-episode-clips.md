@@ -42,13 +42,16 @@ process, so an encode that only lives in the app's scope stalls once the user le
 - Tracks travel by their position among the stream's sideloaded tracks (`PlaybackTrack.sideloadIndex`), not by
   their on-screen labels, which the player makes unique ("English (2)"). An audio track inside the stream is only
   a preferred label. When the job refreshes links, the chosen tracks are found again in the new stream by label and
-  repeat count; a track that is gone is dropped, so the clip never silently uses a different one.
+  repeat count; a track that is gone, or whose label now repeats a different number of times, is dropped, so the
+  clip never silently uses a different one.
 - Subtitles: the selected sideloaded track is parsed and drawn per frame by a `SubtitleView` styled
   with the player's own `applyViewerSubtitleStyle`, so the clip matches what was on screen. If the track cannot be
   burned, the clip saves without it and its download item says "Saved without subtitles".
 - A `mediaProcessing` foreground service (`EpisodeClipService`) starts when a clip is submitted or retried, shows
   progress, posts "Clip saved" (tap to share) or "Clip failed" for every clip that ends, each in its own
-  notification, and stops only when no clip is active and no newer start arrived.
+  notification, and stops only when no clip is active and no newer start arrived. Each start names the clips it is
+  for by marker, so a clip that fails before the service first looks is still reported, and a retried clip is
+  reported once it has run again.
 
 ## Consequences
 
@@ -73,7 +76,7 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/EpisodeClipExportDeviceTest.kt`: `aClipOfAnEncryptedHlsEpisodeKeepsOnlyItsRangeAndBurnsInTheCueShownThen_adr_0223`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipTracksTest.kt`: `refreshed links keep the chosen tracks by label and repeat, or drop a track that is gone (ADR 0223)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipTracksTest.kt`: `refreshed links keep the chosen tracks by label and repeat, or drop a track that is gone or ambiguous (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, and a damaged clip row is dropped alone (ADR 0223)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerClipStateTest.kt`: `clipping starts only on a watched episode with streams (ADR 0223)`, `saving emits one clip for the episode and leaves clip mode (ADR 0223)`, `moving to another episode drops the selection (ADR 0223)`, `the end of the episode loops the clip instead of moving to the next one (ADR 0223)`
