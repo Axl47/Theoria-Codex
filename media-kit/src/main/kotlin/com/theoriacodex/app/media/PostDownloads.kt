@@ -116,10 +116,14 @@ internal class AndroidPostDownloadBackend(
     private suspend fun prepareClip(request: PostDownloadRequest, clip: EpisodeClipRequest): PreparedPostDownload {
         val destination = AnimationExportDestination(context)
         if (destination.findCompleted(request.marker) != null) return PreparedPostDownload.Saved
-        val stream = clip.stream ?: throw DownloadPreparationException("This clip was interrupted. Clip it again from the episode.")
+        val encoded = File(context.cacheDir, "$CLIP_CACHE_DIRECTORY/${request.marker}.mp4")
+        val current = clip.stream ?: run {
+            withContext(Dispatchers.IO) { encoded.delete() }
+            throw DownloadPreparationException("This clip was interrupted. Clip it again from the episode.")
+        }
         context.animationExportNetworkBlock(readSettings())?.let { throw DownloadPreparationException(it) }
+        val stream = clip.freshStream?.let { refresh -> runCatchingPreservingCancellation { refresh() }.getOrNull() } ?: current
         return PreparedPostDownload.Encode { onProgress ->
-            val encoded = File(context.cacheDir, "$CLIP_CACHE_DIRECTORY/${request.marker}.mp4")
             try {
                 val result = try {
                     exportEpisodeClip(context, context.videoPlaybackInfrastructure(), stream, clip.range, clip.subtitleLabel, clip.audioLabel,

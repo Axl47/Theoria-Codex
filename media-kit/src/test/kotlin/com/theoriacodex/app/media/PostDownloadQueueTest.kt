@@ -375,18 +375,22 @@ class PostDownloadQueueTest {
     fun `clips encode one at a time with progress and end saved with their note (ADR 0223)`() = runTest {
         val backend = FakeBackend()
         val finish = CompletableDeferred<Unit>()
-        backend.prepareOverride = { PreparedPostDownload.Encode { progress -> progress(40); finish.await(); "Saved without subtitles" } }
+        backend.prepareOverride = { request ->
+            if (request.clip == null) PreparedPostDownload.Transfer { 99L }
+            else PreparedPostDownload.Encode { progress -> progress(40); finish.await(); "Saved without subtitles" }
+        }
         val queue = PostDownloadQueue(backgroundScope, backend)
         queue.submit("Clip", listOf(clip(1), clip(2)))
+        queue.submit("Post", listOf(request(3)))
         runCurrent()
 
-        assertEquals(listOf(PostDownloadStatus.ENCODING to 40, PostDownloadStatus.PREPARING to null),
-            queue.batches.value.single().items.map { it.status to it.encodedPercent })
+        assertEquals(listOf(PostDownloadStatus.ENCODING to 40, PostDownloadStatus.QUEUED to null, PostDownloadStatus.DOWNLOADING to null),
+            queue.batches.value.flatMap { it.items }.map { it.status to it.encodedPercent })
         finish.complete(Unit)
         runCurrent()
 
-        assertEquals(listOf(PostDownloadStatus.SAVED, PostDownloadStatus.SAVED), queue.batches.value.single().items.map { it.status })
-        assertEquals("Saved without subtitles", queue.batches.value.single().items.first().message)
+        assertEquals(listOf(PostDownloadStatus.SAVED, PostDownloadStatus.SAVED), queue.batches.value.first().items.map { it.status })
+        assertEquals("Saved without subtitles", queue.batches.value.first().items.first().message)
     }
 
     @Test

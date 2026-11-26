@@ -1,5 +1,6 @@
 package com.theoriacodex.app.media
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -24,26 +25,46 @@ import kotlinx.coroutines.withTimeoutOrNull
 class EpisodeClipService : Service() {
     private val scope = MainScope()
     private var watching: Job? = null
+    private var latestStartId = 0
 
     override fun onBind(intent: Intent?) = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         startForeground(CLIP_NOTIFICATION_ID, clipNotification(this, null, null), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
-        if (watching?.isActive != true) watching = scope.launch {
-            val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().features.postDownloads
-            val clipped = mutableSetOf<Long>()
-            val progress = downloads.batches.map { batches -> batches.activeClips().onEach { clipped += it.id }.firstOrNull() }
-            withTimeoutOrNull(SUBMIT_GRACE_MS) { progress.first { it != null } }
-            progress.distinctUntilChanged().takeWhile { it != null }.collect { clip ->
-                getSystemService(NotificationManager::class.java)
-                    .notify(CLIP_NOTIFICATION_ID, clipNotification(this@EpisodeClipService, clip?.request?.post?.title, clip?.encodedPercent))
-            }
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            downloads.batches.value.flatMap { it.items }.lastOrNull { it.id in clipped && it.status == PostDownloadStatus.SAVED }
-                ?.let { saved -> downloads.localFile(saved)?.let { file -> notifyClipSaved(this@EpisodeClipService, saved, file) } }
-            stopSelf()
-        }
+        if (watching?.isActive != true) watching = scope.launch { watchClips() }
         return START_NOT_STICKY
+    }
+
+    private suspend fun watchClips() {
+        val downloads = (application as TheoriaAppContainerOwner).awaitAppContainer().features.postDownloads
+        val active = downloads.batches.map { batches -> batches.activeClips().firstOrNull() }
+        var shownId: Long? = null
+        while (true) {
+            val seen = latestStartId
+            withTimeoutOrNull(SUBMIT_GRACE_MS) { active.first { it != null } }
+            active.distinctUntilChanged().takeWhile { it != null }.collect { clip ->
+                if (shownId != null && shownId != clip?.id) shownId?.let { notifyClipOutcome(downloads, it) }
+                shownId = clip?.id
+                getSystemService(NotificationManager::class.java)
+                    .notify(CLIP_NOTIFICATION_ID, clipNotification(this, clip?.request?.post?.title, clip?.encodedPercent))
+            }
+            shownId?.let { notifyClipOutcome(downloads, it) }
+            shownId = null
+            if (latestStartId != seen || downloads.batches.value.activeClips().isNotEmpty()) continue
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf(seen)
+            return
+        }
+    }
+
+    private suspend fun notifyClipOutcome(downloads: PostDownloads, itemId: Long) {
+        val item = downloads.batches.value.firstNotNullOfOrNull { batch -> batch.items.firstOrNull { it.id == itemId } } ?: return
+        when (item.status) {
+            PostDownloadStatus.SAVED -> downloads.localFile(item)?.let { file -> notifyClipSaved(this, item, file) }
+            PostDownloadStatus.FAILED -> notifyClipFailed(this, item)
+            else -> Unit
+        }
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
@@ -58,7 +79,11 @@ class EpisodeClipService : Service() {
 
     companion object {
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, EpisodeClipService::class.java))
+            try {
+                context.startForegroundService(Intent(context, EpisodeClipService::class.java))
+            } catch (_: ForegroundServiceStartNotAllowedException) {
+                Unit
+            }
         }
     }
 }
@@ -86,6 +111,17 @@ private fun notifyClipSaved(context: Context, item: PostDownloadItem, file: Down
         .setContentTitle("Clip saved")
         .setContentText(item.request.post.title)
         .setContentIntent(share)
+        .setAutoCancel(true)
+        .build())
+}
+
+private fun notifyClipFailed(context: Context, item: PostDownloadItem) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (!manager.areNotificationsEnabled()) return
+    manager.notify(CLIP_SAVED_NOTIFICATION_ID, clipNotificationBuilder(context)
+        .setContentTitle("Clip failed")
+        .setContentText(item.message ?: item.request.post.title)
+        .setContentIntent(PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
         .setAutoCancel(true)
         .build())
 }

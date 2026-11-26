@@ -28,7 +28,13 @@ import kotlinx.coroutines.yield
 data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null,
     val marker: String = UUID.randomUUID().toString(), val restored: Boolean = false,
     val untrackedPreparation: Boolean = false, val originLabel: String = "Downloads", val clip: EpisodeClipRequest? = null)
-data class EpisodeClipRequest(val range: EpisodeClipRange, val stream: MediaStream?, val subtitleLabel: String?, val audioLabel: String?)
+data class EpisodeClipRequest(
+    val range: EpisodeClipRange,
+    val stream: MediaStream?,
+    val subtitleLabel: String?,
+    val audioLabel: String?,
+    val freshStream: (suspend () -> MediaStream?)? = null,
+)
 data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)
 
 enum class PostDownloadStatus { QUEUED, PREPARING, ENCODING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
@@ -100,7 +106,6 @@ class PostDownloadQueue(
     private var nextId = 0L
     private val persistence = Mutex()
     private val restoration = Mutex()
-    private val encoder = Mutex()
     private var restored = false
 
     suspend fun restore() = restoration.withLock {
@@ -204,8 +209,11 @@ class PostDownloadQueue(
 
     private fun schedule() {
         if (!scope.isActive) return
-        val queued = mutableBatches.value.flatMap { it.items }
+        val items = mutableBatches.value.flatMap { it.items }
+        var clipFree = items.none { it.id in workers && it.request.clip != null }
+        val queued = items
             .filter { it.status == PostDownloadStatus.QUEUED && it.id !in workers }
+            .filter { it.request.clip == null || clipFree.also { clipFree = false } }
             .take((concurrency - workers.size).coerceAtLeast(0))
         queued.forEach { item ->
             val worker = scope.launch(start = CoroutineStart.LAZY) {
@@ -266,7 +274,7 @@ class PostDownloadQueue(
         }
     }
 
-    private suspend fun encode(itemId: Long, prepared: PreparedPostDownload.Encode) = encoder.withLock {
+    private suspend fun encode(itemId: Long, prepared: PreparedPostDownload.Encode) {
         update(itemId) { it.copy(status = PostDownloadStatus.ENCODING, encodedPercent = 0) }
         checkpoint()
         val queueThread = checkNotNull(currentCoroutineContext()[ContinuationInterceptor])

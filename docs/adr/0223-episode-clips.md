@@ -18,10 +18,13 @@ process, so an encode that only lives in the app's scope stalls once the user le
   after the playhead. A selection is one second to one minute inside the episode (`EpisodeClipRange`). The player
   loops it, and the top bar holds only ✕, "Clip · length" and Save. Leaving the episode, entering
   picture-in-picture or pressing Back ends clip mode, and the player returns to where it was.
-- Save emits `ViewerEffect.ClipEpisode`. The route refreshes links that are old, picks the stream that is playing,
-  and submits `PostDownloads.submitClip` with the subtitle and audio labels selected in the player. The clip then
+- Save emits `ViewerEffect.ClipEpisode`, and the route submits `PostDownloads.submitClip` at once, with the stream
+  that is playing and the subtitle and audio labels selected in the player, so the job and its foreground service
+  start while the app is still in front. When the links are old, the request carries an in-memory refresh that the
+  job runs before encoding, so closing the Viewer cannot lose the clip. The clip then
   shows in the download log like any download, with a determinate "Clipping" bar while it encodes.
-- The queue runs a clip as `PreparedPostDownload.Encode` under the status `ENCODING`, one encode at a time. The job
+- The queue runs a clip as `PreparedPostDownload.Encode` under the status `ENCODING`. Only one clip holds a worker
+  at a time; the others stay queued, so they never take a slot from ordinary downloads. The job
   file stores the clip's range only, never URLs or headers, matching ADR 0113. A clip restored after the process
   died fails with "This clip was interrupted" and is not retryable, since its links are gone. A damaged clip row is
   dropped alone instead of failing the whole queue.
@@ -35,7 +38,8 @@ process, so an encode that only lives in the app's scope stalls once the user le
   with the player's own `applyViewerSubtitleStyle`, so the clip matches what was on screen. If the track cannot be
   burned, the clip saves without it and its download item says "Saved without subtitles".
 - A `mediaProcessing` foreground service (`EpisodeClipService`) starts when a clip is submitted or retried, shows
-  progress, and stops when no clip is active.
+  progress, posts "Clip saved" (tap to share) or "Clip failed" as each clip ends, and stops only when no clip is
+  active and no newer start arrived.
 
 ## Consequences
 

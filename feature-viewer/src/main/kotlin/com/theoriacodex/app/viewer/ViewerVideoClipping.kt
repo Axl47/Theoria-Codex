@@ -20,7 +20,7 @@ internal fun ViewerVideoClipping(state: ViewerVideoState, controls: ViewerRender
     LaunchedEffect(state.player, clip) {
         val previous = shown
         shown = clip
-        state.seek(if (previous?.startMs == clip.startMs) (clip.endMs - CLIP_END_PREVIEW_MS).coerceAtLeast(clip.startMs) else clip.startMs)
+        state.seek(if (previous != null && previous != clip && previous.startMs == clip.startMs) (clip.endMs - CLIP_END_PREVIEW_MS).coerceAtLeast(clip.startMs) else clip.startMs)
         while (true) {
             delay(CLIP_LOOP_POLL_MS)
             val at = state.player?.currentPosition ?: continue
