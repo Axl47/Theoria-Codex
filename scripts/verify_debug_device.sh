@@ -6,7 +6,7 @@ source "$repo/scripts/device_validation_common.sh"
 cd "$repo"
 readonly owner="${1:-all}"
 if [[ $# -gt 1 || ( "$owner" != app && "$owner" != data && "$owner" != media && "$owner" != all ) ]]; then
-  echo 'Usage: scripts/verify_debug_device.sh [app|data|media|all]' >&2
+  echo 'Usage: scripts/verify_debug_device.sh [app|data|media|viewer|all]' >&2
   exit 2
 fi
 if [[ "$owner" == all && -n "${DEVICE_TEST_CLASS:-}" ]]; then
@@ -50,6 +50,10 @@ if [[ "$owner" == media || "$owner" == all ]]; then
   connected+=(":media-kit:connectedDebugAndroidTest")
   assemblies+=(":media-kit:assembleDebugAndroidTest")
 fi
+if [[ "$owner" == viewer || "$owner" == all ]]; then
+  connected+=(":feature-viewer:connectedDebugAndroidTest")
+  assemblies+=(":feature-viewer:assembleDebugAndroidTest")
+fi
 ./gradlew "${connected[@]}" "${test_options[@]}" --dry-run --no-parallel --console=plain > "$evidence/task-graph.txt" 2>&1
 ./gradlew "${assemblies[@]}" --console=plain > "$evidence/build.log" 2>&1
 if [[ "$owner" == app || "$owner" == all ]]; then
@@ -61,6 +65,9 @@ if [[ "$owner" == data || "$owner" == all ]]; then
 fi
 if [[ "$owner" == media || "$owner" == all ]]; then
   python3 scripts/verify_device_apk.py media-kit/build/outputs/apk/androidTest/debug/media-kit-debug-androidTest.apk --package com.theoriacodex.mediakit.test
+fi
+if [[ "$owner" == viewer || "$owner" == all ]]; then
+  python3 scripts/verify_device_apk.py feature-viewer/build/outputs/apk/androidTest/debug/feature-viewer-debug-androidTest.apk --package com.theoriacodex.feature.viewer.test
 fi
 current_device="$(selected_device)"
 [[ "$current_device" == "$serial" ]]

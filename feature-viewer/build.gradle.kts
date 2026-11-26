@@ -36,6 +36,8 @@ extensions.configure<LibraryExtension> {
 }
 
 dependencies {
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.runner)
     implementation(project(":app-logic"))
     implementation(project(":core-domain"))
     implementation(project(":core-data"))

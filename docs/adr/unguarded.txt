@@ -58,7 +58,6 @@
 0169-viewer-gif-frame-rendering.md
 0171-viewer-level-controls.md
 0173-viewer-reading-modes-and-navigation.md
-0176-viewer-scrub-preview-player.md
 0177-viewer-episode-resume-positions.md
 0178-viewer-session-state-rules.md
 0179-viewer-swipe-and-vertical-gallery.md

@@ -661,7 +661,7 @@ private fun ViewerVideoTimelineOverlay(
         return
     }
     ViewerChromeVisibility(controls.showControls, modifier) {
-        val previews = rememberViewerScrubPreviews(state.player.takeIf { playback.readsAheadFreely() }, playback)
+        val previews = rememberViewerScrubPreviews(state.player.takeIf { playback.previewsScrubFrames() }, playback)
         ViewerPlaybackTimeline(
             controls, events, { state.position }, state.duration,
             bufferedPositionMs = { state.bufferedPosition },

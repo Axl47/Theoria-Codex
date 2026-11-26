@@ -20,12 +20,12 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         self.assertIn("DEVICE_TEST_SHARD: ${{ matrix.shard }}/2", self.workflow)
         lane = (REPOSITORY_ROOT / "scripts/verify_debug_device.sh").read_text(encoding="utf-8")
         self.assertIn(":app:connectedDebugAndroidTest", lane)
-        for owner, module in (("app", "app"), ("data", "core-data-android"), ("media", "media-kit")):
+        for owner, module in (("app", "app"), ("data", "core-data-android"), ("media", "media-kit"), ("viewer", "feature-viewer")):
             self.assertRegex(
                 lane,
                 rf'if \[\[ "\$owner" == {owner} \|\| "\$owner" == all \]\]; then\n  connected\+=\(":{module}:connectedDebugAndroidTest"\)',
             )
-        for module in ("core-data-android", "media-kit"):
+        for module in ("core-data-android", "media-kit", "feature-viewer"):
             self.assertIn(f":{module}:connectedDebugAndroidTest", lane)
             self.assertIn(f":{module}:assembleDebugAndroidTest", self.workflow)
             self.assertIn(f"{module}/build/outputs/androidTest-results/connected/", self.workflow)

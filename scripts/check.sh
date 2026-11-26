@@ -195,6 +195,7 @@ apk_tasks=(
   :core-data-android:compileDebugAndroidTestKotlin
   :extension-host:compileDebugAndroidTestKotlin
   :media-kit:compileDebugAndroidTestKotlin
+  :feature-viewer:compileDebugAndroidTestKotlin
 )
 detekt_tasks=(
   :app:detektDebug

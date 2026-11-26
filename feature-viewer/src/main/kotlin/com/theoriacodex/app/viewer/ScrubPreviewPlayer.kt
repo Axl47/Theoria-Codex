@@ -18,6 +18,7 @@ import androidx.media3.common.GlTextureInfo
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoFrameProcessingException
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.GlUtil
@@ -34,7 +35,6 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.FormatHolder
 import androidx.media3.exoplayer.RenderersFactory
-import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.MediaSource
@@ -43,6 +43,7 @@ import androidx.media3.exoplayer.video.PlaybackVideoGraphWrapper
 import androidx.media3.exoplayer.video.VideoFrameReleaseControl
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 
 internal class ScrubPreviewPlayer(
@@ -54,22 +55,15 @@ internal class ScrubPreviewPlayer(
     private val main = Handler(Looper.getMainLooper())
     private val mediaItem = request.mediaItem
     private val frames = ScrubFrameMatcher<ScrubFrame>()
+    private val renders = PreviewRenders()
     private var released = false
     private var attached = true
     private var pending: CompletableDeferred<ScrubFrame>? = null
 
     private val listener = object : Player.Listener {
-        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-            if (timeline.isEmpty) return
-            val window = timeline.getWindow(0, Timeline.Window())
-            if (!window.isPlaceholder && window.durationUs != C.TIME_UNSET) act(frames.onIndexed())
-        }
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) = index()
 
-        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-            if (reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT && pending != null) {
-                frames.onSeekResolved(newPosition.positionMs)?.let(::deliver)
-            }
-        }
+        override fun onTracksChanged(tracks: Tracks) = index()
 
         override fun onPlayerError(error: PlaybackException) {
             pending?.completeExceptionally(error)
@@ -79,7 +73,7 @@ internal class ScrubPreviewPlayer(
 
     private val player: ExoPlayer = ExoPlayer.Builder(
         context,
-        RenderersFactory { handler, videoListener, _, _, _ -> arrayOf(PreviewFrameRenderer(context, handler, videoListener)) },
+        RenderersFactory { handler, videoListener, _, _, _ -> arrayOf(PreviewFrameRenderer(context, handler, videoListener, renders)) },
         request.mediaSourceFactory,
     )
         .setLoadControl(previewLoadControl())
@@ -88,21 +82,24 @@ internal class ScrubPreviewPlayer(
         .build()
         .apply {
             setForegroundMode(true)
-            addListener(listener)
-            setSeekParameters(SeekParameters.CLOSEST_SYNC)
             setVideoEffects(
                 listOf(
                     Presentation.createForWidthAndHeight(widthPx, heightPx, Presentation.LAYOUT_SCALE_TO_FIT),
                     MatrixTransformation { Matrix().apply { setScale(1f, -1f) } },
-                    FrameGrabber { frameMs, bitmap ->
-                        main.post { if (!released) frames.onFrame(frameMs, ScrubFrame(frameMs, bitmap))?.let(::deliver) }
+                    FrameGrabber(renders::renderAt) { render, bitmap ->
+                        val frame = ScrubFrame(render.mediaUs / US_PER_MS, bitmap)
+                        main.post { if (!released) frames.onFrame(render.generation, frame)?.let(::deliver) }
                     },
                 ),
             )
             playWhenReady = false
-            setMediaItem(mediaItem)
-            prepare()
         }
+
+    init {
+        player.addListener(listener)
+        player.setMediaItem(mediaItem)
+        player.prepare()
+    }
 
     override suspend fun frameAt(positionMs: Long): ScrubFrame {
         check(!released) { "Preview player released" }
@@ -140,10 +137,27 @@ internal class ScrubPreviewPlayer(
         player.release()
     }
 
-    private fun act(next: ScrubFrameMatcher.Next<ScrubFrame>) = when (next) {
-        is ScrubFrameMatcher.Next.Seek -> player.seekTo(next.positionMs)
-        is ScrubFrameMatcher.Next.Answer -> deliver(next.frame)
+    private fun index() {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return
+        val window = timeline.getWindow(0, Timeline.Window())
+        if (window.isPlaceholder || window.durationUs == C.TIME_UNSET) return
+        val video = player.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO }?.getTrackFormat(0) ?: return
+        player.setSeekParameters(scrubPreviewSeekParameters(window.durationUs, video))
+        act(frames.onIndexed())
+    }
+
+    private fun act(next: ScrubFrameMatcher.Next) = when (next) {
+        is ScrubFrameMatcher.Next.Seek -> seek(next)
         ScrubFrameMatcher.Next.Wait -> Unit
+    }
+
+    private fun seek(next: ScrubFrameMatcher.Next.Seek) {
+        player.seekTo(next.positionMs)
+        player.createMessage { _, _ ->
+            val generation = renders.generation
+            main.post { if (!released) frames.onSettled(next.token, generation)?.let(::deliver) }
+        }.setLooper(player.playbackLooper).send()
     }
 
     private fun deliver(frame: ScrubFrame) {
@@ -166,7 +180,25 @@ private fun previewLoadControl() = DefaultLoadControl.Builder()
 
 private const val PREVIEW_BUFFER_MS = 1_000
 
-private class PreviewFrameRenderer(context: Context, handler: Handler, listener: VideoRendererEventListener) :
+private class PreviewRenders {
+    var generation = 0L
+        private set
+
+    private val last = AtomicReference<Render?>(null)
+
+    data class Render(val graphUs: Long, val mediaUs: Long, val generation: Long)
+
+    fun reset() {
+        generation++
+        last.set(null)
+    }
+
+    fun rendered(graphUs: Long, mediaUs: Long) = last.set(Render(graphUs, mediaUs, generation))
+
+    fun renderAt(graphUs: Long): Render? = last.get()?.takeIf { it.graphUs == graphUs }
+}
+
+private class PreviewFrameRenderer(context: Context, handler: Handler, listener: VideoRendererEventListener, private val renders: PreviewRenders) :
     MediaCodecVideoRenderer(
         Builder(context)
             .setMediaCodecSelector(MediaCodecSelector.PREFER_SOFTWARE)
@@ -228,11 +260,18 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
     override fun renderOutputBufferV21(codec: MediaCodecAdapter, index: Int, presentationTimeUs: Long, releaseTimeNs: Long) {
         if (frameRendered) return
         frameRendered = true
+        renders.rendered(graphUs = presentationTimeUs + outputStreamOffsetUs + bufferTimestampAdjustmentUs, mediaUs = presentationTimeUs)
         super.renderOutputBufferV21(codec, index, presentationTimeUs, releaseTimeNs)
+    }
+
+    override fun onDisabled() {
+        renders.reset()
+        super.onDisabled()
     }
 
     override fun onPositionReset(positionUs: Long, joining: Boolean, sampleStreamIsResetToKeyFrame: Boolean) {
         frameRendered = false
+        renders.reset()
         super.onPositionReset(positionUs, joining, sampleStreamIsResetToKeyFrame)
     }
 
@@ -244,11 +283,12 @@ private class PreviewFrameRenderer(context: Context, handler: Handler, listener:
 
 private const val FULL_TURN = 360f
 
-private class FrameGrabber(private val onFrame: (Long, Bitmap) -> Unit) : GlEffect {
+private class FrameGrabber<T : Any>(private val claim: (Long) -> T?, private val onFrame: (T, Bitmap) -> Unit) : GlEffect {
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram = object : PassthroughShaderProgram() {
         private var pixels: ByteBuffer = ByteBuffer.allocateDirect(0)
 
         override fun queueInputFrame(glObjectsProvider: GlObjectsProvider, inputTexture: GlTextureInfo, presentationTimeUs: Long) {
+            val claimed = claim(presentationTimeUs) ?: return inputListener.onInputFrameProcessed(inputTexture)
             val width = inputTexture.width
             val height = inputTexture.height
             if (pixels.capacity() != width * height * RGBA_BYTES) pixels = ByteBuffer.allocateDirect(width * height * RGBA_BYTES)
@@ -259,9 +299,10 @@ private class FrameGrabber(private val onFrame: (Long, Bitmap) -> Unit) : GlEffe
                 GlUtil.checkGlError()
             } catch (error: GlUtil.GlException) {
                 onError(VideoFrameProcessingException(error))
+                inputListener.onInputFrameProcessed(inputTexture)
                 return
             }
-            onFrame(presentationTimeUs / US_PER_MS, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
+            onFrame(claimed, Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(pixels) })
             inputListener.onInputFrameProcessed(inputTexture)
         }
     }

@@ -4,44 +4,48 @@ internal class ScrubFrameMatcher<F : Any> {
     private var attached = true
     private var indexed = false
     private var queuedMs: Long? = null
-    private var expectedMs: Long? = null
+    private var seeks = 0L
+    private var awaiting: Long? = null
     private var shown: Pair<Long, F>? = null
 
-    sealed interface Next<out F> {
-        data class Seek(val positionMs: Long) : Next<Nothing>
-        data class Answer<F>(val frame: F) : Next<F>
-        data object Wait : Next<Nothing>
+    sealed interface Next {
+        data class Seek(val positionMs: Long, val token: Long) : Next
+        data object Wait : Next
     }
 
-    fun request(targetMs: Long): Next<F> {
+    fun request(targetMs: Long): Next {
+        awaiting = null
         if (!indexed) {
             queuedMs = targetMs
             return Next.Wait
         }
-        return seekOrAnswer(targetMs)
+        return seek(targetMs)
     }
 
-    fun onIndexed(): Next<F> {
+    fun onIndexed(): Next {
         if (!attached || indexed) return Next.Wait
         indexed = true
-        return queuedMs?.let { targetMs -> queuedMs = null; seekOrAnswer(targetMs) } ?: Next.Wait
+        return queuedMs?.let { targetMs -> queuedMs = null; seek(targetMs) } ?: Next.Wait
     }
 
-    fun onSeekResolved(positionMs: Long): F? {
-        expectedMs = positionMs
-        return shown?.takeIf { (frameMs, _) -> frameMs == positionMs }?.second
+    fun onSettled(token: Long, generation: Long): F? {
+        if (token != seeks) return null
+        shown?.let { (shownGeneration, frame) -> if (shownGeneration >= generation) return frame }
+        awaiting = generation
+        return null
     }
 
-    fun onFrame(positionMs: Long, frame: F): F? {
-        shown = positionMs to frame
-        return frame.takeIf { positionMs == expectedMs }
+    fun onFrame(generation: Long, frame: F): F? {
+        shown = generation to frame
+        return frame.takeIf { awaiting?.let { generation >= it } == true }?.also { awaiting = null }
     }
 
     fun detach() {
         attached = false
         queuedMs = null
-        expectedMs = null
+        awaiting = null
         shown = null
+        seeks++
     }
 
     fun attach() {
@@ -49,8 +53,5 @@ internal class ScrubFrameMatcher<F : Any> {
         indexed = false
     }
 
-    private fun seekOrAnswer(targetMs: Long): Next<F> {
-        expectedMs = targetMs
-        return shown?.takeIf { (frameMs, _) -> frameMs == targetMs }?.let { (_, frame) -> Next.Answer(frame) } ?: Next.Seek(targetMs)
-    }
+    private fun seek(targetMs: Long): Next.Seek = Next.Seek(targetMs, ++seeks)
 }
