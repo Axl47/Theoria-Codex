@@ -55,7 +55,7 @@ internal class DelayedTextRenderer(renderer: Renderer) : ForwardingRenderer(rend
     ) {
         streamOffsetUs = offsetUs
         periodId = mediaPeriodId
-        super.replaceStream(formats, stream, startPositionUs, offsetUs, mediaPeriodId)
+        super.replaceStream(formats, stream, subtitleClockUs(startPositionUs, delayUs), offsetUs, mediaPeriodId)
     }
 
     override fun setTimeline(timeline: Timeline) {
@@ -84,7 +84,7 @@ internal class DelayedTextRenderer(renderer: Renderer) : ForwardingRenderer(rend
     private fun playbackPassedStreamEnd(): Boolean {
         val id = periodId ?: return false
         val index = timeline.getIndexOfPeriod(id.periodUid)
-        if (!isCurrentStreamFinal || index == C.INDEX_UNSET || playbackPositionUs == C.TIME_UNSET) return false
+        if (index == C.INDEX_UNSET || playbackPositionUs == C.TIME_UNSET) return false
         val durationUs = timeline.getPeriod(index, period).durationUs
         return durationUs != C.TIME_UNSET && playbackPositionUs - streamOffsetUs >= durationUs
     }

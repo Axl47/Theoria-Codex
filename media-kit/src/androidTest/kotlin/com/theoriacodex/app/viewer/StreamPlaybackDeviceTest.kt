@@ -34,7 +34,7 @@ class StreamPlaybackDeviceTest {
                 }
             }
             val lease = onMain {
-                infrastructure.viewerVideoPlayerPool.acquire(
+                deviceTestInfrastructure.viewerVideoPlayerPool.acquire(
                     VideoPlaybackRequest(
                         location = "${server.base}/episode",
                         headers = STREAM_FIXTURE_HEADERS,
@@ -68,7 +68,7 @@ class StreamPlaybackDeviceTest {
             } finally {
                 onMain {
                     player.removeListener(cueListener)
-                    infrastructure.viewerVideoPlayerPool.recycle(lease)
+                    deviceTestInfrastructure.viewerVideoPlayerPool.recycle(lease)
                 }
             }
         }
@@ -121,7 +121,7 @@ class StreamPlaybackDeviceTest {
                 }
             }
             val lease = onMain {
-                infrastructure.viewerVideoPlayerPool.acquire(
+                deviceTestInfrastructure.viewerVideoPlayerPool.acquire(
                     VideoPlaybackRequest(
                         location = "${server.base}/episode",
                         headers = STREAM_FIXTURE_HEADERS,
@@ -141,7 +141,7 @@ class StreamPlaybackDeviceTest {
                 onMain {
                     player.removeListener(cueListener)
                     player.setSubtitleDelay(0L)
-                    infrastructure.viewerVideoPlayerPool.recycle(lease)
+                    deviceTestInfrastructure.viewerVideoPlayerPool.recycle(lease)
                 }
             }
         }
@@ -152,7 +152,7 @@ class StreamPlaybackDeviceTest {
         val clip = instrumentation.context.assets.open("looping-clip.mp4").use { it.readBytes() }
         StreamFixtureServer(mapOf("/clip.mp4" to FixtureRoute.Body(clip))).use { server ->
             val lease = onMain {
-                infrastructure.viewerVideoPlayerPool
+                deviceTestInfrastructure.viewerVideoPlayerPool
                     .acquire(VideoPlaybackRequest("${server.base}/clip.mp4", STREAM_FIXTURE_HEADERS, cache = false), loop = true)
                     .also { it.player.play() }
             }
@@ -170,7 +170,7 @@ class StreamPlaybackDeviceTest {
                 skipIfTheEmulatorDecoderFailed(player)
                 onMain { assertNull(player.playerError) }
             } finally {
-                onMain { infrastructure.viewerVideoPlayerPool.recycle(lease) }
+                onMain { deviceTestInfrastructure.viewerVideoPlayerPool.recycle(lease) }
             }
         }
     }
@@ -184,7 +184,7 @@ class StreamPlaybackDeviceTest {
         val frames = VideoFrameMetadataListener { presentationTimeUs, _, _, _ -> rendered += presentationTimeUs / 1_000L }
         StreamFixtureServer(mapOf("/clip.mp4" to FixtureRoute.Body(clip))).use { server ->
             val lease = onMain {
-                infrastructure.viewerVideoPlayerPool
+                deviceTestInfrastructure.viewerVideoPlayerPool
                     .acquire(VideoPlaybackRequest("${server.base}/clip.mp4", STREAM_FIXTURE_HEADERS, cache = false), loop = true)
                     .also {
                         it.player.setVideoSurface(surface.surface)
@@ -217,7 +217,7 @@ class StreamPlaybackDeviceTest {
                 onMain {
                     player.clearVideoFrameMetadataListener(frames)
                     player.clearVideoSurface()
-                    infrastructure.viewerVideoPlayerPool.recycle(lease)
+                    deviceTestInfrastructure.viewerVideoPlayerPool.recycle(lease)
                 }
                 surface.close()
             }
@@ -246,6 +246,5 @@ class StreamPlaybackDeviceTest {
     private companion object {
         const val DEVICE_LOG_TAG = "SubtitleTuningDevice"
         const val TIMED_CUES = "WEBVTT\n\n00:00:00.500 --> 00:00:01.000\nEarly cue\n\n00:00:02.000 --> 00:00:02.500\nLate cue\n"
-        val infrastructure by lazy { VideoPlaybackInfrastructure(InstrumentationRegistry.getInstrumentation().targetContext) }
     }
 }

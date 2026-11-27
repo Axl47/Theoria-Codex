@@ -126,6 +126,7 @@ internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     var player by mutableStateOf<ExoPlayer?>(null)
     var view: PlayerView? = null
     var subtitleView: SubtitleView? = null
+    var subtitleSizePercent: Int? = null
     var cues: List<Cue> = emptyList()
     var loading by mutableStateOf(true)
     var hasRenderedFirstFrame by mutableStateOf(false)
@@ -608,9 +609,10 @@ private fun viewerSubtitleBottomOverlapPx(parentHeightPx: Int, viewBottomPx: Flo
 
 internal fun bindViewerSubtitleOverlay(view: PlayerView, state: ViewerVideoState, bottomOverlapPx: Int, sizePercent: Int): SubtitleView {
     val overlay = view.viewerSubtitleOverlay() ?: view.attachViewerSubtitleView(view.context)
-    overlay.applyViewerSubtitleStyle(sizePercent)
     val reconnected = state.subtitleView !== overlay
+    if (reconnected || state.subtitleSizePercent != sizePercent) overlay.applyViewerSubtitleStyle(sizePercent)
     state.subtitleView = overlay
+    state.subtitleSizePercent = sizePercent
     if (reconnected) overlay.setCues(state.cues)
     overlay.setPadding(0, 0, 0, bottomOverlapPx)
     return overlay
