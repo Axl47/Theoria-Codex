@@ -49,6 +49,7 @@ class DataStoreRepositoriesTest {
                     playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE,
                     instantSeek = true,
                     commentOrder = com.theoriacodex.domain.model.CommentOrder.NEWEST,
+                    subtitleSizePercent = 130,
                 ))
             }
         } finally {
@@ -60,11 +61,18 @@ class DataStoreRepositoriesTest {
             assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE, restored.viewer.playbackMode)
             assertTrue(restored.viewer.instantSeek)
             assertEquals(com.theoriacodex.domain.model.CommentOrder.NEWEST, restored.viewer.commentOrder)
+            assertEquals(130, restored.viewer.subtitleSizePercent)
             assertTrue(restored.oldSearchBar)
             assertEquals(CodexLibrarySort.MOST_ITEMS, restored.codexLibrarySort)
         } finally {
             secondScope.closeDataStores()
         }
+    }
+
+    @Test
+    fun `a stored subtitle size snaps to a supported step and missing means the default (ADR 0224)`() {
+        val sizes = listOf(137, 999, 10, null).map { SettingsStoreRecord(viewerSubtitleSizePercent = it).toDomain().viewer.subtitleSizePercent }
+        assertEquals(listOf(140, 200, 50, 100), sizes)
     }
 
     @Test

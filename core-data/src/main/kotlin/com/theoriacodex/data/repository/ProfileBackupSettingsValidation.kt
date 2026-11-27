@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.SubtitleTuning
 import com.theoriacodex.domain.model.VideoQuality
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -24,6 +25,11 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
     }
     if ("viewerOrientationLock" in root) com.theoriacodex.domain.model.ViewerOrientation.valueOf(root.backupString("viewerOrientationLock"))
     if ("viewerCommentOrder" in root) com.theoriacodex.domain.model.CommentOrder.valueOf(root.backupString("viewerCommentOrder"))
+    if ("viewerSubtitleSizePercent" in root) {
+        require(root.backupInt("viewerSubtitleSizePercent") in SubtitleTuning.MIN_SIZE_PERCENT..SubtitleTuning.MAX_SIZE_PERCENT) {
+            "Invalid backup preference: viewerSubtitleSizePercent"
+        }
+    }
     if ("codexLibrarySort" in root) CodexLibrarySort.valueOf(root.backupString("codexLibrarySort"))
     if ("seriesUpdateInterval" in root) SeriesUpdateInterval.valueOf(root.backupString("seriesUpdateInterval"))
     VideoQuality.valueOf(root.backupString("videoQuality"))

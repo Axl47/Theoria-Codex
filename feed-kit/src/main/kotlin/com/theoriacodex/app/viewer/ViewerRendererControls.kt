@@ -21,6 +21,7 @@ data class ViewerRendererControls(
     val repeatsAtEnd: Boolean = loopPlayback,
     val clipping: Boolean = false,
     val clip: EpisodeClipRange? = null,
+    val subtitleDelayMs: Long = 0L,
 ) {
     companion object {
         fun feedCard(isActive: Boolean) = ViewerRendererControls(

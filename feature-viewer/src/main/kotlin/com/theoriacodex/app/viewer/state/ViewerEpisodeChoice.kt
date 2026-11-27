@@ -4,6 +4,7 @@ data class ViewerEpisodeChoice(
     val streamLabel: String? = null,
     val subtitle: ViewerSubtitleChoice? = null,
     val audioLabel: String? = null,
+    val subtitleDelayMs: Long = 0L,
     val episodeStreams: Map<ViewerMediaKey, ViewerEpisodeStream> = emptyMap(),
 ) {
     fun streamLabelFor(media: ViewerMediaKey?): String? = episodeStreams[media]?.label ?: streamLabel

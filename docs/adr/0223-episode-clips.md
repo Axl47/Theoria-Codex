@@ -48,7 +48,8 @@ process, so an encode that only lives in the app's scope stalls once the user le
   repeat count; a track that is gone, or whose label now repeats a different number of times, is dropped, so the
   clip never silently uses a different one.
 - Subtitles: the selected sideloaded track is parsed and drawn per frame by a `SubtitleView` styled
-  with the player's own `applyViewerSubtitleStyle`, so the clip matches what was on screen. If the track cannot be
+  with the player's own `applyViewerSubtitleStyle` at the Viewer's subtitle size and delay (ADR 0224), so the clip
+  matches what was on screen. If the track cannot be
   burned, the clip saves without it and its download item says "Saved without subtitles".
 - A `mediaProcessing` foreground service (`EpisodeClipService`) starts when a clip is submitted or retried, shows
   progress, posts "Clip saved" (tap to share) or "Clip failed" for every clip that ends, each in its own

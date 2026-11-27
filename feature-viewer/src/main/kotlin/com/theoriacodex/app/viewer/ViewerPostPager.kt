@@ -317,6 +317,7 @@ private fun viewerRendererControls(
         loopPlayback = frame.uiState.loopsPlayback,
         repeatsAtEnd = frame.videoRepeats || clip != null,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
+        subtitleDelayMs = controls.episode.subtitleDelayMs,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,
         systemControlsReady = frame.systemControlsReady,

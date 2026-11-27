@@ -73,6 +73,13 @@ class BackupGoldenTest {
         assertEquals("Backup is missing favoriteTagsByProfile", runCatching { codec.decode(noFavorites) }.exceptionOrNull()?.message)
     }
 
+    @Test fun `a backup's subtitle size must be one the Viewer offers (ADR 0224)`() {
+        val v2 = golden("backup-v2.json").decodeToString()
+        fun withSize(size: Int) = v2.replace("\"settings\":{", "\"settings\":{\"viewerSubtitleSizePercent\":$size,").toByteArray()
+        assertEquals("Invalid backup preference: viewerSubtitleSizePercent", runCatching { codec.decode(withSize(500)) }.exceptionOrNull()?.message)
+        assertTrue(runCatching { codec.decode(withSize(130)) }.isSuccess)
+    }
+
     @Test fun `a backup with only the retired profile key is refused`() {
         val v2 = golden("backup-v2.json").decodeToString()
         val retired = v2.replace("\"activeProfileId\":\"profile-main\"", "\"activeProfile\":\"USER_2\"")

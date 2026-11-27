@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.app.viewer.ViewerSeries
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
+import com.theoriacodex.domain.model.SubtitleAdjustment
 
 sealed interface ViewerAction {
     data class ReplaceSession(
@@ -59,6 +60,7 @@ sealed interface ViewerAction {
     data class FallBackToStream(val media: ViewerMediaKey, val label: String) : ViewerAction
     data class ChooseSubtitle(val choice: ViewerSubtitleChoice) : ViewerAction
     data class ChooseAudio(val label: String) : ViewerAction
+    data class AdjustSubtitleDelay(val adjustment: SubtitleAdjustment) : ViewerAction
     data class SetLocked(val locked: Boolean) : ViewerAction
     data object ToggleFillScreen : ViewerAction
     sealed interface Clip : ViewerAction

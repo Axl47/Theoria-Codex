@@ -9,6 +9,8 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.SubtitleAdjustment
+import com.theoriacodex.domain.model.SubtitleTuning
 import com.theoriacodex.domain.model.VideoQuality
 import com.theoriacodex.domain.model.ViewerOrientation
 import com.theoriacodex.domain.model.ViewerPlaybackMode
@@ -22,6 +24,7 @@ data class ViewerScreenConfig(
     val instantSeek: Boolean = false,
     val orientationLock: ViewerOrientation? = null,
     val commentOrder: CommentOrder = CommentOrder.OLDEST,
+    val subtitleSizePercent: Int = SubtitleTuning.DEFAULT_SIZE_PERCENT,
     val likedPostIds: Set<PostId> = emptySet(),
     val galleryReadingModes: Map<PostId, GalleryReadingMode> = emptyMap(),
     val playbackDiagnosticsEnabled: Boolean = false,
@@ -35,6 +38,7 @@ data class ViewerScreenCallbacks(
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val onOrientationLockSelected: (ViewerOrientation?) -> Unit = {},
     val onCommentOrderSelected: (CommentOrder) -> Unit = {},
+    val onSubtitleSizeAdjusted: (SubtitleAdjustment) -> Unit = {},
     val onGalleryReadingModeSelected: (PostId, GalleryReadingMode) -> Unit = { _, _ -> },
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, Float?, ViewerSession) -> Unit = { _, _, _, _ -> },
@@ -60,5 +64,6 @@ class ViewerScreenHost(
     val onPlaybackProgress: ((Post, ViewerPlaybackProgress) -> Unit)? = null,
     val onVideoQualitySelected: (VideoQuality) -> Unit = {},
     val onOrientationLockChanged: (ViewerOrientation?) -> Unit = {},
+    val onSubtitleSizeAdjusted: (SubtitleAdjustment) -> Unit = {},
     val durations: ViewerPostDurations = ViewerPostDurations.None,
 )

@@ -42,6 +42,7 @@ internal data class SettingsStoreRecord(
     @SerialName("instantSeek") val instantSeek: Boolean = false,
     @SerialName("viewerOrientationLock") val viewerOrientationLock: String? = null,
     @SerialName("viewerCommentOrder") val viewerCommentOrder: String? = null,
+    @SerialName("viewerSubtitleSizePercent") val viewerSubtitleSizePercent: Int? = null,
     @SerialName("recommendationProfiles")
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
     @SerialName("activeProfileId")
@@ -133,6 +134,8 @@ internal data class SettingsStoreRecord(
             orientationLock = com.theoriacodex.domain.model.ViewerOrientation.entries.firstOrNull { it.name == viewerOrientationLock },
             commentOrder = com.theoriacodex.domain.model.CommentOrder.entries.firstOrNull { it.name == viewerCommentOrder }
                 ?: com.theoriacodex.domain.model.CommentOrder.OLDEST,
+            subtitleSizePercent = viewerSubtitleSizePercent?.let { com.theoriacodex.domain.model.subtitleSizePercent(it) }
+                ?: com.theoriacodex.domain.model.SubtitleTuning.DEFAULT_SIZE_PERCENT,
         )
     }
 
@@ -163,6 +166,7 @@ internal data class SettingsStoreRecord(
                 instantSeek = settings.viewer.instantSeek,
                 viewerOrientationLock = settings.viewer.orientationLock?.name,
                 viewerCommentOrder = settings.viewer.commentOrder.name,
+                viewerSubtitleSizePercent = settings.viewer.subtitleSizePercent.takeUnless { it == com.theoriacodex.domain.model.SubtitleTuning.DEFAULT_SIZE_PERCENT },
                 recommendationProfiles = settings.recommendationProfiles.map(RecommendationProfileRecord::fromDomain),
                 activeProfileId = settings.activeProfileId,
                 forYouBlacklistByProfile = settings.forYouBlacklistByProfile.mapValues { (_, entries) ->
