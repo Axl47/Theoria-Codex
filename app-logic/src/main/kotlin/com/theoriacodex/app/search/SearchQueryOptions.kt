@@ -5,7 +5,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.abs
 
 enum class DateRangePreset(val label: String, val days: Int?) {
     NONE("Any time", null),
@@ -18,27 +17,23 @@ enum class DateRangePreset(val label: String, val days: Int?) {
 
 enum class NhentaiLanguageFilter { ANY, ENGLISH, CHINESE, JAPANESE }
 
-private const val DAY_MS = 24L * 60L * 60L * 1000L
-private const val PRESET_TOLERANCE_MS = 2L * 60L * 60L * 1000L
+val DateRangePreset.range: DateRange?
+    get() = days?.let(DateRange::LastDays)
 
-fun DateRangePreset.rangeEndingAt(nowEpochMs: Long): DateRange? =
-    days?.let { DateRange(nowEpochMs - it * DAY_MS, nowEpochMs) }
-
-fun presetFor(range: DateRange?, nowEpochMs: Long): DateRangePreset? {
-    if (range == null) return DateRangePreset.NONE
-    val from = range.fromEpochMs ?: return null
-    val to = range.toEpochMs ?: return null
-    if (abs(nowEpochMs - to) > PRESET_TOLERANCE_MS) return null
-    return DateRangePreset.entries.firstOrNull { preset ->
-        preset.days != null && abs((to - from) - preset.days * DAY_MS) <= PRESET_TOLERANCE_MS
-    }
+fun presetFor(range: DateRange?): DateRangePreset? = when (range) {
+    null -> DateRangePreset.NONE
+    is DateRange.LastDays -> DateRangePreset.entries.firstOrNull { it.days == range.days }
+    is DateRange.Between -> null
 }
 
-fun customDateRange(fromDayMs: Long, toDayMs: Long): DateRange = DateRange(fromDayMs, toDayMs + DAY_MS - 1)
+fun customDateRange(fromDayMs: Long, toDayMs: Long): DateRange.Between =
+    DateRange.Between(fromDayMs, toDayMs + DateRange.DAY_MS - 1)
 
-fun dateRangeLabel(range: DateRange, nowEpochMs: Long): String {
-    presetFor(range, nowEpochMs)?.let { return it.label }
-    val format = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault()).withZone(ZoneOffset.UTC)
-    val date = { epochMs: Long? -> epochMs?.let { format.format(Instant.ofEpochMilli(it)) } ?: "…" }
-    return "${date(range.fromEpochMs)} – ${date(range.toEpochMs)}"
+fun dateRangeLabel(range: DateRange): String = when (range) {
+    is DateRange.LastDays -> presetFor(range)?.label ?: "${range.days} days"
+    is DateRange.Between -> {
+        val format = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault()).withZone(ZoneOffset.UTC)
+        val date = { epochMs: Long? -> epochMs?.let { format.format(Instant.ofEpochMilli(it)) } ?: "…" }
+        "${date(range.fromEpochMs)} – ${date(range.toEpochMs)}"
+    }
 }

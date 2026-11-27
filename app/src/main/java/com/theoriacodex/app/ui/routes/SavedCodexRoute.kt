@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
+import com.theoriacodex.app.codex.LiveCodexFeedState
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.filterCodexCollectionPosts
 import com.theoriacodex.app.codex.newFirst
@@ -60,6 +61,7 @@ import com.theoriacodex.app.viewer.ViewerReturnColumn
 import com.theoriacodex.app.viewer.ViewerReturnShelf
 import com.theoriacodex.app.viewer.ViewerReturnShelfId
 import com.theoriacodex.app.ui.components.PostShelfSection
+import com.theoriacodex.app.ui.components.ShelfFailure
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.POST_SHELF_CARD_WIDTH
 import com.theoriacodex.app.ui.components.POST_SHELF_MEDIA_ASPECT_RATIO
@@ -192,7 +194,7 @@ private fun SavedCodexSection(
     )
     var menuPost by remember { mutableStateOf<Post?>(null) }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
-        PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
+        PostShelfSection(title, count, posts, state.loading, feed?.shelfFailure(),
             actions.open, { liveOwner?.retry() }, actions.openActions,
             icon = savedCodexChildIcon(id),
             countSuffix = savedCodexCountSuffix(id, count),
@@ -213,4 +215,10 @@ private fun SavedCodexSection(
         }
     }
     menuPost?.let { post -> FeedPostActionSheet(post, { menuPost = null }, actions.goToSearch) }
+}
+
+private fun LiveCodexFeedState.shelfFailure(): ShelfFailure? = when {
+    errors.isEmpty() -> null
+    refreshFailedOnly -> ShelfFailure.Refresh
+    else -> ShelfFailure.Load
 }

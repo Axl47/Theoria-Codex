@@ -78,7 +78,7 @@ class TrailSpecsTest {
 
     @Test
     fun `a tag trail keeps its level's media, dates and same-place exclusions`() {
-        val dates = DateRange(1L, 2L)
+        val dates = DateRange.Between(1L, 2L)
         val level = Query(QueryMode.Source(SourceKey.DANBOORU), listOf("cat"), listOf("comic", "dog"), SortMode.TOP, dates, null)
             .copy(media = MediaFilter.ANIMATED)
 
@@ -165,16 +165,16 @@ class TrailSpecsTest {
     @Test
     fun `a fork keeps its level's phone filters, with its own query's media and dates`() {
         val parent = SearchVisibilityFilters(
-            animatedOnly = false, hideWatched = true, dateRange = DateRange(1L, 2L),
+            animatedOnly = false, hideWatched = true, dateRange = DateRange.Between(1L, 2L),
             animatedDurationRange = AnimatedDurationRange(minBucket = 3, maxBucket = 9),
         )
         val tagQuery = trailTagQuery("dog", SourceKey.DANBOORU, null).copy(media = MediaFilter.ANIMATED)
 
         assertEquals(
             SearchVisibilityFilters(animatedOnly = true, hideWatched = true),
-            trailVisibilityFilters(parent, tagQuery),
+            trailVisibilityFilters(parent, tagQuery, nowEpochMs = 0L),
         )
-        assertEquals(SearchVisibilityFilters(hideWatched = true), trailVisibilityFilters(parent, query = null))
+        assertEquals(SearchVisibilityFilters(hideWatched = true), trailVisibilityFilters(parent, query = null, nowEpochMs = 0L))
     }
 
     @Test

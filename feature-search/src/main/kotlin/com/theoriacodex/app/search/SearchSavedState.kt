@@ -21,14 +21,14 @@ internal object SearchSavedStateKeys {
 
 internal object SearchSavedQueryCodec {
     private const val NULL = "~"
+    private const val LAST_DAYS = "last:"
 
     @OptIn(RetiredQueryField::class)
     fun encode(query: Query): String {
         return listOf(
             encodeMode(query.mode),
             query.sort.name,
-            query.dateRange?.fromEpochMs?.toString() ?: NULL,
-            query.dateRange?.toEpochMs?.toString() ?: NULL,
+            *encodeDateRange(query.dateRange),
             query.minScore?.toString() ?: NULL,
             encodeGroups(query.effectiveIncludeTermGroups),
             encodeTerms(query.excludeTerms),
@@ -45,18 +45,23 @@ internal object SearchSavedQueryCodec {
                 includeTerms = decodeGroups(parts[5]).flatMap(SearchTermGroup::terms),
                 excludeTerms = decodeTerms(parts[6]),
                 sort = SortMode.valueOf(parts[1]),
-                dateRange = if (parts[2] == NULL && parts[3] == NULL) {
-                    null
-                } else {
-                    DateRange(
-                        fromEpochMs = parts[2].takeUnless { it == NULL }?.toLong(),
-                        toEpochMs = parts[3].takeUnless { it == NULL }?.toLong(),
-                    )
-                },
+                dateRange = decodeDateRange(parts[2], parts[3]),
                 minScore = parts[4].takeUnless { it == NULL }?.toInt(),
                 includeTermGroups = decodeGroups(parts[5]),
             ).copy(media = parts.getOrNull(7)?.let(MediaFilter::valueOf) ?: MediaFilter.ANY)
         }.getOrNull()
+    }
+
+    private fun encodeDateRange(range: DateRange?): Array<String> = when (range) {
+        null -> arrayOf(NULL, NULL)
+        is DateRange.LastDays -> arrayOf("$LAST_DAYS${range.days}", NULL)
+        is DateRange.Between -> arrayOf(range.fromEpochMs?.toString() ?: NULL, range.toEpochMs?.toString() ?: NULL)
+    }
+
+    private fun decodeDateRange(from: String, to: String): DateRange? = when {
+        from.startsWith(LAST_DAYS) -> DateRange.LastDays(from.removePrefix(LAST_DAYS).toInt())
+        from == NULL && to == NULL -> null
+        else -> DateRange.Between(from.takeUnless { it == NULL }?.toLong(), to.takeUnless { it == NULL }?.toLong())
     }
 
     private fun encodeMode(mode: QueryMode): String {

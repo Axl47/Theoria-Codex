@@ -18,7 +18,7 @@ data class SearchVisibilityFilters(
     val hideSaved: Boolean = false,
     val hideWatched: Boolean = false,
     val animatedDurationRange: AnimatedDurationRange = AnimatedDurationRange.Full,
-    val dateRange: DateRange? = null,
+    val dateRange: DateRange.Between? = null,
 )
 
 data class FavoriteTagSection(

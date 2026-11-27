@@ -38,7 +38,6 @@ class SearchDraftReducerTest {
                 query = state(applied).query.copy(draft = applied.withIncludeTermsAsRequired(applied.includeTerms + SearchTerm("draft"))),
             ),
             SearchAction.SetMedia(MediaFilter.ANIMATED),
-            nowEpochMs = 0,
         )
 
         val cleared = SearchDraftReducer.clearDraft(edited).state

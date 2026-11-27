@@ -74,9 +74,9 @@ internal fun trailTagQuery(
         .withinTermLimit(termLimit.takeIf { mode is QueryMode.Source })
 }
 
-internal fun trailVisibilityFilters(parent: SearchVisibilityFilters, query: Query?): SearchVisibilityFilters = parent.copy(
+internal fun trailVisibilityFilters(parent: SearchVisibilityFilters, query: Query?, nowEpochMs: Long): SearchVisibilityFilters = parent.copy(
     animatedOnly = query?.let { it.media == MediaFilter.ANIMATED } ?: parent.animatedOnly,
-    dateRange = query?.dateRange,
+    dateRange = query?.dateRange?.boundsAt(nowEpochMs),
     animatedDurationRange = AnimatedDurationRange.Full,
 )
 

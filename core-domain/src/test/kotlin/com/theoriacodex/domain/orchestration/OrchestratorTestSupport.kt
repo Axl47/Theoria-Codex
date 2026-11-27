@@ -7,4 +7,5 @@ import kotlin.coroutines.EmptyCoroutineContext
 internal fun testOrchestrator(
     adaptersBySource: Map<SourceKey, SourceAdapter> = emptyMap(),
     sourceTimeoutMs: Long = 15_000L,
-) = UnifiedSearchOrchestrator(adaptersBySource, sourceTimeoutMs, EmptyCoroutineContext)
+    clock: () -> Long = System::currentTimeMillis,
+) = UnifiedSearchOrchestrator(adaptersBySource, sourceTimeoutMs, EmptyCoroutineContext, clock = clock)

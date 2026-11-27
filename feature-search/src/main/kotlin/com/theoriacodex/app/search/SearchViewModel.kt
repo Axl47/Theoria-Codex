@@ -255,12 +255,12 @@ class SearchViewModel(
     }
 
     private fun applyDraftAction(action: SearchAction.DraftEdit) {
-        mutateDraft { SearchDraftReducer.edit(it, action, System.currentTimeMillis()) }
+        mutateDraft { SearchDraftReducer.edit(it, action) }
     }
 
     private fun stageDraftEdit(edit: SearchAction.DraftEdit) {
         liveSearch.cancel()
-        mutableState.value = SearchDraftReducer.edit(mutableState.value, edit, System.currentTimeMillis())
+        mutableState.value = SearchDraftReducer.edit(mutableState.value, edit)
         persistDraftQuery()
         draftStaged = true
     }

@@ -35,7 +35,7 @@ data class TriageSeed(
     val posts: List<Post>,
     val filters: SearchVisibilityFilters,
     val lengthFilterActive: Boolean,
-    private val filterInRange: (posts: List<Post>, dateRange: DateRange?, knownDurationMsByPostId: Map<PostId, Long>) -> List<Post>,
+    private val filterInRange: (posts: List<Post>, dateRange: DateRange.Between?, knownDurationMsByPostId: Map<PostId, Long>) -> List<Post>,
 ) {
     fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post> =
         filterInRange(posts, filters.dateRange, knownDurationMsByPostId)

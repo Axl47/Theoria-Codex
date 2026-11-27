@@ -123,6 +123,7 @@ class FollowedCodexViewModelTest {
             advanceUntilIdle()
             assertEquals(1, owner.state.value.posts.size)
             assertEquals(1, owner.state.value.errors.size)
+            assertFalse(owner.state.value.refreshFailedOnly)
             failSecond = false
             owner.retry()
             advanceUntilIdle()
@@ -218,7 +219,7 @@ class FollowedCodexViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `refresh keeps the loaded posts while offline, shows the error, and Retry replaces them with the newest page (ADR 0152)`() = runTest {
+    @Test fun `refresh keeps the loaded posts while offline, reports only a failed refresh, and Retry replaces them with the newest page (ADR 0152)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -240,6 +241,7 @@ class FollowedCodexViewModelTest {
             advanceUntilIdle()
             assertEquals(listOf("1-old", "2-old"), owner.state.value.posts.map { it.id.sourcePostId })
             assertEquals(2, owner.state.value.errors.size)
+            assertTrue(owner.state.value.refreshFailedOnly)
             assertEquals(loadedAt, owner.state.value.loadedAtEpochMs)
             assertFalse(owner.state.value.loading)
 
@@ -248,6 +250,29 @@ class FollowedCodexViewModelTest {
             advanceUntilIdle()
             assertEquals(listOf("1-new", "2-new"), owner.state.value.posts.map { it.id.sourcePostId })
             assertTrue(owner.state.value.errors.isEmpty())
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `a refresh that cuts off a creator's first load and fails reports a load failure, not a failed refresh (ADR 0152)`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            var secondCalls = 0
+            val owner = owner { creator, _ ->
+                if (creator.profileId == "2" && secondCalls++ == 0) delay(10_000)
+                check(creator.profileId != "2") { "offline" }
+                Page(listOf(testPost(SourceKey.PIXIV, "${creator.profileId}-old")), null)
+            }
+            store.put("owner", owner)
+            owner.synchronize(listOf(follow("1"), follow("2")), setOf(SourceKey.PIXIV))
+            runCurrent()
+
+            owner.refresh()
+            advanceUntilIdle()
+
+            assertEquals(listOf("1-old"), owner.state.value.posts.map { it.id.sourcePostId })
+            assertEquals(setOf("membership:2"), owner.state.value.errors.keys)
+            assertFalse(owner.state.value.refreshFailedOnly)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
