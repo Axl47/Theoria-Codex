@@ -57,7 +57,12 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
         if (titleFooter) CornerRadius.Zero else rounded.bottomLeftCornerRadius)
 }
 
-class ViewerReturnOrigin internal constructor()
+class ViewerReturnOrigin internal constructor(
+    internal val gridId: String? = null,
+    internal val shelfId: ViewerReturnShelfId? = null,
+) {
+    internal var adopted = false
+}
 
 class ViewerPostRetention
 
@@ -78,11 +83,9 @@ class ViewerReturnTransition {
         retainedPostIds = retentions.values.flatMapTo(mutableSetOf()) { it }
     }
 
-    var origin: ViewerReturnOrigin? = null
-        private set
+    private val origins = mutableListOf<ViewerReturnOrigin>()
+    val origin: ViewerReturnOrigin? get() = origins.lastOrNull()
     private var unclaimedPost: PostId? = null
-    private var originGridId: String? = null
-    private var originShelfId: ViewerReturnShelfId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
         private set
     var request by mutableStateOf<ViewerReturnRequest?>(null)
@@ -108,12 +111,9 @@ class ViewerReturnTransition {
         corners: ViewerReturnCorners = ViewerReturnCorners(),
         post: PostId,
     ) {
-        clear()
+        startOrigin(ViewerReturnOrigin(gridId, shelfId))
         if (gridId == null) return
-        origin = ViewerReturnOrigin()
         unclaimedPost = post
-        originGridId = gridId
-        originShelfId = shelfId
         openingBounds = bounds?.takeUnless { it.isEmpty }
         openingCorners = corners
     }
@@ -121,7 +121,18 @@ class ViewerReturnTransition {
     fun launching(postIds: Collection<PostId>, keepsRoot: Boolean) {
         if (keepsRoot) return
         val tapped = unclaimedPost
-        if (tapped != null && tapped in postIds) unclaimedPost = null else clear()
+        if (tapped != null && tapped in postIds) unclaimedPost = null else startOrigin(ViewerReturnOrigin())
+    }
+
+    fun adopt(): ViewerReturnOrigin {
+        val pending = origin?.takeUnless { it.adopted } ?: ViewerReturnOrigin().also(origins::add)
+        return pending.also { it.adopted = true }
+    }
+
+    private fun startOrigin(next: ViewerReturnOrigin) {
+        resetReturn()
+        if (origin?.adopted == false) origins.removeAt(origins.lastIndex)
+        origins += next
     }
 
     fun finishOpening(opened: ViewerReturnOrigin?) {
@@ -129,13 +140,14 @@ class ViewerReturnTransition {
     }
 
     fun begin(postId: PostId) {
-        if (origin == null) return
+        val active = origin ?: return
+        val gridId = active.gridId ?: return
         openingBounds = null
-        request = ViewerReturnRequest(originGridId, postId, originShelfId)
+        request = ViewerReturnRequest(gridId, postId, active.shelfId)
         mediaSettling = true
         targetBounds = null
         positioned = false
-        rowPositioned = originShelfId == null
+        rowPositioned = active.shelfId == null
         mediaBounds.clear()
     }
 
@@ -168,12 +180,18 @@ class ViewerReturnTransition {
         targetCorners = mediaCorners[postId] ?: ViewerReturnCorners()
     }
 
-    fun release(released: ViewerReturnOrigin?) {
-        if (released != null && released === origin) clear()
+    fun release(released: ViewerReturnOrigin) {
+        val active = released === origin
+        origins.remove(released)
+        if (active) resetReturn()
     }
 
     fun clear() {
-        origin = null
+        origins.clear()
+        resetReturn()
+    }
+
+    private fun resetReturn() {
         unclaimedPost = null
         mediaSettling = false
         openingCorners = ViewerReturnCorners()
@@ -181,8 +199,6 @@ class ViewerReturnTransition {
         mediaCorners.clear()
         request = null
         targetBounds = null
-        originGridId = null
-        originShelfId = null
         rowPositioned = false
         openingBounds = null
         positioned = false

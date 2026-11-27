@@ -16,6 +16,7 @@ import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerReturnOriginLifetime
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -69,6 +70,21 @@ class ViewerReturnOriginLifetimeTest {
         assertTrue(returnsToCard(nextPost))
     }
 
+    @Test fun `a Viewer under a second card-opened Viewer still closes into its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openViewer(nextPost, grid = "creator") }
+        compose.waitForIdle()
+        compose.runOnIdle { viewerReturn.begin(nextPost) }
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewerReturn.begin(post)
+            assertEquals("feed", viewerReturn.request?.gridId)
+        }
+    }
+
     @Test fun `a covered Viewer removed from the back stack lets its card go (ADR 0220)`() {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack(AppRoute.Home, inclusive = false) }
@@ -98,8 +114,8 @@ class ViewerReturnOriginLifetimeTest {
         compose.waitForIdle()
     }
 
-    private fun openViewer(tapped: PostId) {
-        viewerReturn.openedFrom(gridId = "feed", post = tapped)
+    private fun openViewer(tapped: PostId, grid: String = "feed") {
+        viewerReturn.openedFrom(gridId = grid, post = tapped)
         viewerReturn.launching(listOf(tapped), keepsRoot = false)
         navigation.navigate(AppRoute.Viewer)
     }

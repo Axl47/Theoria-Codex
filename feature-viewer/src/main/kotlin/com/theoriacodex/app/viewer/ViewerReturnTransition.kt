@@ -69,13 +69,13 @@ fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolea
 fun ViewerReturnOriginLifetime() {
     val transition = LocalViewerReturnTransition.current ?: return
     viewModel<ViewerReturnOriginOwner>(
-        factory = viewModelFactory { initializer { ViewerReturnOriginOwner(transition, transition.origin) } },
+        factory = viewModelFactory { initializer { ViewerReturnOriginOwner(transition, transition.adopt()) } },
     )
 }
 
 private class ViewerReturnOriginOwner(
     private val transition: ViewerReturnTransition,
-    private val origin: ViewerReturnOrigin?,
+    private val origin: ViewerReturnOrigin,
 ) : ViewModel() {
     override fun onCleared() = transition.release(origin)
 }
