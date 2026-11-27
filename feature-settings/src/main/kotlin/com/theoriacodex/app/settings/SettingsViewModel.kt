@@ -278,6 +278,11 @@ class SettingsViewModel(
             is SettingsAction.SetCommentOrder -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(commentOrder = action.order)) }
             }
+            is SettingsAction.AdjustSubtitleSize -> launchMutation {
+                dependencies.settingsRepository.updateSettings {
+                    it.copy(viewer = it.viewer.copy(subtitleSizePercent = action.adjustment.size(it.viewer.subtitleSizePercent)))
+                }
+            }
             is SettingsAction.SetViewerPlaybackMode -> launchMutation {
                 dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(playbackMode = action.mode)) }
             }

@@ -295,6 +295,7 @@ private fun rememberViewerScreenHost(
         },
         onVideoQualitySelected = callbacks.onVideoQualitySelected,
         onOrientationLockChanged = callbacks.onOrientationLockSelected,
+        onSubtitleSizeAdjusted = callbacks.onSubtitleSizeAdjusted,
         onGoToSearch = {
             viewerOwner.clearSession(retainPresentation = true)
             latestDependencies.value.sessionRetentionOwner.clear()

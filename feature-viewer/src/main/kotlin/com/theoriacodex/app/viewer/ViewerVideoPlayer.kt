@@ -223,6 +223,7 @@ private fun ViewerVideoBinding(
         val player = lease.player
         val started = start.applyTo(player)
         player.playbackParameters = PlaybackParameters(controls.playbackRate)
+        player.setSubtitleDelay(controls.subtitleDelayMs)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
         val seeks = ViewerSeekReports(started, { state.scrubbing }) { progress -> latestEvents.onPlaybackProgress?.invoke(progress) }
         player.addListener(listener)
@@ -471,6 +472,10 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
     LaunchedEffect(state.player, controls.playbackRate) {
         runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate) }
     }
+    LaunchedEffect(state.player, controls.subtitleDelayMs) {
+        delay(VIEWER_SUBTITLE_DELAY_SETTLE_MS)
+        runCatching { state.player?.setSubtitleDelay(controls.subtitleDelayMs) }
+    }
     LaunchedEffect(state.player, controls.restartRequest) {
         if (controls.restartRequest != handledRestart) {
             handledRestart = controls.restartRequest
@@ -576,12 +581,13 @@ private fun ViewerVideoSurface(
 ) {
     val subtitleBottomLiftPx = with(LocalDensity.current) { LocalViewerSubtitleBottomLift.current.toPx() }
     val subtitleBottomOverlapPx = viewerSubtitleBottomOverlapPx(parentHeightPx.intValue, viewBottomPx.floatValue, subtitleBottomLiftPx)
+    val subtitleSizePercent = LocalViewerSubtitleSizePercent.current
     AndroidView(
         modifier = modifier,
         factory = { context ->
             createTexturePlayerView(context).apply {
                 useController = false
-                bindViewerSubtitleOverlay(this, state, subtitleBottomOverlapPx)
+                bindViewerSubtitleOverlay(this, state, subtitleBottomOverlapPx, subtitleSizePercent)
                 player = state.player
                 state.view = this
             }
@@ -590,7 +596,7 @@ private fun ViewerVideoSurface(
             state.view = view
             view.useController = false
             view.resizeMode = if (fillScreen) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-            bindViewerSubtitleOverlay(view, state, subtitleBottomOverlapPx)
+            bindViewerSubtitleOverlay(view, state, subtitleBottomOverlapPx, subtitleSizePercent)
             view.player = state.player
             view.tag = if (diagnosticsEnabled) viewerVideoTestTag(postId) else null
         },
@@ -600,8 +606,9 @@ private fun ViewerVideoSurface(
 private fun viewerSubtitleBottomOverlapPx(parentHeightPx: Int, viewBottomPx: Float, liftPx: Float): Int =
     (liftPx - (parentHeightPx - viewBottomPx).coerceAtLeast(0f)).roundToInt().coerceAtLeast(0)
 
-internal fun bindViewerSubtitleOverlay(view: PlayerView, state: ViewerVideoState, bottomOverlapPx: Int): SubtitleView {
+internal fun bindViewerSubtitleOverlay(view: PlayerView, state: ViewerVideoState, bottomOverlapPx: Int, sizePercent: Int): SubtitleView {
     val overlay = view.viewerSubtitleOverlay() ?: view.attachViewerSubtitleView(view.context)
+    overlay.applyViewerSubtitleStyle(sizePercent)
     val reconnected = state.subtitleView !== overlay
     state.subtitleView = overlay
     if (reconnected) overlay.setCues(state.cues)
@@ -621,7 +628,6 @@ private fun PlayerView.attachViewerSubtitleView(context: Context): SubtitleView 
     subtitleView?.visibility = View.GONE
     val overlay = SubtitleView(context).apply {
         tag = VIEWER_SUBTITLE_OVERLAY_TAG
-        applyViewerSubtitleStyle()
     }
     addView(overlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     return overlay
@@ -667,4 +673,5 @@ private fun ViewerVideoMessage(message: String, modifier: Modifier) {
 internal fun viewerVideoTestTag(postId: PostId): String = "viewer_video_${postId.mediaTestTagPart()}"
 
 private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
+private const val VIEWER_SUBTITLE_DELAY_SETTLE_MS = 250L
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"

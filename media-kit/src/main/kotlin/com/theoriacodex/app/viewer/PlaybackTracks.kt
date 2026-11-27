@@ -8,6 +8,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.MediaTrack
+import com.theoriacodex.domain.model.SubtitleTuning
 import com.theoriacodex.domain.model.uniqueLabels
 
 data class PlaybackTrack(
@@ -24,6 +25,7 @@ data class EpisodeClipTracks(
     val subtitleIndex: Int? = null,
     val audioIndex: Int? = null,
     val streamAudioLabel: String? = null,
+    val subtitleTuning: SubtitleTuning = SubtitleTuning(),
 )
 
 fun EpisodeClipTracks.movedTo(from: MediaStream, to: MediaStream): EpisodeClipTracks = copy(
@@ -39,7 +41,7 @@ private fun sameTrackIndex(from: List<MediaTrack>, to: List<MediaTrack>, index: 
     return if (before.size == after.size) after[before.indexOf(index)] else null
 }
 
-fun PlaybackTracks.clipTracks(): EpisodeClipTracks {
+fun PlaybackTracks.clipTracks(subtitleTuning: SubtitleTuning): EpisodeClipTracks {
     val subtitle = subtitles.firstOrNull { it.selected }
     val audio = audio.firstOrNull { it.selected }
     return EpisodeClipTracks(
@@ -47,6 +49,7 @@ fun PlaybackTracks.clipTracks(): EpisodeClipTracks {
         subtitleIndex = subtitle?.sideloadIndex,
         audioIndex = audio?.sideloadIndex,
         streamAudioLabel = audio?.takeIf { it.sideloadIndex == null }?.label,
+        subtitleTuning = subtitleTuning,
     )
 }
 

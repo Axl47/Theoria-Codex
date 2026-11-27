@@ -19,6 +19,7 @@ import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.SubtitleAdjustment
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -228,6 +229,26 @@ class ViewerWatchingTest {
         assertEquals("720p · B", state.controls.episode.streamLabel)
         state = reduceViewerState(state, ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track("English"))).state
         assertEquals(ViewerEpisodeChoice("720p · B", ViewerSubtitleChoice.Track("English"), episodeStreams = state.controls.episode.episodeStreams), state.controls.episode)
+    }
+
+    @Test
+    fun `subtitle delay opens over hidden chrome, carries across episodes and sessions it replaces, and starts at zero in a new one (ADR 0224)`() {
+        val identity = ViewerSessionIdentity("watching")
+        var state = createViewerUiState(identity, episodes, series = ViewerSeries.Watching())
+        state = reduceViewerState(state, ViewerAction.ShowPanel(ViewerPanel.SUBTITLE_TUNING)).state
+        assertEquals(ViewerPanel.SUBTITLE_TUNING, state.controls.panel)
+        assertFalse(state.controls.chromeVisible)
+
+        repeat(3) { state = reduceViewerState(state, ViewerAction.AdjustSubtitleDelay(SubtitleAdjustment.Step(1))).state }
+        state = reduceViewerState(state, ViewerAction.SelectPage(1)).state
+        state = reduceViewerState(state, ViewerAction.ReplaceSession(identity, episodes, series = ViewerSeries.Watching())).state
+        assertEquals(300L, state.controls.episode.subtitleDelayMs)
+
+        state = reduceViewerState(state, ViewerAction.AdjustSubtitleDelay(SubtitleAdjustment.Reset)).state
+        state = reduceViewerState(state, ViewerAction.AdjustSubtitleDelay(SubtitleAdjustment.Step(-2))).state
+        assertEquals(-200L, state.controls.episode.subtitleDelayMs)
+        state = reduceViewerState(state, ViewerAction.ReplaceSession(ViewerSessionIdentity("next"), episodes, series = ViewerSeries.Watching())).state
+        assertEquals(0L, state.controls.episode.subtitleDelayMs)
     }
 
     @Test

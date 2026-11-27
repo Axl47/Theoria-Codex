@@ -6,6 +6,7 @@
 
 - Clip in an episode's ⋮ menu saves up to a minute of it as a small video, with the subtitles you're watching burned in. Drag the handles on the strip to pick the part, which plays on repeat, then tap Save. The clip encodes in Downloads, keeps going if you leave the app, and can be shared from there or from its notification.
 - Saved downloads have Share in their menu.
+- Size and delay in an episode's Subtitles sheet opens a small panel over the playing video where you can make subtitles bigger or smaller and shift them earlier or later in tenths of a second, holding a button to keep stepping. The size is remembered for every video; the delay lasts until you close the Viewer, carrying across episodes. Clips burn in subtitles at the size and delay you set.
 
 ### Changed
 

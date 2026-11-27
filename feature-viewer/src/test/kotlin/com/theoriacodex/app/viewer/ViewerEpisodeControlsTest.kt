@@ -7,6 +7,15 @@ import android.text.Spanned
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import com.theoriacodex.domain.model.SubtitleTuning
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +94,47 @@ class ViewerEpisodeControlsTest {
         awaitState { state.value.controls.episode.subtitle == ViewerSubtitleChoice.Track("Signs") }
     }
 
+    @Test fun `the subtitle sheet offers size and delay only while a track is on, and opens their panel (ADR 0224)`() {
+        val state = episodeState()
+        val tracks = mutableStateOf(PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = false))))
+        setControls(state) { tracks.value }
+        compose.onNodeWithContentDescription("Subtitles").performClick()
+        compose.onNodeWithTag(VIEWER_SUBTITLE_TUNING_ROW_TAG).assertDoesNotExist()
+        tracks.value = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = true)))
+        compose.onNodeWithText("Size and delay").performClick()
+        awaitState { state.value.controls.panel == ViewerPanel.SUBTITLE_TUNING }
+        assertFalse(state.value.controls.chromeVisible)
+    }
+
+    @Test fun `the size and delay panel steps each value, resets both from one button, and closes on a tap outside (ADR 0224)`() {
+        var tuning by mutableStateOf(SubtitleTuning())
+        var dismissed = false
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.fillMaxSize()) {
+                    ViewerSubtitleTuningPanel(
+                        tuning = tuning,
+                        onSize = { tuning = tuning.copy(sizePercent = it.size(tuning.sizePercent)) },
+                        onDelay = { tuning = tuning.copy(delayMs = it.delay(tuning.delayMs)) },
+                        onDismiss = { dismissed = true },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("100%").assertExists()
+        compose.onNodeWithText("0.0 s").assertExists()
+        compose.onNodeWithContentDescription("Reset subtitle size and delay").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Larger subtitles").performClick()
+        repeat(2) { compose.onNodeWithContentDescription("Show subtitles earlier").performClick() }
+        compose.onNodeWithText("110%").assertExists()
+        compose.onNodeWithText("\u22120.2 s").assertExists()
+        compose.onNodeWithContentDescription("Reset subtitle size and delay").performClick()
+        assertEquals(SubtitleTuning(), tuning)
+        compose.onNodeWithContentDescription("Reset subtitle size and delay").assertDoesNotExist()
+        compose.onRoot().performTouchInput { click(bottomCenter - androidx.compose.ui.geometry.Offset(0f, 10f)) }
+        assertTrue(dismissed)
+    }
+
     @Test fun `audio is offered only with more than one track`() {
         val state = episodeState()
         val tracks = mutableStateOf(PlaybackTracks(audio = listOf(PlaybackTrack("1:0/0", "Japanese", selected = true))))
@@ -123,12 +173,12 @@ class ViewerEpisodeControlsTest {
         val playerView = createTexturePlayerView(context)
 
         val firstState = ViewerVideoState(pending = null)
-        val firstOverlay = bindViewerSubtitleOverlay(playerView, firstState, bottomOverlapPx = 24)
+        val firstOverlay = bindViewerSubtitleOverlay(playerView, firstState, bottomOverlapPx = 24, sizePercent = 100)
         assertEquals(24, firstOverlay.paddingBottom)
 
         firstState.subtitleView = null
         firstState.setCues(listOf(Cue.Builder().setText("After retry").build()))
-        val afterRetry = bindViewerSubtitleOverlay(playerView, firstState, bottomOverlapPx = 48)
+        val afterRetry = bindViewerSubtitleOverlay(playerView, firstState, bottomOverlapPx = 48, sizePercent = 100)
         assertTrue(firstOverlay === afterRetry)
         assertEquals(48, afterRetry.paddingBottom)
         assertTrue(firstState.subtitleView === afterRetry)
@@ -136,7 +186,7 @@ class ViewerEpisodeControlsTest {
         val switchedState = ViewerVideoState(pending = null).apply {
             setCues(listOf(Cue.Builder().setText("After switch").build()))
         }
-        val afterSwitch = bindViewerSubtitleOverlay(playerView, switchedState, bottomOverlapPx = 0)
+        val afterSwitch = bindViewerSubtitleOverlay(playerView, switchedState, bottomOverlapPx = 0, sizePercent = 100)
         assertTrue(firstOverlay === afterSwitch)
         assertEquals(0, afterSwitch.paddingBottom)
         assertTrue(switchedState.subtitleView === afterSwitch)
@@ -249,6 +299,7 @@ class ViewerEpisodeControlsTest {
                     streams = streams,
                     currentStream = currentStream,
                     tracks = tracks(),
+                    subtitleTuning = com.theoriacodex.domain.model.SubtitleTuning(),
                     playbackRate = closestViewerPlaybackRate(state.value.controls.playback.playbackRate),
                     openPanel = openPanel,
                     onDismiss = { onAction(ViewerAction.HidePanel(it)) },

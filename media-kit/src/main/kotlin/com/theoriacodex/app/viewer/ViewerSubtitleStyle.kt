@@ -13,14 +13,17 @@ import androidx.media3.common.text.Cue
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 
-fun SubtitleView.applyViewerSubtitleStyle() {
-    setUserDefaultTextSize()
-    val captioning = context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
-    if (captioning?.isEnabled == true) setUserDefaultStyle() else setStyle(VIEWER_SUBTITLE_STYLE)
+fun SubtitleView.applyViewerSubtitleStyle(sizePercent: Int) {
+    val captioning = (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.takeIf { it.isEnabled }
+    setFractionalTextSize(viewerSubtitleTextFraction(captioning?.fontScale ?: 1f, sizePercent))
+    if (captioning != null) setUserDefaultStyle() else setStyle(VIEWER_SUBTITLE_STYLE)
     setApplyEmbeddedStyles(true)
     setApplyEmbeddedFontSizes(false)
     setBottomPaddingFraction(VIEWER_SUBTITLE_RESTING_BOTTOM_FRACTION)
 }
+
+internal fun viewerSubtitleTextFraction(systemFontScale: Float, sizePercent: Int): Float =
+    SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * systemFontScale * sizePercent / PERCENT
 
 fun sanitizeViewerSubtitleCue(cue: Cue): Cue {
     if (cue.bitmap != null) return cue
@@ -36,6 +39,7 @@ fun sanitizeViewerSubtitleCue(cue: Cue): Cue {
     return builder.build()
 }
 
+private const val PERCENT = 100f
 private const val VIEWER_SUBTITLE_RESTING_BOTTOM_FRACTION = 0.06f
 private val VIEWER_SUBTITLE_STYLE = CaptionStyleCompat(
     android.graphics.Color.WHITE,

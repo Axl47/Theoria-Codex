@@ -55,6 +55,7 @@ import androidx.media3.ui.SubtitleView
 import com.google.common.collect.ImmutableList
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.model.SubtitleTuning
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.coroutines.resume
@@ -101,7 +102,7 @@ suspend fun exportEpisodeClip(
         withContext(Handler(thread.looper).asCoroutineDispatcher()) {
             val video = listOfNotNull(
                 Presentation.createForShortSide(EPISODE_CLIP_SHORT_SIDE_PX).copyWithUnsetSideRoundedTo(2),
-                cues?.let { OverlayEffect(ImmutableList.of<TextureOverlay>(SubtitleBurnIn(clipSubtitleView(context), it, range.startMs * US_PER_MS))) },
+                cues?.let { OverlayEffect(ImmutableList.of<TextureOverlay>(SubtitleBurnIn(clipSubtitleView(context, tracks.subtitleTuning.sizePercent), it, clipSubtitleSourceOffsetUs(range, tracks.subtitleTuning)))) },
             )
             val composition = Composition.Builder(EditedMediaItemSequence.Builder(
                 EditedMediaItem.Builder(item).setEffects(Effects(emptyList(), video)).build(),
@@ -250,13 +251,13 @@ private class ClippingSourceFactory(private val delegate: MediaSource.Factory) :
     override fun getSupportedTypes(): IntArray = delegate.supportedTypes
 }
 
-private fun clipSubtitleView(context: Context): SubtitleView {
+private fun clipSubtitleView(context: Context, sizePercent: Int): SubtitleView {
     val metrics = context.resources.displayMetrics
     val screenShortSide = minOf(metrics.widthPixels, metrics.heightPixels).coerceAtLeast(1)
     val configuration = Configuration(context.resources.configuration).apply {
         densityDpi = (densityDpi * EPISODE_CLIP_SHORT_SIDE_PX / screenShortSide).coerceAtLeast(DisplayMetrics.DENSITY_LOW)
     }
-    return SubtitleView(context.createConfigurationContext(configuration)).apply { applyViewerSubtitleStyle() }
+    return SubtitleView(context.createConfigurationContext(configuration)).apply { applyViewerSubtitleStyle(sizePercent) }
 }
 
 internal class SubtitleBurnIn(
@@ -268,8 +269,7 @@ internal class SubtitleBurnIn(
     private var drawn: List<CuesWithTiming>? = null
 
     override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
-        val sourceUs = presentationTimeUs + sourceOffsetUs
-        val active = cues.filter { it.startTimeUs <= sourceUs && sourceUs < it.activeUntilUs }
+        val active = cues.activeAt(presentationTimeUs + sourceOffsetUs)
         if (canvas === drawnOn && active == drawn) return
         drawnOn = canvas
         drawn = active
@@ -285,6 +285,12 @@ internal class SubtitleBurnIn(
         subtitles.draw(canvas)
     }
 }
+
+internal fun clipSubtitleSourceOffsetUs(range: EpisodeClipRange, tuning: SubtitleTuning): Long =
+    subtitleClockUs(range.startMs * US_PER_MS, tuning.delayMs * US_PER_MS)
+
+internal fun List<CuesWithTiming>.activeAt(sourceUs: Long): List<CuesWithTiming> =
+    filter { it.startTimeUs <= sourceUs && sourceUs < it.activeUntilUs }
 
 private val CuesWithTiming.activeUntilUs: Long get() = if (durationUs == C.TIME_UNSET) Long.MAX_VALUE else startTimeUs + durationUs
 
