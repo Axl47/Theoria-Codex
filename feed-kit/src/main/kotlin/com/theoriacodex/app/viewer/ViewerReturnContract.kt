@@ -60,9 +60,7 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
 class ViewerReturnOrigin internal constructor(
     internal val gridId: String? = null,
     internal val shelfId: ViewerReturnShelfId? = null,
-) {
-    internal var adopted = false
-}
+)
 
 class ViewerPostRetention
 
@@ -83,8 +81,9 @@ class ViewerReturnTransition {
         retainedPostIds = retentions.values.flatMapTo(mutableSetOf()) { it }
     }
 
-    private val origins = mutableListOf<ViewerReturnOrigin>()
-    val origin: ViewerReturnOrigin? get() = origins.lastOrNull()
+    private var pending: ViewerReturnOrigin? = null
+    private val adopted = mutableListOf<ViewerReturnOrigin>()
+    val origin: ViewerReturnOrigin? get() = pending ?: adopted.lastOrNull()
     private var unclaimedPost: PostId? = null
     var openingBounds by mutableStateOf<Rect?>(null)
         private set
@@ -124,15 +123,14 @@ class ViewerReturnTransition {
         if (tapped != null && tapped in postIds) unclaimedPost = null else startOrigin(ViewerReturnOrigin())
     }
 
-    fun adopt(): ViewerReturnOrigin {
-        val pending = origin?.takeUnless { it.adopted } ?: ViewerReturnOrigin().also(origins::add)
-        return pending.also { it.adopted = true }
+    fun adopt(): ViewerReturnOrigin = (pending ?: ViewerReturnOrigin()).also { adoptee ->
+        adopted += adoptee
+        pending = null
     }
 
     private fun startOrigin(next: ViewerReturnOrigin) {
         resetReturn()
-        if (origin?.adopted == false) origins.removeAt(origins.lastIndex)
-        origins += next
+        pending = next
     }
 
     fun finishOpening(opened: ViewerReturnOrigin?) {
@@ -182,12 +180,13 @@ class ViewerReturnTransition {
 
     fun release(released: ViewerReturnOrigin) {
         val active = released === origin
-        origins.remove(released)
+        adopted.remove(released)
         if (active) resetReturn()
     }
 
     fun clear() {
-        origins.clear()
+        pending = null
+        adopted.clear()
         resetReturn()
     }
 

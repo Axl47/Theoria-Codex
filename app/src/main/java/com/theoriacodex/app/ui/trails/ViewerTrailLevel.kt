@@ -37,6 +37,7 @@ internal class ViewerLevel(
     val remove: (Int) -> Unit = {},
     val replay: CrumbTag? = null,
     val restart: (CrumbTag) -> Unit = {},
+    val isRoot: Boolean = !isFork,
 ) {
     companion object {
         val Root = ViewerLevel(false, emptyList(), null, {}, { _, _ -> })
@@ -88,6 +89,7 @@ internal fun rememberViewerLevel(navController: NavHostController, entry: NavBac
         val popTo: (Int) -> Unit = { crumb -> repeat((ancestors.size - crumb).coerceAtLeast(0)) { navController.popBackStack() } }
         ViewerLevel(
             isFork = ancestors.isNotEmpty() || entry.isTrailLevel(),
+            isRoot = ancestors.isEmpty(),
             crumbs = crumbs,
             feed = owner.claimed?.feed,
             popTo = popTo,

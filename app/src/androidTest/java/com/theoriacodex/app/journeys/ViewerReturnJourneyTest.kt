@@ -22,7 +22,7 @@ class ViewerReturnJourneyTest : AppJourneyFixture() {
         activate(creatorCard)
         waitFor("Viewer B is open") { viewerShown() }
         pressSystemBack()
-        waitFor("Viewer B closed into the creator page") { !viewerShown() && creatorCard.isDisplayed() }
+        waitFor("the creator page is back") { !viewerShown() && creatorCard.isDisplayed() }
         pressSystemBack()
         waitFor("Viewer A is shown again") { viewerShown() }
 
