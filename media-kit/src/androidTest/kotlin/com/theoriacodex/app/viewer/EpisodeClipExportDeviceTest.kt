@@ -38,7 +38,7 @@ class EpisodeClipExportDeviceTest {
             val output = File(context.cacheDir, "clip-device-test.mp4").apply { delete() }
             val progress = CopyOnWriteArrayList<Int>()
             val result = runBlocking {
-                exportEpisodeClip(context, VideoPlaybackInfrastructure(context), stream, EpisodeClipRange(1_000L, 4_000L),
+                exportEpisodeClip(context, deviceTestInfrastructure, stream, EpisodeClipRange(1_000L, 4_000L),
                     EpisodeClipTracks(subtitles = true, subtitleIndex = 0, audioIndex = 0), output) { progress += it }
             }
 
@@ -68,7 +68,7 @@ class EpisodeClipExportDeviceTest {
             fun inkAt(tuning: SubtitleTuning, vararg atMs: Long): List<Int> {
                 val output = File(context.cacheDir, "clip-tuning-device-test.mp4").apply { delete() }
                 runBlocking {
-                    exportEpisodeClip(context, VideoPlaybackInfrastructure(context), stream, EpisodeClipRange(1_000L, 4_000L),
+                    exportEpisodeClip(context, deviceTestInfrastructure, stream, EpisodeClipRange(1_000L, 4_000L),
                         EpisodeClipTracks(subtitles = true, subtitleIndex = 0, subtitleTuning = tuning), output) {}
                 }
                 return MediaMetadataRetriever().use { retriever ->

@@ -58,8 +58,9 @@ internal fun BoxScope.ViewerSubtitleTuningPanel(
     onDelay: (SubtitleAdjustment) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val dismiss by rememberUpdatedState(onDismiss)
     BackHandler(onBack = onDismiss)
-    Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { onDismiss() } })
+    Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { dismiss() } })
     FlowRow(
         modifier = Modifier
             .align(Alignment.TopCenter)
@@ -67,6 +68,7 @@ internal fun BoxScope.ViewerSubtitleTuningPanel(
             .padding(top = 12.dp, start = 16.dp, end = 16.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = PANEL_ALPHA))
+            .pointerInput(Unit) { detectTapGestures { } }
             .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
             .testTag(VIEWER_SUBTITLE_TUNING_TAG),
         horizontalArrangement = Arrangement.spacedBy(16.dp),

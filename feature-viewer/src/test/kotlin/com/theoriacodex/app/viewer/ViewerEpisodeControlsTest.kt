@@ -106,7 +106,7 @@ class ViewerEpisodeControlsTest {
         assertFalse(state.value.controls.chromeVisible)
     }
 
-    @Test fun `the size and delay panel steps each value, resets both from one button, and closes on a tap outside (ADR 0224)`() {
+    @Test fun `the size and delay panel steps each value, resets both from one button, and closes on a tap outside it but not on it (ADR 0224)`() {
         var tuning by mutableStateOf(SubtitleTuning())
         var dismissed = false
         compose.setContent {
@@ -131,6 +131,9 @@ class ViewerEpisodeControlsTest {
         compose.onNodeWithContentDescription("Reset subtitle size and delay").performClick()
         assertEquals(SubtitleTuning(), tuning)
         compose.onNodeWithContentDescription("Reset subtitle size and delay").assertDoesNotExist()
+        compose.onNodeWithText("100%").performClick()
+        compose.onNodeWithText("Delay").performClick()
+        assertFalse(dismissed)
         compose.onRoot().performTouchInput { click(bottomCenter - androidx.compose.ui.geometry.Offset(0f, 10f)) }
         assertTrue(dismissed)
     }

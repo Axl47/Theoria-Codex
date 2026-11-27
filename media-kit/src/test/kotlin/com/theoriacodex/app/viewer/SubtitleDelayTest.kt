@@ -50,10 +50,9 @@ class SubtitleDelayTest {
     }
 
     @Test
-    fun `a positive delay lets playback end when the final stream reaches its end, not the delay later (ADR 0224)`() {
+    fun `a positive delay lets playback end with the video, not the delay later (ADR 0224)`() {
         renderer.handleMessage(MSG_SET_SUBTITLE_DELAY, 2_000_000L)
         enableAt(0L)
-        renderer.setCurrentStreamFinal()
         renderer.render(OFFSET_US + DURATION_US - 1L, 0L)
         assertFalse(renderer.isEnded)
         renderer.render(OFFSET_US + DURATION_US, 0L)
