@@ -20,21 +20,27 @@ import org.junit.Test
 class TrailingDateRangeTest {
     private val day = DateRange.DAY_MS
 
+    private val source = adapter(post("chosen-week", 95 * day), post("this-week", 108 * day))
+    private val orchestrator = testOrchestrator(mapOf(SourceKey.DANBOORU to source), clock = { 110 * day })
+
     @Test
     fun `a trailing date range is measured from each run, not from when it was chosen (ADR 0084)`() = runTest {
-        val source = adapter(post("chosen-week", 95 * day), post("this-week", 108 * day))
-        val orchestrator = testOrchestrator(mapOf(SourceKey.DANBOORU to source), clock = { 110 * day })
-
-        val result = orchestrator.search(
-            Query(
-                mode = QueryMode.Unified, includeTerms = listOf(SearchTerm("landscape")), excludeTerms = emptyList(),
-                sort = SortMode.NEWEST, dateRange = DateRange.LastDays(7), minScore = null,
-            ),
-            setOf(SourceKey.DANBOORU), emptyMap(), emptyMap(),
-        )
+        val result = orchestrator.search(lastWeek(QueryMode.Unified), setOf(SourceKey.DANBOORU), emptyMap(), emptyMap())
 
         assertEquals(listOf("this-week"), result.items.map { it.id.sourcePostId })
     }
+
+    @Test
+    fun `a single-source search drops posts outside its date range too (ADR 0084)`() = runTest {
+        val page = orchestrator.searchSource(source, lastWeek(QueryMode.Source(SourceKey.DANBOORU)), pageToken = null)
+
+        assertEquals(listOf("this-week"), page.items.map { it.id.sourcePostId })
+    }
+
+    private fun lastWeek(mode: QueryMode) = Query(
+        mode = mode, includeTerms = listOf(SearchTerm("landscape")), excludeTerms = emptyList(),
+        sort = SortMode.NEWEST, dateRange = DateRange.LastDays(7), minScore = null,
+    )
 
     private fun post(id: String, createdAtEpochMs: Long) = Post(
         id = PostId(SourceKey.DANBOORU, id), preview = ImageRef("https://example.com/$id.jpg", null, "image/jpeg"),

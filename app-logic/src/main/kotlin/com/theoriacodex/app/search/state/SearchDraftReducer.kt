@@ -1,13 +1,11 @@
 package com.theoriacodex.app.search.state
 
-import com.theoriacodex.app.search.DateRangePreset
 import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.app.search.ParsedScopedInput
 import com.theoriacodex.app.search.UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
 import com.theoriacodex.app.search.UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
 import com.theoriacodex.app.search.UNSUPPORTED_SEARCH_SCOPE_MESSAGE
 import com.theoriacodex.app.search.parseScopedInput
-import com.theoriacodex.app.search.range
 import com.theoriacodex.app.search.resolveSupportedScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -35,7 +33,6 @@ object SearchDraftReducer {
         is SearchAction.SelectSort -> mutateQuery(state) { it.copy(sort = edit.sort) }
         is SearchAction.SetMedia -> mutateQuery(state) { it.copy(media = edit.media) }
         is SearchAction.SetDateRange -> mutateQuery(state) { it.copy(dateRange = edit.range) }
-        is SearchAction.SetDateRangePreset -> mutateQuery(state) { it.copy(dateRange = edit.preset.range) }
         is SearchAction.AddIncludeTerm -> addTerm(state, edit.term, excluded = false)
         is SearchAction.AddExcludeTerm -> addTerm(state, edit.term, excluded = true)
         is SearchAction.RemoveIncludeTerm -> removeTerm(state, edit.term, excluded = false)

@@ -724,8 +724,7 @@ private fun FilterSheet(
         }
         DateRangeFilterSection(
             range = query.dateRange,
-            onPreset = { preset -> onAction(SearchAction.SetDateRangePreset(preset)) },
-            onCustom = { range -> onAction(SearchAction.SetDateRange(range)) },
+            onRangeChange = { range -> onAction(SearchAction.SetDateRange(range)) },
         )
     }
 }

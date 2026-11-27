@@ -210,7 +210,7 @@ class UnifiedSearchOrchestrator(
             preparedQueries[source] = if (clientSideExclude) {
                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
             } else prepared
-            val page = fetchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
+            val page = fetchSource(adapter, prepared, pageToken)
             if (clientSideExclude) {
                 val hydrated = listOf(page).withSearchMetadata(adapter).single()
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
@@ -232,7 +232,10 @@ class UnifiedSearchOrchestrator(
         return page.copy(items = annotateListing(page.items))
     }
 
-    private suspend fun fetchSource(
+    private suspend fun fetchSource(adapter: SourceAdapter, query: Query, pageToken: String?): Page<Post> =
+        fetchUnfiltered(adapter, query, pageToken).inDateRange(query.dateRange)
+
+    private suspend fun fetchUnfiltered(
         adapter: SourceAdapter,
         query: Query,
         pageToken: String?,

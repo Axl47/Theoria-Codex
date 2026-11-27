@@ -103,14 +103,14 @@ private fun FavoriteTagSectionContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePreset) -> Unit, onCustom: (DateRange) -> Unit) {
+internal fun DateRangeFilterSection(range: DateRange?, onRangeChange: (DateRange?) -> Unit) {
     val now = remember { System.currentTimeMillis() }
     val preset = presetFor(range)
     val custom = range as? DateRange.Between
     var picking by remember { mutableStateOf(false) }
     FilterSection("Date") {
         DateRangePreset.entries.forEach { option ->
-            FilterChoiceChip(option.label, preset == option) { onPreset(option) }
+            FilterChoiceChip(option.label, preset == option) { onRangeChange(option.range) }
         }
         val customLabel = range?.takeIf { preset == null }?.let(::dateRangeLabel) ?: "Custom"
         FilterChoiceChip(customLabel, preset == null) { picking = true }
@@ -132,7 +132,7 @@ internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePrese
                 onClick = {
                     val from = pickerState.selectedStartDateMillis
                     val to = pickerState.selectedEndDateMillis
-                    if (from != null && to != null) onCustom(customDateRange(from, to))
+                    if (from != null && to != null) onRangeChange(customDateRange(from, to))
                     picking = false
                 },
             ) { Text("Apply") }
