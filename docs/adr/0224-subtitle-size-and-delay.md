@@ -13,7 +13,7 @@ the text renderer reads at most one second ahead of the position it is given.
 ## Decision
 
 - Controls: the Subtitles sheet shows a "Size and delay" row while a track is on. It closes the sheet and opens a
-  floating panel at the top (`ViewerPanel.SUBTITLE_TUNING`) with chrome hidden, so the subtitles stay visible while
+  floating panel at the top (`ViewerPanel.SUBTITLE_TUNING`) with chrome hidden, even under TalkBack, so the subtitles stay visible while
   the episode plays. Each value has − and + buttons that repeat while held. A reset button shows only when a value
   is not the default. A tap outside the panel or Back closes it. Changes are sent as relative steps
   (`SubtitleAdjustment`), so fast taps never apply a stale value.
@@ -28,7 +28,9 @@ the text renderer reads at most one second ahead of the position it is given.
 - Mechanism: the text renderer is wrapped in `DelayedTextRenderer`, a `ForwardingRenderer` that hands the renderer
   `playback position − delay` wherever Media3 passes a position (enable, reset, render, progress). A new delay is
   sent as a player message on the playback thread, then the player seeks 1 ms back, because a seek to the current
-  position does nothing, and the reset makes the renderer reload cues for the shifted time. The Viewer sends a
+  position does nothing, and the reset makes the renderer reload cues for the shifted time. The seek is skipped
+  when the player is idle or ended, and on a stream that cannot seek, where any seek restarts it; there the new
+  delay applies from the next render without reloading cues. The Viewer sends a
   change after it has settled for 250 ms, so a held button causes one seek, not twenty.
 - Ending: Media3 ends a text renderer at the period end only through an `instanceof TextRenderer` call in
   `RendererHolder` (`setFinalStreamEndPositionUs`), which the wrapper does not receive. Otherwise a text renderer

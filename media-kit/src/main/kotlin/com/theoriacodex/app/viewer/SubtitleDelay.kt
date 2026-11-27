@@ -96,8 +96,8 @@ fun ExoPlayer.setSubtitleDelay(delayMs: Long) {
     if (renderer.requestedDelayMs == delayMs) return
     renderer.requestedDelayMs = delayMs
     createMessage(renderer).setType(MSG_SET_SUBTITLE_DELAY).setPayload(Util.msToUs(delayMs)).send()
-    val playing = playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING
-    if (playing && currentTracks.isTypeSelected(C.TRACK_TYPE_TEXT)) seekTo((currentPosition - SUBTITLE_RESET_SEEK_BACK_MS).coerceAtLeast(0L))
+    val loaded = playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING
+    if (loaded && isCurrentMediaItemSeekable && currentTracks.isTypeSelected(C.TRACK_TYPE_TEXT)) seekTo((currentPosition - SUBTITLE_RESET_SEEK_BACK_MS).coerceAtLeast(0L))
 }
 
 internal const val MSG_SET_SUBTITLE_DELAY = Renderer.MSG_CUSTOM_BASE + 1
