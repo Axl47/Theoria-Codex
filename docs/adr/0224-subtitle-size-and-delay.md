@@ -13,9 +13,11 @@ the text renderer reads at most one second ahead of the position it is given.
 ## Decision
 
 - Controls: the Subtitles sheet shows a "Size and delay" row while a track is on. It closes the sheet and opens a
-  floating panel at the top (`ViewerPanel.SUBTITLE_TUNING`) with chrome hidden, even under TalkBack, so the subtitles stay visible while
-  the episode plays. Each value has − and + buttons that repeat while held. A reset button shows only when a value
-  is not the default. A tap outside the panel or Back closes it. Changes are sent as relative steps
+  floating panel at the top (`ViewerPanel.SUBTITLE_TUNING`), and the Viewer hides its chrome while the panel is open,
+  even under TalkBack, so the subtitles stay visible while the episode plays. It is a chrome panel, so starting a
+  clip, locking or toggling the chrome closes it, and the chrome comes back as it was. Each value has − and +
+  buttons that repeat while held and turn off at their limit. A reset button shows only when a value is not the
+  default. A tap outside the panel or Back closes it. Changes are sent as relative steps
   (`SubtitleAdjustment`), so fast taps never apply a stale value.
 - Size: 50–200 % in 10 % steps (`SubtitleTuning`). It multiplies the system caption scale when the user has
   captions turned on in Android, so it never overrides an accessibility choice. It is global and saved in
@@ -70,9 +72,9 @@ remembered per series.
 - `core-domain/src/test/kotlin/com/theoriacodex/domain/model/SubtitleTuningTest.kt`: `size steps by ten percent within 50 to 200 and reset returns 100 (ADR 0224)`, `delay steps by a tenth of a second in both directions up to thirty seconds and reset returns zero (ADR 0224)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/SubtitleDelayTest.kt`: `the subtitle renderer runs behind playback by a positive delay and ahead of it by a negative one (ADR 0224)`, `subtitles end with the video at any delay, never holding playback past its end (ADR 0224)`, `a clip burns each cue in the delay later, measured from the clip's own start (ADR 0224)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `a stored subtitle size snaps to a supported step and missing means the default (ADR 0224)`
-- `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `a backup's subtitle size must be one the Viewer offers (ADR 0224)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `a backup's subtitle size must be within 50 to 200 percent (ADR 0224)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerEpisodeControlsTest.kt`: `the subtitle sheet offers size and delay only while a track is on, and opens their panel (ADR 0224)`, `the size and delay panel steps each value, resets both from one button, and closes on a tap outside it but not on it (ADR 0224)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerWatchingTest.kt`: `subtitle delay opens over hidden chrome, carries across episodes and sessions it replaces, and starts at zero in a new one (ADR 0224)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerWatchingTest.kt`: `the size and delay panel closes with the chrome, and the delay carries across episodes and sessions it replaces but starts at zero in a new one (ADR 0224)`
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/StreamPlaybackDeviceTest.kt`: `aPositiveSubtitleDelayShowsCuesLaterAndPlaybackStillEndsWithTheVideo_adr_0224`, `aNegativeSubtitleDelayChosenDuringPlaybackShowsCuesEarlier_adr_0224`
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/EpisodeClipExportDeviceTest.kt`: `aClipBurnsSubtitlesAtTheChosenSizeAndDelay_adr_0224`
-- Left to prose: the embedded-track gap under a positive delay; no fixture carries subtitles inside the stream.
+- Left to prose: the embedded-track gaps under positive and negative delays; no fixture carries subtitles inside the stream.

@@ -35,6 +35,7 @@ import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerPageState
 import com.theoriacodex.app.viewer.state.ViewerResolutionState
+import com.theoriacodex.domain.model.SubtitleTuning
 import com.theoriacodex.domain.model.GalleryReadingMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -240,7 +241,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = host.rememberVideoOptions(key, pageState.resolution, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config.playbackDiagnosticsEnabled),
+            videoOptions = host.rememberVideoOptions(key, pageState.resolution, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },
@@ -286,13 +287,14 @@ private fun ViewerScreenHost.rememberVideoOptions(
     screen: ViewerScreenState,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
-    diagnosticsEnabled: Boolean,
-): ViewerVideoOptions = remember(key, resolution, episode, session, screen, quality, qualityHeight, diagnosticsEnabled, this) {
+    config: ViewerScreenConfig,
+): ViewerVideoOptions = remember(key, resolution, episode, session, screen, quality, qualityHeight, config.playbackDiagnosticsEnabled, config.subtitleSizePercent, this) {
     ViewerVideoOptions(
-        quality, qualityHeight, episode.streamLabelFor(key), resolution.terminalMessage(), diagnosticsEnabled,
+        quality, qualityHeight, episode.streamLabelFor(key), resolution.terminalMessage(), config.playbackDiagnosticsEnabled,
         ViewerEpisodeOptions(screen.streamAttempts.forSession(session), episode.pickedStream(key), resolution.resolvedAtMs) { label ->
             onAction(ViewerAction.FallBackToStream(key, label))
         },
+        SubtitleTuning(config.subtitleSizePercent, episode.subtitleDelayMs),
     )
 }
 
@@ -317,7 +319,6 @@ private fun viewerRendererControls(
         loopPlayback = frame.uiState.loopsPlayback,
         repeatsAtEnd = frame.videoRepeats || clip != null,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
-        subtitleDelayMs = controls.episode.subtitleDelayMs,
         restartRequest = controls.playback.restartRequest,
         loadGeneration = loadGeneration,
         systemControlsReady = frame.systemControlsReady,

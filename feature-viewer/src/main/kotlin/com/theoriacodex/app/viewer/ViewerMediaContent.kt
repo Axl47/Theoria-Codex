@@ -54,6 +54,7 @@ internal fun ViewerMediaContent(
                     fallBack = options.fallBack,
                 )
             },
+            subtitleTuning = videoOptions.subtitleTuning,
         )
         ViewerMediaKind.GIF -> {
             val locations = remember(post, media, controls.loadGeneration) { viewerGifLocations(post, media) }

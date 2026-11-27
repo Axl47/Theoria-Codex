@@ -299,9 +299,6 @@ private fun ViewerUiState.reduceToggleOverview(): ViewerReduction =
 
 private fun ViewerUiState.showPanel(panel: ViewerPanel): ViewerUiState {
     if (panel == ViewerPanel.PLAYBACK_SETTINGS && !controls.playback.available) return hidePanel(panel)
-    if (panel == ViewerPanel.SUBTITLE_TUNING) {
-        return if (series is ViewerSeries.Watching) copy(controls = controls.copy(panel = panel, chromeVisible = false)) else this
-    }
     return copy(controls = controls.copy(panel = panel))
 }
 

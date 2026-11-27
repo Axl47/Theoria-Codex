@@ -70,6 +70,7 @@ internal data class ViewerVideoOptions(
     val terminalMessage: String?,
     val diagnosticsEnabled: Boolean,
     val episode: ViewerEpisodeOptions? = null,
+    val subtitleTuning: com.theoriacodex.domain.model.SubtitleTuning = com.theoriacodex.domain.model.SubtitleTuning(),
 )
 
 internal class ViewerEpisodeOptions(

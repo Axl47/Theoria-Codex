@@ -103,7 +103,6 @@ class ViewerEpisodeControlsTest {
         tracks.value = PlaybackTracks(subtitles = listOf(PlaybackTrack("0:1/0", "English", selected = true)))
         compose.onNodeWithText("Size and delay").performClick()
         awaitState { state.value.controls.panel == ViewerPanel.SUBTITLE_TUNING }
-        assertFalse(state.value.controls.chromeVisible)
     }
 
     @Test fun `the size and delay panel steps each value, resets both from one button, and closes on a tap outside it but not on it (ADR 0224)`() {
