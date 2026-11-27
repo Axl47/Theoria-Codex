@@ -192,7 +192,7 @@ private fun SavedCodexSection(
     )
     var menuPost by remember { mutableStateOf<Post?>(null) }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {
-        PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true,
+        PostShelfSection(title, count, posts, state.loading, feed?.errors?.isNotEmpty() == true, feed?.refreshFailedOnly == true,
             actions.open, { liveOwner?.retry() }, actions.openActions,
             icon = savedCodexChildIcon(id),
             countSuffix = savedCodexCountSuffix(id, count),

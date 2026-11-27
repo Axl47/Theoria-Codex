@@ -29,6 +29,7 @@ data class LiveCodexFeedState(
     val loading: Boolean = false,
     val canLoadMore: Boolean = false,
     val errors: Map<String, String> = emptyMap(),
+    val refreshFailedOnly: Boolean = false,
     val generation: Long = 0,
     val loadedAtEpochMs: Long? = null,
 )
@@ -211,12 +212,14 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         val shown = slots.keys.withIndex().associate { (rank, id) -> id to rank }
         val posts = branches.values.flatMap { it.posts }.sortedBy { shown[it.id] ?: Int.MAX_VALUE }.distinctByFile()
         posts.forEach { post -> slots.getOrPut(post.id) { FeedSlot(batch, post.createdAtEpochMs) } }
+        val loadErrors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap()
+        val errors = loadErrors + refreshErrors.filterKeys { it in branches }
         mutableState.value = LiveCodexFeedState(
             posts = posts.sortedWith(feedOrder()),
             loading = loading,
             canLoadMore = branches.values.any { it.canLoadMore },
-            errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap() +
-                refreshErrors.filterKeys { it in branches },
+            errors = errors,
+            refreshFailedOnly = loadErrors.isEmpty() && errors.isNotEmpty(),
             generation = generation,
             loadedAtEpochMs = loadedAt,
         )

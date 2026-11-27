@@ -31,6 +31,7 @@ fun PostShelfSection(
     posts: List<Post>,
     loading: Boolean,
     failed: Boolean,
+    refreshFailedOnly: Boolean,
     onOpen: () -> Unit,
     onRetry: () -> Unit,
     onLongPress: () -> Unit,
@@ -65,9 +66,14 @@ fun PostShelfSection(
             loading -> Text("Loading posts…", Modifier.padding(horizontal = 16.dp))
             !failed -> Text("No posts", Modifier.padding(horizontal = 16.dp))
         }
-        if (failed) TextButton(onClick = onRetry, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text("Could not load some posts. Retry")
-        }
+        if (failed) ShelfRetry(stale = refreshFailedOnly, showingPosts = posts.isNotEmpty(), onRetry = onRetry)
+    }
+}
+
+@Composable
+private fun ShelfRetry(stale: Boolean, showingPosts: Boolean, onRetry: () -> Unit) {
+    TextButton(onClick = onRetry, modifier = Modifier.padding(horizontal = 8.dp)) {
+        Text(if (stale && showingPosts) "Couldn't refresh. Retry" else "Could not load some posts. Retry")
     }
 }
 
