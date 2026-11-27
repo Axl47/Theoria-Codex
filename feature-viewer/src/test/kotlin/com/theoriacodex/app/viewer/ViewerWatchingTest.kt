@@ -232,12 +232,12 @@ class ViewerWatchingTest {
     }
 
     @Test
-    fun `subtitle delay opens over hidden chrome, carries across episodes and sessions it replaces, and starts at zero in a new one (ADR 0224)`() {
+    fun `the size and delay panel closes with the chrome, and the delay carries across episodes and sessions it replaces but starts at zero in a new one (ADR 0224)`() {
         val identity = ViewerSessionIdentity("watching")
         var state = createViewerUiState(identity, episodes, series = ViewerSeries.Watching())
         state = reduceViewerState(state, ViewerAction.ShowPanel(ViewerPanel.SUBTITLE_TUNING)).state
         assertEquals(ViewerPanel.SUBTITLE_TUNING, state.controls.panel)
-        assertFalse(state.controls.chromeVisible)
+        assertNull(reduceViewerState(state, ViewerAction.ToggleChrome).state.controls.panel)
 
         repeat(3) { state = reduceViewerState(state, ViewerAction.AdjustSubtitleDelay(SubtitleAdjustment.Step(1))).state }
         state = reduceViewerState(state, ViewerAction.SelectPage(1)).state
