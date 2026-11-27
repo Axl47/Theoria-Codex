@@ -2,6 +2,7 @@ package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import com.theoriacodex.app.search.searchCardTestTag
@@ -13,7 +14,8 @@ class ViewerReturnJourneyTest : AppJourneyFixture() {
     @Test
     fun aViewerUnderASecondCardOpenedViewerStillClosesIntoItsCard_adr_0220() {
         openSearchPost(0, RECENT_SEARCH)
-        val searchCard = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[0].id))
+        val searchCardTag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[0].id)
+        val searchCard = compose.onNodeWithTag(searchCardTag)
         waitFor("Viewer A is open") { viewerShown() }
         activate(compose.onNodeWithContentDescription("Info"))
         activate(compose.onNodeWithContentDescription(CREATOR_LINK))
@@ -28,11 +30,14 @@ class ViewerReturnJourneyTest : AppJourneyFixture() {
         waitFor("Viewer A is shown again") { viewerShown() }
 
         compose.mainClock.autoAdvance = false
-        pressSystemBack()
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(MID_RETURN_MS)
-        val returning = viewerShown()
-        compose.mainClock.autoAdvance = true
+        val returning = try {
+            pressSystemBack()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(MID_RETURN_MS)
+            viewerShown() && compose.onAllNodesWithTag(searchCardTag).fetchSemanticsNodes().isNotEmpty()
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
         assertTrue("Viewer A left at once instead of closing into its card", returning)
         waitFor("Viewer A closed into its Search card") { !viewerShown() && searchCard.isDisplayed() }
     }

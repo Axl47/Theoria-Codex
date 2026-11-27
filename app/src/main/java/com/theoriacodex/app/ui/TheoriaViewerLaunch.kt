@@ -25,10 +25,11 @@ internal suspend fun TheoriaShell.launchViewer(session: ViewerSession, saveConte
     features.offlineMedia.store.load()
     viewerSessions.retain(session)
     if (saveContext) data.uiRestoreRepository.setViewerLaunchContext(session.context)
+    val viewer = navController.currentBackStackEntry?.takeIf { it.destination.route == AppRoute.Viewer }
     val target = when {
-        navController.currentDestination?.route != AppRoute.Viewer -> ViewerLaunchTarget.NewRoot
+        viewer == null -> ViewerLaunchTarget.NewRoot
         !singleTop || navController.previousBackStackEntry?.destination?.route == AppRoute.Viewer -> ViewerLaunchTarget.OverRoot
-        else -> ViewerLaunchTarget.ReusedRoot
+        else -> ViewerLaunchTarget.ReusedRoot(viewer.id)
     }
     viewerReturn.launching(session.posts.map { it.id }, target)
     navController.navigate(AppRoute.Viewer) { launchSingleTop = singleTop }

@@ -59,7 +59,7 @@ class ViewerReturnOriginLifetimeTest {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
-        compose.runOnIdle { viewerReturn.begin(post) }
+        compose.runOnIdle { viewerReturn.begin(post, viewerEntry()) }
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { navigation.popBackStack() }
         compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
@@ -73,7 +73,7 @@ class ViewerReturnOriginLifetimeTest {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
-        compose.runOnIdle { viewerReturn.begin(post) }
+        compose.runOnIdle { viewerReturn.begin(post, viewerEntry()) }
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { navigation.popBackStack() }
         compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
@@ -87,15 +87,32 @@ class ViewerReturnOriginLifetimeTest {
         openViewerThenCover()
         compose.runOnIdle { openViewer(nextPost, grid = "creator") }
         compose.waitForIdle()
-        compose.runOnIdle { viewerReturn.begin(nextPost) }
+        compose.runOnIdle { viewerReturn.begin(nextPost, viewerEntry()) }
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
         compose.runOnIdle {
-            viewerReturn.begin(post)
+            viewerReturn.begin(post, viewerEntry())
             assertEquals("feed", viewerReturn.request?.gridId)
         }
+    }
+
+    @Test fun `a Viewer closed during the hold of the Viewer over it still closes into its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openViewer(nextPost, grid = "creator") }
+        compose.waitForIdle()
+        compose.runOnIdle { viewerReturn.begin(nextPost, viewerEntry()) }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
+        compose.runOnIdle {
+            navigation.popBackStack()
+            viewerReturn.begin(post, viewerEntry())
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("feed", viewerReturn.request?.gridId) }
     }
 
     @Test fun `a Viewer under a trail opened from a full screen still closes into its own card (ADR 0220)`() {
@@ -114,12 +131,12 @@ class ViewerReturnOriginLifetimeTest {
         compose.runOnIdle { openViewer(nextPost, grid = "creator") }
         compose.waitForIdle()
         compose.runOnIdle {
-            viewerReturn.launching(listOf(sharedPost), ViewerLaunchTarget.ReusedRoot)
+            viewerReturn.launching(listOf(sharedPost), ViewerLaunchTarget.ReusedRoot(checkNotNull(viewerEntry())))
             navigation.navigate(AppRoute.Viewer) { launchSingleTop = true }
         }
         compose.waitForIdle()
         compose.runOnIdle {
-            viewerReturn.begin(sharedPost)
+            viewerReturn.begin(sharedPost, viewerEntry())
             assertNull(viewerReturn.request)
         }
         compose.runOnIdle { navigation.popBackStack() }
@@ -127,7 +144,7 @@ class ViewerReturnOriginLifetimeTest {
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
         compose.runOnIdle {
-            viewerReturn.begin(post)
+            viewerReturn.begin(post, viewerEntry())
             assertEquals("feed", viewerReturn.request?.gridId)
         }
     }
@@ -146,7 +163,7 @@ class ViewerReturnOriginLifetimeTest {
                 TheoriaScreenHost(navigation, AppRoute.Home) {
                     opaqueScreen(AppRoute.Home) { Box(Modifier.fillMaxSize()) }
                     composable(AppRoute.Viewer) { entry ->
-                        if (rememberViewerLevel(navigation, entry, trailSession).isRoot) ViewerReturnOriginLifetime()
+                        if (!rememberViewerLevel(navigation, entry, trailSession).isFork) ViewerReturnOriginLifetime(entry.id)
                         ViewerReturnLifetime(this) { navigation.currentDestination?.route != AppRoute.Viewer }
                         Box(Modifier.fillMaxSize())
                     }
@@ -175,8 +192,10 @@ class ViewerReturnOriginLifetimeTest {
         navigation.navigate(AppRoute.Viewer)
     }
 
+    private fun viewerEntry(): String? = navigation.currentBackStackEntry?.id
+
     private fun returnsToCard(tapped: PostId = post): Boolean = compose.runOnIdle {
-        viewerReturn.begin(tapped)
+        viewerReturn.begin(tapped, viewerEntry())
         (viewerReturn.request != null).also { viewerReturn.finishLanding() }
     }
 
