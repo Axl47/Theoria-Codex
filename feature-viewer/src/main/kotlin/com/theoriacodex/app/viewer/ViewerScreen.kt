@@ -242,7 +242,8 @@ private fun viewerChromeVisible(
     dismissDrag: ViewerDismissDrag,
 ): Boolean {
     val locked = uiState.controls.locked && uiState.series is ViewerSeries.Watching
-    val wanted = (uiState.controls.chromeVisible || touchExplorationEnabled || uiState.controls.clip != null) && !locked
+    val tuning = uiState.controls.panel == ViewerPanel.SUBTITLE_TUNING
+    val wanted = (uiState.controls.chromeVisible || touchExplorationEnabled || uiState.controls.clip != null) && !locked && !tuning
     return wanted && !inPictureInPicture && !returning && !opening && !dismissDrag.active
 }
 
