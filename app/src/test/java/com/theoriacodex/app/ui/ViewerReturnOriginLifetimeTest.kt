@@ -7,16 +7,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.trails.TrailPage
+import com.theoriacodex.app.ui.trails.TrailFeed
+import com.theoriacodex.app.ui.trails.TrailHandoffViewModel
+import com.theoriacodex.app.ui.trails.TrailLevel
+import com.theoriacodex.app.ui.trails.TrailTestData
+import com.theoriacodex.app.ui.trails.rememberViewerLevel
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerLaunchTarget
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerReturnOriginLifetime
 import com.theoriacodex.app.viewer.ViewerReturnTransition
 import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -31,8 +43,10 @@ class ViewerReturnOriginLifetimeTest {
 
     private val post = testPost(sourcePostId = "tapped").id
     private val nextPost = testPost(sourcePostId = "tapped-next").id
+    private val sharedPost = testPost(sourcePostId = "shared").id
     private val viewerReturn = ViewerReturnTransition()
     private lateinit var navigation: NavHostController
+    private var trailSession: String? = null
 
     @Test fun `a Viewer covered by a full screen still closes into its card (ADR 0220)`() {
         openViewerThenCover()
@@ -45,21 +59,22 @@ class ViewerReturnOriginLifetimeTest {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
-        compose.runOnIdle { viewerReturn.begin(post) }
+        val viewer = compose.runOnIdle { checkNotNull(viewerEntry()).also { viewerReturn.begin(post, it) } }
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { navigation.popBackStack() }
         compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
         compose.runOnIdle { assertTrue(viewerReturn.request != null) }
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
-        assertFalse(returnsToCard())
+        compose.runOnIdle { assertNull(viewerReturn.request) }
+        assertFalse(returnsToCard(entry = viewer))
     }
 
     @Test fun `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`() {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
-        compose.runOnIdle { viewerReturn.begin(post) }
+        compose.runOnIdle { viewerReturn.begin(post, viewerEntry()) }
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { navigation.popBackStack() }
         compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
@@ -69,11 +84,81 @@ class ViewerReturnOriginLifetimeTest {
         assertTrue(returnsToCard(nextPost))
     }
 
+    @Test fun `a Viewer under a second card-opened Viewer still closes into its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openViewer(nextPost, grid = "creator") }
+        compose.waitForIdle()
+        compose.runOnIdle { viewerReturn.begin(nextPost, viewerEntry()) }
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewerReturn.begin(post, viewerEntry())
+            assertEquals("feed", viewerReturn.request?.gridId)
+        }
+    }
+
+    @Test fun `a Viewer closed during the hold of the Viewer over it still closes into its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openViewer(nextPost, grid = "creator") }
+        compose.waitForIdle()
+        compose.runOnIdle { viewerReturn.begin(nextPost, viewerEntry()) }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
+        compose.runOnIdle {
+            navigation.popBackStack()
+            viewerReturn.begin(post, viewerEntry())
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("feed", viewerReturn.request?.gridId) }
+    }
+
+    @Test fun `a Viewer under a trail opened from a full screen still closes into its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openTrail() }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        assertTrue(returnsToCard())
+    }
+
+    @Test fun `a shared post reusing a covering Viewer leaves the Viewer under it its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openViewer(nextPost, grid = "creator") }
+        compose.waitForIdle()
+        val reused = compose.runOnIdle {
+            viewerEntry().also {
+                viewerReturn.launching(listOf(sharedPost), navigation.viewerLaunchTarget(singleTop = true))
+                navigation.navigate(AppRoute.Viewer) { launchSingleTop = true }
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(reused, viewerEntry())
+            viewerReturn.begin(sharedPost, viewerEntry())
+            assertNull(viewerReturn.request)
+        }
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewerReturn.begin(post, viewerEntry())
+            assertEquals("feed", viewerReturn.request?.gridId)
+        }
+    }
+
     @Test fun `a covered Viewer removed from the back stack lets its card go (ADR 0220)`() {
         openViewerThenCover()
+        val viewer = compose.runOnIdle { navigation.getBackStackEntry(AppRoute.Viewer).id }
         compose.runOnIdle { navigation.popBackStack(AppRoute.Home, inclusive = false) }
         compose.waitForIdle()
-        assertFalse(returnsToCard())
+        assertFalse(returnsToCard(entry = viewer))
     }
 
     private fun openViewerThenCover() {
@@ -82,8 +167,8 @@ class ViewerReturnOriginLifetimeTest {
             CompositionLocalProvider(LocalViewerReturnTransition provides viewerReturn) {
                 TheoriaScreenHost(navigation, AppRoute.Home) {
                     opaqueScreen(AppRoute.Home) { Box(Modifier.fillMaxSize()) }
-                    composable(AppRoute.Viewer) {
-                        ViewerReturnOriginLifetime()
+                    composable(AppRoute.Viewer) { entry ->
+                        if (!rememberViewerLevel(navigation, entry, trailSession).isFork) ViewerReturnOriginLifetime(entry.id)
                         ViewerReturnLifetime(this) { navigation.currentDestination?.route != AppRoute.Viewer }
                         Box(Modifier.fillMaxSize())
                     }
@@ -98,18 +183,29 @@ class ViewerReturnOriginLifetimeTest {
         compose.waitForIdle()
     }
 
-    private fun openViewer(tapped: PostId) {
-        viewerReturn.openedFrom(gridId = "feed", post = tapped)
-        viewerReturn.launching(listOf(tapped), keepsRoot = false)
+    private fun openViewer(tapped: PostId, grid: String = "feed") {
+        viewerReturn.openedFrom(gridId = grid, post = tapped)
+        viewerReturn.launching(listOf(tapped), ViewerLaunchTarget.NewRoot)
         navigation.navigate(AppRoute.Viewer)
     }
 
-    private fun returnsToCard(tapped: PostId = post): Boolean = compose.runOnIdle {
-        viewerReturn.begin(tapped)
+    private fun openTrail() {
+        val feed = TrailFeed("trail:cat", { TrailPage(listOf(TrailTestData.post("cat")), true) }, TrailTestData.related(), CoroutineScope(Job()))
+        ViewModelProvider(compose.activity)[TrailHandoffViewModel::class.java].hand(TRAIL_SESSION, TrailLevel("cat", "tag:cat", feed))
+        trailSession = TRAIL_SESSION
+        viewerReturn.launching(listOf(nextPost), ViewerLaunchTarget.NewRoot)
+        navigation.navigate(AppRoute.Viewer)
+    }
+
+    private fun viewerEntry(): String? = navigation.currentBackStackEntry?.id
+
+    private fun returnsToCard(tapped: PostId = post, entry: String? = viewerEntry()): Boolean = compose.runOnIdle {
+        viewerReturn.begin(tapped, entry)
         (viewerReturn.request != null).also { viewerReturn.finishLanding() }
     }
 
     private companion object {
         const val HALF_HOLD_MS = 350L
+        const val TRAIL_SESSION = "trail-session"
     }
 }

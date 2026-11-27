@@ -167,6 +167,7 @@ internal fun ViewerRoute(
     screenCallbacks: ViewerScreenCallbacks,
     onOwnerChanged: (ViewerViewModel?) -> Unit = {},
     level: ViewerLevel = ViewerLevel.Root,
+    returnEntryId: String? = null,
 ) {
     val viewerReturn = LocalViewerReturnTransition.current
     val latestLevel = rememberUpdatedState(level)
@@ -192,7 +193,7 @@ internal fun ViewerRoute(
     LaunchedEffect(viewerOwner, restoration.claimedSessionId, restoration.attempt) { restoration.run() }
     ViewerLiveSourceMergeEffect(viewerOwner, session, liveSourceState)
     CollectRouteEffects(viewerOwner.effects) { effect ->
-        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn.takeUnless { latestLevel.value.isFork }, routeScope, mediaRetries)
+        handleViewerEffect(effect, viewerOwner, latestEffectCallbacks.value, latestDependencies, viewerReturn?.takeUnless { latestLevel.value.isFork }?.let { transition -> { post: PostId -> transition.begin(post, returnEntryId) } }, routeScope, mediaRetries)
     }
     ViewerUsageTargetEffect(session?.context, viewerState, dependencies.onCodexUsageTargetChanged)
 
@@ -469,7 +470,7 @@ private suspend fun handleViewerEffect(
     viewerOwner: ViewerViewModel,
     callbacks: ViewerRouteEffectCallbacks,
     dependencies: State<ViewerRouteDependencies>,
-    viewerReturn: ViewerReturnTransition?,
+    beginReturn: ((PostId) -> Unit)?,
     routeScope: CoroutineScope,
     mediaRetries: Mutex,
 ) {
@@ -502,7 +503,7 @@ private suspend fun handleViewerEffect(
             viewerOwner.clearSession(retainPresentation = true)
             dependencies.value.sessionRetentionOwner.clear()
             callbacks.onDismiss()
-            currentState.currentPage?.post?.id?.let { viewerReturn?.begin(it) }
+            currentState.currentPage?.post?.id?.let { beginReturn?.invoke(it) }
         }
     }
 }
