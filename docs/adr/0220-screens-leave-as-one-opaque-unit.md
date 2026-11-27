@@ -97,6 +97,7 @@ one that must show what is beneath it would need its own transitions that never 
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a covered Viewer removed from the back stack lets its card go (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer under a second card-opened Viewer still closes into its own card (ADR 0220)`
+- `app/src/androidTest/java/com/theoriacodex/app/journeys/ViewerReturnJourneyTest.kt`: `aViewerUnderASecondCardOpenedViewerStillClosesIntoItsCard_adr_0220`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/triage/TriageCardsTest.kt`: `a Viewer opened from the top card closes into that card (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer that leaves releases only the posts it retained (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `an older Viewer's opening never ends a newer Viewer's (ADR 0220)`
