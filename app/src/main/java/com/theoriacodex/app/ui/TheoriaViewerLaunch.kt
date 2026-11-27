@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.navigation.NavController
 import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.viewer.ViewerLaunchTarget
@@ -25,14 +26,17 @@ internal suspend fun TheoriaShell.launchViewer(session: ViewerSession, saveConte
     features.offlineMedia.store.load()
     viewerSessions.retain(session)
     if (saveContext) data.uiRestoreRepository.setViewerLaunchContext(session.context)
-    val viewer = navController.currentBackStackEntry?.takeIf { it.destination.route == AppRoute.Viewer }
-    val target = when {
+    viewerReturn.launching(session.posts.map { it.id }, navController.viewerLaunchTarget(singleTop))
+    navController.navigate(AppRoute.Viewer) { launchSingleTop = singleTop }
+}
+
+internal fun NavController.viewerLaunchTarget(singleTop: Boolean): ViewerLaunchTarget {
+    val viewer = currentBackStackEntry?.takeIf { it.destination.route == AppRoute.Viewer }
+    return when {
         viewer == null -> ViewerLaunchTarget.NewRoot
-        !singleTop || navController.previousBackStackEntry?.destination?.route == AppRoute.Viewer -> ViewerLaunchTarget.OverRoot
+        !singleTop || previousBackStackEntry?.destination?.route == AppRoute.Viewer -> ViewerLaunchTarget.OverRoot
         else -> ViewerLaunchTarget.ReusedRoot(viewer.id)
     }
-    viewerReturn.launching(session.posts.map { it.id }, target)
-    navController.navigate(AppRoute.Viewer) { launchSingleTop = singleTop }
 }
 
 internal suspend fun TheoriaShell.openFeedViewer(

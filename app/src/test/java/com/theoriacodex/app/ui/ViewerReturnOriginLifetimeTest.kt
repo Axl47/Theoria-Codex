@@ -59,14 +59,15 @@ class ViewerReturnOriginLifetimeTest {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack() }
         compose.waitForIdle()
-        compose.runOnIdle { viewerReturn.begin(post, viewerEntry()) }
+        val viewer = compose.runOnIdle { checkNotNull(viewerEntry()).also { viewerReturn.begin(post, it) } }
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { navigation.popBackStack() }
         compose.mainClock.advanceTimeBy(HALF_HOLD_MS)
         compose.runOnIdle { assertTrue(viewerReturn.request != null) }
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
-        assertFalse(returnsToCard())
+        compose.runOnIdle { assertNull(viewerReturn.request) }
+        assertFalse(returnsToCard(entry = viewer))
     }
 
     @Test fun `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`() {
@@ -130,12 +131,15 @@ class ViewerReturnOriginLifetimeTest {
         openViewerThenCover()
         compose.runOnIdle { openViewer(nextPost, grid = "creator") }
         compose.waitForIdle()
-        compose.runOnIdle {
-            viewerReturn.launching(listOf(sharedPost), ViewerLaunchTarget.ReusedRoot(checkNotNull(viewerEntry())))
-            navigation.navigate(AppRoute.Viewer) { launchSingleTop = true }
+        val reused = compose.runOnIdle {
+            viewerEntry().also {
+                viewerReturn.launching(listOf(sharedPost), navigation.viewerLaunchTarget(singleTop = true))
+                navigation.navigate(AppRoute.Viewer) { launchSingleTop = true }
+            }
         }
         compose.waitForIdle()
         compose.runOnIdle {
+            assertEquals(reused, viewerEntry())
             viewerReturn.begin(sharedPost, viewerEntry())
             assertNull(viewerReturn.request)
         }
@@ -151,9 +155,10 @@ class ViewerReturnOriginLifetimeTest {
 
     @Test fun `a covered Viewer removed from the back stack lets its card go (ADR 0220)`() {
         openViewerThenCover()
+        val viewer = compose.runOnIdle { navigation.getBackStackEntry(AppRoute.Viewer).id }
         compose.runOnIdle { navigation.popBackStack(AppRoute.Home, inclusive = false) }
         compose.waitForIdle()
-        assertFalse(returnsToCard())
+        assertFalse(returnsToCard(entry = viewer))
     }
 
     private fun openViewerThenCover() {
@@ -194,8 +199,8 @@ class ViewerReturnOriginLifetimeTest {
 
     private fun viewerEntry(): String? = navigation.currentBackStackEntry?.id
 
-    private fun returnsToCard(tapped: PostId = post): Boolean = compose.runOnIdle {
-        viewerReturn.begin(tapped, viewerEntry())
+    private fun returnsToCard(tapped: PostId = post, entry: String? = viewerEntry()): Boolean = compose.runOnIdle {
+        viewerReturn.begin(tapped, entry)
         (viewerReturn.request != null).also { viewerReturn.finishLanding() }
     }
 
