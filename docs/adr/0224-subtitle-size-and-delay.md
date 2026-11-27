@@ -30,14 +30,13 @@ the text renderer reads at most one second ahead of the position it is given.
   sent as a player message on the playback thread, then the player seeks 1 ms back, because a seek to the current
   position does nothing, and the reset makes the renderer reload cues for the shifted time. The Viewer sends a
   change after it has settled for 250 ms, so a held button causes one seek, not twenty.
-- Wrapping loses two `instanceof TextRenderer` cases in Media3's `RendererHolder`. The final-stream end position is
-  only an early end signal: the wrapped renderer still ends from the period duration Media3 passes as the stream
-  end. Server-side ad insertion transitions do not apply, since no source uses it.
-- With a positive delay, the subtitle clock reaches the end of the stream after the video does, and the text
-  renderer does not end before its own clock does (for subtitles inside the stream, Media3 does not even mark the
-  stream final until then), so the player would sit on the last frame for the delay. `DelayedTextRenderer.isEnded`
-  also reports ended once playback passes the period's duration, without waiting for the stream to be marked final;
-  Media3 enters ENDED only on a final period, so episodes still end and autoplay on time.
+- Ending: Media3 ends a text renderer at the period end only through an `instanceof TextRenderer` call in
+  `RendererHolder` (`setFinalStreamEndPositionUs`), which the wrapper does not receive. Otherwise a text renderer
+  ends only once its cues run out, and it reads its end of stream only when its own clock is within a second of the
+  end, so a cue past the video's end, or any positive delay, would hold the player on the last frame.
+  `DelayedTextRenderer.isEnded` therefore also reports ended once playback passes the period's duration, at every
+  delay. Media3 enters ENDED only on a final period, so episodes end and autoplay on time. The other lost case,
+  server-side ad insertion transitions, does not apply, since no source uses it.
 - Clips: a clip burns subtitles at the Viewer's size and delay when Save was pressed (`EpisodeClipTracks.subtitleTuning`).
   The burn-in reads each frame's cues at `clip start + frame time − delay`.
 
@@ -47,8 +46,10 @@ Subtitles inside the stream have a gap under a positive delay: right after a see
 queue starts from the keyframe at or before the playback position, so cues that began within the delay before it
 are skipped until the next cue. Under a negative delay the renderer needs cues the delay ahead of playback, so
 after a seek, at the start of playback, or after a delay change, cues inside that window can load after their
-shifted time and are skipped or shown late until the buffer passes the delay. Sideloaded files, the common case, have no gap because the whole file is one
-sample. A seek takes one rebuffer each time the delay settles. Size applies to every source; delay is not
+shifted time and are skipped or shown late until the buffer passes the delay. Sideloaded files, the common case, have
+no gap because the whole file is one sample. A looping video with a text track and a positive delay over a second
+pauses on its last frame for about the delay minus a second each loop, because Media3 loops only after every
+renderer has read to the end; episodes do not loop, and clip mode seeks back before the end. A seek takes one rebuffer each time the delay settles. Size applies to every source; delay is not
 remembered per series.
 
 ## Applies to
@@ -65,7 +66,7 @@ remembered per series.
 ## Guarded by
 
 - `core-domain/src/test/kotlin/com/theoriacodex/domain/model/SubtitleTuningTest.kt`: `size steps by ten percent within 50 to 200 and reset returns 100 (ADR 0224)`, `delay steps by a tenth of a second in both directions up to thirty seconds and reset returns zero (ADR 0224)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/SubtitleDelayTest.kt`: `the subtitle renderer runs behind playback by a positive delay and ahead of it by a negative one (ADR 0224)`, `a positive delay lets playback end with the video, not the delay later (ADR 0224)`, `a clip burns each cue in the delay later, measured from the clip's own start (ADR 0224)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/SubtitleDelayTest.kt`: `the subtitle renderer runs behind playback by a positive delay and ahead of it by a negative one (ADR 0224)`, `subtitles end with the video at any delay, never holding playback past its end (ADR 0224)`, `a clip burns each cue in the delay later, measured from the clip's own start (ADR 0224)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `a stored subtitle size snaps to a supported step and missing means the default (ADR 0224)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `a backup's subtitle size must be one the Viewer offers (ADR 0224)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerEpisodeControlsTest.kt`: `the subtitle sheet offers size and delay only while a track is on, and opens their panel (ADR 0224)`, `the size and delay panel steps each value, resets both from one button, and closes on a tap outside it but not on it (ADR 0224)`

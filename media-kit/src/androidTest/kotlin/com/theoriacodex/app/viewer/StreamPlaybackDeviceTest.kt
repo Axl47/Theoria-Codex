@@ -139,7 +139,6 @@ class StreamPlaybackDeviceTest {
             } finally {
                 onMain {
                     player.removeListener(cueListener)
-                    player.setSubtitleDelay(0L)
                     deviceTestInfrastructure.viewerVideoPlayerPool.recycle(lease)
                 }
             }
