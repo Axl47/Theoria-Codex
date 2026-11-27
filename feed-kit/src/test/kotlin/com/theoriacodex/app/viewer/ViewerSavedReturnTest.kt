@@ -62,7 +62,7 @@ class ViewerSavedReturnTest {
                                 val row = rememberLazyListState()
                                 rows[shelf] = row
                                 ViewerReturnShelf(shelf, posts.map { it.id }, row) {
-                                    PostShelfSection(shelf.codexId, posts.size, posts, false, false, false, {}, {}, {}) {
+                                    PostShelfSection(shelf.codexId, posts.size, posts, false, null, {}, {}, {}) {
                                         LazyRow(state = row, modifier = Modifier.height(260.dp)) {
                                             items(posts) { post ->
                                                 Box(Modifier.width(164.dp)) {
