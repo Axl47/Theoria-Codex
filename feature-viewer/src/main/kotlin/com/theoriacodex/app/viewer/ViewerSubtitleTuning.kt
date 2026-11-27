@@ -1,7 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -28,6 +27,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,7 +38,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -61,41 +60,56 @@ internal fun BoxScope.ViewerSubtitleTuningPanel(
     val dismiss by rememberUpdatedState(onDismiss)
     BackHandler(onBack = onDismiss)
     Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { dismiss() } })
-    FlowRow(
+    Surface(
         modifier = Modifier
             .align(Alignment.TopCenter)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             .padding(top = 12.dp, start = 16.dp, end = 16.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = PANEL_ALPHA))
-            .pointerInput(Unit) { detectTapGestures { } }
-            .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
             .testTag(VIEWER_SUBTITLE_TUNING_TAG),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = PANEL_ALPHA),
     ) {
-        TuningStepper("Size", "${tuning.sizePercent}%", "Smaller subtitles", "Larger subtitles", onSize)
-        TuningStepper("Delay", formatSubtitleDelay(tuning.delayMs), "Show subtitles earlier", "Show subtitles later", onDelay)
-        if (!tuning.isDefault) {
-            IconButton(onClick = { onSize(SubtitleAdjustment.Reset); onDelay(SubtitleAdjustment.Reset) }) {
-                Icon(Icons.Default.RestartAlt, contentDescription = "Reset subtitle size and delay")
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            TuningStepper(
+                label = "Size",
+                value = "${tuning.sizePercent}%",
+                lower = StepButton("Smaller subtitles", tuning.sizePercent > SubtitleTuning.MIN_SIZE_PERCENT),
+                higher = StepButton("Larger subtitles", tuning.sizePercent < SubtitleTuning.MAX_SIZE_PERCENT),
+                onAdjust = onSize,
+            )
+            TuningStepper(
+                label = "Delay",
+                value = formatSubtitleDelay(tuning.delayMs),
+                lower = StepButton("Show subtitles earlier", tuning.delayMs > -SubtitleTuning.MAX_DELAY_MS),
+                higher = StepButton("Show subtitles later", tuning.delayMs < SubtitleTuning.MAX_DELAY_MS),
+                onAdjust = onDelay,
+            )
+            if (!tuning.isDefault) {
+                IconButton(onClick = { onSize(SubtitleAdjustment.Reset); onDelay(SubtitleAdjustment.Reset) }) {
+                    Icon(Icons.Default.RestartAlt, contentDescription = "Reset subtitle size and delay")
+                }
             }
         }
     }
 }
 
+private class StepButton(val description: String, val enabled: Boolean)
+
 @Composable
 private fun TuningStepper(
     label: String,
     value: String,
-    lowerDescription: String,
-    higherDescription: String,
+    lower: StepButton,
+    higher: StepButton,
     onAdjust: (SubtitleAdjustment) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.widthIn(min = 44.dp), style = MaterialTheme.typography.labelLarge)
-        RepeatingStepButton(Icons.Default.Remove, lowerDescription) { onAdjust(SubtitleAdjustment.Step(-1)) }
+        RepeatingStepButton(Icons.Default.Remove, lower) { onAdjust(SubtitleAdjustment.Step(-1)) }
         Text(
             text = value,
             modifier = Modifier.widthIn(min = 56.dp),
@@ -103,18 +117,21 @@ private fun TuningStepper(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium,
         )
-        RepeatingStepButton(Icons.Default.Add, higherDescription) { onAdjust(SubtitleAdjustment.Step(1)) }
+        RepeatingStepButton(Icons.Default.Add, higher) { onAdjust(SubtitleAdjustment.Step(1)) }
     }
 }
 
 @Composable
-private fun RepeatingStepButton(icon: ImageVector, description: String, onStep: () -> Unit) {
+private fun RepeatingStepButton(icon: ImageVector, button: StepButton, onStep: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val latestStep by rememberUpdatedState(onStep)
     var repeated by remember { mutableStateOf(false) }
-    LaunchedEffect(pressed) {
-        if (!pressed) return@LaunchedEffect
+    LaunchedEffect(pressed, button.enabled) {
+        if (!pressed || !button.enabled) {
+            repeated = false
+            return@LaunchedEffect
+        }
         repeated = false
         delay(STEP_REPEAT_START_MS)
         repeated = true
@@ -125,10 +142,10 @@ private fun RepeatingStepButton(icon: ImageVector, description: String, onStep: 
     }
     FilledTonalIconButton(
         onClick = { if (repeated) repeated = false else latestStep() },
-        modifier = Modifier.size(36.dp),
+        enabled = button.enabled,
         interactionSource = interaction,
     ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = button.description, modifier = Modifier.size(20.dp))
     }
 }
 

@@ -53,6 +53,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.theoriacodex.domain.model.SubtitleTuning
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -81,6 +82,7 @@ internal fun ViewerVideoPlayer(
     positions: ViewerVideoPositions,
     loadingPreview: (@Composable () -> Unit)? = null,
     episode: ViewerEpisodeStreams? = null,
+    subtitleTuning: SubtitleTuning = SubtitleTuning(),
 ) {
     val context = LocalContext.current
     val playback = remember(media, sourceKey, quality, qualityHeight, streamLabel) {
@@ -104,7 +106,7 @@ internal fun ViewerVideoPlayer(
     val state = remember(key) { ViewerVideoState(recovery.opening(positions.position(mediaKey))) }
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
-    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, events, recovery, start) { releasedMs, progress ->
+    if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, subtitleTuning.delayMs, events, recovery, start) { releasedMs, progress ->
         val resumeMs = clipReturn.ms ?: releasedMs
         positions.save(mediaKey, resumeMs)
         context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
@@ -117,9 +119,10 @@ internal fun ViewerVideoPlayer(
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
     ViewerVideoCommands(state, controls, clipReturn)
+    ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview)
+    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview, subtitleTuning.sizePercent)
 }
 
 internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
@@ -210,6 +213,7 @@ private fun ViewerVideoBinding(
     state: ViewerVideoState,
     playback: VideoPlaybackRequest,
     controls: ViewerRendererControls,
+    subtitleDelayMs: Long,
     events: ViewerRendererEvents,
     recovery: ViewerVideoRecovery,
     start: ViewerVideoStart,
@@ -224,7 +228,7 @@ private fun ViewerVideoBinding(
         val player = lease.player
         val started = start.applyTo(player)
         player.playbackParameters = PlaybackParameters(controls.playbackRate)
-        player.setSubtitleDelay(controls.subtitleDelayMs)
+        player.setSubtitleDelay(subtitleDelayMs)
         val listener = viewerVideoListener(player, state, recovery) { latestEvents }
         val seeks = ViewerSeekReports(started, { state.scrubbing }) { progress -> latestEvents.onPlaybackProgress?.invoke(progress) }
         player.addListener(listener)
@@ -473,10 +477,6 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
     LaunchedEffect(state.player, controls.playbackRate) {
         runCatching { state.player?.playbackParameters = PlaybackParameters(controls.playbackRate) }
     }
-    LaunchedEffect(state.player, controls.subtitleDelayMs) {
-        delay(VIEWER_SUBTITLE_DELAY_SETTLE_MS)
-        runCatching { state.player?.setSubtitleDelay(controls.subtitleDelayMs) }
-    }
     LaunchedEffect(state.player, controls.restartRequest) {
         if (controls.restartRequest != handledRestart) {
             handledRestart = controls.restartRequest
@@ -521,6 +521,14 @@ private fun ViewerVideoProgress(state: ViewerVideoState, events: ViewerRendererE
 }
 
 @Composable
+private fun ViewerVideoSubtitleDelay(state: ViewerVideoState, delayMs: Long) {
+    LaunchedEffect(state.player, delayMs) {
+        delay(VIEWER_SUBTITLE_DELAY_SETTLE_MS)
+        runCatching { state.player?.setSubtitleDelay(delayMs) }
+    }
+}
+
+@Composable
 private fun ViewerVideoContent(
     state: ViewerVideoState,
     postId: PostId,
@@ -532,6 +540,7 @@ private fun ViewerVideoContent(
     mediaModifier: Modifier,
     aspectRatio: Float?,
     loadingPreview: (@Composable () -> Unit)?,
+    subtitleSizePercent: Int,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
     val parentHeightPx = remember { mutableIntStateOf(0) }
@@ -552,6 +561,7 @@ private fun ViewerVideoContent(
             postId = postId,
             diagnosticsEnabled = diagnosticsEnabled,
             fillScreen = controls.fillScreen,
+            subtitleSizePercent = subtitleSizePercent,
             parentHeightPx = parentHeightPx,
             viewBottomPx = viewBottomPx,
             modifier = videoModifier
@@ -576,13 +586,13 @@ private fun ViewerVideoSurface(
     postId: PostId,
     diagnosticsEnabled: Boolean,
     fillScreen: Boolean,
+    subtitleSizePercent: Int,
     parentHeightPx: IntState,
     viewBottomPx: FloatState,
     modifier: Modifier,
 ) {
     val subtitleBottomLiftPx = with(LocalDensity.current) { LocalViewerSubtitleBottomLift.current.toPx() }
     val subtitleBottomOverlapPx = viewerSubtitleBottomOverlapPx(parentHeightPx.intValue, viewBottomPx.floatValue, subtitleBottomLiftPx)
-    val subtitleSizePercent = LocalViewerSubtitleSizePercent.current
     AndroidView(
         modifier = modifier,
         factory = { context ->
