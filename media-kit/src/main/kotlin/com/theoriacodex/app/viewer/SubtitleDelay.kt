@@ -4,6 +4,7 @@ package com.theoriacodex.app.viewer
 
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.ExoPlayer
@@ -79,7 +80,7 @@ internal class DelayedTextRenderer(renderer: Renderer) : ForwardingRenderer(rend
     override fun getDurationToProgressUs(positionUs: Long, elapsedRealtimeUs: Long): Long =
         super.getDurationToProgressUs(subtitleClockUs(positionUs, delayUs), elapsedRealtimeUs)
 
-    override fun isEnded(): Boolean = super.isEnded() || delayUs > 0L && playbackPassedStreamEnd()
+    override fun isEnded(): Boolean = super.isEnded() || playbackPassedStreamEnd()
 
     private fun playbackPassedStreamEnd(): Boolean {
         val id = periodId ?: return false
@@ -95,7 +96,8 @@ fun ExoPlayer.setSubtitleDelay(delayMs: Long) {
     if (renderer.requestedDelayMs == delayMs) return
     renderer.requestedDelayMs = delayMs
     createMessage(renderer).setType(MSG_SET_SUBTITLE_DELAY).setPayload(Util.msToUs(delayMs)).send()
-    if (currentTracks.isTypeSelected(C.TRACK_TYPE_TEXT)) seekTo((currentPosition - SUBTITLE_RESET_SEEK_BACK_MS).coerceAtLeast(0L))
+    val playing = playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING
+    if (playing && currentTracks.isTypeSelected(C.TRACK_TYPE_TEXT)) seekTo((currentPosition - SUBTITLE_RESET_SEEK_BACK_MS).coerceAtLeast(0L))
 }
 
 internal const val MSG_SET_SUBTITLE_DELAY = Renderer.MSG_CUSTOM_BASE + 1
