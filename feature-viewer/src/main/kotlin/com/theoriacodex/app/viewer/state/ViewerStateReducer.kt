@@ -160,10 +160,7 @@ private fun reduceViewerAction(state: ViewerUiState, action: ViewerAction): View
         ViewerAction.ToggleLike -> state.currentPageEffect { page, _ ->
             ViewerEffect.SetLiked(session = session, postId = page.post.id)
         }
-        is ViewerAction.OpenCreator -> ViewerReduction(
-            state,
-            listOf(ViewerEffect.OpenCreatorProfile(session, action.creator)),
-        )
+        is ViewerAction.OpenCreator -> ViewerReduction(state, listOf(ViewerEffect.OpenCreatorProfile(session, action.creator)))
         is ViewerAction.IncludeTag -> state.reduceIncludeTag(session, action)
         is ViewerAction.ExcludeTag -> state.reduceExcludeTag(session, action)
         ViewerAction.LoadMore -> ViewerReduction(state, listOf(ViewerEffect.LoadMore(session)))
