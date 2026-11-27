@@ -24,16 +24,21 @@ A card tap inside a return grid records its origin with `openedFrom`, naming the
 records none, since nothing would answer the return. Every Viewer launch goes through
 `TheoriaShell.launchViewer`, which hands the origin to `ViewerReturnTransition.launching`: a launch that leaves the
 root Viewer in place (a trail fork pushed over it, or a single-top launch that replaces only a fork) keeps the root's
-origin, and any other launch keeps it only when its posts include the tapped post, clearing it otherwise. A Codex in
+origin; a single-top launch that reuses the root Viewer's own entry, such as a shared link opened over it, hands that
+entry the launch's origin in place (`ViewerLaunchTarget.ReusedRoot`); and any other launch keeps it only when its posts
+include the tapped post, clearing it otherwise. A Codex in
 edit mode gives its cards no return transition, since a tap there selects instead of opening. A tap that opened no
 Viewer therefore never lends its card to the next launch, whatever screen that launch starts from. `ViewerReturnTransition.begin` starts a return
 only while an origin is recorded, and `ViewerReturnLifetime` holds the Viewer's exit only while a return is running.
 A Viewer opened from no card therefore leaves in one frame, the same way it opens.
 
 The origin belongs to the root Viewer's back stack entry, not to its composition: `ViewerReturnOriginLifetime`, which
-only a root Viewer composes, keeps the `ViewerReturnOrigin` current when the entry was created in an entry-scoped
-ViewModel and releases it when the entry leaves the back stack, which navigation does only after the closing hold ends. A release clears only that origin,
-so a card tapped during the hold keeps its own. A Viewer covered by a full screen, such as a creator profile or a
+only a root Viewer composes, adopts the pending origin under the entry's id when the entry was created in an
+entry-scoped ViewModel and releases it when the entry leaves the back stack, which navigation does only after the
+closing hold ends. A close looks up its own entry's origin (`begin(postId, entryId)`), never the newest one, and a
+release resets a running return only when it is that origin's, so a card tapped during the hold keeps its own, a Viewer
+under a second root Viewer (Feed, Viewer, creator profile, Viewer) closes into its own card, even when it closes during
+the second one's hold, and a tap that opened nothing never hides an older Viewer's card. A Viewer covered by a full screen, such as a creator profile or a
 series page, or by a trail fork, therefore still closes into its card when the user comes back to it, and a covered
 Viewer removed from the back stack without being shown again lets its card go. An opening cut short, as when a full
 screen covers the Viewer at once, still ends, but only for the origin it opened from (`finishOpening`).
@@ -93,6 +98,11 @@ one that must show what is beneath it would need its own transitions that never 
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `the card origin outlives the Viewer's closing hold and ends with it (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer leaving the back stack never takes a newer Viewer's card (ADR 0220)`
 - `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a covered Viewer removed from the back stack lets its card go (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer under a second card-opened Viewer still closes into its own card (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer under a trail opened from a full screen still closes into its own card (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a shared post reusing a covering Viewer leaves the Viewer under it its own card (ADR 0220)`
+- `app/src/test/java/com/theoriacodex/app/ui/ViewerReturnOriginLifetimeTest.kt`: `a Viewer closed during the hold of the Viewer over it still closes into its own card (ADR 0220)`
+- `app/src/androidTest/java/com/theoriacodex/app/journeys/ViewerReturnJourneyTest.kt`: `aViewerUnderASecondCardOpenedViewerStillClosesIntoItsCard_adr_0220`
 - `feed-kit/src/test/kotlin/com/theoriacodex/app/triage/TriageCardsTest.kt`: `a Viewer opened from the top card closes into that card (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `a Viewer that leaves releases only the posts it retained (ADR 0220)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerReturnTransitionTest.kt`: `an older Viewer's opening never ends a newer Viewer's (ADR 0220)`

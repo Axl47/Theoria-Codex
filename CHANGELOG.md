@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- A post opened from a feed closes back into its card after you open another post from the creator's profile and come back, instead of vanishing at once.
 - With Instant Seek on, tapping or dragging the timeline of a short looping video shows the frame at that point instead of the video's first frame.
 - With Instant Seek off, dragging the timeline of a short video previews the frame near your finger and plays from there when you let go, instead of restarting the video.
 - The timeline preview no longer stalls and then shows "Preview unavailable" when you drag close to where it last showed a frame, or on videos with a low frame rate.

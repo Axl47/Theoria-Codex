@@ -66,18 +66,22 @@ fun ViewerReturnLifetime(scope: AnimatedVisibilityScope, holdsExit: () -> Boolea
 }
 
 @Composable
-fun ViewerReturnOriginLifetime() {
+fun ViewerReturnOriginLifetime(entryId: String) {
     val transition = LocalViewerReturnTransition.current ?: return
     viewModel<ViewerReturnOriginOwner>(
-        factory = viewModelFactory { initializer { ViewerReturnOriginOwner(transition, transition.origin) } },
+        factory = viewModelFactory { initializer { ViewerReturnOriginOwner(transition, entryId) } },
     )
 }
 
 private class ViewerReturnOriginOwner(
     private val transition: ViewerReturnTransition,
-    private val origin: ViewerReturnOrigin?,
+    private val entryId: String,
 ) : ViewModel() {
-    override fun onCleared() = transition.release(origin)
+    init {
+        transition.adopt(entryId)
+    }
+
+    override fun onCleared() = transition.release(entryId)
 }
 
 @Composable
