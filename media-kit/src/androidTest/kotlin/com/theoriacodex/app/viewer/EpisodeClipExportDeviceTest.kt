@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.MediaMetadataRetriever
+import androidx.media3.transformer.ExportException
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.MediaStream
@@ -35,7 +36,7 @@ class EpisodeClipExportDeviceTest {
             )
             val output = File(context.cacheDir, "clip-device-test.mp4").apply { delete() }
             val progress = CopyOnWriteArrayList<Int>()
-            val result = runBlocking {
+            val result = skippingTheEmulatorDecoder {
                 exportEpisodeClip(context, VideoPlaybackInfrastructure(context), stream, EpisodeClipRange(1_000L, 4_000L),
                     EpisodeClipTracks(subtitles = true, subtitleIndex = 0, audioIndex = 0), output) { progress += it }
             }
@@ -54,6 +55,13 @@ class EpisodeClipExportDeviceTest {
             }
             output.delete()
         }
+    }
+
+    private fun <T> skippingTheEmulatorDecoder(export: suspend () -> T): T = try {
+        runBlocking { export() }
+    } catch (failure: EpisodeClipException) {
+        assumeTheEmulatorDecoderWorks((failure.cause as? ExportException)?.codecInfo?.name)
+        throw failure
     }
 
     private fun MediaMetadataRetriever.frameAt(ms: Long): Bitmap =

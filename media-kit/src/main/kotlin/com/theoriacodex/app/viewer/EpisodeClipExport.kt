@@ -66,7 +66,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
-class EpisodeClipException(message: String) : Exception(message)
+class EpisodeClipException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 data class EpisodeClipResult(val subtitlesBurned: Boolean)
 
@@ -185,7 +185,7 @@ private suspend fun runTransformer(
                     }
                     override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
                         finished = true
-                        continuation.resumeWithException(EpisodeClipException(clipFailureMessage(exportException.errorCode)))
+                        continuation.resumeWithException(exportException.asEpisodeClipFailure())
                     }
                 })
                 .build()
@@ -198,14 +198,17 @@ private suspend fun runTransformer(
     }
 }
 
-internal fun clipFailureMessage(errorCode: Int): String = when (errorCode) {
-    in ExportException.ERROR_CODE_IO_UNSPECIFIED until ExportException.ERROR_CODE_DECODER_INIT_FAILED,
-    ExportException.ERROR_CODE_MUXING_TIMEOUT ->
-        "The episode stopped loading. Clip it again from the episode."
-    ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED ->
-        "This episode can't be clipped on this device."
-    else -> "Could not save this clip. Try again."
-}
+internal fun ExportException.asEpisodeClipFailure(): EpisodeClipException = EpisodeClipException(
+    when (errorCode) {
+        in ExportException.ERROR_CODE_IO_UNSPECIFIED until ExportException.ERROR_CODE_DECODER_INIT_FAILED,
+        ExportException.ERROR_CODE_MUXING_TIMEOUT ->
+            "The episode stopped loading. Clip it again from the episode."
+        ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED ->
+            "This episode can't be clipped on this device."
+        else -> "Could not save this clip. Try again."
+    },
+    this,
+)
 
 private fun loadSubtitleCues(infrastructure: VideoPlaybackInfrastructure, stream: MediaStream, index: Int): List<CuesWithTiming>? {
     val track = stream.subtitles.filter { it.url.isNotBlank() }.getOrNull(index) ?: return null

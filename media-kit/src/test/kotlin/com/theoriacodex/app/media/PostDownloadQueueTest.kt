@@ -394,6 +394,21 @@ class PostDownloadQueueTest {
     }
 
     @Test
+    fun `a failed clip shows its own message and reaches diagnostics with the encoder's error (ADR 0223)`() = runTest {
+        val backend = FakeBackend()
+        val cause = IllegalStateException("decoder rejected its input")
+        backend.prepareOverride = { PreparedPostDownload.Encode { throw DownloadPreparationException("This episode can't be clipped on this device.", cause) } }
+        val reported = mutableListOf<Throwable?>()
+        val queue = PostDownloadQueue(backgroundScope, backend, diagnostics = { _, _, error -> reported += error })
+        queue.submit("Clip", listOf(clip(1)))
+        runCurrent()
+
+        val item = queue.batches.value.single().items.single()
+        assertEquals(PostDownloadStatus.FAILED to "This episode can't be clipped on this device.", item.status to item.message)
+        assertEquals(listOf<Throwable?>(cause), reported)
+    }
+
+    @Test
     fun `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`() = runTest {
         val backend = FakeBackend()
         backend.prepareOverride = { PreparedPostDownload.Encode { kotlinx.coroutines.awaitCancellation() } }
