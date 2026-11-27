@@ -21,6 +21,19 @@ name: Claude Design Review
 # - To change it without a commit, set a repository variable named CLAUDE_REVIEW_MAX_LINES
 #   (Settings > Secrets and variables > Actions > Variables). Otherwise edit the default below.
 #
+# Which pull requests and how many (cost cap)
+# - Automatic reviews run only for pull requests whose title starts with one of the conventional-commit
+#   types in CLAUDE_REVIEW_TYPES (default: feat refactor perf), the changes where design matters most.
+#   Other types are skipped quietly (a line in the job summary, no comment). Set the variable to * to
+#   review every type.
+# - At most CLAUDE_REVIEW_DAILY_CAP automatic reviews run per day (default 10), counted from the review
+#   comments posted since midnight in America/Puerto_Rico. Once the cap is reached, a pull request gets
+#   one comment saying so. @claude requests count toward the day's total but are never refused.
+# - Measured 2026-11-22 to 11-26: about $0.53 per review and ~50 pull requests a day, so reviewing
+#   everything would cost ~$800 a month. 10 a day comes to at most ~$165 a month.
+# - Change either without a commit through repository variables
+#   (Settings > Secrets and variables > Actions > Variables).
+#
 # Setup
 # - Add an Anthropic API key as a repository secret named ANTHROPIC_API_KEY
 #   (Settings > Secrets and variables > Actions > New repository secret).
@@ -46,8 +59,12 @@ permissions:
 
 env:
   MAX_AUTO_REVIEW_LINES: ${{ vars.CLAUDE_REVIEW_MAX_LINES || '5000' }}
+  AUTO_REVIEW_TYPES: ${{ vars.CLAUDE_REVIEW_TYPES || 'feat refactor perf' }}
+  DAILY_REVIEW_CAP: ${{ vars.CLAUDE_REVIEW_DAILY_CAP || '10' }}
+  CAP_TIMEZONE: America/Puerto_Rico
   REVIEW_MARKER: '<!-- claude-design-review -->'
   SIZE_SKIP_MARKER: '<!-- claude-design-review:size-skip -->'
+  CAP_SKIP_MARKER: '<!-- claude-design-review:cap-skip -->'
 
 jobs:
   decide:
@@ -84,6 +101,7 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          TITLE: ${{ github.event.pull_request.title }}
           ADDITIONS: ${{ github.event.pull_request.additions || 0 }}
           DELETIONS: ${{ github.event.pull_request.deletions || 0 }}
         run: |
@@ -91,6 +109,13 @@ jobs:
           if [[ "$EVENT" != pull_request ]]; then
             echo "review=true" >> "$GITHUB_OUTPUT"
             echo "Reviewing #$PR on request." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          type=$(sed -nE 's/^([a-z]+)(\([^)]*\))?!?:.*/\1/p' <<< "$TITLE")
+          if [[ "$AUTO_REVIEW_TYPES" != '*' && " $AUTO_REVIEW_TYPES " != *" ${type:-none} "* ]]; then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "#$PR is a '${type:-untyped}' pull request; automatic reviews cover only: $AUTO_REVIEW_TYPES. Comment @claude to request one." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -113,8 +138,24 @@ jobs:
             exit 0
           fi
 
+          # Count today's review comments (local midnight) to enforce the daily cap.
+          since=$(date -u -d "$(TZ="$CAP_TIMEZONE" date +%Y-%m-%dT00:00:00%:z)" +%Y-%m-%dT%H:%M:%SZ)
+          today=$(gh api --paginate "repos/$REPO/issues/comments?since=$since&per_page=100" \
+            --jq ".[] | select(.created_at >= \"$since\" and .user.login == \"github-actions[bot]\") | .body" |
+            grep -cF "$REVIEW_MARKER" || true)
+          if (( today >= DAILY_REVIEW_CAP )); then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "#$PR skipped: $today reviews already today, the daily cap is $DAILY_REVIEW_CAP." >> "$GITHUB_STEP_SUMMARY"
+            if ! grep -qF "$CAP_SKIP_MARKER" <<< "$comments"; then
+              printf '%s\nSkipped the automatic design review: the daily limit of %s automatic reviews is reached. Comment `@claude` to request one anyway.\n' \
+                "$CAP_SKIP_MARKER" "$DAILY_REVIEW_CAP" > cap.md
+              gh pr comment "$PR" --repo "$REPO" --body-file cap.md
+            fi
+            exit 0
+          fi
+
           echo "review=true" >> "$GITHUB_OUTPUT"
-          echo "Reviewing #$PR ($lines lines changed)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Reviewing #$PR ($lines lines changed; review $((today + 1)) of $DAILY_REVIEW_CAP today)." >> "$GITHUB_STEP_SUMMARY"
 
   review:
     name: review
