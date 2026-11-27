@@ -2,6 +2,7 @@ package com.theoriacodex.app.ui
 
 import com.theoriacodex.app.related.relatedViewerContext
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.viewer.ViewerLaunchTarget
 import com.theoriacodex.app.viewer.ViewerRelatedBinding
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -24,9 +25,12 @@ internal suspend fun TheoriaShell.launchViewer(session: ViewerSession, saveConte
     features.offlineMedia.store.load()
     viewerSessions.retain(session)
     if (saveContext) data.uiRestoreRepository.setViewerLaunchContext(session.context)
-    val overViewer = navController.currentDestination?.route == AppRoute.Viewer
-    val keepsRoot = overViewer && (!singleTop || navController.previousBackStackEntry?.destination?.route == AppRoute.Viewer)
-    viewerReturn.launching(session.posts.map { it.id }, keepsRoot = keepsRoot)
+    val target = when {
+        navController.currentDestination?.route != AppRoute.Viewer -> ViewerLaunchTarget.NewRoot
+        !singleTop || navController.previousBackStackEntry?.destination?.route == AppRoute.Viewer -> ViewerLaunchTarget.OverRoot
+        else -> ViewerLaunchTarget.ReusedRoot
+    }
+    viewerReturn.launching(session.posts.map { it.id }, target)
     navController.navigate(AppRoute.Viewer) { launchSingleTop = singleTop }
 }
 

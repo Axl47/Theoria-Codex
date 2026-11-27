@@ -369,19 +369,19 @@ class ViewerReturnTransitionTest {
         val other = PostId(SourceKey.GELBOORU, "other")
         val abandoned = ViewerReturnTransition()
         abandoned.openedFrom("grid", Rect(0f, 0f, 40f, 50f), post = postId)
-        abandoned.launching(listOf(other), keepsRoot = false)
+        abandoned.launching(listOf(other), ViewerLaunchTarget.NewRoot)
         abandoned.begin(other)
         assertNull(abandoned.openingBounds)
         assertNull(abandoned.request)
 
         val launched = ViewerReturnTransition()
         launched.openedFrom("grid", Rect(0f, 0f, 40f, 50f), post = postId)
-        launched.launching(listOf(other, postId), keepsRoot = false)
-        launched.launching(listOf(other), keepsRoot = true)
+        launched.launching(listOf(other, postId), ViewerLaunchTarget.NewRoot)
+        launched.launching(listOf(other), ViewerLaunchTarget.OverRoot)
         launched.begin(postId)
         assertEquals("grid", launched.request?.gridId)
 
-        launched.launching(listOf(postId), keepsRoot = false)
+        launched.launching(listOf(postId), ViewerLaunchTarget.NewRoot)
         launched.begin(postId)
         assertNull(launched.request)
     }

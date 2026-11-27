@@ -19,6 +19,7 @@ import com.theoriacodex.app.ui.trails.TrailLevel
 import com.theoriacodex.app.ui.trails.TrailTestData
 import com.theoriacodex.app.ui.trails.rememberViewerLevel
 import com.theoriacodex.app.viewer.LocalViewerReturnTransition
+import com.theoriacodex.app.viewer.ViewerLaunchTarget
 import com.theoriacodex.app.viewer.ViewerReturnLifetime
 import com.theoriacodex.app.viewer.ViewerReturnOriginLifetime
 import com.theoriacodex.app.viewer.ViewerReturnTransition
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -41,6 +43,7 @@ class ViewerReturnOriginLifetimeTest {
 
     private val post = testPost(sourcePostId = "tapped").id
     private val nextPost = testPost(sourcePostId = "tapped-next").id
+    private val sharedPost = testPost(sourcePostId = "shared").id
     private val viewerReturn = ViewerReturnTransition()
     private lateinit var navigation: NavHostController
     private var trailSession: String? = null
@@ -106,6 +109,29 @@ class ViewerReturnOriginLifetimeTest {
         assertTrue(returnsToCard())
     }
 
+    @Test fun `a shared post reusing a covering Viewer leaves the Viewer under it its own card (ADR 0220)`() {
+        openViewerThenCover()
+        compose.runOnIdle { openViewer(nextPost, grid = "creator") }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewerReturn.launching(listOf(sharedPost), ViewerLaunchTarget.ReusedRoot)
+            navigation.navigate(AppRoute.Viewer) { launchSingleTop = true }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewerReturn.begin(sharedPost)
+            assertNull(viewerReturn.request)
+        }
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle { navigation.popBackStack() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            viewerReturn.begin(post)
+            assertEquals("feed", viewerReturn.request?.gridId)
+        }
+    }
+
     @Test fun `a covered Viewer removed from the back stack lets its card go (ADR 0220)`() {
         openViewerThenCover()
         compose.runOnIdle { navigation.popBackStack(AppRoute.Home, inclusive = false) }
@@ -137,7 +163,7 @@ class ViewerReturnOriginLifetimeTest {
 
     private fun openViewer(tapped: PostId, grid: String = "feed") {
         viewerReturn.openedFrom(gridId = grid, post = tapped)
-        viewerReturn.launching(listOf(tapped), keepsRoot = false)
+        viewerReturn.launching(listOf(tapped), ViewerLaunchTarget.NewRoot)
         navigation.navigate(AppRoute.Viewer)
     }
 
@@ -145,7 +171,7 @@ class ViewerReturnOriginLifetimeTest {
         val feed = TrailFeed("trail:cat", { TrailPage(listOf(TrailTestData.post("cat")), true) }, TrailTestData.related(), CoroutineScope(Job()))
         ViewModelProvider(compose.activity)[TrailHandoffViewModel::class.java].hand(TRAIL_SESSION, TrailLevel("cat", "tag:cat", feed))
         trailSession = TRAIL_SESSION
-        viewerReturn.launching(listOf(nextPost), keepsRoot = false)
+        viewerReturn.launching(listOf(nextPost), ViewerLaunchTarget.NewRoot)
         navigation.navigate(AppRoute.Viewer)
     }
 

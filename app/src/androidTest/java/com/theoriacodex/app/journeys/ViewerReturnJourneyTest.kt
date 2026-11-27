@@ -13,6 +13,7 @@ class ViewerReturnJourneyTest : AppJourneyFixture() {
     @Test
     fun aViewerUnderASecondCardOpenedViewerStillClosesIntoItsCard_adr_0220() {
         openSearchPost(0, RECENT_SEARCH)
+        val searchCard = compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[0].id))
         waitFor("Viewer A is open") { viewerShown() }
         activate(compose.onNodeWithContentDescription("Info"))
         activate(compose.onNodeWithContentDescription(CREATOR_LINK))
@@ -33,11 +34,11 @@ class ViewerReturnJourneyTest : AppJourneyFixture() {
         val returning = viewerShown()
         compose.mainClock.autoAdvance = true
         assertTrue("Viewer A left at once instead of closing into its card", returning)
-        waitFor("Viewer A closed into Search") { !viewerShown() }
+        waitFor("Viewer A closed into its Search card") { !viewerShown() && searchCard.isDisplayed() }
     }
 
     private fun viewerShown() =
-        compose.onAllNodesWithContentDescription("Info", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private companion object {
         const val RECENT_SEARCH = "journey:viewer-return"

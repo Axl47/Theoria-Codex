@@ -58,9 +58,11 @@ fun viewerReturnCorners(outline: Outline, titleFooter: Boolean): ViewerReturnCor
 }
 
 class ViewerReturnOrigin internal constructor(
-    internal val gridId: String? = null,
-    internal val shelfId: ViewerReturnShelfId? = null,
+    internal var gridId: String? = null,
+    internal var shelfId: ViewerReturnShelfId? = null,
 )
+
+enum class ViewerLaunchTarget { NewRoot, OverRoot, ReusedRoot }
 
 class ViewerPostRetention
 
@@ -117,10 +119,19 @@ class ViewerReturnTransition {
         openingCorners = corners
     }
 
-    fun launching(postIds: Collection<PostId>, keepsRoot: Boolean) {
-        if (keepsRoot) return
+    fun launching(postIds: Collection<PostId>, target: ViewerLaunchTarget) {
+        if (target == ViewerLaunchTarget.OverRoot) return
         val tapped = unclaimedPost
         if (tapped != null && tapped in postIds) unclaimedPost = null else startOrigin(ViewerReturnOrigin())
+        if (target == ViewerLaunchTarget.ReusedRoot) retargetRoot()
+    }
+
+    private fun retargetRoot() {
+        val root = adopted.lastOrNull() ?: return
+        val next = pending ?: return
+        root.gridId = next.gridId
+        root.shelfId = next.shelfId
+        pending = null
     }
 
     fun adopt(): ViewerReturnOrigin = (pending ?: ViewerReturnOrigin()).also { adoptee ->
