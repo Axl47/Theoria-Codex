@@ -19,7 +19,7 @@ class SourceCapabilityGateTest {
             includeTerms = listOf(SearchTerm("landscape")),
             excludeTerms = listOf(SearchTerm("comic")),
             sort = SortMode.TOP,
-            dateRange = DateRange(fromEpochMs = 1L, toEpochMs = 2L),
+            dateRange = DateRange.Between(fromEpochMs = 1L, toEpochMs = 2L),
             minScore = 100,
         )
         val capabilities = mapOf(

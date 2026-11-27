@@ -105,19 +105,20 @@ private fun FavoriteTagSectionContent(
 @Composable
 internal fun DateRangeFilterSection(range: DateRange?, onPreset: (DateRangePreset) -> Unit, onCustom: (DateRange) -> Unit) {
     val now = remember { System.currentTimeMillis() }
-    val preset = presetFor(range, now)
+    val preset = presetFor(range)
+    val custom = range as? DateRange.Between
     var picking by remember { mutableStateOf(false) }
     FilterSection("Date") {
         DateRangePreset.entries.forEach { option ->
             FilterChoiceChip(option.label, preset == option) { onPreset(option) }
         }
-        val customLabel = range?.takeIf { preset == null }?.let { dateRangeLabel(it, now) } ?: "Custom"
+        val customLabel = range?.takeIf { preset == null }?.let(::dateRangeLabel) ?: "Custom"
         FilterChoiceChip(customLabel, preset == null) { picking = true }
     }
     if (!picking) return
     val pickerState = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = range?.fromEpochMs?.takeIf { preset == null },
-        initialSelectedEndDateMillis = range?.toEpochMs?.takeIf { preset == null },
+        initialSelectedStartDateMillis = custom?.fromEpochMs,
+        initialSelectedEndDateMillis = custom?.toEpochMs,
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= now
         },

@@ -16,6 +16,8 @@
 - With Instant Seek on, tapping or dragging the timeline of a short looping video shows the frame at that point instead of the video's first frame.
 - With Instant Seek off, dragging the timeline of a short video previews the frame near your finger and plays from there when you let go, instead of restarting the video.
 - The timeline preview no longer stalls and then shows "Preview unavailable" when you drag close to where it last showed a frame, or on videos with a low frame rate.
+- A search with Today, 7 days, 30 days, 90 days or 1 year now always covers the days before you run it. Saved searches, Recents, the Searches collection and new-post counts used to stay stuck on the days before you chose the filter, and the filter showed as dates. A saved search made before this update keeps its old dates until you edit it and pick the filter again.
+- When Followed or Searches on the Saved page can't refresh, it says "Couldn't refresh" above the posts it still shows, instead of "Could not load some posts".
 
 ## [2.0.0] - 2026-11-25
 

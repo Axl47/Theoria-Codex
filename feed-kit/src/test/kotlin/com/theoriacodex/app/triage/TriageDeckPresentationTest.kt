@@ -34,7 +34,7 @@ class TriageDeckPresentationTest {
     @Test fun `a seed settled to a wider date range keeps the posts the old range dropped`() {
         val old = testPost(sourcePostId = "old", createdAtEpochMs = 10L)
         val recent = testPost(sourcePostId = "recent", createdAtEpochMs = 100L)
-        val lastWeek = DateRange(fromEpochMs = 50L, toEpochMs = null)
+        val lastWeek = DateRange.Between(fromEpochMs = 50L, toEpochMs = null)
         val seed = TriageSeed(listOf(recent), SearchVisibilityFilters(dateRange = lastWeek), lengthFilterActive = false) { posts, range, _ ->
             filterSearchResults(posts, SearchVisibilityFilters(dateRange = range), emptySet(), emptySet())
         }

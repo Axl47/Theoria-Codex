@@ -507,7 +507,7 @@ class UnifiedSearchOrchestratorTest {
         )
 
         val result = orchestrator.search(
-            sampleQuery().copy(dateRange = DateRange(fromEpochMs = 50, toEpochMs = null)),
+            sampleQuery().copy(dateRange = DateRange.Between(fromEpochMs = 50, toEpochMs = null)),
             setOf(SourceKey.DANBOORU, SourceKey.GELBOORU), emptyMap(), emptyMap(),
         )
 

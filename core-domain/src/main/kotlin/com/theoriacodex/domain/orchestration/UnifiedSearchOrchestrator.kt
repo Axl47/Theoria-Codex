@@ -61,6 +61,7 @@ class UnifiedSearchOrchestrator(
     private val sourceTimeoutMs: Long = 15_000L,
     private val providerContext: CoroutineContext = Dispatchers.Default,
     private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun search(
         query: Query,
@@ -369,7 +370,10 @@ class UnifiedSearchOrchestrator(
     }
 
     private fun Page<Post>.inDateRange(range: DateRange?): Page<Post> =
-        if (range == null) this else copy(items = items.filter { post -> post.createdAtEpochMs in range })
+        if (range == null) this else {
+            val bounds = range.boundsAt(clock())
+            copy(items = items.filter { post -> post.createdAtEpochMs in bounds })
+        }
 
     private fun applyClientSideExcludeFilter(
         posts: List<Post>,

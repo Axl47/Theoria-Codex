@@ -53,10 +53,12 @@ fun filterSearchResults(
     watchedPostIds: Set<PostId> = emptySet(),
     knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
     retainedLikedPostIds: Set<PostId> = emptySet(),
+    nowEpochMs: Long = System.currentTimeMillis(),
 ): List<Post> {
+    val dates = filters.dateRange?.boundsAt(nowEpochMs)
     return results.filter { post ->
         (!filters.animatedOnly || matchesAnimatedFilter(post)) &&
-            (filters.dateRange == null || post.createdAtEpochMs in filters.dateRange) &&
+            (dates == null || post.createdAtEpochMs in dates) &&
             matchesAnimatedDurationFilter(post, filters, knownDurationMsByPostId[post.id]) &&
             (!filters.hideLiked || post.id !in likedPostIds || post.id in retainedLikedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds || post.id in retainedLikedPostIds) &&

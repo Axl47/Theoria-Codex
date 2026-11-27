@@ -1,0 +1,1 @@
+{"queries":{"lastWeek":{"schemaVersion":2,"modeType":"source","modeSource":"DANBOORU","includeTags":["cat"],"excludeTags":[],"sort":"NEWEST","includeTerms":[{"value":"cat","facet":"TAG"}],"excludeTerms":[],"includeTermGroups":[[{"value":"cat","facet":"TAG"}]],"dateLastDays":7}}}

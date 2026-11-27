@@ -42,6 +42,13 @@ class RecentSearchPayloadGoldenTest {
     }
 
     @Test
+    fun `a preset is stored as its days and loads back relative, and stored dates stay fixed (ADR 0038, 0084)`() {
+        assertEquals(lastWeek, RecentSearchPayloadCodec.decodeJson(golden("last-days.json")))
+        val fixedWeek = lastWeek.query.copy(dateRange = DateRange.Between(1_699_395_200_000L, 1_700_000_000_000L))
+        assertEquals(lastWeek.copy(query = fixedWeek), RecentSearchPayloadCodec.decodeJson(golden("fixed-week.json")))
+    }
+
+    @Test
     fun `the goldens hold every stored key`() {
         val source = RecentSearchPayload(
             query = Query(
@@ -72,6 +79,7 @@ class RecentSearchPayloadGoldenTest {
             golden("fyp.json") to record(fyp).copy(kind = "FYP"),
             golden("source.json") to record(source),
             golden("animated.json") to record(animated),
+            golden("last-days.json") to record(lastWeek),
         )
     }
 
@@ -92,7 +100,7 @@ class RecentSearchPayloadGoldenTest {
                 includeTerms = escaped + artist,
                 excludeTerms = listOf(SearchTerm("english", SearchFacet.LANGUAGE, "language")),
                 sort = SortMode.NEWEST,
-                dateRange = DateRange(1_700_000_000_000L, 1_790_000_000_000L),
+                dateRange = DateRange.Between(1_700_000_000_000L, 1_790_000_000_000L),
                 minScore = 10,
                 includeTermGroups = listOf(SearchTermGroup(escaped), SearchTermGroup.single(artist)),
             ),
@@ -100,6 +108,19 @@ class RecentSearchPayloadGoldenTest {
             sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
         )
     }
+
+    private val lastWeek = RecentSearchPayload(
+        query = Query(
+            mode = QueryMode.Unified,
+            includeTags = listOf("cat"),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = DateRange.LastDays(7),
+            minScore = null,
+        ),
+        kind = RecentSearchKind.UNIFIED,
+        sources = listOf(SourceKey.DANBOORU, SourceKey.GELBOORU),
+    )
 
     private val fyp = RecentSearchPayload(
         query = Query(

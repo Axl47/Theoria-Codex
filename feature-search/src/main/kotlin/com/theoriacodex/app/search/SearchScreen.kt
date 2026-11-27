@@ -494,7 +494,7 @@ private fun searchFilterLabels(
     fabRestoreState: FeedFabRestoreState,
 ): List<String> = listOfNotNull(
     sortModeLabel(serverFilters.sort).takeIf { serverFilters.sort != SortMode.NEWEST },
-    serverFilters.dateRange?.let { dateRangeLabel(it, System.currentTimeMillis()) },
+    serverFilters.dateRange?.let(::dateRangeLabel),
     "Animated".takeIf { feed.animatedFilterActive },
     animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.animatedDurationFilterActive },
     "Full color".takeIf { serverFilters.fullColor },

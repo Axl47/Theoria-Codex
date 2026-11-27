@@ -10,7 +10,7 @@ Posts, queries and recent searches are persisted in Room payloads, offline manif
 
 - Stores serialize `PostStorageRecord`, `QueryStorageRecord` and `RecentSearchPayloadRecord`, not the domain models, so the domain can evolve without silently changing the schema.
 - A null schema version means the original pre-versioned shape; unknown explicit versions fail closed. Current writers always write the explicit version.
-- Newer optional fields (`galleryLengthUnknown`, `contentHash`, query `media`) are written only when set, so records without them keep their exact stored form.
+- Newer optional fields (`galleryLengthUnknown`, `contentHash`, query `media`, query `dateLastDays`) are written only when set, so records without them keep their exact stored form.
 - Rows written before payloads carried their own version hold a bare `Query`; `RecentSearchPayloadCodec.decode` still reads them.
 - The retired For You search kind (`FYP`) decodes as a Unified search that keeps an entry of tags for every source it searched, even an empty one, so the saved-search library can convert it instead of failing.
 - `RecentSearchPayloadCodec.normalize` returns an entry as storing and reading it back would: sources de-duplicated, source tags kept only for participating sources, the whole search validated.
@@ -38,7 +38,7 @@ Adding a field means making it optional and omitted when unset. Removing the leg
 - `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepositoryTest.kt`: `unsupported and malformed local Post payloads fail explicitly (ADR 0016, 0038)`
 - `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomPayloadGoldenTest.kt`: `upserting an unchanged post keeps the Gson-written row (ADR 0016, 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/QueryStoreGoldenTest.kt`: `a search without a media filter is stored without a media key (ADR 0038)`
-- `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadGoldenTest.kt`: `a bare Query row infers its source metadata (ADR 0038)`, `a Gson-written For You row reads as Unified and keeps its tags by source (ADR 0038)`
+- `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadGoldenTest.kt`: `a bare Query row infers its source metadata (ADR 0038)`, `a preset is stored as its days and loads back relative, and stored dates stay fixed (ADR 0038, 0084)`, `a Gson-written For You row reads as Unified and keeps its tags by source (ADR 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/storage/RecentSearchPayloadCodecTest.kt`: `a retired For You payload reads as Unified with tags for every source it searched (ADR 0038)`, `normalize gives the entry storing would keep, sources once and tags only for searched sources, and refuses what storing refuses (ADR 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedQueryRepositoryTest.kt`: `query repository falls back when persisted source or sort is unknown (ADR 0038)`
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/DataStoreRepositoriesTest.kt`: `settings values this build does not know fall back without resetting the file (ADR 0038)`

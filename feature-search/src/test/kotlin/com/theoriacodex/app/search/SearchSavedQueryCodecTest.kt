@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
@@ -26,5 +27,14 @@ class SearchSavedQueryCodecTest {
         )
 
         assertEquals(query, SearchSavedQueryCodec.decode(SearchSavedQueryCodec.encode(query)))
+    }
+
+    @Test
+    fun `saved state keeps a preset relative and picked dates fixed`() {
+        val query = Query(QueryMode.Unified, emptyList<String>(), emptyList(), SortMode.NEWEST, null, null)
+        listOf(DateRange.LastDays(7), DateRange.Between(100L, null), DateRange.Between(null, 200L)).forEach { range ->
+            val dated = query.copy(dateRange = range)
+            assertEquals(dated, SearchSavedQueryCodec.decode(SearchSavedQueryCodec.encode(dated)))
+        }
     }
 }

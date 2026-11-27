@@ -1,5 +1,6 @@
 package com.theoriacodex.domain.query
 
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -29,7 +30,11 @@ object QueryHash {
             .mapNotNull { term -> term.hashEntry(polarity = "exclude") }
             .sorted()
         val terms = (includeGroups + exclusions).joinToString(separator = ";")
-        val date = query.dateRange?.let { "${it.fromEpochMs ?: "-"}:${it.toEpochMs ?: "-"}" } ?: "none"
+        val date = when (val range = query.dateRange) {
+            null -> "none"
+            is DateRange.Between -> "${range.fromEpochMs ?: "-"}:${range.toEpochMs ?: "-"}"
+            is DateRange.LastDays -> "last:${range.days}d"
+        }
         val score = query.minScore?.toString() ?: "none"
         val parts = listOf(VERSION, mode, terms, query.sort.name, date, score)
         val media = if (query.media == MediaFilter.ANIMATED) listOf("media=animated") else emptyList()
