@@ -60,7 +60,7 @@ class EpisodeClipExportDeviceTest {
     private fun <T> skippingTheEmulatorDecoder(export: suspend () -> T): T = try {
         runBlocking { export() }
     } catch (failure: EpisodeClipException) {
-        assumeTheEmulatorDecoderWorks((failure.cause as? ExportException)?.codecInfo?.name)
+        assumeTheEmulatorDecoderWorks((failure.cause as? ExportException)?.codecInfo?.takeIf { it.isDecoder }?.name)
         throw failure
     }
 
