@@ -3,10 +3,12 @@ package com.theoriacodex.app.viewer
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.MediaMetadataRetriever
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.domain.model.MediaStream
 import com.theoriacodex.domain.model.MediaTrack
+import com.theoriacodex.domain.model.SubtitleTuning
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
@@ -53,6 +55,33 @@ class EpisodeClipExportDeviceTest {
                 assertTrue("before $beforeCue, during $duringCue", duringCue > beforeCue + MIN_CUE_INK)
             }
             output.delete()
+        }
+    }
+
+    @Test
+    fun aClipBurnsSubtitlesAtTheChosenSizeAndDelay_adr_0224() {
+        val routes = streamFixtureRoutes(instrumentation.context.assets) +
+            ("/subtitles/late.vtt" to FixtureRoute.Body(LATE_CUE.toByteArray()))
+        StreamFixtureServer(routes).use { server ->
+            val stream = MediaStream(url = "${server.base}/episode", label = "Fixture", mime = "application/vnd.apple.mpegurl",
+                headers = STREAM_FIXTURE_HEADERS, subtitles = listOf(MediaTrack("${server.base}/subtitles/late.vtt", "English")))
+            fun inkAt(tuning: SubtitleTuning, vararg atMs: Long): List<Int> {
+                val output = File(context.cacheDir, "clip-tuning-device-test.mp4").apply { delete() }
+                runBlocking {
+                    exportEpisodeClip(context, VideoPlaybackInfrastructure(context), stream, EpisodeClipRange(1_000L, 4_000L),
+                        EpisodeClipTracks(subtitles = true, subtitleIndex = 0, subtitleTuning = tuning), output) {}
+                }
+                return MediaMetadataRetriever().use { retriever ->
+                    retriever.setDataSource(output.path)
+                    atMs.map { retriever.frameAt(it).subtitleInk() }
+                }.also { output.delete() }
+            }
+
+            val (plainBefore, plainDuring) = inkAt(SubtitleTuning(), 500L, 1_500L)
+            val (tunedBefore, tunedDuring) = inkAt(SubtitleTuning(sizePercent = 200, delayMs = 1_000L), 1_500L, 2_500L)
+            Log.i("SubtitleTuningDevice", "clip ink: 100% at 0.5 s=$plainBefore, 1.5 s=$plainDuring; 200% +1 s at 1.5 s=$tunedBefore, 2.5 s=$tunedDuring")
+            assertTrue("plain before $plainBefore, tuned before $tunedBefore", tunedBefore < plainBefore + MIN_CUE_INK)
+            assertTrue("plain $plainBefore/$plainDuring, tuned $tunedBefore/$tunedDuring", tunedDuring - tunedBefore > 2 * (plainDuring - plainBefore))
         }
     }
 

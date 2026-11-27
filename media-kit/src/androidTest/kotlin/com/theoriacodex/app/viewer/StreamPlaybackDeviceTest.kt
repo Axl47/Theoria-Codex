@@ -4,6 +4,7 @@ import android.graphics.ImageFormat
 import android.media.ImageReader
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.common.text.CueGroup
@@ -67,6 +68,79 @@ class StreamPlaybackDeviceTest {
             } finally {
                 onMain {
                     player.removeListener(cueListener)
+                    infrastructure.viewerVideoPlayerPool.recycle(lease)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aPositiveSubtitleDelayShowsCuesLaterAndPlaybackStillEndsWithTheVideo_adr_0224() {
+        playWithDelayedSubtitles { player, cues ->
+            onMain {
+                player.setSubtitleDelay(3_000L)
+                player.play()
+            }
+            awaitOnMain { "Early cue" in cues || player.playerError != null }
+            skipIfTheEmulatorDecoderFailed(player)
+            val shownAtMs = cues.getValue("Early cue")
+            awaitOnMain { player.currentPosition >= 3_900L || player.playerError != null }
+            val nearEnd = System.currentTimeMillis()
+            awaitOnMain(timeoutMs = 5_000L) { player.playbackState == Player.STATE_ENDED || player.playerError != null }
+            val endedAfterMs = System.currentTimeMillis() - nearEnd
+            Log.i(DEVICE_LOG_TAG, "delay +3000 ms: cue at 500 ms shown at $shownAtMs ms; ended $endedAfterMs ms after 3900 ms")
+            onMain { assertNull(player.playerError) }
+            assertTrue("shown at $shownAtMs", shownAtMs in 3_300L..3_900L)
+            assertTrue("ended after $endedAfterMs", endedAfterMs < 1_000L)
+        }
+    }
+
+    @Test
+    fun aNegativeSubtitleDelayChosenDuringPlaybackShowsCuesEarlier_adr_0224() {
+        playWithDelayedSubtitles { player, cues ->
+            onMain { player.play() }
+            awaitOnMain { player.currentPosition >= 300L || player.playerError != null }
+            skipIfTheEmulatorDecoderFailed(player)
+            onMain { player.setSubtitleDelay(-1_000L) }
+            awaitOnMain { "Late cue" in cues || player.playerError != null }
+            val shownAtMs = cues.getValue("Late cue")
+            Log.i(DEVICE_LOG_TAG, "delay -1000 ms set at 300 ms: cue at 2000 ms shown at $shownAtMs ms")
+            onMain { assertNull(player.playerError) }
+            assertTrue("shown at $shownAtMs", shownAtMs in 800L..1_400L)
+        }
+    }
+
+    private fun playWithDelayedSubtitles(check: (androidx.media3.exoplayer.ExoPlayer, Map<String, Long>) -> Unit) {
+        val routes = streamFixtureRoutes(instrumentation.context.assets) + ("/subtitles/timed.vtt" to FixtureRoute.Body(TIMED_CUES.toByteArray()))
+        StreamFixtureServer(routes).use { server ->
+            val cues = java.util.concurrent.ConcurrentHashMap<String, Long>()
+            lateinit var player: androidx.media3.exoplayer.ExoPlayer
+            val cueListener = object : Player.Listener {
+                override fun onCues(cueGroup: CueGroup) {
+                    cueGroup.cues.mapNotNull { it.text?.toString() }.forEach { cues.putIfAbsent(it, player.currentPosition) }
+                }
+            }
+            val lease = onMain {
+                infrastructure.viewerVideoPlayerPool.acquire(
+                    VideoPlaybackRequest(
+                        location = "${server.base}/episode",
+                        headers = STREAM_FIXTURE_HEADERS,
+                        mime = "application/vnd.apple.mpegurl",
+                        subtitles = listOf(MediaTrack("${server.base}/subtitles/timed.vtt", "English")),
+                        cache = false,
+                    ),
+                    loop = false,
+                ).also { player = it.player; it.player.addListener(cueListener) }
+            }
+            try {
+                awaitOnMain { player.playbackState == Player.STATE_READY || player.playerError != null }
+                skipIfTheEmulatorDecoderFailed(player)
+                onMain { player.selectSubtitle(player.playbackTracks().subtitles.single { it.label == "English" }.id) }
+                check(player, cues)
+            } finally {
+                onMain {
+                    player.removeListener(cueListener)
+                    player.setSubtitleDelay(0L)
                     infrastructure.viewerVideoPlayerPool.recycle(lease)
                 }
             }
@@ -170,6 +244,8 @@ class StreamPlaybackDeviceTest {
     }
 
     private companion object {
+        const val DEVICE_LOG_TAG = "SubtitleTuningDevice"
+        const val TIMED_CUES = "WEBVTT\n\n00:00:00.500 --> 00:00:01.000\nEarly cue\n\n00:00:02.000 --> 00:00:02.500\nLate cue\n"
         val infrastructure by lazy { VideoPlaybackInfrastructure(InstrumentationRegistry.getInstrumentation().targetContext) }
     }
 }

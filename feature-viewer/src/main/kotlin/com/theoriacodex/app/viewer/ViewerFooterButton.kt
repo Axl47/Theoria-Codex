@@ -86,6 +86,7 @@ private fun ViewerFooterIconButton(
 }
 
 internal val LocalViewerSubtitleBottomLift = compositionLocalOf { 0.dp }
+internal val LocalViewerSubtitleSizePercent = compositionLocalOf { com.theoriacodex.domain.model.SubtitleTuning.DEFAULT_SIZE_PERCENT }
 
 @Composable
 internal fun viewerFooterHeight(

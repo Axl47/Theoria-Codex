@@ -41,7 +41,11 @@ class DataStoreFormatTest {
             providerHealth = listOf(ProviderHealthSnapshotRecord("PIXIV", "DEGRADED", 1L, 2L, "timeout", "slow")),
         )
         val full = SettingsDataStoreFile(settings = settings)
-        assertStoredFormat(golden("settings-full.json") to full, retiredKeys = setOf("settings.scenarioPreset", "settings.viewerAutoRotateVideos"))
+        assertStoredFormat(
+            golden("settings-full.json") to full,
+            golden("settings-subtitle-size.json") to SettingsDataStoreFile(settings = SettingsStoreRecord(viewerSubtitleSizePercent = 130)),
+            retiredKeys = setOf("settings.scenarioPreset", "settings.viewerAutoRotateVideos"),
+        )
     }
 
     @Test

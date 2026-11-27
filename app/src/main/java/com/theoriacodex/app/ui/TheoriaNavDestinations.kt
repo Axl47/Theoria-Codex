@@ -335,6 +335,7 @@ private fun ViewerDestination(shell: TheoriaShell, entry: NavBackStackEntry) {
                     instantSeek = state.browsing.settings.viewer.instantSeek,
                     orientationLock = state.browsing.settings.viewer.orientationLock,
                     commentOrder = state.browsing.settings.viewer.commentOrder,
+                    subtitleSizePercent = state.browsing.settings.viewer.subtitleSizePercent,
                     likedPostIds = state.browsing.likedPostIds,
                     galleryReadingModes = state.browsing.galleryReadingModes,
                     creatorBrowsingSources = state.browsing.creatorBrowsingSources,
@@ -467,6 +468,7 @@ private fun viewerScreenCallbacks(shell: TheoriaShell) = ViewerScreenCallbacks(
     onOrientationLockSelected = { shell.owners.settings.onAction(SettingsAction.SetViewerOrientationLock(it)) },
     onVideoQualitySelected = { shell.owners.settings.onAction(SettingsAction.SetChoice(SettingChoices.DefaultVideoQuality, it)) },
     onCommentOrderSelected = { shell.owners.settings.onAction(SettingsAction.SetCommentOrder(it)) },
+    onSubtitleSizeAdjusted = { shell.owners.settings.onAction(SettingsAction.AdjustSubtitleSize(it)) },
     onGalleryReadingModeSelected = { postId, mode ->
         shell.scope.launch {
             val session = shell.routes.viewer.current?.session?.value

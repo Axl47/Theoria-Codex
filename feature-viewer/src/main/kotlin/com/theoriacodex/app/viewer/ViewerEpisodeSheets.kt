@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -35,12 +37,14 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.app.viewer.state.ViewerSubtitleChoice
 import com.theoriacodex.domain.model.MediaStream
+import com.theoriacodex.domain.model.SubtitleTuning
 
 @Composable
 internal fun ViewerEpisodeSheets(
     streams: List<MediaStream>,
     currentStream: MediaStream?,
     tracks: PlaybackTracks,
+    subtitleTuning: SubtitleTuning,
     playbackRate: ViewerPlaybackRate,
     openPanel: ViewerPanel?,
     onDismiss: (ViewerPanel) -> Unit,
@@ -48,7 +52,7 @@ internal fun ViewerEpisodeSheets(
 ) {
     when (openPanel) {
         ViewerPanel.EPISODE_STREAM -> ViewerStreamSheet(streams, currentStream, { onDismiss(ViewerPanel.EPISODE_STREAM) }, onAction)
-        ViewerPanel.EPISODE_SUBTITLES -> ViewerSubtitleSheet(tracks.subtitles, { onDismiss(ViewerPanel.EPISODE_SUBTITLES) }, onAction)
+        ViewerPanel.EPISODE_SUBTITLES -> ViewerSubtitleSheet(tracks.subtitles, subtitleTuning, { onDismiss(ViewerPanel.EPISODE_SUBTITLES) }, onAction)
         ViewerPanel.EPISODE_AUDIO -> ViewerAudioSheet(tracks.audio, { onDismiss(ViewerPanel.EPISODE_AUDIO) }, onAction)
         ViewerPanel.PLAYBACK_SETTINGS -> ViewerSpeedSheet(playbackRate, { onDismiss(ViewerPanel.PLAYBACK_SETTINGS) }) {
             onAction(ViewerAction.SetPlaybackRate(it.speed))
@@ -84,6 +88,7 @@ private fun ViewerStreamSheet(
 @Composable
 private fun ViewerSubtitleSheet(
     subtitles: List<PlaybackTrack>,
+    tuning: SubtitleTuning,
     onDismiss: () -> Unit,
     onAction: (ViewerAction) -> Unit,
 ) {
@@ -106,6 +111,16 @@ private fun ViewerSubtitleSheet(
                 selected = track.selected,
                 tag = "$VIEWER_EPISODE_SUBTITLES_TAG:${track.label}",
                 onClick = { if (track.selected) onDismiss() else onAction(ViewerAction.ChooseSubtitle(ViewerSubtitleChoice.Track(track.label))) },
+            )
+        }
+        if (active != null) {
+            HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            EpisodeNavRow(
+                icon = Icons.Default.Tune,
+                label = "Size and delay",
+                detail = formatSubtitleTuning(tuning).takeUnless { tuning.isDefault },
+                tag = VIEWER_SUBTITLE_TUNING_ROW_TAG,
+                onClick = { onAction(ViewerAction.ShowPanel(ViewerPanel.SUBTITLE_TUNING)) },
             )
         }
     }
@@ -206,6 +221,30 @@ private fun EpisodeCheckRow(
 }
 
 @Composable
+private fun EpisodeNavRow(
+    icon: ImageVector,
+    label: String,
+    detail: String?,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .testTag(tag)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null)
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        if (detail != null) Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun EpisodeRadioRow(
     label: String,
     selected: Boolean,
@@ -238,3 +277,5 @@ private fun EpisodeRadioRow(
         )
     }
 }
+
+internal const val VIEWER_SUBTITLE_TUNING_ROW_TAG = "viewer-subtitle-tuning-row"

@@ -95,6 +95,7 @@ sealed interface SettingsAction {
         fun applyTo(settings: AppSettings): AppSettings = choice.write(settings, value)
     }
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
+    data class AdjustSubtitleSize(val adjustment: com.theoriacodex.domain.model.SubtitleAdjustment) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
 
     data class SetViewerOrientationLock(val lock: com.theoriacodex.domain.model.ViewerOrientation?) : SettingsAction
