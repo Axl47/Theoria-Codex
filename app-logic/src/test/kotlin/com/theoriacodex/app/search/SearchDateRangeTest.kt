@@ -20,7 +20,7 @@ class SearchDateRangeTest {
         val later = now + 30 * day
         val visible = filterSearchResults(
             listOf(post("chosen-day", now), post("yesterday", later - day)),
-            SearchVisibilityFilters(dateRange = week), emptySet(), emptySet(), nowEpochMs = later,
+            SearchVisibilityFilters(dateRange = week.boundsAt(later)), emptySet(), emptySet(),
         )
         assertEquals(listOf("yesterday"), visible.map { it.id.sourcePostId })
     }

@@ -58,7 +58,7 @@ fun rememberSearchFeed(
         animatedDurationRange, state.query.applied.dateRange,
     ) {
         SearchVisibilityFilters(
-            dateRange = state.query.applied.dateRange, animatedOnly = animatedFilterActive,
+            dateRange = state.query.applied.dateRange?.boundsAt(System.currentTimeMillis()), animatedOnly = animatedFilterActive,
             hideLiked = fabRestoreState.hideLiked, hideSaved = fabRestoreState.hideSaved,
             hideWatched = fabRestoreState.hideWatched, animatedDurationRange = animatedDurationRange,
         )

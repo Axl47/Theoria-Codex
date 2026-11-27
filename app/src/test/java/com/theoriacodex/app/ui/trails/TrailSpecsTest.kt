@@ -172,9 +172,9 @@ class TrailSpecsTest {
 
         assertEquals(
             SearchVisibilityFilters(animatedOnly = true, hideWatched = true),
-            trailVisibilityFilters(parent, tagQuery),
+            trailVisibilityFilters(parent, tagQuery, nowEpochMs = 0L),
         )
-        assertEquals(SearchVisibilityFilters(hideWatched = true), trailVisibilityFilters(parent, query = null))
+        assertEquals(SearchVisibilityFilters(hideWatched = true), trailVisibilityFilters(parent, query = null, nowEpochMs = 0L))
     }
 
     @Test

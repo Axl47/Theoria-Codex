@@ -91,7 +91,7 @@ private suspend fun TheoriaShell.openLevel(
     val parent = routes.viewer.current?.session?.value?.searchVisibilityFilters
         ?.takeIf { origin?.destination?.route == AppRoute.Viewer } ?: SearchVisibilityFilters()
     val spec = trailSpec(request, shellTrailSources(), parent) ?: return TrailOutcome.Failed
-    val filters = trailVisibilityFilters(parent, spec.query)
+    val filters = trailVisibilityFilters(parent, spec.query, System.currentTimeMillis())
     val feed = TrailFeed("trail:${UUID.randomUUID()}", spec.pager, features.relatedPosts)
     var opened = false
     try {

@@ -10,7 +10,7 @@ Posts, queries and recent searches are persisted in Room payloads, offline manif
 
 - Stores serialize `PostStorageRecord`, `QueryStorageRecord` and `RecentSearchPayloadRecord`, not the domain models, so the domain can evolve without silently changing the schema.
 - A null schema version means the original pre-versioned shape; unknown explicit versions fail closed. Current writers always write the explicit version.
-- Newer optional fields (`galleryLengthUnknown`, `contentHash`, query `media`, query `dateLastDays`) are written only when set, so records without them keep their exact stored form.
+- Newer optional fields (`galleryLengthUnknown`, `contentHash`, query `media`, query `dateLastDays`) are written only when set, so records without them keep their exact stored form. An older build ignores a field it does not know, so it reads a preset search (`dateLastDays`) as having no date filter; that beats failing the whole record.
 - Rows written before payloads carried their own version hold a bare `Query`; `RecentSearchPayloadCodec.decode` still reads them.
 - The retired For You search kind (`FYP`) decodes as a Unified search that keeps an entry of tags for every source it searched, even an empty one, so the saved-search library can convert it instead of failing.
 - `RecentSearchPayloadCodec.normalize` returns an entry as storing and reading it back would: sources de-duplicated, source tags kept only for participating sources, the whole search validated.

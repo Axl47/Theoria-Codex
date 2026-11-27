@@ -45,7 +45,9 @@ class RecentSearchPayloadGoldenTest {
     fun `a preset is stored as its days and loads back relative, and stored dates stay fixed (ADR 0038, 0084)`() {
         assertEquals(lastWeek, RecentSearchPayloadCodec.decodeJson(golden("last-days.json")))
         val fixedWeek = lastWeek.query.copy(dateRange = DateRange.Between(1_699_395_200_000L, 1_700_000_000_000L))
-        assertEquals(lastWeek.copy(query = fixedWeek), RecentSearchPayloadCodec.decodeJson(golden("fixed-week.json")))
+        val stored = golden("fixed-week.json")
+        assertEquals(lastWeek.copy(query = fixedWeek), RecentSearchPayloadCodec.decodeJson(stored))
+        assertEquals(stored, RecentSearchPayloadCodec.decodeJson(stored).run { RecentSearchPayloadCodec.encodeJson(query, kind, sources) })
     }
 
     @Test

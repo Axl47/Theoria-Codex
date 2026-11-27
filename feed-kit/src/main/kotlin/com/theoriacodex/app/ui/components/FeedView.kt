@@ -29,7 +29,7 @@ data class FeedMarks(
 fun interface FeedPostFilter {
     fun filter(posts: List<Post>, knownDurationMsByPostId: Map<PostId, Long>): List<Post>
 
-    fun withDateRange(range: DateRange?): FeedPostFilter = this
+    fun withDateRange(range: DateRange.Between?): FeedPostFilter = this
 }
 
 private data class VisibilityPostFilter(
@@ -44,7 +44,7 @@ private data class VisibilityPostFilter(
         knownDurationMsByPostId = knownDurationMsByPostId, retainedLikedPostIds = retained,
     )
 
-    override fun withDateRange(range: DateRange?): FeedPostFilter = copy(filters = filters.copy(dateRange = range))
+    override fun withDateRange(range: DateRange.Between?): FeedPostFilter = copy(filters = filters.copy(dateRange = range))
 }
 
 class FeedView(
