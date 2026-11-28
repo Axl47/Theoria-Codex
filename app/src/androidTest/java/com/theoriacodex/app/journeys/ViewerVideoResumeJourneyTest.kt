@@ -62,7 +62,7 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
         moveBy(Offset(width * fraction / 2f, 0f))
     }
 
-    private fun releaseDrag(fraction: Float) = media().performTouchInput { moveBy(Offset(width * fraction / 2f, 0f)); up() }
+    private fun releaseDrag(fraction: Float) = media().performTouchInput { moveBy(Offset(width * fraction / 4f, 0f)); up() }
 
     private fun assertNeighbourShowsFrame(index: Int, expectedStart: (Float) -> Boolean) {
         waitFor("video $index renders a frame while the drag is held") { showsVideoFrame(index) }
