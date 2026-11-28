@@ -42,7 +42,7 @@ class SavedSearchNewPostsTest {
 
     private suspend fun counts() = store.observeSavedSearchNewPosts().first().marks.mapValues { it.value.newPostCount }
 
-    @Test fun `first check sets the baseline, later ones count, and opening clears them`() = runTest {
+    @Test fun `first check sets the baseline, later ones count, and seeing them clears them`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
         check(searches, 0L)
@@ -50,7 +50,7 @@ class SavedSearchNewPostsTest {
         pages = mapOf("a" to listOf("2", "1"))
         check(searches, 3 * hour)
         assertEquals(mapOf("a" to 1), counts())
-        store.markSavedSearchesSeen(setOf("a"))
+        store.markSavedSearchPostsSeen(setOf("PIXIV:2"))
         assertEquals(mapOf("a" to 0), counts())
     }
 
@@ -155,24 +155,6 @@ class SavedSearchNewPostsTest {
         check(listOf(saved), 3 * hour)
         assertEquals(mapOf("a" to 2), counts())
         return saved
-    }
-
-    @Test fun `opening a saved search keeps its marks until Search shows results for it`() = runTest {
-        val saved = savedSearchWithTwoNew()
-        val opens = SavedSearchOpenMarks(store)
-        opens.opened(saved)
-        opens.resultsShown(saved.search.query.copy(minScore = 5), listOf(testPost(SourceKey.PIXIV, "3")))
-        assertEquals(mapOf("a" to 2), counts())
-    }
-
-    @Test fun `results clear only the posts they showed`() = runTest {
-        val saved = savedSearchWithTwoNew()
-        val opens = SavedSearchOpenMarks(store)
-        opens.opened(saved)
-        opens.resultsShown(saved.search.query, listOf(testPost(SourceKey.PIXIV, "3"), testPost(SourceKey.PIXIV, "1")))
-        assertEquals(mapOf("a" to 1), counts())
-        opens.resultsShown(saved.search.query, listOf(testPost(SourceKey.PIXIV, "2")))
-        assertEquals(mapOf("a" to 1), counts())
     }
 
     private fun entry(id: String, savedAt: Long, sort: SortMode = SortMode.NEWEST) = SavedSearchEntry(id, id, RecentSearchEntry(

@@ -19,8 +19,16 @@ data class NewPostMarks(
         return NewPostMarks(if (baseline) latest else seenPostIds, latest, atEpochMs)
     }
 
-    fun seen(shown: (String) -> Boolean = { true }): NewPostMarks =
-        copy(seenPostIds = (latestPostIds.filter(shown) + seenPostIds).distinct().take(MAX_NEW_POST_MARK_IDS))
+    fun seen(shown: (String) -> Boolean = { true }): NewPostMarks = including(latestPostIds.filter(shown))
+
+    fun including(ids: Collection<String>): NewPostMarks {
+        val seen = (ids + seenPostIds).distinct()
+        val excess = seen.size - MAX_NEW_POST_MARK_IDS
+        if (excess <= 0) return copy(seenPostIds = seen)
+        val current = latestPostIds.toSet()
+        val evicted = seen.asReversed().asSequence().filter { it !in current }.take(excess).toSet()
+        return copy(seenPostIds = seen.filter { it !in evicted })
+    }
 }
 
 const val MAX_NEW_POST_MARK_IDS = 200

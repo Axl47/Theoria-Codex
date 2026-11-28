@@ -89,12 +89,14 @@ private fun SearchDestination(shell: TheoriaShell) {
             relatedPostsLoader = shell.features.relatedPosts,
             mediaDurationCoordinator = shell.features.mediaDurationCoordinator,
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
-            config = searchRouteConfig(shell, state).copy(omnibox = { rememberSearchOmniboxEntries(shell, state) }),
+            config = searchRouteConfig(shell, state).copy(
+                omnibox = { rememberSearchOmniboxEntries(shell, state) },
+                newPosts = rememberNewPostsSeen(shell.data),
+            ),
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated) },
             callbacks = SearchRouteCallbacks(
                 onOpenSavedSearch = shell::openSavedSearch,
-                onResultsShown = shell.savedSearchOpens::resultsShown,
                 onSaveSearch = shell.owners.savedSearches::save,
                 onUpdateSavedSearch = { saved, search -> shell.owners.savedSearches.update(saved.id, search) },
                 onManageSavedSearches = { shell.overlays.showSavedSearchManagement = true },

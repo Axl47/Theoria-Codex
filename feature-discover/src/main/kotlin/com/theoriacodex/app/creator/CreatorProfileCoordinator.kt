@@ -25,8 +25,6 @@ interface CreatorRouteEngine {
 
     suspend fun accountDetails(creator: CreatorProfile): AccountDetails? = null
     suspend fun load(creator: CreatorProfile, feed: AccountFeed, pageToken: String?): Page<Post>
-    suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>)
-
     suspend fun seenPostIds(creator: CreatorProfile): Set<String>? = null
     suspend fun resolvePost(postId: PostId): Post?
 }
@@ -60,10 +58,6 @@ class CreatorProfileCoordinator(
             }
         }?.also { page -> fileMirrors.learn(page.items) }
             ?: error(if (feed == AccountFeed.FAVORITES) "Favorites timed out. Try again." else "Creator uploads timed out. Try again.")
-    }
-
-    override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
-        follows?.recordVisit(creator, posts)
     }
 
     override suspend fun seenPostIds(creator: CreatorProfile): Set<String>? = follows?.seenPostIds(creator)

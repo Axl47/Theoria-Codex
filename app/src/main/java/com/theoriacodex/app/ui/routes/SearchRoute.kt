@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.ui.NewPostsSeen
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.feedDurations
@@ -41,7 +42,6 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.SearchSourceMix
 
@@ -53,6 +53,7 @@ internal data class SearchRouteConfig(
     val favoriteTags: List<FavoriteTagEntry>,
     val resolveUnknownAnimatedDurations: Boolean,
     val omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
+    val newPosts: NewPostsSeen? = null,
 )
 
 internal data class SearchRouteCallbacks(
@@ -63,7 +64,6 @@ internal data class SearchRouteCallbacks(
     val onOpenSourceAccounts: () -> Unit = {},
     val onSetSourceWeights: (Set<SourceKey>, Map<SourceKey, Double>) -> Unit = { _, _ -> },
     val onOpenSavedSearch: (SavedSearchEntry) -> Unit = {},
-    val onResultsShown: suspend (Query, List<Post>) -> Unit = { _, _ -> },
     val onSaveSearch: (String, RecentSearchEntry) -> Unit = { _, _ -> },
     val onUpdateSavedSearch: (SavedSearchEntry, RecentSearchEntry) -> Unit = { _, _ -> },
     val onManageSavedSearches: () -> Unit = {},
@@ -109,15 +109,6 @@ internal class SearchRouteResumeObserver(
 }
 
 @Composable
-private fun ReportShownResults(state: SearchUiState, onResultsShown: suspend (Query, List<Post>) -> Unit) {
-    val current by rememberUpdatedState(onResultsShown)
-    val shown = state.content.results.takeIf { !state.loading && state.content.error == null && state.content.hasExecutedSearch }
-    LaunchedEffect(shown, state.query.applied) {
-        if (!shown.isNullOrEmpty()) current(state.query.applied, shown)
-    }
-}
-
-@Composable
 internal fun SearchRoute(
     coordinator: SearchCoordinator,
     relatedPostsLoader: RelatedPostsLoading,
@@ -151,7 +142,6 @@ internal fun SearchRoute(
 
     SideEffect { currentOnOwnerAvailable(owner) }
 
-    ReportShownResults(state, callbacks.onResultsShown)
     ReportLaunchContent(TopLevelDestination.Search, drawn = state.firstContentDrawn)
 
     LaunchedEffect(owner) {
@@ -250,6 +240,8 @@ private fun SearchRouteContent(
         fabRestoreState = fabRestoreState,
         onFabRestoreStateChange = onFabRestoreStateChange,
         sourceMix = SearchSourceMix(config.settings.runtime, callbacks.onSetSourceWeights),
+        newPostIds = remember(state.content.results, config.newPosts) { config.newPosts?.among(state.content.results).orEmpty() },
+        onNewPostsSeen = config.newPosts?.onSeen,
     )
 }
 

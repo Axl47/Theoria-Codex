@@ -23,6 +23,7 @@ import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.markKey
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.awaitCancellation
@@ -68,6 +69,33 @@ internal fun newPostsSeenHandler(data: DataDependencies, codexId: String): (susp
 
 private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
 
+internal class NewPostsSeen(
+    private val keys: Set<String>,
+    private val followed: CreatorProfile?,
+    private val mark: suspend (Set<PostId>, CreatorProfile?) -> Unit,
+) {
+    val onSeen: suspend (Set<PostId>) -> Unit = { seen -> mark(seen, followed) }
+
+    fun among(posts: List<Post>, withFollowed: Boolean = true): Set<PostId> {
+        val source = followed?.source?.takeIf { withFollowed }
+        return posts.mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { it.markKey() in keys || it.source == source } }
+    }
+}
+
+@Composable
+internal fun rememberNewPostsSeen(data: DataDependencies, followed: CreatorProfile? = null): NewPostsSeen {
+    val keys = rememberSavedNewPosts(data).values.flatMapTo(mutableSetOf()) { it }
+    return remember(data, followed, keys) { NewPostsSeen(keys, followed) { seen, creator -> data.markPostsSeen(seen, creator) } }
+}
+
+private suspend fun DataDependencies.markPostsSeen(seen: Set<PostId>, followed: CreatorProfile?) {
+    followed?.let { creator ->
+        CreatorFollowsRepository(settingsRepository).markShown(creator, seen.filter { it.source == creator.source }.map { it.sourcePostId })
+    }
+    val keys = seen.mapTo(mutableSetOf()) { it.markKey() }
+    newPostCodexIds.forEach { markNewPostsSeen(it, keys) }
+}
+
 private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Set<String>) {
     when (codexId) {
         FOLLOWED_CODEX_ID -> CreatorFollowsRepository(settingsRepository).markSeen(shown)
@@ -76,10 +104,11 @@ private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Se
 }
 
 internal suspend fun DataDependencies.markViewedNewPost(post: Post, session: ViewerSession?) {
-    val collection = newPostsCollection(session?.context) ?: return
     val key = post.id.markKey()
-    viewedNewPosts.update { viewed -> viewed + (collection to viewed[collection].orEmpty() + key) }
-    markNewPostsSeen(collection, setOf(key))
+    newPostsCollection(session?.context)?.let { collection ->
+        viewedNewPosts.update { viewed -> viewed + (collection to viewed[collection].orEmpty() + key) }
+    }
+    newPostCodexIds.forEach { markNewPostsSeen(it, setOf(key)) }
 }
 
 private class OpenedNewPosts(val markKeys: Set<String>) : ViewModel()

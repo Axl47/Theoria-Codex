@@ -53,25 +53,23 @@ class CreatorProfileViewModelTest {
     }
 
     @Test
-    fun `the follow's seen ids are read before the first visit records more`() = runTest {
+    fun `opening a followed creator snapshots the seen ids it had before the page loaded`() = runTest {
         val creator = creator(SourceKey.PIXIV, "followed")
         val gate = CompletableDeferred<Unit>()
         val engine = FakeCreatorRouteEngine().apply {
-            seen = mutableSetOf("old")
+            seen = setOf("old")
             seenGate = gate
             openResults = listOf(testPost(sourcePostId = "new"), testPost(sourcePostId = "old"))
         }
         val viewModel = CreatorProfileViewModel(engine, SavedStateHandle(), coroutineScope = this)
         viewModel.onAction(CreatorAction.OpenCreator(creator))
         advanceUntilIdle()
-        assertTrue(engine.visits.isEmpty())
+        assertEquals(listOf("new", "old"), viewModel.state.value.results.map { it.id.sourcePostId })
 
         gate.complete(Unit)
         advanceUntilIdle()
 
         assertEquals(CreatorSeenSnapshot(creator, setOf("old")), viewModel.seenAtOpen.value)
-        assertEquals(listOf(creator), engine.visits)
-        assertEquals(setOf("new", "old"), engine.seen)
     }
 
     @Test
@@ -160,11 +158,10 @@ class CreatorProfileViewModelTest {
         advanceUntilIdle()
         assertEquals(replacement, viewModel.state.value.creator)
         assertEquals(listOf("fresh"), viewModel.state.value.results.map { it.id.sourcePostId })
-        assertEquals(listOf(replacement), engine.visits)
     }
 
     @Test
-    fun `paging failure retries exact continuation without duplicating accepted root bookkeeping`() = runTest {
+    fun `paging failure retries the exact continuation`() = runTest {
         val first = testPost(sourcePostId = "first")
         val engine = FakeCreatorRouteEngine().apply {
             openResults = listOf(first)
@@ -191,7 +188,6 @@ class CreatorProfileViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("next", "next"), engine.pageTokens)
         assertEquals(listOf("first", "next"), viewModel.state.value.results.map { it.id.sourcePostId })
-        assertEquals(1, engine.visits.size)
         assertNull(viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.canLoadMore)
     }
@@ -272,7 +268,6 @@ class CreatorProfileViewModelTest {
         assertFalse(sibling in owner.state.value.relatedPosts.loadedPosts)
         owner.related.onLikeCommitted(sibling, LikeToggleOutcome.UNLIKED)
         assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
-        assertEquals(1, engine.visits.size)
     }
 
     @Test
@@ -374,7 +369,6 @@ class CreatorProfileViewModelTest {
 private class FakeCreatorRouteEngine : CreatorRouteEngine {
     val openedCreators = mutableListOf<CreatorProfile>()
     val pageTokens = mutableListOf<String>()
-    val visits = mutableListOf<CreatorProfile>()
     var openResults: List<Post> = emptyList()
     var openCanLoadMore = false
     var openError: String? = null
@@ -407,12 +401,7 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
         return Page(openResults, if (openCanLoadMore) "next" else null)
     }
 
-    override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
-        visits += creator
-        seen?.addAll(posts.map { it.id.sourcePostId })
-    }
-
-    var seen: MutableSet<String>? = null
+    var seen: Set<String>? = null
     var seenGate: CompletableDeferred<Unit>? = null
 
     override suspend fun seenPostIds(creator: CreatorProfile): Set<String>? {

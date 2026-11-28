@@ -5,7 +5,6 @@ import androidx.compose.runtime.remember
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.codex.codexPostCount
-import com.theoriacodex.app.codex.markSavedSearchesSeen
 import com.theoriacodex.app.recents.recentSearchPresentation
 import com.theoriacodex.app.search.omnibox.OmniboxEntry
 import com.theoriacodex.app.search.omnibox.OmniboxKind
@@ -129,5 +128,4 @@ internal fun recentCreators(
 
 internal fun TheoriaShell.openSavedSearch(entry: SavedSearchEntry) {
     openHistoricalSearch(entry.search)
-    savedSearchOpens.opened(entry)
 }

@@ -27,7 +27,7 @@ class CreatorFollowsRepositoryTest {
         assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
     }
 
-    @Test fun `check reports new ids and an accepted visit clears them`() = runTest {
+    @Test fun `check reports new ids and seeing them clears them`() = runTest {
         val repository = CreatorFollowsRepository(InMemorySettingsRepository())
         fun post(id: String) = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
             com.theoriacodex.data.storage.PostStorageRecord(source = "PIXIV", sourcePostId = id)))
@@ -35,11 +35,22 @@ class CreatorFollowsRepositoryTest {
         val follow = repository.observe().first().single()
         repository.recordChecks(mapOf(follow.membershipId to listOf(post("new"), post("old"), post("new"))), 42L)
         assertEquals(1, repository.observe().first().single().newPostCount)
-        repository.recordVisit(creator, listOf(post("new"), post("old")))
+        repository.markSeen(setOf("PIXIV:new"))
         assertEquals(0, repository.observe().first().single().newPostCount)
         repository.unfollow(creator)
         repository.recordChecks(mapOf(follow.membershipId to listOf(post("later"))), 43L)
         assertTrue(repository.observe().first().isEmpty())
+    }
+
+    @Test fun `a post seen on the profile before a check lists it never counts as new (ADR 0019)`() = runTest {
+        val repository = CreatorFollowsRepository(InMemorySettingsRepository())
+        fun post(id: String) = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
+            com.theoriacodex.data.storage.PostStorageRecord(source = "PIXIV", sourcePostId = id)))
+        repository.follow(creator, listOf(post("old")))
+        val follow = repository.observe().first().single()
+        repository.markShown(creator, listOf("posted after the check"))
+        repository.recordChecks(mapOf(follow.membershipId to listOf(post("posted after the check"), post("unseen"), post("old"))), 42L)
+        assertEquals(listOf("unseen"), repository.observe().first().single().newPostIds.map { it.sourcePostId })
     }
 
     @Test fun `following marks the posts it was shown as seen, so only later posts count as new (ADR 0019)`() = runTest {

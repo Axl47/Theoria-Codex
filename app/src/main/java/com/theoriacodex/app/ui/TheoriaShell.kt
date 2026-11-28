@@ -32,7 +32,6 @@ import androidx.navigation.compose.rememberNavController
 import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
-import com.theoriacodex.app.codex.SavedSearchOpenMarks
 import com.theoriacodex.app.codex.SavedSearchActions
 import com.theoriacodex.app.codex.resetSavedSearchNewPosts
 import com.theoriacodex.app.codex.CodexCommandViewModel
@@ -347,7 +346,6 @@ internal class TheoriaShell(
     var navReady by mutableStateOf(appShellOwner.state.value.appReady)
     val creatorOpening = CreatorOpeningWorkflow(sources.registry, sources.httpClient)
     private val fileCopies = FileCopyLookup(sources.registry, data.fileMirrors::copiesOf)
-    val savedSearchOpens = SavedSearchOpenMarks(data.uiRestoreRepository)
     val savedSearchActions = SavedSearchActions(owners.savedSearches::rename, owners.savedSearches::remove, ::editSavedSearch)
     val recentsClearWorkflow = RecentsClearWorkflow(data.recentsRepository)
     val seriesReader = container.series?.let(::SeriesReader)
@@ -663,7 +661,6 @@ internal class TheoriaShell(
         overlays.showSavedSearchManagement = false
         routes.dispatchOrQueue(SearchAction.EditSavedSearch(entry.id, entry.search.query, entry.search.replayScope()))
         navigation.goToTab(TopLevelDestination.Search)
-        savedSearchOpens.opened(entry)
     }
 
     fun openHistoricalSearch(entry: RecentSearchEntry) {

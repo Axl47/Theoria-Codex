@@ -8,12 +8,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import com.theoriacodex.app.ui.LocalTabShown
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SeenPostsEffect(grid: LazyStaggeredGridState, tracked: Set<PostId>, onSeen: suspend (Set<PostId>) -> Unit) {
+fun SeenPostsEffect(
+    grid: LazyStaggeredGridState,
+    tracked: Set<PostId>,
+    onSeen: suspend (Set<PostId>) -> Unit,
+    covered: () -> Boolean = { false },
+) {
+    val tabShown = LocalTabShown.current
+    val hidden by rememberUpdatedState(covered)
     val byKey = remember(tracked) { tracked.associateBy(::feedPostItemKey) }
     val targets by rememberUpdatedState(byKey)
     val report by rememberUpdatedState(onSeen)
@@ -30,7 +38,7 @@ fun SeenPostsEffect(grid: LazyStaggeredGridState, tracked: Set<PostId>, onSeen: 
         try {
             snapshotFlow {
                 val current = targets
-                if (current.isEmpty()) false to emptySet<PostId>()
+                if (current.isEmpty() || !tabShown() || hidden()) false to emptySet<PostId>()
                 else grid.isScrollInProgress to grid.layoutInfo.mostlyVisibleKeys().mapNotNullTo(mutableSetOf()) { current[it] }
             }
                 .collect { (scrolling, seen) ->

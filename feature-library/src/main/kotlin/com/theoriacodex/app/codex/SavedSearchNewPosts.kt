@@ -7,8 +7,6 @@ import com.theoriacodex.data.repository.markKey
 import com.theoriacodex.data.repository.newPostsCheckDue
 import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.SortMode
 
 class SavedSearchNewPostsChecker(
@@ -52,12 +50,6 @@ class SavedSearchNewPostsChecker(
 internal fun SavedSearchEntry.newestFirst() =
     copy(search = search.copy(query = search.query.copy(sort = SortMode.NEWEST)))
 
-suspend fun UiRestoreRepository.markSavedSearchesSeen(ids: Set<String>? = null) {
-    updateSavedSearchNewPosts { state ->
-        state.copy(marks = state.marks.mapValues { (id, marks) -> if (ids == null || id in ids) marks.seen() else marks })
-    }
-}
-
 suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
     updateSavedSearchNewPosts { state ->
         if (state.marks.values.none { marks -> marks.newPostIds.any { it in shown } }) state
@@ -67,23 +59,6 @@ suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
 
 suspend fun UiRestoreRepository.resetSavedSearchNewPosts(id: String) {
     updateSavedSearchNewPosts { state -> state.copy(attempts = state.attempts - id, marks = state.marks - id) }
-}
-
-class SavedSearchOpenMarks(private val store: UiRestoreRepository) {
-    private var waiting: Pair<String, Query>? = null
-
-    fun opened(entry: SavedSearchEntry) {
-        waiting = entry.id to entry.search.query.run { normalizedForMode(mode).query }
-    }
-
-    suspend fun resultsShown(applied: Query, posts: List<Post>) {
-        val (id, query) = waiting?.takeIf { it.second == applied } ?: return
-        waiting = null
-        val shown = posts.mapTo(mutableSetOf()) { it.id.markKey() }
-        store.updateSavedSearchNewPosts { state ->
-            state.copy(marks = state.marks.mapValues { (key, marks) -> if (key == id) marks.seen { it in shown } else marks })
-        }
-    }
 }
 
 const val MAX_CHECKED_SAVED_SEARCHES = 8

@@ -261,6 +261,8 @@ private fun CreatorDestination(shell: TheoriaShell) {
         val creatorIdentity = creator.profileId ?: creator.uploadsQuery ?: creator.displayName
         val fabContext = creatorFeedFabContext(creator.source.id, creatorIdentity)
         val fabRestoreState = shell.feedFabRestoreRegistry.state(fabContext) ?: return@BrowsingDestinationStateBoundary
+        val followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() }
+        val newPosts = rememberNewPostsSeen(shell.data, creator.takeIf { followed })
         CreatorRoute(
             coordinator = shell.features.creatorProfile,
             relatedPostsLoader = shell.features.relatedPosts,
@@ -268,7 +270,8 @@ private fun CreatorDestination(shell: TheoriaShell) {
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
             config = CreatorRouteConfig(
                 marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
-                followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() },
+                followed = followed,
+                newPosts = newPosts,
                 activeCreator = creator,
                 availableSources = state.availableSources,
                 resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,
