@@ -48,6 +48,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -77,7 +78,7 @@ class NewPostMarkersTest {
     }
 
     @Test
-    fun `a visit clears only the new posts it showed mostly on screen, keeps every marker until it ends, and the Viewer clears what it opens (ADR 0019, 0152)`() {
+    fun `a visit clears only the new posts it showed mostly on screen, keeps every marker until it ends, and the Viewer clears what it opens wherever it was opened (ADR 0019, 0152)`() {
         val data = graph.data
         runBlocking {
             data.uiRestoreRepository.updateSavedSearchNewPosts {
@@ -107,13 +108,26 @@ class NewPostMarkersTest {
             data.markViewedNewPost(posts[4], ViewerSession(posts, launchedFrom(SAVED_SEARCHES_CODEX_ID)))
         }
         compose.runOnIdle { navigation.popBackStack() }
-        awaitText("new: a, b, c, d, f")
+        awaitText("new: a, b, c, d")
 
         compose.runOnIdle {
             navigation.popBackStack()
             navigation.navigate("collection")
         }
-        awaitText("new: f")
+        awaitText("new: none")
+    }
+
+    @Test
+    fun `a Viewer opened from Search clears the marks of the posts it shows without touching collection markers (ADR 0019)`() {
+        val data = graph.data
+        runBlocking {
+            data.uiRestoreRepository.updateSavedSearchNewPosts {
+                SavedSearchNewPosts(marks = mapOf("search" to NewPostMarks(latestPostIds = posts.map { it.id.markKey() }, checkedAtEpochMs = 1)))
+            }
+            data.markViewedNewPost(posts[5], ViewerSession(posts, ViewerLaunchContext("search", 0, ViewerStreamSource.SEARCH, 0)))
+            assertEquals(posts.take(5).map { it.id.markKey() }, liveNewPosts(data))
+            assertEquals(emptyMap<String, Set<String>>(), data.viewedNewPosts.value)
+        }
     }
 
     @Composable

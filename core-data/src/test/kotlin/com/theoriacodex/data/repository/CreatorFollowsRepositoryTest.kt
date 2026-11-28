@@ -42,6 +42,17 @@ class CreatorFollowsRepositoryTest {
         assertTrue(repository.observe().first().isEmpty())
     }
 
+    @Test fun `a post seen on the profile before a check lists it never counts as new (ADR 0019)`() = runTest {
+        val repository = CreatorFollowsRepository(InMemorySettingsRepository())
+        fun post(id: String) = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
+            com.theoriacodex.data.storage.PostStorageRecord(source = "PIXIV", sourcePostId = id)))
+        repository.follow(creator, listOf(post("old")))
+        val follow = repository.observe().first().single()
+        repository.markShown(creator, listOf("posted after the check"))
+        repository.recordChecks(mapOf(follow.membershipId to listOf(post("posted after the check"), post("unseen"), post("old"))), 42L)
+        assertEquals(listOf("unseen"), repository.observe().first().single().newPostIds.map { it.sourcePostId })
+    }
+
     @Test fun `following marks the posts it was shown as seen, so only later posts count as new (ADR 0019)`() = runTest {
         val repository = CreatorFollowsRepository(InMemorySettingsRepository())
         fun post(id: String, source: String = "PIXIV") = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(

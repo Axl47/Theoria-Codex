@@ -12,7 +12,7 @@ class NewPostsCollectionTest {
     private fun codex(id: String) = ViewerLaunchContext("codex:$id", 0, ViewerStreamSource.CODEX, 0)
 
     @Test
-    fun `only a Viewer opened from Followed or Searches marks the posts it shows seen (ADR 0019)`() {
+    fun `only a Viewer opened from Followed or Searches hides the posts it shows from an open collection's markers (ADR 0019)`() {
         assertEquals(FOLLOWED_CODEX_ID, newPostsCollection(codex(FOLLOWED_CODEX_ID)))
         assertEquals(SAVED_SEARCHES_CODEX_ID, newPostsCollection(codex(SAVED_SEARCHES_CODEX_ID)))
         assertNull(newPostsCollection(codex("my-codex")))

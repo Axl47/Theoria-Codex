@@ -19,10 +19,12 @@ data class NewPostMarks(
         return NewPostMarks(if (baseline) latest else seenPostIds, latest, atEpochMs)
     }
 
-    fun seen(shown: (String) -> Boolean = { true }): NewPostMarks {
-        val seen = seenPostIds.toSet()
-        val current = latestPostIds.filter { it in seen || shown(it) }
-        return copy(seenPostIds = (current + seenPostIds).distinct().take(MAX_NEW_POST_MARK_IDS))
+    fun seen(shown: (String) -> Boolean = { true }): NewPostMarks = including(latestPostIds.filter(shown))
+
+    fun including(ids: Collection<String>): NewPostMarks {
+        val seen = seenPostIds.toSet() + ids
+        val current = latestPostIds.filter { it in seen }
+        return copy(seenPostIds = (current + ids + seenPostIds).distinct().take(MAX_NEW_POST_MARK_IDS))
     }
 }
 

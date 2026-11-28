@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui
 
-import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import com.theoriacodex.app.series.ExtensionsDestination
 import com.theoriacodex.app.series.extensionsArguments
 import com.theoriacodex.app.series.seriesArguments
@@ -263,7 +262,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
         val fabContext = creatorFeedFabContext(creator.source.id, creatorIdentity)
         val fabRestoreState = shell.feedFabRestoreRegistry.state(fabContext) ?: return@BrowsingDestinationStateBoundary
         val followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() }
-        val newPosts = rememberNewPostsSeen(shell.data, FOLLOWED_CODEX_ID)
+        val newPosts = rememberNewPostsSeen(shell.data, creator.takeIf { followed })
         CreatorRoute(
             coordinator = shell.features.creatorProfile,
             relatedPostsLoader = shell.features.relatedPosts,
@@ -272,7 +271,7 @@ private fun CreatorDestination(shell: TheoriaShell) {
             config = CreatorRouteConfig(
                 marks = state.feedMarks(shell.pendingLikePostIds[state.activeProfile.profileId].orEmpty()),
                 followed = followed,
-                newPosts = newPosts.takeIf { followed },
+                newPosts = newPosts,
                 activeCreator = creator,
                 availableSources = state.availableSources,
                 resolveUnknownAnimatedDurations = state.settings.contentFilters.resolveUnknownAnimatedDurations,

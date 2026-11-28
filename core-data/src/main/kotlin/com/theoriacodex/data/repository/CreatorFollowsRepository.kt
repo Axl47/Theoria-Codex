@@ -88,6 +88,17 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
         }) }
     }
 
+    suspend fun markShown(creator: CreatorProfile, sourcePostIds: Collection<String>) {
+        settings.updateSettings { current ->
+            val key = creator.followKey()
+            val follow = current.followedCreators.firstOrNull { it.creator.followKey() == key }
+            if (follow == null || follow.seenPostIds.containsAll(sourcePostIds)) current
+            else current.copy(followedCreators = current.followedCreators.map {
+                if (it.creator.followKey() == key) it.withMarks(it.marks.including(sourcePostIds)) else it
+            })
+        }
+    }
+
     suspend fun markSeen(shown: Set<String>) {
         settings.updateSettings { current ->
             if (current.followedCreators.none { follow -> follow.newPostIds.any { it.markKey() in shown } }) current

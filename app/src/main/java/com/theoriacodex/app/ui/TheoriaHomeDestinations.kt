@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui
 
-import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import androidx.compose.runtime.CompositionLocalProvider
 import com.theoriacodex.app.series.SeriesTabDestination
 import android.widget.Toast
@@ -92,7 +91,7 @@ private fun SearchDestination(shell: TheoriaShell) {
             pixivUgoiraClient = shell.sources.pixivUgoiraClient,
             config = searchRouteConfig(shell, state).copy(
                 omnibox = { rememberSearchOmniboxEntries(shell, state) },
-                newPosts = rememberNewPostsSeen(shell.data, SAVED_SEARCHES_CODEX_ID),
+                newPosts = rememberNewPostsSeen(shell.data),
             ),
             fabRestoreState = fabRestoreState,
             onFabRestoreStateChange = { updated -> shell.feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated) },
