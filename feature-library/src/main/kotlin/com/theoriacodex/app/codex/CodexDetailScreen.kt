@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.ui.components.FeedGrid
+import com.theoriacodex.app.ui.components.SeenPostsEffect
 import com.theoriacodex.app.ui.components.FeedRelatedPostsShelf
 import com.theoriacodex.app.ui.components.FeedPostCard
 import com.theoriacodex.app.ui.components.FeedCardEnvironment
@@ -128,6 +129,7 @@ fun CodexDetailScreen(
     tagSheetRequested: Boolean = false,
     onTagSheetRequestHandled: () -> Unit = {},
     liveOwner: LiveCodexFeedOwner? = null,
+    onNewPostsSeen: (suspend (Set<PostId>) -> Unit)? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -168,7 +170,7 @@ fun CodexDetailScreen(
             padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
             editSelection, { editSelection = it }, likedPostIds, newPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
-            liveOwner,
+            liveOwner, onNewPostsSeen,
         )
     }
     if (showFilterSheet) {
@@ -236,6 +238,7 @@ private fun CodexDetailBody(
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
     liveOwner: LiveCodexFeedOwner?,
+    onNewPostsSeen: (suspend (Set<PostId>) -> Unit)?,
 ) {
     val focusManager = LocalFocusManager.current
     Column(
@@ -264,6 +267,7 @@ private fun CodexDetailBody(
                 onEditSelectionChange, onOpenPostActions, emptyMessage, related,
             )
         }
+        onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it) }
         if (liveOwner == null) {
             grid()
         } else {

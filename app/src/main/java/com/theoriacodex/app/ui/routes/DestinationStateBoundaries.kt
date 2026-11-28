@@ -261,6 +261,7 @@ internal fun CodexDetailDestinationStateBoundary(
     features: com.theoriacodex.app.di.FeatureDependencies,
     fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
     durationStates: MediaDurationStates = MediaDurationStates.EMPTY,
+    followNewMarks: Boolean = false,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val metadata = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value ?: return
@@ -269,11 +270,11 @@ internal fun CodexDetailDestinationStateBoundary(
             metadata.likedPostIds else emptySet()))
     }
     if (codexId == com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID) {
-        SavedSearchesCodexBoundary(data, sources, features, metadata.settings, fabRestoreState, sortMode, durationStates, render)
+        SavedSearchesCodexBoundary(data, sources, features, metadata.settings, fabRestoreState, sortMode, durationStates, followNewMarks, render)
         return
     }
     if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {
-        FollowedCodexDestinationStateBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, durationStates, render)
+        FollowedCodexDestinationStateBoundary(data, sources, metadata.settings, fabRestoreState, sortMode, durationStates, followNewMarks, render)
         return
     }
     val content = rememberCodexContentFlows()
@@ -499,6 +500,7 @@ private fun FollowedCodexDestinationStateBoundary(
     filters: com.theoriacodex.data.repository.FeedFabRestoreState,
     sort: CodexSortMode,
     durationStates: MediaDurationStates,
+    followNewMarks: Boolean,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val available = sources.availableSources.collectAsStateWithLifecycle().value
@@ -514,13 +516,13 @@ private fun FollowedCodexDestinationStateBoundary(
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, FOLLOWED_CODEX_ID, sort).orEmpty()
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val reloading = com.theoriacodex.app.codex.rememberNewPostsReload(owner, feed, selected.map { it.marks })
+    val reloading = com.theoriacodex.app.codex.rememberNewPostsReload(owner, feed, selected.map { it.marks }, followNewMarks)
     val durations = rememberCodexPostDurations(feed.posts, sort, durationStates, FOLLOWED_CODEX_ID)
     androidx.compose.runtime.LaunchedEffect(selected, available, sort, usage, durations) {
         owner.synchronize(selected, available, sort, usage, durations)
     }
     val posts = rememberSortedCodexPosts(FOLLOWED_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
-    val newPostIds = com.theoriacodex.app.ui.rememberNewPostMarkers(data, FOLLOWED_CODEX_ID, posts) {
+    val newPostIds = com.theoriacodex.app.ui.rememberNewPostMarkers(data, FOLLOWED_CODEX_ID, posts, live = followNewMarks) {
         com.theoriacodex.app.codex.savedNewPosts(settings.followedCreators)[FOLLOWED_CODEX_ID].orEmpty()
     }
     content(CodexDetailDestinationState(

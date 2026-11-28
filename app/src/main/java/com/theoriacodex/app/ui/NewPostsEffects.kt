@@ -1,12 +1,8 @@
 package com.theoriacodex.app.ui
 
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -23,7 +19,6 @@ import com.theoriacodex.app.codex.markSavedSearchPostsSeen
 import com.theoriacodex.app.codex.savedNewPosts
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.statistics.statisticsCodexId
-import com.theoriacodex.app.ui.components.FeedView
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -68,25 +63,8 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
     }
 }
 
-internal fun markingNewPostsSeen(
-    data: DataDependencies,
-    codexId: String,
-    loading: Boolean,
-    header: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)?,
-): (@Composable (FeedView, LazyStaggeredGridState) -> Unit)? = header?.let { drawHeader ->
-    { feed, grid ->
-        drawHeader(feed, grid)
-        val shown = feed.visiblePosts
-        val rendered = !loading && shown.isNotEmpty() && codexId in newPostCodexIds
-        var marked by remember(codexId) { mutableStateOf(false) }
-        LaunchedEffect(codexId, rendered) {
-            if (!rendered || marked) return@LaunchedEffect
-            withFrameNanos {}
-            data.markNewPostsSeen(codexId, shown.mapTo(mutableSetOf()) { it.id.markKey() })
-            marked = true
-        }
-    }
-}
+internal fun newPostsSeenHandler(data: DataDependencies, codexId: String): (suspend (Set<PostId>) -> Unit)? =
+    if (codexId !in newPostCodexIds) null else { seen -> data.markNewPostsSeen(codexId, seen.mapTo(mutableSetOf()) { it.markKey() }) }
 
 private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
 
@@ -111,17 +89,21 @@ internal fun rememberNewPostMarkers(
     data: DataDependencies,
     codexId: String,
     posts: List<Post>,
+    live: Boolean = false,
     newOnOpen: () -> Set<String>,
 ): Set<PostId> {
+    if (live) {
+        val current = newOnOpen()
+        return remember(posts, current) { posts.markedBy(current, emptySet()) }
+    }
     val opened = viewModel(key = "opened-new-posts:$codexId") { OpenedNewPosts(newOnOpen()) }.markKeys
     val viewed = data.viewedNewPosts.collectAsStateWithLifecycle().value[codexId].orEmpty()
-    return remember(posts, opened, viewed) {
-        if (opened.isEmpty()) return@remember emptySet()
-        posts.mapNotNullTo(mutableSetOf()) { post ->
-            post.id.takeIf { id -> id.markKey().let { key -> key in opened && key !in viewed } }
-        }
-    }
+    return remember(posts, opened, viewed) { posts.markedBy(opened, viewed) }
 }
+
+private fun List<Post>.markedBy(marked: Set<String>, viewed: Set<String>): Set<PostId> =
+    if (marked.isEmpty()) emptySet()
+    else mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { id -> id.markKey().let { it in marked && it !in viewed } } }
 
 internal fun newPostsCollection(context: ViewerLaunchContext?): String? = statisticsCodexId(context)?.takeIf { it in newPostCodexIds }
 

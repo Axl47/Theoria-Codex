@@ -51,6 +51,8 @@ fun FeedGrid(
     )
 }
 
+internal fun feedPostItemKey(id: PostId): String = "post:${id.source.id}:${id.sourcePostId}"
+
 class FeedGridDivider(val beforePost: PostId, val content: @Composable () -> Unit)
 
 @Composable
@@ -103,7 +105,7 @@ private fun LazyStaggeredGridScope.projectedEntries(
         items = entries,
         key = { _, entry ->
             when (entry) {
-                is RelatedFeedEntry.PostEntry -> "post:${entry.post.id.source.id}:${entry.post.id.sourcePostId}"
+                is RelatedFeedEntry.PostEntry -> feedPostItemKey(entry.post.id)
                 is RelatedFeedEntry.ShelfEntry -> {
                     val seed = entry.state.requestOrNull?.seed?.id
                     "related:${seed?.source?.id}:${seed?.sourcePostId}"

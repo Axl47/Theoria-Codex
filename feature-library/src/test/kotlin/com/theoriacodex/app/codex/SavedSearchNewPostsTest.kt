@@ -54,7 +54,7 @@ class SavedSearchNewPostsTest {
         assertEquals(mapOf("a" to 0), counts())
     }
 
-    @Test fun `a feed clears only the posts it showed`() = runTest {
+    @Test fun `a feed clears only the posts it showed and leaves already-seen posts alone`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
         check(searches, 0L)
@@ -64,6 +64,9 @@ class SavedSearchNewPostsTest {
         assertEquals(mapOf("a" to 1), counts())
         store.markSavedSearchPostsSeen(setOf("PIXIV:2"))
         assertEquals(mapOf("a" to 0), counts())
+        val settled = store.observeSavedSearchNewPosts().first()
+        store.markSavedSearchPostsSeen(setOf("PIXIV:1", "PIXIV:2"))
+        assertEquals(settled, store.observeSavedSearchNewPosts().first())
     }
 
     @Test fun `checks wait out the interval after a failure and take the eight newest`() = runTest {
