@@ -309,7 +309,7 @@ class FollowedCodexViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun `only a refresh reports refreshing, never the first load or a load more (ADR 0225)`() = runTest {
+    @Test fun `only a refresh reports refreshing or counts as one, never the first load, a load more or a reset (ADR 0225)`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
@@ -330,6 +330,11 @@ class FollowedCodexViewModelTest {
             advanceUntilIdle()
             assertFalse(owner.state.value.refreshing)
             assertFalse(owner.state.value.loading)
+            assertEquals(1, owner.state.value.refreshes)
+
+            owner.synchronize(listOf(follow("2")), setOf(SourceKey.PIXIV))
+            assertFalse(owner.state.value.refreshing)
+            assertEquals(1, owner.state.value.refreshes)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 

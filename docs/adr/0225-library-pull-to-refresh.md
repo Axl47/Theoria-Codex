@@ -19,7 +19,8 @@ The Saved page (Library's Saved section, and the Saved collection opened from Co
 shelves have shown; inside Followed or Searches a pull refreshes that feed. A failed pull keeps the posts and reports
 through the existing "Couldn't refresh" state, so the pill shows no result. Each finished reload counts up
 `LiveCodexFeedState.refreshes`, and the shelf row or collection grid then scrolls to its start
-(`ShowNewestAfterRefresh`): keyed lazy lists keep the old first card anchored, which would leave the new posts just
+(`ShowNewestAfterRefresh`, which saves the last count it handled with the list's scroll state, so a shelf that
+refreshed while scrolled off the Saved page still starts at its newest posts when it returns): keyed lazy lists keep the old first card anchored, which would leave the new posts just
 out of view. Only a finished refresh scrolls, so new-post marks reordering a shelf never fights the Viewer's return.
 A collection's empty state scrolls, so a pull still reaches a live feed that is empty or filtered to nothing.
 Ordinary Codices and the Codices list hold
@@ -42,5 +43,6 @@ A new live collection gets pull to refresh by passing its owner to `LiveCodexRef
 - `feature-library/src/test/kotlin/com/theoriacodex/app/codex/LiveCodexRefreshTest.kt`: `pulling a live collection refreshes its feed, shows Checking until the refresh ends, then shows the newest post (ADR 0225)`
 - `feature-library/src/test/kotlin/com/theoriacodex/app/codex/LiveCodexRefreshTest.kt`: `an empty live collection still takes a pull (ADR 0225)`
 - `feature-library/src/test/kotlin/com/theoriacodex/app/codex/LiveCodexRefreshTest.kt`: `pulling the Saved shelves refreshes every live feed on them (ADR 0225)`
-- `feature-library/src/test/kotlin/com/theoriacodex/app/codex/FollowedCodexViewModelTest.kt`: `only a refresh reports refreshing, never the first load or a load more (ADR 0225)`
+- `feature-library/src/test/kotlin/com/theoriacodex/app/codex/FollowedCodexViewModelTest.kt`: `only a refresh reports refreshing or counts as one, never the first load, a load more or a reset (ADR 0225)`
+- `feature-library/src/test/kotlin/com/theoriacodex/app/codex/LiveCodexRefreshTest.kt`: `a shelf that refreshed while off screen shows its newest posts when it comes back (ADR 0225)`
 - `app/src/androidTest/java/com/theoriacodex/app/journeys/LibraryPullToRefreshJourneyTest.kt`: `pullingTheSavedPageAndTheSearchesCollectionShowsNewUploads_adr_0225`

@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -75,6 +76,21 @@ class LiveCodexRefreshTest {
 
         compose.onRoot().performTouchInput { swipeDown(startY = centerY, endY = bottom) }
         compose.runOnIdle { assertEquals(listOf(1, 1), owners.map(FakeOwner::refreshes)) }
+    }
+
+    @Test fun `a shelf that refreshed while off screen shows its newest posts when it comes back (ADR 0225)`() {
+        val owner = FakeOwner()
+        var onScreen by mutableStateOf(true)
+        var scrolls = 0
+        compose.setContent {
+            val shelves = rememberSaveableStateHolder()
+            if (onScreen) shelves.SaveableStateProvider("followed") { ShowNewestAfterRefresh(owner) { scrolls++ } }
+        }
+
+        compose.runOnIdle { onScreen = false }
+        compose.runOnIdle { owner.state.value = LiveCodexFeedState(refreshes = 1) }
+        compose.runOnIdle { onScreen = true }
+        compose.runOnIdle { assertEquals(1, scrolls) }
     }
 
     @Composable

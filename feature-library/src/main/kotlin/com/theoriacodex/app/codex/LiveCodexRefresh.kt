@@ -5,7 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,10 +32,10 @@ fun LiveCodexRefreshBox(
 @Composable
 fun ShowNewestAfterRefresh(owner: LiveCodexFeedOwner, scrollToStart: suspend () -> Unit) {
     val refreshes = owner.state.collectAsStateWithLifecycle().value.refreshes
-    var shown by remember(owner) { mutableIntStateOf(refreshes) }
+    var shown by rememberSaveable { mutableIntStateOf(refreshes) }
     LaunchedEffect(refreshes) {
-        if (refreshes == shown) return@LaunchedEffect
+        val refreshed = refreshes > shown
         shown = refreshes
-        scrollToStart()
+        if (refreshed) scrollToStart()
     }
 }

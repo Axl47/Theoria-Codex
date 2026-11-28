@@ -130,7 +130,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         loadedAt = System.currentTimeMillis()
         branches.clear()
         initial.associateByTo(branches) { it.id }
-        mutableState.value = LiveCodexFeedState(generation = generation, loadedAtEpochMs = loadedAt)
+        mutableState.value = LiveCodexFeedState(refreshes = refreshes, generation = generation, loadedAtEpochMs = loadedAt)
         load(branches.keys.toList(), retry = false, initial = true)
     }
 
