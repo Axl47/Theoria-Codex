@@ -262,6 +262,19 @@ class ViewerStateBoundaryTest {
     }
 
     @Test
+    fun `a page that showed while the user was swiping to it counts as shown once it becomes current (ADR 0225)`() {
+        val gallery = post("g", listOf(ref("image/jpeg", "1.jpg"), ref("image/jpeg", "2.jpg")))
+        val state = createViewerUiState(session, listOf(gallery))
+        val incoming = ViewerMediaKey(gallery.id, 1)
+
+        val shown = state.act(ViewerAction.MediaReady(session, incoming, 0L))
+
+        assertFalse(shown.currentMedia!!.ready)
+        assertTrue(shown.act(ViewerAction.SelectMedia(1)).currentMedia!!.ready)
+        assertFalse(state.act(ViewerAction.MediaReady(session, incoming, 1L)).act(ViewerAction.SelectMedia(1)).currentMedia!!.ready)
+    }
+
+    @Test
     fun `media readiness follows the load generation and a retry invalidates it`() {
         val gallery = post("g", listOf(ref("video/mp4", "1.mp4"), ref("video/mp4", "2.mp4")))
         val state = createViewerUiState(session, listOf(gallery))
@@ -269,7 +282,7 @@ class ViewerStateBoundaryTest {
         val other = ViewerMediaKey(gallery.id, 1)
         val ready = state.act(ViewerAction.MediaReady(session, key, 0L))
         assertTrue(ready.currentMedia!!.ready)
-        assertEquals(ready, ready.act(ViewerAction.MediaReady(session, other, 0L)))
+        assertEquals(ready, ready.act(ViewerAction.MediaReady(session, other, 1L)))
         val failed = ready.act(ViewerAction.MediaFailed(session, ViewerMediaError.Recoverable(key, "stall"), loadGeneration = 0L))
         assertFalse(failed.currentMedia!!.ready)
         assertEquals(ready, ready.act(ViewerAction.MediaFailed(session, ViewerMediaError.Recoverable(key, "late"), loadGeneration = 5L)))

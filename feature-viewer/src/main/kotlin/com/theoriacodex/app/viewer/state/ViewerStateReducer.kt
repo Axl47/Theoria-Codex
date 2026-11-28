@@ -356,9 +356,16 @@ private fun ViewerUiState.reduceMediaFailed(action: ViewerAction.MediaFailed): V
 
 private fun ViewerUiState.reduceMediaReady(action: ViewerAction.MediaReady): ViewerReduction =
     this.ifCurrentSession(action.session) {
-        if (currentMedia?.key == action.key && currentMedia?.loadGeneration == action.loadGeneration) {
-            withCurrentMediaReadiness(true).copy(mediaError = null)
-        } else this
+        val pageIndex = pages.indexOfFirst { page -> page.post.id == action.key.postId }
+        val page = pages.getOrNull(pageIndex) ?: return@ifCurrentSession this
+        val mediaIndex = page.media.indexOfFirst { media -> media.key == action.key && media.loadGeneration == action.loadGeneration }
+        if (mediaIndex < 0) return@ifCurrentSession this
+        val readied = if (page.media[mediaIndex].ready) this else copy(
+            pages = pages.toMutableList().also { updated ->
+                updated[pageIndex] = page.copy(media = page.media.toMutableList().also { it[mediaIndex] = it[mediaIndex].copy(ready = true) })
+            },
+        )
+        if (currentMedia?.key == action.key) readied.copy(mediaError = null) else readied
     }
 
 private fun ViewerUiState.reduceIncludeTag(session: ViewerSessionIdentity, action: ViewerAction.IncludeTag): ViewerReduction =

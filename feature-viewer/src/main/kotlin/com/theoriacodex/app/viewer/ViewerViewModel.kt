@@ -74,6 +74,7 @@ class ViewerViewModel(
     private val recordedVisiblePosts = mutableSetOf<PostId>()
     private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
+    private val downloadingGifs = mutableSetOf<ViewerMediaKey>()
     private val prefetchLedger = ViewerPrefetchLedger()
     private val firstMediaShown = MutableStateFlow(false)
     private var lastCurrentPostId: PostId? = null
@@ -393,7 +394,7 @@ class ViewerViewModel(
     ) {
         val downloaded = prefetchLedger.isDownloaded(request.key)
         launchSessionJob(ViewerWorkKey.Prefetch(request.key)) {
-            if (media.kind == ViewerMediaKind.GIF) return@launchSessionJob withPermitWhileCurrentSettled { runPrefetch(session, request, media) }
+            if (media.kind == ViewerMediaKind.GIF) return@launchSessionJob withPermitWhileCurrentSettled { runGifPrefetch(session, request, media) }
             awaitFirstMediaShown()
             if (downloaded) {
                 runPrefetch(session, request, media)
@@ -410,6 +411,15 @@ class ViewerViewModel(
                 mutableState.value.currentMediaSettled.also { settled -> if (settled) block() }
             }
             if (ran) return
+        }
+    }
+
+    private suspend fun runGifPrefetch(session: ViewerSessionIdentity, request: ViewerPrefetchRequest, media: ViewerMediaState) {
+        synchronized(lock) { downloadingGifs += request.key }
+        try {
+            runPrefetch(session, request, media)
+        } finally {
+            synchronized(lock) { downloadingGifs -= request.key }
         }
     }
 
@@ -453,7 +463,8 @@ class ViewerViewModel(
                 .distinctBy(ViewerPrefetchRequest::key)
                 .mapNotNull { request -> mediaFor(request.key)?.let { media -> request to media } }
                 .toList()
-            desiredPrefetchKeys = wanted.mapTo(mutableSetOf()) { (request, _) -> request.key }
+            desiredPrefetchKeys = wanted.mapTo(mutableSetOf()) { (request, _) -> request.key } +
+                downloadingGifs.filter { key -> key == current.currentMedia?.key }
             sessionJobs.keys
                 .filterIsInstance<ViewerWorkKey.Prefetch>()
                 .filterNot { key -> key.mediaKey in desiredPrefetchKeys }

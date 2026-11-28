@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 
 internal class ViewerGifByteStore(private val directory: File) {
@@ -131,9 +131,9 @@ private suspend fun fillRemoteGif(
     download: suspend (String, Map<String, String>, File, Long, OkHttpClient) -> Unit,
 ) {
     if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES)) return
-    withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
+    withTimeoutOrNull(GIF_DOWNLOAD_TIMEOUT_MS) {
         download(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, context.appHttpClients.downloads)
-    }
+    } ?: throw IOException("GIF download timed out")
 }
 
 suspend fun cachedViewerGifLocation(context: Context, source: SourceKey, location: String): String =

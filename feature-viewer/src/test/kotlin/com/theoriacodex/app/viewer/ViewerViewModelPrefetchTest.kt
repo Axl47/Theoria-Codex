@@ -14,6 +14,7 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -23,6 +24,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -127,6 +129,37 @@ class ViewerViewModelPrefetchTest {
         owner.onAction(ViewerAction.MediaReady(session, keys[4], 0L))
         runCurrent()
         assertEquals(listOf(keys[1], keys[2], keys[3]), started)
+    }
+
+    @Test
+    fun `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0225)`() = runTest {
+        val finish = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                if (media.kind == com.theoriacodex.app.viewer.state.ViewerMediaKind.GIF) {
+                    try { finish.await() } catch (stop: CancellationException) { cancelled.complete(Unit); throw stop }
+                }
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("gif-current", listOf(post("gallery", media = listOf(image("0.jpg"), gif("1.gif"), image("2.jpg"))))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+        owner.onAction(queue(keys[1], keys[2]))
+        runCurrent()
+
+        owner.onAction(ViewerAction.SelectMedia(1))
+        owner.onAction(queue(keys[2], keys[0]))
+        runCurrent()
+
+        assertFalse(cancelled.isCompleted)
+        finish.complete(Unit)
+        runCurrent()
+        assertFalse(cancelled.isCompleted)
     }
 
     @Test

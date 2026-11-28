@@ -64,10 +64,11 @@ private class ViewerGifState(locations: List<String>) {
 @Composable
 private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>, current: Boolean) {
     val context = LocalContext.current
+    val isCurrent by rememberUpdatedState(current)
     LaunchedEffect(state, source) {
         var movie: Movie? = null
         for (attempt in 1..GIF_MOVIE_LOAD_ATTEMPTS) {
-            movie = loadFirstGifMovie(context, source, locations, attempt, current)
+            movie = loadFirstGifMovie(context, source, locations, attempt, isCurrent)
             if (movie != null) break
             if (attempt < GIF_MOVIE_LOAD_ATTEMPTS) delay(GIF_MOVIE_RETRY_DELAY_MS)
         }
