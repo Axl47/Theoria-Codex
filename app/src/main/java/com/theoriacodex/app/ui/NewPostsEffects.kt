@@ -3,10 +3,7 @@ package com.theoriacodex.app.ui
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -24,6 +21,7 @@ import com.theoriacodex.app.codex.savedNewPosts
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.statistics.statisticsCodexId
 import com.theoriacodex.app.ui.components.FeedView
+import com.theoriacodex.app.ui.components.SeenPostsEffect
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -71,19 +69,14 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
 internal fun markingNewPostsSeen(
     data: DataDependencies,
     codexId: String,
-    loading: Boolean,
+    newPostIds: Set<PostId>,
     header: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)?,
-): (@Composable (FeedView, LazyStaggeredGridState) -> Unit)? = header?.let { drawHeader ->
+): (@Composable (FeedView, LazyStaggeredGridState) -> Unit)? = header?.takeIf { codexId in newPostCodexIds }?.let { drawHeader ->
     { feed, grid ->
         drawHeader(feed, grid)
-        val shown = feed.visiblePosts
-        val rendered = !loading && shown.isNotEmpty() && codexId in newPostCodexIds
-        var marked by remember(codexId) { mutableStateOf(false) }
-        LaunchedEffect(codexId, rendered) {
-            if (!rendered || marked) return@LaunchedEffect
-            withFrameNanos {}
-            data.markNewPostsSeen(codexId, shown.mapTo(mutableSetOf()) { it.id.markKey() })
-            marked = true
+        SeenPostsEffect(grid, feed.visiblePosts) { seen ->
+            val keys = seen.filter { it in newPostIds }.mapTo(mutableSetOf()) { it.markKey() }
+            if (keys.isNotEmpty()) data.markNewPostsSeen(codexId, keys)
         }
     }
 }

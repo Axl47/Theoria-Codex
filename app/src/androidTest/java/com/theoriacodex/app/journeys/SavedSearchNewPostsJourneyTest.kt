@@ -54,6 +54,7 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
             }
         }
         waitFor("the Searches shelf shows 1 new") { compose.onAllNodesWithText("1 new").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the shelf marks only the new post's card new") { shows(fresh.id) && markedNew() == 1 }
 
         activate(compose.onNodeWithText("Searches"))
         waitFor("reopened Searches shows the new post") { inCollection() && shows(fresh.id) }
