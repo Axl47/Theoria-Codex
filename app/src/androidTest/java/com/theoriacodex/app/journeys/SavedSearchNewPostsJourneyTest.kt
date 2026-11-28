@@ -48,25 +48,29 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
 
         val fresh = uploads.last().copy(id = PostId(SourceKey.PIXIV, "journey-new"), createdAtEpochMs = 10_000L)
         val shown = uploads.take(20).map { it.id.markKey() }
+        val belowFold = uploads.first().id.markKey()
         uploads.add(0, fresh)
         io {
             container.data.uiRestoreRepository.updateSavedSearchNewPosts { state ->
-                state.copy(marks = mapOf(saved.id to NewPostMarks(shown, listOf(fresh.id.markKey()) + shown, System.currentTimeMillis())))
+                state.copy(marks = mapOf(saved.id to NewPostMarks(shown - belowFold, listOf(fresh.id.markKey()) + shown, System.currentTimeMillis())))
             }
         }
-        waitFor("the Searches shelf shows 1 new") { compose.onAllNodesWithText("1 new").fetchSemanticsNodes().isNotEmpty() }
-        waitFor("the shelf loads the new post and marks only its card new") { shows(fresh.id) && newCards() == 1 }
+        waitFor("the Searches shelf shows 2 new") { compose.onAllNodesWithText("2 new").fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the shelf loads the new post and marks only the new cards") { shows(fresh.id) && newCards() == 2 }
 
         activate(compose.onNodeWithText("Searches"))
         waitFor("reopened Searches shows the new post") { inCollection() && shows(fresh.id) }
-        waitFor("the new post counts as seen") { io { newPosts().marks.getValue(saved.id).newPostCount == 0 } }
-        waitFor("only the new post's card is marked new") { markedNew() == 1 }
+        waitFor("the new post on screen counts as seen") {
+            io { newPosts().marks.getValue(saved.id).newPostIds == listOf(belowFold) }
+        }
+        waitFor("both new cards keep their markers for the visit") { newCards() == 2 }
 
         activate(compose.onNodeWithTag(searchCardTestTag(fresh.id)))
         waitFor("the Viewer opens the new post") { compose.onAllNodesWithContentDescription("Media actions").fetchSemanticsNodes().isNotEmpty() }
         pressSystemBack()
         waitFor("Searches is back") { inCollection() && shows(fresh.id) }
-        waitFor("opening the post cleared its marker") { markedNew() == 0 }
+        waitFor("opening the post cleared its marker") { newCards() == 1 }
+        check(io { newPosts().marks.getValue(saved.id).newPostIds } == listOf(belowFold)) { "the post never scrolled to lost its mark" }
     }
 
     private fun newCards() = compose.onAllNodes(hasStateDescription("New") and hasTestTagPrefix("search_card_"), useUnmergedTree = true)
@@ -74,8 +78,6 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
 
     private fun hasTestTagPrefix(prefix: String) =
         SemanticsMatcher("TestTag starts with $prefix") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true }
-
-    private fun markedNew() = compose.onAllNodes(hasStateDescription("New"), useUnmergedTree = true).fetchSemanticsNodes().size
 
     private fun hasStateDescription(value: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value)
 
