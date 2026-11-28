@@ -119,13 +119,18 @@ class ViewerGifByteStoreTest {
     }
 
     @Test
-    fun `neighbour warms never trim the GIF the current page loaded, until another page becomes current (ADR 0226)`() = runBlocking {
+    fun `neighbour warms never trim the current page's GIF, even one loaded before its page became current (ADR 0226)`() = runBlocking {
         val store = ViewerGifByteStore(temporary.newFolder(), maxBytes = 3_000)
-        store.load("PIXIV:current", current = true) { it.writeBytes(ByteArray(1_000)) }
+        suspend fun age(key: String, minutes: Long) =
+            File(requireNotNull(store.cachedLocation(key))).setLastModified(System.currentTimeMillis() - minutes * 60_000)
+        store.load("PIXIV:current") { it.writeBytes(ByteArray(1_000)) }
+        store.markCurrent(listOf("PIXIV:current"))
+        age("PIXIV:current", 10)
         repeat(4) { index -> store.warm("PIXIV:neighbour-$index") { it.writeBytes(ByteArray(1_000)) } }
         assertNotNull(store.cachedLocation("PIXIV:current"))
 
-        store.load("PIXIV:next", current = true) { it.writeBytes(ByteArray(1_000)) }
+        store.markCurrent(listOf("PIXIV:next"))
+        store.load("PIXIV:next") { it.writeBytes(ByteArray(1_000)) }
         repeat(4) { index -> store.warm("PIXIV:later-$index") { it.writeBytes(ByteArray(1_000)) } }
         assertNull(store.cachedLocation("PIXIV:current"))
         assertNotNull(store.cachedLocation("PIXIV:next"))

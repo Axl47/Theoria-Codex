@@ -14,7 +14,7 @@ A Viewer GIF shows nothing until its whole file has arrived, because `Movie` (AD
 - Range requests are marked `withoutRateLimitRecording`, and `recordingRateLimits` ignores a 429 on them. A host that refuses extra connections then costs one fallback request, instead of marking the whole site rate-limited.
 - Each request, the single-request path's included, runs as a blocking call inside the coroutine that owns it (`withResponse`), and cancelling that coroutine cancels the call. The parts are children of the download's scope, so cancelling the page cancels every part, and nothing is still writing once a download returns, falls back or is cancelled.
 - `ViewerGifByteStore` locks per entry, not per stripe, so the current GIF never waits behind an unrelated neighbour's download.
-- The store never trims the file the current page loaded (`load`'s `current`, `trim`), until another page loads as current. The cache holds only about two of the largest GIFs (`CACHE_MAX_BYTES` against `MAX_VIEWER_GIF_BYTES`), and trimming drops the oldest file first, so neighbour warms written after the current GIF would otherwise evict it.
+- The store never trims the current page's GIF (`markCurrentViewerGifs`, `trim`), until another page becomes current. `ViewerGifPlayer` marks it whenever its page is active, so a GIF that finished loading during the swipe onto its page is covered too. The cache holds only about two of the largest GIFs (`CACHE_MAX_BYTES` against `MAX_VIEWER_GIF_BYTES`), and trimming drops the oldest file first, so neighbour warms written after the current GIF would otherwise evict it.
 
 ## Consequences
 
@@ -28,7 +28,7 @@ The current GIF's wait no longer grows with how many neighbour GIFs are queued, 
 - `media-kit/src/main/kotlin/com/theoriacodex/app/media/OfflineMediaAcquisition.kt`: `downloadMediaFile`, `withResponse`
 - `media-kit/src/main/kotlin/com/theoriacodex/app/network/AppHttpClients.kt`: `recordingRateLimits`, `withoutRateLimitRecording`
 - `feature-viewer/src/main/kotlin/com/theoriacodex/app/viewer/ViewerGifPlayer.kt`: `ViewerGifLoadEffect`
-- `media-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerGifBytes.kt`: `ViewerGifByteStore.withEntry`, `ViewerGifByteStore.trim`, `loadRemoteViewerGifBytes`, `warmRemoteViewerGif`, `fillRemoteGif`
+- `media-kit/src/main/kotlin/com/theoriacodex/app/viewer/ViewerGifBytes.kt`: `ViewerGifByteStore.withEntry`, `ViewerGifByteStore.trim`, `markCurrentViewerGifs`, `loadRemoteViewerGifBytes`, `warmRemoteViewerGif`, `fillRemoteGif`
 
 ## Guarded by
 
@@ -38,7 +38,7 @@ The current GIF's wait no longer grows with how many neighbour GIFs are queued, 
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a small file, a server without ranges or a version to check, or an HTTP 2 host is fetched in one request (ADR 0226)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `cancelling the download cancels every part (ADR 0226)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt`: `every GIF fills under its own lock, so seventeen can download at once (ADR 0226)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt`: `neighbour warms never trim the GIF the current page loaded, until another page becomes current (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt`: `neighbour warms never trim the current page's GIF, even one loaded before its page became current (ADR 0226)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0226)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0226)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0226)`

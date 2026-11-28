@@ -23,13 +23,12 @@ internal class ViewerGifByteStore(private val directory: File, private val maxBy
     private val locks = mutableMapOf<String, EntryLock>()
     private val writeMutex = Mutex()
     private var generation = 0L
-    @Volatile private var currentEntry: String? = null
+    private var currentEntries = emptySet<String>()
 
-    suspend fun load(key: String, current: Boolean = false, fill: suspend (File) -> Unit): ByteArray =
-        withEntry(key) { destination ->
-            if (current) currentEntry = destination.name
-            read(destination) ?: store(destination, fill, File::readBytes)
-        }
+    suspend fun load(key: String, fill: suspend (File) -> Unit): ByteArray =
+        withEntry(key) { destination -> read(destination) ?: store(destination, fill, File::readBytes) }
+
+    suspend fun markCurrent(keys: List<String>) = writeMutex.withLock { currentEntries = keys.mapTo(mutableSetOf(), ::entryName) }
 
     suspend fun warm(key: String, fill: suspend (File) -> Unit): Long = withEntry(key) { destination ->
         if (isFresh(destination)) destination.length() else store(destination, fill, File::length)
@@ -100,7 +99,7 @@ internal class ViewerGifByteStore(private val directory: File, private val maxBy
         val files = entries().sortedBy(File::lastModified)
         var bytes = files.sumOf(File::length)
         var count = files.size
-        files.filterNot { it == retained || it.name == currentEntry }.forEach { file ->
+        files.filterNot { it == retained || it.name in currentEntries }.forEach { file ->
             if (bytes > maxBytes || count > CACHE_MAX_FILES) {
                 val length = file.length()
                 if (file.delete()) { bytes -= length; count-- }
@@ -119,12 +118,17 @@ internal class ViewerGifByteStore(private val directory: File, private val maxBy
 suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String, current: Boolean): ByteArray {
     val url = normalizeMediaUrl(source, location) ?: location
     val download = if (current) ::downloadMediaFileInParts else ::downloadMediaFile
-    return gifByteStore(context).load("${source.id}:$url", current) { file -> fillRemoteGif(context, source, url, file, download) }
+    return gifByteStore(context).load(gifKey(source, location)) { file -> fillRemoteGif(context, source, url, file, download) }
 }
+
+suspend fun markCurrentViewerGifs(context: Context, source: SourceKey, locations: List<String>) =
+    gifByteStore(context).markCurrent(locations.map { location -> gifKey(source, location) })
+
+private fun gifKey(source: SourceKey, location: String): String = "${source.id}:${normalizeMediaUrl(source, location) ?: location}"
 
 suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).warm("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file, ::downloadMediaFile) }
+    return gifByteStore(context).warm(gifKey(source, location)) { file -> fillRemoteGif(context, source, url, file, ::downloadMediaFile) }
 }
 
 private suspend fun fillRemoteGif(
@@ -141,7 +145,7 @@ private suspend fun fillRemoteGif(
 }
 
 suspend fun cachedViewerGifLocation(context: Context, source: SourceKey, location: String): String =
-    gifByteStore(context).cachedLocation("${source.id}:${normalizeMediaUrl(source, location) ?: location}") ?: location
+    gifByteStore(context).cachedLocation(gifKey(source, location)) ?: location
 
 internal suspend fun clearViewerGifCache(context: Context) = gifByteStore(context).clear()
 
