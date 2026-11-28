@@ -304,7 +304,7 @@ internal fun ViewerScreenHost.episodeProgress(series: ViewerSeries?, post: Post)
 private fun ViewerResolutionState.terminalMessage(): String? = takeIf { it.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED && !it.recoverable }
     ?.message
 
-private fun viewerRendererControls(
+internal fun viewerRendererControls(
     frame: ViewerFrame, key: ViewerMediaKey, active: Boolean, preloading: Boolean, loadGeneration: Long, expectedDurationMs: Long?,
 ): ViewerRendererControls {
     val controls = frame.uiState.controls
@@ -315,7 +315,7 @@ private fun viewerRendererControls(
         isPlaying = controls.playback.playing,
         isPreloading = preloading,
         showControls = (active || preloading) && frame.chromeStage.value >= VIEWER_CHROME_STAGE_TIMELINE,
-        showPassiveProgress = active && !frame.inPictureInPicture && !frame.chromeVisible,
+        showPassiveProgress = active && !watching && !frame.inPictureInPicture && !frame.chromeVisible,
         loopPlayback = frame.uiState.loopsPlayback,
         repeatsAtEnd = frame.videoRepeats || clip != null,
         playbackRate = closestViewerPlaybackRate(controls.playback.playbackRate).speed,
