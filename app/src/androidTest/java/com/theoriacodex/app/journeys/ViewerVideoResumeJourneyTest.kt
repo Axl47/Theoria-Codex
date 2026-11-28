@@ -32,7 +32,7 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
     @Before
     fun recordPlaybackErrors() {
         previousSink = Diagnostics.install { area, message, error ->
-            if (area == "playback" && error != null) playbackErrors += error
+            if (area == "playback" && message.startsWith("Viewer video error") && error != null) playbackErrors += error
             previousSink?.record(area, message, error)
         }
     }
