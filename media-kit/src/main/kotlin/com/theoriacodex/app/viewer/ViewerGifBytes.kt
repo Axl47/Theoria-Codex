@@ -19,13 +19,17 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 
-internal class ViewerGifByteStore(private val directory: File) {
+internal class ViewerGifByteStore(private val directory: File, private val maxBytes: Long = CACHE_MAX_BYTES) {
     private val locks = mutableMapOf<String, EntryLock>()
     private val writeMutex = Mutex()
     private var generation = 0L
+    @Volatile private var currentEntry: String? = null
 
-    suspend fun load(key: String, fill: suspend (File) -> Unit): ByteArray =
-        withEntry(key) { destination -> read(destination) ?: store(destination, fill, File::readBytes) }
+    suspend fun load(key: String, current: Boolean = false, fill: suspend (File) -> Unit): ByteArray =
+        withEntry(key) { destination ->
+            if (current) currentEntry = destination.name
+            read(destination) ?: store(destination, fill, File::readBytes)
+        }
 
     suspend fun warm(key: String, fill: suspend (File) -> Unit): Long = withEntry(key) { destination ->
         if (isFresh(destination)) destination.length() else store(destination, fill, File::length)
@@ -96,8 +100,8 @@ internal class ViewerGifByteStore(private val directory: File) {
         val files = entries().sortedBy(File::lastModified)
         var bytes = files.sumOf(File::length)
         var count = files.size
-        files.filterNot { it == retained }.forEach { file ->
-            if (bytes > CACHE_MAX_BYTES || count > CACHE_MAX_FILES) {
+        files.filterNot { it == retained || it.name == currentEntry }.forEach { file ->
+            if (bytes > maxBytes || count > CACHE_MAX_FILES) {
                 val length = file.length()
                 if (file.delete()) { bytes -= length; count-- }
             }
@@ -115,7 +119,7 @@ internal class ViewerGifByteStore(private val directory: File) {
 suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String, current: Boolean): ByteArray {
     val url = normalizeMediaUrl(source, location) ?: location
     val download = if (current) ::downloadMediaFileInParts else ::downloadMediaFile
-    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file, download) }
+    return gifByteStore(context).load("${source.id}:$url", current) { file -> fillRemoteGif(context, source, url, file, download) }
 }
 
 suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {
