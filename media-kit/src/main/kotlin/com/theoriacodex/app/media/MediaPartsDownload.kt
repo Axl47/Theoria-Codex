@@ -44,17 +44,15 @@ private fun mediaParts(length: Long, response: Response): List<LongRange>? {
 private suspend fun fetchInParts(client: OkHttpClient, request: Request, destination: File, maxBytes: Long) =
     client.withResponse(request) { response, call ->
         val length = checkedMediaLength(response, maxBytes)
+        val version = response.header("ETag")?.takeUnless { it.startsWith("W/") }
+        val validator = version ?: response.header("Last-Modified")
         val parts = mediaParts(length, response)
-        if (parts == null) {
+        if (parts == null || validator == null) {
             writeWholeMedia(response, destination, maxBytes, length)
             return@withResponse
         }
         RandomAccessFile(destination, "rw").use { file -> file.setLength(length) }
-        val version = response.header("ETag")?.takeUnless { it.startsWith("W/") }
-        val ranged = request.newBuilder()
-            .apply { (version ?: response.header("Last-Modified"))?.let { header("If-Range", it) } }
-            .withoutRateLimitRecording()
-            .build()
+        val ranged = request.newBuilder().header("If-Range", validator).withoutRateLimitRecording().build()
         val rest = parts.drop(1).map { part -> async { fetchPart(client, ranged, part, length, version, destination) } }
         asPartFailure { writePart(response.body.byteStream(), destination, parts.first()) }
         call.cancel()

@@ -71,10 +71,11 @@ class MediaPartsDownloadTest {
     }
 
     @Test
-    fun `a small file, a server without ranges or an HTTP 2 host is fetched in one request (ADR 0225)`() = runTest {
+    fun `a small file, a server without ranges or a version to check, or an HTTP 2 host is fetched in one request (ADR 0225)`() = runTest {
         val servers = listOf(
             RangeServer(gifBytes(LARGE / 8)),
             RangeServer(gifBytes(LARGE), acceptsRanges = false),
+            RangeServer(gifBytes(LARGE), versioned = false),
             RangeServer(gifBytes(LARGE), protocol = Protocol.HTTP_2),
         )
         servers.forEach { server ->
@@ -108,6 +109,7 @@ class MediaPartsDownloadTest {
     private class RangeServer(
         val bytes: ByteArray,
         private val acceptsRanges: Boolean = true,
+        private val versioned: Boolean = true,
         private val protocol: Protocol = Protocol.HTTP_1_1,
         private val rangeAnswer: RangeAnswer = RangeAnswer.PARTIAL,
         private val firstBody: Hold = Hold.NONE,
@@ -157,7 +159,7 @@ class MediaPartsDownloadTest {
                 .code(code)
                 .message("")
                 .header("Content-Type", "image/gif")
-                .header("ETag", version)
+                .apply { if (versioned) header("ETag", version) }
                 .apply { if (acceptsRanges) header("Accept-Ranges", "bytes") }
                 .apply { contentRange?.let { header("Content-Range", it) } }
                 .body(heldBody(call, body, hold))

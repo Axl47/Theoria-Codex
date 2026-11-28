@@ -60,6 +60,7 @@ class ViewerGifCurrentPageTest {
         val range = exchange.requestHeaders.getFirst("Range")?.removePrefix("bytes=")?.split('-')?.map(String::toInt)
         exchange.responseHeaders.add("Content-Type", "image/gif")
         exchange.responseHeaders.add("Accept-Ranges", "bytes")
+        exchange.responseHeaders.add("ETag", "\"fixture\"")
         try {
             if (range == null) {
                 exchange.sendResponseHeaders(200, bytes.size.toLong())

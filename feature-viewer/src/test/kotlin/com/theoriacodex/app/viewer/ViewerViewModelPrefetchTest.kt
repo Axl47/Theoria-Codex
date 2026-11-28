@@ -163,6 +163,28 @@ class ViewerViewModelPrefetchTest {
     }
 
     @Test
+    fun `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0225)`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("gif-limit", listOf(post("gallery", media = listOf(image("0.jpg"), gif("1.gif"))))))
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+
+        owner.onAction(queue(keys[1]))
+        advanceTimeBy(VIEWER_GIF_HOLD_MAX_MS - 1)
+        assertEquals(emptyList<Any>(), started)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(listOf(keys[1]), started)
+    }
+
+    @Test
     fun `decoding a downloaded image does not wait for a download slot, and happens once`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = testViewerOwner(
