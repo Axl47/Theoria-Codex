@@ -129,7 +129,7 @@ fun CodexDetailScreen(
     tagSheetRequested: Boolean = false,
     onTagSheetRequestHandled: () -> Unit = {},
     liveOwner: LiveCodexFeedOwner? = null,
-    onPostsSeen: (suspend (Set<PostId>) -> Unit)? = null,
+    onNewPostsSeen: (suspend (Set<PostId>) -> Unit)? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -170,7 +170,7 @@ fun CodexDetailScreen(
             padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
             editSelection, { editSelection = it }, likedPostIds, newPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
-            liveOwner, onPostsSeen,
+            liveOwner, onNewPostsSeen,
         )
     }
     if (showFilterSheet) {
@@ -238,7 +238,7 @@ private fun CodexDetailBody(
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
     liveOwner: LiveCodexFeedOwner?,
-    onPostsSeen: (suspend (Set<PostId>) -> Unit)?,
+    onNewPostsSeen: (suspend (Set<PostId>) -> Unit)?,
 ) {
     val focusManager = LocalFocusManager.current
     Column(
@@ -267,7 +267,7 @@ private fun CodexDetailBody(
                 onEditSelectionChange, onOpenPostActions, emptyMessage, related,
             )
         }
-        onPostsSeen?.let { SeenPostsEffect(gridState, feed.visiblePosts, newPostIds, it) }
+        onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it) }
         if (liveOwner == null) {
             grid()
         } else {

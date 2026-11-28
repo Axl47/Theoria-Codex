@@ -124,7 +124,7 @@ class NewPostMarkersTest {
         }
         val feed = rememberFeedView("new-post-markers", posts, SearchVisibilityFilters(), FeedDurations.NONE, RelatedPostsUiState.Idle)
         val grid = rememberLazyStaggeredGridState()
-        SeenPostsEffect(grid, feed.visiblePosts, markers, requireNotNull(newPostsSeenHandler(data, SAVED_SEARCHES_CODEX_ID)))
+        SeenPostsEffect(grid, markers, requireNotNull(newPostsSeenHandler(data, SAVED_SEARCHES_CODEX_ID)))
         Column {
             Text("new: " + posts.filter { it.id in markers }.joinToString { it.id.sourcePostId }.ifEmpty { "none" })
             FeedGrid(feed, grid, footerMessage = null, modifier = Modifier.width(400.dp).height(500.dp), shelf = {}) { _, _ ->

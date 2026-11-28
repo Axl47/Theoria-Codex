@@ -89,17 +89,21 @@ internal fun rememberNewPostMarkers(
     data: DataDependencies,
     codexId: String,
     posts: List<Post>,
+    live: Boolean = false,
     newOnOpen: () -> Set<String>,
 ): Set<PostId> {
+    if (live) {
+        val current = newOnOpen()
+        return remember(posts, current) { posts.markedBy(current, emptySet()) }
+    }
     val opened = viewModel(key = "opened-new-posts:$codexId") { OpenedNewPosts(newOnOpen()) }.markKeys
     val viewed = data.viewedNewPosts.collectAsStateWithLifecycle().value[codexId].orEmpty()
-    return remember(posts, opened, viewed) {
-        if (opened.isEmpty()) return@remember emptySet()
-        posts.mapNotNullTo(mutableSetOf()) { post ->
-            post.id.takeIf { id -> id.markKey().let { key -> key in opened && key !in viewed } }
-        }
-    }
+    return remember(posts, opened, viewed) { posts.markedBy(opened, viewed) }
 }
+
+private fun List<Post>.markedBy(marked: Set<String>, viewed: Set<String>): Set<PostId> =
+    if (marked.isEmpty()) emptySet()
+    else mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { id -> id.markKey().let { it in marked && it !in viewed } } }
 
 internal fun newPostsCollection(context: ViewerLaunchContext?): String? = statisticsCodexId(context)?.takeIf { it in newPostCodexIds }
 

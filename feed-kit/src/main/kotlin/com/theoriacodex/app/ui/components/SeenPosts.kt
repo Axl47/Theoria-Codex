@@ -8,16 +8,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SeenPostsEffect(grid: LazyStaggeredGridState, posts: List<Post>, eligible: Set<PostId>, onSeen: suspend (Set<PostId>) -> Unit) {
-    val byKey = remember(posts) { posts.associateBy { feedPostItemKey(it.id) } }
-    val currentPosts by rememberUpdatedState(byKey)
-    val currentEligible by rememberUpdatedState(eligible)
+fun SeenPostsEffect(grid: LazyStaggeredGridState, tracked: Set<PostId>, onSeen: suspend (Set<PostId>) -> Unit) {
+    val byKey = remember(tracked) { tracked.associateBy(::feedPostItemKey) }
+    val targets by rememberUpdatedState(byKey)
     val report by rememberUpdatedState(onSeen)
     LaunchedEffect(grid) {
         val reported = mutableSetOf<PostId>()
@@ -30,9 +28,13 @@ fun SeenPostsEffect(grid: LazyStaggeredGridState, posts: List<Post>, eligible: S
             withContext(NonCancellable) { report(batch) }
         }
         try {
-            snapshotFlow { grid.isScrollInProgress to grid.layoutInfo.mostlyVisibleKeys().mapNotNullTo(mutableSetOf()) { currentPosts[it]?.id } }
+            snapshotFlow {
+                val current = targets
+                if (current.isEmpty()) false to emptySet<PostId>()
+                else grid.isScrollInProgress to grid.layoutInfo.mostlyVisibleKeys().mapNotNullTo(mutableSetOf()) { current[it] }
+            }
                 .collect { (scrolling, seen) ->
-                    pending += seen.filter { it in currentEligible && it !in reported }
+                    pending += seen - reported
                     if (!scrolling) flush()
                 }
         } finally {
@@ -42,7 +44,7 @@ fun SeenPostsEffect(grid: LazyStaggeredGridState, posts: List<Post>, eligible: S
 }
 
 internal fun LazyStaggeredGridLayoutInfo.mostlyVisibleKeys(): Set<Any> = visibleItemsInfo.filter { item ->
-    val top = maxOf(item.offset.y, viewportStartOffset)
-    val bottom = minOf(item.offset.y + item.size.height, viewportEndOffset)
-    item.size.height > 0 && (bottom - top) * 2 >= item.size.height
+    val visible = minOf(item.offset.y + item.size.height, viewportEndOffset) - maxOf(item.offset.y, viewportStartOffset)
+    val target = minOf(item.size.height, viewportEndOffset - viewportStartOffset)
+    visible > 0 && visible * 2 >= target
 }.mapTo(mutableSetOf()) { it.key }

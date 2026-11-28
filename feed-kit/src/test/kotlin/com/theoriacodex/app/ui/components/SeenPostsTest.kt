@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.testing.waitUntilSettled
@@ -46,6 +47,12 @@ class SeenPostsTest {
         compose.runOnIdle { assertEquals(listOf(posts[2].id), written.toList()) }
     }
 
+    @Test fun `a card taller than the viewport counts once it fills at least half of it (ADR 0152)`() {
+        compose.setContent { Grid(eligible = posts.map { it.id }.toSet(), cardHeight = 600.dp) { written += it } }
+
+        compose.runOnIdle { assertEquals(listOf("p0"), written.map { it.sourcePostId }) }
+    }
+
     @Test fun `a write still running when the visit ends completes (ADR 0152)`() {
         val gate = CompletableDeferred<Unit>()
         var visiting by mutableStateOf(true)
@@ -59,12 +66,12 @@ class SeenPostsTest {
     }
 
     @Composable
-    private fun Grid(eligible: Set<PostId>, onSeen: suspend (Set<PostId>) -> Unit) {
+    private fun Grid(eligible: Set<PostId>, cardHeight: Dp = 100.dp, onSeen: suspend (Set<PostId>) -> Unit) {
         val offset = with(LocalDensity.current) { 70.dp.roundToPx() }
         val grid = rememberLazyStaggeredGridState(initialFirstVisibleItemScrollOffset = offset)
-        SeenPostsEffect(grid, posts, eligible, onSeen)
+        SeenPostsEffect(grid, eligible, onSeen)
         LazyVerticalStaggeredGrid(StaggeredGridCells.Fixed(1), Modifier.height(260.dp), state = grid) {
-            items(posts, key = { feedPostItemKey(it.id) }) { Box(Modifier.height(100.dp)) }
+            items(posts, key = { feedPostItemKey(it.id) }) { Box(Modifier.height(cardHeight)) }
         }
     }
 }

@@ -210,7 +210,7 @@ private fun SavedCodexSection(
     val cards = rememberFeedCardEnvironment(
         sources.pixivUgoiraClient, state.likedPostIds, emptyMap(), durations,
         LocalPostMenuActions.current.toggleLike.takeIf { liveOwner != null }, actions.resolvePost,
-        newPostIds = remember(posts, news) { posts.mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { it.markKey() in news } } },
+        newPostIds = state.newPostIds,
     )
     var menuPost by remember { mutableStateOf<Post?>(null) }
     ViewerReturnShelf(ViewerReturnShelfId.Saved(id), postIds, row) {

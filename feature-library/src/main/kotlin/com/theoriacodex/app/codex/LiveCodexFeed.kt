@@ -57,8 +57,8 @@ fun rememberNewPostsReload(
     val check = if (followNewMarks) latest else opened
     var attempted by rememberSaveable { mutableStateOf<Long?>(null) }
     val pending = attempted != check && feed.predates(check)
-    LaunchedEffect(owner, pending) {
-        if (!pending) return@LaunchedEffect
+    LaunchedEffect(owner, check, pending, feed.refreshing) {
+        if (!pending || feed.refreshing) return@LaunchedEffect
         attempted = check
         owner.refresh()
     }

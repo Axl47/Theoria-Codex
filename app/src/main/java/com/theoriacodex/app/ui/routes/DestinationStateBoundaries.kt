@@ -522,7 +522,7 @@ private fun FollowedCodexDestinationStateBoundary(
         owner.synchronize(selected, available, sort, usage, durations)
     }
     val posts = rememberSortedCodexPosts(FOLLOWED_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
-    val newPostIds = com.theoriacodex.app.ui.rememberNewPostMarkers(data, FOLLOWED_CODEX_ID, posts) {
+    val newPostIds = com.theoriacodex.app.ui.rememberNewPostMarkers(data, FOLLOWED_CODEX_ID, posts, live = followNewMarks) {
         com.theoriacodex.app.codex.savedNewPosts(settings.followedCreators)[FOLLOWED_CODEX_ID].orEmpty()
     }
     content(CodexDetailDestinationState(

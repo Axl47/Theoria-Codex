@@ -53,7 +53,7 @@ internal fun SavedSearchesCodexBoundary(
         owner.synchronize(selected, settings, available, sort, usage, durations)
     }
     val posts = rememberSortedCodexPosts(SAVED_SEARCHES_CODEX_ID, feed.posts, sort, usage, durations).orEmpty()
-    val newPostIds = rememberNewPostMarkers(data, SAVED_SEARCHES_CODEX_ID, posts) {
+    val newPostIds = rememberNewPostMarkers(data, SAVED_SEARCHES_CODEX_ID, posts, live = followNewMarks) {
         savedNewPosts(emptyList(), entries.mapNotNull { news.marks[it.id] })[SAVED_SEARCHES_CODEX_ID].orEmpty()
     }
     content(CodexDetailDestinationState(

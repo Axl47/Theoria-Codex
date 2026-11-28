@@ -217,7 +217,7 @@ private fun CodexDetailContent(
             onTopUpOffline = { shell.transfers.offline.makeAvailableOffline(codexId) },
         ),
         customHeader = virtualUi?.header,
-        onPostsSeen = newPostsSeenHandler(shell.data, codexId),
+        onNewPostsSeen = newPostsSeenHandler(shell.data, codexId),
         likedPostIds = state.likedPostIds,
         newPostIds = state.newPostIds,
         onToggleLike = liveOwner?.let { owner ->
