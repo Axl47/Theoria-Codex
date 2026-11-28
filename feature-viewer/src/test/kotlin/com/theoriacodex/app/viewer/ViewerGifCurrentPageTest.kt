@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import com.theoriacodex.app.testing.waitUntilSettled
 import com.theoriacodex.domain.model.SourceKey
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -45,7 +46,7 @@ class ViewerGifCurrentPageTest {
                     ViewerGifPlayer(SourceKey.PIXIV, listOf(url("incoming.gif")), Modifier.size(100.dp), controls = controls(isActive = false), events = EVENTS)
                 }
             }
-            compose.waitUntil(WAIT_MS) {
+            compose.waitUntilSettled(WAIT_MS) {
                 requests.count { it.first == "/current.gif" } == 4 && requests.any { it.first == "/incoming.gif" }
             }
 
