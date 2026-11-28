@@ -109,6 +109,38 @@ class StreamPlaybackDeviceTest {
         }
     }
 
+    @Test
+    fun aDelayChangeDuringPlaybackReloadsPassedCuesWithoutSeekingOrRebuffering_adr_0224() {
+        playWithDelayedSubtitles { player, _ ->
+            val earlyShownAt = CopyOnWriteArrayList<Long>()
+            val interruptions = CopyOnWriteArrayList<String>()
+            val listener = object : Player.Listener {
+                override fun onCues(cueGroup: CueGroup) {
+                    if (cueGroup.cues.any { it.text?.toString() == "Early cue" }) earlyShownAt += player.currentPosition
+                }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_BUFFERING) interruptions += "buffering at ${player.currentPosition}"
+                }
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                    interruptions += "discontinuity $reason at ${oldPosition.positionMs}"
+                }
+            }
+            onMain {
+                player.addListener(listener)
+                player.play()
+            }
+            awaitOnMain { player.currentPosition >= 1_100L || player.playerError != null }
+            skipIfTheEmulatorDecoderFailed(player)
+            onMain { player.setSubtitleDelay(1_500L) }
+            awaitOnMain { earlyShownAt.size >= 2 || player.playerError != null }
+            onMain { player.removeListener(listener) }
+            Log.i(DEVICE_LOG_TAG, "delay +1500 ms set at 1100 ms: early cue shown at $earlyShownAt; interruptions $interruptions")
+            onMain { assertNull(player.playerError) }
+            assertTrue("shown at $earlyShownAt", earlyShownAt[1] in 1_800L..2_400L)
+            assertTrue(interruptions.toString(), interruptions.isEmpty())
+        }
+    }
+
     private fun playWithDelayedSubtitles(check: (androidx.media3.exoplayer.ExoPlayer, Map<String, Long>) -> Unit) {
         val routes = streamFixtureRoutes(instrumentation.context.assets) + ("/subtitles/timed.vtt" to FixtureRoute.Body(TIMED_CUES.toByteArray()))
         StreamFixtureServer(routes).use { server ->
