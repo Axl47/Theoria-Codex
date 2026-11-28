@@ -48,7 +48,8 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
 
         val fresh = uploads.last().copy(id = PostId(SourceKey.PIXIV, "journey-new"), createdAtEpochMs = 10_000L)
         val shown = uploads.take(20).map { it.id.markKey() }
-        val belowFold = uploads.first().id.markKey()
+        val belowFoldId = uploads.first().id
+        val belowFold = belowFoldId.markKey()
         uploads.add(0, fresh)
         io {
             container.data.uiRestoreRepository.updateSavedSearchNewPosts { state ->
@@ -63,13 +64,13 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
         waitFor("the new post on screen counts as seen") {
             io { newPosts().marks.getValue(saved.id).newPostIds == listOf(belowFold) }
         }
-        waitFor("both new cards keep their markers for the visit") { newCards() == 2 }
+        waitFor("the seen card keeps its marker for the visit") { newCards() == 1 && !shows(belowFoldId) }
 
         activate(compose.onNodeWithTag(searchCardTestTag(fresh.id)))
         waitFor("the Viewer opens the new post") { compose.onAllNodesWithContentDescription("Media actions").fetchSemanticsNodes().isNotEmpty() }
         pressSystemBack()
         waitFor("Searches is back") { inCollection() && shows(fresh.id) }
-        waitFor("opening the post cleared its marker") { newCards() == 1 }
+        waitFor("opening the post cleared its marker") { newCards() == 0 }
         check(io { newPosts().marks.getValue(saved.id).newPostIds } == listOf(belowFold)) { "the post never scrolled to lost its mark" }
     }
 
