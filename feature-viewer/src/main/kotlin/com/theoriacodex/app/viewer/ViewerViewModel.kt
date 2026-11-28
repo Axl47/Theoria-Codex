@@ -22,6 +22,7 @@ import com.theoriacodex.domain.model.ViewerPlaybackMode
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import com.theoriacodex.app.viewer.state.ViewerMediaKind
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
@@ -36,7 +37,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +77,7 @@ class ViewerViewModel(
     private val recordedVisiblePosts = mutableSetOf<PostId>()
     private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
+    private val downloadingGifs = mutableMapOf<ViewerMediaKey, Job>()
     private val prefetchLedger = ViewerPrefetchLedger()
     private val firstMediaShown = MutableStateFlow(false)
     private var lastCurrentPostId: PostId? = null
@@ -173,8 +178,7 @@ class ViewerViewModel(
     }
 
     private fun noteFirstMediaShown(state: ViewerUiState) {
-        if (state.series is ViewerSeries.Reading && state.currentPage?.loadingGalleryMedia() == true) return
-        if (state.currentMedia?.ready == true || state.mediaError != null) firstMediaShown.value = true
+        if (state.currentMediaSettled) firstMediaShown.value = true
     }
 
     fun replaceSession(session: ViewerSession) {
@@ -393,12 +397,37 @@ class ViewerViewModel(
     ) {
         val downloaded = prefetchLedger.isDownloaded(request.key)
         launchSessionJob(ViewerWorkKey.Prefetch(request.key)) {
+            if (media.kind == ViewerMediaKind.GIF) return@launchSessionJob withPermitWhileCurrentSettled { runGifPrefetch(session, request, media) }
             awaitFirstMediaShown()
             if (downloaded) {
                 runPrefetch(session, request, media)
             } else {
                 prefetchSemaphore.withPermit { runPrefetch(session, request, media) }
             }
+        }
+    }
+
+    private suspend fun withPermitWhileCurrentSettled(block: suspend () -> Unit) = coroutineScope {
+        val holdOver = MutableStateFlow(false)
+        val limit = launch { delay(VIEWER_GIF_HOLD_MAX_MS); holdOver.value = true }
+        fun released(state: ViewerUiState) = holdOver.value || state.currentMediaSettled
+        while (true) {
+            combine(mutableState, holdOver) { state, _ -> released(state) }.first { it }
+            val ran = prefetchSemaphore.withPermit {
+                released(mutableState.value).also { free -> if (free) { limit.cancel(); block() } }
+            }
+            if (ran) break
+        }
+        limit.cancel()
+    }
+
+    private suspend fun runGifPrefetch(session: ViewerSessionIdentity, request: ViewerPrefetchRequest, media: ViewerMediaState) {
+        val job = currentCoroutineContext().job
+        synchronized(lock) { downloadingGifs[request.key] = job }
+        try {
+            runPrefetch(session, request, media)
+        } finally {
+            synchronized(lock) { downloadingGifs.remove(request.key, job) }
         }
     }
 
@@ -442,7 +471,8 @@ class ViewerViewModel(
                 .distinctBy(ViewerPrefetchRequest::key)
                 .mapNotNull { request -> mediaFor(request.key)?.let { media -> request to media } }
                 .toList()
-            desiredPrefetchKeys = wanted.mapTo(mutableSetOf()) { (request, _) -> request.key }
+            desiredPrefetchKeys = wanted.mapTo(mutableSetOf()) { (request, _) -> request.key } +
+                downloadingGifs.keys.filter { key -> key == current.currentMedia?.key }
             sessionJobs.keys
                 .filterIsInstance<ViewerWorkKey.Prefetch>()
                 .filterNot { key -> key.mediaKey in desiredPrefetchKeys }
@@ -579,6 +609,11 @@ internal const val VIEWER_SERIES_RESOLUTION_TIMEOUT_MS = 60_000L
 internal const val VIEWER_PREFETCH_MAX_CONCURRENCY = 2
 internal const val VIEWER_PREFETCH_READY_WAIT_MS = 1_500L
 internal const val VIEWER_CHAPTER_READY_WAIT_MS = 30_000L
+internal const val VIEWER_GIF_HOLD_MAX_MS = 30_000L
+
+private val ViewerUiState.currentMediaSettled: Boolean
+    get() = !(series is ViewerSeries.Reading && currentPage?.loadingGalleryMedia() == true) &&
+        (currentMedia?.ready == true || mediaError != null)
 
 internal fun firstMediaWaitMs(series: ViewerSeries?): Long =
     if (series is ViewerSeries.Reading) VIEWER_CHAPTER_READY_WAIT_MS else VIEWER_PREFETCH_READY_WAIT_MS

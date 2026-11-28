@@ -111,11 +111,16 @@ class AppHttpClients(
 
 internal fun recordingRateLimits(outages: HostOutageTracker) = Interceptor { chain ->
     chain.proceed(chain.request()).also { response ->
-        if (response.code == HTTP_TOO_MANY_REQUESTS) {
+        if (response.code == HTTP_TOO_MANY_REQUESTS && response.request.tag(SkipRateLimitRecording::class.java) == null) {
             outages.recordResponse(response.request.url.toString(), response.code, response.headers.toMultimap())
         }
     }
 }
+
+internal fun Request.Builder.withoutRateLimitRecording(): Request.Builder =
+    tag(SkipRateLimitRecording::class.java, SkipRateLimitRecording)
+
+private object SkipRateLimitRecording
 
 private fun OkHttpClient.Builder.countedAs(stack: NetworkUsage.Stack) = apply {
     if (NetworkUsage.enabled) addNetworkInterceptor(NetworkUsage.counting(stack))

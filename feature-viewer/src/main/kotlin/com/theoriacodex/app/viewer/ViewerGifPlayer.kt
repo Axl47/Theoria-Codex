@@ -47,7 +47,7 @@ internal fun ViewerGifPlayer(
     events: ViewerRendererEvents,
 ) {
     val state = remember(locations, controls.loadGeneration) { ViewerGifState(locations) }
-    ViewerGifLoadEffect(state, sourceKey, locations)
+    ViewerGifLoadEffect(state, sourceKey, locations, controls.isActive)
     val movie = state.movie
     if (movie == null) ViewerGifFallback(state, sourceKey, modifier, mediaModifier, controls, events)
     else ViewerGifMovie(movie, modifier, mediaModifier, controls, events)
@@ -62,12 +62,14 @@ private class ViewerGifState(locations: List<String>) {
 }
 
 @Composable
-private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>) {
+private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>, current: Boolean) {
     val context = LocalContext.current
+    val isCurrent by rememberUpdatedState(current)
+    LaunchedEffect(current, source, locations) { if (current) markCurrentViewerGifs(context, source, locations) }
     LaunchedEffect(state, source) {
         var movie: Movie? = null
         for (attempt in 1..GIF_MOVIE_LOAD_ATTEMPTS) {
-            movie = loadFirstGifMovie(context, source, locations, attempt)
+            movie = loadFirstGifMovie(context, source, locations, attempt, isCurrent)
             if (movie != null) break
             if (attempt < GIF_MOVIE_LOAD_ATTEMPTS) delay(GIF_MOVIE_RETRY_DELAY_MS)
         }

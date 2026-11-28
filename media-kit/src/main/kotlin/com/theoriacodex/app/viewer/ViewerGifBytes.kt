@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import com.theoriacodex.app.media.copyCachedMediaBytes
 import com.theoriacodex.app.media.downloadMediaFile
+import com.theoriacodex.app.media.downloadMediaFileInParts
 import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.network.appHttpClients
 import com.theoriacodex.app.source.requestHeaders
@@ -15,15 +16,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.OkHttpClient
 
-internal class ViewerGifByteStore(private val directory: File) {
-    private val locks = List(16) { Mutex() }
+internal class ViewerGifByteStore(private val directory: File, private val maxBytes: Long = CACHE_MAX_BYTES) {
+    private val locks = mutableMapOf<String, EntryLock>()
     private val writeMutex = Mutex()
     private var generation = 0L
+    private var currentEntries = emptySet<String>()
 
     suspend fun load(key: String, fill: suspend (File) -> Unit): ByteArray =
         withEntry(key) { destination -> read(destination) ?: store(destination, fill, File::readBytes) }
+
+    suspend fun markCurrent(keys: List<String>) = writeMutex.withLock { currentEntries = keys.mapTo(mutableSetOf(), ::entryName) }
 
     suspend fun warm(key: String, fill: suspend (File) -> Unit): Long = withEntry(key) { destination ->
         if (isFresh(destination)) destination.length() else store(destination, fill, File::length)
@@ -31,7 +36,17 @@ internal class ViewerGifByteStore(private val directory: File) {
 
     private suspend fun <T> withEntry(key: String, block: suspend (File) -> T): T = withContext(Dispatchers.IO) {
         val name = entryName(key)
-        locks[(name.hashCode() and Int.MAX_VALUE) % locks.size].withLock { block(File(directory, name)) }
+        val lock = synchronized(locks) { locks.getOrPut(name, ::EntryLock).also { it.users++ } }
+        try {
+            lock.mutex.withLock { block(File(directory, name)) }
+        } finally {
+            synchronized(locks) { if (--lock.users == 0) locks.remove(name) }
+        }
+    }
+
+    private class EntryLock {
+        val mutex = Mutex()
+        var users = 0
     }
 
     private suspend fun <T> store(destination: File, fill: suspend (File) -> Unit, result: (File) -> T): T {
@@ -84,8 +99,9 @@ internal class ViewerGifByteStore(private val directory: File) {
         val files = entries().sortedBy(File::lastModified)
         var bytes = files.sumOf(File::length)
         var count = files.size
-        files.filterNot { it == retained }.forEach { file ->
-            if (bytes > CACHE_MAX_BYTES || count > CACHE_MAX_FILES) {
+        val busy = synchronized(locks) { locks.keys.toSet() }
+        files.filterNot { it == retained || it.name in currentEntries || it.name in busy }.forEach { file ->
+            if (bytes > maxBytes || count > CACHE_MAX_FILES) {
                 val length = file.length()
                 if (file.delete()) { bytes -= length; count-- }
             }
@@ -100,25 +116,37 @@ internal class ViewerGifByteStore(private val directory: File) {
     }
 }
 
-suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String): ByteArray {
+suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String, current: Boolean): ByteArray {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
+    val download = if (current) ::downloadMediaFileInParts else ::downloadMediaFile
+    return gifByteStore(context).load(gifKey(source, location)) { file -> fillRemoteGif(context, source, url, file, download) }
 }
+
+suspend fun markCurrentViewerGifs(context: Context, source: SourceKey, locations: List<String>) =
+    gifByteStore(context).markCurrent(locations.map { location -> gifKey(source, location) })
+
+private fun gifKey(source: SourceKey, location: String): String = "${source.id}:${normalizeMediaUrl(source, location) ?: location}"
 
 suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).warm("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
+    return gifByteStore(context).warm(gifKey(source, location)) { file -> fillRemoteGif(context, source, url, file, ::downloadMediaFile) }
 }
 
-private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: String, destination: File) {
+private suspend fun fillRemoteGif(
+    context: Context,
+    source: SourceKey,
+    url: String,
+    destination: File,
+    download: suspend (String, Map<String, String>, File, Long, OkHttpClient) -> Unit,
+) {
     if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES)) return
-    withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
-        downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, context.appHttpClients.downloads)
-    }
+    withTimeoutOrNull(GIF_DOWNLOAD_TIMEOUT_MS) {
+        download(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, context.appHttpClients.downloads)
+    } ?: throw IOException("GIF download timed out")
 }
 
 suspend fun cachedViewerGifLocation(context: Context, source: SourceKey, location: String): String =
-    gifByteStore(context).cachedLocation("${source.id}:${normalizeMediaUrl(source, location) ?: location}") ?: location
+    gifByteStore(context).cachedLocation(gifKey(source, location)) ?: location
 
 internal suspend fun clearViewerGifCache(context: Context) = gifByteStore(context).clear()
 
