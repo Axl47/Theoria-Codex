@@ -15,7 +15,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -151,8 +150,7 @@ class StreamPlaybackDeviceTest {
     }
 
     private fun skipIfTheEmulatorDecoderFailed(player: Player) = onMain {
-        val decoder = (player.playerError?.cause as? MediaCodecDecoderException)?.codecInfo?.name
-        assumeFalse("This emulator's $decoder cannot decode", decoder?.startsWith("c2.goldfish") == true)
+        assumeTheEmulatorDecoderWorks((player.playerError?.cause as? MediaCodecDecoderException)?.codecInfo?.name)
     }
 
     private fun <T> onMain(block: () -> T): T {

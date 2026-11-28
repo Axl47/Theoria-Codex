@@ -33,7 +33,9 @@ process, so an encode that only lives in the app's scope stalls once the user le
   file stores the clip's range only, never URLs or headers, matching ADR 0113. A clip restored after the process
   died fails with "This clip was interrupted" and is not retryable, since its links are gone. A damaged clip row is
   dropped alone instead of failing the whole queue. `ENCODING` is never written: it is saved as `PREPARING`, which
-  restores the same way, so the file stays readable by builds from before clips.
+  restores the same way, so the file stays readable by builds from before clips. A failed export shows one of three
+  short messages chosen by Media3's error code and keeps that `ExportException` as its cause, which the queue records
+  in diagnostics, so a failure on a phone names the codec and error behind it.
 - `exportEpisodeClip` reads through `VideoPlaybackInfrastructure.bind` without the cache, so it gets the player's
   headers, HLS and AES-128 handling and separate audio. Media3 Transformer clips only with its own source factory, so
   the export wraps the bound one in `ClippingMediaSource`. It takes the lowest rendition at least 540 px on the short
@@ -79,7 +81,8 @@ is held; and a handle drag shows no frame preview. Encode time on a phone is unm
 ## Guarded by
 
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/EpisodeClipExportDeviceTest.kt`: `aClipOfAnEncryptedHlsEpisodeKeepsOnlyItsRangeAndBurnsInTheCueShownThen_adr_0223`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadQueueTest.kt`: `clips encode one at a time with progress and end saved with their note (ADR 0223)`, `a failed clip shows its own message and reaches diagnostics with the encoder's error (ADR 0223)`, `cancelling a clip mid-encode ends it cancelled, and an interrupted clip is never retried (ADR 0223)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipFailureTest.kt`: `a failed export keeps Media3's error behind the message the user sees (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipTracksTest.kt`: `refreshed links keep the chosen tracks by label and repeat, or drop a track that is gone or ambiguous (ADR 0223)`
 - `media-kit/src/test/kotlin/com/theoriacodex/app/media/PostDownloadJobStoreGoldenTest.kt`: `a clip keeps only its range across restarts, writes no status older builds lack, and a damaged clip row is dropped alone (ADR 0223)`
 - `app-logic/src/test/kotlin/com/theoriacodex/app/viewer/EpisodeClipRangeTest.kt`: `a clip starts at the playhead with the next 30 seconds, sliding back before the episode ends (ADR 0223)`, `handles keep a clip between one second and one minute inside the episode (ADR 0223)`, `the strip shows two minutes centred on the clip, kept inside the episode (ADR 0223)`, `a touch picks the nearer handle within reach and maps back to episode time (ADR 0223)`

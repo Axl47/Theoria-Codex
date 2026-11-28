@@ -264,6 +264,7 @@ class PostDownloadQueue(
             throw cancelled
         } catch (error: DownloadPreparationException) {
             markFailed(item.id, error.message)
+            error.cause?.let { diagnostics.record("downloads", "Saving a post to the device failed", it) }
         } catch (error: Exception) {
             markFailed(item.id, if (item.request.clip != null) "Could not save this clip. Try again." else "Could not save this post. Try again.")
             diagnostics.record("downloads", "Saving a post to the device failed", error)
