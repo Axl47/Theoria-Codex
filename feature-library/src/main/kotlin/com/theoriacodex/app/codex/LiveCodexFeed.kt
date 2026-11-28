@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
@@ -36,10 +36,14 @@ data class LiveCodexFeedState(
     val loadedAtEpochMs: Long? = null,
 )
 
-fun LiveCodexFeedState.predates(marks: Collection<NewPostMarks>): Boolean {
+fun LiveCodexFeedState.predates(marks: Collection<NewPostMarks>): Boolean = predates(marks.newestCheck())
+
+private fun LiveCodexFeedState.predates(check: Long?): Boolean {
     val loadedAt = loadedAtEpochMs ?: return false
-    return marks.any { it.newPostCount > 0 && (it.checkedAtEpochMs ?: 0) > loadedAt }
+    return check != null && check > loadedAt
 }
+
+private fun Collection<NewPostMarks>.newestCheck(): Long? = filter { it.newPostCount > 0 }.maxOfOrNull { it.checkedAtEpochMs ?: 0 }
 
 @Composable
 fun rememberNewPostsReload(
@@ -48,11 +52,11 @@ fun rememberNewPostsReload(
     marks: Collection<NewPostMarks>,
     followNewMarks: Boolean = false,
 ): Boolean {
-    val opened = remember(owner) { marks }
-    val watched = if (followNewMarks) marks else opened
-    val check = watched.maxOfOrNull { it.checkedAtEpochMs ?: 0 }
-    var attempted by remember(owner) { mutableStateOf<Long?>(null) }
-    val pending = attempted != check && feed.predates(watched)
+    val latest = marks.newestCheck()
+    val opened by rememberSaveable { mutableStateOf(latest) }
+    val check = if (followNewMarks) latest else opened
+    var attempted by rememberSaveable { mutableStateOf<Long?>(null) }
+    val pending = attempted != check && feed.predates(check)
     LaunchedEffect(owner, pending) {
         if (!pending) return@LaunchedEffect
         attempted = check

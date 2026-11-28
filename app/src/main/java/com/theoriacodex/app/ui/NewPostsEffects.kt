@@ -63,15 +63,8 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
     }
 }
 
-internal fun newPostsSeenHandler(data: DataDependencies, codexId: String, newPostIds: Set<PostId>): (suspend (Set<PostId>) -> Unit)? =
-    if (codexId !in newPostCodexIds) {
-        null
-    } else {
-        { seen ->
-            val keys = seen.filter { it in newPostIds }.mapTo(mutableSetOf()) { it.markKey() }
-            if (keys.isNotEmpty()) data.markNewPostsSeen(codexId, keys)
-        }
-    }
+internal fun newPostsSeenHandler(data: DataDependencies, codexId: String): (suspend (Set<PostId>) -> Unit)? =
+    if (codexId !in newPostCodexIds) null else { seen -> data.markNewPostsSeen(codexId, seen.mapTo(mutableSetOf()) { it.markKey() }) }
 
 private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
 

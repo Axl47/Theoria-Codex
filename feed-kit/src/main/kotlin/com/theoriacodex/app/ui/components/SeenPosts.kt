@@ -14,9 +14,10 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SeenPostsEffect(grid: LazyStaggeredGridState, posts: List<Post>, onSeen: suspend (Set<PostId>) -> Unit) {
+fun SeenPostsEffect(grid: LazyStaggeredGridState, posts: List<Post>, eligible: Set<PostId>, onSeen: suspend (Set<PostId>) -> Unit) {
     val byKey = remember(posts) { posts.associateBy { feedPostItemKey(it.id) } }
     val currentPosts by rememberUpdatedState(byKey)
+    val currentEligible by rememberUpdatedState(eligible)
     val report by rememberUpdatedState(onSeen)
     LaunchedEffect(grid) {
         val reported = mutableSetOf<PostId>()
@@ -26,16 +27,16 @@ fun SeenPostsEffect(grid: LazyStaggeredGridState, posts: List<Post>, onSeen: sus
             val batch = pending.toSet()
             pending.clear()
             reported += batch
-            report(batch)
+            withContext(NonCancellable) { report(batch) }
         }
         try {
             snapshotFlow { grid.isScrollInProgress to grid.layoutInfo.mostlyVisibleKeys().mapNotNullTo(mutableSetOf()) { currentPosts[it]?.id } }
                 .collect { (scrolling, seen) ->
-                    pending += seen - reported
+                    pending += seen.filter { it in currentEligible && it !in reported }
                     if (!scrolling) flush()
                 }
         } finally {
-            withContext(NonCancellable) { flush() }
+            flush()
         }
     }
 }

@@ -267,7 +267,7 @@ private fun CodexDetailBody(
                 onEditSelectionChange, onOpenPostActions, emptyMessage, related,
             )
         }
-        onPostsSeen?.let { SeenPostsEffect(gridState, feed.visiblePosts, it) }
+        onPostsSeen?.let { SeenPostsEffect(gridState, feed.visiblePosts, newPostIds, it) }
         if (liveOwner == null) {
             grid()
         } else {
