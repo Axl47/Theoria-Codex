@@ -99,7 +99,8 @@ internal class ViewerGifByteStore(private val directory: File, private val maxBy
         val files = entries().sortedBy(File::lastModified)
         var bytes = files.sumOf(File::length)
         var count = files.size
-        files.filterNot { it == retained || it.name in currentEntries }.forEach { file ->
+        val busy = synchronized(locks) { locks.keys.toSet() }
+        files.filterNot { it == retained || it.name in currentEntries || it.name in busy }.forEach { file ->
             if (bytes > maxBytes || count > CACHE_MAX_FILES) {
                 val length = file.length()
                 if (file.delete()) { bytes -= length; count-- }
