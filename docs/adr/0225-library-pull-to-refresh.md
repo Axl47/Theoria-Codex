@@ -38,4 +38,4 @@ non-scrolling empty state that a pull cannot reach; its own Retry covers that ca
 - `feature-library/src/test/kotlin/com/theoriacodex/app/codex/LiveCodexRefreshTest.kt`: `pulling a live collection refreshes its feed and shows Checking until the refresh ends (ADR 0225)`
 - `feature-library/src/test/kotlin/com/theoriacodex/app/codex/LiveCodexRefreshTest.kt`: `pulling the Saved shelves refreshes every live feed on them (ADR 0225)`
 - `feature-library/src/test/kotlin/com/theoriacodex/app/codex/FollowedCodexViewModelTest.kt`: `only a refresh reports refreshing, never the first load or a load more (ADR 0225)`
-- Left to prose: the Saved page registering each shelf's feed, which needs the whole app graph; checked on the emulator.
+- `app/src/androidTest/java/com/theoriacodex/app/journeys/LibraryPullToRefreshJourneyTest.kt`: `pullingTheSavedPageAndTheSearchesCollectionShowsNewUploads_adr_0225`
