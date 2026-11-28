@@ -29,6 +29,7 @@ data class LiveCodexFeedState(
     val loading: Boolean = false,
     val canLoadMore: Boolean = false,
     val errors: Map<String, String> = emptyMap(),
+    val refreshFailedOnly: Boolean = false,
     val generation: Long = 0,
     val loadedAtEpochMs: Long? = null,
 )
@@ -83,6 +84,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var keptBranches: Map<String, B>? = null
     private var keptLoadedAt: Long? = null
     private var refreshErrors = emptyMap<String, String>()
+    private val loadedOnce = mutableSetOf<String>()
     private val slots = LinkedHashMap<PostId, FeedSlot>()
     private var batch = 0
     private var coverSort = CodexSortMode.NEWEST_SAVED
@@ -120,6 +122,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         coverPostId = null
         keptBranches = null
         refreshErrors = emptyMap()
+        loadedOnce.clear()
         slots.clear()
         loadedAt = System.currentTimeMillis()
         branches.clear()
@@ -180,6 +183,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         val result = fetch(branch, retry)
         if (generation != admitted) return
         branches[id] = result
+        if (result.error == null) loadedOnce += id
         if (!progressive) return
         publish(loading = true)
         cacheFirstPost(admitted, root = true)
@@ -211,12 +215,14 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         val shown = slots.keys.withIndex().associate { (rank, id) -> id to rank }
         val posts = branches.values.flatMap { it.posts }.sortedBy { shown[it.id] ?: Int.MAX_VALUE }.distinctByFile()
         posts.forEach { post -> slots.getOrPut(post.id) { FeedSlot(batch, post.createdAtEpochMs) } }
+        val loadErrors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap()
+        val errors = loadErrors + refreshErrors.filterKeys { it in branches }
         mutableState.value = LiveCodexFeedState(
             posts = posts.sortedWith(feedOrder()),
             loading = loading,
             canLoadMore = branches.values.any { it.canLoadMore },
-            errors = branches.values.mapNotNull { branch -> branch.error?.let { branch.id to it } }.toMap() +
-                refreshErrors.filterKeys { it in branches },
+            errors = errors,
+            refreshFailedOnly = loadErrors.isEmpty() && errors.isNotEmpty() && errors.keys.all(loadedOnce::contains),
             generation = generation,
             loadedAtEpochMs = loadedAt,
         )

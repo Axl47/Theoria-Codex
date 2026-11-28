@@ -339,7 +339,7 @@ private val acceptanceQuery = Query(
     includeTerms = listOf(SearchTerm("a & b", SearchFacet.ARTIST, "artist")),
     excludeTerms = listOf(SearchTerm("c")),
     sort = SortMode.NEWEST,
-    dateRange = DateRange(1L, 2L),
+    dateRange = DateRange.Between(1L, 2L),
     minScore = 3,
 )
 

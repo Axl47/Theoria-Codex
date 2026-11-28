@@ -1,11 +1,29 @@
 package com.theoriacodex.domain.model
 
-data class DateRange(
-    val fromEpochMs: Long?,
-    val toEpochMs: Long?,
-) {
-    operator fun contains(epochMs: Long?): Boolean =
-        epochMs != null && epochMs >= (fromEpochMs ?: Long.MIN_VALUE) && epochMs <= (toEpochMs ?: Long.MAX_VALUE)
+sealed interface DateRange {
+    fun boundsAt(nowEpochMs: Long): Between
+
+    data class Between(
+        val fromEpochMs: Long?,
+        val toEpochMs: Long?,
+    ) : DateRange {
+        override fun boundsAt(nowEpochMs: Long): Between = this
+
+        operator fun contains(epochMs: Long?): Boolean =
+            epochMs != null && epochMs >= (fromEpochMs ?: Long.MIN_VALUE) && epochMs <= (toEpochMs ?: Long.MAX_VALUE)
+    }
+
+    data class LastDays(val days: Int) : DateRange {
+        init {
+            require(days > 0) { "A trailing date range must cover at least one day" }
+        }
+
+        override fun boundsAt(nowEpochMs: Long): Between = Between(nowEpochMs - days * DAY_MS, null)
+    }
+
+    companion object {
+        const val DAY_MS: Long = 24L * 60L * 60L * 1000L
+    }
 }
 
 enum class SearchFacet {

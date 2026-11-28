@@ -74,7 +74,9 @@ internal suspend fun TheoriaShell.settledTriage(request: TriageRequest, seed: Tr
     routes.dispatchOrQueue(SearchAction.SettleSearch)
     val query = search.state.first { state -> !state.loading }.query
     val settled = request.copy(feedKey = query.appliedQueryHash.ifBlank { request.feedKey })
-    return settled to seed.settled(sameQuery = settled == request, query.applied.dateRange)
+    val sameQuery = settled == request
+    val dates = if (sameQuery) seed.filters.dateRange else query.applied.dateRange?.boundsAt(System.currentTimeMillis())
+    return settled to seed.settled(sameQuery, dates)
 }
 
 private fun ViewerFeedOwner.seededTriageFeed(

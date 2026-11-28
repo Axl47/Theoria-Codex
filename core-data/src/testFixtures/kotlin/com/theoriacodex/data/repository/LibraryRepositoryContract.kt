@@ -607,7 +607,7 @@ abstract class LibraryRepositoryContract {
             includeTags = includeTags,
             excludeTags = emptyList(),
             sort = SortMode.TOP,
-            dateRange = DateRange(fromEpochMs = 100L, toEpochMs = 200L),
+            dateRange = DateRange.Between(fromEpochMs = 100L, toEpochMs = 200L),
             minScore = 20,
         )
     }

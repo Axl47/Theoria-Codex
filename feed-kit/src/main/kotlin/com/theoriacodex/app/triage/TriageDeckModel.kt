@@ -41,7 +41,7 @@ fun FeedView.triageSeed(): TriageSeed = TriageSeed(visiblePosts, filters, durati
     (if (dateRange == filters.dateRange) postFilter else postFilter.withDateRange(dateRange)).filter(posts, lengths)
 }
 
-fun TriageSeed.settled(sameQuery: Boolean, dateRange: DateRange?): TriageSeed =
+fun TriageSeed.settled(sameQuery: Boolean, dateRange: DateRange.Between?): TriageSeed =
     copy(posts = if (sameQuery) posts else emptyList(), filters = filters.copy(dateRange = dateRange))
 
 data class HiddenTag(val source: SourceKey, val tag: String)

@@ -61,6 +61,7 @@ class UnifiedSearchOrchestrator(
     private val sourceTimeoutMs: Long = 15_000L,
     private val providerContext: CoroutineContext = Dispatchers.Default,
     private val annotateListing: suspend (List<Post>) -> List<Post> = { it },
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun search(
         query: Query,
@@ -209,7 +210,7 @@ class UnifiedSearchOrchestrator(
             preparedQueries[source] = if (clientSideExclude) {
                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
             } else prepared
-            val page = fetchSource(adapter, prepared, pageToken).inDateRange(sourceBaseQuery.dateRange)
+            val page = fetchSource(adapter, prepared, pageToken)
             if (clientSideExclude) {
                 val hydrated = listOf(page).withSearchMetadata(adapter).single()
                 hydrated.copy(items = applyClientSideExcludeFilter(hydrated.items, sourceBaseQuery.excludeTags))
@@ -231,7 +232,10 @@ class UnifiedSearchOrchestrator(
         return page.copy(items = annotateListing(page.items))
     }
 
-    private suspend fun fetchSource(
+    private suspend fun fetchSource(adapter: SourceAdapter, query: Query, pageToken: String?): Page<Post> =
+        fetchUnfiltered(adapter, query, pageToken).inDateRange(query.dateRange)
+
+    private suspend fun fetchUnfiltered(
         adapter: SourceAdapter,
         query: Query,
         pageToken: String?,
@@ -369,7 +373,10 @@ class UnifiedSearchOrchestrator(
     }
 
     private fun Page<Post>.inDateRange(range: DateRange?): Page<Post> =
-        if (range == null) this else copy(items = items.filter { post -> post.createdAtEpochMs in range })
+        if (range == null) this else {
+            val bounds = range.boundsAt(clock())
+            copy(items = items.filter { post -> post.createdAtEpochMs in bounds })
+        }
 
     private fun applyClientSideExcludeFilter(
         posts: List<Post>,

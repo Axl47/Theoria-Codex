@@ -43,6 +43,8 @@ data class QueryStorageRecord(
     val includeTermGroups: List<List<SearchTermStorageRecord?>?>? = null,
     @SerialName("media")
     val media: String? = null,
+    @SerialName("dateLastDays")
+    val dateLastDays: Int? = null,
 )
 
 @Serializable
@@ -66,8 +68,9 @@ object QueryStorageCodec {
             includeTags = query.includeTags,
             excludeTags = query.excludeTags,
             sort = query.sort.name,
-            dateFromEpochMs = query.dateRange?.fromEpochMs,
-            dateToEpochMs = query.dateRange?.toEpochMs,
+            dateFromEpochMs = (query.dateRange as? DateRange.Between)?.fromEpochMs,
+            dateToEpochMs = (query.dateRange as? DateRange.Between)?.toEpochMs,
+            dateLastDays = (query.dateRange as? DateRange.LastDays)?.days,
             minScore = query.minScore,
             includeTerms = query.includeTerms.map(::encodeTerm),
             excludeTerms = query.excludeTerms.map(::encodeTerm),
@@ -107,8 +110,10 @@ object QueryStorageCodec {
             excludeTerms = record.excludeTerms?.mapNotNull { it?.toDomainOrNull() }
                 ?: record.excludeTags.map(::SearchTerm),
             sort = runCatching { SortMode.valueOf(record.sort) }.getOrDefault(SortMode.TOP),
-            dateRange = if (record.dateFromEpochMs == null && record.dateToEpochMs == null) null else {
-                DateRange(record.dateFromEpochMs, record.dateToEpochMs)
+            dateRange = when {
+                record.dateLastDays != null && record.dateLastDays > 0 -> DateRange.LastDays(record.dateLastDays)
+                record.dateFromEpochMs == null && record.dateToEpochMs == null -> null
+                else -> DateRange.Between(record.dateFromEpochMs, record.dateToEpochMs)
             },
             minScore = record.minScore,
             media = MediaFilter.entries.firstOrNull { it.name == record.media } ?: MediaFilter.ANY,

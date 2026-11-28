@@ -1,5 +1,6 @@
 package com.theoriacodex.domain.query
 
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.MediaFilter
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -14,6 +15,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QueryHashTest {
+    @Test
+    fun `picked dates hash as their epochs, as stored hashes hold them, and a preset as its days`() {
+        val query = Query(QueryMode.Unified, listOf("cat"), emptyList(), SortMode.NEWEST, null, null)
+
+        assertEquals("v3|unified|group[include:TAG:null:3:cat]|NEWEST|100:-|none",
+            QueryHash.from(query.copy(dateRange = DateRange.Between(100L, null))))
+        assertEquals("v3|unified|group[include:TAG:null:3:cat]|NEWEST|last:7d|none",
+            QueryHash.from(query.copy(dateRange = DateRange.LastDays(7))))
+    }
+
     @Test
     fun `hash remains stable when include and exclude terms are permuted`() {
         val first = Query(

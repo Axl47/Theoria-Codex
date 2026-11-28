@@ -161,7 +161,7 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
             val savedState = SavedStateHandle()
             val first = viewModel(ViewModelSearchAdapter(), savedState = savedState)
             restore(first)
-            val range = DateRange(fromEpochMs = 100L, toEpochMs = 200L)
+            val range = DateRange.Between(fromEpochMs = 100L, toEpochMs = 200L)
             first.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
             first.onAction(SearchAction.AddIncludeTerm(SearchTerm("restored tag")))
             first.onAction(SearchAction.SelectSort(SortMode.POPULAR))

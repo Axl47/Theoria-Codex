@@ -53,12 +53,13 @@ fun rememberSearchFeed(
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(minBucket = durationMinBucket, maxBucket = durationMaxBucket)
     }
+    val dates = remember(state.query.applied.dateRange) { state.query.applied.dateRange?.boundsAt(System.currentTimeMillis()) }
     val visibilityFilters = remember(
         animatedFilterActive, fabRestoreState.hideLiked, fabRestoreState.hideSaved, fabRestoreState.hideWatched,
-        animatedDurationRange, state.query.applied.dateRange,
+        animatedDurationRange, dates,
     ) {
         SearchVisibilityFilters(
-            dateRange = state.query.applied.dateRange, animatedOnly = animatedFilterActive,
+            dateRange = dates, animatedOnly = animatedFilterActive,
             hideLiked = fabRestoreState.hideLiked, hideSaved = fabRestoreState.hideSaved,
             hideWatched = fabRestoreState.hideWatched, animatedDurationRange = animatedDurationRange,
         )

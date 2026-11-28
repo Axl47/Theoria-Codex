@@ -89,7 +89,7 @@ class PixivSourceAdapter(
             "sort" to mapSort(query.sort),
             "filter" to "for_android",
         )
-        query.dateRange?.let { range ->
+        query.dateRange?.boundsAt(clock())?.let { range ->
             range.fromEpochMs?.let { params["start_date"] = formatEpochDate(it) }
             range.toEpochMs?.let { params["end_date"] = formatEpochDate(it) }
         }

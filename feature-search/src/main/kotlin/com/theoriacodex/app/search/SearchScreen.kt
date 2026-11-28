@@ -494,7 +494,7 @@ private fun searchFilterLabels(
     fabRestoreState: FeedFabRestoreState,
 ): List<String> = listOfNotNull(
     sortModeLabel(serverFilters.sort).takeIf { serverFilters.sort != SortMode.NEWEST },
-    serverFilters.dateRange?.let { dateRangeLabel(it, System.currentTimeMillis()) },
+    serverFilters.dateRange?.let(::dateRangeLabel),
     "Animated".takeIf { feed.animatedFilterActive },
     animatedDurationRangeLabel(feed.animatedDurationRange).takeIf { feed.animatedDurationFilterActive },
     "Full color".takeIf { serverFilters.fullColor },
@@ -724,8 +724,7 @@ private fun FilterSheet(
         }
         DateRangeFilterSection(
             range = query.dateRange,
-            onPreset = { preset -> onAction(SearchAction.SetDateRangePreset(preset)) },
-            onCustom = { range -> onAction(SearchAction.SetDateRange(range)) },
+            onRangeChange = { range -> onAction(SearchAction.SetDateRange(range)) },
         )
     }
 }

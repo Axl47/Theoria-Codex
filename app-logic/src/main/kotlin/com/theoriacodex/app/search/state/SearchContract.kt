@@ -1,7 +1,6 @@
 package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.related.RelatedPostsUiState
-import com.theoriacodex.app.search.DateRangePreset
 import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.app.search.SearchContinuation
 import com.theoriacodex.app.search.SearchTermLimitNotice
@@ -258,7 +257,6 @@ sealed interface SearchAction {
     data class SelectSort(val sort: SortMode) : DraftEdit
     data class SetMedia(val media: MediaFilter) : DraftEdit
     data class SetDateRange(val range: DateRange?) : DraftEdit
-    data class SetDateRangePreset(val preset: DateRangePreset) : DraftEdit
     data class AddIncludeTerm(val term: SearchTerm) : DraftEdit
     data class AddExcludeTerm(val term: SearchTerm) : DraftEdit
     data class RemoveIncludeTerm(val term: SearchTerm) : DraftEdit

@@ -58,9 +58,11 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
     fun `the goldens hold every stored key`() {
         val queries = mapOf("search" to gsonWrittenSearch, "feed" to emptyQuery())
         val animated = mapOf("animated" to animatedSearch)
+        val lastWeek = mapOf("lastWeek" to lastWeekSearch)
         assertStoredFormat(
             golden("gson-written.json") to QueryStoreFile(queries.mapValues { QueryStorageCodec.encode(it.value) }),
             golden("animated.json") to QueryStoreFile(animated.mapValues { QueryStorageCodec.encode(it.value) }),
+            golden("last-days.json") to QueryStoreFile(lastWeek.mapValues { QueryStorageCodec.encode(it.value) }),
         )
     }
 
@@ -86,6 +88,8 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
         minScore = null,
     ).copy(media = MediaFilter.ANIMATED)
 
+    private val lastWeekSearch = animatedSearch.copy(media = MediaFilter.ANY, dateRange = DateRange.LastDays(7))
+
     private fun repositoryWith(json: String, recoveries: FileStoreRecoveryRegistry = FileStoreRecoveryRegistry()) =
         tempDir("query-golden-").let { dir ->
             File(dir, "query_store.json").writeText(json)
@@ -100,7 +104,7 @@ internal class QueryStoreGoldenTest : FileBackedRepositoryTestFixture() {
             includeTerms = escaped + artist,
             excludeTerms = listOf(SearchTerm("english", SearchFacet.LANGUAGE, "language")),
             sort = SortMode.NEWEST,
-            dateRange = DateRange(1_700_000_000_000L, 1_790_000_000_000L),
+            dateRange = DateRange.Between(1_700_000_000_000L, 1_790_000_000_000L),
             minScore = 10,
             includeTermGroups = listOf(SearchTermGroup(escaped), SearchTermGroup.single(artist)),
         )
