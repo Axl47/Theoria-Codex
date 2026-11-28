@@ -44,6 +44,8 @@ internal class ViewerSwipeController(
         private set
     var loadTarget by mutableStateOf<ViewerHorizontalSwipeTarget?>(null)
         private set
+    var revealTarget by mutableStateOf<ViewerHorizontalSwipeTarget?>(null)
+        private set
     var edgeOffset by mutableFloatStateOf(0f)
         private set
 
@@ -99,6 +101,7 @@ internal class ViewerSwipeController(
         val direction = if (displacement < 0f) ViewerHorizontalSwipeDirection.Next else ViewerHorizontalSwipeDirection.Previous
         val target = current.target(origin, direction)
         loadTarget = target
+        revealTarget = target
         current.mediaPager(origin.postIndex)
             ?.dragViewerPage(origin.mediaIndex, target?.takeIf { it.postIndex == origin.postIndex }?.mediaIndex, displacement)
         current.postPager.dragViewerPage(origin.postIndex, target?.takeIf { it.postIndex != origin.postIndex }?.postIndex, displacement)
@@ -137,6 +140,7 @@ internal class ViewerSwipeController(
         settling = false
         dragging = false
         loadTarget = null
+        revealTarget = null
         edgeOffset = 0f
         baseline = 0f
     }
@@ -152,6 +156,7 @@ internal class ViewerSwipeController(
         baseline = 0f
         settle = Settle(target, postId, commits)
         loadTarget = target.takeIf { commits }
+        if (commits) revealTarget = target
         if (commits) current.onInteraction()
         if (crossesPosts) current.prepareDestination(target)
         recoilEdge()
@@ -176,6 +181,7 @@ internal class ViewerSwipeController(
         }
         settling = false
         loadTarget = null
+        revealTarget = null
     }
 
     private fun recoilEdge() {

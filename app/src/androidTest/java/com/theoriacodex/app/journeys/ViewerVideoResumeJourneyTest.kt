@@ -66,7 +66,10 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
                 .fetchSemanticsNodes().isEmpty()
 
     private fun timelineFraction(index: Int): Float? =
-        compose.onAllNodes(hasProgressBarRangeInfo() and hasAnyAncestor(hasTestTag(videoTag(index))), useUnmergedTree = true)
+        compose.onAllNodes(
+            hasProgressBarRangeInfo() and hasAnyAncestor(hasTestTag("viewer-timeline-track")) and hasAnyAncestor(hasTestTag(videoTag(index))),
+            useUnmergedTree = true,
+        )
             .fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.current }
 
     private fun hasProgressBarRangeInfo() = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
@@ -80,8 +83,8 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
     private companion object {
         const val FIRST_VIDEO = 3
         const val SECOND_VIDEO = 4
-        const val RESUMED_FRACTION = 0.2f
-        const val FRESH_FRACTION = 0.05f
+        const val RESUMED_FRACTION = 0.1f
+        const val FRESH_FRACTION = 0.02f
         const val HELD_DRAG = 0.4f
         const val RECENT_SEARCH = "journey:video-resume"
     }

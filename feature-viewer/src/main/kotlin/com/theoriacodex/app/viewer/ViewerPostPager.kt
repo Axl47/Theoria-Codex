@@ -234,7 +234,7 @@ private fun ViewerPostPage(
             dismissDrag = dismissDrag.takeIf { active },
             mediaIndex = mediaPage,
             controls = viewerRendererControls(
-                frame, key, active, swipe.loadTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
+                frame, key, active, swipe.revealTarget == ViewerHorizontalSwipeTarget(postPage, mediaPage), loadGeneration,
                 expectedDurationMs = knownDurationMs?.takeIf { carriesPostDuration(post, media) },
             ),
             events = host.rememberPageEvents(frame, key, loadGeneration, controls, post, media),

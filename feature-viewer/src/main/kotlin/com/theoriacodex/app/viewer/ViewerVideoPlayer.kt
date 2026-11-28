@@ -97,13 +97,15 @@ internal fun ViewerVideoPlayer(
         ViewerVideoMessage("Video unavailable", modifier)
         return
     }
+    val startMs = positions.position(mediaKey)
+    val poster = loadingPreview.takeIf { startMs == 0L }
     if (!controls.isActive && !(controls.isPreloading && playback.readsAheadFreely())) {
-        Box(modifier.background(Color.Black)) { loadingPreview?.invoke() }
+        Box(modifier.background(Color.Black)) { poster?.invoke() }
         return
     }
     val key = ViewerVideoKey.of(ViewerMediaLoad(mediaKey, controls.loadGeneration), media, streamLabel, playback)
     val recovery = remember(key) { ViewerVideoRecovery(key.load, episode, key.label) }
-    val state = remember(key) { ViewerVideoState(recovery.opening(positions.position(mediaKey))) }
+    val state = remember(key) { ViewerVideoState(recovery.opening(startMs), startMs) }
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
     if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, subtitleTuning.delayMs, events, recovery, start) { releasedMs, progress ->
@@ -122,10 +124,10 @@ internal fun ViewerVideoPlayer(
     ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs, playing = controls.isActive && controls.isPlaying && state.actuallyPlaying)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview, subtitleTuning.sizePercent)
+    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, poster, subtitleTuning.sizePercent)
 }
 
-internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
+internal class ViewerVideoState(pending: ViewerRecoveryDecision?, startMs: Long = 0L) {
     var player by mutableStateOf<ExoPlayer?>(null)
     var view: PlayerView? = null
     var subtitleView: SubtitleView? = null
@@ -139,7 +141,7 @@ internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     val failed get() = pending == ViewerRecoveryDecision.Fail
     var started: ViewerStartedPlayback? = null
     var duration by mutableLongStateOf(0L)
-    var position by mutableLongStateOf(0L)
+    var position by mutableLongStateOf(startMs)
     var bufferedPosition by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
     var actuallyPlaying by mutableStateOf(false)
@@ -655,7 +657,7 @@ private fun ViewerVideoTimelineOverlay(
 ) {
     if (!controls.isActive && !controls.isPreloading || state.failed) return
     if (state.duration <= 0L || state.player == null) {
-        ViewerPendingTimeline(controls, events, modifier)
+        ViewerPendingTimeline(controls, events, modifier) { state.position }
         return
     }
     if (controls.clipping) {
