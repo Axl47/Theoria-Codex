@@ -17,7 +17,7 @@
 ### Fixed
 
 - Swiping back to a video post you already watched shows it, and its timeline, where you left off during the swipe, instead of its thumbnail and 0:00 followed by a jump to that point once the swipe settles.
-- A video or episode that picks up where you left off stays black while it loads, instead of showing its thumbnail first.
+- A video or episode you swipe back to shows the frame you left it on until it plays, instead of its thumbnail or a moment of black. One you last watched before opening the Viewer stays black while it loads.
 - A post opened from a feed closes back into its card after you open another post from the creator's profile and come back, instead of vanishing at once.
 - With Instant Seek on, tapping or dragging the timeline of a short looping video shows the frame at that point instead of the video's first frame.
 - With Instant Seek off, dragging the timeline of a short video previews the frame near your finger and plays from there when you let go, instead of restarting the video.
