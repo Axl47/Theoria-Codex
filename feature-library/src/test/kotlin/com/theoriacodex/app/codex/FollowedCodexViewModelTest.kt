@@ -309,6 +309,30 @@ class FollowedCodexViewModelTest {
         } finally { store.clear(); Dispatchers.resetMain() }
     }
 
+    @Test fun `only a refresh reports refreshing, never the first load or a load more (ADR 0225)`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val owner = owner { creator, token -> Page(listOf(testPost(SourceKey.PIXIV, "${creator.profileId}-${token ?: 0}")), "1".takeIf { token == null }) }
+            store.put("owner", owner)
+            owner.synchronize(listOf(follow("1")), setOf(SourceKey.PIXIV))
+            runCurrent()
+            assertFalse(owner.state.value.refreshing)
+            advanceUntilIdle()
+
+            owner.loadMore()
+            assertTrue(owner.state.value.loading)
+            assertFalse(owner.state.value.refreshing)
+            advanceUntilIdle()
+
+            owner.refresh()
+            assertTrue(owner.state.value.refreshing)
+            advanceUntilIdle()
+            assertFalse(owner.state.value.refreshing)
+            assertFalse(owner.state.value.loading)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
     @Test fun `refresh with no follows fetches nothing and leaves the feed idle`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()

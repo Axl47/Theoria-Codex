@@ -126,6 +126,7 @@ fun CodexDetailScreen(
     onSearchSites: ((SourceKey, Query) -> Unit)? = null,
     tagSheetRequested: Boolean = false,
     onTagSheetRequestHandled: () -> Unit = {},
+    liveOwner: LiveCodexFeedOwner? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -166,6 +167,7 @@ fun CodexDetailScreen(
             padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
             editSelection, { editSelection = it }, likedPostIds, newPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
+            liveOwner,
         )
     }
     if (showFilterSheet) {
@@ -232,6 +234,7 @@ private fun CodexDetailBody(
     onBack: () -> Unit,
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
+    liveOwner: LiveCodexFeedOwner?,
 ) {
     val focusManager = LocalFocusManager.current
     Column(
@@ -252,12 +255,15 @@ private fun CodexDetailBody(
         )
         val currentSelection by rememberUpdatedState(editSelection)
         val currentVisiblePosts by rememberUpdatedState(feed.visiblePosts)
-        CodexDetailGrid(
-            feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
-            { index -> onOpenViewer(currentVisiblePosts, index) },
-            { postId -> onEditSelectionChange(currentSelection.toggle(postId)) },
-            onEditSelectionChange, onOpenPostActions, emptyMessage, related,
-        )
+        val grid = @Composable {
+            CodexDetailGrid(
+                feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
+                { index -> onOpenViewer(currentVisiblePosts, index) },
+                { postId -> onEditSelectionChange(currentSelection.toggle(postId)) },
+                onEditSelectionChange, onOpenPostActions, emptyMessage, related,
+            )
+        }
+        if (liveOwner == null) grid() else LiveCodexRefreshBox(listOf(liveOwner), Modifier.fillMaxSize(), grid)
     }
 }
 

@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 data class LiveCodexFeedState(
     val posts: List<Post> = emptyList(),
     val loading: Boolean = false,
+    val refreshing: Boolean = false,
     val canLoadMore: Boolean = false,
     val errors: Map<String, String> = emptyMap(),
     val refreshFailedOnly: Boolean = false,
@@ -160,7 +161,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         if (ids.isEmpty()) return
         val admitted = ++generation
         batch = slots.values.maxOfOrNull(FeedSlot::batch)?.plus(1) ?: 0
-        mutableState.value = state.value.copy(loading = true, generation = generation)
+        mutableState.value = state.value.copy(loading = true, refreshing = keptBranches != null, generation = generation)
         job = scope.launch {
             try {
                 ids.mapConcurrent(concurrency = 2) { id -> fetchBranch(id, retry, admitted, progressive = initial) }
@@ -220,6 +221,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
         mutableState.value = LiveCodexFeedState(
             posts = posts.sortedWith(feedOrder()),
             loading = loading,
+            refreshing = loading && keptBranches != null,
             canLoadMore = branches.values.any { it.canLoadMore },
             errors = errors,
             refreshFailedOnly = loadErrors.isEmpty() && errors.isNotEmpty() && errors.keys.all(loadedOnce::contains),

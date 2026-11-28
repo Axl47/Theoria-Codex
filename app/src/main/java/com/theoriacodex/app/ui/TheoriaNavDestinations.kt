@@ -247,6 +247,7 @@ private fun CodexDetailContent(
         onSearchSites = shell::searchFromCodex,
         tagSheetRequested = tagSheet.requested,
         onTagSheetRequestHandled = tagSheet.onHandled,
+        liveOwner = liveOwner,
     )
 }
 
