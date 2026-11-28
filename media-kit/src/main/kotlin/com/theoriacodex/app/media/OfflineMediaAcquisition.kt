@@ -11,17 +11,25 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.app.network.appHttpClients
-import com.theoriacodex.sources.http.await
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
 class OfflineMediaAcquisition(
     private val context: Context,
@@ -91,25 +99,59 @@ suspend fun downloadMediaFile(
     maxBytes: Long = MAX_OFFLINE_MEDIA_BYTES,
     client: OkHttpClient,
 ) {
+    withContext(Dispatchers.IO) {
+        client.withResponse(mediaRequest(url, headers)) { response, _ ->
+            writeWholeMedia(response, destination, maxBytes, checkedMediaLength(response, maxBytes))
+        }
+    }
+}
+
+internal suspend fun <T> OkHttpClient.withResponse(request: Request, block: suspend CoroutineScope.(Response, Call) -> T): T = coroutineScope {
+    val call = newCall(request)
+    val finished = AtomicBoolean(false)
+    val canceller = launch(start = CoroutineStart.UNDISPATCHED) {
+        try {
+            awaitCancellation()
+        } finally {
+            if (!finished.get()) call.cancel()
+        }
+    }
+    try {
+        call.execute().use { response -> block(response, call) }
+    } catch (failure: IOException) {
+        ensureActive()
+        throw failure
+    } finally {
+        finished.set(true)
+        canceller.cancel()
+    }
+}
+
+internal fun mediaRequest(url: String, headers: Map<String, String>): Request {
     val parsed = requireNotNull(url.toHttpUrlOrNull()) { "Unsupported media URL" }
-    val request = Request.Builder().url(parsed).apply {
+    return Request.Builder().url(parsed).apply {
         headers.forEach { (name, value) -> header(name, value) }
         header("Accept-Encoding", "identity")
     }.build()
-    client.newCall(request).await { response ->
-        if (response.code != MEDIA_HTTP_OK) throw MediaHttpException(response.code)
-        val contentType = response.header("Content-Type").orEmpty().substringBefore(';').lowercase()
-        if (contentType.startsWith("text/") || contentType.contains("json") || contentType.contains("html")) {
-            throw IOException("The provider returned a page instead of media")
-        }
-        val expected = response.body.contentLength()
-        if (expected > maxBytes) throw mediaTooLarge(maxBytes)
-        val written = copyMediaResponse(response.body.byteStream(), destination, maxBytes)
-        if (written <= 0 || expected >= 0 && expected != written) {
-            throw IOException("The media download was incomplete")
-        }
-        validateOfflineMediaFile(destination)
+}
+
+internal fun checkedMediaLength(response: Response, maxBytes: Long): Long {
+    if (response.code != MEDIA_HTTP_OK) throw MediaHttpException(response.code)
+    val contentType = response.header("Content-Type").orEmpty().substringBefore(';').lowercase()
+    if (contentType.startsWith("text/") || contentType.contains("json") || contentType.contains("html")) {
+        throw IOException("The provider returned a page instead of media")
     }
+    val expected = response.body.contentLength()
+    if (expected > maxBytes) throw mediaTooLarge(maxBytes)
+    return expected
+}
+
+internal fun writeWholeMedia(response: Response, destination: File, maxBytes: Long, expected: Long) {
+    val written = copyMediaResponse(response.body.byteStream(), destination, maxBytes)
+    if (written <= 0 || expected >= 0 && expected != written) {
+        throw IOException("The media download was incomplete")
+    }
+    validateOfflineMediaFile(destination)
 }
 
 private fun copyMediaResponse(body: InputStream, destination: File, maxBytes: Long): Long {

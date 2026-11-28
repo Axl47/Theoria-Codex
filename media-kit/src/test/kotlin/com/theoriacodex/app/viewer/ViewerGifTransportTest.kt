@@ -39,12 +39,32 @@ class ViewerGifTransportTest {
         server.start()
         val url = "http://127.0.0.1:${server.address.port}/media.gif"
         try {
-            assertArrayEquals(bytes, loadRemoteViewerGifBytes(context, SourceKey.PIXIV, url))
-            assertArrayEquals(bytes, loadRemoteViewerGifBytes(context, SourceKey.PIXIV, url))
+            assertArrayEquals(bytes, loadRemoteViewerGifBytes(context, SourceKey.PIXIV, url, current = true))
+            assertArrayEquals(bytes, loadRemoteViewerGifBytes(context, SourceKey.PIXIV, url, current = true))
             assertEquals(1, calls.get())
             assertEquals("https://www.pixiv.net/", referer)
             val cached = cachedViewerGifLocation(context, SourceKey.PIXIV, url)
             assertArrayEquals(bytes, java.io.File(cached).readBytes())
+        } finally { server.stop(0) }
+    }
+
+    @Test
+    fun `warming a neighbor GIF asks for the whole file in one request, even from a host that takes ranges (ADR 0226)`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val ranges = mutableListOf<String?>()
+        val bytes = ByteArray(4 * 1024 * 1024).also { "GIF89a".toByteArray().copyInto(it) }
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/neighbor.gif") { exchange ->
+            synchronized(ranges) { ranges += exchange.requestHeaders.getFirst("Range") }
+            exchange.responseHeaders.add("Accept-Ranges", "bytes")
+            exchange.responseHeaders.add("Content-Type", "image/gif")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            assertEquals(bytes.size.toLong(), warmRemoteViewerGif(context, SourceKey.PIXIV, "http://127.0.0.1:${server.address.port}/neighbor.gif"))
+            assertEquals(listOf<String?>(null), ranges)
         } finally { server.stop(0) }
     }
 
@@ -65,7 +85,7 @@ class ViewerGifTransportTest {
         server.start()
         try {
             val request = async {
-                loadRemoteViewerGifBytes(context, SourceKey.PIXIV, "http://127.0.0.1:${server.address.port}/stalled.gif")
+                loadRemoteViewerGifBytes(context, SourceKey.PIXIV, "http://127.0.0.1:${server.address.port}/stalled.gif", current = true)
             }
             withTimeout(2_000L) { started.await(); request.cancelAndJoin() }
         } finally { release.countDown(); server.stop(0) }

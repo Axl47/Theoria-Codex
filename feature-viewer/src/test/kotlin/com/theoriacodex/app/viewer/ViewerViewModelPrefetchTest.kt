@@ -1,17 +1,21 @@
 package com.theoriacodex.app.viewer
 
 import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.viewer.ViewerOwnerTestData.gif
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.image
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.queue
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.request
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.session
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.advanceTimeBy
@@ -20,6 +24,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,6 +64,124 @@ class ViewerViewModelPrefetchTest {
         advanceTimeBy(1)
         runCurrent()
         assertEquals(slow, started.last())
+    }
+
+    @Test
+    fun `a neighbor GIF waits until the current media shows or fails, while other neighbors start at once (ADR 0226)`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        val media = listOf(image("0.jpg"), image("1.jpg"), gif("2.gif"), image("3.jpg"), gif("4.gif"))
+        owner.replaceSession(session("gif-hold", listOf(post("gallery", media = media))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+        owner.onAction(ViewerAction.SelectMedia(1))
+
+        owner.onAction(queue(keys[2], keys[3]))
+        runCurrent()
+        assertEquals(listOf(keys[3]), started)
+        owner.onAction(ViewerAction.MediaReady(session, keys[1], 0L))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[2]), started)
+
+        owner.onAction(ViewerAction.SelectMedia(3))
+        owner.onAction(queue(keys[4]))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[2]), started)
+        owner.onAction(ViewerAction.MediaFailed(session, ViewerMediaError.Recoverable(keys[3], "failed")))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[2], keys[4]), started)
+    }
+
+    @Test
+    fun `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0226)`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val slotsHeld = CompletableDeferred<Unit>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                if (media.kind != com.theoriacodex.app.viewer.state.ViewerMediaKind.GIF) slotsHeld.await()
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        val media = listOf(image("0.jpg"), image("1.jpg"), image("2.jpg"), gif("3.gif"), image("4.jpg"))
+        owner.replaceSession(session("gif-slot", listOf(post("gallery", media = media))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+
+        owner.onAction(queue(keys[1], keys[2], keys[3]))
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[2]), started)
+        owner.onAction(ViewerAction.SelectMedia(4))
+        slotsHeld.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[2]), started)
+        owner.onAction(ViewerAction.MediaReady(session, keys[4], 0L))
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[2], keys[3]), started)
+    }
+
+    @Test
+    fun `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0226)`() = runTest {
+        val finish = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                if (media.kind == com.theoriacodex.app.viewer.state.ViewerMediaKind.GIF) {
+                    try { finish.await() } catch (stop: CancellationException) { cancelled.complete(Unit); throw stop }
+                }
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("gif-current", listOf(post("gallery", media = listOf(image("0.jpg"), gif("1.gif"), image("2.jpg"))))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+        owner.onAction(queue(keys[1], keys[2]))
+        runCurrent()
+
+        owner.onAction(ViewerAction.SelectMedia(1))
+        owner.onAction(queue(keys[2], keys[0]))
+        runCurrent()
+
+        assertFalse(cancelled.isCompleted)
+        finish.complete(Unit)
+        runCurrent()
+        assertFalse(cancelled.isCompleted)
+    }
+
+    @Test
+    fun `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0226)`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(session("gif-limit", listOf(post("gallery", media = listOf(image("0.jpg"), gif("1.gif"))))))
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+
+        owner.onAction(queue(keys[1]))
+        advanceTimeBy(VIEWER_GIF_HOLD_MAX_MS - 1)
+        assertEquals(emptyList<Any>(), started)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(listOf(keys[1]), started)
     }
 
     @Test

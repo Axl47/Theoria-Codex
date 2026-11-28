@@ -49,5 +49,7 @@ internal object ViewerOwnerTestData {
 
     fun image(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "image/jpeg")
 
+    fun gif(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "image/gif")
+
     fun video(path: String) = ImageRef(url = "https://example.test/$path", localPath = null, mime = "video/mp4")
 }
