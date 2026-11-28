@@ -119,7 +119,7 @@ internal fun ViewerVideoPlayer(
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
     ViewerVideoCommands(state, controls, clipReturn)
-    ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs)
+    ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs, playing = controls.isActive && controls.isPlaying)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
     ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview, subtitleTuning.sizePercent)
@@ -521,8 +521,9 @@ private fun ViewerVideoProgress(state: ViewerVideoState, events: ViewerRendererE
 }
 
 @Composable
-private fun ViewerVideoSubtitleDelay(state: ViewerVideoState, delayMs: Long) {
-    LaunchedEffect(state.player, delayMs) {
+private fun ViewerVideoSubtitleDelay(state: ViewerVideoState, delayMs: Long, playing: Boolean) {
+    LaunchedEffect(state.player, delayMs, playing) {
+        if (!playing) return@LaunchedEffect
         delay(VIEWER_SUBTITLE_DELAY_SETTLE_MS)
         runCatching { state.player?.setSubtitleDelay(delayMs) }
     }
