@@ -112,8 +112,11 @@ class StreamPlaybackDeviceTest {
     @Test
     fun aDelayChangeDuringPlaybackReloadsPassedCuesWithoutSeekingOrRebuffering_adr_0224() {
         playWithDelayedSubtitles { player, _ ->
+            val surface = ImageReader.newInstance(320, 180, ImageFormat.PRIVATE, 4)
+            surface.setOnImageAvailableListener({ reader -> reader.acquireLatestImage()?.close() }, Handler(Looper.getMainLooper()))
             val earlyShownAt = CopyOnWriteArrayList<Long>()
             val interruptions = CopyOnWriteArrayList<String>()
+            val firstFrames = CopyOnWriteArrayList<Long>()
             val listener = object : Player.Listener {
                 override fun onCues(cueGroup: CueGroup) {
                     if (cueGroup.cues.any { it.text?.toString() == "Early cue" }) earlyShownAt += player.currentPosition
@@ -125,22 +128,36 @@ class StreamPlaybackDeviceTest {
                     interruptions += "discontinuity $reason at ${oldPosition.positionMs}"
                 }
                 override fun onRenderedFirstFrame() {
-                    interruptions += "first frame at ${player.currentPosition}"
+                    firstFrames += player.currentPosition
                 }
             }
-            onMain { player.play() }
-            awaitOnMain { player.currentPosition >= 1_100L || player.playerError != null }
-            skipIfTheEmulatorDecoderFailed(player)
-            onMain {
-                player.addListener(listener)
-                player.setSubtitleDelay(1_500L)
+            try {
+                onMain {
+                    player.setVideoSurface(surface.surface)
+                    player.addListener(listener)
+                    player.play()
+                }
+                awaitOnMain { (player.currentPosition >= 1_100L && firstFrames.isNotEmpty()) || player.playerError != null }
+                skipIfTheEmulatorDecoderFailed(player)
+                val framesBefore = firstFrames.size
+                onMain {
+                    earlyShownAt.clear()
+                    interruptions.clear()
+                    player.setSubtitleDelay(1_500L)
+                }
+                awaitOnMain { earlyShownAt.isNotEmpty() || player.playerError != null }
+                firstFrames.drop(framesBefore).forEach { interruptions += "first frame at $it" }
+                Log.i(DEVICE_LOG_TAG, "delay +1500 ms set at 1100 ms: early cue shown at $earlyShownAt; interruptions $interruptions")
+                onMain { assertNull(player.playerError) }
+                assertTrue("shown at $earlyShownAt", earlyShownAt.first() in 1_800L..2_400L)
+                assertTrue(interruptions.toString(), interruptions.isEmpty())
+            } finally {
+                onMain {
+                    player.removeListener(listener)
+                    player.clearVideoSurface(surface.surface)
+                }
+                surface.close()
             }
-            awaitOnMain { earlyShownAt.isNotEmpty() || player.playerError != null }
-            onMain { player.removeListener(listener) }
-            Log.i(DEVICE_LOG_TAG, "delay +1500 ms set at 1100 ms: early cue shown at $earlyShownAt; interruptions $interruptions")
-            onMain { assertNull(player.playerError) }
-            assertTrue("shown at $earlyShownAt", earlyShownAt.first() in 1_800L..2_400L)
-            assertTrue(interruptions.toString(), interruptions.isEmpty())
         }
     }
 

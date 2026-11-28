@@ -33,7 +33,7 @@ the text renderer reads at most one second ahead of the position it is given.
   track selector (`SubtitleReloadingTrackSelector`) tags each text selection with a reload count, so a bumped count
   makes the text selection differ while video and audio selections stay equal. Media3 then swaps in a fresh text
   stream and re-enables the text renderer at the shifted time, and leaves the video and audio renderers and their
-  buffers alone, so playback never rebuffers. A sideloaded file is delivered again from its single sample; a
+  buffers alone, so playback keeps going without a rebuffer, apart from the muxed-text case under Consequences. A sideloaded file is delivered again from its single sample; a
   subtitle rendition in its own HLS playlist fetches its current segment again, leaving the video's playlist alone. This
   replaced a 1 ms seek, which flushed every renderer and rebuffered the video on each change. The reload is skipped
   when the player is idle or ended; there the new delay applies from the next render. The Viewer sends a

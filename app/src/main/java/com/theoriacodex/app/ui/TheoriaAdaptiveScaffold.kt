@@ -53,6 +53,7 @@ internal fun TheoriaAdaptiveScaffold(
     val lift by animateDpAsState(snackbarLift, tween(TheoriaMotion.SCREEN_MS), label = "snackbarLift")
     Scaffold(
         containerColor = containerColor,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         snackbarHost = {
             Column(Modifier.padding(bottom = lift), horizontalAlignment = Alignment.CenterHorizontally) {
                 UndoPill(UndoAnchor.App)

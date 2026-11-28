@@ -132,7 +132,7 @@ private class TextReloadingSelectionFactory(private val delegate: ExoTrackSelect
         val current = generation
         return Array(created.size) { index ->
             created[index]?.let { selection ->
-                if (definitions[index]?.group?.type == C.TRACK_TYPE_TEXT) GenerationTrackSelection(selection, current) else selection
+                if (selection.trackGroup.type == C.TRACK_TYPE_TEXT) GenerationTrackSelection(selection, current) else selection
             }
         }
     }
