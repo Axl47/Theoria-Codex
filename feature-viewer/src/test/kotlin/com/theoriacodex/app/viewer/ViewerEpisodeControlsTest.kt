@@ -137,6 +137,36 @@ class ViewerEpisodeControlsTest {
         assertTrue(dismissed)
     }
 
+    @Test fun `holding a step button repeats until its limit, and letting go adds no extra step (ADR 0224)`() {
+        var tuning by mutableStateOf(SubtitleTuning(sizePercent = 150))
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.fillMaxSize()) {
+                    ViewerSubtitleTuningPanel(
+                        tuning = tuning,
+                        onSize = { tuning = tuning.copy(sizePercent = it.size(tuning.sizePercent)) },
+                        onDelay = {},
+                        onDismiss = {},
+                    )
+                }
+            }
+        }
+        compose.mainClock.autoAdvance = false
+        val larger = compose.onNodeWithContentDescription("Larger subtitles")
+        larger.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(600L)
+        val held = tuning.sizePercent
+        assertTrue("held $held", held in 160..190)
+        larger.performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(200L)
+        assertEquals(held, tuning.sizePercent)
+
+        larger.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(2_000L)
+        assertEquals(SubtitleTuning.MAX_SIZE_PERCENT, tuning.sizePercent)
+        larger.assertIsNotEnabled()
+    }
+
     @Test fun `audio is offered only with more than one track`() {
         val state = episodeState()
         val tracks = mutableStateOf(PlaybackTracks(audio = listOf(PlaybackTrack("1:0/0", "Japanese", selected = true))))
