@@ -22,9 +22,12 @@ data class NewPostMarks(
     fun seen(shown: (String) -> Boolean = { true }): NewPostMarks = including(latestPostIds.filter(shown))
 
     fun including(ids: Collection<String>): NewPostMarks {
-        val seen = seenPostIds.toSet() + ids
-        val current = latestPostIds.filter { it in seen }
-        return copy(seenPostIds = (current + ids + seenPostIds).distinct().take(MAX_NEW_POST_MARK_IDS))
+        val seen = (ids + seenPostIds).distinct()
+        val excess = seen.size - MAX_NEW_POST_MARK_IDS
+        if (excess <= 0) return copy(seenPostIds = seen)
+        val current = latestPostIds.toSet()
+        val evicted = seen.asReversed().asSequence().filter { it !in current }.take(excess).toSet()
+        return copy(seenPostIds = seen.filter { it !in evicted })
     }
 }
 

@@ -53,11 +53,11 @@ class CreatorProfileViewModelTest {
     }
 
     @Test
-    fun `opening a followed creator snapshots its seen ids and marks nothing seen (ADR 0019)`() = runTest {
+    fun `opening a followed creator snapshots the seen ids it had before the page loaded`() = runTest {
         val creator = creator(SourceKey.PIXIV, "followed")
         val gate = CompletableDeferred<Unit>()
         val engine = FakeCreatorRouteEngine().apply {
-            seen = mutableSetOf("old")
+            seen = setOf("old")
             seenGate = gate
             openResults = listOf(testPost(sourcePostId = "new"), testPost(sourcePostId = "old"))
         }
@@ -70,7 +70,6 @@ class CreatorProfileViewModelTest {
         advanceUntilIdle()
 
         assertEquals(CreatorSeenSnapshot(creator, setOf("old")), viewModel.seenAtOpen.value)
-        assertEquals(setOf("old"), engine.seen)
     }
 
     @Test
@@ -162,7 +161,7 @@ class CreatorProfileViewModelTest {
     }
 
     @Test
-    fun `paging failure retries exact continuation without duplicating accepted root bookkeeping`() = runTest {
+    fun `paging failure retries the exact continuation`() = runTest {
         val first = testPost(sourcePostId = "first")
         val engine = FakeCreatorRouteEngine().apply {
             openResults = listOf(first)
@@ -402,7 +401,7 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
         return Page(openResults, if (openCanLoadMore) "next" else null)
     }
 
-    var seen: MutableSet<String>? = null
+    var seen: Set<String>? = null
     var seenGate: CompletableDeferred<Unit>? = null
 
     override suspend fun seenPostIds(creator: CreatorProfile): Set<String>? {

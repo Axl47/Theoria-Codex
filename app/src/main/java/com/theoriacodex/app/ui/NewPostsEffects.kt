@@ -72,16 +72,20 @@ private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
 internal class NewPostsSeen(
     private val keys: Set<String>,
     private val followed: CreatorProfile?,
-    val onSeen: suspend (Set<PostId>) -> Unit,
+    private val mark: suspend (Set<PostId>, CreatorProfile?) -> Unit,
 ) {
+    val onSeen: suspend (Set<PostId>) -> Unit = { seen -> mark(seen, followed) }
+
     fun among(posts: List<Post>): Set<PostId> =
         posts.mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { it.markKey() in keys || it.source == followed?.source } }
+
+    fun withoutFollowed(): NewPostsSeen = if (followed == null) this else NewPostsSeen(keys, null, mark)
 }
 
 @Composable
 internal fun rememberNewPostsSeen(data: DataDependencies, followed: CreatorProfile? = null): NewPostsSeen {
     val keys = rememberSavedNewPosts(data).values.flatMapTo(mutableSetOf()) { it }
-    return remember(data, followed, keys) { NewPostsSeen(keys, followed) { seen -> data.markPostsSeen(seen, followed) } }
+    return remember(data, followed, keys) { NewPostsSeen(keys, followed) { seen, creator -> data.markPostsSeen(seen, creator) } }
 }
 
 private suspend fun DataDependencies.markPostsSeen(seen: Set<PostId>, followed: CreatorProfile?) {

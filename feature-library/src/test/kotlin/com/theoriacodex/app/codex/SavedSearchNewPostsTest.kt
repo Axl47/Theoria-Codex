@@ -42,7 +42,7 @@ class SavedSearchNewPostsTest {
 
     private suspend fun counts() = store.observeSavedSearchNewPosts().first().marks.mapValues { it.value.newPostCount }
 
-    @Test fun `first check sets the baseline, later ones count, and opening clears them`() = runTest {
+    @Test fun `first check sets the baseline, later ones count, and seeing them clears them`() = runTest {
         val searches = listOf(entry("a", 1))
         pages = mapOf("a" to listOf("1"))
         check(searches, 0L)
@@ -50,7 +50,7 @@ class SavedSearchNewPostsTest {
         pages = mapOf("a" to listOf("2", "1"))
         check(searches, 3 * hour)
         assertEquals(mapOf("a" to 1), counts())
-        store.markSavedSearchesSeen(setOf("a"))
+        store.markSavedSearchPostsSeen(setOf("PIXIV:2"))
         assertEquals(mapOf("a" to 0), counts())
     }
 

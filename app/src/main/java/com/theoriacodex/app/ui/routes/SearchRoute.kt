@@ -42,7 +42,6 @@ import com.theoriacodex.data.repository.FavoriteTagEntry
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.search.SearchSourceMix
 

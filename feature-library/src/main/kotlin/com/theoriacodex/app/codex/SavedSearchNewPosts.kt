@@ -50,12 +50,6 @@ class SavedSearchNewPostsChecker(
 internal fun SavedSearchEntry.newestFirst() =
     copy(search = search.copy(query = search.query.copy(sort = SortMode.NEWEST)))
 
-suspend fun UiRestoreRepository.markSavedSearchesSeen(ids: Set<String>? = null) {
-    updateSavedSearchNewPosts { state ->
-        state.copy(marks = state.marks.mapValues { (id, marks) -> if (ids == null || id in ids) marks.seen() else marks })
-    }
-}
-
 suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
     updateSavedSearchNewPosts { state ->
         if (state.marks.values.none { marks -> marks.newPostIds.any { it in shown } }) state

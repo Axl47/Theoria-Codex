@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui.routes
 
 import com.theoriacodex.app.ui.NewPostsSeen
+import com.theoriacodex.domain.model.AccountFeed
 import com.theoriacodex.app.ui.components.feedDurations
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -116,14 +117,17 @@ private fun CreatorRouteContent(
     }
     val undo = LocalUndoSlot.current
     val seen by owner.seenAtOpen.collectAsStateWithLifecycle()
-    val newPostIds = remember(state.results, config.newPosts) { config.newPosts?.among(state.results).orEmpty() }
+    val newPosts = remember(config.newPosts, state.selectedFeed) {
+        config.newPosts?.let { if (state.selectedFeed == AccountFeed.UPLOADS) it else it.withoutFollowed() }
+    }
+    val newPostIds = remember(state.results, newPosts) { newPosts?.among(state.results).orEmpty() }
     CreatorProfileScreen(
         related = related,
         followed = config.followed,
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads, undo) } },
         seenAtOpen = seen?.takeIf { config.followed && it.creator == state.creator }?.seenPostIds,
         newPostIds = newPostIds,
-        onNewPostsSeen = config.newPosts?.onSeen,
+        onNewPostsSeen = newPosts?.onSeen,
         state = state,
         marks = config.marks,
         pixivUgoiraClient = pixivUgoiraClient,
