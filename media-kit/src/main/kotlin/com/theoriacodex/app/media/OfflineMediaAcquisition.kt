@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
 class OfflineMediaAcquisition(
     private val context: Context,
@@ -91,25 +92,36 @@ suspend fun downloadMediaFile(
     maxBytes: Long = MAX_OFFLINE_MEDIA_BYTES,
     client: OkHttpClient,
 ) {
+    client.newCall(mediaRequest(url, headers)).await { response ->
+        writeWholeMedia(response, destination, maxBytes, checkedMediaLength(response, maxBytes))
+    }
+}
+
+internal fun mediaRequest(url: String, headers: Map<String, String>): Request {
     val parsed = requireNotNull(url.toHttpUrlOrNull()) { "Unsupported media URL" }
-    val request = Request.Builder().url(parsed).apply {
+    return Request.Builder().url(parsed).apply {
         headers.forEach { (name, value) -> header(name, value) }
         header("Accept-Encoding", "identity")
     }.build()
-    client.newCall(request).await { response ->
-        if (response.code != MEDIA_HTTP_OK) throw MediaHttpException(response.code)
-        val contentType = response.header("Content-Type").orEmpty().substringBefore(';').lowercase()
-        if (contentType.startsWith("text/") || contentType.contains("json") || contentType.contains("html")) {
-            throw IOException("The provider returned a page instead of media")
-        }
-        val expected = response.body.contentLength()
-        if (expected > maxBytes) throw mediaTooLarge(maxBytes)
-        val written = copyMediaResponse(response.body.byteStream(), destination, maxBytes)
-        if (written <= 0 || expected >= 0 && expected != written) {
-            throw IOException("The media download was incomplete")
-        }
-        validateOfflineMediaFile(destination)
+}
+
+internal fun checkedMediaLength(response: Response, maxBytes: Long): Long {
+    if (response.code != MEDIA_HTTP_OK) throw MediaHttpException(response.code)
+    val contentType = response.header("Content-Type").orEmpty().substringBefore(';').lowercase()
+    if (contentType.startsWith("text/") || contentType.contains("json") || contentType.contains("html")) {
+        throw IOException("The provider returned a page instead of media")
     }
+    val expected = response.body.contentLength()
+    if (expected > maxBytes) throw mediaTooLarge(maxBytes)
+    return expected
+}
+
+internal fun writeWholeMedia(response: Response, destination: File, maxBytes: Long, expected: Long) {
+    val written = copyMediaResponse(response.body.byteStream(), destination, maxBytes)
+    if (written <= 0 || expected >= 0 && expected != written) {
+        throw IOException("The media download was incomplete")
+    }
+    validateOfflineMediaFile(destination)
 }
 
 private fun copyMediaResponse(body: InputStream, destination: File, maxBytes: Long): Long {

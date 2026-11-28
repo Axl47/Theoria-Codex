@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import com.theoriacodex.app.media.copyCachedMediaBytes
 import com.theoriacodex.app.media.downloadMediaFile
+import com.theoriacodex.app.media.downloadMediaFileInParts
 import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.network.appHttpClients
 import com.theoriacodex.app.source.requestHeaders
@@ -102,18 +103,23 @@ internal class ViewerGifByteStore(private val directory: File) {
 
 suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String): ByteArray {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
+    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file, inParts = true) }
 }
 
 suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).warm("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file) }
+    return gifByteStore(context).warm("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file, inParts = false) }
 }
 
-private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: String, destination: File) {
+private suspend fun fillRemoteGif(context: Context, source: SourceKey, url: String, destination: File, inParts: Boolean) {
     if (copyCachedMediaBytes(context, source, url, destination, MAX_VIEWER_GIF_BYTES)) return
+    val client = context.appHttpClients.downloads
     withTimeout(GIF_DOWNLOAD_TIMEOUT_MS) {
-        downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, context.appHttpClients.downloads)
+        if (inParts) {
+            downloadMediaFileInParts(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, client)
+        } else {
+            downloadMediaFile(url, source.requestHeaders(), destination, MAX_VIEWER_GIF_BYTES, client)
+        }
     }
 }
 
