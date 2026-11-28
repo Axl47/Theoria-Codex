@@ -1,6 +1,8 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -38,14 +40,14 @@ class LibraryPullToRefreshJourneyTest : AppJourneyFixture() {
 
         val onShelf = upload("journey-shelf", 10_000L)
         pull()
-        waitFor("the pull brings the new upload onto the Searches shelf") { shows(onShelf.id) }
+        waitFor("the pull brings the new upload into view on the Searches shelf") { inView(onShelf.id) }
         waitFor("the pill leaves once the refresh ends") { compose.onAllNodesWithText("Checking").fetchSemanticsNodes().isEmpty() }
 
         activate(compose.onNodeWithText("Searches"))
         waitFor("Searches opens") { inCollection() && shows(onShelf.id) }
         val inCollection = upload("journey-collection", 20_000L)
         pull()
-        waitFor("the pull brings the new upload into Searches") { shows(inCollection.id) }
+        waitFor("the pull brings the new upload into view in Searches") { inView(inCollection.id) }
     }
 
     private fun upload(id: String, createdAt: Long): Post =
@@ -56,6 +58,8 @@ class LibraryPullToRefreshJourneyTest : AppJourneyFixture() {
     }
 
     private fun inCollection() = compose.onAllNodesWithTag("codex-chip-row").fetchSemanticsNodes().isNotEmpty()
+
+    private fun inView(id: PostId) = runCatching { compose.onNodeWithTag(searchCardTestTag(id)).assertIsDisplayed() }.isSuccess
 
     private fun shows(id: PostId) = compose.onAllNodesWithTag(searchCardTestTag(id)).fetchSemanticsNodes().isNotEmpty()
 }

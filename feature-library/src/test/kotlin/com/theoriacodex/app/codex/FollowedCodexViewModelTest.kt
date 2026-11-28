@@ -316,7 +316,7 @@ class FollowedCodexViewModelTest {
             val owner = owner { creator, token -> Page(listOf(testPost(SourceKey.PIXIV, "${creator.profileId}-${token ?: 0}")), "1".takeIf { token == null }) }
             store.put("owner", owner)
             owner.synchronize(listOf(follow("1")), setOf(SourceKey.PIXIV))
-            runCurrent()
+            assertTrue(owner.state.value.loading)
             assertFalse(owner.state.value.refreshing)
             advanceUntilIdle()
 

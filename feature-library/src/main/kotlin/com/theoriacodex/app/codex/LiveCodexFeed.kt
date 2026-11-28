@@ -28,6 +28,7 @@ data class LiveCodexFeedState(
     val posts: List<Post> = emptyList(),
     val loading: Boolean = false,
     val refreshing: Boolean = false,
+    val refreshes: Int = 0,
     val canLoadMore: Boolean = false,
     val errors: Map<String, String> = emptyMap(),
     val refreshFailedOnly: Boolean = false,
@@ -85,6 +86,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     private var keptBranches: Map<String, B>? = null
     private var keptLoadedAt: Long? = null
     private var refreshErrors = emptyMap<String, String>()
+    private var refreshes = 0
     private val loadedOnce = mutableSetOf<String>()
     private val slots = LinkedHashMap<PostId, FeedSlot>()
     private var batch = 0
@@ -191,6 +193,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
     }
 
     private suspend fun finishReload(admitted: Long, reloaded: List<String>) {
+        refreshes++
         val kept = keptBranches.orEmpty()
         val failed = reloaded.filter { id -> id in kept && branches.getValue(id).run { posts.isEmpty() && error != null } }
         refreshErrors = failed.associateWith { id -> checkNotNull(branches.getValue(id).error) }
@@ -222,6 +225,7 @@ internal class LiveCodexFeedController<B : LiveCodexBranch>(
             posts = posts.sortedWith(feedOrder()),
             loading = loading,
             refreshing = loading && keptBranches != null,
+            refreshes = refreshes,
             canLoadMore = branches.values.any { it.canLoadMore },
             errors = errors,
             refreshFailedOnly = loadErrors.isEmpty() && errors.isNotEmpty() && errors.keys.all(loadedOnce::contains),

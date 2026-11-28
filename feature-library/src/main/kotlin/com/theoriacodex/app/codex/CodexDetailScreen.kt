@@ -24,6 +24,7 @@ import com.theoriacodex.app.ui.components.FilterSection
 import com.theoriacodex.app.ui.components.SourceFilterChip
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -263,7 +264,12 @@ private fun CodexDetailBody(
                 onEditSelectionChange, onOpenPostActions, emptyMessage, related,
             )
         }
-        if (liveOwner == null) grid() else LiveCodexRefreshBox(listOf(liveOwner), Modifier.fillMaxSize(), grid)
+        if (liveOwner == null) {
+            grid()
+        } else {
+            ShowNewestAfterRefresh(liveOwner) { gridState.scrollToItem(0) }
+            LiveCodexRefreshBox(listOf(liveOwner), Modifier.fillMaxSize(), grid)
+        }
     }
 }
 
@@ -388,18 +394,24 @@ private fun CodexDetailGrid(
 
 @Composable
 private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, resolvingDurations: Boolean, emptyMessage: String?) {
-    if (loading) {
-        LoadingState(Modifier.fillMaxSize())
-    } else {
-        FeedEmptyTile(
-            title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
-            message = emptyMessage ?: when {
-                collectionIsEmpty -> "No posts"
-                resolvingDurations -> "Resolving durations…"
-                else -> "Adjust your filters"
-            },
-            contentPadding = 24.dp,
-        )
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Box(Modifier.fillParentMaxSize()) {
+                if (loading) {
+                    LoadingState(Modifier.fillMaxSize())
+                } else {
+                    FeedEmptyTile(
+                        title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
+                        message = emptyMessage ?: when {
+                            collectionIsEmpty -> "No posts"
+                            resolvingDurations -> "Resolving durations…"
+                            else -> "Adjust your filters"
+                        },
+                        contentPadding = 24.dp,
+                    )
+                }
+            }
+        }
     }
 }
 

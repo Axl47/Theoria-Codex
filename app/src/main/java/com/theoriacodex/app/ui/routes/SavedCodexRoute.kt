@@ -41,6 +41,7 @@ import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import com.theoriacodex.app.codex.LiveCodexFeedOwner
 import com.theoriacodex.app.codex.LiveCodexFeedState
 import com.theoriacodex.app.codex.LiveCodexRefreshBox
+import com.theoriacodex.app.codex.ShowNewestAfterRefresh
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.filterCodexCollectionPosts
 import com.theoriacodex.app.codex.newFirst
@@ -201,6 +202,7 @@ private fun SavedCodexSection(
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
     LaunchedEffect(liveOwner) { liveOwner?.let(actions.registerLive) }
+    if (liveOwner != null) ShowNewestAfterRefresh(liveOwner) { row.scrollToItem(0) }
     ReportLaunchContent(TopLevelDestination.Library, drawn = posts.isNotEmpty() ||
         if (liveOwner == null) !state.loading else feed?.errors?.isNotEmpty() == true)
     val postIds = remember(posts) { posts.map { it.id } }
