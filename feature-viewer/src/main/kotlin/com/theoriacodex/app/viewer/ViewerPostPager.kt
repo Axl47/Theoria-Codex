@@ -241,7 +241,7 @@ private fun ViewerPostPage(
             transform = viewerTransform,
             onTransformChanged = { viewerTransform.value = it },
             layout = ViewerMediaLayout(frame.mediaEdgeToEdge, frame.inPictureInPicture, frame.touchExplorationEnabled),
-            videoOptions = host.rememberVideoOptions(key, pageState.resolution, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight, config),
+            videoOptions = host.rememberVideoOptions(key, pageState.resolution, frame.uiState.controls.episode, frame.uiState.session, screen, quality, qualityHeight.takeIf { active }, config),
             videoPositions = videoPositions,
             levelControls = levelControls,
             mediaError = frame.uiState.mediaError.takeIf { active }?.takeIf { it.mediaKey == key },

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -10,8 +11,8 @@ import com.theoriacodex.domain.model.PostId
 
 internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
     private var retainedPosts = emptySet<PostId>()
-    private val positions = mutableMapOf<ViewerMediaKey, Long>()
-    private val episodes = watching?.startPositionsMs?.mapKeysTo(mutableMapOf()) { (postId) -> ViewerMediaKey(postId, mediaIndex = 0) }
+    private val positions = mutableStateMapOf<ViewerMediaKey, Long>()
+    private val episodes = watching?.startPositionsMs?.mapKeysTo(mutableStateMapOf()) { (postId) -> ViewerMediaKey(postId, mediaIndex = 0) }
 
     fun retainAround(posts: List<PostId>, currentIndex: Int) {
         retainedPosts = posts.slice(

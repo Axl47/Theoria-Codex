@@ -447,10 +447,10 @@ fun ViewerPlaybackTimeline(
 }
 
 @Composable
-fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier) {
+fun ViewerPendingTimeline(controls: ViewerRendererControls, events: ViewerRendererEvents, modifier: Modifier, positionMs: () -> Long = { 0L }) {
     val expected = controls.expectedDurationMs?.takeIf { it > 0L && (controls.isActive || controls.isPreloading) } ?: return
     ViewerChromeVisibility(controls.showControls, modifier) {
-        ViewerPlaybackTimeline(controls, events, { 0L }, expected)
+        ViewerPlaybackTimeline(controls, events, positionMs, expected)
     }
 }
 

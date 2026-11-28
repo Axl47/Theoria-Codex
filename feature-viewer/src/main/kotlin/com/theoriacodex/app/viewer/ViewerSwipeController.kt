@@ -151,7 +151,7 @@ internal class ViewerSwipeController(
         settling = true
         baseline = 0f
         settle = Settle(target, postId, commits)
-        loadTarget = target.takeIf { commits }
+        if (commits) loadTarget = target
         if (commits) current.onInteraction()
         if (crossesPosts) current.prepareDestination(target)
         recoilEdge()

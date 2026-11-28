@@ -97,15 +97,17 @@ internal fun ViewerVideoPlayer(
         ViewerVideoMessage("Video unavailable", modifier)
         return
     }
+    val startMs = positions.position(mediaKey)
     if (!controls.isActive && !(controls.isPreloading && playback.readsAheadFreely())) {
-        Box(modifier.background(Color.Black)) { loadingPreview?.invoke() }
+        Box(modifier.background(Color.Black)) { loadingPreview.takeIf { startMs == 0L }?.invoke() }
         return
     }
     val key = ViewerVideoKey.of(ViewerMediaLoad(mediaKey, controls.loadGeneration), media, streamLabel, playback)
     val recovery = remember(key) { ViewerVideoRecovery(key.load, episode, key.label) }
-    val state = remember(key) { ViewerVideoState(recovery.opening(positions.position(mediaKey))) }
+    val state = remember(key) { ViewerVideoState(recovery.opening(startMs), startMs) }
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
+    val poster = loadingPreview.takeIf { startMs == 0L && !start.underWay }
     if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, subtitleTuning.delayMs, events, recovery, start) { releasedMs, progress ->
         val resumeMs = clipReturn.ms ?: releasedMs
         positions.save(mediaKey, resumeMs)
@@ -122,10 +124,10 @@ internal fun ViewerVideoPlayer(
     ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs, playing = controls.isActive && controls.isPlaying && state.actuallyPlaying)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview, subtitleTuning.sizePercent)
+    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, poster, subtitleTuning.sizePercent)
 }
 
-internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
+internal class ViewerVideoState(pending: ViewerRecoveryDecision?, startMs: Long = 0L) {
     var player by mutableStateOf<ExoPlayer?>(null)
     var view: PlayerView? = null
     var subtitleView: SubtitleView? = null
@@ -139,7 +141,7 @@ internal class ViewerVideoState(pending: ViewerRecoveryDecision?) {
     val failed get() = pending == ViewerRecoveryDecision.Fail
     var started: ViewerStartedPlayback? = null
     var duration by mutableLongStateOf(0L)
-    var position by mutableLongStateOf(0L)
+    var position by mutableLongStateOf(startMs)
     var bufferedPosition by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
     var actuallyPlaying by mutableStateOf(false)
@@ -235,6 +237,7 @@ private fun ViewerVideoBinding(
         player.addListener(seeks)
         state.started = started
         state.player = player
+        state.updateProgress()
         state.setCues(player.currentCues.cues)
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
@@ -291,7 +294,7 @@ private fun viewerVideoListener(
             runCatching {
                 state.loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_ENDED) events().onPlaybackCompleted()
-                player.duration.takeIf { it > 0L }?.let { state.duration = it }
+                state.updateProgress()
             }
         }
         override fun onPlayerError(error: PlaybackException) {
@@ -378,7 +381,8 @@ internal class ViewerVideoStart(
     private val resume: () -> Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
 ) {
-    private var underWay = false
+    var underWay = false
+        private set
 
     fun applyTo(player: Player): ViewerStartedPlayback {
         val startsOver = startsOver.takeUnless { underWay } ?: { _, _ -> false }
@@ -569,7 +573,7 @@ private fun ViewerVideoContent(
                 .onPlaced { coordinates -> viewBottomPx.floatValue = coordinates.positionInParent().y + coordinates.size.height }
                 .then(mediaModifier),
         )
-        if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
+        if (!state.hasRenderedFirstFrame && !state.failed) ViewerVideoPlaceholder(loadingPreview, Modifier.matchParentSize())
         val holdScrub = LocalViewerHoldScrub.current
         val holdScrubbing by remember(holdScrub) { derivedStateOf { holdScrub?.phase is ViewerHoldScrubPhase.Dragging } }
         ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing && !holdScrubbing, Modifier.matchParentSize()) {
@@ -579,6 +583,11 @@ private fun ViewerVideoContent(
         if (state.failed) Text(VIEWER_VIDEO_FAILED, color = MaterialTheme.colorScheme.onBackground)
         ViewerVideoTimelineOverlay(state, playback, controls, events, effectiveAspectRatio, Modifier.align(Alignment.BottomCenter))
     }
+}
+
+@Composable
+private fun ViewerVideoPlaceholder(poster: (@Composable () -> Unit)?, modifier: Modifier) {
+    Box(modifier.testTag(if (poster != null) VIEWER_VIDEO_POSTER_TAG else VIEWER_VIDEO_PLACEHOLDER_TAG)) { poster?.invoke() }
 }
 
 @Composable
@@ -653,7 +662,7 @@ private fun ViewerVideoTimelineOverlay(
 ) {
     if (!controls.isActive && !controls.isPreloading || state.failed) return
     if (state.duration <= 0L || state.player == null) {
-        ViewerPendingTimeline(controls, events, modifier)
+        ViewerPendingTimeline(controls, events, modifier) { state.position }
         return
     }
     if (controls.clipping) {
@@ -688,3 +697,5 @@ internal fun viewerVideoTestTag(postId: PostId): String = "viewer_video_${postId
 private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
 private const val VIEWER_SUBTITLE_DELAY_SETTLE_MS = 250L
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
+internal const val VIEWER_VIDEO_PLACEHOLDER_TAG = "viewer-video-placeholder"
+internal const val VIEWER_VIDEO_POSTER_TAG = "viewer-video-poster"
