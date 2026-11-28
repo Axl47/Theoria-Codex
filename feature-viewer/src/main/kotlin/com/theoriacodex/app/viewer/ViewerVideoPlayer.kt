@@ -291,7 +291,7 @@ private fun viewerVideoListener(
             runCatching {
                 state.loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_ENDED) events().onPlaybackCompleted()
-                player.duration.takeIf { it > 0L }?.let { state.duration = it }
+                state.updateProgress()
             }
         }
         override fun onPlayerError(error: PlaybackException) {
@@ -569,7 +569,9 @@ private fun ViewerVideoContent(
                 .onPlaced { coordinates -> viewBottomPx.floatValue = coordinates.positionInParent().y + coordinates.size.height }
                 .then(mediaModifier),
         )
-        if ((!controls.isActive || !state.hasRenderedFirstFrame) && !state.failed) loadingPreview?.invoke()
+        if (!state.hasRenderedFirstFrame && !state.failed && loadingPreview != null) {
+            Box(Modifier.matchParentSize().testTag(VIEWER_VIDEO_POSTER_TAG)) { loadingPreview() }
+        }
         val holdScrub = LocalViewerHoldScrub.current
         val holdScrubbing by remember(holdScrub) { derivedStateOf { holdScrub?.phase is ViewerHoldScrubPhase.Dragging } }
         ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing && !holdScrubbing, Modifier.matchParentSize()) {
@@ -688,3 +690,4 @@ internal fun viewerVideoTestTag(postId: PostId): String = "viewer_video_${postId
 private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
 private const val VIEWER_SUBTITLE_DELAY_SETTLE_MS = 250L
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
+internal const val VIEWER_VIDEO_POSTER_TAG = "viewer-video-poster"

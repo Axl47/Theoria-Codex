@@ -104,6 +104,14 @@ abstract class AppJourneyFixture {
         return ImageRef(null, image.absolutePath, "image/png")
     }
 
+    protected fun assetVideo(asset: String, name: String): ImageRef {
+        val video = directory.resolve("$name.${asset.substringAfterLast('.')}")
+        InstrumentationRegistry.getInstrumentation().context.assets.open(asset).use { input ->
+            video.outputStream().use(input::copyTo)
+        }
+        return ImageRef(null, video.absolutePath, "video/mp4")
+    }
+
     protected fun patternImage(name: String): ImageRef {
         val image = directory.resolve("$name.png")
         val size = 320

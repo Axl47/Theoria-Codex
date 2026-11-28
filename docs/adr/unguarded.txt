@@ -61,7 +61,6 @@
 0177-viewer-episode-resume-positions.md
 0178-viewer-session-state-rules.md
 0179-viewer-swipe-and-vertical-gallery.md
-0181-viewer-video-surface-rules.md
 0182-app-job-ids.md
 0183-application-image-loader-and-memory.md
 0184-developer-copy-pipeline.md
