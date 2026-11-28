@@ -119,7 +119,7 @@ internal fun ViewerVideoPlayer(
     ViewerVideoSystemBindings(state, controls.isActive && controls.systemControlsReady, controls.fillScreen, events)
     ReportViewerVideoShape(state.player, controls.isActive, mediaKey)
     ViewerVideoCommands(state, controls, clipReturn)
-    ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs, playing = controls.isActive && controls.isPlaying)
+    ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs, playing = controls.isActive && controls.isPlaying && state.actuallyPlaying)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
     ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, loadingPreview, subtitleTuning.sizePercent)

@@ -34,7 +34,7 @@ the text renderer reads at most one second ahead of the position it is given.
   shifted time. The seek is skipped when the player is idle or ended, and on a stream that cannot seek, where any
   seek restarts it; there the new delay applies from the next render without reloading cues. The Viewer sends a
   change after it has settled for 250 ms, so a held button causes one seek, not twenty, and only while the episode
-  plays: Media3 publishes reloaded cues only from a started renderer, so a reset while paused would blank the
+  plays: with the legacy subtitle decoding the app uses, Media3 publishes reloaded cues only from a started renderer, so a reset while paused would blank the
   subtitle until playback resumed. A change made while paused applies on resume.
 - Ending: Media3 ends a text renderer at the period end only through an `instanceof TextRenderer` call in
   `RendererHolder` (`setFinalStreamEndPositionUs`), which the wrapper does not receive. Otherwise a text renderer
