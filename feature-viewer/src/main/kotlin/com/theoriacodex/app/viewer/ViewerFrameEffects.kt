@@ -58,6 +58,7 @@ internal fun rememberViewerSwipe(
     controls: ViewerControls,
     flingVelocity: Float,
     scope: CoroutineScope,
+    videoPositions: ViewerVideoPositions,
     onAction: (ViewerAction) -> Unit,
 ): ViewerSwipeController {
     val haptics = LocalHapticFeedback.current
@@ -78,7 +79,10 @@ internal fun rememberViewerSwipe(
             val index = posts.indexOfFirst { it.id == postId }
             if (index >= 0) onAction(ViewerAction.Navigate(frame.navigation.sourceIndices[index], mediaIndex))
         },
-        onInteraction = { controls.markPassiveInteraction() },
+        onLeave = {
+            videoPositions.captureLeaving()
+            controls.markPassiveInteraction()
+        },
         onLimit = { haptics.performHapticFeedback(TheoriaHaptics.Limit) },
         flingVelocity = flingVelocity,
     )

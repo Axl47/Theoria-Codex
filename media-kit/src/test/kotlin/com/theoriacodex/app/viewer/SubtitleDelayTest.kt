@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.text.Cue
 import androidx.media3.common.util.Clock
 import androidx.media3.exoplayer.BaseRenderer
@@ -13,7 +16,10 @@ import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.source.EmptySampleStream
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.SinglePeriodTimeline
+import androidx.media3.exoplayer.source.TrackGroupArray
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.text.CuesWithTiming
+import androidx.test.core.app.ApplicationProvider
 import com.google.common.collect.ImmutableList
 import com.theoriacodex.domain.model.SubtitleTuning
 import org.junit.Assert.assertEquals
@@ -72,6 +78,38 @@ class SubtitleDelayTest {
         assertTrue(listOf(cue).activeAt(1_400_000L + offsetUs).isEmpty())
         assertEquals(listOf(cue), listOf(cue).activeAt(1_600_000L + offsetUs))
         assertTrue(listOf(cue).activeAt(2_500_000L + offsetUs).isEmpty())
+    }
+
+    @Test
+    fun `a delay change reselects only the subtitle track, so video and audio keep their streams (ADR 0224)`() {
+        val selector = SubtitleReloadingTrackSelector(ApplicationProvider.getApplicationContext())
+        selector.init({ selector.onParametersActivated(it) }, DefaultBandwidthMeter.getSingletonInstance(ApplicationProvider.getApplicationContext()))
+        val subtitles = TrackGroup(Format.Builder().setSampleMimeType(MimeTypes.TEXT_VTT).build())
+        val groups = TrackGroupArray(
+            TrackGroup(Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H264).setWidth(640).setHeight(360).build()),
+            TrackGroup(Format.Builder().setSampleMimeType(MimeTypes.AUDIO_AAC).setChannelCount(2).setSampleRate(48_000).build()),
+            subtitles,
+        )
+        selector.setParameters(selector.buildUponParameters().setOverrideForType(TrackSelectionOverride(subtitles, 0)))
+        val capabilities = arrayOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_TEXT).map(::HandlesItsType).toTypedArray<RendererCapabilities>()
+        val periodId = MediaSource.MediaPeriodId(timeline.getUidOfPeriod(0))
+        fun select() = selector.selectTracks(capabilities, groups, periodId, timeline)
+
+        val before = select()
+        assertEquals(listOf(true, true, true), capabilities.indices.map { before.isRendererEnabled(it) })
+        assertTrue(before.isEquivalent(select()))
+        selector.reloadText()
+        val after = select()
+
+        assertEquals(listOf(true, true, false), capabilities.indices.map { after.isEquivalent(before, it) })
+    }
+
+    private class HandlesItsType(private val type: Int) : RendererCapabilities {
+        override fun getName() = "handles-$type"
+        override fun getTrackType() = type
+        override fun supportsFormat(format: Format) =
+            RendererCapabilities.create(if (MimeTypes.getTrackType(format.sampleMimeType) == type) C.FORMAT_HANDLED else C.FORMAT_UNSUPPORTED_TYPE)
+        override fun supportsMixedMimeTypeAdaptation() = RendererCapabilities.ADAPTIVE_NOT_SUPPORTED
     }
 
     private fun enableAt(positionInPeriodUs: Long) {

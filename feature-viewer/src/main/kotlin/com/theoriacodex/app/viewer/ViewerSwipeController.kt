@@ -25,7 +25,7 @@ internal class ViewerSwipeContext(
     val swipeSign: (postIndex: Int) -> Float,
     val prepareDestination: (ViewerHorizontalSwipeTarget) -> Unit,
     val commit: (PostId, mediaIndex: Int) -> Unit,
-    val onInteraction: () -> Unit,
+    val onLeave: () -> Unit,
     val onLimit: () -> Unit,
     val flingVelocity: Float,
 )
@@ -151,8 +151,10 @@ internal class ViewerSwipeController(
         settling = true
         baseline = 0f
         settle = Settle(target, postId, commits)
-        if (commits) loadTarget = target
-        if (commits) current.onInteraction()
+        if (commits) {
+            loadTarget = target
+            current.onLeave()
+        }
         if (crossesPosts) current.prepareDestination(target)
         recoilEdge()
         settleJob = scope.launch {
