@@ -68,6 +68,7 @@ internal fun BoxScope.ViewerSubtitleTuningPanel(
             .testTag(VIEWER_SUBTITLE_TUNING_TAG),
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = PANEL_ALPHA),
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         FlowRow(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
