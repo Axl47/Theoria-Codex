@@ -29,6 +29,9 @@ internal class ViewerVideoPositions(watching: ViewerSeries.Watching? = null) {
         if (key.postId in retainedPosts) positions[key] = position
     }
 
+    fun startMs(key: ViewerMediaKey, expectedDurationMs: Long?): Long =
+        position(key).let { if (expectedDurationMs != null && startsOver(it, expectedDurationMs)) 0L else it }
+
     fun startsOver(positionMs: Long, durationMs: Long): Boolean =
         episodes != null && positionMs >= durationMs - VIEWER_EPISODE_END_MARGIN_MS
 }

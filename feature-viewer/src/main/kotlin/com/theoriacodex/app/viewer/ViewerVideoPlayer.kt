@@ -97,10 +97,9 @@ internal fun ViewerVideoPlayer(
         ViewerVideoMessage("Video unavailable", modifier)
         return
     }
-    val startMs = positions.position(mediaKey)
-    val poster = loadingPreview.takeIf { startMs == 0L }
+    val startMs = positions.startMs(mediaKey, controls.expectedDurationMs)
     if (!controls.isActive && !(controls.isPreloading && playback.readsAheadFreely())) {
-        Box(modifier.background(Color.Black)) { poster?.invoke() }
+        Box(modifier.background(Color.Black)) { loadingPreview.takeIf { startMs == 0L }?.invoke() }
         return
     }
     val key = ViewerVideoKey.of(ViewerMediaLoad(mediaKey, controls.loadGeneration), media, streamLabel, playback)
@@ -108,6 +107,7 @@ internal fun ViewerVideoPlayer(
     val state = remember(key) { ViewerVideoState(recovery.opening(startMs), startMs) }
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
+    val poster = loadingPreview.takeIf { startMs == 0L && !start.underWay }
     if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, subtitleTuning.delayMs, events, recovery, start) { releasedMs, progress ->
         val resumeMs = clipReturn.ms ?: releasedMs
         positions.save(mediaKey, resumeMs)
@@ -237,6 +237,7 @@ private fun ViewerVideoBinding(
         player.addListener(seeks)
         state.started = started
         state.player = player
+        state.updateProgress()
         state.setCues(player.currentCues.cues)
         state.setPlaying(controls.isActive && controls.isPlaying)
         onDispose {
@@ -380,7 +381,8 @@ internal class ViewerVideoStart(
     private val resume: () -> Long,
     private val startsOver: (positionMs: Long, durationMs: Long) -> Boolean,
 ) {
-    private var underWay = false
+    var underWay = false
+        private set
 
     fun applyTo(player: Player): ViewerStartedPlayback {
         val startsOver = startsOver.takeUnless { underWay } ?: { _, _ -> false }
@@ -571,8 +573,8 @@ private fun ViewerVideoContent(
                 .onPlaced { coordinates -> viewBottomPx.floatValue = coordinates.positionInParent().y + coordinates.size.height }
                 .then(mediaModifier),
         )
-        if (!state.hasRenderedFirstFrame && !state.failed && loadingPreview != null) {
-            Box(Modifier.matchParentSize().testTag(VIEWER_VIDEO_POSTER_TAG)) { loadingPreview() }
+        if (!state.hasRenderedFirstFrame && !state.failed) {
+            Box(Modifier.matchParentSize().testTag(VIEWER_VIDEO_PLACEHOLDER_TAG)) { loadingPreview?.invoke() }
         }
         val holdScrub = LocalViewerHoldScrub.current
         val holdScrubbing by remember(holdScrub) { derivedStateOf { holdScrub?.phase is ViewerHoldScrubPhase.Dragging } }
@@ -692,4 +694,4 @@ internal fun viewerVideoTestTag(postId: PostId): String = "viewer_video_${postId
 private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
 private const val VIEWER_SUBTITLE_DELAY_SETTLE_MS = 250L
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
-internal const val VIEWER_VIDEO_POSTER_TAG = "viewer-video-poster"
+internal const val VIEWER_VIDEO_PLACEHOLDER_TAG = "viewer-video-placeholder"
