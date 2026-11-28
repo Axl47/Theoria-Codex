@@ -11,8 +11,10 @@ object Diagnostics {
     @Volatile
     private var sink: DiagnosticSink? = null
 
-    fun install(sink: DiagnosticSink) {
+    fun install(sink: DiagnosticSink): DiagnosticSink? {
+        val previous = this.sink
         this.sink = sink
+        return previous
     }
 
     fun report(area: String, message: String, error: Throwable? = null) {

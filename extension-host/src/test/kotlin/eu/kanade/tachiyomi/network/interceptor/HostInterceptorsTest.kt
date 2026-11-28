@@ -24,7 +24,9 @@ import org.junit.Test
 
 class HostInterceptorsTest {
     @After
-    fun stopListeningToDiagnostics() = Diagnostics.install { _, _, _ -> }
+    fun stopListeningToDiagnostics() {
+        Diagnostics.install { _, _, _ -> }
+    }
 
     private val request = Request.Builder().url("https://example.test/").build()
 

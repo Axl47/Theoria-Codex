@@ -32,6 +32,11 @@ extensions.configure<LibraryExtension> {
         unitTests.isIncludeAndroidResources = true
     }
 
+    // The emulator decoder skip that device tests here and in :app share.
+    testFixtures {
+        enable = true
+    }
+
     // The stream fixture and its loopback server serve both the host tests and the device playback test.
     sourceSets {
         listOf("test", "androidTest").forEach { name ->
@@ -84,4 +89,9 @@ dependencies {
     testImplementation(testFixtures(project(":ui-kit")))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
+
+    testFixturesImplementation(libs.junit)
+    // The Compose compiler plugin also runs on test fixtures and refuses a classpath without the runtime.
+    testFixturesImplementation(platform(libs.androidx.compose.bom))
+    testFixturesImplementation(libs.androidx.compose.ui)
 }
