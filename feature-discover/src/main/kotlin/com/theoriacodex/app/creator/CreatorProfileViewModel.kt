@@ -202,7 +202,6 @@ class CreatorProfileViewModel(
                 ensureActive()
                 if (mutableState.value.activeRequest != effect.request) return@launch
                 onAction(CreatorAction.PageLoaded(effect.request, page))
-                recordAcceptedVisit(effect)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -210,16 +209,6 @@ class CreatorProfileViewModel(
             } finally {
                 if (!isActive) onAction(CreatorAction.RequestCancelled(effect.request))
             }
-        }
-    }
-
-    private fun recordAcceptedVisit(effect: CreatorEffect.LoadPage) {
-        if (effect.request.kind != CreatorRequestKind.REFRESH || effect.feed != AccountFeed.UPLOADS) return
-        val posts = mutableState.value.results
-        val snapshot = seenJob
-        ownerScope.launch {
-            snapshot?.join()
-            runCatchingPreservingCancellation { engine.recordAcceptedVisit(effect.creator, posts) }
         }
     }
 

@@ -68,6 +68,17 @@ internal fun newPostsSeenHandler(data: DataDependencies, codexId: String): (susp
 
 private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
 
+internal class NewPostsSeen(private val keys: Set<String>, val onSeen: suspend (Set<PostId>) -> Unit) {
+    fun among(posts: List<Post>): Set<PostId> =
+        if (keys.isEmpty()) emptySet() else posts.mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { it.markKey() in keys } }
+}
+
+@Composable
+internal fun rememberNewPostsSeen(data: DataDependencies, codexId: String): NewPostsSeen {
+    val keys = rememberSavedNewPosts(data)[codexId].orEmpty()
+    return remember(data, codexId, keys) { NewPostsSeen(keys, requireNotNull(newPostsSeenHandler(data, codexId))) }
+}
+
 private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Set<String>) {
     when (codexId) {
         FOLLOWED_CODEX_ID -> CreatorFollowsRepository(settingsRepository).markSeen(shown)

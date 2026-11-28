@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.ui.components.SeenPostsEffect
 import com.theoriacodex.app.ui.components.FeedGrid
 import com.theoriacodex.app.ui.components.FeedGridDivider
 import com.theoriacodex.app.ui.components.rememberFeedView
@@ -95,6 +96,8 @@ fun CreatorProfileScreen(
     followed: Boolean = false,
     onToggleFollow: () -> Unit = {},
     seenAtOpen: Set<String>? = null,
+    newPostIds: Set<PostId> = emptySet(),
+    onNewPostsSeen: (suspend (Set<PostId>) -> Unit)? = null,
     marks: FeedMarks,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     durations: FeedDurations = FeedDurations.NONE,
@@ -118,6 +121,7 @@ fun CreatorProfileScreen(
         CreatorNotSelected()
         return
     }
+    onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it) }
     val cards = rememberFeedCardEnvironment(
         pixivUgoiraClient, marks.liked, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )

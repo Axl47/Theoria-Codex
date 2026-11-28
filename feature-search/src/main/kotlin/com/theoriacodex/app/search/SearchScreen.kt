@@ -5,6 +5,7 @@ import com.theoriacodex.app.related.RelatedShelfBinding
 import com.theoriacodex.app.ui.components.FeedMarks
 import com.theoriacodex.app.ui.components.FeedDurations
 import com.theoriacodex.app.ui.components.rememberRetainedFeedGridState
+import com.theoriacodex.app.ui.components.SeenPostsEffect
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -104,12 +105,15 @@ fun SearchScreen(
     onManageSavedSearches: () -> Unit = {},
     omnibox: @Composable () -> List<OmniboxEntry> = { emptyList() },
     sourceMix: SearchSourceMix? = null,
+    newPostIds: Set<PostId> = emptySet(),
+    onNewPostsSeen: (suspend (Set<PostId>) -> Unit)? = null,
 ) {
     val chrome = rememberSearchChromeState(composerOpen)
     val actionPost = remember { SearchActionPostState() }
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
+    onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it) }
     SearchTabReselectEffect(state.restoration, gridState, onAction)
     val feed = rememberSearchFeed(state, related.state, fabRestoreState, marks, durations)
     val results by rememberUpdatedState(state.content.results)

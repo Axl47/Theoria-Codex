@@ -27,6 +27,17 @@ class NewPostMarksTest {
         assertEquals(1, seen.checked(listOf("d", "a"), 30L).newPostCount)
     }
 
+    @Test fun `seen posts still in the latest check stay seen however far back they were seen (ADR 0019)`() {
+        val first = (0 until 200).map { "old$it" }
+        val reshown = NewPostMarks().checked(first, 10L).seen { it in first.takeLast(50).toSet() }
+        val fresh = (0 until 50).map { "new$it" }
+        val marks = reshown.checked(fresh + first.take(150), 20L)
+        assertEquals(fresh, marks.newPostIds)
+        val after = marks.seen { it in fresh.toSet() }
+        assertEquals(emptyList<String>(), after.newPostIds)
+        assertEquals(0, after.checked(fresh + first.take(150), 30L).newPostCount)
+    }
+
     @Test fun `checks are due when the newest attempt is three hours old`() {
         val hours = 60 * 60 * 1000L
         assertTrue(newPostsCheckDue(listOf(null), 0L))

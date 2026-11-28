@@ -69,18 +69,6 @@ class CreatorAccountViewModelTest {
         assertEquals(listOf(AccountFeed.UPLOADS, AccountFeed.FAVORITES), engine.loadedFeeds)
     }
 
-    @Test
-    fun `only the uploads list is recorded as a visit`() = runTest {
-        val engine = AccountEngine()
-        val viewModel = CreatorProfileViewModel(engine, SavedStateHandle(), coroutineScope = this)
-        viewModel.onAction(CreatorAction.OpenCreator(account))
-        advanceUntilIdle()
-
-        viewModel.onAction(CreatorAction.SelectFeed(AccountFeed.FAVORITES))
-        advanceUntilIdle()
-
-        assertEquals(listOf(account), engine.visits)
-    }
 
     @Test
     fun `a creator without feeds loads uploads through the same path and asks for no details`() = runTest {
@@ -103,7 +91,6 @@ private class AccountEngine : CreatorRouteEngine {
     var uploadsGate: CompletableDeferred<Unit>? = null
     var detailsRequests = 0
     val loadedFeeds = mutableListOf<AccountFeed>()
-    val visits = mutableListOf<CreatorProfile>()
 
     override fun supports(creator: CreatorProfile): Boolean = true
     override fun accountFeeds(creator: CreatorProfile): List<AccountFeed> = feeds
@@ -119,10 +106,6 @@ private class AccountEngine : CreatorRouteEngine {
         loadedFeeds += feed
         if (feed == AccountFeed.UPLOADS) uploadsGate?.await()
         return Page(listOf(testPost(sourcePostId = feed.name.lowercase())), null)
-    }
-
-    override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
-        visits += creator
     }
 
     override suspend fun resolvePost(postId: PostId): Post? = null

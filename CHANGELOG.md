@@ -11,12 +11,13 @@
 
 ### Changed
 
-- New posts on the Saved page's Followed and Searches shelves are marked New on their cards, as they are inside. Opening Followed or Searches clears a post's mark only once its card has been mostly on screen, or when you open the post, so posts you never scrolled to stay New.
+- New posts on the Saved page's Followed and Searches shelves are marked New on their cards, as they are inside. Opening Followed or Searches, a followed creator's profile or a saved search's results clears a post's mark only once its card has been mostly on screen, or when you open the post, so posts you never scrolled to stay New.
 - Episodes no longer show the thin progress line under the video; other videos keep it.
 - Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.
 
 ### Fixed
 
+- A post you had already seen no longer shows as New again after a creator or saved search gets many new posts.
 - Swiping back to a video post you already watched shows it, and its timeline, where you left off during the swipe, instead of its thumbnail and 0:00 followed by a jump to that point once the swipe settles.
 - A video or episode you swipe back to shows the frame you left it on until it plays, instead of its thumbnail or a moment of black. One you last watched before opening the Viewer stays black while it loads.
 - A post opened from a feed closes back into its card after you open another post from the creator's profile and come back, instead of vanishing at once.

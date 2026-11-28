@@ -129,5 +129,4 @@ internal fun recentCreators(
 
 internal fun TheoriaShell.openSavedSearch(entry: SavedSearchEntry) {
     openHistoricalSearch(entry.search)
-    savedSearchOpens.opened(entry)
 }

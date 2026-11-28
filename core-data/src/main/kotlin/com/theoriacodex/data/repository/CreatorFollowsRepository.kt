@@ -96,15 +96,6 @@ class CreatorFollowsRepository(private val settings: SettingsRepository) {
             })
         }
     }
-
-    suspend fun recordVisit(creator: CreatorProfile, posts: List<Post>) {
-        val ids = posts.filter { it.id.source == creator.source }.map { it.id.sourcePostId }.distinct()
-        settings.updateSettings { current -> current.copy(followedCreators = current.followedCreators.map {
-            if (it.creator.followKey() == creator.followKey()) it.copy(
-                seenPostIds = (ids + it.seenPostIds).distinct().take(MAX_FOLLOW_POST_IDS),
-            ) else it
-        }) }
-    }
 }
 
 const val MAX_FOLLOWED_CREATORS = 200

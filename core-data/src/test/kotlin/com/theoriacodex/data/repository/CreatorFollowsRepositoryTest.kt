@@ -27,7 +27,7 @@ class CreatorFollowsRepositoryTest {
         assertEquals(null, repository.observe().first().single().checkedAtEpochMs)
     }
 
-    @Test fun `check reports new ids and an accepted visit clears them`() = runTest {
+    @Test fun `check reports new ids and seeing them clears them`() = runTest {
         val repository = CreatorFollowsRepository(InMemorySettingsRepository())
         fun post(id: String) = requireNotNull(com.theoriacodex.data.storage.PostStorageCodec.decode(
             com.theoriacodex.data.storage.PostStorageRecord(source = "PIXIV", sourcePostId = id)))
@@ -35,7 +35,7 @@ class CreatorFollowsRepositoryTest {
         val follow = repository.observe().first().single()
         repository.recordChecks(mapOf(follow.membershipId to listOf(post("new"), post("old"), post("new"))), 42L)
         assertEquals(1, repository.observe().first().single().newPostCount)
-        repository.recordVisit(creator, listOf(post("new"), post("old")))
+        repository.markSeen(setOf("PIXIV:new"))
         assertEquals(0, repository.observe().first().single().newPostCount)
         repository.unfollow(creator)
         repository.recordChecks(mapOf(follow.membershipId to listOf(post("later"))), 43L)
