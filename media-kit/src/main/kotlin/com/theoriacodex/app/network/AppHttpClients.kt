@@ -2,7 +2,6 @@ package com.theoriacodex.app.network
 
 import android.content.Context
 import com.theoriacodex.app.diagnostics.NetworkUsage
-import com.theoriacodex.app.media.MediaPartRequest
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.sources.http.BrowserAddressDns
 import com.theoriacodex.sources.http.HostOutageTracker
@@ -112,11 +111,16 @@ class AppHttpClients(
 
 internal fun recordingRateLimits(outages: HostOutageTracker) = Interceptor { chain ->
     chain.proceed(chain.request()).also { response ->
-        if (response.code == HTTP_TOO_MANY_REQUESTS && response.request.tag(MediaPartRequest::class.java) == null) {
+        if (response.code == HTTP_TOO_MANY_REQUESTS && response.request.tag(SkipRateLimitRecording::class.java) == null) {
             outages.recordResponse(response.request.url.toString(), response.code, response.headers.toMultimap())
         }
     }
 }
+
+internal fun Request.Builder.withoutRateLimitRecording(): Request.Builder =
+    tag(SkipRateLimitRecording::class.java, SkipRateLimitRecording)
+
+private object SkipRateLimitRecording
 
 private fun OkHttpClient.Builder.countedAs(stack: NetworkUsage.Stack) = apply {
     if (NetworkUsage.enabled) addNetworkInterceptor(NetworkUsage.counting(stack))

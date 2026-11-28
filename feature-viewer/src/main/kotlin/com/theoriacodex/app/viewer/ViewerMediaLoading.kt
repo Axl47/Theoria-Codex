@@ -19,10 +19,11 @@ internal suspend fun loadFirstGifMovie(
     sourceKey: SourceKey,
     locations: List<String>,
     attempt: Int,
+    current: Boolean,
 ): Movie? {
     locations.forEachIndexed { index, location ->
         val result = runCatchingPreservingCancellation {
-            loadGifMovie(context, location, sourceKey)
+            loadGifMovie(context, location, sourceKey, current)
         }
         val outcome = result.getOrNull()
         if (outcome?.movie != null) return outcome.movie
@@ -42,8 +43,9 @@ private suspend fun loadGifMovie(
     context: Context,
     location: String,
     sourceKey: SourceKey,
+    current: Boolean,
 ): GifMovieLoadResult = withContext(Dispatchers.IO) {
-    val bytesResult = loadGifBytes(context, location, sourceKey)
+    val bytesResult = loadGifBytes(context, location, sourceKey, current)
     val bytes = bytesResult.bytes
         ?: return@withContext GifMovieLoadResult(failure = bytesResult.failure ?: "media unavailable")
     val decoded = Movie.decodeByteArray(bytes, 0, bytes.size)
@@ -57,9 +59,10 @@ private suspend fun loadGifBytes(
     context: Context,
     location: String,
     sourceKey: SourceKey,
+    current: Boolean,
 ): GifBytesLoadResult = when {
     location.startsWith("http://", ignoreCase = true) ||
-        location.startsWith("https://", ignoreCase = true) -> GifBytesLoadResult(bytes = loadRemoteViewerGifBytes(context, sourceKey, location))
+        location.startsWith("https://", ignoreCase = true) -> GifBytesLoadResult(bytes = loadRemoteViewerGifBytes(context, sourceKey, location, current))
     location.startsWith("content://", ignoreCase = true) -> {
         val bytes = context.contentResolver.openInputStream(location.toUri())?.use(InputStream::readBoundedGifBytes)
         GifBytesLoadResult(bytes = bytes, failure = if (bytes == null) "content unavailable" else null)

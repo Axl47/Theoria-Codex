@@ -11,14 +11,21 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.app.network.appHttpClients
-import com.theoriacodex.sources.http.await
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -92,8 +99,31 @@ suspend fun downloadMediaFile(
     maxBytes: Long = MAX_OFFLINE_MEDIA_BYTES,
     client: OkHttpClient,
 ) {
-    client.newCall(mediaRequest(url, headers)).await { response ->
-        writeWholeMedia(response, destination, maxBytes, checkedMediaLength(response, maxBytes))
+    withContext(Dispatchers.IO) {
+        client.withResponse(mediaRequest(url, headers)) { response, _ ->
+            writeWholeMedia(response, destination, maxBytes, checkedMediaLength(response, maxBytes))
+        }
+    }
+}
+
+internal suspend fun <T> OkHttpClient.withResponse(request: Request, block: suspend CoroutineScope.(Response, Call) -> T): T = coroutineScope {
+    val call = newCall(request)
+    val finished = AtomicBoolean(false)
+    val canceller = launch(start = CoroutineStart.UNDISPATCHED) {
+        try {
+            awaitCancellation()
+        } finally {
+            if (!finished.get()) call.cancel()
+        }
+    }
+    try {
+        call.execute().use { response -> block(response, call) }
+    } catch (failure: IOException) {
+        ensureActive()
+        throw failure
+    } finally {
+        finished.set(true)
+        canceller.cancel()
     }
 }
 

@@ -112,9 +112,10 @@ internal class ViewerGifByteStore(private val directory: File) {
     }
 }
 
-suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String): ByteArray {
+suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKey, location: String, current: Boolean): ByteArray {
     val url = normalizeMediaUrl(source, location) ?: location
-    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file, ::downloadMediaFileInParts) }
+    val download = if (current) ::downloadMediaFileInParts else ::downloadMediaFile
+    return gifByteStore(context).load("${source.id}:$url") { file -> fillRemoteGif(context, source, url, file, download) }
 }
 
 suspend fun warmRemoteViewerGif(context: Context, source: SourceKey, location: String): Long {

@@ -38,23 +38,25 @@ class MediaPartsDownloadTest {
 
     @Test
     fun `a large file from a server that takes ranges arrives in four parallel parts with the page's headers (ADR 0225)`() = runTest {
-        val server = RangeServer(gifBytes(LARGE), firstBody = Hold.UNTIL_RANGES_ASKED)
+        val length = LARGE + 3
+        val server = RangeServer(gifBytes(length), firstBody = Hold.UNTIL_RANGES_ASKED)
         val output = temporary.newFile()
 
         downloadMediaFileInParts(URL, mapOf("Referer" to "https://provider.test/"), output, Long.MAX_VALUE, server.client)
 
         assertArrayEquals(server.bytes, output.readBytes())
         assertTrue("the whole-file answer waited for every range to be asked", server.rangesArrivedTogether)
-        val quarter = LARGE / 4
+        val part = (length + 3) / 4
         assertEquals(
-            listOf(null, "bytes=$quarter-${2 * quarter - 1}", "bytes=${2 * quarter}-${3 * quarter - 1}", "bytes=${3 * quarter}-${LARGE - 1}"),
+            listOf(null, "bytes=$part-${2 * part - 1}", "bytes=${2 * part}-${3 * part - 1}", "bytes=${3 * part}-${length - 1}"),
             server.requests.map { it.header("Range") }.sortedBy { it.orEmpty() },
         )
         assertTrue(server.requests.all { it.header("Referer") == "https://provider.test/" })
+        assertTrue(server.requests.filter { it.header("Range") != null }.all { it.header("If-Range") == VERSION })
     }
 
     @Test
-    fun `a range answered with the whole file, the wrong span, a short body or a 429 falls back to one whole download (ADR 0225)`() = runTest {
+    fun `a range answered with the whole file, the wrong span or size, another version or a 429 falls back to one whole download (ADR 0225)`() = runTest {
         RangeAnswer.entries.filterNot { it == RangeAnswer.PARTIAL }.forEach { answer ->
             val outages = HostOutageTracker()
             val server = RangeServer(gifBytes(LARGE), rangeAnswer = answer, outages = outages)
@@ -99,7 +101,7 @@ class MediaPartsDownloadTest {
         assertTrue(server.calls.all(Call::isCanceled))
     }
 
-    private enum class RangeAnswer { PARTIAL, WHOLE_FILE, WRONG_SPAN, SHORT_BODY, TOO_MANY_REQUESTS }
+    private enum class RangeAnswer { PARTIAL, WHOLE_FILE, WRONG_SPAN, SHORT_BODY, OVERSIZED_BODY, OTHER_VERSION, TOO_MANY_REQUESTS }
 
     private enum class Hold { NONE, UNTIL_RANGES_ASKED, UNTIL_CANCELLED }
 
@@ -132,18 +134,30 @@ class MediaPartsDownloadTest {
                     RangeAnswer.WHOLE_FILE -> respond(chain.call(), request, 200, bytes)
                     RangeAnswer.WRONG_SPAN -> respond(chain.call(), request, 206, bytes.copyOfRange(0, end - start + 1), "bytes 0-${end - start}/${bytes.size}")
                     RangeAnswer.SHORT_BODY -> respond(chain.call(), request, 206, bytes.copyOfRange(start, end), "bytes $start-$end/${bytes.size}")
+                    RangeAnswer.OVERSIZED_BODY -> respond(chain.call(), request, 206, bytes, "bytes $start-$end/${bytes.size}")
+                    RangeAnswer.OTHER_VERSION ->
+                        respond(chain.call(), request, 206, bytes.copyOfRange(start, end + 1), "bytes $start-$end/${bytes.size}", version = "\"v2\"")
                     RangeAnswer.TOO_MANY_REQUESTS -> respond(chain.call(), request, 429, ByteArray(0))
                 }
             }
             .build()
 
-        private fun respond(call: Call, request: Request, code: Int, body: ByteArray, contentRange: String? = null, hold: Hold = Hold.NONE): Response =
+        private fun respond(
+            call: Call,
+            request: Request,
+            code: Int,
+            body: ByteArray,
+            contentRange: String? = null,
+            hold: Hold = Hold.NONE,
+            version: String = VERSION,
+        ): Response =
             Response.Builder()
                 .request(request)
                 .protocol(protocol)
                 .code(code)
                 .message("")
                 .header("Content-Type", "image/gif")
+                .header("ETag", version)
                 .apply { if (acceptsRanges) header("Accept-Ranges", "bytes") }
                 .apply { contentRange?.let { header("Content-Range", it) } }
                 .body(heldBody(call, body, hold))
@@ -178,6 +192,7 @@ class MediaPartsDownloadTest {
     private companion object {
         const val URL = "https://example.test/large.gif"
         const val LARGE = 4 * 1024 * 1024
+        const val VERSION = "\"v1\""
 
         fun gifBytes(size: Int): ByteArray = Random(size).nextBytes(size).also { bytes ->
             "GIF89a".toByteArray().copyInto(bytes)

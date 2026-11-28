@@ -393,13 +393,23 @@ class ViewerViewModel(
     ) {
         val downloaded = prefetchLedger.isDownloaded(request.key)
         launchSessionJob(ViewerWorkKey.Prefetch(request.key)) {
+            if (media.kind == ViewerMediaKind.GIF) return@launchSessionJob withPermitWhileCurrentSettled { runPrefetch(session, request, media) }
             awaitFirstMediaShown()
-            if (media.kind == ViewerMediaKind.GIF) mutableState.first { state -> state.currentMediaSettled }
             if (downloaded) {
                 runPrefetch(session, request, media)
             } else {
                 prefetchSemaphore.withPermit { runPrefetch(session, request, media) }
             }
+        }
+    }
+
+    private suspend fun withPermitWhileCurrentSettled(block: suspend () -> Unit) {
+        while (true) {
+            mutableState.first { state -> state.currentMediaSettled }
+            val ran = prefetchSemaphore.withPermit {
+                mutableState.value.currentMediaSettled.also { settled -> if (settled) block() }
+            }
+            if (ran) return
         }
     }
 

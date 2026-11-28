@@ -14,6 +14,7 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.advanceTimeBy
@@ -95,6 +96,37 @@ class ViewerViewModelPrefetchTest {
         owner.onAction(ViewerAction.MediaFailed(session, ViewerMediaError.Recoverable(keys[3], "failed")))
         runCurrent()
         assertEquals(listOf(keys[3], keys[2], keys[4]), started)
+    }
+
+    @Test
+    fun `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0225)`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val slotsHeld = CompletableDeferred<Unit>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                if (media.kind != com.theoriacodex.app.viewer.state.ViewerMediaKind.GIF) slotsHeld.await()
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        val media = listOf(image("0.jpg"), image("1.jpg"), image("2.jpg"), gif("3.gif"), image("4.jpg"))
+        owner.replaceSession(session("gif-slot", listOf(post("gallery", media = media))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+
+        owner.onAction(queue(keys[1], keys[2], keys[3]))
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[2]), started)
+        owner.onAction(ViewerAction.SelectMedia(4))
+        slotsHeld.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[2]), started)
+        owner.onAction(ViewerAction.MediaReady(session, keys[4], 0L))
+        runCurrent()
+        assertEquals(listOf(keys[1], keys[2], keys[3]), started)
     }
 
     @Test
