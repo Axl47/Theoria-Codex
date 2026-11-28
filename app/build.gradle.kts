@@ -536,6 +536,7 @@ dependencies {
     testImplementation(testFixtures(project(":feature-settings")))
     testImplementation(testFixtures(project(":feature-viewer")))
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(testFixtures(project(":media-kit")))
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(platform(libs.androidx.compose.bom))

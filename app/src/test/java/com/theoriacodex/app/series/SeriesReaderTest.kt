@@ -47,7 +47,9 @@ import org.junit.rules.TemporaryFolder
 
 class SeriesReaderTest {
     @After
-    fun stopListeningToDiagnostics() = Diagnostics.install { _, _, _ -> }
+    fun stopListeningToDiagnostics() {
+        Diagnostics.install { _, _, _ -> }
+    }
 
     @get:Rule val folder = TemporaryFolder()
 

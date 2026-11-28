@@ -27,7 +27,9 @@ class ExtensionCallsTest {
     private val calls = ExtensionCalls("Ext") {}
 
     @After
-    fun stopListeningToDiagnostics() = Diagnostics.install { _, _, _ -> }
+    fun stopListeningToDiagnostics() {
+        Diagnostics.install { _, _, _ -> }
+    }
 
     @Test
     fun `an extension call runs off the caller's thread (ADR 0060)`() = runBlocking {

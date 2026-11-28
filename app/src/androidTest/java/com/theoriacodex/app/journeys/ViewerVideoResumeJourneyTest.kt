@@ -12,13 +12,36 @@ import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
+import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
+import com.theoriacodex.app.viewer.assumeTheEmulatorDecoderWorks
 import com.theoriacodex.app.viewer.mediaTestTagPart
+import com.theoriacodex.domain.diagnostics.DiagnosticSink
+import com.theoriacodex.domain.diagnostics.Diagnostics
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.CopyOnWriteArrayList
 
 class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
+    private val playbackErrors = CopyOnWriteArrayList<Throwable>()
+    private var previousSink: DiagnosticSink? = null
+
+    @Before
+    fun recordPlaybackErrors() {
+        previousSink = Diagnostics.install { area, message, error ->
+            if (area == "playback" && error != null) playbackErrors += error
+            previousSink?.record(area, message, error)
+        }
+    }
+
+    @After
+    fun restoreDiagnostics() {
+        previousSink?.let(Diagnostics::install)
+    }
+
     override fun customizePost(index: Int, post: Post): Post {
         if (index != FIRST_VIDEO && index != SECOND_VIDEO) return post
         val video = assetVideo("resume-clip.mp4", "video-$index")
@@ -26,7 +49,7 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
     }
 
     @Test
-    fun aSwipedToVideoShowsItsFrameAtItsResumePointAndKeepsItThroughTheSettle_adr_0181() {
+    fun aSwipedToVideoShowsItsFrameAtItsResumePointAndKeepsItThroughTheSettle_adr_0181() = skippingTheEmulatorDecoder {
         openSearchPost(FIRST_VIDEO, RECENT_SEARCH)
         waitFor("the first video plays past its resume threshold") { (timelineFraction(FIRST_VIDEO) ?: 0f) > RESUMED_FRACTION }
 
@@ -54,6 +77,13 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
         assertTrue("the recoiling neighbour keeps its frame after a cancelled swipe", showsVideoFrame(SECOND_VIDEO))
         compose.mainClock.autoAdvance = true
         waitFor("the first video stays selected after the cancelled swipe") { selectedPost() == "journey-$FIRST_VIDEO" }
+    }
+
+    private fun skippingTheEmulatorDecoder(journey: () -> Unit) = try {
+        journey()
+    } catch (failure: Throwable) {
+        assumeTheEmulatorDecoderWorks(playbackErrors.firstNotNullOfOrNull { (it.cause as? MediaCodecDecoderException)?.codecInfo?.name })
+        throw failure
     }
 
     private fun holdDrag(fraction: Float) = media().performTouchInput {

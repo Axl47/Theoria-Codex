@@ -27,6 +27,6 @@ Metered checks and cache decisions are cheap and stable per page; episodes and a
 
 ## Guarded by
 
-- `app/src/androidTest/java/com/theoriacodex/app/journeys/ViewerVideoResumeJourneyTest.kt`: `aSwipedToVideoShowsItsFrameAtItsResumePointAndKeepsItThroughTheSettle_adr_0181`
+- `app/src/androidTest/java/com/theoriacodex/app/journeys/ViewerVideoResumeJourneyTest.kt`: `aSwipedToVideoShowsItsFrameAtItsResumePointAndKeepsItThroughTheSettle_adr_0181` (skipped on the Android 17 emulator, whose decoder cannot decode; ADR 0109)
 - Left to prose: the stream choice, metered check, quality defaults, lifecycle replay, Picture-in-Picture source hint and subtitle overlay rules depend on device system state no host or journey check here reproduces.
 - Left to prose: the under-way and current-media-only rendition rules need a stream switch or a rendition picked in the playback menu, which the fixture journey does not drive.

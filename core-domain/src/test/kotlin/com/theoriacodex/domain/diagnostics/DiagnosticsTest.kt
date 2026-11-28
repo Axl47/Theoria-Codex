@@ -6,7 +6,9 @@ import org.junit.Test
 
 class DiagnosticsTest {
     @After
-    fun stopListening() = Diagnostics.install { _, _, _ -> }
+    fun stopListening() {
+        Diagnostics.install { _, _, _ -> }
+    }
 
     @Test
     fun `a sink that throws never breaks report (ADR 0002)`() {
