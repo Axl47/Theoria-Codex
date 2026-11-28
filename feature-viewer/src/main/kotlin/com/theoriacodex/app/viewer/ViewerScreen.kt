@@ -160,7 +160,7 @@ private fun ViewerLoadedScreen(
     val controls = rememberViewerControls(onAction, screen, uiState.overview.visible, chromeVisibleState, opening, returning)
     val frame = rememberViewerFrame(uiState, navigation, posts, selection, chromeVisibleState, chromeStage, opening, returning, inPictureInPicture, touchExplorationEnabled, isLandscape)
     val flingVelocity = with(LocalDensity.current) { VIEWER_FLING_VELOCITY.toPx() }
-    val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, onAction)
+    val swipe = rememberViewerSwipe(frame, postPagerState, config, screen, controls, flingVelocity, scope, videoPositions, onAction)
     val loadMoreFromStrip = rememberViewerLoadMore(navigation.originalPosts.size, canLoadMoreFromSource, loadingMoreFromSource, onAction)
     ViewerFrameEffects(
         frame, screen, controls, swipe, dismissDrag, postPagerState, pendingPostId, canLoadMoreFromSource,

@@ -3,12 +3,17 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.view.PixelCopy
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +45,9 @@ import androidx.media3.ui.SubtitleView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
@@ -98,8 +106,11 @@ internal fun ViewerVideoPlayer(
         return
     }
     val startMs = positions.position(mediaKey)
+    val resumeFrame = positions.resumeFrame(mediaKey).takeIf { startMs > 0L }
     if (!controls.isActive && !(controls.isPreloading && playback.readsAheadFreely())) {
-        Box(modifier.background(Color.Black)) { loadingPreview.takeIf { startMs == 0L }?.invoke() }
+        Box(modifier.background(Color.Black).testTag(viewerVideoTestTag(postId))) {
+            ViewerVideoPlaceholder(loadingPreview.takeIf { startMs == 0L }, resumeFrame, controls.fillScreen, Modifier.matchParentSize())
+        }
         return
     }
     val key = ViewerVideoKey.of(ViewerMediaLoad(mediaKey, controls.loadGeneration), media, streamLabel, playback)
@@ -108,10 +119,10 @@ internal fun ViewerVideoPlayer(
     val start = remember(mediaKey, positions) { ViewerVideoStart({ positions.position(mediaKey) }, positions::startsOver) }
     val clipReturn = remember(mediaKey) { ViewerClipReturnPosition() }
     val poster = loadingPreview.takeIf { startMs == 0L && !start.underWay }
+    val cover = resumeFrame.takeIf { !start.underWay }
     if (state.pending != ViewerRecoveryDecision.AskForFreshLinks || state.player != null) ViewerVideoBinding(state, playback, controls, subtitleTuning.delayMs, events, recovery, start) { releasedMs, progress ->
         val resumeMs = clipReturn.ms ?: releasedMs
-        positions.save(mediaKey, resumeMs)
-        context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, resumeMs)
+        context.videoPlaybackInfrastructure().feedPositionHandoff.publish(mediaKey, positions.save(mediaKey, resumeMs))
         progress?.let { events.onPlaybackProgress?.invoke(it) }
     }
     ViewerVideoStreamRecovery(state, recovery, episode, events)
@@ -124,7 +135,40 @@ internal fun ViewerVideoPlayer(
     ViewerVideoSubtitleDelay(state, subtitleTuning.delayMs, playing = controls.isActive && controls.isPlaying && state.actuallyPlaying)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, poster, subtitleTuning.sizePercent)
+    ViewerResumeFrames(state, positions, mediaKey, controls.isActive)
+    ViewerVideoContent(state, postId, playback, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, aspectRatio, poster, cover, subtitleTuning.sizePercent)
+}
+
+@Composable
+private fun ViewerResumeFrames(state: ViewerVideoState, positions: ViewerVideoPositions, mediaKey: ViewerMediaKey, active: Boolean) {
+    DisposableEffect(state, positions, mediaKey, active) {
+        val offer = if (active) positions.offerLeavingFrame(mediaKey, state::captureResumeFrame) else null
+        onDispose { offer?.close() }
+    }
+}
+
+internal fun ViewerVideoState.captureResumeFrame(deliver: (ViewerResumeFrame) -> Unit) {
+    val shown = player?.takeIf {
+        hasRenderedFirstFrame && started?.atPosition == true && it.playbackState == Player.STATE_READY && it.currentPosition > 0L
+    } ?: return
+    val texture = (view?.videoSurfaceView as? TextureView)?.takeIf { it.isAvailable && it.width > 0 && it.height > 0 } ?: return
+    val surfaceTexture = texture.surfaceTexture ?: return
+    val scale = minOf(1f, VIEWER_RESUME_FRAME_EDGE_PX / maxOf(texture.width, texture.height))
+    val positionMs = shown.currentPosition
+    val durationMs = shown.duration
+    val source = runCatching { Surface(surfaceTexture) }.getOrNull() ?: return
+    runCatching {
+        val bitmap = Bitmap.createBitmap(
+            (texture.width * scale).roundToInt().coerceAtLeast(1),
+            (texture.height * scale).roundToInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888,
+        )
+        val request = PixelCopy.Request.Builder.ofSurface(source).setDestinationBitmap(bitmap).build()
+        PixelCopy.request(request, texture.context.mainExecutor) { result ->
+            source.release()
+            if (result.status == PixelCopy.SUCCESS) deliver(ViewerResumeFrame(positionMs, durationMs, result.bitmap.apply { prepareToDraw() }.asImageBitmap()))
+        }
+    }.onFailure { source.release() }
 }
 
 internal class ViewerVideoState(pending: ViewerRecoveryDecision?, startMs: Long = 0L) {
@@ -545,6 +589,7 @@ private fun ViewerVideoContent(
     mediaModifier: Modifier,
     aspectRatio: Float?,
     loadingPreview: (@Composable () -> Unit)?,
+    resumeFrame: ImageBitmap?,
     subtitleSizePercent: Int,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
@@ -573,7 +618,7 @@ private fun ViewerVideoContent(
                 .onPlaced { coordinates -> viewBottomPx.floatValue = coordinates.positionInParent().y + coordinates.size.height }
                 .then(mediaModifier),
         )
-        if (!state.hasRenderedFirstFrame && !state.failed) ViewerVideoPlaceholder(loadingPreview, Modifier.matchParentSize())
+        if (!state.hasRenderedFirstFrame && !state.failed) ViewerVideoPlaceholder(loadingPreview, resumeFrame, controls.fillScreen, Modifier.matchParentSize())
         val holdScrub = LocalViewerHoldScrub.current
         val holdScrubbing by remember(holdScrub) { derivedStateOf { holdScrub?.phase is ViewerHoldScrubPhase.Dragging } }
         ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing && !holdScrubbing, Modifier.matchParentSize()) {
@@ -586,8 +631,22 @@ private fun ViewerVideoContent(
 }
 
 @Composable
-private fun ViewerVideoPlaceholder(poster: (@Composable () -> Unit)?, modifier: Modifier) {
-    Box(modifier.testTag(if (poster != null) VIEWER_VIDEO_POSTER_TAG else VIEWER_VIDEO_PLACEHOLDER_TAG)) { poster?.invoke() }
+private fun ViewerVideoPlaceholder(poster: (@Composable () -> Unit)?, resumeFrame: ImageBitmap?, fillScreen: Boolean, modifier: Modifier) {
+    when {
+        poster != null -> Box(modifier.testTag(VIEWER_VIDEO_POSTER_TAG)) { poster() }
+        resumeFrame != null -> ViewerResumeFrameImage(resumeFrame, fillScreen, modifier)
+        else -> Box(modifier.testTag(VIEWER_VIDEO_PLACEHOLDER_TAG))
+    }
+}
+
+@Composable
+private fun ViewerResumeFrameImage(frame: ImageBitmap, fillScreen: Boolean, modifier: Modifier = Modifier) {
+    Image(
+        frame,
+        contentDescription = null,
+        modifier = modifier.fillMaxSize().testTag(VIEWER_VIDEO_RESUME_FRAME_TAG),
+        contentScale = if (fillScreen) ContentScale.Crop else ContentScale.Fit,
+    )
 }
 
 @Composable
@@ -699,3 +758,5 @@ private const val VIEWER_SUBTITLE_DELAY_SETTLE_MS = 250L
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
 internal const val VIEWER_VIDEO_PLACEHOLDER_TAG = "viewer-video-placeholder"
 internal const val VIEWER_VIDEO_POSTER_TAG = "viewer-video-poster"
+internal const val VIEWER_VIDEO_RESUME_FRAME_TAG = "viewer-video-resume-frame"
+private const val VIEWER_RESUME_FRAME_EDGE_PX = 1080f
