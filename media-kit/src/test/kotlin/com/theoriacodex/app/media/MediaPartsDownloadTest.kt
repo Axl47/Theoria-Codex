@@ -37,7 +37,7 @@ class MediaPartsDownloadTest {
     @get:Rule val temporary = TemporaryFolder()
 
     @Test
-    fun `a large file from a server that takes ranges arrives in four parallel parts with the page's headers (ADR 0225)`() = runTest {
+    fun `a large file from a server that takes ranges arrives in four parallel parts with the page's headers (ADR 0226)`() = runTest {
         val length = LARGE + 3
         val server = RangeServer(gifBytes(length), firstBody = Hold.UNTIL_RANGES_ASKED)
         val output = temporary.newFile()
@@ -56,7 +56,7 @@ class MediaPartsDownloadTest {
     }
 
     @Test
-    fun `a range answered with the whole file, the wrong span or size, another version or a 429 falls back to one whole download (ADR 0225)`() = runTest {
+    fun `a range answered with the whole file, the wrong span or size, another version or a 429 falls back to one whole download (ADR 0226)`() = runTest {
         RangeAnswer.entries.filterNot { it == RangeAnswer.PARTIAL }.forEach { answer ->
             val outages = HostOutageTracker()
             val server = RangeServer(gifBytes(LARGE), rangeAnswer = answer, outages = outages)
@@ -71,7 +71,7 @@ class MediaPartsDownloadTest {
     }
 
     @Test
-    fun `a small file, a server without ranges or a version to check, or an HTTP 2 host is fetched in one request (ADR 0225)`() = runTest {
+    fun `a small file, a server without ranges or a version to check, or an HTTP 2 host is fetched in one request (ADR 0226)`() = runTest {
         val servers = listOf(
             RangeServer(gifBytes(LARGE / 8)),
             RangeServer(gifBytes(LARGE), acceptsRanges = false),
@@ -89,7 +89,7 @@ class MediaPartsDownloadTest {
     }
 
     @Test
-    fun `cancelling the download cancels every part (ADR 0225)`() = runBlocking {
+    fun `cancelling the download cancels every part (ADR 0226)`() = runBlocking {
         val server = RangeServer(gifBytes(LARGE), firstBody = Hold.UNTIL_CANCELLED, rangeBodies = Hold.UNTIL_CANCELLED)
         val download = CoroutineScope(Dispatchers.IO).launch {
             downloadMediaFileInParts(URL, emptyMap(), temporary.newFile(), Long.MAX_VALUE, server.client)

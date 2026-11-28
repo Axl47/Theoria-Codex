@@ -1,4 +1,4 @@
-# 0225. The Viewer's current GIF gets the bandwidth: neighbour GIFs wait for it, and it downloads in parts
+# 0226. The Viewer's current GIF gets the bandwidth: neighbour GIFs wait for it, and it downloads in parts
 
 Status: Accepted
 
@@ -31,15 +31,15 @@ The current GIF's wait no longer grows with how many neighbour GIFs are queued, 
 
 ## Guarded by
 
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF waits until the current media shows or fails, while other neighbors start at once (ADR 0225)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a large file from a server that takes ranges arrives in four parallel parts with the page's headers (ADR 0225)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a range answered with the whole file, the wrong span or size, another version or a 429 falls back to one whole download (ADR 0225)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a small file, a server without ranges or a version to check, or an HTTP 2 host is fetched in one request (ADR 0225)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `cancelling the download cancels every part (ADR 0225)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt`: `every GIF fills under its own lock, so seventeen can download at once (ADR 0225)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0225)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0225)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0225)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerStateBoundaryTest.kt`: `a page that showed while the user was swiping to it counts as shown once it becomes current (ADR 0225)`
-- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifCurrentPageTest.kt`: `only the current GIF page asks for its file in parts, not one swiping into view (ADR 0225)`
-- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifTransportTest.kt`: `warming a neighbor GIF asks for the whole file in one request, even from a host that takes ranges (ADR 0225)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF waits until the current media shows or fails, while other neighbors start at once (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a large file from a server that takes ranges arrives in four parallel parts with the page's headers (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a range answered with the whole file, the wrong span or size, another version or a 429 falls back to one whole download (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `a small file, a server without ranges or a version to check, or an HTTP 2 host is fetched in one request (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/media/MediaPartsDownloadTest.kt`: `cancelling the download cancels every part (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt`: `every GIF fills under its own lock, so seventeen can download at once (ADR 0226)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0226)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0226)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerViewModelPrefetchTest.kt`: `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0226)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/state/ViewerStateBoundaryTest.kt`: `a page that showed while the user was swiping to it counts as shown once it becomes current (ADR 0226)`
+- `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifCurrentPageTest.kt`: `only the current GIF page asks for its file in parts, not one swiping into view (ADR 0226)`
+- `media-kit/src/test/kotlin/com/theoriacodex/app/viewer/ViewerGifTransportTest.kt`: `warming a neighbor GIF asks for the whole file in one request, even from a host that takes ranges (ADR 0226)`

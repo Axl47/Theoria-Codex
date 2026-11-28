@@ -262,7 +262,7 @@ class ViewerStateBoundaryTest {
     }
 
     @Test
-    fun `a page that showed while the user was swiping to it counts as shown once it becomes current (ADR 0225)`() {
+    fun `a page that showed while the user was swiping to it counts as shown once it becomes current (ADR 0226)`() {
         val gallery = post("g", listOf(ref("image/jpeg", "1.jpg"), ref("image/jpeg", "2.jpg")))
         val state = createViewerUiState(session, listOf(gallery))
         val incoming = ViewerMediaKey(gallery.id, 1)

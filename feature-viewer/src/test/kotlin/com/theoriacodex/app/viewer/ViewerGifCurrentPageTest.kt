@@ -27,7 +27,7 @@ class ViewerGifCurrentPageTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `only the current GIF page asks for its file in parts, not one swiping into view (ADR 0225)`() {
+    fun `only the current GIF page asks for its file in parts, not one swiping into view (ADR 0226)`() {
         val bytes = Random(7).nextBytes(GIF_BYTES).also { "GIF89a".toByteArray().copyInto(it) }
         val requests = Collections.synchronizedList(mutableListOf<Pair<String, String?>>())
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)

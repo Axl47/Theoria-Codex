@@ -48,7 +48,7 @@ class ViewerGifByteStoreTest {
     }
 
     @Test
-    fun `every GIF fills under its own lock, so seventeen can download at once (ADR 0225)`() = runBlocking {
+    fun `every GIF fills under its own lock, so seventeen can download at once (ADR 0226)`() = runBlocking {
         val store = ViewerGifByteStore(temporary.newFolder())
         val keys = (1..17).map { "GELBOORU:gif-$it" }
         val started = AtomicInteger()

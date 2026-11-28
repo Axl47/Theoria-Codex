@@ -67,7 +67,7 @@ class ViewerViewModelPrefetchTest {
     }
 
     @Test
-    fun `a neighbor GIF waits until the current media shows or fails, while other neighbors start at once (ADR 0225)`() = runTest {
+    fun `a neighbor GIF waits until the current media shows or fails, while other neighbors start at once (ADR 0226)`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),
@@ -101,7 +101,7 @@ class ViewerViewModelPrefetchTest {
     }
 
     @Test
-    fun `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0225)`() = runTest {
+    fun `a neighbor GIF that waited for a download slot still waits while the page now current loads (ADR 0226)`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val slotsHeld = CompletableDeferred<Unit>()
         val owner = testViewerOwner(
@@ -132,7 +132,7 @@ class ViewerViewModelPrefetchTest {
     }
 
     @Test
-    fun `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0225)`() = runTest {
+    fun `a neighbor GIF already downloading keeps going when its page becomes current (ADR 0226)`() = runTest {
         val finish = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
         val owner = testViewerOwner(
@@ -163,7 +163,7 @@ class ViewerViewModelPrefetchTest {
     }
 
     @Test
-    fun `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0225)`() = runTest {
+    fun `a neighbor GIF stops waiting once the hold limit passes, even if the current page never settles (ADR 0226)`() = runTest {
         val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
         val owner = testViewerOwner(
             savedStateHandle = SavedStateHandle(),

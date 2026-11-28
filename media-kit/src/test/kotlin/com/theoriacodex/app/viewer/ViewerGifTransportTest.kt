@@ -49,7 +49,7 @@ class ViewerGifTransportTest {
     }
 
     @Test
-    fun `warming a neighbor GIF asks for the whole file in one request, even from a host that takes ranges (ADR 0225)`() = runBlocking {
+    fun `warming a neighbor GIF asks for the whole file in one request, even from a host that takes ranges (ADR 0226)`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val ranges = mutableListOf<String?>()
         val bytes = ByteArray(4 * 1024 * 1024).also { "GIF89a".toByteArray().copyInto(it) }
