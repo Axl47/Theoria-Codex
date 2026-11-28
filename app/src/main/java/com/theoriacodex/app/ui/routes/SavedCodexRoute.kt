@@ -166,7 +166,7 @@ private fun SavedCodexShelf(
     val owner = viewModel<MediaDurationRouteViewModel>(key = "saved-duration:${child.codexId}",
         factory = MediaDurationRouteViewModel.factory(features.mediaDurationCoordinator, "saved:${child.codexId}"))
     val durationStates by owner.states.collectAsStateWithLifecycle()
-    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, features, restore, durationStates) { state ->
+    CodexDetailDestinationStateBoundary(child.codexId, sort, data, sources, features, restore, durationStates, followNewMarks = true) { state ->
         SavedCodexSection(state, child.codexId, child.name, count, news, restore, sort,
             owner, durationStates, sources, parentScrolling, actions)
     }

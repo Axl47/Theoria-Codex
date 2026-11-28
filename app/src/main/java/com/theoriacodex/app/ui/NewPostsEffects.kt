@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui
 
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -20,8 +19,6 @@ import com.theoriacodex.app.codex.markSavedSearchPostsSeen
 import com.theoriacodex.app.codex.savedNewPosts
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.statistics.statisticsCodexId
-import com.theoriacodex.app.ui.components.FeedView
-import com.theoriacodex.app.ui.components.SeenPostsEffect
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.data.repository.CreatorFollowsRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -66,20 +63,15 @@ private fun savedSearchChecker(shell: TheoriaShell): SavedSearchNewPostsChecker 
     }
 }
 
-internal fun markingNewPostsSeen(
-    data: DataDependencies,
-    codexId: String,
-    newPostIds: Set<PostId>,
-    header: (@Composable (FeedView, LazyStaggeredGridState) -> Unit)?,
-): (@Composable (FeedView, LazyStaggeredGridState) -> Unit)? = header?.takeIf { codexId in newPostCodexIds }?.let { drawHeader ->
-    { feed, grid ->
-        drawHeader(feed, grid)
-        SeenPostsEffect(grid, feed.visiblePosts) { seen ->
+internal fun newPostsSeenHandler(data: DataDependencies, codexId: String, newPostIds: Set<PostId>): (suspend (Set<PostId>) -> Unit)? =
+    if (codexId !in newPostCodexIds) {
+        null
+    } else {
+        { seen ->
             val keys = seen.filter { it in newPostIds }.mapTo(mutableSetOf()) { it.markKey() }
             if (keys.isNotEmpty()) data.markNewPostsSeen(codexId, keys)
         }
     }
-}
 
 private val newPostCodexIds = setOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID)
 

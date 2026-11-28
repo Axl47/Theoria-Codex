@@ -30,6 +30,7 @@ internal fun SavedSearchesCodexBoundary(
     filters: FeedFabRestoreState,
     sort: CodexSortMode,
     durationStates: MediaDurationStates,
+    followNewMarks: Boolean,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
     val entries = rememberRetained("saved-searches") { data.savedSearches.observeSavedSearches() }.value ?: return
@@ -46,7 +47,7 @@ internal fun SavedSearchesCodexBoundary(
     }
     val usage = rememberCodexPostUsage(data.statisticsRepository, SAVED_SEARCHES_CODEX_ID, sort).orEmpty()
     val feed = owner.state.collectAsStateWithLifecycle().value
-    val reloading = rememberNewPostsReload(owner, feed, selected.mapNotNull { news.marks[it.id] })
+    val reloading = rememberNewPostsReload(owner, feed, selected.mapNotNull { news.marks[it.id] }, followNewMarks)
     val durations = rememberCodexPostDurations(feed.posts, sort, durationStates, SAVED_SEARCHES_CODEX_ID)
     LaunchedEffect(selected, settings.runtime, available, sort, usage, durations) {
         owner.synchronize(selected, settings, available, sort, usage, durations)

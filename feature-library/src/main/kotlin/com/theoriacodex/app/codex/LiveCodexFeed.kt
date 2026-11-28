@@ -42,13 +42,20 @@ fun LiveCodexFeedState.predates(marks: Collection<NewPostMarks>): Boolean {
 }
 
 @Composable
-fun rememberNewPostsReload(owner: LiveCodexFeedOwner, feed: LiveCodexFeedState, marks: Collection<NewPostMarks>): Boolean {
+fun rememberNewPostsReload(
+    owner: LiveCodexFeedOwner,
+    feed: LiveCodexFeedState,
+    marks: Collection<NewPostMarks>,
+    followNewMarks: Boolean = false,
+): Boolean {
     val opened = remember(owner) { marks }
-    var attempted by remember(owner) { mutableStateOf(false) }
-    val pending = !attempted && feed.predates(opened)
+    val watched = if (followNewMarks) marks else opened
+    val check = watched.maxOfOrNull { it.checkedAtEpochMs ?: 0 }
+    var attempted by remember(owner) { mutableStateOf<Long?>(null) }
+    val pending = attempted != check && feed.predates(watched)
     LaunchedEffect(owner, pending) {
         if (!pending) return@LaunchedEffect
-        attempted = true
+        attempted = check
         owner.refresh()
     }
     return pending

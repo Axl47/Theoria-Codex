@@ -1,6 +1,7 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -54,7 +55,7 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
             }
         }
         waitFor("the Searches shelf shows 1 new") { compose.onAllNodesWithText("1 new").fetchSemanticsNodes().isNotEmpty() }
-        waitFor("the shelf marks only the new post's card new") { shows(fresh.id) && markedNew() == 1 }
+        waitFor("the shelf loads the new post and marks only its card new") { shows(fresh.id) && newCards() == 1 }
 
         activate(compose.onNodeWithText("Searches"))
         waitFor("reopened Searches shows the new post") { inCollection() && shows(fresh.id) }
@@ -67,6 +68,12 @@ class SavedSearchNewPostsJourneyTest : AppJourneyFixture() {
         waitFor("Searches is back") { inCollection() && shows(fresh.id) }
         waitFor("opening the post cleared its marker") { markedNew() == 0 }
     }
+
+    private fun newCards() = compose.onAllNodes(hasStateDescription("New") and hasTestTagPrefix("search_card_"), useUnmergedTree = true)
+        .fetchSemanticsNodes().size
+
+    private fun hasTestTagPrefix(prefix: String) =
+        SemanticsMatcher("TestTag starts with $prefix") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true }
 
     private fun markedNew() = compose.onAllNodes(hasStateDescription("New"), useUnmergedTree = true).fetchSemanticsNodes().size
 
