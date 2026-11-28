@@ -3,11 +3,14 @@ package com.theoriacodex.app.viewer
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -42,6 +45,26 @@ class ViewerGifByteStoreTest {
         val reopened = ViewerGifByteStore(directory)
         assertArrayEquals(bytes, reopened.load("PIXIV:media") { error("must reuse cached bytes") })
         assertArrayEquals(bytes, File(requireNotNull(reopened.cachedLocation("PIXIV:media"))).readBytes())
+    }
+
+    @Test
+    fun `every GIF fills under its own lock, so seventeen can download at once (ADR 0225)`() = runBlocking {
+        val store = ViewerGifByteStore(temporary.newFolder())
+        val keys = (1..17).map { "GELBOORU:gif-$it" }
+        val started = AtomicInteger()
+        val allStarted = CompletableDeferred<Unit>()
+        withTimeout(5_000L) {
+            keys.map { key ->
+                async(Dispatchers.IO) {
+                    store.warm(key) { file ->
+                        if (started.incrementAndGet() == keys.size) allStarted.complete(Unit)
+                        allStarted.await()
+                        file.writeBytes("GIF89a $key".toByteArray())
+                    }
+                }
+            }.awaitAll()
+        }
+        assertEquals(keys.size, started.get())
     }
 
     @Test

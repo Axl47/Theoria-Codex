@@ -1,6 +1,5 @@
 package com.theoriacodex.app.media
 
-import com.theoriacodex.sources.http.await
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -9,13 +8,20 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.Response
 
 suspend fun downloadMediaFileInParts(
     url: String,
@@ -25,47 +31,71 @@ suspend fun downloadMediaFileInParts(
     client: OkHttpClient,
 ) {
     try {
-        coroutineScope { fetchInParts(this, client, mediaRequest(url, headers), destination, maxBytes) }
+        withContext(Dispatchers.IO) { fetchInParts(client, mediaRequest(url, headers), destination, maxBytes) }
     } catch (_: MediaPartFailure) {
+        currentCoroutineContext().ensureActive()
         downloadMediaFile(url, headers, destination, maxBytes, client)
     }
 }
 
-internal fun mediaParts(length: Long, acceptRanges: String?): List<LongRange>? {
-    if (length < MIN_PARTED_MEDIA_BYTES || acceptRanges?.trim()?.equals("bytes", ignoreCase = true) != true) return null
+internal object MediaPartRequest
+
+internal fun mediaParts(length: Long, response: Response): List<LongRange>? {
+    val acceptsRanges = response.header("Accept-Ranges")?.trim()?.equals("bytes", ignoreCase = true) == true
+    if (length < MIN_PARTED_MEDIA_BYTES || !acceptsRanges || response.protocol != Protocol.HTTP_1_1) return null
     val size = (length + MEDIA_PARTS - 1) / MEDIA_PARTS
     return (0 until MEDIA_PARTS).map { index -> index * size..minOf(length, (index + 1) * size) - 1 }
 }
 
-private class PartsInFlight(val length: Long, val first: Long, val rest: List<Deferred<Long>>)
-
-private suspend fun fetchInParts(scope: CoroutineScope, client: OkHttpClient, request: Request, destination: File, maxBytes: Long) {
-    val inFlight = client.newCall(request).await { response ->
+private suspend fun fetchInParts(client: OkHttpClient, request: Request, destination: File, maxBytes: Long) =
+    client.withResponse(request) { response ->
         val length = checkedMediaLength(response, maxBytes)
-        val parts = mediaParts(length, response.header("Accept-Ranges"))
+        val parts = mediaParts(length, response)
         if (parts == null) {
             writeWholeMedia(response, destination, maxBytes, length)
-            return@await null
+            return@withResponse
         }
         RandomAccessFile(destination, "rw").use { file -> file.setLength(length) }
-        val rest = parts.drop(1).map { part -> scope.async(Dispatchers.IO) { fetchPart(client, request, part, length, destination) } }
-        PartsInFlight(length, asPartFailure { writePart(response.body.byteStream(), destination, parts.first()) }, rest)
-    } ?: return
-    val written = inFlight.first + inFlight.rest.awaitAll().sum()
-    if (written != inFlight.length) throw MediaPartFailure()
-    validateOfflineMediaFile(destination)
-}
+        val rest = parts.drop(1).map { part -> async { fetchPart(client, request, part, length, destination) } }
+        asPartFailure { writePart(response.body.byteStream(), destination, parts.first()) }
+        rest.awaitAll()
+        validateOfflineMediaFile(destination)
+    }
 
-private suspend fun fetchPart(client: OkHttpClient, request: Request, part: LongRange, length: Long, destination: File): Long =
+private suspend fun fetchPart(client: OkHttpClient, request: Request, part: LongRange, length: Long, destination: File) {
+    val ranged = request.newBuilder()
+        .header("Range", "bytes=${part.first}-${part.last}")
+        .tag(MediaPartRequest::class.java, MediaPartRequest)
+        .build()
     asPartFailure {
-        client.newCall(request.newBuilder().header("Range", "bytes=${part.first}-${part.last}").build()).await { response ->
+        client.withResponse(ranged) { response ->
             val range = response.header("Content-Range")?.trim()
             if (response.code != HTTP_PARTIAL_CONTENT || range != "bytes ${part.first}-${part.last}/$length") throw MediaPartFailure()
             writePart(response.body.byteStream(), destination, part)
         }
     }
+}
 
-private fun writePart(input: InputStream, destination: File, part: LongRange): Long {
+private suspend fun <T> OkHttpClient.withResponse(request: Request, block: suspend CoroutineScope.(Response) -> T): T = coroutineScope {
+    val call = newCall(request)
+    val canceller = launch(start = CoroutineStart.UNDISPATCHED) {
+        try {
+            awaitCancellation()
+        } finally {
+            call.cancel()
+        }
+    }
+    try {
+        call.execute().use { response -> block(response) }
+    } catch (failure: IOException) {
+        ensureActive()
+        throw failure
+    } finally {
+        canceller.cancel()
+    }
+}
+
+private fun writePart(input: InputStream, destination: File, part: LongRange) {
     val expected = part.last - part.first + 1
     var written = 0L
     FileChannel.open(destination.toPath(), StandardOpenOption.WRITE).use { channel ->
@@ -78,7 +108,6 @@ private fun writePart(input: InputStream, destination: File, part: LongRange): L
             written += count
         }
     }
-    return written
 }
 
 private inline fun <T> asPartFailure(block: () -> T): T = try {

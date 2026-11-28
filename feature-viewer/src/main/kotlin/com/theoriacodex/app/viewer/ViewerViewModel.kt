@@ -174,8 +174,7 @@ class ViewerViewModel(
     }
 
     private fun noteFirstMediaShown(state: ViewerUiState) {
-        if (state.series is ViewerSeries.Reading && state.currentPage?.loadingGalleryMedia() == true) return
-        if (state.currentMedia?.ready == true || state.mediaError != null) firstMediaShown.value = true
+        if (state.currentMediaSettled) firstMediaShown.value = true
     }
 
     fun replaceSession(session: ViewerSession) {
@@ -583,7 +582,8 @@ internal const val VIEWER_PREFETCH_READY_WAIT_MS = 1_500L
 internal const val VIEWER_CHAPTER_READY_WAIT_MS = 30_000L
 
 private val ViewerUiState.currentMediaSettled: Boolean
-    get() = currentMedia?.ready == true || mediaError != null || currentPage?.resolution?.status == ViewerResolutionStatus.FAILED
+    get() = !(series is ViewerSeries.Reading && currentPage?.loadingGalleryMedia() == true) &&
+        (currentMedia?.ready == true || mediaError != null)
 
 internal fun firstMediaWaitMs(series: ViewerSeries?): Long =
     if (series is ViewerSeries.Reading) VIEWER_CHAPTER_READY_WAIT_MS else VIEWER_PREFETCH_READY_WAIT_MS
