@@ -1,12 +1,14 @@
 package com.theoriacodex.app.viewer
 
 import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.viewer.ViewerOwnerTestData.gif
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.image
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.post
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.queue
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.request
 import com.theoriacodex.app.viewer.ViewerOwnerTestData.session
 import com.theoriacodex.app.viewer.state.ViewerAction
+import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchRequest
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
@@ -59,6 +61,40 @@ class ViewerViewModelPrefetchTest {
         advanceTimeBy(1)
         runCurrent()
         assertEquals(slow, started.last())
+    }
+
+    @Test
+    fun `a neighbor GIF waits until the current media shows or fails, while other neighbors start at once (ADR 0225)`() = runTest {
+        val started = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = testViewerOwner(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media, _ ->
+                started += media.key
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
+            scopeOverride = this,
+        )
+        val media = listOf(image("0.jpg"), image("1.jpg"), gif("2.gif"), image("3.jpg"), gif("4.gif"))
+        owner.replaceSession(session("gif-hold", listOf(post("gallery", media = media))))
+        val session = requireNotNull(owner.state.value.session)
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { item -> item.key }
+        owner.onAction(ViewerAction.MediaReady(session, keys[0], 0L))
+        owner.onAction(ViewerAction.SelectMedia(1))
+
+        owner.onAction(queue(keys[2], keys[3]))
+        runCurrent()
+        assertEquals(listOf(keys[3]), started)
+        owner.onAction(ViewerAction.MediaReady(session, keys[1], 0L))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[2]), started)
+
+        owner.onAction(ViewerAction.SelectMedia(3))
+        owner.onAction(queue(keys[4]))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[2]), started)
+        owner.onAction(ViewerAction.MediaFailed(session, ViewerMediaError.Recoverable(keys[3], "failed")))
+        runCurrent()
+        assertEquals(listOf(keys[3], keys[2], keys[4]), started)
     }
 
     @Test
