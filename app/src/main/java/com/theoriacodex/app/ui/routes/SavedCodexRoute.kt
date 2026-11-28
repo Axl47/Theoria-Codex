@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,7 +25,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,7 +38,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
+import com.theoriacodex.app.codex.LiveCodexFeedOwner
 import com.theoriacodex.app.codex.LiveCodexFeedState
+import com.theoriacodex.app.codex.LiveCodexRefreshBox
+import com.theoriacodex.app.codex.ShowNewestAfterRefresh
 import com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID
 import com.theoriacodex.app.codex.filterCodexCollectionPosts
 import com.theoriacodex.app.codex.newFirst
@@ -98,21 +105,30 @@ internal fun SavedCodexRoute(
     val scroll = rememberLazyListState()
     val children = remember(likesId, news) { savedCodexChildren(likesId).newFirst(news) }
     val shelfIds = remember(children) { children.map { ViewerReturnShelfId.Saved(it.codexId) } }
+    val liveOwners = remember { mutableStateMapOf<String, LiveCodexFeedOwner>() }
     ScrollToTopOnTabReselect(TopLevelDestination.Library, scroll)
     Column(Modifier.fillMaxSize()) {
         header()
-        ViewerReturnColumn(shelfIds, scroll) {
-            LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LiveCodexRefreshBox(liveOwners.values.toList(), Modifier.fillMaxSize()) {
+            SavedShelfColumn(shelfIds, scroll) {
                 children.forEach { child ->
                     item(key = child.codexId) {
                         SavedCodexShelf(child, counts.getValue(child.codexId), news[child.codexId].orEmpty(), data, sources, features, restoreRegistry, { scroll.isScrollInProgress },
                             SavedShelfActions({ onOpenCodex(child.codexId) }, { onOpenCodexActions(child.codexId) },
-                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onGoToSearch))
+                                { posts, position -> onOpenViewer(child.codexId, posts, position) }, resolvePost, onGoToSearch,
+                                { owner -> liveOwners[child.codexId] = owner }))
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SavedShelfColumn(shelfIds: List<ViewerReturnShelfId>, scroll: LazyListState, content: LazyListScope.() -> Unit) {
+    ViewerReturnColumn(shelfIds, scroll) {
+        LazyColumn(Modifier.fillMaxSize(), state = scroll, contentPadding = PaddingValues(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp), content = content)
     }
 }
 
@@ -130,6 +146,7 @@ private class SavedShelfActions(
     val openViewer: (List<Post>, Int) -> Unit,
     val resolvePost: suspend (PostId) -> Post?,
     val goToSearch: () -> Unit,
+    val registerLive: (LiveCodexFeedOwner) -> Unit,
 )
 
 @Composable
@@ -184,6 +201,8 @@ private fun SavedCodexSection(
     DurationRouteEnvironmentEffect({ parentScrolling() || row.isScrollInProgress }, owner::onEnvironmentChanged)
     val liveOwner = state.followedOwner ?: state.savedSearchOwner
     val feed = liveOwner?.state?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(liveOwner) { liveOwner?.let(actions.registerLive) }
+    if (liveOwner != null) ShowNewestAfterRefresh(liveOwner) { row.scrollToItem(0) }
     ReportLaunchContent(TopLevelDestination.Library, drawn = posts.isNotEmpty() ||
         if (liveOwner == null) !state.loading else feed?.errors?.isNotEmpty() == true)
     val postIds = remember(posts) { posts.map { it.id } }

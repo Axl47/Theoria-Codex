@@ -59,24 +59,35 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
         waitFor("the second video is selected") { selectedPost() == "journey-$SECOND_VIDEO" }
 
         holdDrag(HELD_DRAG)
-        assertNeighbourShowsFrame(FIRST_VIDEO, posterAllowed = false) { fraction -> fraction > RESUMED_FRACTION }
+        assertNeighbourShowsFrame(FIRST_VIDEO, resumed = true) { fraction -> fraction > RESUMED_FRACTION }
         releaseDrag(HELD_DRAG)
         waitFor("the first video is selected again") { selectedPost() == "journey-$FIRST_VIDEO" }
         waitFor("the first video shows its timeline after the settle") { timelineFraction(FIRST_VIDEO) != null }
         assertTrue("the first video carries on from its resume point", checkNotNull(timelineFraction(FIRST_VIDEO)) > RESUMED_FRACTION)
 
+        peekSecondVideoAndCancel("a short drag")
+        peekSecondVideoAndCancel("a second short drag")
+    }
+
+    private fun peekSecondVideoAndCancel(drag: String) {
         media().performTouchInput {
             down(Offset(width * 0.6f, height * 0.5f))
             moveBy(Offset(-width * SHORT_DRAG / 2f, 0f))
             moveBy(Offset(-width * SHORT_DRAG / 2f, 0f))
         }
-        waitFor("video $SECOND_VIDEO shows its frame during a short drag") { showsVideoFrame(SECOND_VIDEO) }
+        var blackShown = false
+        waitFor("video $SECOND_VIDEO shows its frame during $drag") {
+            blackShown = blackShown || placeholders(SECOND_VIDEO, PLACEHOLDER_TAG)
+            showsVideoFrame(SECOND_VIDEO)
+        }
+        assertTrue("video $SECOND_VIDEO showed black before its resume frame during $drag", !blackShown)
         compose.mainClock.autoAdvance = false
         media().performTouchInput { advanceEventTime(RELEASE_PAUSE_MS); up() }
         compose.mainClock.advanceTimeByFrame()
-        assertTrue("the recoiling neighbour keeps its frame after a cancelled swipe", showsVideoFrame(SECOND_VIDEO))
+        assertTrue("the recoiling neighbour keeps its frame after $drag is cancelled", showsVideoFrame(SECOND_VIDEO))
         compose.mainClock.autoAdvance = true
-        waitFor("the first video stays selected after the cancelled swipe") { selectedPost() == "journey-$FIRST_VIDEO" }
+        waitFor("the first video stays selected after $drag is cancelled") { selectedPost() == "journey-$FIRST_VIDEO" }
+        waitFor("video $SECOND_VIDEO leaves the screen after $drag is cancelled") { !compose.onNodeWithTag(videoTag(SECOND_VIDEO), useUnmergedTree = true).isDisplayed() }
     }
 
     private fun skippingTheEmulatorDecoder(journey: () -> Unit) = try {
@@ -94,13 +105,16 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
 
     private fun releaseDrag(fraction: Float) = media().performTouchInput { moveBy(Offset(width * fraction / 4f, 0f)); up() }
 
-    private fun assertNeighbourShowsFrame(index: Int, posterAllowed: Boolean = true, expectedStart: (Float) -> Boolean) {
+    private fun assertNeighbourShowsFrame(index: Int, resumed: Boolean = false, expectedStart: (Float) -> Boolean) {
         var posterShown = false
+        var blackShown = false
         waitFor("video $index renders a frame while the drag is held") {
             posterShown = posterShown || placeholders(index, POSTER_TAG)
+            blackShown = blackShown || placeholders(index, PLACEHOLDER_TAG)
             showsVideoFrame(index)
         }
-        assertTrue("video $index showed its poster while loading", posterAllowed || !posterShown)
+        assertTrue("video $index showed its poster while loading", !resumed || !posterShown)
+        assertTrue("video $index showed black before its resume frame", !resumed || !blackShown)
         waitFor("video $index shows its timeline while the drag is held") { timelineFraction(index) != null }
         val fraction = checkNotNull(timelineFraction(index))
         assertTrue("video $index timeline starts at $fraction", expectedStart(fraction))
@@ -112,7 +126,7 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
 
     private fun showsVideoFrame(index: Int): Boolean =
         compose.onNodeWithTag(videoTag(index), useUnmergedTree = true).isDisplayed() &&
-            !placeholders(index, POSTER_TAG) && !placeholders(index, PLACEHOLDER_TAG)
+            !placeholders(index, POSTER_TAG) && !placeholders(index, PLACEHOLDER_TAG) && !placeholders(index, RESUME_FRAME_TAG)
 
     private fun placeholders(index: Int, tag: String): Boolean =
         compose.onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasTestTag(videoTag(index))), useUnmergedTree = true)
@@ -142,6 +156,7 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
         const val SHORT_DRAG = 0.06f
         const val RELEASE_PAUSE_MS = 600L
         const val POSTER_TAG = "viewer-video-poster"
+        const val RESUME_FRAME_TAG = "viewer-video-resume-frame"
         const val PLACEHOLDER_TAG = "viewer-video-placeholder"
         const val RECENT_SEARCH = "journey:video-resume"
     }

@@ -36,14 +36,16 @@ indeterminate bar until the lock frees.
 ## Applies to
 
 - `core-data/src/main/kotlin/com/theoriacodex/data/repository/SeriesUpdates.kt`: `CheckProgress`, `checkFollowed`, `CheckCounter`
-- `feature-series/src/main/kotlin/com/theoriacodex/app/series/FollowingRefresh.kt`: `refreshPill`, `RefreshPill`, `FollowingRefreshBox`
+- `feature-series/src/main/kotlin/com/theoriacodex/app/series/FollowingRefresh.kt`: `refreshStatus`, `pullLabel`, `RefreshStatus`, `FollowingRefreshBox`
+- `ui-kit/src/main/kotlin/com/theoriacodex/app/ui/components/PullRefresh.kt`: `PullRefreshBox`, `isPullArmed` (shared with Library, ADR 0225)
 - `feature-series/src/main/kotlin/com/theoriacodex/app/series/SeriesTabViewModel.kt`: `SeriesTabViewModel.refresh`, `SeriesTabContent.checkWords`, `SeriesTabContent.checkScope`
 
 ## Guarded by
 
 - `core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/SeriesUpdateCheckTest.kt`: `progress counts each due series as it finishes, failures included and missing extensions left out (ADR 0219)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `aRefreshShowsHowManySeriesAreCheckedAsEachFinishesThenItsResult_adr_0219`
-- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `pullingSaysWhatTheCheckLooksForAndArmsAtTheThreshold_adr_0219`
+- `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `pullingSaysWhatTheCheckLooksFor_adr_0219`
+- `ui-kit/src/test/kotlin/com/theoriacodex/app/ui/components/PullRefreshTest.kt`: `a pull arms only past the threshold (ADR 0219)`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `thePullNamesWhatTheCheckCovers_adr_0219`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/SeriesTabRefreshTest.kt`: `aRefreshChecksOnlyTheFilteredKind_adr_0219`
 - `feature-series/src/test/kotlin/com/theoriacodex/app/series/FollowingRefreshTest.kt`: `aFinishedCheckSaysHowManySeriesItRefreshedAndWhatWasNew_adr_0219`

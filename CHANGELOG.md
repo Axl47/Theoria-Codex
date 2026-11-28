@@ -6,16 +6,18 @@
 
 - Clip in an episode's ⋮ menu saves up to a minute of it as a small video, with the subtitles you're watching burned in. Drag the handles on the strip to pick the part, which plays on repeat, then tap Save. The clip encodes in Downloads, keeps going if you leave the app, and can be shared from there or from its notification.
 - Saved downloads have Share in their menu.
-- Size and delay in an episode's Subtitles sheet opens a small panel over the playing video where you can make subtitles bigger or smaller and shift them earlier or later in tenths of a second, holding a button to keep stepping. The size is remembered for every video; the delay lasts until you close the Viewer, carrying across episodes. Clips burn in subtitles at the size and delay you set.
+- Pull down on Library's Saved page, or inside Followed or Searches, to check for new posts, with the same pill as Series.
+- Size and delay in an episode's Subtitles sheet opens a small panel over the playing video where you can make subtitles bigger or smaller and shift them earlier or later in tenths of a second without the video stalling, holding a button to keep stepping. The size is remembered for every video; the delay lasts until you close the Viewer, carrying across episodes. Clips burn in subtitles at the size and delay you set.
 
 ### Changed
 
+- Episodes no longer show the thin progress line under the video; other videos keep it.
 - Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.
 
 ### Fixed
 
 - Swiping back to a video post you already watched shows it, and its timeline, where you left off during the swipe, instead of its thumbnail and 0:00 followed by a jump to that point once the swipe settles.
-- A video or episode that picks up where you left off stays black while it loads, instead of showing its thumbnail first.
+- A video or episode you swipe back to shows the frame you left it on until it plays, instead of its thumbnail or a moment of black. One you last watched before opening the Viewer stays black while it loads.
 - A post opened from a feed closes back into its card after you open another post from the creator's profile and come back, instead of vanishing at once.
 - With Instant Seek on, tapping or dragging the timeline of a short looping video shows the frame at that point instead of the video's first frame.
 - With Instant Seek off, dragging the timeline of a short video previews the frame near your finger and plays from there when you let go, instead of restarting the video.

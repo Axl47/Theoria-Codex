@@ -24,6 +24,7 @@ import com.theoriacodex.app.ui.components.FilterSection
 import com.theoriacodex.app.ui.components.SourceFilterChip
 import com.theoriacodex.app.ui.components.rememberFeedScrollSignal
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -126,6 +127,7 @@ fun CodexDetailScreen(
     onSearchSites: ((SourceKey, Query) -> Unit)? = null,
     tagSheetRequested: Boolean = false,
     onTagSheetRequestHandled: () -> Unit = {},
+    liveOwner: LiveCodexFeedOwner? = null,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -166,6 +168,7 @@ fun CodexDetailScreen(
             padding, codexId, codexName, posts, feed, related, filters.isActive || tagFilter.selected.isNotEmpty(), chips, customHeader, customFiltersActive,
             editSelection, { editSelection = it }, likedPostIds, newPostIds, onToggleLike, loading, gridState, pixivUgoiraClient, resolvePostById,
             durations, onOpenViewer, { selectedActionPost = it }, emptyMessage, headerActions, onBack, onAddPostsToAnotherCodex, onRemovePosts,
+            liveOwner,
         )
     }
     if (showFilterSheet) {
@@ -232,6 +235,7 @@ private fun CodexDetailBody(
     onBack: () -> Unit,
     onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
+    liveOwner: LiveCodexFeedOwner?,
 ) {
     val focusManager = LocalFocusManager.current
     Column(
@@ -252,12 +256,20 @@ private fun CodexDetailBody(
         )
         val currentSelection by rememberUpdatedState(editSelection)
         val currentVisiblePosts by rememberUpdatedState(feed.visiblePosts)
-        CodexDetailGrid(
-            feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
-            { index -> onOpenViewer(currentVisiblePosts, index) },
-            { postId -> onEditSelectionChange(currentSelection.toggle(postId)) },
-            onEditSelectionChange, onOpenPostActions, emptyMessage, related,
-        )
+        val grid = @Composable {
+            CodexDetailGrid(
+                feed, cards, posts.isEmpty(), loading, editSelection, gridState, resolvePostById,
+                { index -> onOpenViewer(currentVisiblePosts, index) },
+                { postId -> onEditSelectionChange(currentSelection.toggle(postId)) },
+                onEditSelectionChange, onOpenPostActions, emptyMessage, related,
+            )
+        }
+        if (liveOwner == null) {
+            grid()
+        } else {
+            ShowNewestAfterRefresh(liveOwner) { gridState.scrollToItem(0) }
+            LiveCodexRefreshBox(listOf(liveOwner), Modifier.fillMaxSize(), grid)
+        }
     }
 }
 
@@ -382,18 +394,24 @@ private fun CodexDetailGrid(
 
 @Composable
 private fun CodexDetailEmptyState(collectionIsEmpty: Boolean, loading: Boolean, resolvingDurations: Boolean, emptyMessage: String?) {
-    if (loading) {
-        LoadingState(Modifier.fillMaxSize())
-    } else {
-        FeedEmptyTile(
-            title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
-            message = emptyMessage ?: when {
-                collectionIsEmpty -> "No posts"
-                resolvingDurations -> "Resolving durations…"
-                else -> "Adjust your filters"
-            },
-            contentPadding = 24.dp,
-        )
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Box(Modifier.fillParentMaxSize()) {
+                if (loading) {
+                    LoadingState(Modifier.fillMaxSize())
+                } else {
+                    FeedEmptyTile(
+                        title = "No matching posts".takeUnless { emptyMessage != null || collectionIsEmpty },
+                        message = emptyMessage ?: when {
+                            collectionIsEmpty -> "No posts"
+                            resolvingDurations -> "Resolving durations…"
+                            else -> "Adjust your filters"
+                        },
+                        contentPadding = 24.dp,
+                    )
+                }
+            }
+        }
     }
 }
 

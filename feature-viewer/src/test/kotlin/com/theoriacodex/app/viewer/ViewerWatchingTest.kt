@@ -252,6 +252,23 @@ class ViewerWatchingTest {
     }
 
     @Test
+    fun `an episode hides the thin progress line under the video that other videos show`() {
+        val video = post("clip", media = listOf(ViewerOwnerTestData.video("clip.mp4")))
+        fun passiveProgress(series: ViewerSeries?): Boolean {
+            val state = createViewerUiState(ViewerSessionIdentity("session"), listOf(video), series = series)
+            val frame = ViewerFrame(
+                state, viewerPostNavigation(state), listOf(video), ViewerSelection(video, video.media, 0, false, emptyList()),
+                chromeVisibleState = mutableStateOf(false), chromeStage = mutableIntStateOf(0), opening = false, returning = false, inPictureInPicture = false,
+                touchExplorationEnabled = false, isLandscape = false, videoRepeatsState = mutableStateOf(false),
+            )
+            return viewerRendererControls(frame, requireNotNull(state.currentMedia).key, active = true, preloading = false, loadGeneration = 0L, expectedDurationMs = null)
+                .showPassiveProgress
+        }
+        assertTrue(passiveProgress(series = null))
+        assertFalse(passiveProgress(ViewerSeries.Watching()))
+    }
+
+    @Test
     fun `the next player gets the subtitles and audio chosen on the last, by label`() {
         val choice = ViewerEpisodeChoice(subtitle = ViewerSubtitleChoice.Track("English"), audioLabel = "Japanese")
         val next = PlaybackTracks(
