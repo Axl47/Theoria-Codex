@@ -42,6 +42,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerPanel
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SubtitleTuning
 import kotlin.math.hypot
 
 internal fun ViewerSeries?.topBarTitles(post: Post): Pair<String, String?> {
@@ -98,10 +99,11 @@ internal fun BoxScope.ViewerChromeOverlays(
     val fadesWhileScrubbing = rememberViewerScrubFade(screen)
     val rotationOffer = rememberViewerRotation(selection, activity?.viewerRotation, frame.inPictureInPicture, config.orientationLock, host.onOrientationLockChanged)
     val episodeStream = selection.media?.viewerStream(frame.uiState.controls.episode.streamLabelFor(frame.uiState.currentMedia?.key))
+    val subtitleTuning = SubtitleTuning(config.subtitleSizePercent, frame.uiState.controls.episode.subtitleDelayMs)
     val pictureInPicture = viewerPictureInPictureAction(activity, selection.post, selection.media, frame.uiState.mediaError != null)
     if (frame.clipping) {
         ViewerClipTopBar(frame.uiState.controls.clip?.range, onCancel = controls::cancelClip, onSave = {
-            host.onAction(ViewerAction.SaveClip(screen.activeTracks.tracks.clipTracks()))
+            host.onAction(ViewerAction.SaveClip(screen.activeTracks.tracks.clipTracks(subtitleTuning)))
         }, modifier = Modifier.align(Alignment.TopCenter))
         return
     }
@@ -120,11 +122,20 @@ internal fun BoxScope.ViewerChromeOverlays(
             streams = selection.media?.streams.orEmpty(),
             currentStream = episodeStream,
             tracks = screen.activeTracks.tracks,
+            subtitleTuning = subtitleTuning,
             playbackRate = closestViewerPlaybackRate(frame.uiState.controls.playback.playbackRate),
             openPanel = frame.uiState.controls.panel,
             onDismiss = { panel -> controls.setPanelOpen(panel, false) },
             onAction = host.onAction,
         )
+        if (frame.uiState.controls.panel == ViewerPanel.SUBTITLE_TUNING) {
+            ViewerSubtitleTuningPanel(
+                tuning = subtitleTuning,
+                onSize = host.onSubtitleSizeAdjusted,
+                onDelay = { host.onAction(ViewerAction.AdjustSubtitleDelay(it)) },
+                onDismiss = { controls.setPanelOpen(ViewerPanel.SUBTITLE_TUNING, false) },
+            )
+        }
     }
     if (frame.locked) {
         ViewerLockOverlay(

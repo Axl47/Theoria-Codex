@@ -56,7 +56,7 @@ internal class SideLoadedSubtitleRenderersFactory(context: Context) : DefaultRen
         extensionRendererMode: Int,
         out: ArrayList<Renderer>,
     ) {
-        out.add(TextRenderer(output, outputLooper, SideLoadedSubtitleDecoders).apply { experimentalSetLegacyDecodingEnabled(true) })
+        out.add(DelayedTextRenderer(TextRenderer(output, outputLooper, SideLoadedSubtitleDecoders).apply { experimentalSetLegacyDecodingEnabled(true) }))
     }
 }
 

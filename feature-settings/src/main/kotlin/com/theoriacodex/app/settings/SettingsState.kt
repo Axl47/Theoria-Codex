@@ -14,6 +14,7 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.SubtitleAdjustment
 
 enum class SettingsPage { HOME, SITES, STORAGE, BACKUP, STATS, STATS_SHARE, STATS_COMPARE, DIAGNOSTICS, PICTURE_TAGS }
 
@@ -95,6 +96,7 @@ sealed interface SettingsAction {
         fun applyTo(settings: AppSettings): AppSettings = choice.write(settings, value)
     }
     data class SetCommentOrder(val order: com.theoriacodex.domain.model.CommentOrder) : SettingsAction
+    data class AdjustSubtitleSize(val adjustment: SubtitleAdjustment) : SettingsAction
     data class SetViewerPlaybackMode(val mode: com.theoriacodex.domain.model.ViewerPlaybackMode) : SettingsAction
 
     data class SetViewerOrientationLock(val lock: com.theoriacodex.domain.model.ViewerOrientation?) : SettingsAction

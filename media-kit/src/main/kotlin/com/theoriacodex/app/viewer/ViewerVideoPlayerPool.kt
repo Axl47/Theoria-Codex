@@ -72,6 +72,7 @@ class ViewerVideoPlayerPool(
             lease.player.clearMediaItems()
             separateAudio.remove(lease)?.let(lease.player::removeListener)
             lease.player.clearTrackChoices()
+            lease.player.setSubtitleDelay(0L)
         }
         slots.recycle(lease.slotLease, retainBinding = false)
         publishCounters()

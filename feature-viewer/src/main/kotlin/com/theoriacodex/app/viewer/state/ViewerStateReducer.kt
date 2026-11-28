@@ -138,6 +138,7 @@ private fun reduceViewerAction(state: ViewerUiState, action: ViewerAction): View
         is ViewerAction.FallBackToStream,
         is ViewerAction.ChooseSubtitle,
         is ViewerAction.ChooseAudio,
+        is ViewerAction.AdjustSubtitleDelay,
         is ViewerAction.SetLocked,
         ViewerAction.ToggleFillScreen -> ViewerReduction(state.reduceEpisodeAction(action))
         is ViewerAction.Clip -> state.reduceClipAction(session, action)
@@ -159,10 +160,7 @@ private fun reduceViewerAction(state: ViewerUiState, action: ViewerAction): View
         ViewerAction.ToggleLike -> state.currentPageEffect { page, _ ->
             ViewerEffect.SetLiked(session = session, postId = page.post.id)
         }
-        is ViewerAction.OpenCreator -> ViewerReduction(
-            state,
-            listOf(ViewerEffect.OpenCreatorProfile(session, action.creator)),
-        )
+        is ViewerAction.OpenCreator -> ViewerReduction(state, listOf(ViewerEffect.OpenCreatorProfile(session, action.creator)))
         is ViewerAction.IncludeTag -> state.reduceIncludeTag(session, action)
         is ViewerAction.ExcludeTag -> state.reduceExcludeTag(session, action)
         ViewerAction.LoadMore -> ViewerReduction(state, listOf(ViewerEffect.LoadMore(session)))
@@ -202,6 +200,9 @@ private fun ViewerUiState.reduceEpisodeAction(action: ViewerAction): ViewerUiSta
     ))
     is ViewerAction.ChooseSubtitle -> chooseEpisodeTracks { copy(subtitle = action.choice) }
     is ViewerAction.ChooseAudio -> chooseEpisodeTracks { copy(audioLabel = action.label) }
+    is ViewerAction.AdjustSubtitleDelay -> copy(controls = controls.copy(
+        episode = controls.episode.copy(subtitleDelayMs = action.adjustment.delay(controls.episode.subtitleDelayMs)),
+    ))
     is ViewerAction.SetLocked -> setLocked(action.locked)
     ViewerAction.ToggleFillScreen -> if (series is ViewerSeries.Watching) {
         copy(controls = controls.copy(fillScreen = !controls.fillScreen))

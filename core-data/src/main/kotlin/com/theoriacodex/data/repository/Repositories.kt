@@ -405,6 +405,7 @@ data class ViewerSettings(
     val instantSeek: Boolean = false,
     val orientationLock: com.theoriacodex.domain.model.ViewerOrientation? = null,
     val commentOrder: com.theoriacodex.domain.model.CommentOrder = com.theoriacodex.domain.model.CommentOrder.OLDEST,
+    val subtitleSizePercent: Int = com.theoriacodex.domain.model.SubtitleTuning.DEFAULT_SIZE_PERCENT,
 )
 
 data class RecommendationProfile(

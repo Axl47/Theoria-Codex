@@ -95,6 +95,7 @@ enum class ViewerPanel(
     EPISODE_STREAM(inChrome = true),
     EPISODE_SUBTITLES(inChrome = true),
     EPISODE_AUDIO(inChrome = true),
+    SUBTITLE_TUNING(inChrome = true),
 }
 
 data class ViewerControlsState(
