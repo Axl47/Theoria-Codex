@@ -12,6 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -135,6 +140,25 @@ class ViewerEpisodeControlsTest {
         assertFalse(dismissed)
         compose.onRoot().performTouchInput { click(bottomCenter - androidx.compose.ui.geometry.Offset(0f, 10f)) }
         assertTrue(dismissed)
+    }
+
+    @Test fun `the size and delay panel draws its text in the theme's on-surface colour, not the black outside any surface`() {
+        var onSurface = Color.Unspecified
+        compose.setContent {
+            TheoriaNightTheme {
+                onSurface = MaterialTheme.colorScheme.onSurface
+                Box(Modifier.fillMaxSize()) {
+                    ViewerSubtitleTuningPanel(SubtitleTuning(sizePercent = 120), onSize = {}, onDelay = {}, onDismiss = {})
+                }
+            }
+        }
+        assertEquals(listOf(onSurface, onSurface), listOf("Size", "120%").map(::drawnTextColor))
+    }
+
+    private fun drawnTextColor(text: String): Color {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().layoutInput.style.color
     }
 
     @Test fun `holding a step button repeats until its limit, and letting go adds no extra step (ADR 0224)`() {

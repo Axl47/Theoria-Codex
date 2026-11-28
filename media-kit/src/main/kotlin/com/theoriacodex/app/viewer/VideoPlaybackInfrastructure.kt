@@ -166,6 +166,7 @@ class VideoPlaybackInfrastructure(
         val renderers = SideLoadedSubtitleRenderersFactory(appContext)
             .setEnableDecoderFallback(true)
         return ExoPlayer.Builder(appContext, renderers)
+            .setTrackSelector(SubtitleReloadingTrackSelector(appContext))
             .setLoadControl(VideoLoadControlFactory.create(profile))
             .setUsePlatformDiagnostics(profile.usesPlatformDiagnostics)
     }

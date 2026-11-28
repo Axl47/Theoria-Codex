@@ -6,10 +6,12 @@
 
 - Clip in an episode's ⋮ menu saves up to a minute of it as a small video, with the subtitles you're watching burned in. Drag the handles on the strip to pick the part, which plays on repeat, then tap Save. The clip encodes in Downloads, keeps going if you leave the app, and can be shared from there or from its notification.
 - Saved downloads have Share in their menu.
-- Size and delay in an episode's Subtitles sheet opens a small panel over the playing video where you can make subtitles bigger or smaller and shift them earlier or later in tenths of a second, holding a button to keep stepping. The size is remembered for every video; the delay lasts until you close the Viewer, carrying across episodes. Clips burn in subtitles at the size and delay you set.
+- Pull down on Library's Saved page, or inside Followed or Searches, to check for new posts, with the same pill as Series.
+- Size and delay in an episode's Subtitles sheet opens a small panel over the playing video where you can make subtitles bigger or smaller and shift them earlier or later in tenths of a second without the video stalling, holding a button to keep stepping. The size is remembered for every video; the delay lasts until you close the Viewer, carrying across episodes. Clips burn in subtitles at the size and delay you set.
 
 ### Changed
 
+- Episodes no longer show the thin progress line under the video; other videos keep it.
 - Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.
 
 ### Fixed
