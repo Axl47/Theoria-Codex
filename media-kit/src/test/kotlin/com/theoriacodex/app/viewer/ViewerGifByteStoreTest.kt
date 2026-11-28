@@ -119,6 +119,44 @@ class ViewerGifByteStoreTest {
     }
 
     @Test
+    fun `neighbour warms never trim the current page's GIF, even one loaded before its page became current (ADR 0226)`() = runBlocking {
+        val store = ViewerGifByteStore(temporary.newFolder(), maxBytes = 3_000)
+        suspend fun age(key: String, minutes: Long) =
+            File(requireNotNull(store.cachedLocation(key))).setLastModified(System.currentTimeMillis() - minutes * 60_000)
+        store.load("PIXIV:current") { it.writeBytes(ByteArray(1_000)) }
+        store.markCurrent(listOf("PIXIV:current"))
+        age("PIXIV:current", 10)
+        repeat(4) { index -> store.warm("PIXIV:neighbour-$index") { it.writeBytes(ByteArray(1_000)) } }
+        assertNotNull(store.cachedLocation("PIXIV:current"))
+
+        store.markCurrent(listOf("PIXIV:next"))
+        store.load("PIXIV:next") { it.writeBytes(ByteArray(1_000)) }
+        repeat(4) { index -> store.warm("PIXIV:later-$index") { it.writeBytes(ByteArray(1_000)) } }
+        assertNull(store.cachedLocation("PIXIV:current"))
+        assertNotNull(store.cachedLocation("PIXIV:next"))
+    }
+
+    @Test
+    fun `neighbour warms never trim a GIF that another load is still using (ADR 0226)`() = runBlocking {
+        val store = ViewerGifByteStore(temporary.newFolder(), maxBytes = 3_000)
+        store.load("PIXIV:incoming") { it.writeBytes(ByteArray(1_000)) }
+        File(requireNotNull(store.cachedLocation("PIXIV:incoming"))).setLastModified(System.currentTimeMillis() - 25 * 60 * 60_000L)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val loading = async(Dispatchers.IO) {
+            store.load("PIXIV:incoming") { entered.complete(Unit); release.await(); it.writeBytes(ByteArray(1_000)) }
+        }
+        entered.await()
+
+        repeat(4) { index -> store.warm("PIXIV:neighbour-$index") { it.writeBytes(ByteArray(1_000)) } }
+
+        assertNotNull(store.cachedLocation("PIXIV:incoming"))
+        release.complete(Unit)
+        loading.await()
+        Unit
+    }
+
+    @Test
     fun `disk entry budget retains the latest file`() = runBlocking {
         val directory = temporary.newFolder()
         val store = ViewerGifByteStore(directory)

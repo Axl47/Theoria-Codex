@@ -65,6 +65,7 @@ private class ViewerGifState(locations: List<String>) {
 private fun ViewerGifLoadEffect(state: ViewerGifState, source: SourceKey, locations: List<String>, current: Boolean) {
     val context = LocalContext.current
     val isCurrent by rememberUpdatedState(current)
+    LaunchedEffect(current, source, locations) { if (current) markCurrentViewerGifs(context, source, locations) }
     LaunchedEffect(state, source) {
         var movie: Movie? = null
         for (attempt in 1..GIF_MOVIE_LOAD_ATTEMPTS) {
