@@ -11,6 +11,7 @@
 
 ### Changed
 
+- New posts on the Saved page's Followed and Searches shelves are marked New on their cards, as they are inside. Opening Followed or Searches clears a post's mark only once its card has been mostly on screen, or when you open the post, so posts you never scrolled to stay New.
 - Episodes no longer show the thin progress line under the video; other videos keep it.
 - Dragging a For You card onto a Codex and then easing back down keeps that Codex picked instead of switching back to the top suggestion, as long as you stay past the save distance. Hide tags work the same way.
 

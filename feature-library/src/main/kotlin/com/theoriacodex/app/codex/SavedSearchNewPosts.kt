@@ -60,7 +60,8 @@ suspend fun UiRestoreRepository.markSavedSearchesSeen(ids: Set<String>? = null) 
 
 suspend fun UiRestoreRepository.markSavedSearchPostsSeen(shown: Set<String>) {
     updateSavedSearchNewPosts { state ->
-        state.copy(marks = state.marks.mapValues { (_, marks) -> marks.seen { it in shown } })
+        if (state.marks.values.none { marks -> marks.newPostIds.any { it in shown } }) state
+        else state.copy(marks = state.marks.mapValues { (_, marks) -> marks.seen { it in shown } })
     }
 }
 
