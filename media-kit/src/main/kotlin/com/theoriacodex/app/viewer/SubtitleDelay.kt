@@ -19,7 +19,6 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection
 import androidx.media3.exoplayer.trackselection.ForwardingTrackSelection
 import androidx.media3.exoplayer.upstream.BandwidthMeter
-import java.util.concurrent.atomic.AtomicInteger
 
 internal fun subtitleClockUs(playbackUs: Long, delayUs: Long): Long = playbackUs - delayUs
 
@@ -104,7 +103,8 @@ fun ExoPlayer.setSubtitleDelay(delayMs: Long) {
     renderer.requestedDelayMs = delayMs
     createMessage(renderer).setType(MSG_SET_SUBTITLE_DELAY).setPayload(Util.msToUs(delayMs)).send()
     val loaded = playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING
-    if (loaded && currentTracks.isTypeSelected(C.TRACK_TYPE_TEXT)) (trackSelector as? SubtitleReloadingTrackSelector)?.reloadText()
+    val selector = trackSelector as? SubtitleReloadingTrackSelector ?: return
+    if (loaded && currentTracks.isTypeSelected(C.TRACK_TYPE_TEXT)) createMessage { _, _ -> selector.reloadText() }.setLooper(playbackLooper).send()
 }
 
 internal class SubtitleReloadingTrackSelector private constructor(
@@ -114,13 +114,13 @@ internal class SubtitleReloadingTrackSelector private constructor(
     constructor(context: Context) : this(context, TextReloadingSelectionFactory(AdaptiveTrackSelection.Factory()))
 
     fun reloadText() {
-        selections.generation.incrementAndGet()
+        selections.generation++
         invalidate(null)
     }
 }
 
-internal class TextReloadingSelectionFactory(private val delegate: ExoTrackSelection.Factory) : ExoTrackSelection.Factory {
-    val generation = AtomicInteger()
+private class TextReloadingSelectionFactory(private val delegate: ExoTrackSelection.Factory) : ExoTrackSelection.Factory {
+    var generation = 0
 
     override fun createTrackSelections(
         definitions: Array<out ExoTrackSelection.Definition?>,
@@ -129,7 +129,7 @@ internal class TextReloadingSelectionFactory(private val delegate: ExoTrackSelec
         timeline: Timeline,
     ): Array<ExoTrackSelection?> {
         val created = delegate.createTrackSelections(definitions, bandwidthMeter, mediaPeriodId, timeline)
-        val current = generation.get()
+        val current = generation
         return Array(created.size) { index ->
             created[index]?.let { selection ->
                 if (definitions[index]?.group?.type == C.TRACK_TYPE_TEXT) GenerationTrackSelection(selection, current) else selection

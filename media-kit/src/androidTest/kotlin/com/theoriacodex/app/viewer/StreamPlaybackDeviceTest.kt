@@ -124,19 +124,22 @@ class StreamPlaybackDeviceTest {
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                     interruptions += "discontinuity $reason at ${oldPosition.positionMs}"
                 }
+                override fun onRenderedFirstFrame() {
+                    interruptions += "first frame at ${player.currentPosition}"
+                }
             }
-            onMain {
-                player.addListener(listener)
-                player.play()
-            }
+            onMain { player.play() }
             awaitOnMain { player.currentPosition >= 1_100L || player.playerError != null }
             skipIfTheEmulatorDecoderFailed(player)
-            onMain { player.setSubtitleDelay(1_500L) }
-            awaitOnMain { earlyShownAt.size >= 2 || player.playerError != null }
+            onMain {
+                player.addListener(listener)
+                player.setSubtitleDelay(1_500L)
+            }
+            awaitOnMain { earlyShownAt.isNotEmpty() || player.playerError != null }
             onMain { player.removeListener(listener) }
             Log.i(DEVICE_LOG_TAG, "delay +1500 ms set at 1100 ms: early cue shown at $earlyShownAt; interruptions $interruptions")
             onMain { assertNull(player.playerError) }
-            assertTrue("shown at $earlyShownAt", earlyShownAt[1] in 1_800L..2_400L)
+            assertTrue("shown at $earlyShownAt", earlyShownAt.first() in 1_800L..2_400L)
             assertTrue(interruptions.toString(), interruptions.isEmpty())
         }
     }

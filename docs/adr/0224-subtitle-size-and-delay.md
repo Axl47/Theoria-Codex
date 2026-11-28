@@ -29,12 +29,12 @@ the text renderer reads at most one second ahead of the position it is given.
   closes, since an offset fits one release of one series, not every video.
 - Mechanism: the text renderer is wrapped in `DelayedTextRenderer`, a `ForwardingRenderer` that hands the renderer
   `playback position − delay` wherever Media3 passes a position (enable, reset, render, progress). A new delay is
-  sent as a player message on the playback thread, then the player reselects only the subtitle track: the Viewer's
+  sent as a player message on the playback thread, followed there by a reload that reselects only the subtitle track: the Viewer's
   track selector (`SubtitleReloadingTrackSelector`) tags each text selection with a reload count, so a bumped count
   makes the text selection differ while video and audio selections stay equal. Media3 then swaps in a fresh text
   stream and re-enables the text renderer at the shifted time, and leaves the video and audio renderers and their
   buffers alone, so playback never rebuffers. A sideloaded file is delivered again from its single sample; a
-  subtitle rendition in its own HLS playlist re-reads its buffered samples, or reloads only that playlist. This
+  subtitle rendition in its own HLS playlist fetches its current segment again, leaving the video's playlist alone. This
   replaced a 1 ms seek, which flushed every renderer and rebuffered the video on each change. The reload is skipped
   when the player is idle or ended; there the new delay applies from the next render. The Viewer sends a
   change after it has settled for 250 ms, so a held button causes one reload, not twenty, and only while the episode
@@ -59,7 +59,7 @@ after a seek, at the start of playback, or after a delay change, cues inside tha
 shifted time and are skipped or shown late until the buffer passes the delay. Sideloaded files, the common case, have
 no gap because the whole file is one sample. A looping video with a text track and a positive delay over a second
 pauses on its last frame for about the delay minus a second each loop, because Media3 loops only after every
-renderer has read to the end; episodes do not loop, and clip mode seeks back before the end. Captions carried inside an HLS video playlist (CEA-608/708) share that playlist's loader, so when their buffered samples no longer reach back to the playback position, the reload restarts that loader and the video rebuffers once, as the old seek did; no fixture carries such captions. Size scales text subtitles from every source; image-based subtitles (PGS, VobSub) keep their size; delay is not
+renderer has read to the end; episodes do not loop, and clip mode seeks back before the end. Text carried inside the video's own stream (CEA-608/708 captions in an HLS video playlist, or a subtitle track inside an MKV or MP4) shares the video's loader, so when its buffered samples no longer reach back to the playback position, the reload restarts that loader and the video rebuffers once, as the old seek did; no source or fixture carries such text today. Size scales text subtitles from every source; image-based subtitles (PGS, VobSub) keep their size; delay is not
 remembered per series.
 
 ## Applies to
@@ -81,6 +81,6 @@ remembered per series.
 - `core-data/src/test/kotlin/com/theoriacodex/data/repository/BackupGoldenTest.kt`: `a backup's subtitle size must be within 50 to 200 percent (ADR 0224)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerEpisodeControlsTest.kt`: `the subtitle sheet offers size and delay only while a track is on, and opens their panel (ADR 0224)`, `the size and delay panel steps each value, resets both from one button, and closes on a tap outside it but not on it (ADR 0224)`, `holding a step button repeats until its limit, and letting go adds no extra step (ADR 0224)`
 - `feature-viewer/src/test/kotlin/com/theoriacodex/app/viewer/ViewerWatchingTest.kt`: `the size and delay panel closes with the chrome, and the delay carries across episodes and sessions it replaces but starts at zero in a new one (ADR 0224)`
-- `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/StreamPlaybackDeviceTest.kt`: `aPositiveSubtitleDelayShowsCuesLaterAndPlaybackStillEndsWithTheVideo_adr_0224`, `aNegativeSubtitleDelayChosenDuringPlaybackShowsCuesEarlier_adr_0224`
+- `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/StreamPlaybackDeviceTest.kt`: `aPositiveSubtitleDelayShowsCuesLaterAndPlaybackStillEndsWithTheVideo_adr_0224`, `aNegativeSubtitleDelayChosenDuringPlaybackShowsCuesEarlier_adr_0224`, `aDelayChangeDuringPlaybackReloadsPassedCuesWithoutSeekingOrRebuffering_adr_0224`
 - `media-kit/src/androidTest/kotlin/com/theoriacodex/app/viewer/EpisodeClipExportDeviceTest.kt`: `aClipBurnsSubtitlesAtTheChosenSizeAndDelay_adr_0224`
 - Left to prose: the embedded-track gaps under positive and negative delays; no fixture carries subtitles inside the stream.
