@@ -121,7 +121,7 @@ fun CreatorProfileScreen(
         CreatorNotSelected()
         return
     }
-    onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it) }
+    onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it, covered = { showFilterSheet }) }
     val cards = rememberFeedCardEnvironment(
         pixivUgoiraClient, marks.liked, feed.durations.knownDurationMsByPostId, durations, onToggleLike, resolvePostById,
     )

@@ -108,7 +108,7 @@ class NewPostMarkersTest {
             data.markViewedNewPost(posts[4], ViewerSession(posts, launchedFrom(SAVED_SEARCHES_CODEX_ID)))
         }
         compose.runOnIdle { navigation.popBackStack() }
-        awaitText("new: a, b, c, d")
+        awaitText("new: a, b, c, d, f")
 
         compose.runOnIdle {
             navigation.popBackStack()

@@ -113,7 +113,7 @@ fun SearchScreen(
     val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
     val gridState = rememberRetainedFeedGridState("search")
-    onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it, covered = { composerOpen.value }) }
+    onNewPostsSeen?.let { SeenPostsEffect(gridState, newPostIds, it, covered = { composerOpen.value || chrome.showFilterSheet }) }
     SearchTabReselectEffect(state.restoration, gridState, onAction)
     val feed = rememberSearchFeed(state, related.state, fabRestoreState, marks, durations)
     val results by rememberUpdatedState(state.content.results)

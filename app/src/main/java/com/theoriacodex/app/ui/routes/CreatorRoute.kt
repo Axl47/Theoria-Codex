@@ -117,17 +117,16 @@ private fun CreatorRouteContent(
     }
     val undo = LocalUndoSlot.current
     val seen by owner.seenAtOpen.collectAsStateWithLifecycle()
-    val newPosts = remember(config.newPosts, state.selectedFeed) {
-        config.newPosts?.let { if (state.selectedFeed == AccountFeed.UPLOADS) it else it.withoutFollowed() }
+    val newPostIds = remember(state.results, state.selectedFeed, config.newPosts) {
+        config.newPosts?.among(state.results, withFollowed = state.selectedFeed == AccountFeed.UPLOADS).orEmpty()
     }
-    val newPostIds = remember(state.results, newPosts) { newPosts?.among(state.results).orEmpty() }
     CreatorProfileScreen(
         related = related,
         followed = config.followed,
         onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.uploads, undo) } },
         seenAtOpen = seen?.takeIf { config.followed && it.creator == state.creator }?.seenPostIds,
         newPostIds = newPostIds,
-        onNewPostsSeen = newPosts?.onSeen,
+        onNewPostsSeen = config.newPosts?.onSeen,
         state = state,
         marks = config.marks,
         pixivUgoiraClient = pixivUgoiraClient,

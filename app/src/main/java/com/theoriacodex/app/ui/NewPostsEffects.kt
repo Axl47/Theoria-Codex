@@ -76,10 +76,10 @@ internal class NewPostsSeen(
 ) {
     val onSeen: suspend (Set<PostId>) -> Unit = { seen -> mark(seen, followed) }
 
-    fun among(posts: List<Post>): Set<PostId> =
-        posts.mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { it.markKey() in keys || it.source == followed?.source } }
-
-    fun withoutFollowed(): NewPostsSeen = if (followed == null) this else NewPostsSeen(keys, null, mark)
+    fun among(posts: List<Post>, withFollowed: Boolean = true): Set<PostId> {
+        val source = followed?.source?.takeIf { withFollowed }
+        return posts.mapNotNullTo(mutableSetOf()) { post -> post.id.takeIf { it.markKey() in keys || it.source == source } }
+    }
 }
 
 @Composable
@@ -105,8 +105,8 @@ private suspend fun DataDependencies.markNewPostsSeen(codexId: String, shown: Se
 
 internal suspend fun DataDependencies.markViewedNewPost(post: Post, session: ViewerSession?) {
     val key = post.id.markKey()
-    if (newPostsCollection(session?.context) != null) {
-        viewedNewPosts.update { viewed -> viewed + newPostCodexIds.associateWith { viewed[it].orEmpty() + key } }
+    newPostsCollection(session?.context)?.let { collection ->
+        viewedNewPosts.update { viewed -> viewed + (collection to viewed[collection].orEmpty() + key) }
     }
     newPostCodexIds.forEach { markNewPostsSeen(it, setOf(key)) }
 }
