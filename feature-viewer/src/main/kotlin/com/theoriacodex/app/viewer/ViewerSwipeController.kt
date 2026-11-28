@@ -76,7 +76,6 @@ internal class ViewerSwipeController(
         settling = false
         baseline = displacementFrom(caught.target)
         if (caught.commits) {
-            loadTarget = origin()
             context.commit(caught.postId, caught.target.mediaIndex)
             pendingOrigin = Origin(caught.postId, caught.target.mediaIndex)
         }

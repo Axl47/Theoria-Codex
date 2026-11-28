@@ -36,7 +36,7 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
         waitFor("the second video is selected") { selectedPost() == "journey-$SECOND_VIDEO" }
 
         holdDrag(HELD_DRAG)
-        assertNeighbourShowsFrame(FIRST_VIDEO) { fraction -> fraction > RESUMED_FRACTION }
+        assertNeighbourShowsFrame(FIRST_VIDEO, posterAllowed = false) { fraction -> fraction > RESUMED_FRACTION }
         releaseDrag(HELD_DRAG)
         waitFor("the first video is selected again") { selectedPost() == "journey-$FIRST_VIDEO" }
         waitFor("the first video shows its timeline after the settle") { timelineFraction(FIRST_VIDEO) != null }
@@ -64,8 +64,13 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
 
     private fun releaseDrag(fraction: Float) = media().performTouchInput { moveBy(Offset(width * fraction / 4f, 0f)); up() }
 
-    private fun assertNeighbourShowsFrame(index: Int, expectedStart: (Float) -> Boolean) {
-        waitFor("video $index renders a frame while the drag is held") { showsVideoFrame(index) }
+    private fun assertNeighbourShowsFrame(index: Int, posterAllowed: Boolean = true, expectedStart: (Float) -> Boolean) {
+        var posterShown = false
+        waitFor("video $index renders a frame while the drag is held") {
+            posterShown = posterShown || placeholders(index, POSTER_TAG)
+            showsVideoFrame(index)
+        }
+        assertTrue("video $index showed its poster while loading", posterAllowed || !posterShown)
         waitFor("video $index shows its timeline while the drag is held") { timelineFraction(index) != null }
         val fraction = checkNotNull(timelineFraction(index))
         assertTrue("video $index timeline starts at $fraction", expectedStart(fraction))
@@ -77,8 +82,11 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
 
     private fun showsVideoFrame(index: Int): Boolean =
         compose.onNodeWithTag(videoTag(index), useUnmergedTree = true).isDisplayed() &&
-            compose.onAllNodes(hasTestTag("viewer-video-placeholder") and hasAnyAncestor(hasTestTag(videoTag(index))), useUnmergedTree = true)
-                .fetchSemanticsNodes().isEmpty()
+            !placeholders(index, POSTER_TAG) && !placeholders(index, PLACEHOLDER_TAG)
+
+    private fun placeholders(index: Int, tag: String): Boolean =
+        compose.onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasTestTag(videoTag(index))), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
 
     private fun timelineFraction(index: Int): Float? =
         compose.onAllNodes(
@@ -103,6 +111,8 @@ class ViewerVideoResumeJourneyTest : AppJourneyFixture() {
         const val HELD_DRAG = 0.4f
         const val SHORT_DRAG = 0.06f
         const val RELEASE_PAUSE_MS = 600L
+        const val POSTER_TAG = "viewer-video-poster"
+        const val PLACEHOLDER_TAG = "viewer-video-placeholder"
         const val RECENT_SEARCH = "journey:video-resume"
     }
 }

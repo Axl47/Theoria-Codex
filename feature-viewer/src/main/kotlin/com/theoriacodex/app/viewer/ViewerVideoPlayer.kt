@@ -97,7 +97,7 @@ internal fun ViewerVideoPlayer(
         ViewerVideoMessage("Video unavailable", modifier)
         return
     }
-    val startMs = positions.startMs(mediaKey, controls.expectedDurationMs)
+    val startMs = positions.position(mediaKey)
     if (!controls.isActive && !(controls.isPreloading && playback.readsAheadFreely())) {
         Box(modifier.background(Color.Black)) { loadingPreview.takeIf { startMs == 0L }?.invoke() }
         return
@@ -573,9 +573,7 @@ private fun ViewerVideoContent(
                 .onPlaced { coordinates -> viewBottomPx.floatValue = coordinates.positionInParent().y + coordinates.size.height }
                 .then(mediaModifier),
         )
-        if (!state.hasRenderedFirstFrame && !state.failed) {
-            Box(Modifier.matchParentSize().testTag(VIEWER_VIDEO_PLACEHOLDER_TAG)) { loadingPreview?.invoke() }
-        }
+        if (!state.hasRenderedFirstFrame && !state.failed) ViewerVideoPlaceholder(loadingPreview, Modifier.matchParentSize())
         val holdScrub = LocalViewerHoldScrub.current
         val holdScrubbing by remember(holdScrub) { derivedStateOf { holdScrub?.phase is ViewerHoldScrubPhase.Dragging } }
         ViewerChromeVisibility(controls.showControls && controls.dimBackdrop && !state.scrubbing && !holdScrubbing, Modifier.matchParentSize()) {
@@ -585,6 +583,11 @@ private fun ViewerVideoContent(
         if (state.failed) Text(VIEWER_VIDEO_FAILED, color = MaterialTheme.colorScheme.onBackground)
         ViewerVideoTimelineOverlay(state, playback, controls, events, effectiveAspectRatio, Modifier.align(Alignment.BottomCenter))
     }
+}
+
+@Composable
+private fun ViewerVideoPlaceholder(poster: (@Composable () -> Unit)?, modifier: Modifier) {
+    Box(modifier.testTag(if (poster != null) VIEWER_VIDEO_POSTER_TAG else VIEWER_VIDEO_PLACEHOLDER_TAG)) { poster?.invoke() }
 }
 
 @Composable
@@ -695,3 +698,4 @@ private const val VIEWER_DIM_BACKDROP_ALPHA = 0.34f
 private const val VIEWER_SUBTITLE_DELAY_SETTLE_MS = 250L
 private const val VIEWER_SUBTITLE_OVERLAY_TAG = "viewer-subtitle-overlay"
 internal const val VIEWER_VIDEO_PLACEHOLDER_TAG = "viewer-video-placeholder"
+internal const val VIEWER_VIDEO_POSTER_TAG = "viewer-video-poster"
